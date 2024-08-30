@@ -5,6 +5,10 @@
 
 if HAVE_GO
 
+EXTRA_DIST = \
+	src \
+	tests
+
 GOOBJDIR=$(abs_top_builddir)/bindings/go/$(objdir)
 GOPATH=$(abs_top_srcdir)/bindings/go/
 CGOCFLAGS=-I$(abs_top_builddir)/src -I$(abs_top_srcdir)/src
@@ -56,8 +60,11 @@ run-perftest:
 	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
 	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} ${GOTMPDIR}/goperftest ${ARGS}
 
-install-exec-hook:
+install-exec-hook: goperftest
 	$(INSTALL) ${GOTMPDIR}/goperftest $(DESTDIR)$(bindir)
+
+uninstall-hook:
+	$(RM) $(DESTDIR)$(bindir)/goperftest
 
 all: goperftest build
 

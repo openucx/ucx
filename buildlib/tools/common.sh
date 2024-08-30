@@ -4,8 +4,8 @@ WORKSPACE=${WORKSPACE:=$PWD}
 # build in local directory which goes away when docker exits
 ucx_build_dir=$HOME/${BUILD_ID}/build
 ucx_inst=$ucx_build_dir/install
-CUDA_MODULE="dev/cuda11.4"
-GDRCOPY_MODULE="dev/gdrcopy2.3_cuda11.4"
+CUDA_MODULE="dev/cuda12.2.2"
+GDRCOPY_MODULE="dev/gdrcopy2.3.1-1_cuda12.2.2"
 JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-90a95a4"
@@ -21,7 +21,7 @@ FUSE3_MODULE="dev/fuse-3.10.5"
 #
 num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
 [ -z $num_cpus ] && num_cpus=1
-parallel_jobs=4
+parallel_jobs=${parallel_jobs:-4}
 [ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
 num_pinned_threads=$(nproc)
 [ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
@@ -134,31 +134,6 @@ module_load() {
 module_unload() {
 	module=$1
 	module unload "${module}" || true
-}
-
-#
-# try load cuda modules if nvidia driver is installed
-#
-try_load_cuda_env() {
-	num_gpus=0
-	have_cuda=no
-	have_gdrcopy=no
-	if [ -f "/proc/driver/nvidia/version" ]; then
-		have_cuda=yes
-		have_gdrcopy=yes
-		module_load $CUDA_MODULE    || have_cuda=no
-		module_load $GDRCOPY_MODULE || have_gdrcopy=no
-		num_gpus=$(nvidia-smi -L | wc -l)
-		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
-	fi
-}
-
-#
-# Alwasy succeeds
-#
-unload_cuda_env() {
-	module_unload $CUDA_MODULE
-	module_unload $GDRCOPY_MODULE
 }
 
 #

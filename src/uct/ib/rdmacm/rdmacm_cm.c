@@ -187,8 +187,8 @@ dummy_qp_ctx_init:
     /* Create a dummy completion queue */
     ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
     if (ctx->cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
-                                       "%s: ibv_create_cq()", dev_name);
+        uct_ib_check_memlock_limit_msg(verbs, UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq()");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -485,15 +485,15 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
         /* For local IB address, assume the remote subnet prefix is the same
          * and pack it to make reachability check pass */
         ret = ibv_query_gid(cm_id->verbs, cm_id->port_num,
-                            UCT_IB_MD_DEFAULT_GID_INDEX, &params.gid);
+                            UCT_IB_DEVICE_DEFAULT_GID_INDEX, &params.gid);
         if (ret) {
             ucs_error("ibv_query_gid(dev=%s port=%d index=%d) failed: %m",
                       ibv_get_device_name(cm_id->verbs->device),
-                      cm_id->port_num, UCT_IB_MD_DEFAULT_GID_INDEX);
+                      cm_id->port_num, UCT_IB_DEVICE_DEFAULT_GID_INDEX);
             return UCS_ERR_IO_ERROR;
         }
 
-        params.gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
+        params.gid_index = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
         params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
                            UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
     }
@@ -779,7 +779,7 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         break;
     case RDMA_CM_EVENT_TIMEWAIT_EXIT:
         /* This event is generated when the QP associated with the connection
-         * has exited its timewait state and is now ready to be re-used.
+         * has exited its timewait state and is now ready to be reused.
          * After a QP has been disconnected, it is maintained in a timewait
          * state to allow any in flight packets to exit the network.
          * After the timewait state has completed, the rdma_cm will report this event.*/

@@ -37,6 +37,64 @@ protected:
 
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
+
+    static void check_ip_port(const char *ip_port_str, uint16_t default_port,
+                              ucs_status_t exp_status, const std::string &exp_str)
+    {
+        struct sockaddr_storage ss = {0};
+        struct sockaddr *saddr     = (struct sockaddr*)&ss;
+        ucs_status_t status;
+
+        status = ucs_sock_ipportstr_to_sockaddr(ip_port_str, default_port, &ss);
+        EXPECT_EQ(exp_status, status);
+        if (UCS_OK == status) {
+            char test_str[1024];
+            ucs_sockaddr_str(saddr, test_str, sizeof(test_str));
+            EXPECT_EQ(exp_str, test_str);
+        }
+    }
+
+    void verify_subnet_match(const char *ip_addr1,
+                             const char *ip_addr2,
+                             unsigned longest_common_prefix) const
+    {
+        struct sockaddr_storage saddr1, saddr2;
+        int matched;
+
+        ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr(ip_addr1, &saddr1));
+        ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr(ip_addr2, &saddr2));
+
+        size_t addr_size;
+        ASSERT_UCS_OK(ucs_sockaddr_inet_addr_sizeof((struct sockaddr *)&saddr1,
+                                                    &addr_size));
+        size_t addr_size_bits = addr_size * CHAR_BIT;
+
+        /* Add extra iterations to check prefix truncation */
+        constexpr size_t extra_iters = 10;
+
+        for (size_t prefix = 0; prefix <= addr_size_bits + extra_iters; ++prefix) {
+            matched = ucs_sockaddr_is_same_subnet((struct sockaddr*)&saddr1,
+                                                  (struct sockaddr*)&saddr2,
+                                                  prefix);
+            EXPECT_EQ(std::min(prefix, addr_size_bits) <= longest_common_prefix,
+                      matched)
+                    << "failed to match subnet: ip1=" << ip_addr1
+                    << " ip2=" << ip_addr2 << " prefix=" << prefix
+                    << " max_common=" << longest_common_prefix
+                    << " (matched=" << matched << ")";
+        }
+    }
+
+    void verify_subnet_error(sa_family_t af1, sa_family_t af2, unsigned prefix) const
+    {
+        struct sockaddr_storage storage1 = {0}, storage2 = {0};
+        struct sockaddr *sa1             = (struct sockaddr *)&storage1;
+        struct sockaddr *sa2             = (struct sockaddr *)&storage2;
+
+        sa1->sa_family = af1;
+        sa2->sa_family = af2;
+        EXPECT_FALSE(ucs_sockaddr_is_same_subnet(sa1, sa2, prefix));
+    }
 };
 
 UCS_TEST_F(test_socket, sockaddr_sizeof) {
@@ -394,6 +452,86 @@ UCS_TEST_F(test_socket, str_sockaddr_str) {
     }
 }
 
+UCS_TEST_F(test_socket, sock_ipportstr_to_sockaddr) {
+    check_ip_port("1.2.3.4", 1234, UCS_OK, "1.2.3.4:1234");
+    check_ip_port("1.2.3.4:4567", 1234, UCS_OK, "1.2.3.4:4567");
+    check_ip_port("192.168.100.100:60000", 1234, UCS_OK, "192.168.100.100:60000");
+
+    /* Check wrong IPv4:port addresses */
+    {
+        socket_err_exp_str = "invalid address";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        check_ip_port("", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("randomstring", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port(":9999", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.2.3.", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.1.1.256:9999", 0, UCS_ERR_INVALID_ADDR, "");
+    }
+    {
+        socket_err_exp_str = "invalid port";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        check_ip_port("1.1.1.1:-1", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.1.1.1:65536", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.1.1.1:1111111", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.1.1.1:randomstring", 0, UCS_ERR_INVALID_ADDR, "");
+    }
+
+    /* TODO: for IPv6 addresses string representation "IPv6%0:port" produced by
+     * ucs_sockaddr_str does not conform RFC format: "[IPv6]:port" */
+
+    check_ip_port("::", 1234, UCS_OK, "::%0:1234");
+    check_ip_port("::1", 1234, UCS_OK, "::1%0:1234");
+    check_ip_port("[::1]:9999", 1234, UCS_OK, "::1%0:9999");
+    check_ip_port("::ffff:127.0.0.1", 1234, UCS_OK, "::ffff:127.0.0.1%0:1234");
+    check_ip_port("[::ffff:127.0.0.1]:9999", 0, UCS_OK, "::ffff:127.0.0.1%0:9999");
+    check_ip_port("1234:1234:1234:1234:1234:1234:1234:1234", 4444, UCS_OK,
+                  "1234:1234:1234:1234:1234:1234:1234:1234%0:4444");
+    check_ip_port("[1234:1234:1234:1234:1234:1234:1234:1234]:7777", 4444, UCS_OK,
+                  "1234:1234:1234:1234:1234:1234:1234:1234%0:7777");
+
+    /* Check wrong IPv6:port addresses */
+    {
+        socket_err_exp_str = "invalid address";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        check_ip_port("", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port(":::", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("::fffg", 0, UCS_ERR_INVALID_ADDR, "");
+    }
+    {
+        socket_err_exp_str = "invalid port";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        check_ip_port("[::1]:-1", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("[::1]:65536", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("[::1]:1111111", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("[::1]:randomstring", 0, UCS_ERR_INVALID_ADDR, "");
+    }
+}
+
+UCS_TEST_F(test_socket, port_from_string) {
+    uint16_t port = 0;
+
+    EXPECT_EQ(UCS_OK, ucs_sock_port_from_string("0", &port));
+    EXPECT_EQ(0, port);
+    EXPECT_EQ(UCS_OK, ucs_sock_port_from_string("1234", &port));
+    EXPECT_EQ(1234, port);
+    EXPECT_EQ(UCS_OK, ucs_sock_port_from_string("65535", &port));
+    EXPECT_EQ(65535, port);
+
+    {
+        socket_err_exp_str = "invalid port";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("", &port));
+        EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("-1", &port));
+        EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("str", &port));
+        EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("65536", &port));
+    }
+}
+
 UCS_TEST_F(test_socket, socket_setopt) {
     socklen_t optlen;
     int optname;
@@ -576,6 +714,44 @@ UCS_TEST_F(test_socket, sockaddr_cmp_err) {
 
     sockaddr_cmp_err_test((const struct sockaddr*)&sa_un,
                           (const struct sockaddr*)&sa_in);
+}
+
+UCS_TEST_F(test_socket, subnet_match) {
+    /* IPv4 non byte-aligned */
+    verify_subnet_match("192.168.122.28", "192.168.122.13", 27);
+    verify_subnet_match("192.168.3.28", "192.168.7.13", 21);
+    verify_subnet_match("192.45.3.28", "192.14.7.13", 10);
+
+    /* IPv4 byte-aligned */
+    verify_subnet_match("192.168.173.157", "10.33.44.100", 0);
+    verify_subnet_match("192.168.173.157", "192.33.44.100", 8);
+    verify_subnet_match("192.168.173.157", "192.168.44.100", 16);
+    verify_subnet_match("192.168.173.157", "192.168.173.100", 24);
+    verify_subnet_match("192.168.173.157", "192.168.173.157", 32);
+
+    /* IPv6 non byte-aligned */
+    verify_subnet_match("fe80::218:e7ff:fe16:fb97", "fe80::219:e7ff:fe16:fb97",
+                        79);
+    verify_subnet_match("fe80::218:e7ff:fef8:fb97", "fe80::218:e7ff:feff:fb97",
+                        109);
+
+    /* IPv6 byte-aligned */
+    verify_subnet_match("fe80::218:e7ff:fe16:fb97", "fe80::218:e77f:fe16:fb97",
+                        88);
+    verify_subnet_match("fe80::218:e7ff:fe16:fb97", "fe80::218:e7ff:fe16:fb97",
+                        128);
+}
+
+UCS_TEST_F(test_socket, subnet_match_failure) {
+    scoped_log_handler log_handler(socket_error_handler);
+
+    /* Unknown address family */
+    socket_err_exp_str = "unknown address family: ";
+    verify_subnet_error(AF_UNIX, AF_INET, 10);
+    verify_subnet_error(AF_INET, AF_UNIX, 10);
+
+    /* Different address families */
+    verify_subnet_error(AF_INET, AF_INET6, 10);
 }
 
 static void sockaddr_get_ipstr_check(const struct sockaddr *sockaddr,

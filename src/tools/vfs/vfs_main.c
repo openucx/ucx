@@ -10,6 +10,7 @@
 
 #include "vfs_daemon.h"
 
+#include <ucs/debug/log_def.h>
 #include <sys/wait.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -22,8 +23,7 @@ vfs_opts_t g_opts = {
     .foreground     = 0,
     .verbose        = 0,
     .mountpoint_dir = VFS_DEFAULT_MOUNTPOINT_DIR,
-    .mount_opts     = "",
-    .sock_path      = NULL
+    .mount_opts     = ""
 };
 
 const char *vfs_action_names[] = {
@@ -254,6 +254,11 @@ static int vfs_listen(int silent_addinuse_err)
         goto out;
     }
 
+    ret = ucs_vfs_sock_mkdir(g_sockaddr.sun_path, UCS_LOG_LEVEL_ERROR);
+    if (ret != 0) {
+        goto out;
+    }
+
     listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (listen_fd < 0) {
         ret = -errno;
@@ -387,9 +392,6 @@ out:
 
 static void vfs_usage()
 {
-    struct sockaddr_un sock_addr = {};
-
-    ucs_vfs_sock_get_address(&sock_addr);
     printf("Usage:   ucx_vfs [options]  [action]\n");
     printf("\n");
     printf("Options:\n");
@@ -398,8 +400,6 @@ static void vfs_usage()
     printf("  -o <opts>  Pass these mount options to mount.fuse\n");
     printf("  -f         Do not daemonize; run in foreground\n");
     printf("  -v         Enable verbose logging (requires -f)\n");
-    printf("  -l <path>  Set listening unix socket path (default: %s)\n",
-           sock_addr.sun_path);
     printf("\n");
     printf("Actions:\n");
     printf("   start     Run the daemon and listen for connection from UCX\n");
@@ -414,7 +414,7 @@ static int vfs_parse_args(int argc, char **argv)
     const char *action_str;
     int c, i;
 
-    while ((c = getopt(argc, argv, "d:o:vfl:h")) != -1) {
+    while ((c = getopt(argc, argv, "d:o:vfh")) != -1) {
         switch (c) {
         case 'd':
             g_opts.mountpoint_dir = optarg;
@@ -427,9 +427,6 @@ static int vfs_parse_args(int argc, char **argv)
             break;
         case 'f':
             g_opts.foreground = 1;
-            break;
-        case 'l':
-            g_opts.sock_path = optarg;
             break;
         case 'h':
         default:
@@ -494,14 +491,7 @@ int main(int argc, char **argv)
         fuse_daemonize(0);
     }
 
-    if (g_opts.sock_path == NULL) {
-        ucs_vfs_sock_get_address(&g_sockaddr);
-    } else {
-        g_sockaddr.sun_family = AF_UNIX;
-        memset(g_sockaddr.sun_path, 0, sizeof(g_sockaddr.sun_path));
-        strncpy(g_sockaddr.sun_path, g_opts.sock_path,
-                sizeof(g_sockaddr.sun_path) - 1);
-    }
+    ucs_vfs_sock_get_address(&g_sockaddr);
 
     switch (g_opts.action) {
     case VFS_DAEMON_ACTION_START:

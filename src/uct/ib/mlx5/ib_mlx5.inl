@@ -6,6 +6,8 @@
 
 #include "ib_mlx5.h"
 
+#include <ucs/sys/ptr_arith.h>
+
 typedef struct uct_ib_mlx5_wqe_ctrl_seg {
     __be32      opmod_idx_opcode;
     __be32      qpn_ds;
@@ -152,7 +154,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
     }
 
     cq->cq_ci = idx + 1;
-    return cqe; /* TODO optimize - let complier know cqe is not null */
+    return cqe; /* TODO optimize - let compiler know cqe is not null */
 }
 
 
@@ -504,12 +506,23 @@ size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
 static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
                                                        void * restrict src)
 {
-#if defined( __SSE4_2__)
-    UCS_WORD_COPY(__m128i, dst, __m128i, src, MLX5_SEND_WQE_BB);
-#elif defined(__ARM_NEON)
-    UCS_WORD_COPY(int16x8_t, dst, int16x8_t, src, MLX5_SEND_WQE_BB);
-#else /* NO SIMD support */
-    UCS_WORD_COPY(uint64_t, dst, uint64_t, src, MLX5_SEND_WQE_BB);
+#if defined(__ARM_NEON)
+    vst4q_u64(dst, vld4q_u64(src));
+#else
+#if defined(__SSE4_2__)
+    typedef __m128i uct_ib_mlx5_send_wqe_bb_block_t;
+#else
+    typedef uint8_t uct_ib_mlx5_send_wqe_bb_block_t;
+#endif
+    /* Prevent compiler to replace by memmove() */
+    typedef struct {
+        uct_ib_mlx5_send_wqe_bb_block_t
+                data[MLX5_SEND_WQE_BB / sizeof(uct_ib_mlx5_send_wqe_bb_block_t)];
+    } UCS_S_PACKED uct_ib_mlx5_send_wqe_bb_t;
+
+    UCS_WORD_COPY(uct_ib_mlx5_send_wqe_bb_t, dst,
+                  uct_ib_mlx5_send_wqe_bb_t, src,
+                  MLX5_SEND_WQE_BB);
 #endif
 }
 
@@ -637,4 +650,12 @@ uct_ib_mlx5_update_cqe_zipping_stats(uct_ib_iface_t *iface,
         UCS_STATS_UPDATE_COUNTER(iface->stats,
                                  UCT_IB_IFACE_STAT_RX_COMPLETION_ZIPPED, 1);
     }
+}
+
+
+static int UCS_F_ALWAYS_INLINE
+uct_ib_mlx5_get_atomic_mode(uct_ib_iface_t *iface)
+{
+    return uct_ib_iface_device(iface)->ext_atomic_arg_sizes ?
+        UCT_IB_MLX5_ATOMIC_MODE_EXT : UCT_IB_MLX5_ATOMIC_MODE_COMP;
 }

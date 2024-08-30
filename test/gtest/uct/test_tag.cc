@@ -272,7 +272,7 @@ public:
 
         wait_for_flag(&r_ctx.unexp);
         if (static_cast<send_func>(&test_tag::tag_rndv_zcopy) == sfunc) {
-            // Need to cancel origin RNDV operation, beacuse no RNDV_COMP
+            // Need to cancel origin RNDV operation, because no RNDV_COMP
             // will be received (as it arrived unexpectedly and should be
             // handled by SW).
             ASSERT_UCS_OK(tag_rndv_cancel(sender(), s_ctx.rndv_op));
@@ -291,7 +291,7 @@ public:
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
 
         // Post modified tag for incoming message to be reported as unexpected
-        // and not to be macthed.
+        // and not to be matched.
         recv_ctx r_ctx;
         init_recv_ctx(r_ctx, &recvbuf, tag + 1);
         send_ctx s_ctx;
@@ -761,7 +761,7 @@ UCT_TAG_INSTANTIATE_TEST_CASE(test_tag)
 #if defined (ENABLE_STATS) && IBV_HW_TM
 extern "C" {
 #include <uct/api/uct.h>
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/base/ib_verbs.h>
 }
 
@@ -795,7 +795,7 @@ public:
 
         // Counters are synced every IBV_DEVICE_MAX_UNEXP_COUNT ops, set
         // it one op before, so that any following unexpected message would
-        // cause HW ans SW counters sync.
+        // cause HW and SW counters sync.
         iface->tm.unexpected_cnt = IBV_DEVICE_MAX_UNEXP_COUNT - 1;
     }
 
@@ -929,7 +929,7 @@ UCT_TAG_INSTANTIATE_TEST_CASE(test_tag_stats)
 #if IBV_HW_TM
 
 extern "C" {
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 }
 
 // TODO: Unite with test_tag + add GRH testing for DC
@@ -1018,7 +1018,8 @@ void test_tag_mp_xrq::init()
     set_env_var_or_skip(m_iface_config, "RC_TM_ENABLE", "y");
     set_env_var_or_skip(m_iface_config, "RC_TM_MP_SRQ_ENABLE", "try");
     set_env_var_or_skip(m_iface_config, "RC_TM_MP_NUM_STRIDES", "8");
-    set_env_var_or_skip(m_md_config, "MLX5_DEVX_OBJECTS", "dct,dcsrq,rcsrq,rcqp");
+    set_env_var_or_skip(m_md_config, "IB_MLX5_DEVX_OBJECTS",
+                        "dct,dcsrq,rcsrq,rcqp");
 
     uct_test::init();
 

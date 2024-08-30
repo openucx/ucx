@@ -75,7 +75,7 @@ if [ $opt_tarball -eq 1 ]; then
 fi
 
 # Version includes revision, while tarball in Source doesn't have it since
-# it uses GitHub standart name v<Version>.tar.gz, so make:
+# it uses GitHub standard name v<Version>.tar.gz, so make:
 # ucx-1.3.0.6a61458.tar.gz --> v1.3.0.tar.gz for rpmbuild
 tgz=(ucx*.tar.gz)
 tarball=${tgz[0]}
@@ -114,6 +114,8 @@ if [ $opt_binrpm -eq 1 ]; then
 	with_args+=" $(with_arg ugni)"
 	with_args+=" $(with_arg xpmem)"
 	with_args+=" $(with_arg fuse)"
+	with_args+=" $(with_arg mad)"
+	with_args+=" $(with_arg mlx5)"
 
 	echo rpmbuild -bb $rpmmacros $rpmopts $rpmspec $defines $with_args | bash -eEx
 fi

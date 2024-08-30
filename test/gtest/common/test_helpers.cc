@@ -24,7 +24,7 @@ namespace ucs {
 
 typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
 
-const double test_timeout_in_sec = 60.;
+const double test_timeout_in_sec = 180.;
 
 double watchdog_timeout = 900.; // 15 minutes
 
@@ -324,12 +324,16 @@ void analyze_test_results()
 int test_time_multiplier()
 {
     int factor = 1;
-#if _BullseyeCoverage
-    factor *= 10;
-#endif
     if (RUNNING_ON_VALGRIND) {
         factor *= 20;
     }
+#if _BullseyeCoverage
+    factor *= 10;
+#endif
+#ifdef __SANITIZE_ADDRESS__
+    factor *= 20;
+#endif
+
     return factor;
 }
 
@@ -628,17 +632,18 @@ uint16_t get_port() {
     return port;
 }
 
-void *mmap_fixed_address(size_t length) {
-    void *ptr = mmap(NULL, length, PROT_READ | PROT_WRITE,
-                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (ptr == MAP_FAILED) {
-        return nullptr;
+mmap_fixed_address::mmap_fixed_address(size_t length) : m_length(length) {
+    m_ptr = mmap(NULL, m_length, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (m_ptr == MAP_FAILED) {
+        UCS_TEST_ABORT("mmap failed to allocate memory region");
     }
+}
 
-    munmap(ptr, length);
-
-    /* coverity[use_after_free] */
-    return ptr;
+mmap_fixed_address::~mmap_fixed_address() {
+    if (m_ptr != NULL) {
+        munmap(m_ptr, m_length);
+    }
 }
 
 std::string compact_string(const std::string &str, size_t length)
@@ -791,6 +796,15 @@ std::string sock_addr_storage::to_str() const {
     return ucs_sockaddr_str(get_sock_addr_ptr(), str, sizeof(str));
 }
 
+std::string sock_addr_storage::to_ip_str() const {
+    char str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+
+    status = ucs_sockaddr_get_ipstr(get_sock_addr_ptr(), str, sizeof(str));
+    ASSERT_UCS_OK(status);
+    return str;
+}
+
 const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
     return m_is_valid ? (struct sockaddr *)(&m_storage) : NULL;
 }
@@ -812,19 +826,11 @@ std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage)
     return os << ucs::sockaddr_to_str(sa_storage.get_sock_addr_ptr());
 }
 
-auto_buffer::auto_buffer(size_t size) : m_ptr(malloc(size)) {
-    if (!m_ptr) {
-        UCS_TEST_ABORT("Failed to allocate memory");
-    }
+auto_buffer::auto_buffer(size_t size) : m_buf(size) {
 }
 
-auto_buffer::~auto_buffer()
-{
-    free(m_ptr);
-}
-
-void* auto_buffer::operator*() const {
-    return m_ptr;
+void* auto_buffer::operator*() {
+    return as<void>();
 };
 
 scoped_log_level::scoped_log_level(ucs_log_level_t level)

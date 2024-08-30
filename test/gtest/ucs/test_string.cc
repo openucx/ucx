@@ -9,6 +9,7 @@ extern "C" {
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 }
 
@@ -257,8 +258,8 @@ void test_string_buffer::test_fixed(ucs_string_buffer_t *strb, size_t capacity)
     ucs_string_buffer_appendf(strb, "%s", "mrmeeseeks");
     ucs_string_buffer_appendf(strb, "%s", "lookatme");
 
-    EXPECT_LE(ucs_string_buffer_length(strb), capacity - 1);
-    EXPECT_EQ(std::string("immrmeeseeksloo"), ucs_string_buffer_cstr(strb));
+    EXPECT_EQ(ucs_string_buffer_length(strb), capacity - 1);
+    EXPECT_EQ(std::string("immrmeeseekslook"), ucs_string_buffer_cstr(strb));
 }
 
 UCS_TEST_F(test_string_buffer, fixed_static) {

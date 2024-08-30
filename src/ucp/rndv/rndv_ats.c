@@ -11,25 +11,21 @@
 #include "proto_rndv.inl"
 
 
-static ucs_status_t
-ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
+static void ucp_proto_rndv_ats_probe(const ucp_proto_init_params_t *init_params)
 {
+    ucp_proto_caps_t caps, input_caps;
+    ucp_proto_rndv_ack_priv_t priv;
     ucp_proto_perf_range_t *range0;
-    ucp_proto_caps_t caps;
     ucs_status_t status;
 
     if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    *init_params->priv_size = sizeof(ucp_proto_rndv_ack_priv_t);
-
-    caps.cfg_thresh   = 0;
-    caps.cfg_priority = 1;
-    caps.min_length   = 0;
-    caps.num_ranges   = 1;
-    range0            = &caps.ranges[0];
-    range0->node      = NULL;
+    input_caps.min_length = 0;
+    input_caps.num_ranges = 1;
+    range0                = &input_caps.ranges[0];
+    range0->node          = NULL;
     ucp_proto_perf_set(range0->perf, UCS_LINEAR_FUNC_ZERO);
 
     /* This protocols supports either a regular rendezvous receive but without
@@ -42,15 +38,20 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
                                        UCS_BIT(UCP_OP_ID_RNDV_RECV_DROP))) {
         range0->max_length = SIZE_MAX;
     } else {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
     status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
-                                     &caps, UCS_LINEAR_FUNC_ZERO,
-                                     init_params->priv);
-    ucp_proto_select_caps_cleanup(&caps);
+                                     &input_caps, UCS_LINEAR_FUNC_ZERO, &priv,
+                                     &caps);
+    ucp_proto_select_caps_cleanup(&input_caps);
 
-    return status;
+    if (status != UCS_OK) {
+        return;
+    }
+
+    ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_AUTO, 80, &caps, &priv,
+                               sizeof(priv));
 }
 
 static void
@@ -73,7 +74,7 @@ ucp_proto_t ucp_rndv_ats_proto = {
     .name     = "rndv/ats",
     .desc     = "no data fetch",
     .flags    = 0,
-    .init     = ucp_proto_rndv_ats_init,
+    .probe    = ucp_proto_rndv_ats_probe,
     .query    = ucp_proto_rndv_ats_query,
     .progress = {ucp_proto_rndv_ats_progress},
     .abort    = ucp_proto_rndv_ats_abort,

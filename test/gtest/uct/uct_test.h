@@ -25,7 +25,6 @@
 
 
 #define DEFAULT_DELAY_MS           1.0
-#define DEFAULT_TIMEOUT_SEC       10.0
 #define DEFAULT_VARIANT              0
 
 #define UCT_TEST_CALL_AND_TRY_AGAIN(_func, _res) \
@@ -137,10 +136,11 @@ protected:
         entity(const resource& resource, uct_md_config_t *md_config,
                uct_cm_config_t *cm_config);
 
-        void mem_alloc_host(size_t length, unsigned mem_flags,
-                            uct_allocated_memory_t *mem) const;
+        void mem_alloc(size_t length, unsigned mem_flags,
+                       uct_allocated_memory_t *mem,
+                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST) const;
 
-        void mem_free_host(const uct_allocated_memory_t *mem) const;
+        void mem_free(const uct_allocated_memory_t *mem) const;
 
         void mem_type_reg(uct_allocated_memory_t *mem, unsigned flags) const;
 
@@ -189,9 +189,10 @@ protected:
         void revoke_ep(unsigned index);
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
-        void connect_to_iface(unsigned index, entity& other);
-        void connect_to_ep(unsigned index, entity& other,
-                           unsigned other_index);
+        void connect_to_iface(unsigned index, entity &other,
+                              unsigned path_index = 0);
+        void connect_to_ep(unsigned index, entity &other, unsigned other_index,
+                           unsigned path_index = 0);
         void connect_to_sockaddr(unsigned index,
                                  const ucs::sock_addr_storage &remote_addr,
                                  const ucs::sock_addr_storage *local_addr,
@@ -240,16 +241,24 @@ protected:
 
     class mapped_buffer {
     public:
+        mapped_buffer(size_t size, const entity &entity, size_t offset = 0,
+                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                      unsigned mem_flags = UCT_MD_MEM_ACCESS_ALL);
+
         mapped_buffer(size_t size, uint64_t seed, const entity &entity,
                       size_t offset = 0,
                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
                       unsigned mem_flags = UCT_MD_MEM_ACCESS_ALL);
         virtual ~mapped_buffer();
 
+        mapped_buffer(mapped_buffer &&other);
+
         void *ptr() const;
         uintptr_t addr() const;
         size_t length() const;
         uct_mem_h memh() const;
+        ucs_memory_type_t mem_type() const;
+        void *reg_addr() const;
         uct_rkey_t rkey() const;
         const uct_iov_t* iov() const;
 
@@ -260,6 +269,7 @@ protected:
         static size_t pack(void *dest, void *arg);
 
     private:
+        void reset();
 
         const uct_test::entity& m_entity;
 
@@ -315,8 +325,8 @@ protected:
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
+        using ucs::get_deadline;
+        ucs_time_t deadline = get_deadline(timeout);
         while ((ucs_get_time() < deadline) && (!(*flag))) {
             short_progress_loop();
         }
@@ -326,9 +336,8 @@ protected:
     void wait_for_bits(FlagType *flag, MaskType mask,
                        double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) *
-                              ucs::test_time_multiplier();
+        using ucs::get_deadline;
+        ucs_time_t deadline = get_deadline(timeout);
         while ((ucs_get_time() < deadline) && (!ucs_test_all_flags(*flag, mask))) {
             /* Don't do short_progress_loop() to avoid extra timings */
             progress_mt();
@@ -336,18 +345,15 @@ protected:
     }
 
     template <typename T>
-    void wait_for_value(volatile T *var, T value, bool progress,
+    void wait_for_value(const volatile T *var, T value, bool progress,
                         double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
-        while ((ucs_get_time() < deadline) && (*var != value)) {
-            if (progress) {
-                short_progress_loop();
-            } else {
-                twait();
-            }
-        }
+        test_base::wait_for_value(
+                var, value,
+                [this, progress]() {
+                    progress ? short_progress_loop() : twait();
+                },
+                timeout);
     }
 
     template <typename T>
@@ -355,18 +361,13 @@ protected:
                                bool progress = true,
                                double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) *
-                              ucs::test_time_multiplier();
-        T initial_value     = *var;
-
-        while ((ucs_get_time() < deadline) && (*var == initial_value)) {
-            if (progress) {
-                short_progress_loop(DEFAULT_DELAY_MS, e);
-            } else {
-                twait();
-            }
-        }
+        const T initial_value = *var;
+        wait_for_cond([var, initial_value]() { return *var != initial_value; },
+                      [this, progress, e]() {
+                          progress ? short_progress_loop(DEFAULT_DELAY_MS, e) :
+                                     twait();
+                      },
+                      timeout);
     }
 
     virtual void init();
@@ -467,10 +468,14 @@ protected:
     rc_verbs,           \
     dc_mlx5,            \
     ud_verbs,           \
-    ud_mlx5
+    ud_mlx5,            \
+    gga_mlx5
 
 
 #define UCT_TEST_CMS rdmacm, tcp
+
+
+#define UCT_TEST_MM_TLS posix, sysv, xpmem
 
 
 #define UCT_TEST_NO_SELF_TLS \
@@ -479,9 +484,7 @@ protected:
     ugni_udt,                \
     ugni_smsg,               \
     tcp,                     \
-    posix,                   \
-    sysv,                    \
-    xpmem,                   \
+    UCT_TEST_MM_TLS,         \
     cma,                     \
     knem
 
@@ -520,6 +523,15 @@ protected:
  */
 #define UCT_INSTANTIATE_IB_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_IB_TLS)
+
+
+/**
+ * Instantiate the parametrized test case for the MM transports.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_MM_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_MM_TLS)
 
 
 /**
@@ -576,6 +588,16 @@ protected:
 #define UCT_INSTANTIATE_RC_DC_TEST_CASE(_test_case) \
     UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
+
+
+/**
+ * Instantiate the parametrized test case for CUDA_IPC.
+ * TODO: add cuda_ipc to UCT_INSTANTIATE_TEST_CASE.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_CUDA_IPC_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, cuda_ipc)
 
 std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resource);
 

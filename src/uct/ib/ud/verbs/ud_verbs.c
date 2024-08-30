@@ -29,6 +29,10 @@
 
 #include <uct/ib/ud/base/ud_inl.h>
 
+
+#define UCT_UD_VERBS_IFACE_OVERHEAD 105e-9
+
+
 static UCS_F_NOINLINE void
 uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max);
 
@@ -36,7 +40,7 @@ static inline void
 uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface);
 
 static ucs_config_field_t uct_ud_verbs_iface_config_table[] = {
-  {"UD_", "", NULL,
+  {"UD_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_UD_VERBS_IFACE_OVERHEAD), NULL,
    0, UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
   {NULL}
@@ -535,7 +539,7 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->overhead = 105e-9; /* Software overhead */
+    iface_attr->overhead = UCT_UD_VERBS_IFACE_OVERHEAD; /* Software overhead */
 
     return UCS_OK;
 }
@@ -757,7 +761,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, &uct_ud_verbs_iface_tl_ops, md,
                               worker, params, config, &init_attr);
 
-    self->super.super.config.sl       = uct_ib_iface_config_select_sl(&config->super);
+    self->super.super.config.sl = uct_ib_iface_config_select_sl(&config->super);
+    uct_ib_iface_set_reverse_sl(&self->super.super, &config->super);
 
     memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
     self->tx.wr_inl.opcode            = IBV_WR_SEND;

@@ -17,9 +17,15 @@
 
 static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
 
-    {"", "", NULL,
-     ucs_offsetof(uct_rocm_ipc_iface_config_t, super),
+    {"", "", NULL, ucs_offsetof(uct_rocm_ipc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+    {"MIN_ZCOPY", "128", "Minimum data size for ROCm/IPC zcopy protocols",
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, min_zcopy),
+     UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"LAT", "1e-7", "Latency",
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, latency), UCS_CONFIG_TYPE_TIME},
 
     {NULL}
 };
@@ -77,13 +83,13 @@ static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
 
     uct_base_iface_query(&iface->super, iface_attr);
 
-    iface_attr->cap.put.min_zcopy       = 0;
+    iface_attr->cap.put.min_zcopy       = iface->config.min_zcopy;
     iface_attr->cap.put.max_zcopy       = SIZE_MAX;
     iface_attr->cap.put.opt_zcopy_align = sizeof(uint32_t);
     iface_attr->cap.put.align_mtu       = iface_attr->cap.put.opt_zcopy_align;
     iface_attr->cap.put.max_iov         = 1;
 
-    iface_attr->cap.get.min_zcopy       = 0;
+    iface_attr->cap.get.min_zcopy       = iface->config.min_zcopy;
     iface_attr->cap.get.max_zcopy       = SIZE_MAX;
     iface_attr->cap.get.opt_zcopy_align = sizeof(uint32_t);
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
@@ -98,7 +104,7 @@ static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_PENDING   |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
-    iface_attr->latency                 = ucs_linear_func_make(1e-9, 0);
+    iface_attr->latency = ucs_linear_func_make(iface->config.latency, 0);
     iface_attr->bandwidth.dedicated     = 0;
     iface_attr->bandwidth.shared        = uct_rocm_ipc_iface_get_bw();
     iface_attr->overhead                = 0;
@@ -170,6 +176,8 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    uct_rocm_ipc_iface_config_t *config =
+            ucs_derived_of(tl_config, uct_rocm_ipc_iface_config_t);
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
 
@@ -178,6 +186,9 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
                               md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_IPC_TL_NAME));
+
+    self->config.min_zcopy = config->min_zcopy;
+    self->config.latency   = config->latency;
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_rocm_base_signal_desc_t);

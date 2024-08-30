@@ -42,12 +42,9 @@ typedef struct ucp_am_entry {
 } ucp_am_entry_t;
 
 
-UCS_ARRAY_DECLARE_TYPE(ucp_am_cbs, unsigned, ucp_am_entry_t)
-
-
 typedef struct ucp_am_info {
-    size_t                   alignment;
-    ucs_array_t(ucp_am_cbs)  cbs;
+    size_t                                alignment;
+    ucs_array_s(unsigned, ucp_am_entry_t) cbs;
 } ucp_am_info_t;
 
 

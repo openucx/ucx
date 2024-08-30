@@ -128,20 +128,24 @@ void test_perf::rte::exchange_vec(void *rte_group, void * req)
 {
 }
 
-void test_perf::rte::report(void *rte_group, const ucx_perf_result_t *result,
-                            void *arg, const char *extra_info, int is_final,
-                            int is_multi_thread)
+ucs_status_t test_perf::rte::setup(void *arg)
+{
+    return UCS_OK;
+}
+
+void test_perf::rte::cleanup(void *arg)
 {
 }
 
 ucx_perf_rte_t test_perf::rte::test_rte = {
+    rte::setup,
+    rte::cleanup,
     rte::group_size,
     rte::group_index,
     rte::barrier,
     rte::post_vec,
     rte::recv,
     rte::exchange_vec,
-    rte::report,
 };
 
 std::vector<int> test_perf::get_affinity() {
@@ -229,6 +233,7 @@ void test_perf::test_params_init(const test_spec &test,
     params.report_interval = 1.0;
     params.rte_group       = NULL;
     params.rte             = &rte::test_rte;
+    params.report_func     = test_perf::print_progress;
     params.report_arg      = NULL;
 
     ucs_strncpy_zero(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
@@ -241,8 +246,10 @@ void test_perf::test_params_init(const test_spec &test,
     params.iov_stride           = test.msg_stride;
     params.ucp.send_datatype    = (ucp_perf_datatype_t)test.data_layout;
     params.ucp.recv_datatype    = (ucp_perf_datatype_t)test.data_layout;
-    params.ucp.nonblocking_mode = 0;
     params.ucp.am_hdr_size      = 0;
+    params.ucp.is_daemon_mode   = 0;
+    params.ucp.dmn_local_addr   = {};
+    params.ucp.dmn_remote_addr  = {};
 }
 
 test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsigned flags,

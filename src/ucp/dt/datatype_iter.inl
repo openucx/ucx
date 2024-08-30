@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -230,15 +231,12 @@ ucp_datatype_iter_move(ucp_datatype_iter_t *dst_iter,
     }
 
     /* Invalidate source iterator */
-#if UCS_ENABLE_ASSERT
     src_iter->dt_class = UCP_DATATYPE_CLASS_MASK;
-#endif
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_slice(const ucp_datatype_iter_t *dt_iter, size_t offset,
-                        size_t length, ucp_datatype_iter_t *sliced_dt_iter,
-                        uint8_t *sg_count)
+                        size_t length, ucp_datatype_iter_t *sliced_dt_iter)
 {
     ucs_assertv(dt_iter->dt_class == UCP_DATATYPE_CONTIG, "dt=%d (%s)",
                 dt_iter->dt_class, ucp_datatype_class_names[dt_iter->dt_class]);
@@ -251,7 +249,6 @@ ucp_datatype_iter_slice(const ucp_datatype_iter_t *dt_iter, size_t offset,
                                                     dt_iter->type.contig.buffer,
                                                     offset);
     sliced_dt_iter->type.contig.memh       = NULL;
-    *sg_count                              = 1;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
@@ -380,7 +377,8 @@ ucp_datatype_iter_next_pack(const ucp_datatype_iter_t *dt_iter,
         src    = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer,
                                      dt_iter->offset);
         ucp_dt_contig_pack(worker, dest, src, length,
-                           (ucs_memory_type_t)dt_iter->mem_info.type);
+                           (ucs_memory_type_t)dt_iter->mem_info.type,
+                           dt_iter->length);
         break;
     case UCP_DATATYPE_IOV:
         ucp_datatype_iter_iov_check(dt_iter);
@@ -391,7 +389,8 @@ ucp_datatype_iter_next_pack(const ucp_datatype_iter_t *dt_iter,
                               dt_iter->type.iov.iov, length,
                               &next_iter->type.iov.iov_offset,
                               &next_iter->type.iov.iov_index,
-                              (ucs_memory_type_t)dt_iter->mem_info.type);
+                              (ucs_memory_type_t)dt_iter->mem_info.type,
+                              dt_iter->length);
         break;
     case UCP_DATATYPE_GENERIC:
         if (max_length != 0) {
@@ -445,7 +444,8 @@ ucp_datatype_iter_unpack(ucp_datatype_iter_t *dt_iter, ucp_worker_h worker,
         ucs_assert(dt_iter->mem_info.type < UCS_MEMORY_TYPE_LAST);
         dest = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer, offset);
         ucp_dt_contig_unpack(worker, dest, src, length,
-                             (ucs_memory_type_t)dt_iter->mem_info.type);
+                             (ucs_memory_type_t)dt_iter->mem_info.type,
+                             dt_iter->length);
         status = UCS_OK;
         break;
     case UCP_DATATYPE_IOV:
@@ -455,7 +455,8 @@ ucp_datatype_iter_unpack(ucp_datatype_iter_t *dt_iter, ucp_worker_h worker,
                                            length,
                                            &dt_iter->type.iov.iov_offset,
                                            &dt_iter->type.iov.iov_index,
-                                           (ucs_memory_type_t)dt_iter->mem_info.type);
+                                           (ucs_memory_type_t)dt_iter->mem_info.type,
+                                           dt_iter->length);
         ucs_assert(unpacked_length <= length);
         dt_iter->offset += unpacked_length;
         status           = UCS_OK;
@@ -517,17 +518,26 @@ ucp_datatype_iter_next_ptr(const ucp_datatype_iter_t *dt_iter,
     return ucp_datatype_iter_next(dt_iter, max_length, next_iter);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_datatype_iter_next_slice(const ucp_datatype_iter_t *dt_iter,
-                             size_t max_length,
-                             ucp_datatype_iter_t *sliced_dt_iter,
-                             ucp_datatype_iter_t *next_iter, uint8_t *sg_count)
+static UCS_F_ALWAYS_INLINE size_t
+ucp_datatype_iter_next_slice_overlap(ucp_datatype_iter_t *dt_iter,
+                                     size_t max_length, size_t min_frag,
+                                     ucp_datatype_iter_t *sliced_dt_iter,
+                                     ucp_datatype_iter_t *next_iter)
 {
-    size_t length;
+    size_t  length  = ucp_datatype_iter_next(dt_iter, max_length, next_iter);
+    ssize_t overlap = min_frag - length;
 
-    length = ucp_datatype_iter_next(dt_iter, max_length, next_iter);
-    ucp_datatype_iter_slice(dt_iter, dt_iter->offset, length, sliced_dt_iter,
-                            sg_count);
+    /* Overlap previous fragment to respect min_frag requirement */
+    if (ucs_unlikely(overlap > 0)) {
+        dt_iter->offset -= overlap;
+        length          += overlap;
+    } else {
+        overlap          = 0;
+    }
+
+    ucp_datatype_iter_slice(dt_iter, dt_iter->offset, length, sliced_dt_iter);
+
+    return overlap;
 }
 
 static UCS_F_ALWAYS_INLINE uct_mem_h
@@ -609,23 +619,15 @@ ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
 }
 
 /*
- * Check if the next iterator has reached the end
- */
-static UCS_F_ALWAYS_INLINE int
-ucp_datatype_iter_is_end_position(const ucp_datatype_iter_t *dt_iter,
-                                  const ucp_datatype_iter_t *pos_iter)
-{
-    ucs_assert(dt_iter->offset <= dt_iter->length);
-    return pos_iter->offset == dt_iter->length;
-}
-
-/*
  * Check if the iterator has reached the end
  */
 static UCS_F_ALWAYS_INLINE int
 ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
 {
-    return ucp_datatype_iter_is_end_position(dt_iter, dt_iter);
+    ucs_assertv(dt_iter->offset <= dt_iter->length,
+                "dt_iter=%p dt_iter->offset=%zu dt_iter->length=%zu", dt_iter,
+                dt_iter->offset, dt_iter->length);
+    return dt_iter->offset == dt_iter->length;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -635,6 +637,20 @@ ucp_datatype_iter_rewind(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         dt_iter->type.iov.iov_index  = 0;
         dt_iter->type.iov.iov_offset = 0;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_seek(ucp_datatype_iter_t *dt_iter, size_t offset,
+                       unsigned dt_mask)
+{
+    ucs_assertv(offset <= dt_iter->length,
+                "dt_iter=%p offset=%zu dt_iter->length=%zu", dt_iter,
+                offset, dt_iter->length);
+    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
+        ucp_datatype_iter_iov_seek(dt_iter, offset);
+    } else {
+        dt_iter->offset = offset;
     }
 }
 

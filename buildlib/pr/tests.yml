@@ -4,7 +4,10 @@ parameters:
   demands: []
   name: subtest
   container:
+  run_tests: yes
   proto_enable: yes
+  asan_check: no
+  valgrind_check: no
 
 jobs:
   - job: tests_${{ parameters.name }}
@@ -21,11 +24,12 @@ jobs:
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     workspace:
-      clean: all
+      clean: outputs
     steps:
       - checkout: self
         clean: true
         fetchDepth: 100
+        retryCountOnTaskFailure: 5
 
       - bash: |
           source ./buildlib/az-helpers.sh
@@ -39,12 +43,11 @@ jobs:
           worker: $(worker_id)
           BUILD_NUMBER: "$(Build.BuildId)-$(Build.BuildNumber)"
           JOB_URL: "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
-          # Set $JENKINS_RUN_TESTS to empty value to avoid setting CPU affinity in test_jenkins.sh
-          JENKINS_RUN_TESTS: ""
           # $AZP_AGENT_ID is set for every self-hosted Azure agent (uniq for one host, from 1 to N)
           EXECUTOR_NUMBER: $(AZP_AGENT_ID)
-          RUN_TESTS: yes
-          JENKINS_TEST_PERF: ${{ parameters.test_perf }}
+          RUN_TESTS: ${{ parameters.run_tests }}
+          TEST_PERF: ${{ parameters.test_perf }}
           PROTO_ENABLE: ${{ parameters.proto_enable }}
-          JENKINS_NO_VALGRIND: ${{ parameters.valgrind_disable }}
+          ASAN_CHECK: ${{ parameters.asan_check }}
+          VALGRIND_CHECK: ${{ parameters.valgrind_check }}
           RUNNING_IN_AZURE: yes

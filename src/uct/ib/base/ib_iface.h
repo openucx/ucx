@@ -31,6 +31,16 @@
 #define UCT_IB_COUNTER_SET_ID_INVALID      UINT8_MAX
 
 
+#define UCT_IB_SEND_OVERHEAD_VALUE(_iface_overhead) \
+    "bcopy:5ns,cqe:20ns,db:40ns,wqe_fetch:350ns," \
+    "wqe_post:" UCS_PP_MAKE_STRING(_iface_overhead)
+
+
+#define UCT_IB_SEND_OVERHEAD_DEFAULT(_iface_overhead) \
+    UCT_IB_CONFIG_PREFIX "SEND_OVERHEAD=" \
+    UCT_IB_SEND_OVERHEAD_VALUE(_iface_overhead)
+
+
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
 typedef struct uct_ib_iface_ops      uct_ib_iface_ops_t;
@@ -127,6 +137,22 @@ typedef struct uct_ib_address_pack_params {
 } uct_ib_address_pack_params_t;
 
 
+
+/** Overhead of send operation of ib interface */
+typedef struct uct_ib_iface_send_overhead {
+    /** Overhead of allocating a tx buffer */
+    double bcopy;
+    /** Overhead of processing a work request completion */
+    double cqe;
+    /** Overhead of writing a doorbell to PCI */
+    double db;
+    /** Overhead of fetching a wqe */
+    double wqe_fetch;
+    /** Overhead of posting a wqe */
+    double wqe_post;
+} uct_ib_iface_send_overhead_t;
+
+
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
@@ -157,6 +183,9 @@ struct uct_ib_iface_config {
     /* Force global routing */
     int                     is_global;
 
+    /* Use FLID based routing */
+    int                     flid_enabled;
+
     /* IB SL to use (default: AUTO) */
     unsigned long           sl;
 
@@ -175,6 +204,9 @@ struct uct_ib_iface_config {
     /* Length of subnet prefix for reachability check */
     unsigned long           rocev2_subnet_pfx_len;
 
+    /* List of included/excluded subnets to filter RoCE GID entries by */
+    ucs_config_allow_list_t rocev2_subnet_filter;
+
     /* Multiplier for RoCE LAG UDP source port calculation */
     unsigned                roce_path_factor;
 
@@ -182,13 +214,21 @@ struct uct_ib_iface_config {
     UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
 
     /* IB PKEY to use */
-    unsigned                pkey;
+    unsigned                     pkey;
 
     /* Path MTU size */
-    uct_ib_mtu_t            path_mtu;
+    uct_ib_mtu_t                 path_mtu;
 
     /* QP counter set ID */
-    unsigned long           counter_set_id;
+    unsigned long                counter_set_id;
+
+    /* IB reverse SL (default: AUTO - same value as sl) */
+    unsigned long                reverse_sl;
+
+    /**
+     * Estimated overhead of preparing a work request and posting it to the NIC
+     */
+    uct_ib_iface_send_overhead_t send_overhead;
 };
 
 
@@ -214,6 +254,7 @@ typedef struct uct_ib_iface_init_attr {
     /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
     unsigned    max_rd_atomic;
     uint8_t     cqe_zip_sizes[UCT_IB_DIR_LAST];
+    uint16_t    tx_moderation;           /* TX CQ moderation */
 } uct_ib_iface_init_attr_t;
 
 
@@ -281,23 +322,29 @@ struct uct_ib_iface {
     uct_ib_device_gid_info_t  gid_info;
 
     struct {
-        unsigned              rx_payload_offset;   /* offset from desc to payload */
-        unsigned              rx_hdr_offset;       /* offset from desc to network header */
-        unsigned              rx_headroom_offset;  /* offset from desc to user headroom */
-        unsigned              rx_max_batch;
-        unsigned              rx_max_poll;
-        unsigned              tx_max_poll;
-        unsigned              seg_size;
-        unsigned              roce_path_factor;
-        uint8_t               max_inl_cqe[UCT_IB_DIR_LAST];
-        uint8_t               port_num;
-        uint8_t               sl;
-        uint8_t               traffic_class;
-        uint8_t               hop_limit;
-        uint8_t               qp_type;
-        uint8_t               force_global_addr;
-        enum ibv_mtu          path_mtu;
-        uint8_t               counter_set_id;
+        /* offset from desc to payload */
+        unsigned                     rx_payload_offset;
+        /* offset from desc to network header */
+        unsigned                     rx_hdr_offset;
+        /* offset from desc to user headroom */
+        unsigned                     rx_headroom_offset;
+        unsigned                     rx_max_batch;
+        unsigned                     rx_max_poll;
+        unsigned                     tx_max_poll;
+        unsigned                     seg_size;
+        unsigned                     roce_path_factor;
+        uint8_t                      max_inl_cqe[UCT_IB_DIR_LAST];
+        uint8_t                      port_num;
+        uint8_t                      sl;
+        uint8_t                      reverse_sl;
+        uint8_t                      traffic_class;
+        uint8_t                      hop_limit;
+        uint8_t                      qp_type;
+        uint8_t                      force_global_addr;
+        uint8_t                      flid_enabled;
+        enum ibv_mtu                 path_mtu;
+        uint8_t                      counter_set_id;
+        uct_ib_iface_send_overhead_t send_overhead;
     } config;
 
     uct_ib_iface_ops_t        *ops;
@@ -499,9 +546,12 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface);
  *
  * @param iface                 IB interface
  * @param md_config_index       Gid index from the md configuration.
+ * @param subnets_list          Subnets list to filter GIDs by.
  */
-ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             unsigned long cfg_gid_index);
+ucs_status_t
+uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
+                                unsigned long cfg_gid_index,
+                                const ucs_config_allow_list_t *subnets_list);
 
 
 static inline uct_ib_md_t* uct_ib_iface_md(uct_ib_iface_t *iface)
@@ -577,6 +627,12 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface,
                             uct_ib_qp_attr_t *attr);
 
 uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
+
+void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
+                                 const uct_ib_iface_config_t *ib_config);
+
+uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
+                                          const union ibv_gid *gid);
 
 #define UCT_IB_IFACE_FMT \
     "%s:%d/%s"
@@ -674,9 +730,12 @@ uct_ib_fill_cq_attr(struct ibv_cq_init_attr_ex *cq_attr,
                     const uct_ib_iface_init_attr_t *init_attr,
                     uct_ib_iface_t *iface, int preferred_cpu, unsigned cq_size)
 {
+    int num_comp_vectors =
+            uct_ib_iface_device(iface)->ibv_context->num_comp_vectors;
+
     cq_attr->cqe         = cq_size;
     cq_attr->channel     = iface->comp_channel;
-    cq_attr->comp_vector = preferred_cpu;
+    cq_attr->comp_vector = preferred_cpu % num_comp_vectors;
 #if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
     /* Always check CQ overrun if assert mode enabled. */
     /* coverity[dead_error_condition] */

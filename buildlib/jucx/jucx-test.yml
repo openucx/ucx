@@ -1,12 +1,14 @@
 parameters:
+  arch:
   name: java test
   demands: []
 
 jobs:
-  - job: ${{ parameters.name }}
+  - job: jucx_test_${{ parameters.arch }}
+    displayName: JUCX Test ${{ parameters.arch }}
     workspace:
-      clean: all
-      
+      clean: outputs
+
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
@@ -20,8 +22,9 @@ jobs:
 
     steps:
       - checkout: self
-        fetchDepth: 100
+        fetchDepth: 200
         clean: true
+        retryCountOnTaskFailure: 5
         displayName: Checkout
       - bash: |
           set -xeE
@@ -30,7 +33,7 @@ jobs:
           az_init_modules
           az_module_load dev/mvn
           az_module_load dev/jdk-${JAVA_VERSION}
-          try_load_cuda_env
+          load_cuda_env
           ./autogen.sh
           ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
             --with-java --enable-gtest=no --with-cuda=$have_cuda
@@ -39,10 +42,24 @@ jobs:
         displayName: Build UCX
 
       - bash: |
+          set -exE
+          source buildlib/az-helpers.sh
+          az_init_modules
+          az_module_load dev/mvn
+          az_module_load dev/jdk-1.8
+          TAG=`git describe --tags`
+          MAVEN_VERSION=${TAG:1}
+          make -C bindings/java/src/main/native/ publish-local \
+              JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
+        displayName: Publish-Local
+        condition: eq(variables['Build.Reason'], 'PullRequest')
+
+
+      - bash: |
           set -xeE
           source buildlib/az-helpers.sh
           az_init_modules
-          try_load_cuda_env
+          load_cuda_env
           az_module_load dev/mvn
           az_module_load dev/jdk-${JAVA_VERSION}
 
@@ -62,7 +79,7 @@ jobs:
               if [ -z "$server_ip" ]; then
                   continue
               fi
-              echo "Running standalone benchamrk on $iface:$jucx_port"
+              echo "Running standalone benchmark on $iface:$jucx_port"
               java_cmd='java -XX:ErrorFile=$(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log  \
                   -XX:OnError="cat $(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log" \
                   -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \

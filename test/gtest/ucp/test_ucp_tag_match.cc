@@ -9,6 +9,7 @@
 
 #include <common/test_helpers.h>
 extern "C" {
+#include <ucs/sys/ptr_arith.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_types.h>
 #include <ucp/rndv/proto_rndv.h>
@@ -82,29 +83,50 @@ protected:
         return get_variant_value() & DISABLE_PROTO;
     }
 
+    void send_recv_unexp(bool immediate);
     static ucs_status_t m_req_status;
 };
 
 ucs_status_t test_ucp_tag_match::m_req_status = UCS_OK;
 
-
-UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {
+void test_ucp_tag_match::send_recv_unexp(bool immediate)
+{
+    ucp_tag_t tag        = 0x111337;
+    ucp_tag_t mask       = 0xffff;
+    ucp_tag_t masked_tag = tag & mask;
     ucp_tag_recv_info_t info;
     ucs_status_t        status;
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
 
-    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+    send_b(&send_data, sizeof(send_data), DATATYPE, tag);
 
     short_progress_loop(); /* Receive messages as unexpected */
 
-    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
-    ASSERT_UCS_OK(status);
+    if (immediate) {
+        status = recv_imm(&recv_data, sizeof(recv_data), DATATYPE, masked_tag,
+                          mask, &info);
+        ASSERT_UCS_OK(status);
+    } else {
+        status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, masked_tag,
+                        mask, &info);
+        ASSERT_UCS_OK(status);
+    }
 
-    EXPECT_EQ(sizeof(send_data),   info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+    EXPECT_EQ(sizeof(send_data), info.length);
+    EXPECT_EQ(tag,               info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
+}
+
+UCS_TEST_P(test_ucp_tag_match, send_recv_unexp)
+{
+    send_recv_unexp(false);
+}
+
+UCS_TEST_P(test_ucp_tag_match, send_recv_unexp_immediate)
+{
+    send_recv_unexp(true);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_tag_match, send_recv_unexp_rqfree,
@@ -834,7 +856,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, req_exp_auto_thresh, "RNDV_THRESH=auto") {
 
 UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
     const std::vector<size_t> sizes = {1000, 2000, 8000,
-                                       ucs::limit_buffer_size(2500ul *
+                                       ucs::limit_buffer_size(250ul *
                                                               UCS_MBYTE),
                                        ucs::limit_buffer_size(UCS_GBYTE + 32)};
 
@@ -843,6 +865,8 @@ UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
         const size_t size = c_size / ucs::test_time_multiplier() /
                             ucs::test_time_multiplier();
         request *my_send_req, *my_recv_req;
+
+        UCS_TEST_MESSAGE << size << " bytes (c_size=" << c_size << ")";
 
         std::vector<char> sendbuf(size, 0);
         std::vector<char> recvbuf(size, 0);
@@ -859,6 +883,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
 
         wait(my_recv_req);
 
+        EXPECT_EQ(UCS_OK,              my_recv_req->status);
         EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
         EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
         EXPECT_TRUE(my_recv_req->completed);

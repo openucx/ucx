@@ -119,7 +119,8 @@ protected:
         ops.ep_destroy       = ep_destroy_func;
         iface.ops            = ops;
 
-        ucp_rsc_index_t rsc_index  = UCS_BITMAP_FFS(sender().ucph()->tl_bitmap);
+        ucp_rsc_index_t rsc_index  = UCS_STATIC_BITMAP_FFS(
+                sender().ucph()->tl_bitmap);
         ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(),
                                                       rsc_index);
         std::vector<uct_ep_h> eps_to_discard;
@@ -133,7 +134,7 @@ protected:
             std::vector<ucp_request_t*> pending_reqs;
 
             if (i < wireup_ep_count) {
-                status = ucp_wireup_ep_create(m_ucp_ep, NULL, &discard_ep);
+                status = ucp_wireup_ep_create(m_ucp_ep, &discard_ep);
                 ASSERT_UCS_OK(status);
 
                 wireup_eps.push_back(discard_ep);
@@ -812,7 +813,7 @@ public:
     void verify_seg_size(ucp_worker_h worker) const {
         ucp_rsc_index_t tl_id;
 
-        UCS_BITMAP_FOR_EACH_BIT(worker->context->tl_bitmap, tl_id) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
             ucp_worker_iface_t *wiface = ucp_worker_iface(worker, tl_id);
 
             if (wiface->attr.cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
@@ -858,7 +859,8 @@ public:
         }
 
         for (const auto &file : sysfs_files) {
-            if (file.find("slave_") != std::string::npos) {
+            if ((file.find("slave_") != std::string::npos) ||
+                (file.find("lower_") != std::string::npos)) {
                 dev_path += "/" + file;
                 break;
             }
@@ -925,3 +927,52 @@ UCS_TEST_P(test_pci_bw, get_pci_bw)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_pci_bw, all, "all")
+
+class test_worker_cpu_mask : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+    }
+
+protected:
+    void init() override
+    {
+        // Don't create any entities on startup
+    }
+
+    ucp_worker_params_t get_worker_params() override
+    {
+        auto params        = ucp_test::get_worker_params();
+        params.field_mask |= UCP_WORKER_PARAM_FIELD_CPU_MASK;
+        UCS_CPU_ZERO(&params.cpu_mask);
+        UCS_CPU_SET(m_cpu, &params.cpu_mask);
+        return params;
+    }
+
+    void set_cpu(unsigned cpu)
+    {
+        m_cpu = cpu;
+    }
+
+private:
+    unsigned m_cpu = 0;
+};
+
+UCS_TEST_P(test_worker_cpu_mask, all_cpus)
+{
+    ucs_sys_cpuset_t mask;
+
+    CPU_ZERO(&mask);
+
+    ASSERT_GE(ucs_sys_getaffinity(&mask), 0);
+    for (auto cpu = 0; cpu < ucs_sys_get_num_cpus(); ++cpu) {
+        if (CPU_ISSET(cpu, &mask)) {
+            set_cpu(cpu);
+            UCS_TEST_MESSAGE << "create entity on cpu " << cpu;
+            create_entity();
+        }
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_worker_cpu_mask, all, "all")

@@ -488,7 +488,7 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
         fprintf(stderr, "received unexpected header, length %ld", header_length);
     }
 
-    am_data_desc.complete = 1;
+    am_data_desc.complete++;
 
     if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) {
         /* Rendezvous request arrived, data contains an internal UCX descriptor,
@@ -525,6 +525,7 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
 static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
                         int current_iter)
 {
+    static int last   = 0;
     ucp_dt_iov_t *iov = alloca(iov_cnt * sizeof(ucp_dt_iov_t));
     test_req_t *request;
     ucp_request_param_t params;
@@ -543,11 +544,11 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
         am_data_desc.recv_buf = iov;
 
         /* waiting for AM callback has called */
-        while (!am_data_desc.complete) {
+        while (last == am_data_desc.complete) {
             ucp_worker_progress(ucp_worker);
         }
 
-        am_data_desc.complete = 0;
+        last++;
 
         if (am_data_desc.is_rndv) {
             /* Rendezvous request has arrived, need to invoke receive operation

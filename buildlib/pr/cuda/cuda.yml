@@ -13,6 +13,7 @@ jobs:
       - checkout: self
         clean: true
         fetchDepth: 100
+        retryCountOnTaskFailure: 5
       - bash: |
           set -eEx
           ./autogen.sh
@@ -26,7 +27,7 @@ jobs:
     dependsOn: source_tarball
     displayName: Test Cuda Docker
     workspace:
-      clean: all
+      clean: outputs
     pool:
       name: MLNX
       demands:

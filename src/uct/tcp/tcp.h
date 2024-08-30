@@ -60,6 +60,9 @@
 /* Maximal value for connection sequence number */
 #define UCT_TCP_CM_CONN_SN_MAX               UINT64_MAX
 
+/* A string to hold the pair of local and remote addresses */
+#define UCT_TCP_CM_SOCKADDR_STR_LEN          ((UCS_SOCKADDR_STRING_LEN * 2) + 32)
+
 /* The seconds the connection needs to remain idle before TCP starts sending
  * keepalive probes */
 #define UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE    10
@@ -196,7 +199,7 @@ enum {
 typedef struct uct_tcp_cm_conn_req_pkt {
     uct_tcp_cm_conn_event_t event;         /* Connection event ID */
     uint8_t                 flags;         /* Packet flags */
-    uct_tcp_ep_cm_id_t      cm_id;         /* EP connection mananger ID */
+    uct_tcp_ep_cm_id_t      cm_id;         /* EP connection manager ID */
     /* Socket address follows. The address size is according
      * to the address family in use */
 } UCS_S_PACKED uct_tcp_cm_conn_req_pkt_t;
@@ -340,7 +343,7 @@ struct uct_tcp_ep {
     int                           stale_fd;     /* Old file descriptor which should be
                                                  * closed as soon as the EP is connected
                                                  * using the new fd */
-    uct_tcp_ep_cm_id_t            cm_id;        /* EP connection mananger ID */
+    uct_tcp_ep_cm_id_t            cm_id;        /* EP connection manager ID */
     uct_tcp_ep_ctx_t              tx;           /* TX resources */
     uct_tcp_ep_ctx_t              rx;           /* RX resources */
     ucs_queue_head_t              pending_q;    /* Pending operations */
@@ -397,6 +400,7 @@ typedef struct uct_tcp_iface {
         struct sockaddr_storage   ifaddr;            /* Network address */
         struct sockaddr_storage   netmask;           /* Network address mask */
         size_t                    sockaddr_len;      /* Network address length */
+        ucs_ternary_auto_value_t  ep_bind_src_addr;  /* Bind EP's FD to ifaddr */
         int                       prefer_default;    /* Prefer default gateway */
         int                       put_enable;        /* Enable PUT Zcopy operation support */
         int                       conn_nb;           /* Use non-blocking connect() */
@@ -454,6 +458,7 @@ typedef struct uct_tcp_iface_config {
         unsigned long              cnt;
         ucs_time_t                 intvl;
     } keepalive;
+    ucs_ternary_auto_value_t       ep_bind_src_addr;
 } uct_tcp_iface_config_t;
 
 
@@ -465,6 +470,7 @@ typedef struct uct_tcp_md {
     struct {
         int         af_prio_count;
         sa_family_t af_prio_list[2];
+        uint8_t     bridge_enable;
     } config;
 } uct_tcp_md_t;
 
@@ -475,6 +481,7 @@ typedef struct uct_tcp_md {
 typedef struct uct_tcp_md_config {
     uct_md_config_t                   super;
     UCS_CONFIG_STRING_ARRAY_FIELD(af) af_prio;
+    int                               bridge_enable;
 } uct_tcp_md_config_t;
 
 

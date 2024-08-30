@@ -123,9 +123,8 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
-                                       "%s: mlx5dv_create_cq(cqe=%d)",
-                                       uct_ib_device_name(dev), cq_attr.cqe);
+        uct_ib_check_memlock_limit_msg(dev->ibv_context, UCS_LOG_LEVEL_ERROR,
+                                       "mlx5dv_create_cq(cqe=%d)", cq_attr.cqe);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -544,31 +543,91 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
 }
 
 #if HAVE_DEVX
-static ucs_status_t
-uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, unsigned flags, int log_level,
-                           char *title, char *fallback,
-                           struct mlx5dv_devx_uar **uar_p)
+static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md,
+                                               uint32_t flags,
+                                               struct mlx5dv_devx_uar **uar_p)
 {
+    const char *uar_type_str      = (flags == UCT_IB_MLX5_UAR_ALLOC_TYPE_WC) ?
+                                    "WC" : "NC_DEDICATED";
+    ucs_log_level_t err_log_level = UCS_LOG_LEVEL_DIAG;
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
     struct mlx5dv_devx_uar *uar;
-    char buf[512];
+    ucs_status_t status;
+    int err;
 
     uar = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, flags);
-    if (uar == NULL) {
-        sprintf(buf, "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x(%s)) "
-                "failed: %m", uct_ib_device_name(&md->super.dev), flags, title);
-        if (fallback == NULL) {
-            ucs_log(log_level, "%s", buf);
-        } else {
-            ucs_log(log_level, "%s, fallback to %s", buf, fallback);
-        }
-
-        return UCS_ERR_NO_MEMORY;
+    if (uar != NULL) {
+        *uar_p = uar;
+        return UCS_OK;
     }
 
-    *uar_p = uar;
-    return UCS_OK;
+    err = errno;
+    ucs_string_buffer_appendf(&strb,
+                              "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x)"
+                              "type=%s failed: %s. ",
+                              uct_ib_device_name(&md->super.dev),
+                              flags,
+                              uar_type_str,
+                              strerror(err));
+    switch (err) {
+    case ENOMEM:
+        ucs_string_buffer_appendf(&strb,
+                                  "Consider increasing PF_LOG_BAR_SIZE "
+                                  "using mlxconfig tool (requires reboot)");
+        err_log_level = UCS_LOG_LEVEL_ERROR;
+        status        = UCS_ERR_NO_MEMORY;
+        break;
+    case EOPNOTSUPP:
+        status = UCS_ERR_UNSUPPORTED;
+        break;
+    case EINVAL:
+        status = UCS_ERR_INVALID_PARAM;
+        break;
+    default:
+        status = UCS_ERR_NO_MEMORY;
+        break;
+    }
+
+    ucs_log(err_log_level, "%s", ucs_string_buffer_cstr(&strb));
+    return status;
 }
 #endif
+
+ucs_status_t uct_ib_mlx5_devx_check_uar(uct_ib_mlx5_md_t *md)
+{
+#if HAVE_DEVX
+    uct_ib_mlx5_devx_uar_t uar;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_alloc_uar(md,
+                                        UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
+                                        &uar.uar);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        status = uct_ib_mlx5_devx_alloc_uar(md,
+                                            UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
+                                            &uar.uar);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            ucs_error("%s: both WC and NC_DEDICATED UAR allocation types "
+                      " are not supported", uct_ib_device_name(&md->super.dev));
+            return status;
+        } else if (status != UCS_OK) {
+            return status;
+        }
+        /* NC_DEDICATED is supported - the flag is automatically set to 0 */
+    } else if (status != UCS_OK) {
+        /* The error is unrelated to the UAR allocation type, no fallback */
+        return status;
+    } else {
+        /* WC is supported - set the flag to 1 */
+        md->flags |= UCT_IB_MLX5_MD_FLAG_UAR_USE_WC;
+    }
+
+    uct_ib_mlx5_devx_uar_cleanup(&uar);
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
 
 ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_md_t *md,
@@ -576,16 +635,16 @@ ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
 {
 #if HAVE_DEVX
     ucs_status_t status;
+    uint32_t flags;
 
-    status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
-                                        UCS_LOG_LEVEL_DEBUG, "WC", "NC",
-                                        &uar->uar);
-    if (status != UCS_OK) {
-        status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
-                                            UCS_LOG_LEVEL_ERROR, "NC", NULL,
-                                            &uar->uar);
+    /* Use UCT_IB_MLX5_MD_FLAG_UAR_USE_WC to determine the supported UAR allocation type */
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC) {
+        flags = UCT_IB_MLX5_UAR_ALLOC_TYPE_WC;
+    } else {
+        flags = UCT_IB_MLX5_UAR_ALLOC_TYPE_NC;
     }
 
+    status = uct_ib_mlx5_devx_alloc_uar(md, flags, &uar->uar);
     if (status != UCS_OK) {
         return status;
     }
@@ -787,6 +846,8 @@ void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
         uct_ib_mlx5_iface_put_res_domain(qp);
         uct_worker_tl_data_put(reg, uct_ib_mlx5_mmio_cleanup);
         break;
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
+        ucs_fatal("qp %p: TYPE_NULL", qp);
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         if (reg != NULL) {
             uct_worker_tl_data_put(reg, uct_ib_mlx5_mmio_cleanup);
@@ -942,6 +1003,8 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         uct_ib_mlx5_devx_destroy_qp(md, qp);
         break;
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
+        ucs_fatal("md %p: qp %p: TYPE_NULL", md, qp);
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
@@ -953,12 +1016,11 @@ size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length)
 }
 
 /* Keep the function as a separate to test SL selection */
-ucs_status_t
-uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
-                      ucs_ternary_auto_value_t ar_enable,
-                      uint16_t hw_sl_mask, int have_sl_mask_cap,
-                      const char *dev_name, uint8_t port_num,
-                      uint8_t *sl_p)
+ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
+                                   ucs_ternary_auto_value_t ar_enable,
+                                   uint16_t hw_sl_mask, int have_sl_mask_cap,
+                                   const char *dev_name, uint8_t port_num,
+                                   uint8_t *sl_p)
 {
     ucs_status_t status = UCS_OK;
     const char *sl_ar_support_str;
@@ -1018,6 +1080,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
               sl, sl_ar_support_str, dev_name, port_num,
               ucs_mask_str(sls_with_ar, &sls_with_ar_str),
               ucs_mask_str(sls_without_ar, &sls_without_ar_str));
+
 out_str_buf_clean:
     ucs_string_buffer_cleanup(&sls_with_ar_str);
     ucs_string_buffer_cleanup(&sls_without_ar_str);
@@ -1058,9 +1121,15 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
                                    iface->config.port_num)) {
         /* Ethernet priority for RoCE devices can't be selected regardless
          * AR support requested by user, pass empty ooo_sl_mask */
-        return uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1, dev_name,
-                                     iface->config.port_num,
-                                     &iface->config.sl);
+        status = uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1, dev_name,
+                                       iface->config.port_num,
+                                       &iface->config.sl);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        uct_ib_iface_set_reverse_sl(iface, ib_config);
+        return status;
     }
 
 #if HAVE_DEVX
@@ -1073,10 +1142,17 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
     status = UCS_ERR_UNSUPPORTED;
 #endif
 
-    return uct_ib_mlx5_select_sl(ib_config, ib_mlx5_config->ar_enable,
-                                 ooo_sl_mask, status == UCS_OK, dev_name,
-                                 iface->config.port_num,
-                                 &iface->config.sl);
+    status = uct_ib_mlx5_select_sl(ib_config, ib_mlx5_config->ar_enable,
+                                   ooo_sl_mask, status == UCS_OK, dev_name,
+                                   iface->config.port_num, &iface->config.sl);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    uct_ib_iface_set_reverse_sl(iface, ib_config);
+
+out:
+    return status;
 }
 
 uint8_t uct_ib_mlx5_iface_get_counter_set_id(uct_ib_iface_t *iface)
@@ -1135,5 +1211,52 @@ void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
                 "TX WQ overrun: wq=%p wqe_last_pi=%u max_pi=%u sw_pi=%u "
                 "num_bb=%u hw_ci=%u qp_length=%u",
                 wq, wqe_last_pi, max_pi, wq->sw_pi, num_bb, hw_ci, qp_length);
+#endif
+}
+
+extern uct_tl_t UCT_TL_NAME(dc_mlx5);
+extern uct_tl_t UCT_TL_NAME(rc_mlx5);
+extern uct_tl_t UCT_TL_NAME(ud_mlx5);
+
+extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(devx);
+extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(dv);
+
+void UCS_F_CTOR uct_mlx5_init(void)
+{
+#if defined (HAVE_MLX5_DV)
+    ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(dv).list);
+#endif
+#if defined (HAVE_DEVX)
+    ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(devx).list);
+#endif
+
+#ifdef HAVE_TL_DC
+    uct_tl_register(&uct_ib_component, &UCT_TL_NAME(dc_mlx5));
+#endif
+#if defined (HAVE_TL_RC) && defined (HAVE_MLX5_DV)
+    uct_tl_register(&uct_ib_component, &UCT_TL_NAME(rc_mlx5));
+#endif
+#if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
+    uct_tl_register(&uct_ib_component, &UCT_TL_NAME(ud_mlx5));
+#endif
+}
+
+void UCS_F_DTOR uct_mlx5_cleanup(void)
+{
+#if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
+    uct_tl_unregister(&UCT_TL_NAME(ud_mlx5));
+#endif
+#if defined (HAVE_TL_RC) && defined (HAVE_MLX5_DV)
+    uct_tl_unregister(&UCT_TL_NAME(rc_mlx5));
+#endif
+#ifdef HAVE_TL_DC
+    uct_tl_unregister(&UCT_TL_NAME(dc_mlx5));
+#endif
+
+#if defined (HAVE_MLX5_DV)
+    ucs_list_del(&UCT_IB_MD_OPS_NAME(dv).list);
+#endif
+#if defined (HAVE_DEVX)
+    ucs_list_del(&UCT_IB_MD_OPS_NAME(devx).list);
 #endif
 }

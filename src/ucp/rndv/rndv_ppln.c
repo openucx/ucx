@@ -26,41 +26,41 @@ enum {
 
 /* Private data for pipeline protocol */
 typedef struct {
-    ucp_proto_rndv_ack_priv_t ack;        /* Ack configuration */
-    size_t                    frag_size;  /* Fragment size */
-    ucp_proto_select_elem_t   frag_proto; /* Protocol for fragments */
+    ucp_proto_rndv_ack_priv_t ack;                   /* Ack configuration */
+    size_t                    frag_size;             /* Fragment size */
+    ucp_proto_config_t        frag_proto_cfg;        /* Frag proto config */
+    size_t                    frag_proto_min_length; /* Frag proto min length */
 } ucp_proto_rndv_ppln_priv_t;
 
 
-static ucs_status_t
-ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
     static const double frag_overhead            = 30e-9;
     ucp_worker_h worker                          = init_params->worker;
-    ucp_proto_rndv_ppln_priv_t *rpriv            = init_params->priv;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     ucp_proto_common_init_params_t err_params    = {
         .super = *init_params,
         .flags = 0
     };
-    const ucp_proto_threshold_elem_t *thresh_elem;
     const ucp_proto_select_elem_t *select_elem;
     const ucp_proto_perf_range_t *frag_range;
-    size_t frag_min_length, frag_max_length;
     ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_init_params_t ppln_params;
     ucp_proto_select_param_t sel_param;
+    ucp_proto_rndv_ppln_priv_t rpriv;
     ucp_proto_select_t *proto_select;
+    ucp_proto_caps_t caps, ppln_caps;
     ucs_linear_func_t ppln_overhead;
-    ucp_proto_caps_t ppln_caps;
+    ucp_proto_init_elem_t *proto;
     char frag_size_str[32];
+    void *frag_proto_priv;
     ucs_status_t status;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
         !ucp_proto_common_init_check_err_handling(&err_params) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
     /* Select a protocol for rndv recv */
@@ -74,7 +74,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
                                         init_params->rkey_cfg_index,
                                         &rkey_cfg_index);
     if (proto_select == NULL) {
-        return UCS_OK;
+        return;
     }
 
     select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
@@ -82,47 +82,56 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
                                                init_params->rkey_cfg_index,
                                                &sel_param);
     if (select_elem == NULL) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    /* Find the performance range of sending one fragment */
-    if (!ucp_proto_select_get_valid_range(select_elem->thresholds,
-                                          &frag_min_length, &frag_max_length)) {
-        return UCS_ERR_UNSUPPORTED;
+    /* Add each proto as a separate variant */
+    ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
+        if (ucp_proto_id_field(proto->proto_id, flags) &
+            UCP_PROTO_FLAG_INVALID) {
+            continue;
+        }
+
+        ucs_assert(proto->caps.num_ranges > 0);
+
+        frag_range = proto->caps.ranges + (proto->caps.num_ranges - 1);
+        if (frag_range->max_length == 0) {
+            continue;
+        }
+
+        /* Initialize private data */
+        rpriv.frag_size             = frag_range->max_length;
+        rpriv.frag_proto_min_length = proto->caps.min_length;
+
+        frag_proto_priv = &ucs_array_elem(&select_elem->proto_init.priv_buf,
+                                          proto->priv_offset);
+        ucp_proto_rndv_set_variant_config(init_params, proto,
+                                          &sel_param, frag_proto_priv,
+                                          &rpriv.frag_proto_cfg);
+
+        ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+                  ucs_memunits_to_str(rpriv.frag_size, frag_size_str,
+                                      sizeof(frag_size_str)),
+                  UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
+
+        /* Add the single range of the pipeline protocol to ppln_caps */
+        ppln_caps.min_length = frag_range->max_length + 1;
+        ppln_caps.num_ranges = 0;
+        ucp_proto_common_add_ppln_range(&ppln_caps, frag_range, SIZE_MAX);
+
+        /* Add ATS overhead */
+        ppln_overhead = ucs_linear_func_make(
+                frag_overhead, frag_overhead / frag_range->max_length);
+        status        = ucp_proto_rndv_ack_init(
+                init_params, UCP_PROTO_RNDV_ATS_NAME, &ppln_caps,
+                ppln_overhead, &rpriv.ack, &caps);
+        if (status == UCS_OK) {
+            ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
+                                       proto->cfg_priority,
+                                       &caps, &rpriv, sizeof(rpriv));
+        }
+        ucp_proto_select_caps_cleanup(&ppln_caps);
     }
-
-    frag_range  = ucp_proto_perf_range_search(select_elem, frag_max_length);
-    thresh_elem = ucp_proto_select_thresholds_search(select_elem,
-                                                     frag_max_length);
-
-    ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
-              ucs_memunits_to_str(rpriv->frag_size, frag_size_str,
-                                  sizeof(frag_size_str)),
-              UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
-
-    /* Add the single range of the pipeline protocol to ppln_caps */
-    ppln_params            = *init_params;
-    ppln_params.caps       = &ppln_caps;
-    ppln_caps.cfg_thresh   = thresh_elem->proto_config.cfg_thresh;
-    ppln_caps.cfg_priority = 0;
-    ppln_caps.min_length   = frag_max_length + 1;
-    ppln_caps.num_ranges   = 0;
-    ucp_proto_common_add_ppln_range(&ppln_params, frag_range, SIZE_MAX);
-
-    /* Initialize private data */
-    *init_params->priv_size = sizeof(*rpriv);
-    rpriv->frag_proto       = *select_elem;
-    rpriv->frag_size        = frag_max_length;
-
-    /* Add ATS overhead */
-    ppln_overhead = ucs_linear_func_make(frag_overhead,
-                                         frag_overhead / frag_max_length);
-    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
-                                     &ppln_caps, ppln_overhead, &rpriv->ack);
-
-    ucp_proto_select_caps_cleanup(&ppln_caps);
-
-    return status;
 }
 
 static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
@@ -133,13 +142,13 @@ static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
 
     if (params->msg_length <= rpriv->frag_size) {
         /* Message is smaller than fragment size */
-        ucp_proto_select_elem_query(params->worker, &rpriv->frag_proto,
-                                    params->msg_length, attr);
+        ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
+                               params->msg_length, attr);
         attr->max_msg_length = rpriv->frag_size;
     } else {
         /* Message is large and fragmented to frag_size */
-        ucp_proto_select_elem_query(params->worker, &rpriv->frag_proto,
-                                    rpriv->frag_size, &frag_attr);
+        ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
+                               rpriv->frag_size, &frag_attr);
 
         attr->max_msg_length = SIZE_MAX;
         attr->is_estimation  = 0;
@@ -188,30 +197,6 @@ void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack)
                                       "ppln_send");
 }
 
-static ucs_status_t ucp_proto_rndv_recv_ppln_reset(ucp_request_t *req)
-{
-    ucs_assert(req->send.rndv.ppln.ack_data_size == 0);
-
-    if (!ucp_proto_common_multi_frag_is_completed(req)) {
-        return UCS_OK;
-    }
-
-    req->status                    = UCS_OK;
-    req->send.state.dt_iter.offset = 0;
-    ucp_proto_request_restart(req);
-    return UCS_OK;
-}
-
-void ucp_proto_rndv_ppln_recv_frag_clean(ucp_request_t *freq)
-{
-    ucp_send_request_id_release(freq);
-
-    /* abort freq since super request may change protocol */
-    ucp_proto_rndv_ppln_frag_complete(freq, 0, 1,
-                                      ucp_proto_rndv_recv_ppln_reset,
-                                      "ppln_recv_clean");
-}
-
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
                                             int abort)
 {
@@ -228,7 +213,7 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
     ucp_datatype_iter_t next_iter;
     ucs_status_t status;
     ucp_request_t *freq;
-    uint8_t sg_count;
+    size_t overlap;
 
     /* Nested pipeline is prevented during protocol selection */
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_FRAG));
@@ -248,9 +233,12 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         }
 
         /* Initialize datatype for the fragment */
-        ucp_datatype_iter_next_slice(&req->send.state.dt_iter, rpriv->frag_size,
-                                     &freq->send.state.dt_iter, &next_iter,
-                                     &sg_count);
+        overlap = ucp_datatype_iter_next_slice_overlap(
+                &req->send.state.dt_iter, rpriv->frag_size,
+                rpriv->frag_proto_min_length, &freq->send.state.dt_iter,
+                &next_iter);
+        req->send.rndv.ppln.ack_data_size -= overlap;
+        req->send.state.completed_size    -= overlap;
 
         /* Empty fragments should not happen */
         ucs_assert(freq->send.state.dt_iter.length > 0);
@@ -262,8 +250,9 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         freq->send.rndv.rkey           = req->send.rndv.rkey;
         freq->send.rndv.offset         = req->send.rndv.offset +
                                          req->send.state.dt_iter.offset;
-        ucp_proto_request_select_proto(freq, &rpriv->frag_proto,
-                                       freq->send.state.dt_iter.length);
+
+        ucp_proto_request_set_proto(freq, &rpriv->frag_proto_cfg,
+                                    freq->send.state.dt_iter.length);
 
         ucp_trace_req(req, "send freq %p offset %zu size %zu", freq,
                       freq->send.rndv.offset, freq->send.state.dt_iter.length);
@@ -285,14 +274,14 @@ static size_t ucp_proto_rndv_ppln_pack_ack(void *dest, void *arg)
                                    req->send.rndv.ppln.ack_data_size);
 }
 
-static ucs_status_t
-ucp_proto_rndv_send_ppln_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_send_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_SEND))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_rndv_ppln_init(init_params);
+    ucp_proto_rndv_ppln_probe(init_params);
 }
 
 static ucs_status_t
@@ -310,7 +299,7 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
     .name     = "rndv/send/ppln",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_proto_rndv_send_ppln_init,
+    .probe    = ucp_proto_rndv_send_ppln_probe,
     .query    = ucp_proto_rndv_ppln_query,
     .progress = {
         [UCP_PROTO_RNDV_PPLN_STAGE_SEND] = ucp_proto_rndv_ppln_progress,
@@ -320,14 +309,14 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
     .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
-static ucs_status_t
-ucp_proto_rndv_recv_ppln_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_recv_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_rndv_ppln_init(init_params);
+    ucp_proto_rndv_ppln_probe(init_params);
 }
 
 static ucs_status_t
@@ -363,7 +352,7 @@ ucp_proto_t ucp_rndv_recv_ppln_proto = {
     .name     = "rndv/recv/ppln",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_proto_rndv_recv_ppln_init,
+    .probe    = ucp_proto_rndv_recv_ppln_probe,
     .query    = ucp_proto_rndv_ppln_query,
     .progress = {
         [UCP_PROTO_RNDV_PPLN_STAGE_SEND] = ucp_proto_rndv_ppln_progress,

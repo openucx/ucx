@@ -97,7 +97,7 @@ func (w *UcpWorker) Query(attrs ...UcpWorkerAttribute) (*UcpWorkerAttributes, er
 // is over, as part of the wake-up mechanism.
 //
 // The worker must be armed before waiting on an event (must be re-armed after
-// it has been signaled for re-use) with UcpWorker.Arm().
+// it has been signaled for reuse) with UcpWorker.Arm().
 // The events triggering a signal of the file descriptor from
 // UcpWorker.GetEfd() depend on the interfaces used by the worker and
 // defined in the transport layer, and typically represent a request completion
@@ -234,7 +234,7 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 	*recvInfoPtr = recvInfo
 
 	if params != nil {
-		(&requestParams).SetMemType(params)
+		setMemType(params, &requestParams)
 
 		if params.Cb != nil {
 			cbId = register(params.Cb)
@@ -306,7 +306,7 @@ func (w *UcpWorker) RecvAmDataNonBlocking(dataDesc *UcpAmData, recvBuffer unsafe
 	*recvInfoPtr = &length
 
 	if params != nil {
-		(&requestParams).SetMemType(params)
+		setMemType(params, &requestParams)
 
 		if params.Cb != nil {
 			cbId = register(params.Cb)

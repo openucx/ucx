@@ -15,7 +15,7 @@
 #include <ucs/profile/profile.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/datastruct/khash.h>
 
 
@@ -77,6 +77,30 @@ uct_cuda_ipc_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
     ucs_list_add_tail(list, &region->list);
 }
 
+static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *region)
+{
+    ucs_status_t status;
+
+#if HAVE_CUDA_FABRIC
+    if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+        status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(
+                    (CUdeviceptr)region->mapped_addr, region->key.b_len));
+        if (status == UCS_OK) {
+            return UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(
+                        (CUdeviceptr)region->mapped_addr, region->key.b_len));
+        }
+    } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
+        return UCT_CUDADRV_FUNC_LOG_WARN(cuMemPoolDestroy(region->key.ph.pool));
+    } else
+#endif
+    {
+        return UCT_CUDADRV_FUNC_LOG_WARN(cuIpcCloseMemHandle(
+                    (CUdeviceptr)region->mapped_addr));
+    }
+
+    return status;
+}
+
 static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
 {
     int active = uct_cuda_base_is_context_active();
@@ -88,32 +112,152 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         if (active) {
-            UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+            uct_cuda_ipc_close_memhandle(region);
         }
         ucs_free(region);
     }
     ucs_trace("%s: cuda ipc cache purged", cache->name);
 }
 
-static ucs_status_t uct_cuda_ipc_open_memhandle(const uct_cuda_ipc_key_t *key,
-                                                CUdeviceptr *mapped_addr)
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh,
+                                   CUdeviceptr *mapped_addr)
 {
     CUresult cuerr;
-    ucs_status_t status;
 
-    cuerr = cuIpcOpenMemHandle(mapped_addr, key->ph,
+    cuerr = cuIpcOpenMemHandle(mapped_addr, memh,
                                CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
-    if (cuerr == CUDA_SUCCESS) {
-        status = UCS_OK;
-    } else {
+    if (cuerr != CUDA_SUCCESS) {
         ucs_debug("cuIpcOpenMemHandle() failed: %s",
                   uct_cuda_base_cu_get_error_string(cuerr));
-        status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ? UCS_ERR_ALREADY_EXISTS :
-                                                        UCS_ERR_INVALID_PARAM;
+        return (cuerr == CUDA_ERROR_ALREADY_MAPPED) ?
+            UCS_ERR_ALREADY_EXISTS : UCS_ERR_INVALID_PARAM;
     }
 
+    return UCS_OK;
+}
+
+#if HAVE_CUDA_FABRIC
+static ucs_status_t uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc)
+{
+    access_desc->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+
+    return UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&access_desc->location.id));
+}
+
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_vmm(uct_cuda_ipc_rkey_t *key,
+                                CUdeviceptr *mapped_addr)
+{
+    CUmemAccessDesc access_desc = {};
+    ucs_status_t status;
+    CUdeviceptr dptr;
+    CUmemGenericAllocationHandle handle;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemImportFromShareableHandle(&handle,
+                (void*)&key->ph.handle.fabric_handle,
+                CU_MEM_HANDLE_TYPE_FABRIC));
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status =
+        UCT_CUDADRV_FUNC_LOG_ERR(cuMemAddressReserve(&dptr, key->b_len, 0, 0, 0));
+    if (status != UCS_OK) {
+        goto release_handle;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemMap(dptr, key->b_len, 0, handle, 0));
+    if (status != UCS_OK) {
+        goto release_va_range;
+    }
+
+    status = uct_cuda_ipc_init_access_desc(&access_desc);
+    if (status != UCS_OK) {
+        goto unmap_range;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemSetAccess(dptr, key->b_len, &access_desc, 1));
+    if (status != UCS_OK) {
+        goto unmap_range;
+    }
+
+    *mapped_addr = dptr;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemRelease(handle));
+    if (status == UCS_OK) {
+        goto out;
+    }
+
+unmap_range:
+    cuMemUnmap(dptr, key->b_len);
+release_va_range:
+    cuMemAddressFree(dptr, key->b_len);
+release_handle:
+    cuMemRelease(handle);
+out:
     return status;
+}
+
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_mempool(uct_cuda_ipc_rkey_t *key,
+                                    CUdeviceptr *mapped_addr)
+{
+    CUmemAccessDesc access_desc = {};
+    CUdeviceptr dptr;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolImportFromShareableHandle(
+                &key->ph.pool, (void *)&key->ph.handle.fabric_handle,
+                CU_MEM_HANDLE_TYPE_FABRIC, 0));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolImportPointer(&dptr,
+                key->ph.pool, (CUmemPoolPtrExportData*)&key->ph.ptr));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_cuda_ipc_init_access_desc(&access_desc);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolSetAccess(key->ph.pool,
+                &access_desc, 1));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *mapped_addr = dptr;
+
+    return UCS_OK;
+}
+#endif
+
+static ucs_status_t uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key,
+                                                CUdeviceptr *mapped_addr)
+{
+
+#if HAVE_CUDA_FABRIC
+    ucs_trace("key handle type %u", key->ph.handle_type);
+
+    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+        return uct_cuda_ipc_open_memhandle_legacy(key->ph.handle.legacy,
+                                                  mapped_addr);
+    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+        return uct_cuda_ipc_open_memhandle_vmm(key, mapped_addr);
+    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
+        return uct_cuda_ipc_open_memhandle_mempool(key, mapped_addr);
+    } else {
+        return UCS_ERR_INVALID_PARAM;
+    }
+#else
+    return uct_cuda_ipc_open_memhandle_legacy(key->ph, mapped_addr);
+#endif
 }
 
 static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
@@ -122,6 +266,7 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
     ucs_list_link_t region_list;
     ucs_status_t status;
     uct_cuda_ipc_cache_region_t *region, *tmp;
+    int handle_type;
 
     ucs_list_head_init(&region_list);
     ucs_pgtable_search_range(&cache->pgtable, (ucs_pgt_addr_t)from,
@@ -134,8 +279,19 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
             ucs_error("failed to remove address:%p from cache (%s)",
                       (void *)region->key.d_bptr, ucs_status_string(status));
         }
-        UCT_CUDADRV_FUNC_LOG_ERR(
-                cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+
+        status = uct_cuda_ipc_close_memhandle(region);
+        if (status != UCS_OK) {
+#if HAVE_CUDA_FABRIC
+            handle_type = region->key.ph.handle_type;
+#else
+            handle_type = 1; /* legacy memory type is the only valid type */
+#endif
+            ucs_error("failed to close memhandle for base addr:%p type:%d (%s)",
+                      (void *)region->key.d_bptr, handle_type,
+                      ucs_status_string(status));
+        }
+
         ucs_free(region);
     }
     ucs_trace("%s: closed memhandles in the range [%p..%p]",
@@ -215,8 +371,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
                       (void *)region->key.d_bptr, ucs_status_string(status));
         }
         ucs_assert(region->mapped_addr == mapped_addr);
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+        status = uct_cuda_ipc_close_memhandle(region);
         ucs_free(region);
     }
 
@@ -225,13 +380,20 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
-                 const uct_cuda_ipc_key_t *key, void **mapped_addr)
+                 uct_cuda_ipc_rkey_t *key, void **mapped_addr)
 {
     uct_cuda_ipc_cache_t *cache;
     ucs_status_t status;
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
     int ret;
+    size_t cmp_size;
+
+#if HAVE_CUDA_FABRIC
+    cmp_size = sizeof(key->ph.handle);
+#else
+    cmp_size = sizeof(key->ph);
+#endif
 
     status = uct_cuda_ipc_get_remote_cache(key->pid, &cache);
     if (status != UCS_OK) {
@@ -244,7 +406,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
         if (memcmp((const void *)&key->ph, (const void *)&region->key.ph,
-                   sizeof(key->ph)) == 0) {
+                   cmp_size) == 0) {
             /*cache hit */
             ucs_trace("%s: cuda_ipc cache hit addr:%p size:%lu region:"
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,
@@ -269,8 +431,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
             }
 
             /* close memhandle */
-            UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+            uct_cuda_ipc_close_memhandle(region);
             ucs_free(region);
         }
     }

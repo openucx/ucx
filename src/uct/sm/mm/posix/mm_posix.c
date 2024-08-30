@@ -13,6 +13,7 @@
 #include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/sys.h>
@@ -141,8 +142,12 @@ uct_posix_md_query(uct_md_h tl_md, uct_md_attr_v2_t *md_attr)
     }
 
     shm_size = shm_statvfs.f_bsize * shm_statvfs.f_bavail;
-    uct_mm_md_query(&md->super, md_attr,
-                    (shm_size < posix_config->shm_min_size) ? 0 : shm_size);
+    if (shm_size < posix_config->shm_min_size) {
+        ucs_debug("md alloc disabled: only %zu bytes left in shm", shm_size);
+        shm_size = 0;
+    }
+
+    uct_mm_md_query(&md->super, md_attr, shm_size);
 
     md_attr->rkey_packed_size = sizeof(uct_posix_packed_rkey_t) +
                                 uct_posix_iface_addr_length(md);
@@ -270,7 +275,8 @@ static ucs_status_t uct_posix_procfs_open(int pid, int peer_fd, int* fd_p)
     return uct_posix_open_check_result("open", file_path, 0, ret, fd_p);
 }
 
-static ucs_status_t uct_posix_unlink(uct_mm_md_t *md, uint64_t seg_id)
+static ucs_status_t
+uct_posix_unlink(uct_mm_md_t *md, uint64_t seg_id, ucs_log_level_t err_level)
 {
     uct_posix_md_config_t *posix_config = ucs_derived_of(md->config,
                                                          uct_posix_md_config_t);
@@ -282,7 +288,7 @@ static ucs_status_t uct_posix_unlink(uct_mm_md_t *md, uint64_t seg_id)
                           seg_id & UCT_POSIX_SEG_MMID_MASK);
         ret = shm_unlink(file_path);
         if (ret < 0) {
-            ucs_error("shm_unlink(%s) failed: %m", file_path);
+            ucs_log(err_level, "shm_unlink(%s) failed: %m", file_path);
             return UCS_ERR_SHMEM_SEGMENT;
         }
     } else {
@@ -511,10 +517,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     /* If using procfs link instead of mmid, remove the original file and update
      * seg->seg_id */
     if (posix_config->use_proc_link) {
-        status = uct_posix_unlink(md, seg->seg_id);
-        if (status != UCS_OK) {
-            goto err_close;
-        }
+        uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_DIAG);
 
         /* Replace mmid by pid+fd. Keep previous SHM_OPEN flag for mkey_pack() */
         seg->seg_id = uct_posix_mmid_procfs_pack(fd) |
@@ -582,7 +585,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
 err_close:
     close(fd);
     if (!(seg->seg_id & UCT_POSIX_SEG_FLAG_PROCFS)) {
-        uct_posix_unlink(md, seg->seg_id);
+        uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_WARN);
     }
 err_free_seg:
     ucs_free(seg);
@@ -608,7 +611,7 @@ static ucs_status_t uct_posix_mem_free(uct_md_h tl_md, uct_mem_h memh)
         ucs_assert(dummy_pid == getpid());
         close(fd);
     } else {
-        status = uct_posix_unlink(md, seg->seg_id);
+        status = uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_ERROR);
         if (status != UCS_OK) {
             return status;
         }
@@ -646,8 +649,8 @@ static ucs_status_t uct_posix_iface_addr_pack(uct_mm_md_t *md, void *buffer)
 }
 
 static ucs_status_t
-uct_posix_md_mkey_pack(uct_md_h tl_md, uct_mem_h memh,
-                       const uct_md_mkey_pack_params_t *params,
+uct_posix_md_mkey_pack(uct_md_h tl_md, uct_mem_h memh, void *address,
+                       size_t length, const uct_md_mkey_pack_params_t *params,
                        void *mkey_buffer)
 {
     uct_mm_md_t *md                      = ucs_derived_of(tl_md, uct_mm_md_t);

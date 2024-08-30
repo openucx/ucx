@@ -29,7 +29,7 @@ func (p *UcpRequestParams) SetMemType(memType UcsMemoryType) *UcpRequestParams {
 	return p
 }
 
-func (p *C.ucp_request_param_t) SetMemType(params *UcpRequestParams) {
+func setMemType(params *UcpRequestParams, p *C.ucp_request_param_t) {
 	if (params != nil) && params.memTypeSet {
 		p.op_attr_mask = C.UCP_OP_ATTR_FIELD_MEMORY_TYPE
 		p.memory_type = C.ucs_memory_type_t(params.memType)
@@ -41,7 +41,7 @@ func (p *UcpRequestParams) SetCallback(cb UcpCallback) *UcpRequestParams {
 	return p
 }
 
-// Checks wether request is a pointer
+// Checks whether request is a pointer
 func isRequestPtr(request C.ucs_status_ptr_t) bool {
 	errLast := UCS_ERR_LAST
 	return (uint64(uintptr(request)) - 1) < (uint64(errLast) - 1)

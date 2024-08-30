@@ -59,6 +59,7 @@ jobs:
       - checkout: self
         clean: true
         fetchDepth: 100
+        retryCountOnTaskFailure: 5
         path: "we/need/to/go/deeper"
         # ^ Avoid rpmbuild error: Dest dir longer than base dir is not supported
 
@@ -99,7 +100,7 @@ jobs:
 
           # Remove superfluous dependency
           dpkg-deb -R "ucx-cuda-${VER}.deb" tmp    # Extract
-          sed -i 's/libnvidia-compute-[0-9]* | libnvidia-ml1, //g' tmp/DEBIAN/control
+          sed -i 's/libnvidia-compute | libnvidia-ml1, //g' tmp/DEBIAN/control
           dpkg-deb -b tmp "ucx-cuda-${VER}.deb"        # Rebuild
           dpkg-deb -I "ucx-cuda-${VER}.deb"
           dpkg-deb -I "ucx-${VER}.deb"

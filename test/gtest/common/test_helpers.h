@@ -347,7 +347,17 @@ uint16_t get_port();
 /**
  * Address to use for mmap(FIXED)
  */
-void *mmap_fixed_address(size_t length);
+class mmap_fixed_address {
+public:
+    mmap_fixed_address(size_t length);
+    ~mmap_fixed_address();
+    void* operator*() const { return m_ptr; }
+    void detach() { m_ptr = NULL; }
+
+private:
+    void *m_ptr;
+    size_t m_length;
+};
 
 
 /*
@@ -411,6 +421,8 @@ public:
     ucs_sock_addr_t to_ucs_sock_addr() const;
 
     std::string to_str() const;
+
+    std::string to_ip_str() const;
 
     const struct sockaddr* get_sock_addr_ptr() const;
 
@@ -867,10 +879,31 @@ static inline O& operator<<(O& os, const size_value& sz)
 class auto_buffer {
 public:
     auto_buffer(size_t size);
-    ~auto_buffer();
-    void* operator*() const;
+    void* operator*();
+    template <typename T> T* as();
 private:
-    void *m_ptr;
+    std::vector<uint8_t> m_buf;
+};
+
+
+template <typename T>
+T* auto_buffer::as()
+{
+    return reinterpret_cast<T*>(m_buf.data());
+}
+
+
+template <typename T>
+class typed_auto_buffer : private auto_buffer {
+public:
+    typed_auto_buffer(size_t size) : auto_buffer(size)
+    {
+    }
+
+    T* operator*()
+    {
+        return as<T>();
+    }
 };
 
 

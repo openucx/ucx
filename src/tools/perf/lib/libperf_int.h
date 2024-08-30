@@ -43,18 +43,36 @@ typedef struct ucp_perf_request        ucp_perf_request_t;
 typedef struct ucx_perf_thread_context ucx_perf_thread_context_t;
 
 
+typedef ucs_status_t (*ucx_perf_init_func_t)(ucx_perf_context_t *perf);
+
+typedef ucs_status_t (*ucx_perf_uct_alloc_func_t)(
+        const ucx_perf_context_t *perf, size_t length, unsigned flags,
+        uct_allocated_memory_t *alloc_mem);
+
+typedef void (*ucx_perf_uct_free_func_t)(const ucx_perf_context_t *perf,
+                                         uct_allocated_memory_t *alloc_mem);
+
+typedef void (*ucx_perf_memcpy_func_t)(void *dst,
+                                       ucs_memory_type_t dst_mem_type,
+                                       const void *src,
+                                       ucs_memory_type_t src_mem_type,
+                                       size_t count);
+
+typedef void *(*ucx_perf_memset_func_t)(void *dst, int value, size_t count);
+
 struct ucx_perf_allocator {
-    ucs_memory_type_t mem_type;
-    ucs_status_t (*init)(ucx_perf_context_t *perf);
-    ucs_status_t (*uct_alloc)(const ucx_perf_context_t *perf, size_t length,
-                              unsigned flags, uct_allocated_memory_t *alloc_mem);
-    void         (*uct_free)(const ucx_perf_context_t *perf,
-                             uct_allocated_memory_t *alloc_mem);
-    void         (*memcpy)(void *dst, ucs_memory_type_t dst_mem_type,
-                           const void *src, ucs_memory_type_t src_mem_type,
-                           size_t count);
-    void*        (*memset)(void *dst, int value, size_t count);
+    ucs_memory_type_t         mem_type;
+    ucx_perf_init_func_t      init;
+    ucx_perf_uct_alloc_func_t uct_alloc;
+    ucx_perf_uct_free_func_t  uct_free;
+    ucx_perf_memcpy_func_t    memcpy;
+    ucx_perf_memset_func_t    memset;
 };
+
+typedef struct {
+    void   *address;
+    size_t length;
+} ucx_perf_exported_mem_t;
 
 struct ucx_perf_context {
     ucx_perf_params_t            params;
@@ -109,9 +127,15 @@ struct ucx_perf_context {
             unsigned long              remote_addr;
             ucp_mem_h                  send_memh;
             ucp_mem_h                  recv_memh;
+            ucx_perf_exported_mem_t    send_exported_mem;
+            ucx_perf_exported_mem_t    recv_exported_mem;
+            ucp_perf_daemon_req_t      daemon_req;
             ucp_dt_iov_t               *send_iov;
             ucp_dt_iov_t               *recv_iov;
             void                       *am_hdr;
+            ucp_ep_h                   self_ep;
+            ucp_rkey_h                 self_send_rkey;
+            ucp_rkey_h                 self_recv_rkey;
         } ucp;
     };
 };
@@ -172,6 +196,7 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
 
 void ucx_perf_report(ucx_perf_context_t *perf);
 
+ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf);
 
 static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
 {

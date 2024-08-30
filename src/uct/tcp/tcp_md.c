@@ -14,33 +14,29 @@
 
 
 static ucs_config_field_t uct_tcp_md_config_table[] = {
-    {"", "", NULL,
-     ucs_offsetof(uct_tcp_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+    {"", "", NULL, ucs_offsetof(uct_tcp_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"AF_PRIO", "inet,inet6",
      "Priority of address families used for socket connections",
      ucs_offsetof(uct_tcp_md_config_t, af_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+    {"BRIDGE_ENABLE", "n", "Enable using bridge devices",
+     ucs_offsetof(uct_tcp_md_config_t, bridge_enable), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
 
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
+    uct_md_base_md_query(attr);
     /* Dummy memory registration provided. No real memory handling exists */
     attr->flags                  = UCT_MD_FLAG_REG |
                                    UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->max_alloc              = 0;
     attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->alloc_mem_types        = 0;
     attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->detect_mem_types       = 0;
-    attr->dmabuf_mem_types       = 0;
-    attr->max_reg                = ULONG_MAX;
-    attr->rkey_packed_size       = 0;
-    attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
-    memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
 
@@ -79,6 +75,7 @@ uct_tcp_md_open(uct_component_t *component, const char *md_name,
     tcp_md->super.ops            = &uct_tcp_md_ops;
     tcp_md->super.component      = &uct_tcp_component;
     tcp_md->config.af_prio_count = ucs_min(md_config->af_prio.count, 2);
+    tcp_md->config.bridge_enable = md_config->bridge_enable;
 
     for (i = 0; i < tcp_md->config.af_prio_count; i++) {
         if (!strcasecmp(md_config->af_prio.af[i], "inet")) {

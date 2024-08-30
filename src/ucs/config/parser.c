@@ -30,8 +30,6 @@
 /* width of titles in docstring */
 #define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
-/* String literal for allow-list */
-#define UCS_CONFIG_PARSER_ALL "all"
 
 /* list of prefixes for a configuration variable, used to dump all possible
  * aliases.
@@ -69,6 +67,19 @@ const char *ucs_async_mode_names[] = {
 };
 
 UCS_CONFIG_DEFINE_ARRAY(string, sizeof(char*), UCS_CONFIG_TYPE_STRING);
+
+
+typedef struct ucs_config_parse_section {
+    char name[64];
+    int  skip;
+} ucs_config_parse_section_t;
+
+
+typedef struct ucs_config_parse_arg {
+    int                        override;
+    ucs_config_parse_section_t section_info;
+} ucs_config_parse_arg_t;
+
 
 /* Fwd */
 static ucs_status_t
@@ -1026,8 +1037,8 @@ int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
         name  = strtok_r(token, "=", &saveptr2);
         value = strtok_r(NULL,  "=", &saveptr2);
         if (name == NULL || value == NULL) {
-            ucs_free(tokens);
             ucs_error("Could not parse list of values in '%s' (token: '%s')", buf, token);
+            ucs_free(tokens);
             return 0;
         }
 
@@ -1066,7 +1077,190 @@ void ucs_config_help_table(char *buf, size_t max, const void *arg)
     snprintf(buf, max, "Table");
 }
 
+/**
+ * Return number of allowed keys in the given config
+ */
+static size_t ucs_config_key_count(const ucs_config_key_field_t *cfg_key)
+{
+    size_t count = 0;
+    for (; cfg_key->name; ++cfg_key, ++count);
+    return count;
+}
+
+/**
+ * Find index of the given key in the config
+ */
+static int ucs_config_key_find(const ucs_config_key_field_t *cfg_key,
+                               const char *key)
+{
+    int idx;
+
+    for (idx = 0; cfg_key->name; ++cfg_key, ++idx) {
+        if (!strcmp(cfg_key->name, key)) {
+            return idx;
+        }
+    }
+    return -1;
+}
+
+int ucs_config_sscanf_key_value(const char *buf, void *dest, const void *arg)
+{
+    const ucs_config_key_value_param_t *param = arg;
+    size_t buf_len                            = strlen(buf) + 1;
+    const char *TOKEN_DELIM                   = ",";
+    const char *VALUE_DELIM                   = ":";
+    const char *default_value                 = NULL;
+    const char *key, *value, **values;
+    char *token, *tokens;
+    size_t key_count;
+    int idx;
+
+    /* values is the array of key-specific settings */
+    key_count = ucs_config_key_count(param->keys);
+    ucs_assert(key_count > 0);
+    values = ucs_alloca(key_count * sizeof(*values));
+    memset(values, 0, key_count * sizeof(*values));
+
+    /* Writable copy of the input buffer on stack */
+    tokens = ucs_alloca(buf_len);
+    ucs_strncpy_safe(tokens, buf, buf_len);
+
+    tokens = ucs_string_split(tokens, TOKEN_DELIM, 1, &token);
+    while (NULL != token) {
+        ucs_string_split(token, VALUE_DELIM, 2, &key, &value);
+
+        if (NULL == value) {
+            /* No value means key is the default value for all */
+            default_value = key;
+        } else {
+            /* Specific key config is present */
+            if ((idx = ucs_config_key_find(param->keys, key)) < 0) {
+                ucs_error("key '%s' is not supported", key);
+                return 0;
+            }
+
+            values[idx] = value;
+        }
+
+        tokens = ucs_string_split(tokens, TOKEN_DELIM, 1, &token);
+    }
+
+    /* Validate and apply settings, revert in case of errors */
+    for (idx = 0; idx < key_count; ++idx) {
+        value = (values[idx] == NULL) ? default_value : values[idx];
+        if (NULL == value) {
+            ucs_error("no value configured for key '%s'", param->keys[idx].name);
+        } else if ((param->parser.read(value,
+                                       UCS_PTR_BYTE_OFFSET(dest, param->keys[idx].offset),
+                                       param->parser.arg) == 1)) {
+            continue;
+        }
+
+        /* Revert already made settings */
+        while (idx-- > 0) {
+            param->parser.release(UCS_PTR_BYTE_OFFSET(dest, param->keys[idx].offset),
+                                  param->parser.arg);
+        }
+
+        return 0;
+    }
+
+    return 1;
+}
+
+int ucs_config_sprintf_key_value(char *buf, size_t max, const void *src,
+                                 const void *arg)
+{
+    const ucs_config_key_value_param_t *param = arg;
+    char value_buf[256]                       = "";
+    const ucs_config_key_field_t *cfg_key;
+    UCS_STRING_BUFFER_FIXED(strb, buf, max);
+
+    for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
+        if (!param->parser.write(value_buf, sizeof(value_buf),
+                                 UCS_PTR_BYTE_OFFSET(src, cfg_key->offset),
+                                 param->parser.arg)) {
+            /* Error is logged by parser impl */
+            return 0;
+        }
+
+        ucs_string_buffer_appendf(&strb, "%s:%s,", cfg_key->name, value_buf);
+    }
+
+    ucs_string_buffer_rtrim(&strb, ",");
+    return 1;
+}
+
+ucs_status_t ucs_config_clone_key_value(const void *src, void *dest,
+                                        const void *arg)
+{
+    const ucs_config_key_value_param_t *param = arg;
+    ucs_status_t status                       = UCS_OK;
+    const ucs_config_key_field_t *cfg_key;
+
+    for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
+        status = param->parser.clone(UCS_PTR_BYTE_OFFSET(src, cfg_key->offset),
+                                     UCS_PTR_BYTE_OFFSET(dest, cfg_key->offset),
+                                     param->parser.arg);
+        if (UCS_OK != status) {
+            /* Error is logged by parser impl */
+            break;
+        }
+    }
+    return status;
+}
+
+void ucs_config_release_key_value(void *ptr, const void *arg)
+{
+    const ucs_config_key_value_param_t *param = arg;
+    const ucs_config_key_field_t *cfg_key;
+
+    for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
+        param->parser.release(UCS_PTR_BYTE_OFFSET(ptr, cfg_key->offset),
+                              param->parser.arg);
+    }
+}
+
+void ucs_config_help_key_value(char *buf, size_t max, const void *arg)
+{
+    const ucs_config_key_value_param_t *param = arg;
+    char syntax_buf[256]                      = "";
+    const ucs_config_key_field_t *cfg_key;
+    UCS_STRING_BUFFER_FIXED(strb, buf, max);
+
+    ucs_string_buffer_appendf(&strb, "comma-separated list of value or key:value"
+                              " pairs, where key is one of [");
+
+    for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
+        ucs_string_buffer_appendf(&strb, "%s,", cfg_key->name);
+    }
+
+    ucs_string_buffer_rtrim(&strb, ",");
+    ucs_string_buffer_appendf(&strb, "] and value is: ");
+
+    param->parser.help(syntax_buf, sizeof(syntax_buf), param->parser.arg);
+    ucs_string_buffer_appendf(&strb, "%s. A value without a key is the default.",
+                              syntax_buf);
+}
+
+void ucs_config_doc_key_value(ucs_string_buffer_t *strb, const void *arg)
+{
+    const ucs_config_key_value_param_t *param = arg;
+    const ucs_config_key_field_t *cfg_key;
+
+    for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
+        ucs_string_buffer_appendf(strb, " %-*s- %s\n",
+                                  UCS_CONFIG_PARSER_DOCSTR_WIDTH,
+                                  cfg_key->name, cfg_key->doc);
+    }
+    ucs_string_buffer_rtrim(strb, "\n");
+}
+
 void ucs_config_release_nop(void *ptr, const void *arg)
+{
+}
+
+void ucs_config_doc_nop(ucs_string_buffer_t *strb, const void *arg)
 {
 }
 
@@ -1090,6 +1284,21 @@ static inline int ucs_config_is_table_field(const ucs_config_field_t *field)
     return (field->parser.read == ucs_config_sscanf_table);
 }
 
+/**
+ * Allocates multi-line documentation text string, caller is responsible for
+ * freeing the memory.
+ */
+static char *ucs_config_get_doc(const ucs_config_field_t *field)
+{
+    ucs_string_buffer_t strb;
+    ucs_string_buffer_init(&strb);
+
+    ucs_string_buffer_appendf(&strb, "%s\n", field->doc);
+    field->parser.doc(&strb, field->parser.arg);
+
+    return ucs_string_buffer_extract_mem(&strb);
+}
+
 static void ucs_config_print_doc_line_by_line(const ucs_config_field_t *field,
                                               void (*cb)(int num, const char *line, void *arg),
                                               void *arg)
@@ -1097,7 +1306,7 @@ static void ucs_config_print_doc_line_by_line(const ucs_config_field_t *field,
     char *doc, *line, *p;
     int num;
 
-    line = doc = ucs_strdup(field->doc, "config_doc");
+    line = doc = ucs_config_get_doc(field);
     p = strchr(line, '\n');
     num = 0;
     while (p != NULL) {
@@ -1112,7 +1321,8 @@ static void ucs_config_print_doc_line_by_line(const ucs_config_field_t *field,
 }
 
 static ucs_status_t
-ucs_config_parser_parse_field(ucs_config_field_t *field, const char *value, void *var)
+ucs_config_parser_parse_field(const ucs_config_field_t *field,
+                              const char *value, void *var)
 {
     char syntax_buf[256];
     int ret;
@@ -1313,16 +1523,68 @@ static char *ucs_config_get_value_from_config_file(const char *name)
     return kh_val(&ucs_config_file_vars, iter);
 }
 
+static int ucs_config_parse_check_filter(const char *name, const char *value)
+{
+    typedef struct {
+        const char *name;
+        const char *(*value_f)();
+    } filter_t;
+
+    static filter_t filters[] = {{UCS_CPU_VENDOR_LABEL, ucs_cpu_vendor_name},
+                                 {UCS_CPU_MODEL_LABEL, ucs_cpu_model_name},
+                                 {UCS_SYS_DMI_PRODUCT_NAME_LABEL,
+                                  ucs_sys_dmi_product_name}};
+    filter_t *filter;
+
+    ucs_carray_for_each(filter, filters, ucs_static_array_size(filters)) {
+        if ((strcmp(name, filter->name) == 0) &&
+            (fnmatch(value, filter->value_f(), FNM_CASEFOLD) != 0)) {
+            /**
+             * The value does not match the pattern for this filter. E.g.
+             * configuration file contains the line: CPU model = v1.*, and
+             * ucs_cpu_model_name() returns "v2.0".
+             */
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void
+ucs_config_parse_set_section_info(ucs_config_parse_section_t *section_info,
+                                  const char *section, const char *name,
+                                  const char *value)
+{
+    if (strcmp(section, section_info->name) != 0) {
+        /* A new section has started. Update section name. */
+        ucs_strncpy_zero(section_info->name, section,
+                         sizeof(section_info->name));
+    } else if (section_info->skip) {
+        /* The section has already been filtered out earlier. */
+        return;
+    }
+
+    section_info->skip = ucs_config_parse_check_filter(name, value);
+}
+
 static int ucs_config_parse_config_file_line(void *arg, const char *section,
                                              const char *name,
                                              const char *value)
 {
-    khiter_t iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
-    int override  = *(int*)arg;
+    ucs_config_parse_arg_t *parse_arg        = (ucs_config_parse_arg_t*)arg;
+    ucs_config_parse_section_t *section_info = &parse_arg->section_info;
+    khiter_t iter;
     int result;
 
+    ucs_config_parse_set_section_info(section_info, section, name, value);
+    if (section_info->skip) {
+        return 1;
+    }
+
+    iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
     if (iter != kh_end(&ucs_config_file_vars)) {
-        if (override) {
+        if (parse_arg->override) {
             ucs_free(kh_val(&ucs_config_file_vars, iter));
         } else {
             ucs_error("found duplicate '%s' in config map", name);
@@ -1344,6 +1606,11 @@ static int ucs_config_parse_config_file_line(void *arg, const char *section,
 void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
                                   int override)
 {
+    ucs_config_parse_arg_t parse_arg = {
+        .override     = override,
+        .section_info = {.name = "",
+                         .skip = 0}
+    };
     char file_path[MAXPATHLEN];
     int parse_result;
     FILE* file;
@@ -1356,7 +1623,7 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
     }
 
     parse_result = ini_parse_file(file, ucs_config_parse_config_file_line,
-                                  &override);
+                                  &parse_arg);
     if (parse_result != 0) {
         ucs_warn("failed to parse config file %s: %d", file_path, parse_result);
     }
@@ -1490,7 +1757,8 @@ void ucs_config_parse_config_files()
     path_p = ucs_sys_get_lib_path();
     if (path_p != NULL) {
         ucs_strncpy_safe(path, path_p, PATH_MAX);
-        ucs_config_parse_config_file(dirname(path), "../etc/" UCX_CONFIG_FILE_NAME, 1);
+        ucs_config_parse_config_file(dirname(path),
+                                     "../etc/ucx/" UCX_CONFIG_FILE_NAME, 1);
     }
 
     /* User home dir */
@@ -1560,9 +1828,11 @@ err:
 }
 
 ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
-                                        const char *name, const char *value)
+                                         const char *prefix, const char *name,
+                                         const char *value)
 {
-    return ucs_config_parser_set_value_internal(opts, fields, name, value, NULL, 1);
+    return ucs_config_parser_set_value_internal(opts, fields, name, value,
+                                                prefix, 1);
 }
 
 ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
@@ -2119,7 +2389,8 @@ void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
     });
 }
 
-UCS_STATIC_CLEANUP {
+void ucs_config_parser_cleanup()
+{
     const char *key;
     char *value;
 

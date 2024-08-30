@@ -9,10 +9,16 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
-#include <ucs/sys/math.h>
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 
+/* First one is used as the default value */
+typedef enum uct_rocm_amd_gpu_product {
+    UCT_ROCM_AMD_GPU_UNDEFINED = -1,
+    UCT_ROCM_AMD_GPU_MI200,
+    UCT_ROCM_AMD_GPU_MI300A,
+    UCT_ROCM_AMD_GPU_MI300X
+} uct_rocm_amd_gpu_product_t;
 
 hsa_status_t uct_rocm_base_init(void);
 ucs_status_t uct_rocm_base_query_md_resources(uct_component_h component,
@@ -38,6 +44,7 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                      const size_t length,
                                      uct_md_mem_attr_t *mem_attr_p);
 ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *type);
+uct_rocm_amd_gpu_product_t uct_rocm_base_get_gpu_product(void);
 int uct_rocm_base_is_dmabuf_supported();
 
 #endif

@@ -14,7 +14,6 @@
 #include <ucp/am/ucp_am.inl>
 #include <ucp/rndv/proto_rndv.h>
 #include <ucs/arch/atomic.h>
-#include <ucs/datastruct/array.inl>
 #include <fnmatch.h>
 #include <ctype.h>
 
@@ -25,45 +24,38 @@ typedef struct {
     ucs_linear_func_t value;
 } ucp_proto_perf_node_data_t;
 
-/* Array of performance data entries */
-UCS_ARRAY_DEFINE_INLINE(ucp_proto_perf_node_data, unsigned,
-                        ucp_proto_perf_node_data_t);
-
-/* Array of performance node pointers - used for node children array */
-UCS_ARRAY_DEFINE_INLINE(ucp_proto_perf_node, unsigned, ucp_proto_perf_node_t*);
-
 /*
  * Performance estimation for a range of message sizes.
  * Defined in C file to prevent direct access to the structure fields.
  */
 struct ucp_proto_perf_node {
     /* Type of the range */
-    ucp_proto_perf_node_type_t       type;
+    ucp_proto_perf_node_type_t                    type;
 
     /* Name of the range */
-    const char                       *name;
+    char                                          name[UCP_PROTO_DESC_STR_MAX];
 
     /* Description of the range */
-    char                             desc[UCP_PROTO_DESC_STR_MAX];
+    char                                          desc[UCP_PROTO_DESC_STR_MAX];
 
     /* Number of references in the performance tree defined by 'children' */
-    unsigned                         refcount;
+    unsigned                                      refcount;
 
-    /* Child nodes */
-    ucs_array_t(ucp_proto_perf_node) children;
+    /* Array of child performance node pointers */
+    ucs_array_s(unsigned, ucp_proto_perf_node_t*) children;
 
     union {
         /*
          * Index of selected child node in the 'children' array.
          * Used when type == UCP_PROTO_PERF_NODE_TYPE_SELECT
          */
-        unsigned                              selected_child;
+        unsigned                                          selected_child;
 
         /*
-         * Data entries
+         * Array of performance data entries.
          * Used when type == UCP_PROTO_PERF_NODE_TYPE_DATA
          */
-        ucs_array_t(ucp_proto_perf_node_data) data;
+        ucs_array_s(unsigned, ucp_proto_perf_node_data_t) data;
     };
 };
 
@@ -73,7 +65,7 @@ typedef struct {
     char desc[UCP_PROTO_DESC_STR_MAX];
     char config[UCP_PROTO_CONFIG_STR_MAX];
 } ucp_proto_info_row_t;
-UCS_ARRAY_DEFINE_INLINE(ucp_proto_info_table, unsigned, ucp_proto_info_row_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_info_table_t, unsigned, ucp_proto_info_row_t);
 
 
 void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
@@ -89,13 +81,13 @@ void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
                       UCP_PROTO_PERF_FUNC_BW_ARG(perf));
 }
 
-void ucp_proto_select_init_trace_caps(
-        ucp_proto_id_t proto_id, const ucp_proto_init_params_t *init_params)
+void ucp_proto_select_init_trace_caps(const ucp_proto_init_params_t *init_params,
+                                      const ucp_proto_caps_t *proto_caps,
+                                      const void *priv)
 {
-    ucp_proto_caps_t *proto_caps          = init_params->caps;
     ucp_proto_query_params_t query_params = {
-        .proto         = ucp_protocols[proto_id],
-        .priv          = init_params->priv,
+        .proto         = ucp_protocols[init_params->proto_id],
+        .priv          = priv,
         .worker        = init_params->worker,
         .select_param  = init_params->select_param,
         .ep_config_key = init_params->ep_config_key,
@@ -104,22 +96,13 @@ void ucp_proto_select_init_trace_caps(
     const UCS_V_UNUSED ucs_linear_func_t *perf;
     size_t range_start, range_end;
     ucp_proto_query_attr_t query_attr;
-    int range_index;
-    char min_length_str[64];
     char thresh_str[64];
+    int range_index;
 
     if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
         return;
     }
 
-    ucs_trace("initialized protocol %s min_length %s cfg_thresh %s",
-              init_params->proto_name,
-              ucs_memunits_to_str(proto_caps->min_length, min_length_str,
-                                  sizeof(min_length_str)),
-              ucs_memunits_to_str(proto_caps->cfg_thresh, thresh_str,
-                                  sizeof(thresh_str)));
-
-    ucs_log_indent(1);
     range_start = 0;
     for (range_index = 0; range_index < proto_caps->num_ranges; ++range_index) {
         range_start = ucs_max(range_start, proto_caps->min_length);
@@ -127,7 +110,8 @@ void ucp_proto_select_init_trace_caps(
         if (range_end > range_start) {
             query_params.msg_length = range_start;
 
-            ucp_proto_id_call(proto_id, query, &query_params, &query_attr);
+            ucp_proto_id_call(init_params->proto_id, query, &query_params,
+                              &query_attr);
 
             perf = proto_caps->ranges[range_index].perf;
             ucs_trace("range[%d] %s %s %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
@@ -138,7 +122,6 @@ void ucp_proto_select_init_trace_caps(
         }
         range_start = range_end + 1;
     }
-    ucs_log_indent(-1);
 }
 
 static void
@@ -209,7 +192,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);
     static const char *info_row_fmt = "| %*s | %-*s | %-*s |\n";
-    ucs_array_t(ucp_proto_info_table) table;
+    ucp_proto_info_table_t table;
     int hdr_col_width[2], col_width[3];
     ucp_proto_query_attr_t proto_attr;
     ucp_proto_info_row_t *row_elem;
@@ -241,7 +224,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
             continue;
         }
 
-        row_elem = ucs_array_append(ucp_proto_info_table, &table, break);
+        row_elem = ucs_array_append(&table, break);
 
         ucs_snprintf_safe(row_elem->desc, sizeof(row_elem->desc), "%s%s",
                           proto_attr.is_estimation ? "(?) " : "",
@@ -293,7 +276,7 @@ void ucp_proto_select_info(ucp_worker_h worker,
     ucp_proto_select_elem_t select_elem;
     ucp_proto_select_key_t key;
 
-    kh_foreach(&proto_select->hash, key.u64, select_elem,
+    kh_foreach(proto_select->hash, key.u64, select_elem,
                ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
                                           &key.param, &select_elem, show_all,
                                           strb);
@@ -517,9 +500,10 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
     }
 }
 
-static ucp_proto_perf_node_t *
-ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type, const char *name,
-                        const char *desc_fmt, va_list ap)
+ucp_proto_perf_node_t *ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
+                                               unsigned selected_child,
+                                               const char *name,
+                                               const char *desc_fmt, va_list ap)
 {
     ucp_proto_perf_node_t *perf_node;
 
@@ -529,10 +513,18 @@ ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type, const char *name,
     }
 
     perf_node->type     = type;
-    perf_node->name     = name;
     perf_node->refcount = 1;
     ucs_array_init_dynamic(&perf_node->children);
+
+    ucs_assert(name != NULL);
+    ucs_strncpy_safe(perf_node->name, name, sizeof(perf_node->name));
     ucs_vsnprintf_safe(perf_node->desc, sizeof(perf_node->desc), desc_fmt, ap);
+
+    if (type == UCP_PROTO_PERF_NODE_TYPE_DATA) {
+        ucs_array_init_dynamic(&perf_node->data);
+    } else if (type == UCP_PROTO_PERF_NODE_TYPE_SELECT) {
+        perf_node->selected_child = selected_child;
+    }
 
     return perf_node;
 }
@@ -554,14 +546,15 @@ static void ucp_proto_perf_node_free(ucp_proto_perf_node_t *perf_node)
     ucs_free(perf_node);
 }
 
-#define UCP_PROTO_PERF_NODE_NEW(_type, _name, _desc_fmt) \
+#define UCP_PROTO_PERF_NODE_NEW(_type, _selected_child, _name, _desc_fmt) \
     ({ \
         ucp_proto_perf_node_t *__perf_node; \
         va_list __ap; \
         \
         va_start(__ap, _desc_fmt); \
-        __perf_node = ucp_proto_perf_node_new( \
-                UCP_PROTO_PERF_NODE_TYPE_##_type, _name, _desc_fmt, __ap); \
+        __perf_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_##_type, \
+                                              _selected_child, _name, \
+                                              _desc_fmt, __ap); \
         va_end(__ap); \
         \
         if (__perf_node == NULL) { \
@@ -574,28 +567,20 @@ static void ucp_proto_perf_node_free(ucp_proto_perf_node_t *perf_node)
 ucp_proto_perf_node_t *
 ucp_proto_perf_node_new_data(const char *name, const char *desc_fmt, ...)
 {
-    ucp_proto_perf_node_t *perf_node;
-
-    perf_node = UCP_PROTO_PERF_NODE_NEW(DATA, name, desc_fmt);
-    ucs_array_init_dynamic(&perf_node->data);
-    return perf_node;
+    return UCP_PROTO_PERF_NODE_NEW(DATA, 0, name, desc_fmt);
 }
 
 ucp_proto_perf_node_t *ucp_proto_perf_node_new_select(const char *name,
                                                       unsigned selected_child,
                                                       const char *desc_fmt, ...)
 {
-    ucp_proto_perf_node_t *perf_node;
-
-    perf_node                 = UCP_PROTO_PERF_NODE_NEW(SELECT, name, desc_fmt);
-    perf_node->selected_child = selected_child;
-    return perf_node;
+    return UCP_PROTO_PERF_NODE_NEW(SELECT, selected_child, name, desc_fmt);
 }
 
 ucp_proto_perf_node_t *
 ucp_proto_perf_node_new_compose(const char *name, const char *desc_fmt, ...)
 {
-    return UCP_PROTO_PERF_NODE_NEW(COMPOSE, name, desc_fmt);
+    return UCP_PROTO_PERF_NODE_NEW(COMPOSE, 0, name, desc_fmt);
 }
 
 void ucp_proto_perf_node_ref(ucp_proto_perf_node_t *perf_node)
@@ -628,10 +613,50 @@ static void
 ucp_proto_perf_node_append_child(ucp_proto_perf_node_t *perf_node,
                                  ucp_proto_perf_node_t *child_perf_node)
 {
-    ucs_array_append(ucp_proto_perf_node, &perf_node->children,
+    ucs_array_append(&perf_node->children,
                      ucs_diag("failed to add perf node child");
                      return );
     *ucs_array_last(&perf_node->children) = child_perf_node;
+}
+
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_dup(const ucp_proto_perf_node_t *perf_node)
+{
+    ucp_proto_perf_node_t *dup_perf_node = NULL;
+    ucp_proto_perf_node_t **child_elem;
+    ucp_proto_perf_node_data_t *data;
+
+    if (perf_node == NULL) {
+        return NULL;
+    }
+
+    if (perf_node->type == UCP_PROTO_PERF_NODE_TYPE_DATA) {
+        dup_perf_node = ucp_proto_perf_node_new_data(perf_node->name, "%s",
+                                                     perf_node->desc);
+    } else if (perf_node->type == UCP_PROTO_PERF_NODE_TYPE_SELECT) {
+        dup_perf_node = ucp_proto_perf_node_new_select(perf_node->name,
+                                                       perf_node->selected_child,
+                                                       "%s", perf_node->desc);
+    } else if (perf_node->type == UCP_PROTO_PERF_NODE_TYPE_COMPOSE) {
+        dup_perf_node = ucp_proto_perf_node_new_compose(perf_node->name, "%s",
+                                                        perf_node->desc);
+    }
+    if (dup_perf_node == NULL) {
+        return NULL;
+    }
+
+    ucs_array_for_each(child_elem, &perf_node->children) {
+        ucp_proto_perf_node_add_child(dup_perf_node, *child_elem);
+    }
+
+    if (perf_node->type == UCP_PROTO_PERF_NODE_TYPE_DATA) {
+        ucs_array_for_each(data, &perf_node->data) {
+            ucp_proto_perf_node_add_data(dup_perf_node, data->name,
+                                         data->value);
+        }
+    }
+
+    return dup_perf_node;
 }
 
 void ucp_proto_perf_node_own_child(ucp_proto_perf_node_t *perf_node,
@@ -680,12 +705,31 @@ void ucp_proto_perf_node_add_data(ucp_proto_perf_node_t *perf_node,
 
     ucs_assert(perf_node->type == UCP_PROTO_PERF_NODE_TYPE_DATA);
 
-    ucs_array_append(ucp_proto_perf_node_data, &perf_node->data,
-                     ucs_diag("failed to add perf node data");
+    ucs_array_append(&perf_node->data, ucs_diag("failed to add perf node data");
                      return );
     data        = ucs_array_last(&perf_node->data);
     data->name  = name;
     data->value = value;
+}
+
+void ucp_proto_perf_node_update_data(ucp_proto_perf_node_t *perf_node,
+                                     const char *name,
+                                     const ucs_linear_func_t value)
+{
+    ucp_proto_perf_node_data_t *data;
+
+    if (perf_node == NULL) {
+        return;
+    }
+
+    ucs_array_for_each(data, &perf_node->data) {
+        if (!strcmp(name, data->name)) {
+            data->value = value;
+            return;
+        }
+    }
+
+    ucp_proto_perf_node_add_data(perf_node, name, value);
 }
 
 void ucp_proto_perf_node_add_scalar(ucp_proto_perf_node_t *perf_node,
@@ -857,7 +901,8 @@ ucp_proto_perf_graph_dump_recurs(ucp_proto_perf_node_t *perf_node,
     /* Description */
     if (!ucs_string_is_empty(perf_node->desc)) {
         ucs_string_buffer_appendf(
-                strb, "<font face=\"calibri\" point-size=\"11\">%s<br/></font>",
+                strb, "<font face=\"calibri\" point-size=\"11\">%s"
+                UCP_PROTO_PERF_NODE_NEW_LINE"</font>",
                 perf_node->desc);
     }
 

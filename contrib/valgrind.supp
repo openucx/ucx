@@ -339,3 +339,9 @@
    obj:*/libmlx5*.so*
    fun:uct_rdmacm_cm_create_dummy_qp
 }
+{
+   bfd_map_over_sections_leak
+   Memcheck:Leak
+   ...
+   fun:bfd_map_over_sections
+}

@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -313,7 +314,8 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     UCT_CHECK_LENGTH(total_length, 0, iface->send_size, "am_short");
 
     send_buffer = UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
-    uct_am_short_fill_data(send_buffer, header, payload, length);
+    uct_am_short_fill_data(send_buffer, header, payload, length,
+                           UCS_ARCH_MEMCPY_NT_NONE);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, total_length);
     uct_self_iface_sendrecv_am(iface, id, send_buffer, total_length, "SHORT");
@@ -372,7 +374,8 @@ static uct_iface_internal_ops_t uct_self_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_self_iface_is_reachable_v2
+    .iface_is_reachable_v2 = uct_self_iface_is_reachable_v2,
+    .ep_is_connected       = uct_base_ep_is_connected
 };
 
 static uct_iface_ops_t uct_self_iface_ops = {
@@ -409,21 +412,14 @@ static uct_iface_ops_t uct_self_iface_ops = {
 
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
+    uct_md_base_md_query(attr);
     /* Dummy memory registration provided. No real memory handling exists */
     attr->flags                  = UCT_MD_FLAG_REG |
                                    UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
     attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->alloc_mem_types        = 0;
-    attr->detect_mem_types       = 0;
     attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->dmabuf_mem_types       = 0;
-    attr->max_alloc              = 0;
-    attr->max_reg                = ULONG_MAX;
-    attr->rkey_packed_size       = 0;
-    attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
-    memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
 

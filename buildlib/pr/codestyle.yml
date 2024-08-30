@@ -10,6 +10,7 @@ jobs:
       - checkout: self
         clean: true
         fetchDepth: 100
+        retryCountOnTaskFailure: 5
 
       - bash: |
           set -eE
@@ -47,6 +48,7 @@ jobs:
       - checkout: self
         clean: true
         fetchDepth: 100
+        retryCountOnTaskFailure: 5
 
       - bash: |
           source ./buildlib/az-helpers.sh
@@ -68,3 +70,23 @@ jobs:
               azure_complete_with_issues "Code is not formatted according to the code style, see $url for more info."
           fi
         condition: eq(variables['Build.Reason'], 'PullRequest')
+
+  - job: codespell
+    displayName: codespell check
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    container: fedora
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+
+      - bash: |
+          python3 -m venv /tmp/codespell_env
+          source /tmp/codespell_env/bin/activate
+          pip3 install codespell
+          codespell
+        displayName: codespell test

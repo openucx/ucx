@@ -67,7 +67,9 @@ SpaceBeforeParens: ControlStatementsExceptForEachMacros
 SpaceBeforeAssignmentOperators: true
 SpaceAfterCStyleCast: false
 SortIncludes: false
-ForEachMacros: ['_UCS_BITMAP_FOR_EACH_WORD',
+ForEachMacros: ['UCS_STATIC_BITMAP_FOR_EACH_BIT',
+                'UCS_DYNAMIC_BITMAP_FOR_EACH_BIT',
+                'UCS_STATIC_BITMAP_FOR_EACH_BIT',
                 'FOR_EACH_ENTITY',
                 'ucs_carray_for_each',
                 'kh_foreach',
@@ -76,6 +78,7 @@ ForEachMacros: ['_UCS_BITMAP_FOR_EACH_WORD',
                 'UCP_PROTO_PERF_TYPE_FOREACH',
                 'ucp_unpacked_address_for_each',
                 'ucp_datatype_iter_iov_for_each',
+                'ucp_proto_perf_segment_foreach',
                 'ucs_array_for_each',
                 'UCS_BITMAP_FOR_EACH_BIT',
                 'ucs_for_each_bit',
@@ -104,7 +107,9 @@ ForEachMacros: ['_UCS_BITMAP_FOR_EACH_WORD',
                 'UCX_PERF_TEST_FOREACH',
 		'ucs_lru_for_each']
 StatementMacros : []
-TypenameMacros: ['khash_t', 'ucs_array_t']
+TypenameMacros: ['khash_t',
+                 'ucs_array_s',
+                 'ucs_static_bitmap_s']
 WhitespaceSensitiveMacros: []
 
 # CPP
@@ -123,7 +128,6 @@ FixNamespaceComments: true
 NamespaceIndentation: None
 UseTab: Never
 ReflowComments: false
-SortIncludes: false
 IncludeCategories:
  - Regex: '^"'
    Priority: 1

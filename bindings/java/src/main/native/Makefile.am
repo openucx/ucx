@@ -9,7 +9,7 @@ jardir         = $(libdir)
 topdir         = $(abs_top_builddir)
 java_build_dir = $(builddir)/build-java
 maven_repo    ?= $(java_build_dir)/.deps
-jarfile        = $(java_build_dir)/jucx-@VERSION@.jar
+jarfile        = $(java_build_dir)/jucx-@VERSION@$(suffix).jar
 javadir        = $(top_srcdir)/bindings/java
 
 MVNCMD = $(MVN) -B -T 1C -f \
@@ -48,8 +48,12 @@ $(STAMP_FILE): \
 
 $(JUCX_GENERATED_H_FILES): $(STAMP_FILE)
 
-# Return CPU architecure in Java format
+# Return CPU architecture in Java format
 arch = $(if $(filter x86_64,$(shell uname -p)),amd64,$(shell uname -p))
+
+# Append non-x86_64 arch as filename suffix
+suffix = $(if $(filter-out x86_64,$(shell uname -p)),-$(shell uname -p))
+
 libjucx = $(objdir)/libjucx_$(arch).so
 
 lib_LTLIBRARIES = libjucx.la
@@ -82,7 +86,7 @@ $(libjucx): libjucx.la
 	cp $(objdir)/libjucx.so $(libjucx)
 
 $(jarfile): $(libjucx)
-	$(MVNCMD) package -DskipTests
+	$(MVNCMD) package -DskipTests -Djar.finalName=jucx-@VERSION@$(suffix)
 	jar tf $(jarfile)
 
 package : $(jarfile)
@@ -103,7 +107,8 @@ set-version:
 repack-jar: $(jarfile)
 	$(RM) -r $(java_build_dir)/repack_dir
 	unzip -o $(jarfile) -d $(java_build_dir)/repack_dir
-	\cp $(topdir)/libjucx_*.so/libjucx_*.so $(java_build_dir)/repack_dir
+	\cp -v $(topdir)/libjucx_*.so/libjucx_*.so $(topdir)/bindings/java/resources
+	\cp -v $(topdir)/libjucx_*.so/libjucx_*.so $(java_build_dir)/repack_dir
 	jar -cf $(jarfile) -C $(java_build_dir)/repack_dir .
 	jar tf $(jarfile)
 
@@ -111,15 +116,22 @@ multi-arch:
 	@make set-version JUCX_VERSION=${JUCX_VERSION}
 	@make repack-jar
 
+check-jar:
+	@test $(shell jar tf $(jarfile) | grep -q libjucx_amd64.so)
+	@test $(shell jar tf $(jarfile) | grep -q libjucx_aarch64.so)
+
 # Publish JUCX jar to maven central
 publish-snapshot:
-	@make set-version JUCX_VERSION=@VERSION@-SNAPSHOT
+	@make set-version JUCX_VERSION=${JUCX_VERSION}-SNAPSHOT
 	@make publish
 
 publish-release:
 	@make set-version JUCX_VERSION=${JUCX_VERSION}
-	@make repack-jar
 	@make publish
+
+publish-local:
+	@make set-version JUCX_VERSION=${JUCX_VERSION}
+	$(MVNCMD) deploy -DskipTests ${ARGS} -Plocal-deploy
 
 publish:
 	$(MVNCMD) deploy -DskipTests ${ARGS}

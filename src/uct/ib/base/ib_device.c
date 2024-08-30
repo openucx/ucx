@@ -72,6 +72,14 @@ uct_ib_async_event_hash_equal(uct_ib_async_event_t event1,
 KHASH_IMPL(uct_ib_async_event, uct_ib_async_event_t, uct_ib_async_event_val_t, 1,
            uct_ib_async_event_hash_func, uct_ib_async_event_hash_equal)
 
+typedef struct uct_ib_device_subnet {
+    struct sockaddr_storage address;
+    unsigned                prefix_length;
+} uct_ib_device_subnet_t;
+
+UCS_ARRAY_DECLARE_TYPE(uct_ib_device_subnet_array_t, unsigned,
+                       uct_ib_device_subnet_t);
+
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name          = "",
@@ -136,6 +144,9 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"ConnectX-7", {0x15b3, 4129},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 70},
+  {"ConnectX-8", {0x15b3, 4131},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 80},
   {"BlueField", {0x15b3, 0xa2d2},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 41},
@@ -651,7 +662,7 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
 {
     if (md->config.gid_index == UCS_ULUNITS_AUTO) {
-        return UCT_IB_MD_DEFAULT_GID_INDEX;
+        return UCT_IB_DEVICE_DEFAULT_GID_INDEX;
     } else {
         return md->config.gid_index;
     }
@@ -681,6 +692,14 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
         ucs_trace("%s:%d is not active (state: %d)", uct_ib_device_name(dev),
                   port_num, uct_ib_device_port_attr(dev, port_num)->state);
         return UCS_ERR_UNREACHABLE;
+    }
+
+    if (flags & UCT_IB_DEVICE_FLAG_SRQ) {
+        if (IBV_DEV_ATTR(dev, max_srq) == 0) {
+            ucs_trace("%s:%d does not support SRQ", uct_ib_device_name(dev),
+                      port_num);
+            return UCS_ERR_UNSUPPORTED;
+        }
     }
 
     if (!uct_ib_device_is_port_ib(dev, port_num) && (flags & UCT_IB_DEVICE_FLAG_LINK_IB)) {
@@ -867,9 +886,141 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
     return 1;
 }
 
-ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
-                                      uct_ib_device_gid_info_t *gid_info)
+ucs_status_t
+uct_ib_device_roce_gid_to_sockaddr(sa_family_t af, const void *gid,
+                                   struct sockaddr_storage *sock_storage)
 {
+    struct sockaddr *sa = (struct sockaddr*)sock_storage;
+    const uint8_t *inet_addr;
+    size_t addr_size;
+    ucs_status_t status;
+
+    /* Set address family */
+    sa->sa_family = af;
+
+    /* Set port to 0 as it's not relevant for RoCE */
+    status = ucs_sockaddr_set_port(sa, 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Get address size */
+    status = ucs_sockaddr_inet_addr_size(af, &addr_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Set IP address */
+    inet_addr = UCS_PTR_BYTE_OFFSET(gid, sizeof(union ibv_gid) - addr_size);
+    return ucs_sockaddr_set_inet_addr(sa, inet_addr);
+}
+
+static ucs_status_t
+uct_ib_device_parse_subnet_filter(const ucs_config_allow_list_t *subnet_strs,
+                                  uct_ib_device_subnet_array_t *subnets)
+{
+    char *address_str, *mask_str;
+    char **subnet_str;
+    char subnet_str_dup[UCS_SOCKADDR_STRING_LEN];
+    uct_ib_device_subnet_t *subnet;
+    ucs_status_t status;
+
+    if (subnet_strs->mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        return UCS_OK;
+    }
+
+    ucs_carray_for_each(subnet_str, subnet_strs->array.names,
+                        subnet_strs->array.count) {
+        ucs_strncpy_safe(subnet_str_dup, *subnet_str, sizeof(subnet_str_dup));
+
+        /* Expect a string of the following pattern: x.x.x.x/y */
+        ucs_string_split(subnet_str_dup, "/", 2, &address_str, &mask_str);
+        if (mask_str == NULL) {
+            status = UCS_ERR_INVALID_PARAM;
+            goto err;
+        }
+
+        subnet = ucs_array_append_fixed(subnets);
+
+        /* Parse subnet address */
+        status = ucs_sock_ipstr_to_sockaddr(address_str, &subnet->address);
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        /* Parse subnet mask */
+        if (sscanf(mask_str, "%u", &subnet->prefix_length) != 1) {
+            status = UCS_ERR_INVALID_PARAM;
+            goto err;
+        }
+    }
+
+    return UCS_OK;
+
+err:
+    ucs_error("failed to parse RoCE subnet: %s", *subnet_str);
+    return status;
+}
+
+static int
+uct_ib_device_match_roce_subnet(const uct_ib_device_gid_info_t *gid_info,
+                                const uct_ib_device_subnet_array_t *subnets,
+                                ucs_config_allow_list_mode_t mode)
+{
+    const int is_allow_mode = (mode == UCS_CONFIG_ALLOW_LIST_ALLOW);
+    static const char UCS_V_UNUSED *allow_mode_str[] = {"accepted",
+                                                        "restricted"};
+    const uct_ib_device_subnet_t *subnet;
+    struct sockaddr_storage gid_sockaddr;
+    char gid_str[UCS_SOCKADDR_STRING_LEN];
+    char subnet_str[UCS_SOCKADDR_STRING_LEN];
+
+    if (mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        return 1;
+    }
+
+    /* Convert GID to sockaddr structure */
+    if (uct_ib_device_roce_gid_to_sockaddr(gid_info->roce_info.addr_family,
+                                           &gid_info->gid,
+                                           &gid_sockaddr) != UCS_OK) {
+        ucs_error("failed to convert GID %u to sockaddr", gid_info->gid_index);
+        return 0;
+    }
+
+    /* Iterate over all subnets and compare them with GID */
+    ucs_array_for_each(subnet, subnets) {
+        if (!ucs_sockaddr_is_same_subnet(
+                    (const struct sockaddr*)&gid_sockaddr,
+                    (const struct sockaddr*)&subnet->address,
+                    subnet->prefix_length)) {
+            continue;
+        }
+
+        ucs_sockaddr_str((const struct sockaddr*)&gid_sockaddr, gid_str,
+                         UCS_SOCKADDR_STRING_LEN);
+        ucs_sockaddr_str((const struct sockaddr*)&subnet->address, subnet_str,
+                         UCS_SOCKADDR_STRING_LEN);
+        ucs_trace("address %s at gid[%u] was %s by subnet filter %s/%u",
+                  gid_str, gid_info->gid_index, allow_mode_str[!is_allow_mode],
+                  subnet_str, subnet->prefix_length);
+
+        /* Accept/Restrict GID according to required policy */
+        return is_allow_mode;
+    }
+
+    ucs_trace("gid index %u was %s due to no matching subnets",
+              gid_info->gid_index, allow_mode_str[!is_allow_mode]);
+
+    /* Handle non-matched GID according to policy */
+    return !is_allow_mode;
+}
+
+ucs_status_t
+uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
+                         const ucs_config_allow_list_t *subnet_strs,
+                         uct_ib_device_gid_info_t *gid_info)
+{
+    static const size_t max_str_len                     = 200;
     static const uct_ib_roce_version_info_t roce_prio[] = {
         {UCT_IB_DEVICE_ROCE_V2, AF_INET},
         {UCT_IB_DEVICE_ROCE_V2, AF_INET6},
@@ -879,10 +1030,18 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
     int gid_tbl_len         = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
     ucs_status_t status     = UCS_OK;
     int priorities_arr_len  = ucs_static_array_size(roce_prio);
+    UCS_ARRAY_DEFINE_ONSTACK(uct_ib_device_subnet_array_t, subnets,
+                             subnet_strs->array.count);
     uct_ib_device_gid_info_t gid_info_tmp;
-    int i, prio_idx;
+    int i, prio_idx, res;
+    char subnet_list_str[max_str_len];
 
     ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
+
+    status = uct_ib_device_parse_subnet_filter(subnet_strs, &subnets);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     /* search for matching GID table entries, according to the order defined
      * in priorities array
@@ -898,8 +1057,9 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
 
             if ((roce_prio[prio_idx].ver         == gid_info_tmp.roce_info.ver) &&
                 (roce_prio[prio_idx].addr_family == gid_info_tmp.roce_info.addr_family) &&
-                uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info_tmp.gid, i)) {
-
+                uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info_tmp.gid, i) &&
+                uct_ib_device_match_roce_subnet(&gid_info_tmp, &subnets,
+                                                subnet_strs->mode)) {
                 gid_info->gid_index = i;
                 gid_info->roce_info = gid_info_tmp.roce_info;
                 goto out_print;
@@ -907,7 +1067,16 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
         }
     }
 
-    gid_info->gid_index             = UCT_IB_MD_DEFAULT_GID_INDEX;
+    if (subnet_strs->mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        res = ucs_config_sprintf_allow_list(subnet_list_str, max_str_len,
+                                            subnet_strs,
+                                            &ucs_config_array_string);
+        ucs_error("failed to find a gid which matches/unmatches the following "
+                  "subnet list: %s", res ? subnet_list_str : "<none>");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    gid_info->gid_index             = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
     gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_V1;
     gid_info->roce_info.addr_family = AF_INET;
 
@@ -1117,9 +1286,9 @@ ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)
     return UCS_OK;
 }
 
-int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
+int uct_ib_device_is_gid_valid(const union ibv_gid *gid)
 {
-    return (*(uint64_t *)gid_raw == 0) && (*(uint64_t *)(gid_raw + 8) == 0);
+    return gid->global.interface_id != 0;
 }
 
 ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
@@ -1135,7 +1304,7 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
         return status;
     }
 
-    if (uct_ib_device_is_gid_raw_empty(gid_info.gid.raw)) {
+    if (!uct_ib_device_is_gid_valid(&gid_info.gid)) {
         ucs_log(error_level, "invalid gid[%d] on %s:%d", gid_index,
                 uct_ib_device_name(dev), port_num);
         return UCS_ERR_INVALID_ADDR;
@@ -1335,3 +1504,4 @@ const char* uct_ib_ah_attr_str(char *buf, size_t max,
 
     return buf;
 }
+

@@ -174,12 +174,8 @@ int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 
 int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
                             ucp_rsc_index_t rsc_index,
-                            const ucp_address_entry_t *ae);
-void
-ucp_wireup_get_dst_rsc_indices(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
-                               const ucp_unpacked_address_t *remote_address,
-                               const unsigned *addr_indices,
-                               ucp_rsc_index_t *dst_rsc_indices);
+                            const ucp_address_entry_t *ae,
+                            char *info_str, size_t info_str_size);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_tl_bitmap_t *local_tl_bitmap,
@@ -222,6 +218,9 @@ double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface);
 
 double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 
+int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
+                                 const ucp_address_entry_t *addr_entry);
+
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {
     return lane_types &
@@ -233,6 +232,12 @@ static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 static inline int ucp_wireup_lane_type_is_fast_path(ucp_lane_type_t lane_type)
 {
     return ucp_wireup_lane_types_has_fast_path(UCS_BIT(lane_type));
+}
+
+static inline double ucp_wireup_fp8_pack_unpack_latency(double latency)
+{
+    return UCS_FP8_PACK_UNPACK(LATENCY, latency * UCS_NSEC_PER_SEC) /
+           UCS_NSEC_PER_SEC;
 }
 
 #endif

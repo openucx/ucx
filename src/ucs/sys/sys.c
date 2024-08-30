@@ -13,6 +13,7 @@
 
 #include <ucs/algorithm/crc.h>
 #include <ucs/sys/checker.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
@@ -48,6 +49,7 @@
 #define UCS_PROCCESS_STAT_FMT      "/proc/%d/stat"
 #define UCS_PROCESS_NS_FIRST       0xF0000000U
 #define UCS_PROCESS_NS_NET_DFLT    0xF0000080U
+#define UCS_DMI_PRODUCT_NAME_FILE  "/sys/devices/virtual/dmi/id/product_name"
 
 #define UCS_NS_INFO_ITEM(_id, _name, _dflt) \
     [_id] = {.name = (_name), .dflt = (_dflt), .value = (_dflt), \
@@ -1460,31 +1462,19 @@ ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ct
     ucs_status_t res = UCS_OK;
     DIR *dir;
     struct dirent *entry;
-    struct dirent *entry_out;
-    size_t entry_len;
 
     dir = opendir(path);
     if (dir == NULL) {
-        return UCS_ERR_NO_ELEM; /* failed to open directory */
+        return UCS_ERR_NO_ELEM;
     }
 
-    entry_len = ucs_offsetof(struct dirent, d_name) +
-                fpathconf(dirfd(dir), _PC_NAME_MAX) + 1;
-    entry     = (struct dirent*)malloc(entry_len);
-    if (entry == NULL) {
-        res = UCS_ERR_NO_MEMORY;
-        goto failed_no_mem;
-    }
-
-    while (!readdir_r(dir, entry, &entry_out) && (entry_out != NULL)) {
+    while ((entry = readdir(dir)) != NULL) {
         res = cb(entry, ctx);
         if (res != UCS_OK) {
             break;
         }
     }
 
-    free(entry);
-failed_no_mem:
     closedir(dir);
     return res;
 }
@@ -1588,7 +1578,7 @@ unsigned long ucs_sys_get_proc_create_time(pid_t pid)
     }
 
 scan_err:
-    ucs_error("failed to scan "UCS_PROCCESS_STAT_FMT, pid);
+    ucs_debug("failed to scan "UCS_PROCCESS_STAT_FMT, pid);
 err:
     return 0ul;
 }
@@ -1647,4 +1637,24 @@ ucs_status_t ucs_sys_read_sysfs_file(const char *dev_name,
     }
 
     return UCS_OK;
+}
+
+const char *ucs_sys_dmi_product_name()
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static char product_name[128];
+    ssize_t nread;
+
+    UCS_INIT_ONCE(&init_once) {
+        nread = ucs_read_file_str(product_name, sizeof(product_name), 1,
+                                  UCS_DMI_PRODUCT_NAME_FILE);
+        if (nread >= 0) {
+            ucs_strtrim(product_name);
+        } else {
+            ucs_strncpy_zero(product_name, UCS_VALUE_UNKNOWN_STR,
+                             sizeof(product_name));
+        }
+    }
+
+    return product_name;
 }

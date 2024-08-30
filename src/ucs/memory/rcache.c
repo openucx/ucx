@@ -102,11 +102,6 @@ ucs_config_field_t ucs_config_rcache_table[] = {
     {"RCACHE_OVERHEAD", "auto", "Registration cache lookup overhead",
      ucs_offsetof(ucs_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME_UNITS},
 
-    {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
-     "Registration cache address alignment, must be power of 2\n"
-     "between " UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN) "and system page size",
-     ucs_offsetof(ucs_rcache_config_t, alignment), UCS_CONFIG_TYPE_MEMUNITS},
-
     {"RCACHE_MAX_REGIONS", "inf",
      "Maximal number of regions in the registration cache",
      ucs_offsetof(ucs_rcache_config_t, max_regions),
@@ -184,8 +179,6 @@ void ucs_rcache_region_log(const char *file, int line, const char *function,
 void ucs_rcache_set_default_params(ucs_rcache_params_t *rcache_params)
 {
     rcache_params->region_struct_size = sizeof(ucs_rcache_region_t);
-    rcache_params->alignment          = UCS_RCACHE_MIN_ALIGNMENT;
-    rcache_params->max_alignment      = ucs_get_page_size();
     rcache_params->ucm_events         = 0;
     rcache_params->ucm_event_priority = 1000;
     rcache_params->ops                = NULL;
@@ -201,7 +194,6 @@ void ucs_rcache_set_params(ucs_rcache_params_t *rcache_params,
 {
     ucs_rcache_set_default_params(rcache_params);
 
-    rcache_params->alignment          = rcache_config->alignment;
     rcache_params->ucm_event_priority = rcache_config->event_prio;
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
@@ -373,7 +365,7 @@ static void ucs_rcache_region_collect_callback(const ucs_pgtable_t *pgtable,
 static void ucs_rcache_find_regions(ucs_rcache_t *rcache, ucs_pgt_addr_t from,
                                     ucs_pgt_addr_t to, ucs_list_link_t *list)
 {
-    ucs_list_head_init(list);
+    ucs_trace("%s: find regions in 0x%lx..0x%lx", rcache->name, from, to);
     ucs_pgtable_search_range(&rcache->pgtable, from, to,
                              ucs_rcache_region_collect_callback, list);
 }
@@ -546,6 +538,7 @@ static void ucs_rcache_invalidate_range(ucs_rcache_t *rcache, ucs_pgt_addr_t sta
 
     ucs_trace_func("rcache=%s, start=0x%lx, end=0x%lx", rcache->name, start, end);
 
+    ucs_list_head_init(&region_list);
     ucs_rcache_find_regions(rcache, start, end - 1, &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, tmp_list) {
         /* all regions on the list are in the page table */
@@ -653,7 +646,8 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
      * This way we avoid queuing endless events on the invalidation queue when
      * no rcache operations are performed to clean it.
      */
-    if (!pthread_rwlock_trywrlock(&rcache->pgt_lock)) {
+    if (!(rcache->params.flags & UCS_RCACHE_FLAG_SYNC_EVENTS) &&
+        !pthread_rwlock_trywrlock(&rcache->pgt_lock)) {
         /* coverity[double_lock] */
         ucs_rcache_invalidate_range(rcache, start, end,
                                     UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC);
@@ -765,13 +759,87 @@ static void ucs_rcache_lru_evict(ucs_rcache_t *rcache)
 
 /* Lock must be held */
 static ucs_status_t
-ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
-                         ucs_pgt_addr_t *end, int *prot, int *merged,
-                         ucs_rcache_region_t **region_p)
+ucs_rcache_check_overlap_one(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
+                             ucs_pgt_addr_t *end, size_t *alignment, int *prot,
+                             void *arg, ucs_rcache_region_t *region)
+{
+    int mem_prot;
+
+    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_MERGES, 1);
+    /*
+     * If we don't provide some of the permissions the other region had,
+     * we might want to expand our permissions to support them. We can
+     * do that only if the memory range actually has those permissions.
+     *  This will prevent the users of the other region to kick us out
+     * the next time.
+     */
+    if (!ucs_test_all_flags(*prot, region->prot)) {
+        /* A slow path because searching /proc/maps in order to
+         * check memory protection is very expensive.
+         *
+         * TODO: currently rcache is optimized for the case where most of
+         * the regions have same protection.
+         */
+        mem_prot = UCS_PROFILE_CALL_ALWAYS(ucs_get_mem_prot, *start, *end);
+        if (!ucs_test_all_flags(mem_prot, *prot)) {
+            ucs_rcache_region_trace(rcache, region,
+                                    "do not merge "UCS_RCACHE_PROT_FMT
+                                    " with mem "UCS_RCACHE_PROT_FMT,
+                                    UCS_RCACHE_PROT_ARG(*prot),
+                                    UCS_RCACHE_PROT_ARG(mem_prot));
+            /* The memory protection can not satisfy that of the
+             * region. However mem_reg still may be able to deal with it.
+             * Do the safest thing: invalidate cached region
+             */
+            ucs_rcache_region_invalidate_internal(
+                    rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
+            return UCS_ERR_CANCELED;
+        } else if (ucs_test_all_flags(mem_prot, region->prot)) {
+            *prot |= region->prot;
+        } else {
+            /* Could not support other region's permissions - so do not merge
+             * with it. If anybody will use the other region, this will kick
+             * out our region, and may potentially lead to ineffective use
+             * of the cache. We can't solve it as long as we have only one
+             * page table, since it does not allow overlap.
+             */
+            ucs_rcache_region_trace(rcache, region,
+                                    "do not merge mem "UCS_RCACHE_PROT_FMT" with",
+                                    UCS_RCACHE_PROT_ARG(mem_prot));
+            ucs_rcache_region_invalidate_internal(
+                    rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
+            return UCS_ERR_CANCELED;
+        }
+    }
+
+    ucs_rcache_region_trace(rcache, region,
+                            "merge 0x%lx..0x%lx "UCS_RCACHE_PROT_FMT" with",
+                            *start, *end, UCS_RCACHE_PROT_ARG(*prot));
+
+    rcache->params.ops->merge(rcache->params.context, rcache, arg, region);
+
+    *alignment = ucs_max(*alignment, region->alignment);
+    *start     = ucs_min(*start, region->super.start);
+    *end       = ucs_max(*end, region->super.end);
+
+    /* coverity[double_unlock] */
+    /* coverity[double_lock] */
+    ucs_rcache_region_invalidate_internal(
+            rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
+
+    return UCS_OK;
+}
+
+/* Lock must be held */
+static ucs_status_t
+ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
+                         ucs_pgt_addr_t *end, size_t *alignment, int *prot,
+                         int *merged, ucs_rcache_region_t **region_p)
 {
     ucs_rcache_region_t *region, *tmp;
+    ucs_pgt_addr_t old_start, old_end;
     ucs_list_link_t region_list;
-    int mem_prot;
+    ucs_status_t status;
 
     ucs_trace_func("rcache=%s, *start=0x%lx, *end=0x%lx", rcache->name, *start,
                    *end);
@@ -780,78 +848,45 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
     /* coverity[double_unlock] */
     ucs_rcache_check_gc_list(rcache, 1);
 
+    ucs_list_head_init(&region_list);
     ucs_rcache_find_regions(rcache, *start, *end - 1, &region_list);
 
-    /* TODO check if any of the regions is locked */
-
-    ucs_list_for_each_safe(region, tmp, &region_list, tmp_list) {
-        if ((*start >= region->super.start) && (*end <= region->super.end) &&
-            ucs_rcache_region_test(region, *prot))
-        {
+    if (!ucs_list_is_empty(&region_list)) {
+        region = ucs_list_next(&region_list, ucs_rcache_region_t, tmp_list);
+        if (ucs_list_is_only(&region_list, &region->tmp_list) &&
+            (*start >= region->super.start) && (*end <= region->super.end) &&
+            ucs_rcache_region_test(region, *prot, *alignment)) {
             /* Found a region which contains the given address range */
             ucs_rcache_region_hold(rcache, region);
             *region_p = region;
             return UCS_ERR_ALREADY_EXISTS;
         }
+    }
 
-        UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_MERGES, 1);
-        /*
-         * If we don't provide some of the permissions the other region had,
-         * we might want to expand our permissions to support them. We can
-         * do that only if the memory range actually has those permissions.
-         *  This will prevent the users of the other region to kick us out
-         * the next time.
-         */
-        if (!ucs_test_all_flags(*prot, region->prot)) {
-            /* A slow path because searching /proc/maps in order to
-             * check memory protection is very expensive.
-             *
-             * TODO: currently rcache is optimized for the case where most of
-             * the regions have same protection.
-             */
-            mem_prot = UCS_PROFILE_CALL_ALWAYS(ucs_get_mem_prot, *start, *end);
-            if (!ucs_test_all_flags(mem_prot, *prot)) {
-                ucs_rcache_region_trace(rcache, region,
-                                        "do not merge "UCS_RCACHE_PROT_FMT
-                                        " with mem "UCS_RCACHE_PROT_FMT,
-                                        UCS_RCACHE_PROT_ARG(*prot),
-                                        UCS_RCACHE_PROT_ARG(mem_prot));
-                /* The memory protection can not satisfy that of the
-                 * region. However mem_reg still may be able to deal with it.
-                 * Do the safest thing: invalidate cached region
-                 */
-                ucs_rcache_region_invalidate_internal(
-                        rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
-                continue;
-            } else if (ucs_test_all_flags(mem_prot, region->prot)) {
-                *prot |= region->prot;
-            } else {
-                /* Could not support other region's permissions - so do not merge
-                 * with it. If anybody will use the other region, this will kick
-                 * out our region, and may potentially lead to ineffective use
-                 * of the cache. We can't solve it as long as we have only one
-                 * page table, since it does not allow overlap.
-                 */
-                ucs_rcache_region_trace(rcache, region,
-                                        "do not merge mem "UCS_RCACHE_PROT_FMT" with",
-                                        UCS_RCACHE_PROT_ARG(mem_prot));
-                ucs_rcache_region_invalidate_internal(
-                        rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
-                continue;
+    /* TODO check if any of the regions is locked */
+    do {
+        old_start = *start;
+        old_end   = *end;
+
+        ucs_list_for_each_safe(region, tmp, &region_list, tmp_list) {
+            status = ucs_rcache_check_overlap_one(rcache, start, end, alignment,
+                                                  prot, arg, region);
+            if (status == UCS_OK) {
+                *merged = 1;
             }
         }
 
-        ucs_rcache_region_trace(rcache, region,
-                                "merge 0x%lx..0x%lx "UCS_RCACHE_PROT_FMT" with",
-                                *start, *end, UCS_RCACHE_PROT_ARG(*prot));
-        *start  = ucs_min(*start, region->super.start);
-        *end    = ucs_max(*end,   region->super.end);
-        *merged = 1;
-        /* coverity[double_unlock] */
-        /* coverity[double_lock] */
-        ucs_rcache_region_invalidate_internal(
-                rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
-    }
+        *start = ucs_align_down_pow2(*start, *alignment);
+        *end   = ucs_align_up_pow2(*end, *alignment);
+
+        /* Overlapping regions might necessitate a larger alignment, which,
+         * in turn, can result in even more overlapping regions.
+         */
+        ucs_list_head_init(&region_list);
+        ucs_rcache_find_regions(rcache, *start, old_start - 1, &region_list);
+        ucs_rcache_find_regions(rcache, old_end, *end - 1, &region_list);
+    } while (!ucs_list_is_empty(&region_list));
+
     return UCS_OK;
 }
 
@@ -887,9 +922,9 @@ static ucs_status_t ucs_rcache_fill_pfn(ucs_rcache_region_t *region)
     return status;
 }
 
-ucs_status_t
-ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
-                         int prot, void *arg, ucs_rcache_region_t **region_p)
+ucs_status_t ucs_rcache_create_region(ucs_rcache_t *rcache, void *address,
+                                      size_t length, size_t alignment, int prot,
+                                      void *arg, ucs_rcache_region_t **region_p)
 {
     ucs_rcache_region_t *region;
     ucs_pgt_addr_t start, end;
@@ -905,17 +940,15 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
 
 retry:
     /* Align to page size */
-    start  = ucs_align_down_pow2((uintptr_t)address,
-                                 rcache->params.alignment);
-    end    = ucs_align_up_pow2  ((uintptr_t)address + length,
-                                 rcache->params.alignment);
+    start  = ucs_align_down_pow2((uintptr_t)address, alignment);
+    end    = ucs_align_up_pow2  ((uintptr_t)address + length, alignment);
     region = NULL;
     merged = 0;
 
     /* Check overlap with existing regions */
     /* coverity[double_lock] */
-    status = UCS_PROFILE_CALL(ucs_rcache_check_overlap, rcache, &start, &end,
-                              &prot, &merged, &region);
+    status = UCS_PROFILE_CALL(ucs_rcache_check_overlap, rcache, arg, &start,
+                              &end, &alignment, &prot, &merged, &region);
     if (status == UCS_ERR_ALREADY_EXISTS) {
         /* Found a matching region (it could have been added after we released
          * the lock)
@@ -965,6 +998,7 @@ retry:
     region->lru_flags = 0;
     region->refcount  = 1;
     region->status    = UCS_INPROGRESS;
+    region->alignment = alignment;
 
     ++rcache->num_regions;
 
@@ -1033,7 +1067,8 @@ void ucs_rcache_region_hold(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 }
 
 ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
-                            int prot, void *arg, ucs_rcache_region_t **region_p)
+                            size_t alignment, int prot, void *arg,
+                            ucs_rcache_region_t **region_p)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_pgt_region_t *pgt_region;
@@ -1050,8 +1085,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
         if (ucs_likely(pgt_region != NULL)) {
             region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
             if (((start + length) <= region->super.end) &&
-                ucs_rcache_region_test(region, prot))
-            {
+                ucs_rcache_region_test(region, prot, alignment)) {
                 ucs_rcache_region_hold(rcache, region);
                 ucs_rcache_region_validate_pfn(rcache, region);
                 ucs_rcache_region_lru_get(rcache, region);
@@ -1070,7 +1104,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
      * - found unregistered region
      */
     return UCS_PROFILE_CALL(ucs_rcache_create_region, rcache, address, length,
-                            prot, arg, region_p);
+                            alignment, prot, arg, region_p);
 }
 
 void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
@@ -1237,18 +1271,6 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     ucs_mpool_params_t mp_params;
 
     if (params->region_struct_size < sizeof(ucs_rcache_region_t)) {
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
-    }
-
-    if (!ucs_is_pow2(params->alignment) ||
-        (params->alignment < UCS_RCACHE_MIN_ALIGNMENT) ||
-        (params->alignment > params->max_alignment))
-    {
-        ucs_error("invalid regcache alignment (%zu): must be a power of 2 "
-                  "between %zu and %zu",
-                  params->alignment, UCS_RCACHE_MIN_ALIGNMENT,
-                  params->max_alignment);
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }

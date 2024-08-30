@@ -20,7 +20,6 @@
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
-#include <ucs/datastruct/bitmap.h>
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/memory/memory_type.h>
@@ -47,8 +46,10 @@ enum {
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
     size_t                                 bcopy_thresh;
-    /** Threshold for switching UCP to rendezvous protocol */
-    size_t                                 rndv_thresh;
+    /** Threshold for switching UCP to rendezvous protocol for intra-node */
+    size_t                                 rndv_intra_thresh;
+    /** Threshold for switching UCP to rendezvous protocol for inter-node */
+    size_t                                 rndv_inter_thresh;
     /** Threshold for switching UCP to rendezvous protocol
      *  in ucp_tag_send_nbr() */
     size_t                                 rndv_send_nbr_thresh;
@@ -136,6 +137,10 @@ typedef struct ucp_context_config {
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
+    /** Time period between dynamic transport switching rounds */
+    ucs_time_t                             dynamic_tl_switch_interval;
+    /** Number of usage tracker rounds performed for each progress operation */
+    unsigned                               dynamic_tl_progress_factor;
     /** Defines whether resolving remote endpoint ID is required or not when
      *  creating a local endpoint */
     ucs_on_off_auto_value_t                resolve_remote_ep_id;
@@ -164,6 +169,26 @@ typedef struct ucp_context_config {
     char                                   *proto_info_dir;
     /** Memory types that perform non-blocking registration by default */
     uint64_t                               reg_nb_mem_types;
+    /** Prefer native RMA transports for RMA/AMO protocols */
+    int                                    prefer_offload;
+    /** RMA zcopy segment size */
+    size_t                                 rma_zcopy_max_seg_size;
+    /** Enable global VA MR */
+    int                                    gva_enable;
+    /** Lock memory when using global VA MR */
+    int                                    gva_mlock;
+    /** Prefetch memory when using global VA MR */
+    int                                    gva_prefetch;
+    /** Protocol overhead */
+    double                                 proto_overhead_single;
+    double                                 proto_overhead_multi;
+    double                                 proto_overhead_rndv_offload;
+    double                                 proto_overhead_rndv_rts;
+    double                                 proto_overhead_rndv_rtr;
+    double                                 proto_overhead_sw;
+    double                                 proto_overhead_rkey_ptr;
+    /** Registration cache lookup overhead estimation */
+    double                                 rcache_overhead;
 } ucp_context_config_t;
 
 
@@ -263,7 +288,20 @@ typedef struct ucp_tl_md {
      * Flags mask parameter for @ref uct_md_mkey_pack_v2
      */
     unsigned               pack_flags_mask;
+
+    /**
+     * Global VA memory handle
+     */
+    uct_mem_h              gva_mr;
 } ucp_tl_md_t;
+
+
+typedef struct ucp_context_alloc_md_index {
+    int            initialized;
+    /* Index of memory domain that is used to allocate memory of the given type
+     * using ucp_memh_alloc(). */
+    ucp_md_index_t md_index;
+} ucp_context_alloc_md_index_t;
 
 
 /**
@@ -276,17 +314,24 @@ typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_md_index_t                num_mds;    /* Number of memory domains */
 
-    /* Index of memory domain that is used to allocate memory of the given type
-     * using ucp_memh_alloc(). */
-    int                           alloc_md_index_initialized;
-    ucp_md_index_t                alloc_md_index[UCS_MEMORY_TYPE_LAST];
+    ucp_context_alloc_md_index_t  alloc_md[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration for given memory type,
        ucp_mem_map() will register memory for all those domains. */
     ucp_md_map_t                  reg_md_map[UCS_MEMORY_TYPE_LAST];
 
+    /* Map of MDs that provide blocking registration for given memory type.
+     * This map is initialized if non-blocking registration is requested for
+     * the memory type (thus reg_md_map contains only MDs supporting
+     * non-blocking registration).
+     */
+    ucp_md_map_t                  reg_block_md_map[UCS_MEMORY_TYPE_LAST];
+
     /* Map of MDs that require caching registrations for given memory type. */
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
+
+    /* Map of MDs that support global VA MRs for given memory type. */
+    ucp_md_map_t                  gva_md_map[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration of a memory buffer for a given
        memory type to be exported to other processes. */
@@ -363,6 +408,9 @@ typedef struct ucp_context {
 
         /* worker_fence implementation method */
         unsigned                  worker_strong_fence;
+
+        /* Progress wrapper enabled */
+        int                       progress_wrapper_enabled;
 
         struct {
            unsigned               count;
@@ -503,12 +551,13 @@ typedef struct ucp_tl_iface_atomic_flags {
         const uct_md_attr_v2_t *md_attr; \
         ucp_md_index_t md_index; \
         ucp_rsc_index_t tl_id; \
-        UCS_BITMAP_CLEAR(&(_tl_bitmap)); \
-        UCS_BITMAP_FOR_EACH_BIT((_context)->tl_bitmap, tl_id) { \
+        \
+        UCS_STATIC_BITMAP_RESET_ALL(&(_tl_bitmap)); \
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &(_context)->tl_bitmap) { \
             md_index = (_context)->tl_rscs[tl_id].md_index; \
             md_attr  = &(_context)->tl_mds[md_index].attr; \
             if (md_attr->_cap_field & UCS_BIT(_mem_type)) { \
-                UCS_BITMAP_SET(_tl_bitmap, tl_id); \
+                UCS_STATIC_BITMAP_SET(&(_tl_bitmap), tl_id); \
             } \
         } \
     }
@@ -657,6 +706,12 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_usage_tracker_enabled(ucp_context_h context)
+{
+    return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
 }
 
 void

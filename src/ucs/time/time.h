@@ -11,6 +11,7 @@
 #include <ucs/time/time_def.h>
 #include <sys/time.h>
 #include <limits.h>
+#include <math.h>
 
 BEGIN_C_DECLS
 
@@ -151,6 +152,21 @@ static inline void ucs_sec_to_timespec(double seconds, struct timespec *ts)
     int64_t nsec = (int64_t)( (seconds * UCS_NSEC_PER_SEC) + 0.5 );
     ts->tv_sec  = nsec / UCS_NSEC_PER_SEC;
     ts->tv_nsec = nsec % UCS_NSEC_PER_SEC;
+}
+
+
+/**
+ * Convert UCS time units, including auto and inf values, to seconds
+ */
+static inline double ucs_time_units_to_sec(ucs_time_t t, double auto_val)
+{
+    if (t == UCS_TIME_AUTO) {
+        return auto_val;
+    } else if (t == UCS_TIME_INFINITY) {
+        return INFINITY;
+    }
+
+    return ucs_time_to_sec(t);
 }
 
 END_C_DECLS

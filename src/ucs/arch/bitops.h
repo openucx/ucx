@@ -127,7 +127,7 @@ BEGIN_C_DECLS
     ((sizeof(_n) <= 4) ? __builtin_clz((uint32_t)(_n)) : __builtin_clzl(_n))
 
 /* Returns the number of bits lower than 'bit_index' that are set in 'mask'
- * For example: ucs_idx2bitmap(mask=0xF0, idx=6) returns 2
+ * For example: ucs_bitmap2idx(mask=0xF0, idx=6) returns 2
  */
 static inline unsigned ucs_bitmap2idx(uint64_t mask, unsigned bit_index)
 {

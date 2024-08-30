@@ -1,6 +1,3 @@
-# See https://aka.ms/yaml
-# This pipeline to be run on direct pushes and merges
-
 pr:
   - master
   - v*.*.x
@@ -8,11 +5,18 @@ trigger:
   - master
   - v*.*.x
 
+variables:
+  DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local
+
 resources:
   containers:
-    - container: centos7_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:2
-
+    - container: centos8_cuda11_x86_64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos8-mofed5-cuda11:3
+      options: $(DOCKER_OPT_VOLUMES)
+    - container: centos8_cuda11_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/centos8-mofed5-cuda11:3
+      options: $(DOCKER_OPT_VOLUMES)
+      
 stages:
   - stage: Prepare
     jobs:
@@ -24,19 +28,28 @@ stages:
         steps:
           - checkout: self
             clean: true
+            retryCountOnTaskFailure: 5
           - bash: |
               set -eE
               source ./buildlib/az-helpers.sh
               set -x
               check_release_build $(Build.Reason) $(Build.SourceVersion) "AZP/SNAPSHOT: "
             name: Result
+            
   - stage: Build
     dependsOn: Prepare
     condition: eq(dependencies.Prepare.outputs['Check.Result.Launch'], 'True')
     jobs:
-      - template: jucx/jucx-publish.yml
+      - template: jucx/jucx-build.yml
         parameters:
-          ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
-            target: publish-snapshot
-          ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
-            target: package
+          arch: amd64
+          container: centos8_cuda11_x86_64
+          demands: ucx_docker
+          target: publish-snapshot
+
+      - template: jucx/jucx-build.yml
+        parameters:
+          arch: aarch64
+          container: centos8_cuda11_aarch64
+          demands: ucx-arm64
+          target: publish-snapshot

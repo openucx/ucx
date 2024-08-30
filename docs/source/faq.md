@@ -344,7 +344,7 @@ for zero copy operations, or copy the data to/from host memory.
 > support, otherwise the GPU memory will not be recognized.
 > For example: `UCX_TLS=rc,cuda` or `UCX_TLS=dc,rocm`
 
-#### I'm running UCX with GPU memory and geting a segfault, why?
+#### I'm running UCX with GPU memory and getting a segfault, why?
 
 Most likely UCX does not detect that the pointer is a GPU memory and tries to
 access it from CPU. It can happen if UCX is not compiled with GPU support, or fails

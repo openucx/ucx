@@ -57,7 +57,10 @@ typedef enum {
     UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE  = UCS_BIT(8),
 
     /* Supports error handling */
-    UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9)
+    UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9),
+
+    /* Supports starting the request when its datatype iterator offset is > 0 */
+    UCP_PROTO_COMMON_INIT_FLAG_RESUME        = UCS_BIT(10),
 } ucp_proto_common_init_flags_t;
 
 
@@ -242,8 +245,16 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
 
 /* @return number of lanes found */
+ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
+        const ucp_proto_common_init_params_t *params, ucp_lane_type_t lane_type,
+        uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
+        ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes);
+
+
 ucp_lane_index_t
-ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
+ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
+                            uct_ep_operation_t memtype_op, unsigned flags,
+                            ptrdiff_t max_iov_offs, size_t min_iov,
                             ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
                             ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,
@@ -255,8 +266,9 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
                             ucp_lane_map_t lane_map);
 
 
-ucp_lane_index_t
-ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
+void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
+                                const ucp_proto_caps_t *proto_caps,
+                                const void *priv, size_t priv_size);
 
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
@@ -284,7 +296,9 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
-ucs_status_t ucp_proto_request_init(ucp_request_t *req);
+ucs_status_t
+ucp_proto_request_init(ucp_request_t *req,
+                       const ucp_proto_select_param_t *select_param);
 
 void ucp_proto_request_check_reset_state(const ucp_request_t *req);
 

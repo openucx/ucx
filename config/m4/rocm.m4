@@ -39,7 +39,7 @@ AC_DEFUN([ROCM_BUILD_FLAGS],
 # Parse value of ARG into appropriate LIBS, LDFLAGS, and
 # CPPFLAGS variables.
 AC_DEFUN([HIP_BUILD_FLAGS],
-    $4="-D__HIP_PLATFORM_HCC__ -I$1/include/hip -I$1/include"
+    $4="-D__HIP_PLATFORM_HCC__ -D__HIP_PLATFORM_AMD__ -I$1/include/hip -I$1/include"
     $3="-L$1/hip/lib -L$1/lib"
     $2="-lamdhip64"
 )

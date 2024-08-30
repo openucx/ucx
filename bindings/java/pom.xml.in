@@ -117,6 +117,39 @@
         </build>
       </profile>
 
+      <profile>
+        <id>local-deploy</id>
+        <distributionManagement>
+          <repository>
+            <id>local-repo</id>
+            <name>Local Repository</name>
+            <url>file://bindings/java/src/main/native/build-java/</url>
+          </repository>
+        </distributionManagement>
+        <build>
+          <plugins>
+            <!-- Disable GPG signing -->
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-gpg-plugin</artifactId>
+              <executions>
+                <execution>
+                  <id>sign-artifacts</id>
+                  <phase>none</phase>
+                </execution>
+              </executions>
+            </plugin>
+            <!-- Skip nexus staging -->
+            <plugin>
+              <groupId>org.sonatype.plugins</groupId>
+              <artifactId>nexus-staging-maven-plugin</artifactId>
+              <configuration>
+                <skipNexusStagingDeployMojo>true</skipNexusStagingDeployMojo>
+              </configuration>
+            </plugin>
+          </plugins>
+        </build>
+      </profile>
     </profiles>
 
   <issueManagement>
@@ -212,6 +245,12 @@
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ai.rapids</groupId>
+      <artifactId>cudf</artifactId>
+      <version>23.10.0</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

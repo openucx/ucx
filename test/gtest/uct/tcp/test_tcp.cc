@@ -15,8 +15,8 @@ class test_uct_tcp : public uct_test {
 public:
     void init() {
         if (RUNNING_ON_VALGRIND) {
-            modify_config("TX_SEG_SIZE", "1kb");
-            modify_config("RX_SEG_SIZE", "1kb");
+            modify_config("TCP_TX_SEG_SIZE", "1kb");
+            modify_config("TCP_RX_SEG_SIZE", "1kb");
         }
 
         uct_test::init();

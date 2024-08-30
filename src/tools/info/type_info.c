@@ -45,20 +45,20 @@
 #  include <uct/ib/rc/base/rc_ep.h>
 #  include <uct/ib/rc/verbs/rc_verbs.h>
 #  ifdef HAVE_MLX5_DV
-#    include <uct/ib/rc/accel/rc_mlx5.h>
+#    include <uct/ib/mlx5/rc/rc_mlx5.h>
 #  endif
 #endif
 
 #if HAVE_TL_DC
-#  include <uct/ib/dc/dc_mlx5.h>
-#  include <uct/ib/dc/dc_mlx5_ep.h>
+#  include <uct/ib/mlx5/dc/dc_mlx5.h>
+#  include <uct/ib/mlx5/dc/dc_mlx5_ep.h>
 #endif
 
 #if HAVE_TL_UD
 #  include <uct/ib/ud/base/ud_def.h>
 #  include <uct/ib/ud/verbs/ud_verbs.h>
 #  ifdef HAVE_MLX5_HW_UD
-#    include <uct/ib/ud/accel/ud_mlx5.h>
+#    include <uct/ib/mlx5/ud/ud_mlx5.h>
 #  endif
 #endif
 
@@ -213,6 +213,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_dc_mlx5_ep_t);
         PRINT_SIZE(uct_dc_mlx5_iface_t);
         PRINT_SIZE(uct_dc_mlx5_iface_config_t);
+        PRINT_SIZE(uct_dc_mlx5_dci_pool_t);
         printf("\n");
     }
 #endif

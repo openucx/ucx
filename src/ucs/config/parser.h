@@ -21,6 +21,9 @@
 #define UCS_CONFIG_ARRAY_MAX   128
 #define UCX_CONFIG_FILE_NAME   "ucx.conf"
 
+/* String literal for allow-list */
+#define UCS_CONFIG_PARSER_ALL "all"
+
 BEGIN_C_DECLS
 
 /** @file parser.h */
@@ -46,6 +49,7 @@ typedef struct ucs_config_parser {
     ucs_status_t             (*clone)(const void *src, void *dest, const void *arg);
     void                     (*release)(void *ptr, const void *arg);
     void                     (*help)(char *buf, size_t max, const void *arg);
+    void                     (*doc)(ucs_string_buffer_t *strb, const void *arg);
     const void               *arg;
 } ucs_config_parser_t;
 
@@ -63,6 +67,23 @@ typedef struct ucs_config_field {
     size_t                   offset;
     ucs_config_parser_t      parser;
 } ucs_config_field_t;
+
+
+typedef struct {
+    const char               *name;   /* Key name */
+    const char               *doc;    /* Documentation */
+    size_t                   offset;  /* Storage offset */
+} ucs_config_key_field_t;
+
+
+/**
+ * Describes structure that is passed to key-value parser functions as an
+ * argument.
+ */
+typedef struct {
+    ucs_config_parser_t          parser;  /* Parser impl */
+    const ucs_config_key_field_t *keys;   /* Array of allowed key fields */
+} ucs_config_key_value_param_t;
 
 
 typedef struct ucs_config_cached_key {
@@ -259,9 +280,18 @@ ucs_status_t ucs_config_clone_table(const void *src, void *dest, const void *arg
 void ucs_config_release_table(void *ptr, const void *arg);
 void ucs_config_help_table(char *buf, size_t max, const void *arg);
 
+/* Key-value parser functions */
+int ucs_config_sscanf_key_value(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_key_value(char *buf, size_t max, const void *src, const void *arg);
+ucs_status_t ucs_config_clone_key_value(const void *src, void *dest, const void *arg);
+void ucs_config_release_key_value(void *ptr, const void *arg);
+void ucs_config_help_key_value(char *buf, size_t max, const void *arg);
+void ucs_config_doc_key_value(ucs_string_buffer_t *strb, const void *arg);
+
 ucs_status_t ucs_config_clone_log_comp(const void *src, void *dst, const void *arg);
 
 void ucs_config_release_nop(void *ptr, const void *arg);
+void ucs_config_doc_nop(ucs_string_buffer_t *strb, const void *arg);
 void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 #define UCS_CONFIG_DEPRECATED_FIELD_OFFSET SIZE_MAX
@@ -276,129 +306,161 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 #define UCS_CONFIG_TYPE_STRING     {ucs_config_sscanf_string,    ucs_config_sprintf_string, \
                                     ucs_config_clone_string,     ucs_config_release_string, \
-                                    ucs_config_help_generic,     "string"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "string"}
 
 #define UCS_CONFIG_TYPE_INT        {ucs_config_sscanf_int,       ucs_config_sprintf_int, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "integer"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "integer"}
 
 #define UCS_CONFIG_TYPE_UINT       {ucs_config_sscanf_uint,      ucs_config_sprintf_uint, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "unsigned integer"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "unsigned integer"}
 
 #define UCS_CONFIG_TYPE_ULONG      {ucs_config_sscanf_ulong,     ucs_config_sprintf_ulong, \
                                     ucs_config_clone_ulong,      ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "unsigned long"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "unsigned long"}
 
 #define UCS_CONFIG_TYPE_ULUNITS    {ucs_config_sscanf_ulunits,   ucs_config_sprintf_ulunits, \
                                     ucs_config_clone_ulong,      ucs_config_release_nop, \
-                                    ucs_config_help_generic, \
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
                                     "unsigned long: <number>, \"inf\", or \"auto\""}
 
 #define UCS_CONFIG_TYPE_DOUBLE     {ucs_config_sscanf_double,    ucs_config_sprintf_double, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "floating point number"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "floating point number"}
 
 #define UCS_CONFIG_TYPE_POS_DOUBLE {ucs_config_sscanf_pos_double, ucs_config_sprintf_pos_double, \
                                     ucs_config_clone_double,      ucs_config_release_nop, \
-                                    ucs_config_help_generic, \
+                                    ucs_config_help_generic,      ucs_config_doc_nop, \
                                     "positive floating point number or \"auto\""}
 
 #define UCS_CONFIG_TYPE_HEX        {ucs_config_sscanf_hex,       ucs_config_sprintf_hex, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
-                                    ucs_config_help_generic, \
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
                                     "hex representation of a number or \"auto\""}
 
 #define UCS_CONFIG_TYPE_BOOL       {ucs_config_sscanf_bool,      ucs_config_sprintf_bool, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "<y|n>"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "<y|n>"}
 
 #define UCS_CONFIG_TYPE_TERNARY    {ucs_config_sscanf_ternary, ucs_config_sprintf_ternary_auto, \
                                     ucs_config_clone_int,      ucs_config_release_nop, \
-                                    ucs_config_help_generic,   "<yes|no|try>"}
+                                    ucs_config_help_generic,   ucs_config_doc_nop, \
+                                    "<yes|no|try>"}
 
 #define UCS_CONFIG_TYPE_TERNARY_AUTO {ucs_config_sscanf_ternary_auto, ucs_config_sprintf_ternary_auto, \
                                       ucs_config_clone_int,           ucs_config_release_nop, \
-                                      ucs_config_help_generic,        "<yes|no|try|auto>"}
+                                      ucs_config_help_generic,        ucs_config_doc_nop, \
+                                      "<yes|no|try|auto>"}
 
 #define UCS_CONFIG_TYPE_ON_OFF     {ucs_config_sscanf_on_off,    ucs_config_sprintf_on_off_auto, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "<on|off>"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "<on|off>"}
 
 #define UCS_CONFIG_TYPE_ON_OFF_AUTO {ucs_config_sscanf_on_off_auto, ucs_config_sprintf_on_off_auto, \
                                      ucs_config_clone_int,          ucs_config_release_nop, \
-                                     ucs_config_help_generic,       "<on|off|auto>"}
+                                     ucs_config_help_generic,       ucs_config_doc_nop, \
+                                     "<on|off|auto>"}
 
 #define UCS_CONFIG_TYPE_ENUM(t)    {ucs_config_sscanf_enum,      ucs_config_sprintf_enum, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
-                                    ucs_config_help_enum,        t}
+                                    ucs_config_help_enum,        ucs_config_doc_nop, \
+                                    t}
 
 #define UCS_CONFIG_TYPE_UINT_ENUM(t) {ucs_config_sscanf_uint_enum, ucs_config_sprintf_uint_enum, \
                                       ucs_config_clone_uint,       ucs_config_release_nop, \
-                                      ucs_config_help_uint_enum,   t}
+                                      ucs_config_help_uint_enum,   ucs_config_doc_nop, \
+                                      t}
 
 #define UCS_CONFIG_TYPE_BITMAP(t)  {ucs_config_sscanf_bitmap,    ucs_config_sprintf_bitmap, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
-                                    ucs_config_help_bitmap,      t}
+                                    ucs_config_help_bitmap,      ucs_config_doc_nop, \
+                                    t}
 
 #define UCS_CONFIG_TYPE_BITMASK    {ucs_config_sscanf_bitmask,   ucs_config_sprintf_bitmask, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "bit count"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "bit count"}
 
 #define UCS_CONFIG_TYPE_TIME       {ucs_config_sscanf_time,      ucs_config_sprintf_time, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "time value: <number>[s|us|ms|ns]"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "time value: <number>[m|s|ms|us|ns]"}
 
 #define UCS_CONFIG_TYPE_TIME_UNITS {ucs_config_sscanf_time_units, ucs_config_sprintf_time_units, \
                                     ucs_config_clone_ulong,       ucs_config_release_nop, \
-                                    ucs_config_help_generic, \
-                                    "time value: <number>[s|us|ms|ns], \"inf\", or \"auto\""}
+                                    ucs_config_help_generic,      ucs_config_doc_nop, \
+                                    "time value: <number>[m|s|ms|us|ns], \"inf\", or \"auto\""}
 
 #define UCS_CONFIG_TYPE_BW         {ucs_config_sscanf_bw,        ucs_config_sprintf_bw, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
-                                    ucs_config_help_generic,     \
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
                                     "bandwidth value: <number>[T|G|M|K]B|b[[p|/]s] or \"auto\""}
 
 #define UCS_CONFIG_TYPE_BW_SPEC    {ucs_config_sscanf_bw_spec,   ucs_config_sprintf_bw_spec, \
                                     ucs_config_clone_bw_spec,    ucs_config_release_bw_spec, \
-                                    ucs_config_help_generic,     \
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
                                     "device_name:<number>[T|G|M|K]B|b[[p|/]s] or device_name:auto"}
 
 #define UCS_CONFIG_TYPE_LOG_COMP   {ucs_config_sscanf_enum,      ucs_config_sprintf_enum, \
                                     ucs_config_clone_log_comp,   ucs_config_release_nop, \
-                                    ucs_config_help_enum,        ucs_log_level_names}
+                                    ucs_config_help_enum,        ucs_config_doc_nop, \
+                                    ucs_log_level_names}
 
 #define UCS_CONFIG_TYPE_SIGNO      {ucs_config_sscanf_signo,     ucs_config_sprintf_signo, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "system signal (number or SIGxxx)"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "system signal (number or SIGxxx)"}
 
 #define UCS_CONFIG_TYPE_MEMUNITS   {ucs_config_sscanf_memunits,  ucs_config_sprintf_memunits, \
                                     ucs_config_clone_ulong,      ucs_config_release_nop, \
-                                    ucs_config_help_generic,     \
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
                                     "memory units: <number>[b|kb|mb|gb], \"inf\", or \"auto\""}
 
 #define UCS_CONFIG_TYPE_ARRAY(a)   {ucs_config_sscanf_array,     ucs_config_sprintf_array, \
                                     ucs_config_clone_array,      ucs_config_release_array, \
-                                    ucs_config_help_array,       &ucs_config_array_##a}
+                                    ucs_config_help_array,       ucs_config_doc_nop, \
+                                    &ucs_config_array_##a}
 
 #define UCS_CONFIG_TYPE_ALLOW_LIST {ucs_config_sscanf_allow_list,     ucs_config_sprintf_allow_list, \
                                     ucs_config_clone_allow_list,      ucs_config_release_allow_list, \
-                                    ucs_config_help_allow_list,       &ucs_config_array_string}
+                                    ucs_config_help_allow_list,       ucs_config_doc_nop, \
+                                    &ucs_config_array_string}
 
 #define UCS_CONFIG_TYPE_TABLE(t)   {ucs_config_sscanf_table,     NULL, \
                                     ucs_config_clone_table,      ucs_config_release_table, \
-                                    ucs_config_help_table,       t}
+                                    ucs_config_help_table,       ucs_config_doc_nop, \
+                                    t}
 
 #define UCS_CONFIG_TYPE_RANGE_SPEC {ucs_config_sscanf_range_spec,ucs_config_sprintf_range_spec, \
                                     ucs_config_clone_range_spec, ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "numbers range: <number>-<number>"}
+                                    ucs_config_help_generic,     ucs_config_doc_nop, \
+                                    "numbers range: <number>-<number>"}
 
 #define UCS_CONFIG_TYPE_DEPRECATED {(ucs_field_type(ucs_config_parser_t, read))   ucs_empty_function_do_assert, \
                                     (ucs_field_type(ucs_config_parser_t, write))  ucs_empty_function_do_assert, \
                                     (ucs_field_type(ucs_config_parser_t, clone))  ucs_empty_function_do_assert, \
                                     (ucs_field_type(ucs_config_parser_t, release))ucs_empty_function_do_assert, \
                                     (ucs_field_type(ucs_config_parser_t, help))   ucs_empty_function_do_assert, \
+                                    ucs_config_doc_nop, \
                                     ""}
+
+#define UCS_CONFIG_TYPE_KEY_VALUE(_value, ...) \
+    {ucs_config_sscanf_key_value, ucs_config_sprintf_key_value, \
+     ucs_config_clone_key_value,  ucs_config_release_key_value, \
+     ucs_config_help_key_value,   ucs_config_doc_key_value, \
+        (const ucs_config_key_value_param_t[]) { \
+            {_value, (const ucs_config_key_field_t[]){ __VA_ARGS__ }} \
+        } \
+    }
+
 
 /**
  * Helpers for using an array of strings
@@ -522,11 +584,13 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
  *
  * @param opts       User-defined options structure.
  * @param fields     Array of fields which define how to parse.
+ * @param prefix     Configuration table prefix.
  * @param name       Option name to modify.
  * @param value      Value to assign.
  */
 ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
-                                         const char *name, const char *value);
+                                         const char *prefix, const char *name,
+                                         const char *value);
 
 /**
  * Wrapper for `ucs_config_parser_print_env_vars`
@@ -558,11 +622,17 @@ int ucs_config_names_search(const ucs_config_names_array_t *config_names,
                             const char *str);
 
 /**
- * @param   strb      An initiated ucs_string_buffer_t which will contain the env variables 
- * @param   delimiter String that will seperate between each 2 env variables
+ * @param   strb      An initiated ucs_string_buffer_t which will contain the env variables
+ * @param   delimiter String that will separate between each 2 env variables
 */
 void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
                                     const char *delimiter);
+
+
+/**
+ * Global cleanup of the configuration parser.
+ */
+void ucs_config_parser_cleanup();
 
 
 END_C_DECLS

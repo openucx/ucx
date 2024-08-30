@@ -18,9 +18,9 @@
 #include <ucs/sys/math.h>
 
 
-ucs_status_t
-ucp_proto_single_init_priv(const ucp_proto_single_init_params_t *params,
-                           ucp_proto_single_priv_t *spriv)
+ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
+                                   ucp_proto_caps_t *caps,
+                                   ucp_proto_single_priv_t *spriv)
 {
     ucp_proto_perf_node_t *tl_perf_node;
     ucp_proto_common_tl_perf_t tl_perf;
@@ -29,11 +29,12 @@ ucp_proto_single_init_priv(const ucp_proto_single_init_params_t *params,
     ucp_lane_index_t lane;
     ucs_status_t status;
 
-    num_lanes = ucp_proto_common_find_lanes(&params->super, params->lane_type,
-                                            params->tl_cap_flags, 1,
-                                            params->super.exclude_map, &lane);
+    num_lanes = ucp_proto_common_find_lanes_with_min_frag(
+            &params->super, params->lane_type, params->tl_cap_flags, 1,
+            params->super.exclude_map, &lane);
     if (num_lanes == 0) {
-        ucs_trace("no lanes for %s", params->super.super.proto_name);
+        ucs_trace("no lanes for %s",
+                  ucp_proto_id_field(params->super.super.proto_id, name));
         return UCS_ERR_NO_ELEM;
     }
 
@@ -56,27 +57,28 @@ ucp_proto_single_init_priv(const ucp_proto_single_init_params_t *params,
     }
 
     status = ucp_proto_common_init_caps(&params->super, &tl_perf, tl_perf_node,
-                                        reg_md_map);
+                                        reg_md_map, caps);
     ucp_proto_perf_node_deref(&tl_perf_node);
 
     return status;
 }
 
-ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
+void ucp_proto_single_probe(const ucp_proto_single_init_params_t *params)
 {
+    ucp_proto_single_priv_t spriv;
+    ucp_proto_caps_t caps;
     ucs_status_t status;
 
     if (!ucp_proto_common_init_check_err_handling(&params->super)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    status = ucp_proto_single_init_priv(params, params->super.super.priv);
+    status = ucp_proto_single_init(params, &caps, &spriv);
     if (status != UCS_OK) {
-        return status;
+        return;
     }
 
-    *params->super.super.priv_size = sizeof(ucp_proto_single_priv_t);
-    return UCS_OK;
+    ucp_proto_common_add_proto(&params->super, &caps, &spriv, sizeof(spriv));
 }
 
 void ucp_proto_single_query(const ucp_proto_query_params_t *params,

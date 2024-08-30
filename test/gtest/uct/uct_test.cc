@@ -8,6 +8,7 @@
 #include "uct/api/uct_def.h"
 #include "uct/api/v2/uct_v2.h"
 
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <common/test_helpers.h>
@@ -814,8 +815,8 @@ void uct_test::reduce_tl_send_queues()
     set_config("RC_TX_QUEUE_LEN?=32");
     set_config("UD_TX_QUEUE_LEN?=128");
     set_config("RC_FC_ENABLE?=n");
-    set_config("SNDBUF?=1k");
-    set_config("RCVBUF?=128");
+    set_config("TCP_SNDBUF?=1k");
+    set_config("TCP_RCVBUF?=128");
 }
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
@@ -837,9 +838,9 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
                            uct_worker_create, &m_async.m_async,
                            UCS_THREAD_MODE_SINGLE);
 
-    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
-                           resource.component, resource.md_name.c_str(),
-                           md_config);
+    UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_md_h, m_md, uct_md_close,
+                                        uct_md_open, resource.component,
+                                        resource.md_name.c_str(), md_config);
 
     m_md_attr.field_mask = UINT64_MAX;
     status               = uct_md_query_v2(m_md, &m_md_attr);
@@ -928,10 +929,12 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
     }
 }
 
-void uct_test::entity::mem_alloc_host(size_t length, unsigned mem_flags,
-                                      uct_allocated_memory_t *mem) const
+void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
+                                 uct_allocated_memory_t *mem,
+                                 ucs_memory_type_t mem_type) const
 {
-    void *address             = NULL;
+    void *address   = NULL;
+    uct_md_h uct_md = md();
     ucs_status_t status;
     uct_mem_alloc_params_t params;
 
@@ -941,23 +944,29 @@ void uct_test::entity::mem_alloc_host(size_t length, unsigned mem_flags,
                              UCT_MEM_ALLOC_PARAM_FIELD_NAME;
     params.flags           = mem_flags;
     params.name            = "uct_test";
-    params.mem_type        = UCS_MEMORY_TYPE_HOST;
+    params.mem_type        = mem_type;
     params.address         = address;
 
-    if (md_attr().flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+    if ((md_attr().flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG)) &&
+        (mem_type == UCS_MEMORY_TYPE_HOST)) {
         status = uct_iface_mem_alloc(m_iface, length, mem_flags, "uct_test",
                                      mem);
         ASSERT_UCS_OK(status);
     } else {
-        uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
-        status = uct_mem_alloc(length, &method, 1, &params, mem);
+        uct_alloc_method_t alloc_methods[] = {UCT_ALLOC_METHOD_MMAP,
+                                              UCT_ALLOC_METHOD_MD};
+        params.field_mask                 |= UCT_MEM_ALLOC_PARAM_FIELD_MDS;
+        params.mds.mds                     = &uct_md;
+        params.mds.count                   = 1;
+        status = uct_mem_alloc(length, alloc_methods,
+                               ucs_static_array_size(alloc_methods), &params,
+                               mem);
         ASSERT_UCS_OK(status);
-        ucs_assert(mem->memh == UCT_MEM_HANDLE_NULL);
     }
-    ucs_assert(mem->mem_type == UCS_MEMORY_TYPE_HOST);
+    ucs_assert(mem->mem_type == mem_type);
 }
 
-void uct_test::entity::mem_free_host(const uct_allocated_memory_t *mem) const {
+void uct_test::entity::mem_free(const uct_allocated_memory_t *mem) const {
     if (mem->method != UCT_ALLOC_METHOD_LAST) {
         uct_iface_mem_free(mem);
     }
@@ -967,8 +976,17 @@ void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem,
                                     unsigned mem_flags) const
 {
     if (md_attr().reg_mem_types & UCS_BIT(mem->mem_type)) {
-        ucs_status_t status = uct_md_mem_reg(m_md, mem->address, mem->length,
-                                             mem_flags, &mem->memh);
+        /* Register memory respecting MD reg_alignment */
+        void *reg_address = mem->address;
+        size_t reg_length = mem->length;
+        ucs_align_ptr_range(&reg_address, &reg_length, md_attr().reg_alignment);
+
+        uct_md_mem_reg_params_t reg_params;
+        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+        reg_params.flags      = mem_flags;
+
+        ucs_status_t status = uct_md_mem_reg_v2(m_md, reg_address, reg_length,
+                                                &reg_params, &mem->memh);
         ASSERT_UCS_OK(status);
         mem->md = m_md;
     }
@@ -1258,8 +1276,8 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
     m_eps[index].reset(ep, uct_ep_destroy);
 }
 
-void uct_test::entity::connect_to_ep(unsigned index, entity& other,
-                                     unsigned other_index)
+void uct_test::entity::connect_to_ep(unsigned index, entity &other,
+                                     unsigned other_index, unsigned path_index)
 {
     ucs_status_t status;
     uct_ep_h ep, remote_ep;
@@ -1271,8 +1289,10 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
     }
 
     other.reserve_ep(other_index);
-    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                           UCT_EP_PARAM_FIELD_PATH_INDEX;
     ep_params.iface      = other.m_iface;
+    ep_params.path_index = path_index;
     status               = uct_ep_create(&ep_params, &remote_ep);
     ASSERT_UCS_OK(status);
     other.m_eps[other_index].reset(remote_ep, uct_ep_destroy);
@@ -1291,7 +1311,9 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
     }
 }
 
-void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
+void uct_test::entity::connect_to_iface(unsigned index, entity &other,
+                                        unsigned path_index)
+{
     uct_device_addr_t *dev_addr;
     uct_iface_addr_t *iface_addr;
     uct_ep_params_t ep_params;
@@ -1312,12 +1334,14 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     status = uct_iface_get_address(other.iface(), iface_addr);
     ASSERT_UCS_OK(status);
 
-    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
                            UCT_EP_PARAM_FIELD_DEV_ADDR |
-                           UCT_EP_PARAM_FIELD_IFACE_ADDR;
+                           UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                           UCT_EP_PARAM_FIELD_PATH_INDEX;
     ep_params.iface      = iface();
     ep_params.dev_addr   = dev_addr;
     ep_params.iface_addr = iface_addr;
+    ep_params.path_index = path_index;
 
     status = uct_ep_create(&ep_params, &ep);
     ASSERT_UCS_OK(status);
@@ -1367,40 +1391,61 @@ std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resourc
     return os << resource.tl_name << "/" << resource.dev_name;
 }
 
+void uct_test::mapped_buffer::reset()
+{
+    m_mem.method   = UCT_ALLOC_METHOD_LAST;
+    m_mem.address  = NULL;
+    m_mem.md       = NULL;
+    m_mem.memh     = UCT_MEM_HANDLE_NULL;
+    m_mem.mem_type = UCS_MEMORY_TYPE_HOST;
+    m_mem.length   = 0;
+    m_buf          = NULL;
+    m_end          = NULL;
+    m_iov.buffer   = NULL;
+    m_iov.length   = 0;
+    m_iov.count    = 1;
+    m_iov.stride   = 0;
+    m_iov.memh     = UCT_MEM_HANDLE_NULL;
+    m_rkey.rkey    = UCT_INVALID_RKEY;
+    m_rkey.handle  = NULL;
+    m_rkey.type    = NULL;
+}
+
 uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
+                                       const entity &entity, size_t offset,
+                                       ucs_memory_type_t mem_type,
+                                       unsigned mem_flags) :
+    mapped_buffer(size, entity, offset, mem_type, mem_flags)
+{
+    pattern_fill(seed);
+}
+
+uct_test::mapped_buffer::mapped_buffer(size_t size, 
                                        const entity &entity, size_t offset,
                                        ucs_memory_type_t mem_type,
                                        unsigned mem_flags) :
     m_entity(entity)
 {
-    if (size > 0)  {
-        size_t alloc_size = size + offset;
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            m_entity.mem_alloc_host(alloc_size, mem_flags, &m_mem);
-        } else {
-            m_mem.method   = UCT_ALLOC_METHOD_LAST;
-            m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
-            m_mem.length   = alloc_size;
-            m_mem.mem_type = mem_type;
-            m_mem.memh     = UCT_MEM_HANDLE_NULL;
-            m_mem.md       = NULL;
-            m_entity.mem_type_reg(&m_mem, mem_flags);
-        }
-        m_buf = (char*)m_mem.address + offset;
-        m_end = (char*)m_buf         + size;
-        pattern_fill(seed);
-    } else {
-        m_mem.method  = UCT_ALLOC_METHOD_LAST;
-        m_mem.address = NULL;
-        m_mem.md      = NULL;
-        m_mem.memh    = UCT_MEM_HANDLE_NULL;
-        m_mem.mem_type= UCS_MEMORY_TYPE_HOST;
-        m_mem.length  = 0;
-        m_buf         = NULL;
-        m_end         = NULL;
-        m_rkey.rkey   = UCT_INVALID_RKEY;
-        m_rkey.handle = NULL;
+    if (size == 0)  {
+        reset();
+        return;
     }
+
+    size_t alloc_size = size + offset;
+    if ((mem_type == UCS_MEMORY_TYPE_HOST) || (mem_type == UCS_MEMORY_TYPE_RDMA)) {
+        m_entity.mem_alloc(alloc_size, mem_flags, &m_mem, mem_type);
+    } else {
+        m_mem.method   = UCT_ALLOC_METHOD_LAST;
+        m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
+        m_mem.length   = alloc_size;
+        m_mem.mem_type = mem_type;
+        m_mem.memh     = UCT_MEM_HANDLE_NULL;
+        m_mem.md       = NULL;
+        m_entity.mem_type_reg(&m_mem, mem_flags);
+    }
+
+    m_buf = (char*)m_mem.address + offset;
+    m_end = (char*)m_buf         + size;
     m_iov.buffer = ptr();
     m_iov.length = length();
     m_iov.count  = 1;
@@ -1411,10 +1456,18 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
     m_rkey.type  = NULL;
 }
 
+uct_test::mapped_buffer::mapped_buffer(mapped_buffer &&other) :
+    m_entity(other.m_entity), m_buf(other.m_buf), m_end(other.m_end),
+    m_rkey(other.m_rkey), m_mem(other.m_mem), m_iov(other.m_iov)
+{
+    other.reset();
+}
+
 uct_test::mapped_buffer::~mapped_buffer() {
     m_entity.rkey_release(&m_rkey);
-    if (m_mem.mem_type == UCS_MEMORY_TYPE_HOST) {
-        m_entity.mem_free_host(&m_mem);
+    if ((m_mem.mem_type == UCS_MEMORY_TYPE_HOST) ||
+        (m_mem.mem_type == UCS_MEMORY_TYPE_RDMA)) {
+        m_entity.mem_free(&m_mem);
     } else {
         ucs_assert(m_mem.method == UCT_ALLOC_METHOD_LAST);
         m_entity.mem_type_dereg(&m_mem);
@@ -1451,6 +1504,16 @@ uct_mem_h uct_test::mapped_buffer::memh() const {
     return m_mem.memh;
 }
 
+ucs_memory_type_t uct_test::mapped_buffer::mem_type() const
+{
+    return m_mem.mem_type;
+}
+
+void *uct_test::mapped_buffer::reg_addr() const
+{
+    return m_mem.address;
+}
+
 uct_rkey_t uct_test::mapped_buffer::rkey() const {
     return m_rkey.rkey;
 }
@@ -1461,7 +1524,7 @@ const uct_iov_t*  uct_test::mapped_buffer::iov() const {
 
 size_t uct_test::mapped_buffer::pack(void *dest, void *arg) {
     const mapped_buffer* buf = (const mapped_buffer*)arg;
-    mem_buffer::copy_from(dest, buf->ptr(), buf->length(), buf->m_mem.mem_type);
+    mem_buffer::copy_from(dest, buf->ptr(), buf->length(), buf->mem_type());
     return buf->length();
 }
 

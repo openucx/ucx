@@ -130,6 +130,7 @@ static void UCS_F_DTOR ucs_cleanup(void)
     ucs_async_global_cleanup();
     ucs_profile_cleanup(ucs_profile_default_ctx);
     ucs_debug_cleanup(0);
+    ucs_config_parser_cleanup();
     ucs_memtrack_cleanup();
 #ifdef ENABLE_STATS
     ucs_stats_cleanup();

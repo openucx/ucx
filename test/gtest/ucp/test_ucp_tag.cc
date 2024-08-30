@@ -17,6 +17,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/memory/rcache_int.h>
+#include <ucp/proto/proto_select.inl>
 }
 
 #include <sys/mman.h>
@@ -306,6 +307,11 @@ test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
     param.datatype     = datatype;
 
     switch (type) {
+    case RECV_IMM:
+        param.op_attr_mask      &= ~UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+        param.op_attr_mask      |= UCP_OP_ATTR_FIELD_RECV_INFO;
+        param.recv_info.tag_info = info;
+        // Fallthrough
     case RECV_B:
     case RECV_NB:
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
@@ -315,7 +321,11 @@ test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
         req                 = (request*)ucp_tag_recv_nbx(receiver.worker(worker_index),
                                                          buffer, count, tag, tag_mask,
                                                          &param);
-        if (type == RECV_NB) {
+        if (type == RECV_IMM) {
+            if (req != NULL) {
+                UCS_TEST_ABORT("ucp_tag_recv_nbx returned non-NULL");
+            }
+        } else if (type == RECV_NB) {
             if (UCS_PTR_IS_ERR(req)) {
                 ASSERT_UCS_OK(UCS_PTR_STATUS(req));
             } else if (req == NULL) {
@@ -391,6 +401,17 @@ test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
     return UCS_PTR_STATUS(req);
 }
 
+ucs_status_t test_ucp_tag::recv_imm(void *buffer, size_t count,
+                                    ucp_datatype_t datatype, ucp_tag_t tag,
+                                    ucp_tag_t tag_mask,
+                                    ucp_tag_recv_info_t *info, void *user_data,
+                                    int buf_index)
+{
+    request *req = recv(receiver(), RECV_IMM, buffer, count, datatype, tag,
+                        tag_mask, info, user_data, buf_index);
+    return UCS_PTR_STATUS(req);
+}
+
 bool test_ucp_tag::is_external_request()
 {
     return false;
@@ -403,22 +424,129 @@ class test_ucp_tag_limits : public test_ucp_tag {
 public:
     test_ucp_tag_limits() {
         m_test_offload = get_variant_value();
-        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE",
-                                               ucs::to_string(m_test_offload).c_str()));
+        if (m_test_offload) {
+            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+        }
+        m_tag_min_rndv = 0;
     }
 
     void init() {
+        /* TODO: Currently all the tests are for intra-node communication only.
+         * Find a way to create inter-node endpoint on a single node */
         test_ucp_tag::init();
+
         check_offload_support(m_test_offload);
+
+        if (m_test_offload) {
+            ucp_ep_config_t *cfg = ucp_ep_config(sender().ep());
+            m_tag_min_rndv = ucp_ep_tag_offload_min_rndv_thresh(sender().ucph(),
+                                                                &cfg->key);
+        }
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_with_value(variants, get_ctx_params(), 0, "");
-        add_variant_with_value(variants, get_ctx_params(), 1, "offload");
+        ucp_params_t params = get_ctx_params();
+        params.features = UCP_FEATURE_TAG | UCP_FEATURE_AM;
+
+        add_variant_with_value(variants, params, 0, "");
+        add_variant_with_value(variants, params, 1, "offload");
     }
 
 protected:
-    bool m_test_offload;
+    bool    m_test_offload;
+    size_t  m_tag_min_rndv;
+
+    static void check_short_thresh(const ucp_memtype_thresh_t &thresh,
+                                   size_t cfg_thresh, bool strict = false)
+    {
+        if (strict) {
+            EXPECT_EQ(thresh.memtype_on + 1, cfg_thresh);
+            EXPECT_EQ(thresh.memtype_off + 1, cfg_thresh);
+        } else {
+            EXPECT_LE(thresh.memtype_on + 1, cfg_thresh);
+            EXPECT_LE(thresh.memtype_off + 1, cfg_thresh);
+        }
+    }
+
+    void check_rndv_startup_config(size_t exp_rndv_intra_thresh,
+                                   size_t exp_rndv_inter_thresh)
+    {
+        ucp_context_config_t *cfg = &sender().worker()->context->config.ext;
+
+        EXPECT_EQ(exp_rndv_intra_thresh, cfg->rndv_intra_thresh);
+        EXPECT_EQ(exp_rndv_inter_thresh, cfg->rndv_inter_thresh);
+    }
+
+    void check_tag_rndv_v2(size_t cfg_thresh)
+    {
+        ucp_ep_config_t *cfg = ucp_ep_config(sender().ep());
+
+        if (m_test_offload) {
+            /* If configured threshold is less than min_rndv, then expect exact
+             * min_rndv limit for short messages */
+            if (cfg_thresh < m_tag_min_rndv) {
+                check_short_thresh(cfg->tag.offload.max_eager_short, m_tag_min_rndv,
+                                   true);
+            } else {
+                check_short_thresh(cfg->tag.offload.max_eager_short, cfg_thresh);
+            }
+        } else {
+            check_short_thresh(cfg->tag.max_eager_short, cfg_thresh);
+        }
+    }
+
+    void check_am_rndv_v2(size_t cfg_thresh)
+    {
+        ucp_ep_config_t *cfg = ucp_ep_config(sender().ep());
+
+        check_short_thresh(cfg->am_u.max_eager_short, cfg_thresh);
+        check_short_thresh(cfg->am_u.max_reply_eager_short, cfg_thresh);
+    }
+
+    void check_ep_proto_rndv_v2(size_t cfg_thresh, bool expect_rndv)
+    {
+        ucp_ep_config_t *cfg = ucp_ep_config(sender().ep());
+        const ucp_proto_config_t *proto_config;
+        ucp_proto_select_elem_t value;
+
+        /* Skip proto_select hash map check for HWTM since eager has certain
+           max_frag threshold in that case and there is no reliable way
+           on UCP side to obtain that value. So RNDV can be used instead 
+           of eager even if RNDV_THRESH is set to higher value. */
+        if (m_test_offload) {
+            UCS_TEST_SKIP_R("Skip EP RNDV_THRESH check for HWTM");
+        }
+
+        kh_foreach_value(cfg->proto_select.hash, value, {
+            /* Find index of the corresponding ucp_proto_threshold_elem_t
+             * to handle the given message size */
+            unsigned idx = 0;
+            for (; cfg_thresh > value.thresholds[idx].max_msg_length; ++idx) {
+                proto_config = &value.thresholds[idx].proto_config;
+                /* Assert no rndv before expected limit */
+                EXPECT_EQ(nullptr, strstr(proto_config->proto->name, "rndv"));
+            }
+
+            proto_config = &value.thresholds[idx].proto_config;
+            if (expect_rndv) {
+                EXPECT_NE(nullptr, strstr(proto_config->proto->name, "rndv"));
+            } else {
+                EXPECT_EQ(nullptr, strstr(proto_config->proto->name, "rndv"));
+            }
+        });
+    }
+
+    void check_rndv_threshold(size_t cfg_thresh)
+    {
+        ucp_context_config_t *cfg = &sender().worker()->context->config.ext;
+        if (cfg->proto_enable) {
+            /* Check proto_v2 rndv thresholds only when this protocol is
+             * enabled, otherwise these checks are irrelevant */
+            check_tag_rndv_v2(cfg_thresh);
+            check_am_rndv_v2(cfg_thresh);
+            check_ep_proto_rndv_v2(cfg_thresh, true);
+        }
+    }
 };
 
 UCS_TEST_P(test_ucp_tag_limits, check_max_short_rndv_thresh_zero, "RNDV_THRESH=0") {
@@ -460,6 +588,66 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_zcopy_thresh_zero, "ZCOPY_THRESH
     // (maximal short + 1) <= ZCOPY thresh
     EXPECT_LE(max_short,
               ucp_ep_config(sender().ep())->tag.eager.zcopy_thresh[0]);
+}
+
+UCS_TEST_P(test_ucp_tag_limits, check_rndv_thresh,
+           "RNDV_THRESH=0")
+{
+    check_rndv_startup_config(0, 0);
+    check_rndv_threshold(0);
+}
+
+UCS_TEST_P(test_ucp_tag_limits, check_rndv_intra_thresh,
+           "RNDV_THRESH=auto,intra:20")
+{
+    check_rndv_startup_config(20, UCS_MEMUNITS_AUTO);
+    check_rndv_threshold(20);
+}
+
+UCS_TEST_P(test_ucp_tag_limits, check_rndv_intra_thresh_large,
+           "RNDV_THRESH=auto,intra:2000")
+{
+    check_rndv_startup_config(2000, UCS_MEMUNITS_AUTO);
+    check_rndv_threshold(2000);
+}
+
+UCS_TEST_P(test_ucp_tag_limits, check_rndv_intra_thresh_inf,
+           "RNDV_THRESH=auto,intra:inf")
+{
+    check_rndv_startup_config(UCS_MEMUNITS_INF, UCS_MEMUNITS_AUTO);
+    /* check that rndv protocol is disabled */
+    check_ep_proto_rndv_v2(UCS_MEMUNITS_INF, false);
+}
+
+UCS_TEST_P(test_ucp_tag_limits, check_rndv_intra_thresh_common,
+           "RNDV_THRESH=10,intra:20")
+{
+    check_rndv_startup_config(20, 10);
+    check_rndv_threshold(20);
+}
+
+UCS_TEST_P(test_ucp_tag_limits, check_rndv_intra_inter_thresh,
+           "RNDV_THRESH=intra:20,inter:30")
+{
+    check_rndv_startup_config(20, 30);
+    check_rndv_threshold(20);
+}
+
+UCS_TEST_P(test_ucp_tag_limits, check_rndv_inter_thresh,
+           "RNDV_THRESH=auto,inter:30")
+{
+    check_rndv_startup_config(UCS_MEMUNITS_AUTO, 30);
+    /* TODO: configure/mock inter-node in test */
+
+    /* check that inter-node config is ignored for intra-node */
+    check_ep_proto_rndv_v2(30, false);
+}
+
+UCS_TEST_P(test_ucp_tag_limits, check_rndv_inter_thresh_common,
+           "RNDV_THRESH=1000,inter:30")
+{
+    check_rndv_startup_config(1000, 30);
+    check_rndv_threshold(1000);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_limits)
@@ -643,7 +831,7 @@ protected:
 
         do_send_recv(send_dt, recv_dt, send_param, recv_param);
 
-        if (prereg() && !is_self() && (!is_iov() || m_ucp_config->ctx.proto_enable)) {
+        if (prereg() && !is_self() && (!is_iov() || is_proto_enabled())) {
             /* Not relevant for 'self' because both sender and receiver are the same entity.
                Must be called before request is freed by free_callback (wait_for_value). */
             /* User-provided memh on iov supported only with proto_v2 */

@@ -107,7 +107,8 @@ typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 uct_md_mem_attr_t *mem_attr);
 
 typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
-        uct_md_h md, uct_mem_h memh, const uct_md_mkey_pack_params_t *params,
+        uct_md_h md, uct_mem_h memh, void *address, size_t length,
+        const uct_md_mkey_pack_params_t *params,
         void *buffer);
 
 typedef ucs_status_t
@@ -237,8 +238,6 @@ ucs_status_t uct_md_dummy_mem_reg(uct_md_h md, void *address, size_t length,
 ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
                                     const uct_md_mem_dereg_params_t *params);
 
-double uct_md_rcache_overhead(const ucs_rcache_config_t *rcache_config);
-
 extern ucs_config_field_t uct_md_config_table[];
 
 static inline ucs_log_level_t uct_md_reg_log_lvl(uint64_t flags)
@@ -256,5 +255,7 @@ static UCS_F_ALWAYS_INLINE ucs_log_level_t uct_md_attach_log_lvl(uint64_t flags)
 
 void uct_md_vfs_init(uct_component_h component, uct_md_h md,
                      const char *md_name);
+
+void uct_md_base_md_query(uct_md_attr_v2_t *md_attr);
 
 #endif

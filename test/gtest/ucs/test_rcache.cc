@@ -20,8 +20,6 @@ static ucs_rcache_params_t
 get_default_rcache_params(void *context, const ucs_rcache_ops_t *ops)
 {
     ucs_rcache_params_t params = {sizeof(ucs_rcache_region_t),
-                                  UCS_PGT_ADDR_ALIGN,
-                                  ucs_get_page_size(),
                                   UCM_EVENT_VM_UNMAPPED,
                                   1000,
                                   ops,
@@ -95,17 +93,20 @@ protected:
 
     virtual ucs_rcache_params_t rcache_params()
     {
-        static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb,
+        static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb, merge_cb,
                                              dump_region_cb};
         ucs_rcache_params_t params        = get_default_rcache_params(this, &ops);
         params.region_struct_size         = sizeof(region);
         return params;
     }
 
-    region *get(void *address, size_t length, int prot = PROT_READ|PROT_WRITE) {
+    region *get(void *address, size_t length, int prot = PROT_READ | PROT_WRITE,
+                size_t alignment = UCS_PGT_ADDR_ALIGN)
+    {
         ucs_status_t status;
         ucs_rcache_region_t *r;
-        status = ucs_rcache_get(m_rcache, address, length, prot, NULL, &r);
+        status = ucs_rcache_get(m_rcache, address, length, alignment, prot,
+                                NULL, &r);
         ASSERT_UCS_OK(status);
         EXPECT_TRUE(r != NULL);
         struct region *region = ucs_derived_of(r, struct region);
@@ -205,6 +206,11 @@ private:
     {
         reinterpret_cast<test_rcache*>(context)->mem_dereg(
                         ucs_derived_of(r, struct region));
+    }
+
+    static void merge_cb(void *context, ucs_rcache_t *rcache, void *arg,
+                         ucs_rcache_region_t *r)
+    {
     }
 
     static void dump_region_cb(void *context, ucs_rcache_t *rcache,
@@ -401,6 +407,66 @@ UCS_MT_TEST_F(test_rcache, merge, 6) {
     munmap(mem, size1 + pad + size2);
 }
 
+UCS_TEST_F(test_rcache, merge_aligned)
+{
+    /*
+     * 0         4     5         9
+     * +---------+-----+---------+
+     * | region1 | pad | region2 |         13
+     * +---+-----+-----+----+----+----------+
+     *                           |  region3 |
+     * +--------------------+----+----------+----+
+     * |     merged         |      aligned       |
+     * +--------------------+--------------------+
+     * 0                    8                   16
+     */
+    static const size_t size       = 4 * ucs_get_page_size();
+    static const size_t align      = 8 * ucs_get_page_size();
+    static const size_t total_size = 16 * ucs_get_page_size();
+    void *mem                      = NULL;
+
+    region *region1, *region2, *region3, *region1_2, *region2_2, *region3_2;
+    void *ptr1, *ptr2, *ptr3;
+
+    EXPECT_EQ(posix_memalign(&mem, align, total_size), 0);
+    memset(mem, 0, total_size);
+
+    /* Create region1 */
+    ptr1    = (char*)mem;
+    region1 = get(ptr1, size);
+
+    /* Create region2 */
+    ptr2    = (char*)mem + 5 * ucs_get_page_size();
+    region2 = get(ptr2, size);
+
+    /* Create region3 which should merge region1 and region2 */
+    ptr3    = (char*)mem + 9 * ucs_get_page_size();
+    region3 = get(ptr3, size);
+
+    region3_2 = get(ptr3, size, PROT_READ | PROT_WRITE, align);
+    EXPECT_NE(region3, region3_2) << /* should be different */
+        "region3 0x" << std::hex << region3->super.super.start << "..0x" <<
+        region3->super.super.end << " region3_2 0x" <<
+        region3_2->super.super.start << "..0x" << region3_2->super.super.end;
+
+    EXPECT_EQ(region3_2->super.super.start, (uintptr_t)mem);
+    EXPECT_EQ(region3_2->super.super.end, (uintptr_t)mem + total_size);
+
+    region1_2 = get(ptr1, size);
+    region2_2 = get(ptr2, size);
+    EXPECT_EQ(region3_2, region2_2); /* should be merged */
+    EXPECT_EQ(region3_2, region1_2); /* should be merged too */
+
+    put(region1_2);
+    put(region2_2);
+    put(region3_2);
+    put(region1);
+    put(region2);
+    put(region3);
+
+    free(mem);
+}
+
 UCS_MT_TEST_F(test_rcache, merge_inv, 6) {
     /*
      * Merge with another region which causes immediate invalidation of the
@@ -490,7 +556,7 @@ UCS_MT_TEST_F(test_rcache, merge_with_unwritable, 6) {
     munmap(mem, size1 + size2);
 }
 
-/* don't expand prot of our region if our pages cant support it */
+/* don't expand prot of our region if our pages can't support it */
 UCS_MT_TEST_F(test_rcache, merge_merge_unwritable, 6) {
     static const size_t size1 = 10 * ucs_get_page_size();
     static const size_t size2 =  8 * ucs_get_page_size();
@@ -655,7 +721,8 @@ UCS_MT_TEST_F(test_rcache_no_register, register_failure, 10) {
 
     ucs_status_t status;
     ucs_rcache_region_t *r;
-    status = ucs_rcache_get(m_rcache, ptr, size, PROT_READ|PROT_WRITE, NULL, &r);
+    status = ucs_rcache_get(m_rcache, ptr, size, UCS_PGT_ADDR_ALIGN,
+                            PROT_READ | PROT_WRITE, NULL, &r);
     EXPECT_EQ(UCS_ERR_IO_ERROR, status);
     EXPECT_EQ(0u, m_reg_count);
 
@@ -701,7 +768,8 @@ UCS_MT_TEST_F(test_rcache_no_register, merge_invalid_prot_slow, 5)
     ucs_status_t status;
     ucs_rcache_region_t *r;
 
-    status = ucs_rcache_get(m_rcache, ptr2, size2, PROT_WRITE, NULL, &r);
+    status = ucs_rcache_get(m_rcache, ptr2, size2, UCS_PGT_ADDR_ALIGN,
+                            PROT_WRITE, NULL, &r);
     EXPECT_EQ(UCS_ERR_IO_ERROR, status);
 
     barrier();
@@ -717,7 +785,6 @@ protected:
         ucs_rcache_params_t params = test_rcache::rcache_params();
         params.max_regions         = 2;
         params.max_size            = 1000;
-        params.alignment           = 16;
         return params;
     }
 

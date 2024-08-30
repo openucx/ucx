@@ -77,7 +77,7 @@ public:
     }
 
     void set_posix_config() {
-        set_config("DIR=" + GetParam()->shm_dir);
+        set_config("POSIX_DIR=" + GetParam()->shm_dir);
     }
 
     virtual void init() {
@@ -269,6 +269,4 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, reg,
     ASSERT_UCS_OK(status);
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_uct_mm, posix)
-_UCT_INSTANTIATE_TEST_CASE(test_uct_mm, sysv)
-_UCT_INSTANTIATE_TEST_CASE(test_uct_mm, xpmem)
+UCT_INSTANTIATE_MM_TEST_CASE(test_uct_mm)

@@ -329,7 +329,8 @@ private:
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_sync,
                      ((UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) ||
-                      !check_caps(UCT_IFACE_FLAG_CB_SYNC,
+                      !check_caps(UCT_IFACE_FLAG_CB_SYNC |
+                                  UCT_IFACE_FLAG_AM_BCOPY,
                                   UCT_IFACE_FLAG_AM_DUP))) {
 
     ucs_status_t status;
@@ -708,7 +709,9 @@ public:
     bool m_inited;
 };
 
-UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
+UCS_TEST_SKIP_COND_P(uct_p2p_am_tx_bufs, am_tx_max_bufs,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
     ucs_status_t status;
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy,
@@ -868,15 +871,17 @@ private:
 };
 
 
-UCS_TEST_P(uct_p2p_am_alignment, invalid_align)
+UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, invalid_align,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
     test_invalid_alignment(0, 0, UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT);
     test_invalid_alignment(3, 1, UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT);
 }
 
-UCS_TEST_P(uct_p2p_am_alignment, invalid_offset)
+UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, invalid_offset,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
-    // Align ofsset has no meaning if alignment is not requested
+    // Align offset has no meaning if alignment is not requested
     test_invalid_alignment(0, 11, UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET);
 
     // Align offset must be less than alignment itself

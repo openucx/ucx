@@ -31,8 +31,8 @@ public:
         if (has_ib()) {
             tx_name = "IB_SEG_SIZE";
         } else if (has_transport("tcp")) {
-            tx_name = "TX_SEG_SIZE";
-            rx_name = "RX_SEG_SIZE";
+            tx_name = "TCP_TX_SEG_SIZE";
+            rx_name = "TCP_RX_SEG_SIZE";
         } else if (has_transport("mm")  ||
                    has_transport("self")) {
             tx_name = "SEG_SIZE";

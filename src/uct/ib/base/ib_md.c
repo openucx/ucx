@@ -16,8 +16,8 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
-#include <ucs/sys/math.h>
 #include <ucs/sys/module.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
 #include <ucm/api/ucm.h>
@@ -47,7 +47,7 @@ static const char *uct_ib_devx_objs[] = {
     NULL
 };
 
-static ucs_config_field_t uct_ib_md_config_table[] = {
+ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
@@ -158,13 +158,17 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Maximal number of invalidated memory keys that are kept idle before reuse.",
      ucs_offsetof(uct_ib_md_config_t, ext.max_idle_rkey_count), UCS_CONFIG_TYPE_UINT},
 
-    {"REG_RETRY_CNT", "7",
+    {"REG_RETRY_CNT", "inf",
      "Number of memory registration attempts.",
-     ucs_offsetof(uct_ib_md_config_t, ext.reg_retry_cnt), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_ib_md_config_t, ext.reg_retry_cnt), UCS_CONFIG_TYPE_ULUNITS},
 
     {"SMKEY_BLOCK_SIZE", "8",
      "Number of indexes in a symmetric block. More can lead to less contention.",
      ucs_offsetof(uct_ib_md_config_t, ext.smkey_block_size), UCS_CONFIG_TYPE_UINT},
+
+    {"XGVMI_UMR_ENABLE", "y",
+     "Enable UMR optimization for XGVMI mkeys export/import.",
+     ucs_offsetof(uct_ib_md_config_t, xgvmi_umr_enable), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -182,43 +186,21 @@ static ucs_stats_class_t uct_ib_md_stats_class = {
 #endif
 
 
-extern uct_tl_t UCT_TL_NAME(dc_mlx5);
 extern uct_tl_t UCT_TL_NAME(rc_verbs);
-extern uct_tl_t UCT_TL_NAME(rc_mlx5);
 extern uct_tl_t UCT_TL_NAME(ud_verbs);
-extern uct_tl_t UCT_TL_NAME(ud_mlx5);
 
 static uct_tl_t *uct_ib_tls[] = {
-#ifdef HAVE_TL_DC
-    &UCT_TL_NAME(dc_mlx5),
-#endif
 #ifdef HAVE_TL_RC
     &UCT_TL_NAME(rc_verbs),
-#endif
-#if defined (HAVE_TL_RC) && defined (HAVE_MLX5_DV)
-    &UCT_TL_NAME(rc_mlx5),
 #endif
 #ifdef HAVE_TL_UD
     &UCT_TL_NAME(ud_verbs),
 #endif
-#if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
-    &UCT_TL_NAME(ud_mlx5)
-#endif
 };
 
-extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(devx);
-extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(dv);
 static uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(verbs);
 
-static uct_ib_md_ops_entry_t *uct_ib_ops[] = {
-#if defined (HAVE_DEVX)
-    &UCT_IB_MD_OPS_NAME(devx),
-#endif
-#if defined (HAVE_MLX5_DV)
-    &UCT_IB_MD_OPS_NAME(dv),
-#endif
-    &UCT_IB_MD_OPS_NAME(verbs)
-};
+UCS_LIST_HEAD(uct_ib_ops);
 
 typedef struct {
     uct_ib_mem_t        super;
@@ -228,9 +210,9 @@ typedef struct {
 typedef struct {
     pthread_t                     thread;
     uct_ib_md_t                   *md;
-    int                           reg;
     void                          *address;
     size_t                        length;
+    size_t                        first_mr_size;
     const uct_md_mem_reg_params_t *params;
     uint64_t                      access_flags;
     struct ibv_mr                 **mrs;
@@ -242,14 +224,13 @@ ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     size_t component_name_length = strlen(md->super.component->name);
     uint64_t guid                = IBV_DEV_ATTR(&md->dev, sys_image_guid);
 
+    uct_md_base_md_query(md_attr);
     md_attr->max_alloc                 = ULONG_MAX; /* TODO query device */
     md_attr->max_reg                   = ULONG_MAX; /* TODO query device */
     md_attr->flags                     = md->cap_flags;
-    md_attr->alloc_mem_types           = 0;
     md_attr->access_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->detect_mem_types          = 0;
-    md_attr->dmabuf_mem_types          = 0;
     md_attr->reg_mem_types             = md->reg_mem_types;
+    md_attr->gva_mem_types             = md->gva_mem_types;
     md_attr->reg_nonblock_mem_types    = md->reg_nonblock_mem_types;
     md_attr->cache_mem_types           = UCS_MASK(UCS_MEMORY_TYPE_LAST);
     md_attr->rkey_packed_size          = UCT_IB_MD_PACKED_RKEY_SIZE;
@@ -298,14 +279,14 @@ uct_ib_md_print_mem_reg_err_msg(const char *title, void *address, size_t length,
 void *uct_ib_md_mem_handle_thread_func(void *arg)
 {
     uct_ib_md_mem_reg_thread_t *ctx = arg;
-    size_t max_chunk                = ctx->md->config.mt_reg_chunk;
+    size_t chunk_size               = ctx->md->config.mt_reg_chunk;
     ucs_time_t UCS_V_UNUSED t0      = ucs_get_time();
+    void UCS_V_UNUSED *start        = ctx->address;
     int mr_idx                      = 0;
+    size_t length                   = ctx->first_mr_size;
     ucs_status_t status;
-    size_t length;
 
     while (ctx->length > 0) {
-        length = ucs_min(ctx->length, max_chunk);
         if (ctx->params != NULL) {
             status = uct_ib_reg_mr(ctx->md, ctx->address, length, ctx->params,
                                    ctx->access_flags, NULL, &ctx->mrs[mr_idx]);
@@ -320,11 +301,13 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
         }
         ctx->address = UCS_PTR_BYTE_OFFSET(ctx->address, length);
         ctx->length -= length;
+        length       = ucs_min(ctx->length, chunk_size);
         mr_idx++;
     }
 
-    ucs_trace("%s %p..%p took %f usec\n", ctx->reg ? "reg_mr" : "dereg_mr",
-              ctx->mrs[0]->addr, ctx->address,
+    ucs_trace("%s %p..%p (first_mr_size %zu) took %f usec\n",
+              (ctx->params != NULL) ? "reg_mr" : "dereg_mr",
+              start, ctx->address, ctx->first_mr_size,
               ucs_time_to_usec(ucs_get_time() - t0));
     return UCS_STATUS_PTR(UCS_OK);
 
@@ -339,10 +322,10 @@ err:
 ucs_status_t
 uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             const uct_md_mem_reg_params_t *params,
-                            uint64_t access_flags, struct ibv_mr **mrs)
+                            uint64_t access_flags, size_t mr_num,
+                            struct ibv_mr **mrs)
 {
     size_t chunk_size = md->config.mt_reg_chunk;
-    int mr_num        = ucs_div_round_up(length, chunk_size);
     int thread_num_mrs, thread_num, thread_idx, mr_idx, cpu_id;
     ucs_sys_cpuset_t parent_set, thread_set;
     uct_ib_md_mem_reg_thread_t *ctxs, *ctx;
@@ -350,6 +333,8 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     pthread_attr_t attr;
     ucs_status_t status;
     void *thread_status;
+    uint64_t offset;
+    size_t padding;
     int ret;
 
     status = ucs_sys_pthread_getaffinity(&parent_set);
@@ -378,6 +363,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     status = UCS_OK;
     mr_idx = 0;
     cpu_id = 0;
+    offset = 0;
     for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
         /* calculate number of mrs for each thread so each one will
          * get proportional amount */
@@ -385,12 +371,23 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                                              thread_num - thread_idx);
         ctx               = &ctxs[thread_idx];
         ctx->md           = md;
-        ctx->address      = UCS_PTR_BYTE_OFFSET(address, mr_idx * chunk_size);
-        ctx->length       = ucs_min(thread_num_mrs * chunk_size,
-                                    length - (mr_idx * chunk_size));
+        ctx->address      = UCS_PTR_BYTE_OFFSET(address, offset);
         ctx->params       = params;
         ctx->access_flags = access_flags;
         ctx->mrs          = &mrs[mr_idx];
+
+        /* First MR size can be different to align further MRs */
+        padding            = ucs_padding((uintptr_t)ctx->address, chunk_size);
+        ctx->first_mr_size = (padding > 0) ? padding : chunk_size;
+        ctx->first_mr_size = ucs_min(ctx->first_mr_size, length - offset);
+        ucs_assertv((ctx->address == address) || (padding == 0),
+                    "thread_idx=%d address=%p padding=%zu",
+                    thread_idx, address, padding);
+
+        ctx->length        = (thread_num_mrs - 1) * chunk_size +
+                             ctx->first_mr_size;
+        ctx->length        = ucs_min(ctx->length, length - offset);
+        offset            += ctx->length;
 
         if (md->config.mt_reg_bind) {
             while (!CPU_ISSET(cpu_id, &parent_set)) {
@@ -443,7 +440,7 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
                            struct ibv_mr **mr_p)
 {
     ucs_time_t UCS_V_UNUSED start_time = ucs_get_time();
-    unsigned retry                     = 0;
+    unsigned long retry                = 0;
     size_t UCS_V_UNUSED dmabuf_offset;
     const char *title;
     struct ibv_mr *mr;
@@ -492,7 +489,7 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
     }
 
     ucs_trace("%s(pd=%p addr=%p len=%zu fd=%d offset=%zu access=0x%" PRIx64 "):"
-              " mr=%p lkey=0x%x retry=%d took %.3f ms",
+              " mr=%p lkey=0x%x retry=%lu took %.3f ms",
               title, md->pd, address, length, dmabuf_fd, dmabuf_offset,
               access_flags, mr, mr->lkey, retry,
               ucs_time_to_msec(ucs_get_time() - start_time));
@@ -522,6 +519,7 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
                                  void *addr, size_t length)
 {
 #if HAVE_DECL_IBV_ADVISE_MR
+    unsigned long retry = 0;
     struct ibv_sge sg_list;
     int ret;
 
@@ -535,12 +533,15 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
     sg_list.addr   = (uintptr_t)addr;
     sg_list.length = length;
 
-    ret = UCS_PROFILE_CALL(ibv_advise_mr, md->pd,
-                           IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
-                           IBV_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
+    do {
+        ret = UCS_PROFILE_CALL(ibv_advise_mr, md->pd,
+                               IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
+                               IBV_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
+    } while ((ret == EAGAIN) && (retry++ < md->config.reg_retry_cnt));
+
     if (ret) {
-        ucs_error("ibv_advise_mr(addr=%p length=%zu) returned %d: %m", addr,
-                  length, ret);
+        ucs_diag("ibv_advise_mr(addr=%p length=%zu key=%x) returned %d: %m",
+                 addr, length, ib_memh->lkey, ret);
         return UCS_ERR_IO_ERROR;
     }
 #endif
@@ -696,6 +697,7 @@ uct_ib_verbs_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 }
 
 ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                                    void *address, size_t length,
                                     const uct_md_mkey_pack_params_t *params,
                                     void *mkey_buffer)
 {
@@ -716,9 +718,9 @@ ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
-                                       const void *rkey_buffer,
-                                       uct_rkey_t *rkey_p, void **handle_p)
+ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
+                                const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                void **handle_p)
 {
     uint64_t packed_rkey = *(const uint64_t*)rkey_buffer;
 
@@ -787,9 +789,9 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     return uct_ib_device_is_supported(device);
 }
 
-static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
-                                              uct_md_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p)
+ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
+                                       uct_md_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p)
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
     int num_resources = 0;
@@ -1001,24 +1003,91 @@ uct_ib_md_set_pci_bw(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
     md->pci_bw = md->dev.pci_bw;
 }
 
-ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
-                            const uct_md_config_t *uct_md_config, uct_md_h *md_p)
+static ucs_status_t uct_ib_component_md_open(struct ibv_device *ib_device,
+                                             const uct_ib_md_config_t *md_config,
+                                             const char *md_name,
+                                             struct uct_ib_md **md_p)
 {
-    const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
+    struct uct_ib_md *md;
+    ucs_status_t status;
+    uct_ib_md_ops_entry_t *entry;
+
+    ucs_list_for_each(entry, &uct_ib_ops, list) {
+        status = entry->ops->open(ib_device, md_config, &md);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            ucs_debug("%s: md open by '%s' failed, trying next", md_name,
+                      entry->name);
+            continue;
+        } else if (status == UCS_OK) {
+            ucs_debug("%s: md open by '%s' is successful", md_name,
+                      entry->name);
+            *md_p = md;
+            return UCS_OK;
+        } else {
+            return status;
+        }
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
+ucs_status_t
+uct_ib_get_device_by_name(struct ibv_device **ib_device_list, int num_devices,
+                          const char *md_name, struct ibv_device** ibv_device_p)
+{
+    int i;
+
+    for (i = 0; i < num_devices; ++i) {
+        if (!strcmp(ibv_get_device_name(ib_device_list[i]), md_name)) {
+            *ibv_device_p = ib_device_list[i];
+            return UCS_OK;
+        }
+    }
+
+    ucs_debug("IB device %s not found", md_name);
+    return UCS_ERR_NO_DEVICE;
+}
+
+ucs_status_t
+uct_ib_fork_init(const uct_ib_md_config_t *md_config, int *fork_init_p)
+{
+    int ret;
+
+    *fork_init_p = 0;
+
+    if (md_config->fork_init == UCS_NO) {
+        uct_ib_fork_warn_enable();
+        return UCS_OK;
+    }
+
+    ret = ibv_fork_init();
+    if (ret) {
+        if (md_config->fork_init == UCS_YES) {
+            ucs_error("ibv_fork_init() failed: %m");
+            return UCS_ERR_IO_ERROR;
+        }
+
+        ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
+        uct_ib_fork_warn_enable();
+        return UCS_OK;
+    }
+
+    *fork_init_p = 1;
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_ib_md_open(uct_component_t *component, const char *md_name,
+               const uct_md_config_t *uct_md_config, uct_md_h *md_p)
+{
+    const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config,
+                                                         uct_ib_md_config_t);
     ucs_status_t status = UCS_ERR_UNSUPPORTED;
     uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
-    int i, num_devices, ret, fork_init = 0;
+    int num_devices, fork_init = 0;
 
     ucs_trace("opening IB device %s", md_name);
-
-#if !HAVE_DEVX
-    if (md_config->devx == UCS_YES) {
-        ucs_error("DEVX requested but not supported");
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
-    }
-#endif
 
     /* Get device list from driver */
     ib_device_list = ibv_get_device_list(&num_devices);
@@ -1028,60 +1097,29 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
         goto out;
     }
 
-    ib_device = NULL;
-    for (i = 0; i < num_devices; ++i) {
-        if (!strcmp(ibv_get_device_name(ib_device_list[i]), md_name)) {
-            ib_device = ib_device_list[i];
-            break;
-        }
-    }
-
-    if (ib_device == NULL) {
-        ucs_debug("IB device %s not found", md_name);
-        status = UCS_ERR_NO_DEVICE;
+    status = uct_ib_get_device_by_name(ib_device_list, num_devices, md_name,
+                                       &ib_device);
+    if (status != UCS_OK) {
         goto out_free_dev_list;
     }
 
-    if (md_config->fork_init != UCS_NO) {
-        ret = ibv_fork_init();
-        if (ret) {
-            if (md_config->fork_init == UCS_YES) {
-                ucs_error("ibv_fork_init() failed: %m");
-                status = UCS_ERR_IO_ERROR;
-                goto out_free_dev_list;
-            }
-            ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
-            uct_ib_fork_warn_enable();
-        } else {
-            fork_init = 1;
-        }
-    } else {
-        uct_ib_fork_warn_enable();
-    }
-
-    for (i = 0; i < ucs_static_array_size(uct_ib_ops); i++) {
-        status = uct_ib_ops[i]->ops->open(ib_device, md_config, &md);
-        if (status == UCS_OK) {
-            ucs_debug("%s: md open by '%s' is successful", md_name,
-                      uct_ib_ops[i]->name);
-            break;
-        } else if (status != UCS_ERR_UNSUPPORTED) {
-            goto out_free_dev_list;
-        }
-        ucs_debug("%s: md open by '%s' failed, trying next", md_name,
-                  uct_ib_ops[i]->name);
-    }
-
+    status = uct_ib_fork_init(md_config, &fork_init);
     if (status != UCS_OK) {
-        ucs_assert(status == UCS_ERR_UNSUPPORTED);
-        ucs_debug("Unsupported IB device %s", md_name);
+        goto out_free_dev_list;
+    }
+
+    status = uct_ib_component_md_open(ib_device, md_config, md_name, &md);
+    if (status != UCS_OK) {
+        if (status == UCS_ERR_UNSUPPORTED) {
+            ucs_debug("Unsupported IB device %s", md_name);
+        }
+
         goto out_free_dev_list;
     }
 
     /* cppcheck-suppress autoVariables */
     *md_p         = &md->super;
     md->fork_init = fork_init;
-    status        = UCS_OK;
 
 out_free_dev_list:
     ibv_free_device_list(ib_device_list);
@@ -1295,18 +1333,17 @@ void uct_ib_md_free(uct_ib_md_t *md)
 void uct_ib_md_ece_check(uct_ib_md_t *md)
 {
 #if HAVE_DECL_IBV_SET_ECE
-    uct_ib_device_t *dev = &md->dev;
-    struct ibv_pd *pd    = md->pd;
-    struct ibv_ece ece   = {};
+    struct ibv_context *ibv_context = md->dev.ibv_context;
+    struct ibv_pd *pd               = md->pd;
+    struct ibv_ece ece              = {};
     struct ibv_qp *dummy_qp;
     struct ibv_cq *cq;
     struct ibv_qp_init_attr qp_init_attr;
 
-    cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
+    cq = ibv_create_cq(ibv_context, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_cq()",
-                                       uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
         return;
     }
 
@@ -1321,9 +1358,8 @@ void uct_ib_md_ece_check(uct_ib_md_t *md)
 
     dummy_qp = ibv_create_qp(pd, &qp_init_attr);
     if (dummy_qp == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_qp()",
-                                       uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_qp(RC)");
         goto free_cq;
     }
 
@@ -1350,6 +1386,12 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     uct_ib_md_t *md;
     struct ibv_context *ctx;
 
+    if (md_config->devx == UCS_YES) {
+        ucs_error("DEVX requested but not supported");
+        status = UCS_ERR_UNSUPPORTED;
+        goto err;
+    }
+
     /* Open verbs context */
     ctx = ibv_open_device(ibv_device);
     if (ctx == NULL) {
@@ -1359,7 +1401,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err;
     }
 
-    md = uct_ib_md_alloc(sizeof(*md), "ib_mlx5_devx_md", ctx);
+    md = uct_ib_md_alloc(sizeof(*md), "ib_verbs_md", ctx);
     if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_context;
@@ -1465,6 +1507,7 @@ void UCS_F_CTOR uct_ib_init()
 {
     ssize_t i;
 
+    ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(verbs).list);
     uct_component_register(&uct_ib_component);
 
     for (i = 0; i < ucs_static_array_size(uct_ib_tls); i++) {
@@ -1481,4 +1524,5 @@ void UCS_F_DTOR uct_ib_cleanup()
     }
 
     uct_component_unregister(&uct_ib_component);
+    ucs_list_del(&UCT_IB_MD_OPS_NAME(verbs).list);
 }

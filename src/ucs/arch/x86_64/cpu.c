@@ -1,6 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
-* Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2019-2024. ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -472,7 +472,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
                 break;
             }
             break;
-        /* AMD Zen3 */
+        /* AMD Zen3/Zen4 */
         case 0x19:
             switch (model) {
             case 0x00:
@@ -480,6 +480,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
                 cpu_model = UCS_CPU_MODEL_AMD_MILAN;
                 break;
             case 0x11:
+            case 0x90:
                 cpu_model = UCS_CPU_MODEL_AMD_GENOA;
                 break;
             }
@@ -588,6 +589,28 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 }
 #endif
 
+static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
+{
+    if (user_val != UCS_MEMUNITS_AUTO) {
+        return user_val;
+    }
+
+    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD) {
+        return ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3) * 3 / 4;
+    } else {
+        return UCS_MEMUNITS_INF;
+    }
+}
+
+static size_t ucs_cpu_nt_dest_thresh()
+{
+    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD) {
+        return ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3) * 29 / 32;
+    } else {
+        return UCS_MEMUNITS_INF;
+    }
+}
+
 void ucs_cpu_init()
 {
 #if ENABLE_BUILTIN_MEMCPY
@@ -598,6 +621,9 @@ void ucs_cpu_init()
         ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_max,
                               ucs_cpu_builtin_memcpy[ucs_arch_get_cpu_vendor()].max);
 #endif
+    ucs_global_opts.arch.nt_buffer_transfer_min =
+        ucs_cpu_nt_bt_thresh_min(ucs_global_opts.arch.nt_buffer_transfer_min);
+    ucs_global_opts.arch.nt_dest_threshold = ucs_cpu_nt_dest_thresh();
 }
 
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
@@ -706,6 +732,329 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 
     return cache_count == UCS_CPU_CACHE_LAST ? UCS_OK : UCS_ERR_UNSUPPORTED;
 }
+
+#ifdef __AVX__
+static UCS_F_ALWAYS_INLINE
+size_t ucs_x86_nt_dst_buffer_transfer(void *dst, const void *src, size_t len,
+                                      unsigned int hint, size_t total_len)
+{
+    const size_t switch_to_nt_store_size = 2048;
+    size_t offset, prefetch_tail;
+    __m256i y0, y1, y2, y3;
+
+    ucs_nt_write_prefetch(dst);
+    ucs_nt_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, 64));
+
+    /* copy 64 bytes unconditionally */
+    y0 = _mm256_loadu_si256(src);
+    y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, 32));
+    _mm256_storeu_si256(dst, y0);
+    _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, 32), y1);
+
+    if (ucs_unlikely(total_len > switch_to_nt_store_size)) {
+        offset = 64 - ((uintptr_t)dst & 0x1f);
+        len   -= offset;
+
+        if (ucs_likely((size_t)UCS_PTR_BYTE_OFFSET(src, offset) & 0x1f)) {
+            /* src address is not aligned to 32 byte */
+            while (len >= 128) {
+                y0 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset));
+                y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
+                y2 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 64));
+                y3 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 96));
+                _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y0);
+                _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y1);
+                _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 64), y2);
+                _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 96), y3);
+
+                if (ucs_unlikely(hint & UCS_ARCH_MEMCPY_NT_SOURCE)) {
+                    ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (3 * 64)));
+                    ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (4 * 64)));
+                } else {
+                    if (len > 256) {
+                        ucs_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (3 * 64)));
+                        ucs_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (4 * 64)));
+                    }
+                }
+
+                offset += 128;
+                len    -= 128;
+            }
+        } else {
+            /* src address aligned to 32 byte */
+            while (len >= 128) {
+                y0 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset));
+                y1 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
+                y2 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 64));
+                y3 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 96));
+                _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y0);
+                _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y1);
+                _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 64), y2);
+                _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 96), y3);
+
+                if (ucs_unlikely(hint & UCS_ARCH_MEMCPY_NT_SOURCE)) {
+                    ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (3 * 64)));
+                    ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (4 * 64)));
+                } else {
+                    if (len > 256) {
+                        ucs_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (3 * 64)));
+                        ucs_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (4 * 64)));
+                    }
+                }
+
+                offset += 128;
+                len    -= 128;
+            }
+        }
+
+        if (len >= 64) {
+            y0 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset));
+            y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y0);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y1);
+            offset += 64;
+            len    -= 64;
+        }
+
+        if (len) {
+            ucs_nt_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, offset));
+        }
+
+        /* make the writes visible to the other core */
+        ucs_memory_bus_store_fence();
+    } else {
+        ucs_nt_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, 128));
+
+        offset        = 128 - ((uintptr_t)dst & 0x1f);
+        prefetch_tail = 192 - (offset + ((uintptr_t)dst & 0x3f));
+        len          -= offset;
+
+        if (len > prefetch_tail) {
+            ucs_nt_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, 192));
+            if (len > (prefetch_tail + 64)) {
+                ucs_nt_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, 256));
+            }
+        }
+
+        y2 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, 64));
+        y3 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, 96));
+        _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, 64), y2);
+        _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, 96), y3);
+
+        while (len >= 128) {
+            y0 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset));
+            y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
+            y2 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 64));
+            y3 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 96));
+
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y0);
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y1);
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 64), y2);
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 96), y3);
+
+            if (len > (prefetch_tail + 128)) {
+                ucs_nt_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, offset + (3 * 64)));
+                if (len > (prefetch_tail + 192)) {
+                    ucs_nt_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, offset + (4 * 64)));
+                }
+            }
+
+            offset += 128;
+            len    -= 128;
+        }
+    }
+
+    /* Handle the remaining bytes <= 127 */
+    return len;
+}
+
+static UCS_F_ALWAYS_INLINE
+size_t ucs_x86_nt_src_buffer_transfer(void *dst, const void *src, size_t len)
+{
+    __m256i y0, y1, y2, y3;
+    size_t offset, prefetch_tail;
+
+    ucs_nt_read_prefetch(src);
+    ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, 64));
+    ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, 128));
+
+    /* copy 128 bytes unconditionally */
+    y0 = _mm256_loadu_si256(src);
+    y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, 32));
+    y2 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, 64));
+    y3 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, 96));
+    _mm256_storeu_si256(dst, y0);
+    _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, 32), y1);
+    _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, 64), y2);
+    _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, 96), y3);
+
+    offset        = 128 - ((uintptr_t)dst & 0x1f);
+    prefetch_tail = 192 - (offset + ((uintptr_t)src & 0x3f));
+    len          -= offset;
+
+    if (len > prefetch_tail) {
+        ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, 192));
+        if (len > (prefetch_tail + 64)) {
+            ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, 256));
+        }
+    }
+
+    if (ucs_likely((size_t)UCS_PTR_BYTE_OFFSET(src, offset) & 0x1f)) {
+        while (len >= 128) {
+            y0 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset));
+            y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
+            y2 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 64));
+            y3 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 96));
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y0);
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y1);
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 64), y2);
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 96), y3);
+
+            if (len > (prefetch_tail + 128)) {
+                ucs_nt_read_prefetch(
+                        UCS_PTR_BYTE_OFFSET(src, prefetch_tail + offset + (2 * 64)));
+                ucs_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, offset + (3 * 64)));
+                if (len > (prefetch_tail + 192)) {
+                    ucs_nt_read_prefetch(
+                        UCS_PTR_BYTE_OFFSET(src, prefetch_tail + offset + (3 * 64)));
+                    ucs_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, offset + (4 * 64)));
+                }
+            }
+
+            offset += 128;
+            len    -= 128;
+        }
+    } else {
+        while (len >= 128) {
+            /* Can we use streaming loads on normal memory type? */
+            y0 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset));
+            y1 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
+            y2 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 64));
+            y3 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 96));
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y0);
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y1);
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 64), y2);
+            _mm256_store_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 96), y3);
+
+            if (len > (prefetch_tail + 128)) {
+                ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (3 * 64)));
+                ucs_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, offset + (3 * 64)));
+                if (len > (prefetch_tail + 192)) {
+                    ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (4 * 64)));
+                    ucs_write_prefetch(UCS_PTR_BYTE_OFFSET(dst, offset + (4 * 64)));
+                }
+            }
+
+            offset += 128;
+            len    -= 128;
+        }
+    }
+
+    /* Handle the remaining bytes <= 127 */
+    return len;
+}
+
+static UCS_F_ALWAYS_INLINE
+void ucs_x86_copy_bytes_le_128(void *dst, const void *src, size_t len)
+{
+#if defined (__LZCNT__)
+    __m256i y0, y1, y2, y3;
+    /* Handle lengths that fall usually within eager short range */
+    switch (_lzcnt_u32(len)) {
+    /* 0 */
+    case 32:
+        break;
+    /* 1 */
+    case 31:
+        *(uint8_t *)dst = *(uint8_t *)src;
+        break;
+    /* 2 - 3 */
+    case 30:
+        *(uint16_t *)dst = *(uint16_t *)src;
+        *(uint16_t *)UCS_PTR_BYTE_OFFSET(dst, len - 2) = \
+            *(uint16_t *)UCS_PTR_BYTE_OFFSET(src, len - 2);
+        break;
+    /* 4 - 7 */
+    case 29:
+        *(uint32_t *)dst = *(uint32_t *)src;
+        *(uint32_t *)UCS_PTR_BYTE_OFFSET(dst, len - 4) = \
+            *(uint32_t *)UCS_PTR_BYTE_OFFSET(src, len - 4);
+        break;
+    /* 8 - 15 */
+    case 28:
+        *(uint64_t *)dst = *(uint64_t *)src;
+        *(uint64_t *)UCS_PTR_BYTE_OFFSET(dst, len - 8) = \
+            *(uint64_t *)UCS_PTR_BYTE_OFFSET(src, len - 8);
+        break;
+    /* 16 - 31 */
+    case 27:
+        *(uint64_t *)dst = *(uint64_t *)src;
+        *(uint64_t *)UCS_PTR_BYTE_OFFSET(dst, 8) = \
+            *(uint64_t *)UCS_PTR_BYTE_OFFSET(src, 8);
+        *(uint64_t *)UCS_PTR_BYTE_OFFSET(dst, len - 16) = \
+            *(uint64_t *)UCS_PTR_BYTE_OFFSET(src, len - 16);
+        *(uint64_t *)UCS_PTR_BYTE_OFFSET(dst, len - 8) = \
+            *(uint64_t *)UCS_PTR_BYTE_OFFSET(src, len - 8);
+        break;
+    /* 32 - 63 */
+    case 26:
+        y0 = _mm256_loadu_si256(src);
+        y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src,  len - 32));
+        _mm256_storeu_si256(dst, y0);
+        _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, len - 32), y1);
+        break;
+    /* 64 - 128 */
+    default:
+        y0 = _mm256_loadu_si256(src);
+        y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, 32));
+        y2 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, len - 64));
+        y3 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, len - 32));
+        _mm256_storeu_si256(dst, y0);
+        _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, 32), y1);
+        _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, len - 64), y2);
+        _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, len - 32), y3);
+        break;
+    }
+#else
+    memcpy(dst, src, len);
+#endif
+}
+
+/* This is an adaptation of the memcpy code from https://github.com/amd/aocl-libmem
+ * TODO: Provide an option to copy from backwards, in this way
+ * application can choose the cache hotness of the final buffer
+ */
+void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
+                                ucs_arch_memcpy_hint_t hint, size_t total_len)
+{
+    size_t tail_bytes;
+
+    if (ucs_likely(len <= 128)) {
+        goto copy_bytes_le_128;
+    }
+
+    /* Give precedence to non temporal destination */
+    if (ucs_unlikely(total_len > ucs_global_opts.arch.nt_dest_threshold)) {
+        hint |= UCS_ARCH_MEMCPY_NT_DEST;
+    }
+
+    if (hint & UCS_ARCH_MEMCPY_NT_DEST) {
+        tail_bytes = ucs_x86_nt_dst_buffer_transfer(dst, src, len, hint, total_len);
+    } else if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
+        tail_bytes = ucs_x86_nt_src_buffer_transfer(dst, src, len);
+    } else {
+        memcpy(dst, src, len);
+        tail_bytes = 0;
+    }
+
+    dst = UCS_PTR_BYTE_OFFSET(dst, len - tail_bytes);
+    src = UCS_PTR_BYTE_OFFSET(src, len - tail_bytes);
+    len = tail_bytes;
+
+copy_bytes_le_128:
+    ucs_x86_copy_bytes_le_128(dst, src, len);
+}
+#endif
 
 void ucs_x86_memcpy_sse_movntdqa(void *dst, const void *src, size_t len)
 {

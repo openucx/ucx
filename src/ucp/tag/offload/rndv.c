@@ -15,19 +15,19 @@
 
 
 /* Init HW rendezvous as a single protocol which does not require operation on
- * remote side (which is the case when tag is matched - everyting is done by the
+ * remote side (which is the case when tag is matched - everything is done by the
  * HW/FW).
  */
-static ucs_status_t
-ucp_tag_rndv_offload_proto_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_tag_rndv_offload_proto_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_worker_h worker                   = init_params->worker;
     ucp_context_h context                 = worker->context;
     ucp_proto_single_init_params_t params = {
        .super.super         = *init_params,
        .super.latency       = 0,
-       .super.overhead      = 40e-9,
-       .super.cfg_thresh    = context->config.ext.rndv_thresh,
+       .super.overhead      = context->config.ext.proto_overhead_rndv_offload,
+       .super.cfg_thresh    = ucp_proto_rndv_thresh(init_params),
        .super.cfg_priority  = 60,
        .super.min_length    = ucp_ep_tag_offload_min_rndv_thresh(
                                   context, init_params->ep_config_key),
@@ -51,10 +51,10 @@ ucp_tag_rndv_offload_proto_init(const ucp_proto_init_params_t *init_params)
 
     if (!ucp_tag_rndv_check_op_id(init_params) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_single_init(&params);
+    ucp_proto_single_probe(&params);
 }
 
 static void
@@ -137,7 +137,7 @@ ucp_proto_t ucp_tag_rndv_offload_proto = {
     .name     = "tag/rndv/offload",
     .desc     = "rendezvous tag offload",
     .flags    = 0,
-    .init     = ucp_tag_rndv_offload_proto_init,
+    .probe    = ucp_tag_rndv_offload_proto_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_tag_rndv_offload_proto_progress},
     .abort    = ucp_proto_request_zcopy_abort,
@@ -149,16 +149,16 @@ ucp_proto_t ucp_tag_rndv_offload_proto = {
  * It can be used when real rndv offload is not supported (e.g. for non-contig
  * or very large messages) or when it is enabled by protocol selection.
  */
-static ucs_status_t
-ucp_tag_rndv_offload_sw_proto_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_tag_rndv_offload_sw_proto_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_worker_h worker                      = init_params->worker;
     ucp_context_h context                    = worker->context;
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 40e-9,
-        .super.cfg_thresh    = context->config.ext.rndv_thresh,
+        .super.overhead      = context->config.ext.proto_overhead_rndv_offload,
+        .super.cfg_thresh    = ucp_proto_rndv_thresh(init_params),
         .super.cfg_priority  = 60,
         .super.min_length    = ucp_ep_tag_offload_min_rndv_thresh(
                                    context, init_params->ep_config_key),
@@ -180,6 +180,7 @@ ucp_tag_rndv_offload_sw_proto_init(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .super.exclude_map   = 0,
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
+        .lane                = init_params->ep_config_key->tag_lane,
         .unpack_time         = UCS_LINEAR_FUNC_ZERO,
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .mem_info.type       = init_params->select_param->mem_type,
@@ -187,14 +188,14 @@ ucp_tag_rndv_offload_sw_proto_init(const ucp_proto_init_params_t *init_params)
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
         .md_map              = 0
     };
+    ucp_proto_rndv_ctrl_priv_t rpriv;
 
     if (!ucp_tag_rndv_check_op_id(init_params) ||
         !ucp_ep_config_key_has_tag_lane(init_params->ep_config_key)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_rndv_ctrl_init(&params,
-                                    init_params->ep_config_key->tag_lane);
+    ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_offload_sw_proto_progress, (self),
@@ -229,7 +230,7 @@ ucp_proto_t ucp_tag_rndv_offload_sw_proto = {
     .name     = "tag/rndv/offload_sw",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_tag_rndv_offload_sw_proto_init,
+    .probe    = ucp_tag_rndv_offload_sw_proto_probe,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_tag_rndv_offload_sw_proto_progress},
     .abort    = ucp_proto_rndv_rts_abort,

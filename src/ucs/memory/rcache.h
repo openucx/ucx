@@ -60,6 +60,7 @@ enum {
 enum {
     UCS_RCACHE_FLAG_NO_PFN_CHECK  = UCS_BIT(0), /**< PFN check not supported for this rcache */
     UCS_RCACHE_FLAG_PURGE_ON_FORK = UCS_BIT(1), /**< purge rcache on fork */
+    UCS_RCACHE_FLAG_SYNC_EVENTS   = UCS_BIT(2), /**< Synchronize memory events handling */
 };
 
 /*
@@ -81,7 +82,7 @@ struct ucs_rcache_ops {
     /**
      * Register a memory region.
      *
-     * @param [in]  context    User context, as passed to @ref ucs_rcache_create
+     * @param [in]  context    User context, as passed to @ref ucs_rcache_create().
      * @param [in]  rcache     Pointer to the registration cache.
      * @param [in]  arg        Custom argument passed to @ref ucs_rcache_get().
      * @param [in]  region     Memory region to register. This may point to a larger
@@ -100,25 +101,37 @@ struct ucs_rcache_ops {
     ucs_status_t           (*mem_reg)(void *context, ucs_rcache_t *rcache,
                                       void *arg, ucs_rcache_region_t *region,
                                       uint16_t flags);
-   /**
-    * Deregister a memory region.
-    *
-    * @param [in]  context    User context, as passed to @ref ucs_rcache_create
-    * @param [in]  rcache     Pointer to the registration cache.
-    * @param [in]  region     Memory region to deregister.
-    */
+    /**
+     * Deregister a memory region.
+     *
+     * @param [in]  context  User context, as passed to @ref ucs_rcache_create().
+     * @param [in]  rcache   Pointer to the registration cache.
+     * @param [in]  region   Memory region to deregister.
+     */
     void                   (*mem_dereg)(void *context, ucs_rcache_t *rcache,
                                         ucs_rcache_region_t *region);
+
+    /**
+     * Called in the context of region lookup, for every existing region that
+     * we are potentially merging with.
+     *
+     * @param [in]  context  User context, as passed to @ref ucs_rcache_create().
+     * @param [in]  rcache   Pointer to the registration cache.
+     * @param [in]  arg      Custom argument passed to @ref ucs_rcache_get().
+     * @param [in]  region   Memory region we are merging with.
+     */
+    void                   (*merge)(void *context, ucs_rcache_t *rcache,
+                                    void *arg, ucs_rcache_region_t *region);
 
     /**
      * Dump memory region information to a string buffer.
      * (Only the user-defined part of the memory region should be dumped)
      *
-     * @param [in]  context    User context, as passed to @ref ucs_rcache_create
-     * @param [in]  rcache     Pointer to the registration cache.
-     * @param [in]  region    Memory region to dump.
-     * @param [in]  buf       String buffer to dump to.
-     * @param [in]  max       Maximal length of the string buffer.
+     * @param [in]  context  User context, as passed to @ref ucs_rcache_create().
+     * @param [in]  rcache   Pointer to the registration cache.
+     * @param [in]  region   Memory region to dump.
+     * @param [in]  buf      String buffer to dump to.
+     * @param [in]  max      Maximal length of the string buffer.
      */
     void                   (*dump_region)(void *context, ucs_rcache_t *rcache,
                                           ucs_rcache_region_t *region,
@@ -130,10 +143,6 @@ struct ucs_rcache_params {
     size_t                 region_struct_size;  /**< Size of memory region structure,
                                                      must be at least the size
                                                      of @ref ucs_rcache_region_t */
-    size_t                 alignment;           /**< Force-align regions to this size.
-                                                     Must be smaller or equal to
-                                                     system page size. */
-    size_t                 max_alignment;       /**< Maximum alignment */
     int                    ucm_events;          /**< UCM events to register. Currently
                                                      UCM_EVENT_VM_UNMAPPED and
                                                      UCM_EVENT_MEM_TYPE_FREE are supported */
@@ -167,6 +176,7 @@ struct ucs_rcache_region {
     ucs_list_link_t        lru_list;  /**< LRU list element */
     ucs_list_link_t        tmp_list;  /**< Temp list element */
     ucs_list_link_t        comp_list; /**< Completion list element */
+    size_t                 alignment;
     volatile uint32_t      refcount;  /**< Reference count, including +1 if it's
                                            in the page table */
     ucs_status_t           status;    /**< Current status code */
@@ -210,6 +220,7 @@ void ucs_rcache_destroy(ucs_rcache_t *rcache);
  * @param [in]  rcache      Memory registration cache.
  * @param [in]  address     Address to register or resolve.
  * @param [in]  length      Length of buffer to register or resolve.
+ * @param [in]  alignment   Alignment for registration buffer.
  * @param [in]  prot        Requested access flags, PROT_xx (same as passed to mmap).
  * @param [in]  arg         Custom argument passed down to memory registration
  *                          callback, if a memory registration happens during
@@ -223,7 +234,8 @@ void ucs_rcache_destroy(ucs_rcache_t *rcache);
  * @return Error code.
  */
 ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
-                            int prot, void *arg, ucs_rcache_region_t **region_p);
+                            size_t alignment, int prot, void *arg,
+                            ucs_rcache_region_t **region_p);
 
 
 /**

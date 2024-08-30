@@ -124,10 +124,11 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
 }
 
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
-                 (context, md_map, memh, mem_info, sys_dev_map, sys_distance,
-                  uct_flags, buffer),
+                 (context, md_map, memh, address, length, mem_info, sys_dev_map,
+                  sys_distance, uct_flags, buffer),
                  ucp_context_h context, ucp_md_map_t md_map,
-                 const ucp_mem_h memh, const ucp_memory_info_t *mem_info,
+                 const ucp_mem_h memh, void *address, size_t length,
+                 const ucp_memory_info_t *mem_info,
                  ucp_sys_dev_map_t sys_dev_map,
                  const ucs_sys_dev_distance_t *sys_distance, unsigned uct_flags,
                  void *buffer)
@@ -163,7 +164,8 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
         params.flags = context->tl_mds[md_index].pack_flags_mask & uct_flags;
 
         status = uct_md_mkey_pack_v2(context->tl_mds[md_index].md,
-                                     memh->uct[md_index], &params, tl_rkey_buf);
+                                     memh->uct[md_index], address, length,
+                                     &params, tl_rkey_buf);
         if (status != UCS_OK) {
             result = status;
             goto out;
@@ -373,7 +375,7 @@ static ssize_t
 ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
 {
     ucp_context_h context            = memh->context;
-    uint64_t address                 = (uint64_t)ucp_memh_address(memh);
+    void* address                    = ucp_memh_address(memh);
     uint64_t length                  = ucp_memh_length(memh);
     void *p                          = buffer;
     ucp_tl_md_t *tl_mds              = context->tl_mds;
@@ -397,7 +399,7 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
     ucp_memh_common_pack(memh, &p, UCP_MEMH_BUFFER_FLAG_EXPORTED,
                          memh_info_size);
 
-    *ucs_serialize_next(&p, uint64_t) = address;
+    *ucs_serialize_next(&p, uint64_t) = (uint64_t)address;
     *ucs_serialize_next(&p, uint64_t) = length;
     *ucs_serialize_next(&p, uint64_t) = context->uuid;
     *ucs_serialize_next(&p, uint64_t) = memh->reg_id;
@@ -419,10 +421,9 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
                     "tl_mkey_size %zu", tl_mkey_size);
         *ucs_serialize_next(&p, uint8_t) = tl_mkey_size;
 
-        status = uct_md_mkey_pack_v2(tl_mds[md_index].md,
-                                     memh->uct[md_index], &params,
-                                     ucs_serialize_next_raw(&p, void,
-                                                            tl_mkey_size));
+        status = uct_md_mkey_pack_v2(
+                tl_mds[md_index].md, memh->uct[md_index], address, length,
+                &params, ucs_serialize_next_raw(&p, void, tl_mkey_size));
         if (status != UCS_OK) {
             result = status;
             goto out;
@@ -599,8 +600,9 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
     if (rkey_compat) {
         mem_info.type    = memh->mem_type;
         mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        return ucp_rkey_pack_memh(memh->context, memh->md_map, memh, &mem_info,
-                                  0, NULL, 0, memh_buffer);
+        return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
+                                  ucp_memh_address(memh), ucp_memh_length(memh),
+                                  &mem_info, 0, NULL, 0, memh_buffer);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
@@ -762,7 +764,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
      */
     rkey->cache.ep_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
 
-    /* Look up remote key's configration */
+    /* Look up remote key's configuration */
     rkey_config_key.ep_cfg_index       = ep->cfg_index;
     rkey_config_key.md_map             = rkey->md_map;
     rkey_config_key.mem_type           = rkey->mem_type;

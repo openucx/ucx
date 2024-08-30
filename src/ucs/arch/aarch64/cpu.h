@@ -2,6 +2,7 @@
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) Stony Brook University. 2016-2020.  ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -120,11 +121,6 @@ static inline double ucs_arch_get_clocks_per_sec()
 
 #endif
 
-static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
-{
-    return UCS_CPU_MODEL_ARM_AARCH64;
-}
-
 static inline ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
 {
     ucs_aarch64_cpuid_t cpuid;
@@ -134,7 +130,24 @@ static inline ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
         return UCS_CPU_VENDOR_FUJITSU_ARM;
     }
 
+    if ((cpuid.implementer == 0x41) && (cpuid.architecture == 8)) {
+        return UCS_CPU_VENDOR_NVIDIA;
+    }
+
     return UCS_CPU_VENDOR_GENERIC_ARM;
+}
+
+static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
+{
+    ucs_aarch64_cpuid_t cpuid;
+    ucs_aarch64_cpuid(&cpuid);
+
+    if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_NVIDIA) &&
+        (cpuid.part == 0xd4f)) {
+        return UCS_CPU_MODEL_NVIDIA_GRACE;
+    }
+
+    return UCS_CPU_MODEL_ARM_AARCH64;
 }
 
 static inline int ucs_arch_get_cpu_flag()
@@ -257,7 +270,9 @@ static inline void *memcpy_aarch64_sve(void *dest, const void *src, size_t len)
 }
 #endif
 
-static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
+static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
+                                       ucs_arch_memcpy_hint_t hint,
+                                       size_t total_len)
 {
 #if defined(HAVE_AARCH64_THUNDERX2)
     return __memcpy_thunderx2(dst, src, len);

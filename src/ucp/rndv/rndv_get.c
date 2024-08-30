@@ -20,18 +20,18 @@ enum {
     UCP_PROTO_RNDV_GET_STAGE_ATS
 };
 
-static ucs_status_t
-ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
-                               uint64_t rndv_modes, size_t max_length,
-                               uct_ep_operation_t memtype_op, unsigned flags,
-                               ucp_md_map_t initial_reg_md_map,
-                               int support_ppln)
+static void
+ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
+                                uint64_t rndv_modes, size_t max_length,
+                                uct_ep_operation_t memtype_op, unsigned flags,
+                                ucp_md_map_t initial_reg_md_map,
+                                int support_ppln)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
-        .super.cfg_priority  = 0,
+        .super.cfg_priority  = 80,
         .super.overhead      = 0,
         .super.latency       = 0,
         .super.min_length    = 0,
@@ -59,17 +59,25 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
         .opt_align_offs      = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.opt_zcopy_align),
     };
+    ucp_proto_rndv_bulk_priv_t rpriv;
+    ucp_proto_caps_t caps;
+    ucs_status_t status;
+    size_t priv_size;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
                                  support_ppln)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_rndv_bulk_init(&params, init_params->priv,
-                                    UCP_PROTO_RNDV_GET_DESC,
-                                    UCP_PROTO_RNDV_ATS_NAME,
-                                    init_params->priv_size);
+    status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_GET_DESC,
+                                      UCP_PROTO_RNDV_ATS_NAME, &rpriv, &caps);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    priv_size = UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, mpriv);
+    ucp_proto_common_add_proto(&params.super, &caps, &rpriv, priv_size);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -109,15 +117,15 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
     ucp_proto_rndv_recv_complete_with_ats(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
 }
 
-static ucs_status_t
-ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_get_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
-    return ucp_proto_rndv_get_common_init(init_params,
-                                          UCS_BIT(UCP_RNDV_MODE_GET_ZCOPY),
-                                          SIZE_MAX, UCT_EP_OP_LAST,
-                                          UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
-                                          UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-                                          0, 0);
+    ucp_proto_rndv_get_common_probe(
+            init_params, UCS_BIT(UCP_RNDV_MODE_GET_ZCOPY), SIZE_MAX,
+            UCT_EP_OP_LAST,
+            UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
+            UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+            0, 0);
 }
 
 static void
@@ -216,7 +224,7 @@ ucp_proto_t ucp_rndv_get_zcopy_proto = {
     .name     = "rndv/get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC " " UCP_PROTO_RNDV_GET_DESC,
     .flags    = 0,
-    .init     = ucp_proto_rndv_get_zcopy_init,
+    .probe    = ucp_proto_rndv_get_zcopy_probe,
     .query    = ucp_proto_rndv_get_zcopy_query,
     .progress = {
          [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_zcopy_fetch_progress,
@@ -300,8 +308,8 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
                                     UCS_BIT(UCP_DATATYPE_CONTIG));
 }
 
-static ucs_status_t
-ucp_proto_rndv_get_mtype_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_get_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
@@ -309,13 +317,13 @@ ucp_proto_rndv_get_mtype_init(const ucp_proto_init_params_t *init_params)
 
     status = ucp_proto_rndv_mtype_init(init_params, &mdesc_md_map, &frag_size);
     if (status != UCS_OK) {
-        return status;
+        return;
     }
 
-    return ucp_proto_rndv_get_common_init(init_params,
-                                          UCS_BIT(UCP_RNDV_MODE_GET_PIPELINE),
-                                          frag_size, UCT_EP_OP_PUT_ZCOPY, 0,
-                                          mdesc_md_map, 1);
+    ucp_proto_rndv_get_common_probe(init_params,
+                                    UCS_BIT(UCP_RNDV_MODE_GET_PIPELINE),
+                                    frag_size, UCT_EP_OP_PUT_ZCOPY, 0,
+                                    mdesc_md_map, 1);
 }
 
 static void
@@ -348,7 +356,7 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_proto_rndv_get_mtype_init,
+    .probe    = ucp_proto_rndv_get_mtype_probe,
     .query    = ucp_proto_rndv_get_mtype_query,
     .progress = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,

@@ -8,7 +8,7 @@
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 }
 #endif
 
@@ -359,6 +359,7 @@ public:
         union ibv_gid gid;
         uct_ib_md_config_t *md_config =
             ucs_derived_of(m_md_config, uct_ib_md_config_t);
+        ucs_config_allow_list_t dummy_subnet_list;
         ucs::handle<uct_md_h> uct_md;
         uct_ib_iface_t dummy_ib_iface;
         uct_ib_md_t *ib_md;
@@ -376,11 +377,14 @@ public:
 
         ASSERT_EQ(&ib_md->dev, uct_ib_iface_device(&dummy_ib_iface));
 
+        dummy_subnet_list.mode = UCS_CONFIG_ALLOW_LIST_ALLOW_ALL;
+
         /* uct_ib_iface_init_roce_gid_info() requires only the port from the
          * ib_iface so we can use a dummy one here.
          * this function will set the gid_index in the dummy ib_iface. */
         status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface,
-                                                 md_config->ext.gid_index);
+                                                 md_config->ext.gid_index,
+                                                 &dummy_subnet_list);
         ASSERT_UCS_OK(status);
 
         gid_index = dummy_ib_iface.gid_info.gid_index;
@@ -392,7 +396,7 @@ public:
         }
 
         /* check if the gid is valid to use */
-        if (uct_ib_device_is_gid_raw_empty(gid.raw)) {
+        if (!uct_ib_device_is_gid_valid(&gid)) {
             UCS_TEST_SKIP_R(device_str.str() + " is empty");
         }
 
@@ -404,7 +408,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "GID_INDEX=1") {
+UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "IB_GID_INDEX=1") {
     send_recv_short();
 }
 

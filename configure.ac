@@ -4,12 +4,13 @@
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2019.  ALL RIGHTS RESERVED.
+# Copyright (C) Intel Corporation. 2023.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 16) # Minor version. Increased for each release.
+define([ucx_ver_minor], 18) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -179,12 +180,13 @@ AS_IF([test "x$with_docs_only" = xyes],
      UCX_DX_ENABLE_CHECK([man])
      UCX_DX_ENABLE_CHECK([pdf])
      AM_CONDITIONAL([DOCS_ONLY], [true])
+     AM_CONDITIONAL([HAVE_ASAN], [false])
      AM_CONDITIONAL([HAVE_GTEST], [false])
      AM_CONDITIONAL([HAVE_STATS], [false])
      AM_CONDITIONAL([HAVE_TUNING], [false])
      AM_CONDITIONAL([HAVE_IB], [false])
-     AM_CONDITIONAL([HAVE_MLX5_HW_UD], [false])
      AM_CONDITIONAL([HAVE_MLX5_DV], [false])
+     AM_CONDITIONAL([HAVE_MLX5_HW_UD], [false])
      AM_CONDITIONAL([HAVE_DEVX], [false])
      AM_CONDITIONAL([HAVE_TL_RC], [false])
      AM_CONDITIONAL([HAVE_TL_DC], [false])
@@ -223,6 +225,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([IODEMO_CUDA], [false])
      AM_CONDITIONAL([HAVE_GCOV], [false])
      AM_CONDITIONAL([HAVE_LCOV], [false])
+     AM_CONDITIONAL([HAVE_ZE], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -235,6 +238,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/java.m4])
      m4_include([config/m4/cuda.m4])
      m4_include([config/m4/rocm.m4])
+     m4_include([config/m4/ze.m4])
      m4_include([config/m4/gdrcopy.m4])
      m4_include([config/m4/mad.m4])
      m4_include([config/m4/lcov.m4])
@@ -367,7 +371,6 @@ AC_CONFIG_FILES([
                  src/tools/profile/Makefile
                  test/apps/Makefile
                  test/apps/iodemo/Makefile
-                 test/apps/sockaddr/Makefile
                  test/apps/profiling/Makefile
                  test/mpi/Makefile
                  bindings/go/Makefile
@@ -379,6 +382,7 @@ AC_CONFIG_FILES([
                  cmake/ucx-config-version.cmake
                  cmake/ucx-config.cmake
                  cmake/ucx-targets.cmake
+                 config/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
@@ -389,7 +393,7 @@ AC_OUTPUT
 
 
 #
-# Print build condiguration
+# Print build configuration
 #
 AC_MSG_NOTICE([=========================================================])
 AS_IF([test "x$with_docs_only" = xyes],
@@ -403,6 +407,7 @@ AC_MSG_NOTICE([   Configuration dir:   ${ucx_config_dir}])
 AC_MSG_NOTICE([  Preprocessor flags:   ${BASE_CPPFLAGS}])
 AC_MSG_NOTICE([          C compiler:   ${CC} ${BASE_CFLAGS}])
 AC_MSG_NOTICE([        C++ compiler:   ${CXX} ${BASE_CXXFLAGS}])
+AC_MSG_NOTICE([          ASAN check:   ${enable_asan}])
 AC_MSG_NOTICE([        Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([           MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([         VFS support:   ${vfs_enable}])

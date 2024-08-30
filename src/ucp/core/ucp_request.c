@@ -8,7 +8,6 @@
 #  include "config.h"
 #endif
 
-#include <uct/api/v2/uct_v2.h>
 #include "ucp_context.h"
 #include "ucp_worker.h"
 #include "ucp_request.inl"
@@ -17,7 +16,7 @@
 #include <ucp/proto/proto_am.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/tag/tag_rndv.h>
-
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
@@ -745,6 +744,8 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
                   req->send.proto_config->rkey_cfg_index,
                   req->send.state.dt_iter.offset,
                   req->send.state.dt_iter.length);
+
+    ucp_worker_track_ep_usage(req);
 
     ucs_log_indent(1);
     status = progress_cb(self);

@@ -29,8 +29,14 @@ protected:
 
     void create_sender()
     {
-        m_sender = uct_test::create_entity(0);
-        m_entities.push_back(m_sender);
+        /* Self/Memtype transports must connect to the same ucp_worker */
+        if ((GetParam()->dev_type == UCT_DEVICE_TYPE_SELF) ||
+            (GetParam()->dev_type == UCT_DEVICE_TYPE_ACC)) {
+            m_sender = m_receiver;
+        } else {
+            m_sender = uct_test::create_entity(0);
+            m_entities.push_back(m_sender);
+        }
     }
 
     void connect()
@@ -93,9 +99,67 @@ protected:
         }
     }
 
+    void modify_remote_id(entity &e) const;
+    bool is_connected_to_sender(const entity &e) const;
+
     entity * m_sender;
     entity * m_receiver;
 };
+
+bool test_uct_ep::is_connected_to_sender(const entity &e) const
+{
+    uct_ep_is_connected_params_t params;
+    uct_iface_attr_t iface_attr;
+    std::string dev_addr, ep_addr, iface_addr;
+
+    ASSERT_UCS_OK(uct_iface_query(e.iface(), &iface_attr));
+    dev_addr.resize(iface_attr.device_addr_len);
+    iface_addr.resize(iface_attr.iface_addr_len);
+
+    ASSERT_UCS_OK(uct_iface_get_address(e.iface(),
+                                        (uct_iface_addr_t*)iface_addr.data()));
+    ASSERT_UCS_OK(
+            uct_iface_get_device_address(e.iface(),
+                                         (uct_device_addr_t*)dev_addr.data()));
+
+    params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
+    params.device_addr = (uct_device_addr_t*)dev_addr.data();
+    params.field_mask  = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
+                         UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
+
+    if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        ep_addr.resize(iface_attr.ep_addr_len);
+        auto addr_buf = (uct_ep_addr_t*)ep_addr.data();
+        ASSERT_UCS_OK(uct_ep_get_address(e.ep(0), addr_buf));
+        params.ep_addr     = (uct_ep_addr_t*)ep_addr.data();
+        params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
+    }
+
+    return uct_ep_is_connected(m_sender->ep(0), &params);
+}
+
+void test_uct_ep::modify_remote_id(entity &e) const
+{
+    uct_iface_attr_t iface_attr;
+
+    ASSERT_UCS_OK(uct_iface_query(e.iface(), &iface_attr));
+
+    if (has_transport("knem")) {
+        ASSERT_EQ(iface_attr.device_addr_len, sizeof(uint64_t));
+        auto addr_hook = [](uct_iface_h iface, uct_device_addr_t *addr) {
+            *(uint64_t*)addr = ucs_rand();
+            return UCS_OK;
+        };
+        e.iface()->ops.iface_get_device_address = addr_hook;
+    } else {
+        ASSERT_GE(iface_attr.iface_addr_len, sizeof(pid_t));
+        auto addr_hook = [](uct_iface_h iface, uct_iface_addr_t *addr) {
+            *(pid_t*)addr = getppid();
+            return UCS_OK;
+        };
+        e.iface()->ops.iface_get_address = addr_hook;
+    }
+}
 
 UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
                      !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
@@ -135,49 +199,26 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_uct_ep, is_connected,
-                     !has_ib() && !has_transport("tcp"))
+UCS_TEST_SKIP_COND_P(test_uct_ep, is_connected, has_transport("gga_mlx5"))
 {
-    uct_ep_is_connected_params_t params;
-    uct_iface_attr_t iface_attr;
-    std::string dev_addr, ep_addr, iface_addr;
-    entity *e1, *e2;
-
     create_sender();
-    connect();
 
-    e1 = create_entity(0);
-    e2 = create_entity(0);
-    e1->connect(0, *e2, 0);
+    auto e = create_entity(0);
+    m_entities.push_back(e);
 
-    m_entities.push_back(e1);
-    m_entities.push_back(e2);
-
-    ASSERT_UCS_OK(uct_iface_query(m_receiver->iface(), &iface_attr));
-    dev_addr.resize(iface_attr.device_addr_len);
-    iface_addr.resize(iface_attr.iface_addr_len);
-
-    ASSERT_UCS_OK(uct_iface_get_address(m_receiver->iface(),
-                                        (uct_iface_addr_t*)iface_addr.data()));
-    ASSERT_UCS_OK(
-            uct_iface_get_device_address(m_receiver->iface(),
-                                         (uct_device_addr_t*)dev_addr.data()));
-
-    params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
-    params.device_addr = (uct_device_addr_t*)dev_addr.data();
-    params.field_mask  = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
-                         UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
-
-    if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-        ep_addr.resize(iface_attr.ep_addr_len);
-        ASSERT_UCS_OK(uct_ep_get_address(m_receiver->ep(0),
-                                         (uct_ep_addr_t*)ep_addr.data()));
-        params.ep_addr     = (uct_ep_addr_t*)ep_addr.data();
-        params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
+    /* The following transports are always connected to remote side on the same
+     * process/machine, so we modify remote id to simulate no-connection
+     * scenario. */
+    if (has_cma() || has_cuda_ipc() || has_transport("knem")) {
+        modify_remote_id(has_cuda_ipc() ? *m_receiver : *e);
     }
 
-    EXPECT_TRUE(uct_ep_is_connected(m_sender->ep(0), &params));
-    EXPECT_FALSE(uct_ep_is_connected(e1->ep(0), &params));
+    connect();
+    e->connect(0, *m_receiver, 1);
+    flush();
+
+    EXPECT_TRUE(is_connected_to_sender(*m_receiver));
+    EXPECT_FALSE(is_connected_to_sender(*e));
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_ep, destroy_entity_after_send,
@@ -240,4 +281,5 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, destroy_entity_after_send,
     }
 }
 
-UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_ep)
+UCT_INSTANTIATE_TEST_CASE(test_uct_ep)
+UCT_INSTANTIATE_CUDA_IPC_TEST_CASE(test_uct_ep)

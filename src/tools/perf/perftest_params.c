@@ -15,17 +15,20 @@
 #include <ucs/sys/sock.h>
 #include <ucs/debug/log.h>
 
+const struct option TEST_PARAMS_ARGS_LONG[] =
+{
+    {"daemon-local",  required_argument, 0, 'g'},
+    {"daemon-remote", required_argument, 0, 'G'},
+    {0, 0, 0, 0}
+};
 
 static void print_memory_type_usage(void)
 {
     ucs_memory_type_t it;
 
     ucs_memory_type_for_each(it) {
-        if (ucx_perf_mem_type_allocators[it] != NULL) {
-            printf("                        %s - %s\n",
-                   ucs_memory_type_names[it],
-                   ucs_memory_type_descs[it]);
-        }
+        printf("                        %s - %s\n", ucs_memory_type_names[it],
+               ucs_memory_type_descs[it]);
     }
 }
 
@@ -84,8 +87,11 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -o             do not progress the responder in one-sided tests\n");
     printf("     -B             register memory with NONBLOCK flag\n");
     printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
-    printf("                    file is a test to run, first word is test name, the rest of\n");
-    printf("                    the line is command-line arguments for the test.\n");
+    printf("                    file is a test to run. The first word is a user-defined\n");
+    printf("                    test name, followed by command-line arguments, for example:\n");
+    printf("\n");
+    printf("                        test_tag_bandwidth_64k -t tag_bw -s 65536 -n 10000\n");
+    printf("\n");
     printf("     -R <rank>      percentile rank of the percentile data in latency tests (%.1f)\n",
                                 ctx->params.super.percentile_rank);
     printf("     -p <port>      TCP port to use for data exchange (%d)\n", ctx->port);
@@ -145,6 +151,14 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.ucp.am_hdr_size);
     printf("     -y             do additional memcopy to the user memory in active message receive handler\n");
     printf("     -z             pass pre-registered memory handle\n");
+    printf("     -g <IP>[:<port>], --daemon-local <IP>[:<port>]\n");
+    printf("                    IP address and port of the local daemon to offload UCP operations to\n");
+    printf("                    Port is optional, by default daemon port is (%d)\n",
+                                DEFAULT_DAEMON_PORT);
+    printf("     -G <IP>[:<port>], --daemon-remote <IP>[:<port>]\n");
+    printf("                    IP address and port of the remote daemon to offload UCP operations to\n");
+    printf("                    Port is optional, by default daemon port is (%d)\n",
+                                DEFAULT_DAEMON_PORT);
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
     printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
@@ -162,8 +176,7 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
     }
 
     ucs_memory_type_for_each(it) {
-        if(!strcmp(opt_arg, ucs_memory_type_names[it]) &&
-           (ucx_perf_mem_type_allocators[it] != NULL)) {
+        if (!strcmp(opt_arg, ucs_memory_type_names[it])) {
             *mem_type = it;
             return UCS_OK;
         }
@@ -254,6 +267,55 @@ static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    return UCS_OK;
+}
+
+static ucs_status_t verify_daemon_params(ucx_perf_params_t *params)
+{
+    struct sockaddr_storage *local_addr  = &params->ucp.dmn_local_addr;
+    struct sockaddr_storage *remote_addr = &params->ucp.dmn_remote_addr;
+
+    /* Return if both daemon addresses are not configured */
+    if ((0 == local_addr->ss_family) && (0 == remote_addr->ss_family)) {
+        return UCS_OK;
+    }
+
+    /* If only one address is specified, use it in both cases */
+    if (0 == local_addr->ss_family) {
+        memcpy(local_addr, remote_addr, sizeof(*local_addr));
+    } else if (0 == remote_addr->ss_family) {
+        memcpy(remote_addr, local_addr, sizeof(*remote_addr));
+    }
+
+    if ((params->ucp.send_datatype != UCP_PERF_DATATYPE_CONTIG) ||
+        (params->ucp.recv_datatype != UCP_PERF_DATATYPE_CONTIG)) {
+        ucs_error("only contiguous datatype is supported in offloaded mode");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if ((params->send_mem_type != UCS_MEMORY_TYPE_HOST) ||
+        (params->recv_mem_type != UCS_MEMORY_TYPE_HOST)) {
+        ucs_error("only HOST memory type is supported in offloaded mode");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (params->command != UCX_PERF_CMD_AM) {
+        ucs_error("only UCP AM API is supported in offloaded mode");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (params->ucp.am_hdr_size != 0) {
+        ucs_error("sending UCP AM with non-zero header size is not supported"
+                  " in offloaded mode");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (params->thread_count > 1) {
+        ucs_error("only 1 thread is supported in offloaded mode");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    params->ucp.is_daemon_mode = 1;
     return UCS_OK;
 }
 
@@ -430,6 +492,12 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'z':
         params->super.flags |= UCX_PERF_TEST_FLAG_PREREG;
         return UCS_OK;
+    case 'g': /* handles daemon-local long option as well */
+        return ucs_sock_ipportstr_to_sockaddr(opt_arg, DEFAULT_DAEMON_PORT,
+                                              &params->super.ucp.dmn_local_addr);
+    case 'G': /* handles daemon-remote long option as well */
+        return ucs_sock_ipportstr_to_sockaddr(opt_arg, DEFAULT_DAEMON_PORT,
+                                              &params->super.ucp.dmn_remote_addr);
     default:
        return UCS_ERR_INVALID_PARAM;
     }
@@ -561,11 +629,14 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     ctx->mad_port        = NULL;
 
     optind = 1;
-    while ((c = getopt(argc, argv, "p:b:6NfvIc:P:hK:" TEST_PARAMS_ARGS)) !=
-           -1) {
+    while ((c = getopt_long(argc, argv, "p:b:6NfvIc:P:hK:" TEST_PARAMS_ARGS,
+                            TEST_PARAMS_ARGS_LONG, NULL)) != -1) {
         switch (c) {
         case 'p':
-            ctx->port = atoi(optarg);
+            status = ucs_sock_port_from_string(optarg, &ctx->port);
+            if (status != UCS_OK) {
+                goto err;
+            }
             break;
         case '6':
             ctx->af = AF_INET6;
@@ -634,9 +705,9 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
         }
     }
 
-    return UCS_OK;
+    return verify_daemon_params(&ctx->params.super);
 
 err:
-    release_msg_size_list(&ctx->params);
+    perftest_params_release_msg_size_list(&ctx->params);
     return status;
 }

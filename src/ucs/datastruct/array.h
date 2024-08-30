@@ -8,10 +8,28 @@
 #define UCS_ARRAY_H_
 
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/type/status.h>
+#include <stddef.h>
+#include <limits.h>
 
 BEGIN_C_DECLS
+
+
+/**
+ * Define an array structure.
+ *
+ * @param _index_type  Type of array index.
+ * @param _value_type  Type of array value.
+*/
+#define ucs_array_s(_index_type, _value_type) \
+    struct { \
+        _value_type *buffer; \
+        _index_type length; \
+        _index_type capacity : ((CHAR_BIT * sizeof(_index_type)) - 1); \
+        uint8_t     is_fixed : 1; \
+    }
 
 
 /**
@@ -19,38 +37,12 @@ BEGIN_C_DECLS
  * The array keeps track of its capacity and length (current number of elements)
  * It can be either fixed-size or dynamically-growing.
  *
- * @param _name         Array definition name (needed for some array operations)
- * @param _index_type   Type of array's index (e.g size_t, int, ...)
- * @param _value_type   Type of array's values (could be anything)
+ * @param _array_type   Array type to define.
+ * @param _index_type   Type of array's index (e.g size_t, int, ...).
+ * @param _value_type   Type of array's values (could be anything).
  */
-#define UCS_ARRAY_DECLARE_TYPE(_name, _index_type, _value_type) \
-    typedef struct { \
-        _value_type       *buffer; \
-        _index_type       length; \
-        _index_type       capacity; \
-    } ucs_array_t(_name); \
-    \
-    typedef _value_type UCS_ARRAY_IDENTIFIER(_name, _value_type_t);
-
-
-/**
- * Declare the function prototypes of an array
- *
- * @param _name        Array name
- * @param _index_type  Type of array's index
- * @param _value_type  Type of array's values
- * @param _scope       Scope for array's functions (e.g 'static inline')
- */
-#define UCS_ARRAY_DECLARE_FUNCS(_name, _index_type, _value_type, _scope) \
-    \
-    _scope ucs_status_t \
-    UCS_ARRAY_IDENTIFIER(_name, _reserve)(ucs_array_t(_name) *array, \
-                                          _index_type min_capacity, \
-                                          void **old_buffer_p); \
-    \
-    _scope ucs_status_t \
-    UCS_ARRAY_IDENTIFIER(_name, _append)(ucs_array_t(_name) *array, \
-                                         void **old_buffer_p);
+#define UCS_ARRAY_DECLARE_TYPE(_array_type, _index_type, _value_type) \
+    typedef ucs_array_s(_index_type, _value_type) _array_type
 
 
 /**
@@ -58,7 +50,7 @@ BEGIN_C_DECLS
  * calling @ref ucs_array_cleanup_dynamic()
  */
 #define UCS_ARRAY_DYNAMIC_INITIALIZER \
-    { NULL, 0, 0 }
+    { NULL, 0, 0, 0 }
 
 
 /**
@@ -73,42 +65,41 @@ BEGIN_C_DECLS
  *
  * @code{.c}
  * int buffer[20];
- * ucs_array_t(int_array) array =
+ * int_array_t array =
  *          UCS_ARRAY_FIXED_INITIALIZER(buffer, ucs_static_array_size(buffer));
  * @endcode
  */
 #define UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity) \
-    { (_buffer), 0, ucs_array_init_fixed_capacity(_capacity) }
+    { (_buffer), 0, (_capacity), 1 }
 
 
 /**
  * Helper macro to allocate fixed-size array on stack and check for max alloca
  * size.
  *
- * @param _name      Array name to take value type from.
- * @param _capacity  Array capacity to allocate, must be compile-time constant.
+ * @param _array_type Array type name.
+ * @param _capacity   Array capacity to allocate, must be compile-time constant.
  *
  * @return Pointer to allocated memory on stack
  */
-#define UCS_ARRAY_ALLOC_ONSTACK(_name, _capacity) \
+#define UCS_ARRAY_ALLOC_ONSTACK(_array_type, _capacity) \
     ({ \
-        typedef UCS_ARRAY_IDENTIFIER(_name, _value_type_t) value_t; \
-        UCS_STATIC_ASSERT((_capacity) * sizeof(value_t) <= UCS_ALLOCA_MAX_SIZE); \
-        (value_t*)alloca((_capacity) * sizeof(value_t)); \
+        typedef ucs_typeof(*((_array_type*)NULL)->buffer) value_t; \
+        (value_t*)ucs_alloca((_capacity) * sizeof(value_t)); \
     })
 
 
 /**
  * Define a fixed-size array backed by a buffer allocated on the stack.
  *
- * @param _var       Array variable
- * @param _name      Array name, as used in @ref UCS_ARRAY_DECLARE_TYPE
- * @param _capacity  Array capacity
+ * @param _array_type  Array type, as used in @ref UCS_ARRAY_DECLARE_TYPE
+ * @param _var         Array variable
+ * @param _capacity    Array capacity
  *
  * Example:
  *
  * @code{.c}
- * UCS_ARRAY_DEFINE_INLINE(int_array, unsigned, int)
+ * UCS_ARRAY_DECLARE_TYPE(int_array_t, unsigned, int)
  *
  * void my_func()
  * {
@@ -116,33 +107,9 @@ BEGIN_C_DECLS
  * }
  * @endcode
  */
-#define UCS_ARRAY_DEFINE_ONSTACK(_var, _name, _capacity) \
-    ucs_array_t(_name) _var = \
-        UCS_ARRAY_FIXED_INITIALIZER(UCS_ARRAY_ALLOC_ONSTACK(_name, _capacity), \
-                                    (_capacity))
-
-
-/**
- * Expands to array type definition
- *
- * @param _name Array name (as passed to UCS_ARRAY_DECLARE)
- *
- * Example:
- *
- * @code{.c}
- * ucs_array_t(int_array) my_array;
- * @endcode
- */
-#define ucs_array_t(_name) \
-    UCS_ARRAY_IDENTIFIER(_name, _t)
-
-
-/**
- * Helper function to initialize capacity field of a fixed-size array
- */
-#define ucs_array_init_fixed_capacity(_capacity) \
-    (((_capacity) & UCS_ARRAY_CAP_MASK) | UCS_ARRAY_CAP_FLAG_FIXED)
-
+#define UCS_ARRAY_DEFINE_ONSTACK(_array_type, _var, _capacity) \
+    _array_type _var = UCS_ARRAY_FIXED_INITIALIZER( \
+            UCS_ARRAY_ALLOC_ONSTACK(_array_type, _capacity), (_capacity))
 
 
 /**
@@ -156,34 +123,52 @@ BEGIN_C_DECLS
         (_array)->buffer   = NULL; \
         (_array)->length   = 0; \
         (_array)->capacity = 0; \
+        (_array)->is_fixed = 0; \
     }
 
 
 /**
  * Initialize a fixed-size array with existing buffer as backing storage.
  *
- * @param _array     Pointer to the array to initialize
- * @param _buffer    Buffer to use as backing store
- * @param _capacity  Buffer capacity
+ * @param _array     Pointer to the array to initialize.
+ * @param _buffer    Buffer to use as backing store.
+ * @param _capacity  Buffer capacity.
  */
 #define ucs_array_init_fixed(_array, _buffer, _capacity) \
     { \
+        ucs_assertv((_capacity) <= ucs_array_max_capacity(_array), \
+                    "capacity=%zu is out of range [0, %zu]", \
+                    (size_t)(_capacity), \
+                    (size_t)ucs_array_max_capacity(_array)); \
         (_array)->buffer   = (_buffer); \
         (_array)->length   = 0; \
-        (_array)->capacity = ucs_array_init_fixed_capacity(_capacity); \
+        (_array)->capacity = (_capacity); \
+        (_array)->is_fixed = 1; \
     }
 
 
 /*
  * Cleanup a dynamic array.
  *
- * @param _array   Array to cleanup
+ * @param _array   Array to cleanup.
  */
 #define ucs_array_cleanup_dynamic(_array) \
     { \
         ucs_assert(!ucs_array_is_fixed(_array)); \
-        ucs_free((_array)->buffer); \
+        ucs_array_buffer_free((void*)(_array)->buffer); \
     }
+
+
+/**
+ * Helper function: set old buffer pointer to NULL.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_array_old_buffer_set_null(void **old_buffer_p)
+{
+    if (old_buffer_p != NULL) {
+        *old_buffer_p = NULL;
+    }
+}
 
 
 /*
@@ -191,19 +176,60 @@ BEGIN_C_DECLS
  * change the array length or existing contents, but the backing buffer can be
  * relocated to another memory area.
  *
- * @param _name    Array name
- * @param _array   Array to reserve buffer for
+ * @param _array         Array to reserve buffer for.
+ * @param _min_capacity  Minimal capacity to reserve.
+ * @param _old_buffer_p  If the array was reallocated, and this parameter is
+ *                       non-NULL, the previous buffer will not be released,
+ *                       instead it will be returned in *_old_buffer_p,
+ *                       and the caller should copy the contents of the previous buffer 
+ *                       to the new array buffer.
  *
- * @return UCS_OK if successful, UCS_ERR_NO_MEMORY if cannot grow the array
+ * @return UCS_OK if successful, UCS_ERR_NO_MEMORY if cannot allocate the array.
  */
-#define ucs_array_reserve(_name, _array, _min_capacity) \
-    UCS_ARRAY_IDENTIFIER(_name, _reserve)(_array, _min_capacity, NULL)
+#define ucs_array_reserve_safe(_array, _min_capacity, _old_buffer_p) \
+    ({ \
+        ucs_status_t _reserve_status; \
+        size_t _capacity; \
+        UCS_STATIC_ASSERT(ucs_is_unsigned_type(ucs_typeof((_array)->length))); \
+        \
+        if (ucs_likely((_min_capacity)) <= ucs_array_capacity(_array)) { \
+            ucs_array_old_buffer_set_null((void**)(_old_buffer_p)); \
+            _reserve_status = UCS_OK; \
+        } else if (ucs_array_is_fixed(_array)) { \
+            _reserve_status = UCS_ERR_NO_MEMORY; \
+        } else { \
+            _capacity       = (_array)->capacity; \
+            _reserve_status = ucs_array_grow((void**)&(_array)->buffer, \
+                                             &_capacity, _min_capacity, \
+                                             ucs_array_max_capacity(_array), \
+                                             sizeof(*(_array)->buffer), \
+                                             (void**)(_old_buffer_p), \
+                                             UCS_PP_MAKE_STRING(_array)); \
+            if (_reserve_status == UCS_OK) { \
+                (_array)->capacity = _capacity; \
+            } \
+        } \
+        _reserve_status; \
+    })
+
+
+/*
+ * Grow the array memory buffer to the at least required capacity. This does not
+ * change the array length or existing contents, but the backing buffer can be
+ * relocated to another memory area.
+ *
+ * @param _array         Array to reserve buffer for.
+ * @param _min_capacity  Minimal capacity to reserve.
+ *
+ * @return UCS_OK if successful, UCS_ERR_NO_MEMORY if cannot allocate the array.
+ */
+#define ucs_array_reserve(_array, _min_capacity) \
+    ucs_array_reserve_safe(_array, _min_capacity, NULL)
 
 
 /*
  * Add an element to the end of the array possibly in a thread safe way.
  *
- * @param _name            Array name
  * @param _array           Array to add element to
  * @param _old_buffer_p    If the array was reallocated, the pointer to the
  *                         previous backing buffer is stored in *_old_buffer_p,
@@ -215,45 +241,90 @@ BEGIN_C_DECLS
  *
  * @return If successful returns a pointer to the added element, otherwise NULL.
  */
-#define ucs_array_append_safe(_name, _array, _old_buffer_p, _failed_actions) \
+#define ucs_array_append_safe(_array, _old_buffer_p, _failed_actions) \
     ({ \
-        ucs_status_t __status = UCS_ARRAY_IDENTIFIER(_name, _append)( \
-                                                     _array, _old_buffer_p); \
-        UCS_ARRAY_IDENTIFIER(_name, _value_type_t) * __elem; \
+        ucs_typeof((_array)->buffer) _append_elem; \
+        ucs_status_t _append_status; \
         \
-        if (__status != UCS_OK) { \
-            _failed_actions; \
-            __elem = NULL; \
+        _append_status = ucs_array_reserve_safe(_array, (_array)->length + 1, \
+                                                _old_buffer_p); \
+        if (ucs_likely(_append_status == UCS_OK)) { \
+            ucs_array_set_length(_array, (_array)->length + 1); \
+            _append_elem = ucs_array_last(_array); \
         } else { \
-            __elem = ucs_array_last(_array); \
+            _failed_actions; \
+            _append_elem = NULL; \
         } \
-        \
-        __elem; \
+        _append_elem; \
     })
 
 
 /*
  * Add an element to the end of the array.
  *
- * @param _name            Array name
- * @param _array           Array to add element to
- * @param _failed_actions  Actions to perform if the append operation failed
+ * @param _array           Array to add element to.
+ * @param _failed_actions  Actions to perform if the append operation failed.
  *
  * @return If successful returns a pointer to the added element, otherwise NULL.
  */
-#define ucs_array_append(_name, _array, _failed_actions) \
-    ucs_array_append_safe(_name, _array, NULL, _failed_actions)
+#define ucs_array_append(_array, _failed_actions) \
+    ucs_array_append_safe(_array, NULL, _failed_actions)
+
+
+/*
+ * Change the size of the array and initialize new elements.
+ *
+ * @param _array           Array to resize.
+ * @param _new_length      New size for the array.
+ * @param _init_value      Initialize new elements to this value.
+ * @param _failed_actions  Actions to perform if the append operation failed.
+ * @param _old_buffer_p    If the array was reallocated, and this parameter is
+ *                         non-NULL, the previous buffer will not be released,
+ *                         instead it will be returned in *_old_buffer_p,
+ *                         and the caller should copy the contents of the previous buffer 
+ *                         to the new array buffer.
+ */
+#define ucs_array_resize_safe(_array, _new_length, _init_value, \
+                              _failed_actions, _old_buffer_p) \
+    { \
+        ucs_typeof((_array)->length) _extend_index; \
+        ucs_status_t _extend_status; \
+        \
+        _extend_status = ucs_array_reserve_safe(_array, _new_length, \
+                                                _old_buffer_p); \
+        if (_extend_status == UCS_OK) { \
+            for (_extend_index = (_array)->length; \
+                 _extend_index < (_new_length); ++_extend_index) { \
+                (_array)->buffer[_extend_index] = (_init_value); \
+            } \
+            ucs_array_set_length(_array, _new_length); \
+        } else { \
+            _failed_actions; \
+        } \
+    }
+
+
+/*
+ * Change the size of the array and initialize new elements.
+ *
+ * @param _array           Array to resize.
+ * @param _new_length      New size for the array.
+ * @param _init_value      Initialize new elements to this value.
+ * @param _failed_actions  Actions to perform if the append operation failed.
+ */
+#define ucs_array_resize(_array, _new_length, _init_value, _failed_actions) \
+    ucs_array_resize_safe(_array, _new_length, _init_value, _failed_actions, \
+                          NULL)
 
 
 /**
  * Add an element to the end of the array assuming it has enough space.
  *
- * @param _name     Array name
- * @param _array    Array to add element to
+ * @param _array    Array to add element to.
  */
-#define ucs_array_append_fixed(_name, _array) \
-    ucs_array_append(_name, _array, \
-                     ucs_fatal("failed to grow array %s", #_name))
+#define ucs_array_append_fixed(_array) \
+    ucs_array_append(_array, ucs_fatal("failed to grow array %s", \
+                                       UCS_PP_MAKE_STRING(_array)))
 
 
 /**
@@ -267,14 +338,24 @@ BEGIN_C_DECLS
  * @return Current capacity of the array
  */
 #define ucs_array_capacity(_array) \
-    ((_array)->capacity & UCS_ARRAY_CAP_MASK)
+    ((_array)->capacity)
+
+
+/**
+ * @return Maximum capacity of the array type.
+ *
+ * Since we borrow one bit from the capacity to indicate whether the array is
+ * fixed-size or not, the maximum capacity range is reduced by 1 bit.
+ */
+#define ucs_array_max_capacity(_array) \
+    UCS_MASK((CHAR_BIT * sizeof((_array)->length)) - 1)
 
 
 /**
  * @return Whether this is a fixed-length array
  */
 #define ucs_array_is_fixed(_array) \
-    ((_array)->capacity & UCS_ARRAY_CAP_FLAG_FIXED)
+    ((_array)->is_fixed)
 
 
 /**
@@ -342,6 +423,16 @@ BEGIN_C_DECLS
         ucs_array_length(_array) = (_new_length); \
     }
 
+/**
+ * Remove all elements from array
+ *
+ * @param _array        Array to clean
+ */
+#define ucs_array_clear(_array) \
+    { \
+        ucs_array_length(_array) = 0; \
+    }
+
 
 /**
  * Remove the last element in the array (decrease length by 1)
@@ -358,14 +449,12 @@ BEGIN_C_DECLS
 /**
  * Extract array contents and reset the array
  */
-#define ucs_array_extract_buffer(_name, _array) \
+#define ucs_array_extract_buffer(_array) \
     ({ \
-        UCS_ARRAY_IDENTIFIER(_name, _value_type_t) *buffer = (_array)->buffer; \
+        ucs_typeof((_array)->buffer) _buffer = (_array)->buffer; \
         ucs_assert(!ucs_array_is_fixed(_array)); \
-        (_array)->buffer   = NULL; \
-        (_array)->length   = 0; \
-        (_array)->capacity = 0; \
-        buffer; \
+        ucs_array_init_dynamic(_array); \
+        _buffer; \
     })
 
 
@@ -380,15 +469,15 @@ BEGIN_C_DECLS
                         ucs_array_length(_array))
 
 
-/* Internal flag to distinguish between fixed/dynamic array */
-#define UCS_ARRAY_CAP_FLAG_FIXED   UCS_BIT(0)
-#define UCS_ARRAY_CAP_MASK         (~UCS_ARRAY_CAP_FLAG_FIXED)
+/* Internal helper function */
+ucs_status_t ucs_array_grow(void **buffer_p, size_t *capacity_p,
+                            size_t min_capacity, size_t max_capacity,
+                            size_t value_size, void **old_buffer_p,
+                            const char *array_name);
 
 
-/* Internal macro to construct array identifier from name */
-#define UCS_ARRAY_IDENTIFIER(_name, _suffix) \
-    UCS_PP_TOKENPASTE(ucs_array_, UCS_PP_TOKENPASTE(_name, _suffix))
-
+/* Internal helper function */
+void ucs_array_buffer_free(void *buffer);
 
 END_C_DECLS
 

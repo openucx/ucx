@@ -10,6 +10,7 @@
 #include "proto.h"
 
 #include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/array.h>
 
 
 /**
@@ -23,20 +24,41 @@
 /* Operation flags start bit */
 #define UCP_PROTO_SELECT_OP_FLAGS_BASE UCS_BIT(4)
 
+/* Select protocol which supports resume request after reset. */
+#define UCP_PROTO_SELECT_OP_FLAG_RESUME (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
 
 /* Select a protocol for sending one fragment of a rendezvous pipeline.
  * Relevant for UCP_OP_ID_RNDV_SEND and UCP_OP_ID_RNDV_RECV. */
-#define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
+#define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
 
 
 /* Select eager/rendezvous protocol for Active Message sends.
  * Relevant for UCP_OP_ID_AM_SEND and UCP_OP_ID_AM_SEND_REPLY. */
-#define UCP_PROTO_SELECT_OP_FLAG_AM_EAGER (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
-#define UCP_PROTO_SELECT_OP_FLAG_AM_RNDV  (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
+#define UCP_PROTO_SELECT_OP_FLAG_AM_EAGER (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
+#define UCP_PROTO_SELECT_OP_FLAG_AM_RNDV  (UCP_PROTO_SELECT_OP_FLAGS_BASE << 2)
 
 
 /** Maximal length of ucp_proto_select_param_str() */
 #define UCP_PROTO_SELECT_PARAM_STR_MAX 128
+
+
+typedef struct {
+    ucp_proto_id_t   proto_id;
+    size_t           priv_offset;
+    size_t           cfg_thresh; /* Configured protocol threshold */
+    unsigned         cfg_priority; /* Priority of configuration */
+    ucp_proto_caps_t caps;
+} ucp_proto_init_elem_t;
+
+
+/* Parameters structure for initializing protocols for a selection parameter */
+struct ucp_proto_probe_ctx {
+    ucs_array_s(size_t, uint8_t)                 priv_buf;
+    ucs_array_s(unsigned, ucp_proto_init_elem_t) protocols;
+};
+
+
+typedef ucp_proto_probe_ctx_t ucp_proto_select_init_protocols_t;
 
 
 /**
@@ -77,9 +99,6 @@ typedef struct {
     /* Protocol private configuration space */
     const void               *priv;
 
-    /* Configured protocol threshold */
-    size_t                   cfg_thresh;
-
     /* Endpoint configuration index this protocol was selected on */
     ucp_worker_cfg_index_t   ep_cfg_index;
 
@@ -109,13 +128,13 @@ typedef struct {
  */
 typedef struct {
     /* Array of which protocol to use for different message sizes */
-    const ucp_proto_threshold_elem_t *thresholds;
+    const ucp_proto_threshold_elem_t  *thresholds;
 
     /* Estimated performance for the selected protocols */
-    ucp_proto_perf_range_t           *perf_ranges;
+    ucp_proto_perf_range_t            *perf_ranges;
 
-    /* Private configuration area for the selected protocols */
-    void                             *priv_buf;
+    /* All the initialized protocols that can be chosen */
+    ucp_proto_select_init_protocols_t proto_init;
 } ucp_proto_select_elem_t;
 
 
@@ -128,7 +147,7 @@ KHASH_TYPE(ucp_proto_select_hash, khint64_t, ucp_proto_select_elem_t)
  */
 typedef struct {
     /* Lookup from protocol selection key to thresholds array */
-    khash_t(ucp_proto_select_hash)    hash;
+    khash_t(ucp_proto_select_hash)    *hash;
 
     /* cache the last used protocol, for fast lookup */
     struct {
@@ -157,7 +176,10 @@ ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
 void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
 
 
-void ucp_proto_select_caps_reset(ucp_proto_caps_t *caps);
+void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
+                                size_t cfg_thresh, unsigned cfg_priority,
+                                const ucp_proto_caps_t *proto_caps,
+                                const void *priv, size_t priv_size);
 
 
 void ucp_proto_select_caps_cleanup(ucp_proto_caps_t *caps);

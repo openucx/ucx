@@ -50,14 +50,17 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
 
     if (ucs_likely(context->rcache != NULL)) {
         UCP_THREAD_CS_ENTER(&context->mt_lock);
-        rregion = ucs_rcache_lookup_unsafe(context->rcache, address, length,
-                                           PROT_READ | PROT_WRITE);
+        rregion = UCS_PROFILE_CALL(ucs_rcache_lookup_unsafe, context->rcache,
+                                   address, length, 1, PROT_READ | PROT_WRITE);
         if (rregion == NULL) {
             goto not_found;
         }
 
         memh = ucs_derived_of(rregion, ucp_mem_t);
-        if (ucs_likely(ucs_test_all_flags(memh->md_map, reg_md_map))) {
+        if (ucs_likely(ucs_test_all_flags(memh->md_map, reg_md_map)) &&
+            ucs_likely(
+                    ucs_test_all_flags(memh->uct_flags,
+                                       UCP_MM_UCT_ACCESS_FLAGS(uct_flags)))) {
             ucp_memh_rcache_print(memh, address, length);
             *memh_p = memh;
             UCP_THREAD_CS_EXIT(&context->mt_lock);

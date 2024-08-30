@@ -141,11 +141,13 @@ UCS_TEST_F(rocm_hooks, test_hipMallocPitch) {
     void * dptr;
     size_t pitch;
 
-    ret = hipMallocPitch(&dptr, &pitch, 4, 8);
-    ASSERT_EQ(ret, hipSuccess);
-    check_mem_alloc_events((void *)dptr, (pitch * 8));
+    if (mem_buffer::is_rocm_malloc_pitch_supported()) {
+        ret = hipMallocPitch(&dptr, &pitch, 4, 8);
+        ASSERT_EQ(ret, hipSuccess);
+        check_mem_alloc_events((void*)dptr, (pitch * 8));
 
-    ret = hipFree(dptr);
-    ASSERT_EQ(ret, hipSuccess);
-    check_mem_free_events((void *)dptr, 0);
+        ret = hipFree(dptr);
+        ASSERT_EQ(ret, hipSuccess);
+        check_mem_free_events((void*)dptr, 0);
+    }
 }

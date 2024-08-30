@@ -79,7 +79,8 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     ucs_cma_iface_ext_device_addr_t *iface_addr;
     pid_t peer_pid;
 
-    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+    if (!uct_iface_is_reachable_params_addrs_valid(params) ||
+        (params->device_addr == NULL) || (params->iface_addr == NULL)) {
         return 0;
     }
 
@@ -136,7 +137,7 @@ static uct_iface_ops_t uct_cma_iface_tl_ops = {
 
 static uct_scopy_iface_ops_t uct_cma_iface_ops = {
     .super = {
-        .iface_estimate_perf   = uct_base_iface_estimate_perf,
+        .iface_estimate_perf   = uct_scopy_iface_estimate_perf,
         .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
         .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
         .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,

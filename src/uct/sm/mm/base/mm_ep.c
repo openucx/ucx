@@ -2,6 +2,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -320,7 +321,8 @@ retry:
     switch (send_op) {
     case UCT_MM_SEND_AM_SHORT:
         /* write to the remote FIFO */
-        uct_am_short_fill_data(elem + 1, header, payload, length);
+        uct_am_short_fill_data(elem + 1, header, payload, length,
+                               UCS_ARCH_MEMCPY_NT_DEST);
 
         elem_flags   = UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);

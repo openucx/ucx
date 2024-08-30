@@ -35,7 +35,6 @@ nobase_dist_libucs_la_HEADERS = \
 	config/parser.h \
 	config/types.h \
 	datastruct/array.h \
-	datastruct/array.inl \
 	datastruct/callbackq.h \
 	datastruct/callbackq_compat.h \
 	datastruct/hlist.h \
@@ -45,6 +44,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/mpool.h \
 	datastruct/mpool_set.h \
 	datastruct/pgtable.h \
+	datastruct/piecewise_func.h \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
 	datastruct/string_buffer.h \
@@ -55,6 +55,7 @@ nobase_dist_libucs_la_HEADERS = \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
+	memory/numa.h \
 	profile/profile_defs.h \
 	profile/profile_off.h \
 	profile/profile_on.h \
@@ -98,6 +99,7 @@ noinst_HEADERS = \
 	config/ucm_opts.h \
 	datastruct/arbiter.h \
 	datastruct/bitmap.h \
+	datastruct/dynamic_bitmap.h \
 	datastruct/frag_list.h \
         datastruct/lru.h \
 	datastruct/mpmc.h \
@@ -110,6 +112,7 @@ noinst_HEADERS = \
 	datastruct/conn_match.h \
 	datastruct/ptr_map.h \
 	datastruct/ptr_map.inl \
+	datastruct/static_bitmap.h \
 	datastruct/usage_tracker.h \
 	debug/assert.h \
 	debug/debug_int.h \
@@ -127,6 +130,7 @@ noinst_HEADERS = \
 	sys/sys.h \
 	sys/iovec.h \
 	sys/iovec.inl \
+	sys/ptr_arith.h \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \
@@ -163,6 +167,7 @@ libucs_la_SOURCES = \
 	config/parser.c \
 	datastruct/arbiter.c \
 	datastruct/array.c \
+	datastruct/bitmap.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
 	datastruct/lru.c \
@@ -170,6 +175,7 @@ libucs_la_SOURCES = \
 	datastruct/mpool.c \
 	datastruct/mpool_set.c \
 	datastruct/pgtable.c \
+	datastruct/piecewise_func.c \
 	datastruct/ptr_array.c \
 	datastruct/ptr_map.c \
 	datastruct/strided_alloc.c \

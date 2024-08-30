@@ -41,6 +41,8 @@ protected:
                            const mapped_buffer &recvbuf,
                            uct_completion_t *comp);
 
+    static size_t pack_bcopy(void *dest, void *arg);
+
     ucs_status_t put_bcopy(const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf,
                            uct_completion_t *comp);
@@ -58,16 +60,28 @@ protected:
 
     void random_op(const mapped_buffer &sendbuf, const mapped_buffer &recvbuf);
 
-    void run(unsigned count);
+    virtual mapped_buffer alloc_buffer(const entity &entity, size_t offset);
+
+    void run(unsigned count, size_t offset = 0, size_t size_cap = SIZE_MAX);
 
     virtual void init();
 
     virtual void cleanup();
 
+    size_t max_buffer_size() const;
+
+    size_t                   m_buffer_size;
+
 private:
     std::vector<send_func_t> m_avail_send_funcs;
-    size_t                   m_send_size;
+    size_t                   m_max_short, m_max_bcopy, m_max_zcopy;
+
     static uint32_t          am_pending;
+
+    struct bcopy_pack_arg {
+        const mapped_buffer *sendbuf;
+        size_t              max_bcopy;
+    };
 };
 
 #endif

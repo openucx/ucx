@@ -30,17 +30,9 @@ static ucs_status_t ucx_perf_thread_run_test(void* arg)
     ucx_perf_params_t* params       = &perf->params;
     ucs_status_t status;
 
-    /* new threads need explicit device association */
-    status = perf->send_allocator->init(perf);
+    status = ucx_perf_allocators_init_thread(perf);
     if (status != UCS_OK) {
         goto out;
-    }
-
-    if (perf->send_allocator != perf->recv_allocator) {
-        status = perf->recv_allocator->init(perf);
-        if (status != UCS_OK) {
-            goto out;
-        }
     }
 
     status = ucx_perf_do_warmup(perf, params);
@@ -101,7 +93,8 @@ static void ucx_perf_thread_report_aggregated_results(ucx_perf_context_t *perf)
 
     agg_result.latency.total_average = lat_sum_total_avegare / thread_count;
 
-    rte_call(perf, report, &agg_result, perf->params.report_arg, "", 1, 1);
+    perf->params.report_func(perf->params.rte_group, &agg_result,
+                             perf->params.report_arg, "", 1, 1);
 }
 
 ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
@@ -152,3 +145,20 @@ ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
 }
 
 #endif /* _OPENMP */
+
+ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf)
+{
+    ucs_status_t status;
+
+    /* New threads need explicit device association */
+    status = perf->send_allocator->init(perf);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (perf->send_allocator == perf->recv_allocator) {
+        return UCS_OK;
+    }
+
+    return perf->recv_allocator->init(perf);
+}

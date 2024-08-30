@@ -23,8 +23,8 @@ extern "C" {
 #  include <uct/ib/rc/verbs/rc_verbs.h>
 #endif
 #if HAVE_TL_DC
-#  include <uct/ib/dc/dc_mlx5_ep.h>
-#  include <uct/ib/dc/dc_mlx5.h>
+#  include <uct/ib/mlx5/dc/dc_mlx5_ep.h>
+#  include <uct/ib/mlx5/dc/dc_mlx5.h>
 #endif
 #if HAVE_TL_UD
 #  include <uct/ib/ud/base/ud_ep.h>
@@ -59,7 +59,7 @@ UCS_TEST_F(test_obj_size, size) {
     /* TODO reduce request size to 240 or less after removing old protocols state */
     EXPECTED_SIZE(ucp_request_t, 264);
     EXPECTED_SIZE(ucp_recv_desc_t, 48);
-    EXPECTED_SIZE(ucp_mem_t, 152);
+    EXPECTED_SIZE(ucp_mem_t, 160);
     EXPECTED_SIZE(uct_ep_t, 8);
     EXPECTED_SIZE(uct_base_ep_t, 8);
     EXPECTED_SIZE(uct_rkey_bundle_t, 24);
@@ -77,7 +77,7 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(uct_ud_verbs_ep_t, 264);
 #  endif
 #  if HAVE_CUDA
-    EXPECTED_SIZE(uct_cuda_ipc_ep_t, 24);
+    EXPECTED_SIZE(uct_cuda_ipc_ep_t, 16);
 #  endif
 #endif
 }

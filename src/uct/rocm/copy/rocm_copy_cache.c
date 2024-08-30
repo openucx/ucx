@@ -15,7 +15,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/sys.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <hsa_ext_amd.h>
 
 static ucs_pgt_dir_t *

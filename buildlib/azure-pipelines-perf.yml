@@ -10,6 +10,8 @@ pr:
 variables:
 - name: WorkDir
   value: /hpc/scrap/azure/$(Build.DefinitionName)/$(Build.BuildId)-$(Build.BuildNumber)
+- name: warning
+  value: Attention! CI testing is in progress. Please refrain from any manual action on this machine.
 - name: threshold
   value: 5
 
@@ -19,31 +21,66 @@ resources:
     type: github
     name: Mellanox-lab/PerfX
     endpoint: Mellanox-lab
-    ref: master
+    ref: refs/tags/v1.0.1
 
 stages:
   - stage: Prepare
     jobs:
-      - job: Prepare
+      - job: PrepareWorkdir
         pool:
           name: MLNX
           demands:
-          - ucx_perf
+          - ucx_perf_master
 
         steps:
           - checkout: self
             clean: true
             fetchDepth: 10
+            retryCountOnTaskFailure: 5
 
           - checkout: PerfX
             clean: true
             fetchDepth: 1
+            retryCountOnTaskFailure: 5
 
           - bash: |
               set -xeE
               mkdir -p $(WorkDir)
               mv $(Build.SourcesDirectory)/* $(WorkDir)    
             displayName: Prepare WorkDir with code
+
+      - job: UserHandling
+        strategy:
+          matrix:
+            node1:
+              name: vulcan03
+            node2:
+              name: vulcan04
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: none
+          - bash: |
+              set -xeE
+              # Send a warning
+              sudo usermod -aG tty `whoami`  # add user to the tty group
+              sudo chmod g+rw /dev/pts/*  # set permissions for terminals
+              wall 'CI test is starting. Connections will terminate soon!'
+              sleep 30
+
+              # Disconnect SSH users
+              pgrep -f 'sshd:' | xargs -r sudo kill -HUP || true
+
+              # Add nagging reminder
+              crontab <<EOL
+              * * * * * /usr/bin/mesg y
+              * * * * * sudo chmod g+rw /dev/pts/*
+              * * * * * wall "$(warning)"
+              EOL
+            displayName: Warn and disconnect users
 
 
   - stage: Performance
@@ -55,7 +92,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_perf
+          - ucx_perf_master
 
         steps:
           - checkout: none
@@ -96,22 +133,21 @@ stages:
             parameters:
               Name: Perf-test-single-node
 
-          - script: $(WorkDir)/ucx/buildlib/tools/perf_results.py $(WorkDir)/results-Perf\*.txt $(threshold)
+          - bash: |
+              $(WorkDir)/ucx/buildlib/tools/perf_results.py $(WorkDir)/results-Perf\*.txt $(threshold)
+              echo "Manual repro environment: $(WorkDir)"
             displayName: Results analyzer
             workingDirectory: $(WorkDir)
 
           - bash: |
-              set -x
-              cat perfx.log
-            displayName: Print raw log
+              set -xe
+              sep_line="######################"
+              for file in *.log; do
+                  echo -e "$sep_line $file $sep_line"
+                  cat "$file"
+              done
+            displayName: Print logs
             workingDirectory: $(WorkDir)/PerfX
-            condition: always()
-
-          - task: PublishBuildArtifacts@1
-            inputs:
-              pathToPublish: '$(WorkDir)/PerfX/perfx.log'
-              artifactName: perfx.log
-            displayName: Publish raw log
             condition: always()
 
 
@@ -119,7 +155,7 @@ stages:
     dependsOn: Performance
     condition: always()
     jobs:
-      - job: Cleanup
+      - job: CleanupWorkDir
         displayName: Cleanup WorkDir
         pool:
           name: MLNX
@@ -128,5 +164,29 @@ stages:
             clean: true
           - bash: |
               set -x
-              rm -rf $(WorkDir)
+              echo 'Retain 3 latest workdirs for manual repro; clean the rest'
+              wrk_dirs="/hpc/scrap/azure/$(Build.DefinitionName)/"
+              for dir in $(ls -lt "$wrk_dirs" | tail -n +4 | awk '{print $NF}'); do
+                  echo "Removing old workdir: ${wrk_dirs}${dir}"
+                  rm -rf "${wrk_dirs}${dir}"
+              done
             displayName: Cleanup WorkDir
+
+      - job: RemoveWarning
+        strategy:
+          matrix:
+            node1:
+              name: vulcan03
+            node2:
+              name: vulcan04
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: none
+          - bash: |
+              set -x
+              crontab -r || true
+            displayName: remove warning

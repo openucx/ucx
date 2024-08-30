@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -591,6 +592,84 @@ static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
 #endif /* UCT_TCP_EP_KEEPALIVE */
 }
 
+static ucs_status_t uct_tcp_iface_check_rp_filter(uct_tcp_iface_t *iface,
+                                                  ucs_log_level_t log_level)
+{
+    const struct sockaddr* iface_saddr =
+            (struct sockaddr*)&iface->config.ifaddr;
+    char rp_filter_path[MAXPATHLEN];
+    long rp_filter;
+    ucs_status_t status;
+
+    if (iface_saddr->sa_family != AF_INET) {
+        return UCS_OK;
+    }
+
+    ucs_snprintf_safe(rp_filter_path, MAXPATHLEN,
+                      "/proc/sys/net/ipv4/conf/%s/rp_filter", iface->if_name);
+    status = ucs_read_file_number(&rp_filter, 1, "%s", rp_filter_path);
+    if (status != UCS_OK) {
+        ucs_log(log_level, "tcp_iface %p: unable to read rp_filter from %s",
+                iface, rp_filter_path);
+        return status;
+    }
+
+    if (rp_filter == 1) {
+        ucs_log(log_level, "tcp_iface %p: net.ipv4.conf.%s.rp_filter is set to "
+                "strict mode (1), connections may fail", iface, iface->if_name);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_tcp_ep_bind_src_iface(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface            = ucs_derived_of(ep->super.super.iface,
+                                                       uct_tcp_iface_t);
+    struct sockaddr_storage bind_addr = iface->config.ifaddr;
+    struct sockaddr* bind_sockaddr    = (struct sockaddr*)&bind_addr;
+    char bind_addr_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_log_level_t log_level;
+    int suppress_error;
+    size_t bind_addr_len;
+    ucs_status_t status;
+    int ret;
+
+    if (iface->config.ep_bind_src_addr == UCS_NO) {
+        return UCS_OK;
+    }
+
+    suppress_error = (iface->config.ep_bind_src_addr != UCS_YES);
+    log_level      = suppress_error ? UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
+    status         = uct_tcp_iface_check_rp_filter(iface, log_level);
+    if (!suppress_error && (status != UCS_OK)) {
+        return status;
+    }
+
+    status = ucs_sockaddr_set_port(bind_sockaddr, 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_sockaddr_sizeof(bind_sockaddr, &bind_addr_len);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ret = bind(ep->fd, bind_sockaddr, bind_addr_len);
+    if (ret != 0) {
+        ucs_log(log_level, "tcp_ep %p: failed to bind fd %d to %s: %m", ep,
+                ep->fd, ucs_sockaddr_str(bind_sockaddr, bind_addr_str,
+                                         UCS_SOCKADDR_STRING_LEN));
+        if (!suppress_error) {
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t uct_tcp_ep_create_socket_and_connect(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -603,8 +682,12 @@ static ucs_status_t uct_tcp_ep_create_socket_and_connect(uct_tcp_ep_t *ep)
         goto err;
     }
 
-    status = uct_tcp_iface_set_sockopt(iface, ep->fd,
-                                       iface->config.conn_nb);
+    status = uct_tcp_ep_bind_src_iface(ep);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = uct_tcp_iface_set_sockopt(iface, ep->fd, iface->config.conn_nb);
     if (status != UCS_OK) {
         goto err;
     }
@@ -999,7 +1082,7 @@ static inline ucs_status_t uct_tcp_ep_handle_send_err(uct_tcp_ep_t *ep,
     status = uct_tcp_ep_handle_io_err(ep, "send", status);
     if (status == UCS_ERR_CANCELED) {
         /* If no data were read to the allocated buffer,
-         * we can safely reset it for further re-use and to
+         * we can safely reset it for further reuse and to
          * avoid overwriting this buffer, because `rx::length == 0` */
         if (ep->tx.length == 0) {
             uct_tcp_ep_ctx_reset(&ep->tx);
@@ -1184,7 +1267,7 @@ static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,
     status = uct_tcp_ep_handle_io_err(ep, "recv", status);
     if ((status == UCS_ERR_NO_PROGRESS) || (status == UCS_ERR_CANCELED)) {
         /* If no data were read to the allocated buffer,
-         * we can safely reset it for further re-use and to
+         * we can safely reset it for further reuse and to
          * avoid overwriting this buffer, because `rx::length == 0` */
         if (ep->rx.length == 0) {
             uct_tcp_ep_ctx_reset(&ep->rx);
@@ -1781,7 +1864,8 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     hdr->length = payload_length = length + sizeof(header);
 
     if (length <= iface->config.sendv_thresh) {
-        uct_am_short_fill_data(hdr + 1, header, payload, length);
+        uct_am_short_fill_data(hdr + 1, header, payload, length,
+                               UCS_ARCH_MEMCPY_NT_NONE);
         status = uct_tcp_ep_am_send(ep, hdr);
     } else {
         iov[0].iov_base = hdr;

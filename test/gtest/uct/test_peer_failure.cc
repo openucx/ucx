@@ -8,13 +8,6 @@
 
 #include "test_peer_failure.h"
 
-#if HAVE_CUDA
-extern "C" {
-#include <uct/cuda/cuda_ipc/cuda_ipc_ep.h>
-}
-#endif
-
-
 const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
                                                         UCT_IFACE_FLAG_PENDING   |
                                                         UCT_IFACE_FLAG_CB_SYNC   |
@@ -33,7 +26,7 @@ void test_uct_peer_failure::init()
 
     reduce_tl_send_queues();
 
-    /* To reduce test execution time decrease retransmition timeouts
+    /* To reduce test execution time decrease retransmission timeouts
      * where it is relevant */
     set_config("RC_TIMEOUT?=100us"); /* 100 us should be enough */
     set_config("RC_RETRY_COUNT?=4");
@@ -553,11 +546,6 @@ protected:
         if (has_mm()) {
             uct_mm_ep_t *ep = ucs_derived_of(ep0(), uct_mm_ep_t);
             ep->keepalive.start_time--;
-        } else if (has_cuda_ipc()) {
-#if HAVE_CUDA
-            uct_cuda_ipc_ep_t *ep = ucs_derived_of(ep0(), uct_cuda_ipc_ep_t);
-            ep->keepalive.start_time--;
-#endif
         } else if (has_cma()) {
             uct_cma_ep_t *ep = ucs_derived_of(ep0(), uct_cma_ep_t);
             ep->keepalive.start_time--;
@@ -626,8 +614,6 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed_post_am,
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_peer_failure_keepalive)
-_UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_keepalive, cuda_ipc);
-
 
 class test_uct_peer_failure_rma_zcopy : public test_uct_peer_failure
 {

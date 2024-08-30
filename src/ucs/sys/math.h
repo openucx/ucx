@@ -47,51 +47,8 @@ BEGIN_C_DECLS
 #define ucs_is_pow2(_n) \
     (((_n) > 0) && ucs_is_pow2_or_zero(_n))
 
-#define ucs_padding(_n, _alignment) \
-    ( ((_alignment) - (_n) % (_alignment)) % (_alignment) )
-
-#define ucs_align_down(_n, _alignment) \
-    ( (_n) - ((_n) % (_alignment)) )
-
-#define ucs_align_up(_n, _alignment) \
-    ( (_n) + ucs_padding(_n, _alignment) )
-
-#define ucs_align_down_pow2(_n, _alignment) \
-    ( (_n) & ~((_alignment) - 1) )
-
-#define ucs_align_up_pow2(_n, _alignment) \
-    ucs_align_down_pow2((_n) + (_alignment) - 1, _alignment)
-
-#define ucs_align_down_pow2_ptr(_ptr, _alignment) \
-    ((ucs_typeof(_ptr))ucs_align_down_pow2((uintptr_t)(_ptr), (_alignment)))
-
-#define ucs_align_up_pow2_ptr(_ptr, _alignment) \
-    ((ucs_typeof(_ptr))ucs_align_up_pow2((uintptr_t)(_ptr), (_alignment)))
-
-#define ucs_roundup_pow2(_n) \
-    ({ \
-        ucs_typeof(_n) pow2; \
-        ucs_assert((_n) >= 1); \
-        for (pow2 = 1; pow2 < (_n); pow2 <<= 1); \
-        pow2; \
-    })
-
-#define ucs_rounddown_pow2(_n) (ucs_roundup_pow2(_n + 1) / 2)
-
 #define ucs_signum(_n) \
     (((_n) > (ucs_typeof(_n))0) - ((_n) < (ucs_typeof(_n))0))
-
-#define ucs_roundup_pow2_or0(_n) \
-    ( ((_n) == 0) ? 0 : ucs_roundup_pow2(_n) )
-
-/* Return values: 0 - aligned, non-0 - unaligned */
-#define ucs_check_if_align_pow2(_n, _p) ((_n) & ((_p) - 1))
-
-/* Return values: off-set from the alignment */
-#define ucs_padding_pow2(_n, _p) ucs_check_if_align_pow2(_n, _p)
-
-#define UCS_MASK_SAFE(_i) \
-    (((_i) >= 64) ? ((uint64_t)(-1)) : UCS_MASK(_i))
 
 #define ucs_div_round_up(_n, _d) \
     (((_n) + (_d) - 1) / (_d))
@@ -106,6 +63,7 @@ static UCS_F_ALWAYS_INLINE size_t ucs_double_to_sizet(double value, size_t max)
     double round_value = value + 0.5;
     return (round_value < (double)max) ? ((size_t)round_value) : max;
 }
+
 
 /**
  * Convert flags without a branch

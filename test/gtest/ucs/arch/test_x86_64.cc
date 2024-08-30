@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -21,7 +22,7 @@ protected:
      * not be used as template argument */
     static inline void *memcpy_relaxed(void *dst, const void *src, size_t size)
     {
-        return ucs_memcpy_relaxed(dst, src, size);
+        return ucs_memcpy_relaxed(dst, src, size, UCS_ARCH_MEMCPY_NT_NONE, size);
     }
 
     template <void* (C)(void*, const void*, size_t)>
@@ -61,6 +62,70 @@ protected:
         munmap(src, size);
     out:
         return result;
+    }
+
+    void nt_buffer_transfer_test(ucs_arch_memcpy_hint_t hint) {
+#ifndef __AVX__
+        UCS_TEST_SKIP_R("Built without AVX support");
+#else
+        int i, j, result;
+        char *test_window_src, *test_window_dst, *src, *dst, *dup;
+        size_t len, total_size, test_window_size, hole_size, align;
+
+        align            = 64;
+        test_window_size = 8 * 1024;
+        hole_size        = 2 * align;
+
+        /*
+         * Allocate a hole above and below the test_window_size
+         * to check for writes beyond the designated area.
+         */
+        total_size = test_window_size + (2 * hole_size);
+
+        posix_memalign((void **)&test_window_src, align, total_size);
+        posix_memalign((void **)&test_window_dst, align, total_size);
+        posix_memalign((void **)&dup, align, total_size);
+
+        src = test_window_src + hole_size;
+        dst = test_window_dst + hole_size;
+
+        /* Initialize the regions with known patterns */
+        memset(dup, 0x0, total_size);
+        memset(test_window_src, 0xdeaddead, total_size);
+        memset(test_window_dst, 0x0, total_size);
+
+        len = 0;
+
+        while (len < test_window_size) {
+            for (i = 0; i < align; i++) {
+                for (j = 0; j < align; j++) {
+                    /* Perform the transfer */
+                    ucs_x86_nt_buffer_transfer(dst + i, src + j, len, hint, len);
+                    result = memcmp(src + j, dst + i, len);
+                    EXPECT_EQ(0, result);
+
+                    /* reset the copied region back to zero */
+                    memset(dst + i, 0x0, len);
+
+                    /* check for any modifications in the holes */
+                    result = memcmp(test_window_dst, dup, total_size);
+                    EXPECT_EQ(0, result);
+                }
+            }
+            /* Check for each len for less than 1k sizes
+             * Above 1k test steps of 53
+             */
+            if (len < 1024) {
+                len++;
+            } else {
+                len += 53;
+            }
+        }
+
+        free(test_window_src);
+        free(test_window_dst);
+        free(dup);
+#endif
     }
 };
 
@@ -102,4 +167,17 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
     }
 }
 
+UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src) {
+    nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
+}
+
+UCS_TEST_F(test_arch, nt_buffer_transfer_nt_dst) {
+    nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_DEST);
+}
+
+UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src_dst) {
+    /* Make nt_dest_threshold zero to test the combination of hints */
+    ucs_global_opts.arch.nt_dest_threshold = 0;
+    nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
+}
 #endif

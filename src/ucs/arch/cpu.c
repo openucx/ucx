@@ -22,7 +22,6 @@
 #define UCS_CPU_CACHE_TYPE_FILE  "type"
 #define UCS_CPU_CACHE_SIZE_FILE  "size"
 
-#define UCS_CPU_EST_BCOPY_BW_DEFAULT (7000 * UCS_MBYTE)
 
 /* cache size array. index - cache type (ucs_cpu_cache_type_t), value - cache value,
  * 0 means cache is not supported */
@@ -75,19 +74,13 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_GENERIC_RV64G] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_NVIDIA] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
     }
 };
 
-const size_t ucs_cpu_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
-    [UCS_CPU_VENDOR_UNKNOWN]       = UCS_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_INTEL]         = UCS_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_AMD]           = UCS_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_GENERIC_ARM]   = UCS_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_GENERIC_PPC]   = UCS_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_GENERIC_RV64G] = UCS_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_FUJITSU_ARM]   = UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM,
-    [UCS_CPU_VENDOR_ZHAOXIN]       = UCS_CPU_EST_BCOPY_BW_DEFAULT
-};
 
 static void ucs_sysfs_get_cache_size()
 {
@@ -164,7 +157,46 @@ size_t ucs_cpu_get_cache_size(ucs_cpu_cache_type_t type)
     return ucs_cpu_cache_size[type];
 }
 
-double ucs_cpu_get_memcpy_bw()
+const char *ucs_cpu_vendor_name()
 {
-    return ucs_cpu_est_bcopy_bw[ucs_arch_get_cpu_vendor()];
+    static const char *cpu_vendor_names[] = {
+        [UCS_CPU_VENDOR_UNKNOWN]       = UCS_VALUE_UNKNOWN_STR,
+        [UCS_CPU_VENDOR_INTEL]         = "Intel",
+        [UCS_CPU_VENDOR_AMD]           = "AMD",
+        [UCS_CPU_VENDOR_GENERIC_ARM]   = "Generic ARM",
+        [UCS_CPU_VENDOR_GENERIC_PPC]   = "Generic PPC",
+        [UCS_CPU_VENDOR_GENERIC_RV64G] = "Generic RV64G",
+        [UCS_CPU_VENDOR_FUJITSU_ARM]   = "Fujitsu ARM",
+        [UCS_CPU_VENDOR_ZHAOXIN]       = "Zhaoxin",
+        [UCS_CPU_VENDOR_NVIDIA]        = "Nvidia"
+    };
+
+    return cpu_vendor_names[ucs_arch_get_cpu_vendor()];
+}
+
+const char *ucs_cpu_model_name()
+{
+    static const char *cpu_model_names[] = {
+        [UCS_CPU_MODEL_UNKNOWN]            = UCS_VALUE_UNKNOWN_STR,
+        [UCS_CPU_MODEL_INTEL_IVYBRIDGE]    = "IvyBridge",
+        [UCS_CPU_MODEL_INTEL_SANDYBRIDGE]  = "SandyBridge",
+        [UCS_CPU_MODEL_INTEL_NEHALEM]      = "Nehalem",
+        [UCS_CPU_MODEL_INTEL_WESTMERE]     = "Westmere",
+        [UCS_CPU_MODEL_INTEL_HASWELL]      = "Haswell",
+        [UCS_CPU_MODEL_INTEL_BROADWELL]    = "Broadwell",
+        [UCS_CPU_MODEL_INTEL_SKYLAKE]      = "Skylake",
+        [UCS_CPU_MODEL_INTEL_ICELAKE]      = "Icelake",
+        [UCS_CPU_MODEL_ARM_AARCH64]        = "ARM 64-bit",
+        [UCS_CPU_MODEL_AMD_NAPLES]         = "Naples",
+        [UCS_CPU_MODEL_AMD_ROME]           = "Rome",
+        [UCS_CPU_MODEL_AMD_MILAN]          = "Milan",
+        [UCS_CPU_MODEL_AMD_GENOA]          = "Genoa",
+        [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG] = "Zhangjiang",
+        [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
+        [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui",
+        [UCS_CPU_MODEL_RV64G]              = "RV64G",
+        [UCS_CPU_MODEL_NVIDIA_GRACE]       = "Grace"
+    };
+
+    return cpu_model_names[ucs_arch_get_cpu_model()];
 }

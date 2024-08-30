@@ -27,7 +27,9 @@ public:
     ucp_ep_params_t get_ep_params();
 
 protected:
-    static const int AM_ID = 0;
+    static const int AM_ID        = 0;
+    static const uint64_t TX_SEED = 0x1111111111111111lu;
+    static const uint64_t RX_SEED = 0x2222222222222222lu;
 
     enum {
         TEST_AM  = UCS_BIT(0),
@@ -75,14 +77,17 @@ protected:
 
     void cleanup_rndv_descs();
 
-    void                    *m_sreq, *m_rreq;
-    std::queue<void *>      m_am_rndv_descs;
-    size_t                  m_am_rx_count;
-    size_t                  m_err_count;
-    ucs_status_t            m_err_status;
-    std::string             m_sbuf, m_rbuf;
-    mem_handle_t            m_stable_memh, m_failing_memh;
-    ucs::handle<ucp_rkey_h> m_stable_rkey, m_failing_rkey;
+    void init_buffers(size_t msg_size);
+    virtual ucs_memory_type_t memtype() const;
+
+    void                        *m_sreq, *m_rreq;
+    std::queue<void *>          m_am_rndv_descs;
+    size_t                      m_am_rx_count;
+    size_t                      m_err_count;
+    ucs_status_t                m_err_status;
+    std::unique_ptr<mem_buffer> m_sbuf, m_rbuf;
+    mem_handle_t                m_stable_memh, m_failing_memh;
+    ucs::handle<ucp_rkey_h>     m_stable_rkey, m_failing_rkey;
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
@@ -97,7 +102,6 @@ test_ucp_peer_failure::test_ucp_peer_failure() :
     m_err_count(0),
     m_err_status(UCS_OK)
 {
-    ucs::fill_random(m_sbuf);
     configure_peer_failure_settings();
 }
 
@@ -192,13 +196,13 @@ void *test_ucp_peer_failure::send_nb(ucp_ep_h ep, ucp_rkey_h rkey)
     param.datatype     = DATATYPE;
     param.cb.send      = send_cb;
     if (get_variant_value() & TEST_AM) {
-        return ucp_am_send_nbx(ep, AM_ID, NULL, 0, &m_sbuf[0], m_sbuf.size(),
+        return ucp_am_send_nbx(ep, AM_ID, NULL, 0, m_sbuf->ptr(), m_sbuf->size(),
                                &param);
     } else if (get_variant_value() & TEST_TAG) {
-        return ucp_tag_send_nbx(ep, &m_sbuf[0], m_sbuf.size(), 0, &param);
+        return ucp_tag_send_nbx(ep, m_sbuf->ptr(), m_sbuf->size(), 0, &param);
     } else if (get_variant_value() & TEST_RMA) {
-        return ucp_put_nbx(ep, &m_sbuf[0], m_sbuf.size(), (uintptr_t)&m_rbuf[0],
-                           rkey, &param);
+        return ucp_put_nbx(ep, m_sbuf->ptr(), m_sbuf->size(),
+                           (uintptr_t)m_rbuf->ptr(), rkey, &param);
     } else {
         ucs_fatal("invalid test case");
     }
@@ -265,21 +269,21 @@ test_ucp_peer_failure::smoke_test(bool stable_pair)
         while (!m_am_rndv_descs.empty()) {
             m_rreq        = ucp_am_recv_data_nbx(recv_entity.worker(),
                                                  m_am_rndv_descs.front(),
-                                                 &m_rbuf[0], m_rbuf.size(),
+                                                 m_rbuf->ptr(), m_rbuf->size(),
                                                  &req_param);
             result.second = request_wait(m_rreq);
             m_am_rndv_descs.pop();
         }
     } else if (get_variant_value() & TEST_TAG) {
-        m_rreq        = ucp_tag_recv_nbx(recv_entity.worker(), &m_rbuf[0],
-                                         m_rbuf.size(), 0, 0, &req_param);
+        m_rreq        = ucp_tag_recv_nbx(recv_entity.worker(), m_rbuf->ptr(),
+                                         m_rbuf->size(), 0, 0, &req_param);
         result.second = request_wait(m_rreq);
     } else if (get_variant_value() & TEST_RMA) {
         // Flush the sender and expect data to arrive on receiver
         void *freq = ucp_ep_flush_nb(send_ep, 0,
                                      (ucp_send_callback_t)ucs_empty_function);
         request_wait(freq);
-        EXPECT_EQ(m_sbuf, m_rbuf);
+        m_rbuf->pattern_check(TX_SEED);
         result.second = UCS_OK;
     }
 
@@ -302,8 +306,8 @@ void test_ucp_peer_failure::get_rkey(ucp_ep_h ep, entity& dst, mem_handle_t& mem
     memset(&params, 0, sizeof(params));
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH;
-    params.address    = &m_rbuf[0];
-    params.length     = m_rbuf.size();
+    params.address    = m_rbuf->ptr();
+    params.length     = m_rbuf->size();
 
     ucp_mem_h ucp_memh;
     ucs_status_t status = ucp_mem_map(dst.ucph(), &params, &ucp_memh);
@@ -351,8 +355,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 {
     skip_loopback();
 
-    m_sbuf.resize(msg_size);
-    m_rbuf.resize(msg_size);
+    init_buffers(msg_size);
 
     /* connect 2 ep's from sender() to 2 receiver entities */
     create_entity();
@@ -387,7 +390,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     flush_ep(sender(), 0, FAILING_EP_INDEX);
     EXPECT_EQ(UCS_OK, m_err_status);
 
-    /* Since UCT/UD EP has a SW implementation of reliablity on which peer
+    /* Since UCT/UD EP has a SW implementation of reliability on which peer
      * failure mechanism is based, we should set small UCT/UD EP timeout
      * for UCT/UD EPs for sender's UCP EP to reduce testing time */
     double prev_ib_ud_peer_timeout = sender().set_ib_ud_peer_timeout(3.);
@@ -477,6 +480,16 @@ void test_ucp_peer_failure::cleanup_rndv_descs() {
     }
 }
 
+void test_ucp_peer_failure::init_buffers(size_t msg_size) {
+    m_sbuf.reset(new mem_buffer(msg_size, memtype(), TX_SEED));
+    m_rbuf.reset(new mem_buffer(msg_size, memtype(), RX_SEED));
+}
+
+ucs_memory_type_t test_ucp_peer_failure::memtype() const
+{
+    return UCS_MEMORY_TYPE_HOST;
+}
+
 UCS_TEST_P(test_ucp_peer_failure, basic) {
     do_test(UCS_KBYTE, /* msg_size */
             0, /* pre_msg_cnt */
@@ -517,9 +530,6 @@ class test_ucp_peer_failure_keepalive : public test_ucp_peer_failure
 {
 public:
     test_ucp_peer_failure_keepalive() {
-        m_sbuf.resize(1 * UCS_MBYTE);
-        m_rbuf.resize(1 * UCS_MBYTE);
-
         m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
         m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", "3s"));
     }
@@ -533,6 +543,7 @@ public:
         failing_receiver().connect(&sender(), get_ep_params());
         set_am_handler(failing_receiver());
         set_am_handler(stable_receiver());
+        init_buffers(UCS_MBYTE);
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
@@ -641,16 +652,18 @@ protected:
 
     void init()
     {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+
         self = this;
+        modify_config("RNDV_THRESH", "0");
 
         test_ucp_peer_failure::init();
 
         receiver().connect(&sender(), get_ep_params());
         sender().connect(&receiver(), get_ep_params());
         set_am_handler(receiver());
-
-        m_sbuf.resize(UCS_KBYTE);
-        m_rbuf.resize(UCS_KBYTE);
     }
 
     template<typename Func>
@@ -787,6 +800,8 @@ protected:
             UCS_TEST_SKIP_R("transport has no rma_bw lanes");
         }
 
+        init_buffers(16 * UCS_KBYTE);
+
         define_test_settings(mode, replace_ops);
 
         smoke_test(true);
@@ -830,42 +845,75 @@ protected:
 
 test_ucp_peer_failure_rndv_abort *test_ucp_peer_failure_rndv_abort::self = nullptr;
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, get_zcopy,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
-                     "RNDV_SCHEME=get_zcopy")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort, get_zcopy, "RNDV_SCHEME=get_zcopy")
 {
     rndv_progress_failure_test(rndv_mode::rndv_get, true);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, put_zcopy_force_flush,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
-                     "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort, put_zcopy_force_flush,
+           "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
 {
     rndv_progress_failure_test(rndv_mode::rndv_put, true);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
-                     get_zcopy_memory_invalidation,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
-                     "RNDV_SCHEME=get_zcopy")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort, get_zcopy_memory_invalidation,
+           "RNDV_SCHEME=get_zcopy")
 {
     rndv_progress_failure_test(rndv_mode::rndv_get, false);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
-                     put_zcopy_memory_invalidation,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
-                     "RNDV_SCHEME=put_zcopy")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort, put_zcopy_memory_invalidation,
+           "RNDV_SCHEME=put_zcopy")
 {
     rndv_progress_failure_test(rndv_mode::rndv_put, false);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
-                     put_zcopy_force_flush_memory_invalidation,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
-                     "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort,
+           put_zcopy_force_flush_memory_invalidation, "RNDV_SCHEME=put_zcopy",
+           "RNDV_PUT_FORCE_FLUSH=y")
 {
     rndv_progress_failure_test(rndv_mode::rndv_put, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_rndv_abort)
+
+
+class test_ucp_peer_failure_rndv_put_ppln_abort :
+      public test_ucp_peer_failure_rndv_abort {
+public:
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        test_ucp_peer_failure_rndv_abort::get_test_variants(variants);
+    }
+
+    ucs_memory_type_t memtype() const override
+    {
+        return UCS_MEMORY_TYPE_CUDA;
+    }
+
+    void init() override
+    {
+        modify_config("RNDV_SCHEME", "put_ppln");
+        // Avoid 2-stage ppln being selected, as the intent is to test 3-stage
+        // ppln protocol
+        modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
+        test_ucp_peer_failure_rndv_abort::init();
+        if (!sender().is_rndv_put_ppln_supported()) {
+            cleanup();
+            UCS_TEST_SKIP_R("RNDV pipeline is not supported");
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
+{
+    // Sender is supposed to use put_zcopy, because put_mtype is not supported
+    // with error handling yet
+    rndv_progress_failure_test(rndv_mode::rndv_put, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);

@@ -10,7 +10,7 @@
 #include <ucp/api/ucp.h>
 #include <ucs/type/float8.h>
 #include <uct/api/uct.h>
-#include <ucs/datastruct/bitmap.h>
+#include <ucs/datastruct/static_bitmap.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/math.h>
 #include <stdint.h>
@@ -40,9 +40,9 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 
 /* Lanes */
-#define UCP_MAX_LANES                16
+#define UCP_MAX_LANES_LEGACY         16
+#define UCP_MAX_LANES                64
 #define UCP_MAX_FAST_PATH_LANES      5
-#define UCP_MAX_SLOW_PATH_LANES      (UCP_MAX_LANES - UCP_MAX_FAST_PATH_LANES)
 
 #define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
 typedef uint8_t                      ucp_lane_index_t;
@@ -85,7 +85,7 @@ typedef struct ucp_mem_desc           ucp_mem_desc_t;
  *
  * Bitmap type for representing which TL resources are in use.
  */
-typedef ucs_bitmap_t(UCP_MAX_RESOURCES) ucp_tl_bitmap_t;
+typedef ucs_static_bitmap_s(UCP_MAX_RESOURCES) ucp_tl_bitmap_t;
 
 
 /**
@@ -113,20 +113,26 @@ extern const ucp_tl_bitmap_t ucp_tl_bitmap_min;
  * @return A new bitmap, which is the logical AND NOT of the operands
  */
 #define UCP_TL_BITMAP_AND_NOT(_bitmap1, _bitmap2) \
-    UCS_BITMAP_AND(_bitmap1, UCS_BITMAP_NOT(_bitmap2, UCP_MAX_RESOURCES), \
-                   UCP_MAX_RESOURCES)
+    UCS_STATIC_BITMAP_AND(_bitmap1, UCS_STATIC_BITMAP_NOT(_bitmap2))
 
+
+#define UCS_FP8_MIN_BW  (512 * UCS_MBYTE)
+#define UCS_FP8_MAX_BW  (4 * UCS_TBYTE)
+#define UCS_FP8_MIN_LAT UCS_BIT(4)
+#define UCS_FP8_MAX_LAT UCS_BIT(17)
+#define UCS_FP8_MIN_OVH UCS_BIT(0)
+#define UCS_FP8_MAX_OVH UCS_BIT(12)
 
 /* Pack bandwidth as bytes/second, range: 512 MB/s to 4 TB/s */
-UCS_FP8_DECLARE_TYPE(BANDWIDTH, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
+UCS_FP8_DECLARE_TYPE(BANDWIDTH, UCS_FP8_MIN_BW, UCS_FP8_MAX_BW)
 
 
 /* Pack latency as nanoseconds, range: 16 nsec to 131 usec */
-UCS_FP8_DECLARE_TYPE(LATENCY, UCS_BIT(4), UCS_BIT(17))
+UCS_FP8_DECLARE_TYPE(LATENCY, UCS_FP8_MIN_LAT, UCS_FP8_MAX_LAT)
 
 
 /* Pack overhead as nanoseconds, range: 1 nsec to 4 usec */
-UCS_FP8_DECLARE_TYPE(OVERHEAD, UCS_BIT(0), UCS_BIT(12))
+UCS_FP8_DECLARE_TYPE(OVERHEAD, UCS_FP8_MIN_OVH, UCS_FP8_MAX_OVH)
 
 
 /**

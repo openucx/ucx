@@ -21,8 +21,7 @@
 #include <dirent.h>
 
 #define UCS_NUMA_MIN_DISTANCE       10
-#define UCS_NUMA_NODE_DEFAULT       0
-#define UCS_NUMA_NODE_MAX           UINT16_MAX
+#define UCS_NUMA_NODE_MAX           INT16_MAX
 #define UCS_NUMA_CORE_DIR_PATH      UCS_SYS_FS_CPUS_PATH "/cpu%d"
 #define UCS_NUMA_NODES_DIR_PATH     UCS_SYS_FS_SYSTEM_PATH "/node"
 #define UCS_NUMA_NODE_DISTANCE_PATH UCS_NUMA_NODES_DIR_PATH "/node%d/distance"
@@ -124,7 +123,7 @@ unsigned ucs_numa_num_configured_cpus()
 
 ucs_numa_node_t ucs_numa_node_of_cpu(int cpu)
 {
-    /* Used for caching to improve perfromance */
+    /* Used for caching to improve performance */
     static ucs_numa_node_t cpu_numa_node[__CPU_SETSIZE] = {0};
     ucs_numa_node_t node;
     char core_dir_path[PATH_MAX];
@@ -151,7 +150,10 @@ ucs_numa_node_t ucs_numa_node_of_device(const char *dev_path)
 
     if ((status != UCS_OK) || (parsed_node < 0) ||
         (parsed_node >= UCS_NUMA_NODE_MAX)) {
-        return UCS_NUMA_NODE_DEFAULT;
+        ucs_debug("failed to discover numa node for device: %s, status %s, \
+                  parsed_node %ld", dev_path, ucs_status_string(status),
+                  parsed_node);
+        return UCS_NUMA_NODE_UNDEFINED;
     }
 
     return parsed_node;

@@ -584,6 +584,10 @@ void ucs_log_print_backtrace(ucs_log_level_t level)
     char buf[1024];
     ucs_status_t status;
 
+    if (!ucs_log_is_enabled(level)) {
+        return;
+    }
+
     status = ucs_debug_backtrace_create(&bckt, 1);
     if (status != UCS_OK) {
         return;

@@ -93,9 +93,22 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
 
     /** Enable @ref uct_perf_attr_t::max_inflight_eps */
-    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10)
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10),
+
+    /** Enable @ref uct_perf_attr_t::flags */
+    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(11)
 };
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Flags of supported performance attributes functionalities
+ *
+ * This is used in @ref uct_perf_attr_t::flags.
+ */
+typedef enum {
+    /** TX operations can depend on unrelated RX operation completion */
+    UCT_PERF_ATTR_FLAGS_TX_RX_SHARED = UCS_BIT(0)
+} uct_perf_attr_flags_t;
 
 /**
  * @ingroup UCT_RESOURCE
@@ -183,10 +196,15 @@ typedef struct {
      * operations simultaneously.
      * Protocols that require sending to multiple destinations at the same time
      * (such as keepalive) could benefit from using a transport that has a
-     * large number of maximum inflight endpoints.
+     * large number of maximum in-flight endpoints.
      * This field is set by the UCT layer.
      */
     size_t              max_inflight_eps;
+
+    /**
+     * Performance characteristics of the network interface.
+     */
+    uint64_t            flags;
 } uct_perf_attr_t;
 
 
@@ -787,7 +805,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
 
     /** Indicate registration alignment. */
-    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16)
+    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16),
+
+    /** Indicate memory types that the MD can register using global VA MR. */
+    UCT_MD_ATTR_FIELD_GVA_MEM_TYPES             = UCS_BIT(17)
 } uct_md_attr_field_t;
 
 
@@ -838,6 +859,11 @@ typedef struct {
      * Bitmap of memory types that can be cached for this memory domain.
      */
     uint64_t          cache_mem_types;
+
+    /**
+     * Bitmap of memory types that can create global memory handle.
+     */
+    uint64_t          gva_mem_types;
 
     /**
      * Bitmap of memory types that Memory Domain can detect if address belongs
@@ -912,7 +938,7 @@ typedef enum {
      * Memory domain supports invalidation of memory handle registered by
      * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_RMA flag and packed
      * key by @ref uct_md_mkey_pack_v2 with
-     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA flag.
      */
     UCT_MD_FLAG_INVALIDATE_RMA = UCT_MD_FLAG_V2_FIRST,
 
@@ -920,7 +946,7 @@ typedef enum {
      * Memory domain supports invalidation of memory handle registered by
      * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_REMOTE_ATOMIC flag and
      * packed key by @ref uct_md_mkey_pack_v2 with
-     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
     UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12)
 } uct_md_flags_v2_t;
@@ -948,6 +974,9 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
  *
  * @param [in]  md          Handle to memory domain.
  * @param [in]  memh        Pack a remote key for this memory handle.
+ * @param [in]  address     Memory address to expose for remote access.
+ * @param [in]  length      The size (in bytes) of memory that will be exposed
+ *                          for remote access.
  * @param [in]  params      Operation parameters, see @ref
  *                          uct_md_mkey_pack_params_t.
  * @param [out] mkey_buffer Pointer to a buffer to hold the packed memory key.
@@ -958,6 +987,7 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
  * @return                  Error code.
  */
 ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
+                                 void *address, size_t length,
                                  const uct_md_mkey_pack_params_t *params,
                                  void *mkey_buffer);
 

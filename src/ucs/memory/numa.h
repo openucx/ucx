@@ -7,17 +7,18 @@
 #ifndef UCS_NUMA_H_
 #define UCS_NUMA_H_
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
-
+#include <ucs/sys/compiler_def.h>
 #include <stdint.h>
 
+BEGIN_C_DECLS
+
+#define UCS_NUMA_NODE_DEFAULT    0
+#define UCS_NUMA_NODE_UNDEFINED -1
 
 typedef int ucs_numa_distance_t;
 
 
-typedef uint16_t ucs_numa_node_t;
+typedef int16_t ucs_numa_node_t;
 
 
 extern const char *ucs_numa_policy_names[];
@@ -67,5 +68,7 @@ ucs_numa_node_t ucs_numa_node_of_device(const char *dev_path);
  */
 ucs_numa_distance_t
 ucs_numa_distance(ucs_numa_node_t node1, ucs_numa_node_t node2);
+
+END_C_DECLS
 
 #endif

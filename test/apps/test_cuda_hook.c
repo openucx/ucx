@@ -108,7 +108,7 @@ int main(int argc, char **argv)
     }
 
     /* In order to test long jumps in bistro hooks code, increase address space
-     * separation by allocaing a large VA space segment.
+     * separation by allocating a large VA space segment.
      */
     dummy_ptr = mmap(NULL, dummy_va_size, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);

@@ -31,8 +31,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     self->remote_pid = *(const pid_t*)params->iface_addr;
-
-    return uct_ep_keepalive_init(&self->keepalive, self->remote_pid);
+    return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
@@ -64,7 +63,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                   uct_completion_t *comp, int direction)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_ipc_iface_t);
-    uct_cuda_ipc_key_t *key     = (uct_cuda_ipc_key_t *) rkey;
+    uct_cuda_ipc_rkey_t *key    = (uct_cuda_ipc_rkey_t *) rkey;
     void *mapped_rem_addr;
     void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
@@ -187,14 +186,4 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_zcopy,
     uct_cuda_ipc_trace_data(remote_addr, rkey, "PUT_ZCOPY [length %zu]",
                                 uct_iov_total_length(iov, iovcnt));
     return status;
-}
-
-ucs_status_t uct_cuda_ipc_ep_check(const uct_ep_h tl_ep, unsigned flags,
-                                   uct_completion_t *comp)
-{
-    uct_cuda_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
-
-    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
-    uct_ep_keepalive_check(tl_ep, &ep->keepalive, ep->remote_pid, flags, comp);
-    return UCS_OK;
 }

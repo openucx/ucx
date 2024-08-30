@@ -150,8 +150,9 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
 
     --req->recv.tag.wiface->post_count;
     if (ucs_unlikely(status != UCS_OK)) {
+        ucp_tag_offload_release_buf(req);
         ucp_request_complete_tag_recv(req, status);
-        goto out;
+        return;
     }
 
     ucs_assert(header_length >= sizeof(ucp_rndv_rts_hdr_t));
@@ -170,7 +171,6 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
                              header_length);
     }
 
-out:
     ucp_tag_offload_release_buf(req);
 }
 
