@@ -44,7 +44,6 @@
 typedef enum {
     UCP_PROTO_PERF_NODE_TYPE_DATA,   /* Data node */
     UCP_PROTO_PERF_NODE_TYPE_SELECT, /* Select one of children */
-    UCP_PROTO_PERF_NODE_TYPE_COMPOSE /* Compose new value from the children */
 } ucp_proto_perf_node_type_t;
 
 
@@ -86,10 +85,6 @@ void ucp_proto_config_info_str(ucp_worker_h worker,
                                const ucp_proto_config_t *proto_config,
                                size_t msg_length, ucs_string_buffer_t *strb);
 
-ucp_proto_perf_node_t *
-ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
-                        unsigned selected_child, const char *name,
-                        const char *desc_fmt, va_list ap);
 
 ucp_proto_perf_node_t *
 ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
@@ -103,10 +98,6 @@ ucp_proto_perf_node_new_data(const char *name, const char *desc_fmt, ...);
 ucp_proto_perf_node_t *
 ucp_proto_perf_node_new_select(const char *name, unsigned selected_child,
                                const char *desc_fmt, ...);
-
-
-ucp_proto_perf_node_t *
-ucp_proto_perf_node_new_compose(const char *name, const char *desc_fmt, ...);
 
 
 void ucp_proto_perf_node_ref(ucp_proto_perf_node_t *perf_node);

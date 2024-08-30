@@ -213,6 +213,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto, shm_ipc,
                                         "shm,cuda_ipc,rocm_ipc")
 
 class test_perf_node : public test_ucp_proto {
+    
 };
 
 UCS_TEST_P(test_perf_node, basic)
@@ -222,8 +223,7 @@ UCS_TEST_P(test_perf_node, basic)
     EXPECT_EQ(nullstr, ucp_proto_perf_node_name(NULL));
     EXPECT_EQ(nullstr, ucp_proto_perf_node_desc(NULL));
 
-    ucp_proto_perf_node_t *n1 = ucp_proto_perf_node_new_compose("n1", "node%d",
-                                                                1);
+    ucp_proto_perf_node_t *n1 = ucp_proto_perf_node_new_data("n1", "node%d", 1);
     ASSERT_NE(nullptr, n1);
     EXPECT_EQ(std::string("n1"), ucp_proto_perf_node_name(n1));
     EXPECT_EQ(std::string("node1"), ucp_proto_perf_node_desc(n1));
@@ -247,15 +247,13 @@ UCS_TEST_P(test_perf_node, basic)
     /* NULL child is ignored */
     ucp_proto_perf_node_add_child(n1, NULL);
     ucp_proto_perf_node_add_child(n2, NULL);
-    ucp_proto_perf_node_add_child(n3, NULL);
 
     ucp_proto_perf_node_t *tmp = NULL;
-    ucp_proto_perf_node_own_child(n3, &tmp);
+    ucp_proto_perf_node_own_child(n1, &tmp);
 
     /* NULL parent is ignored */
     ucp_proto_perf_node_add_child(NULL, n1);
     ucp_proto_perf_node_add_child(NULL, n2);
-    ucp_proto_perf_node_add_child(NULL, n3);
     ucp_proto_perf_node_add_child(NULL, NULL);
 
     /* NULL owner should remove extra ref */

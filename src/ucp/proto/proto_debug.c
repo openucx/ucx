@@ -544,12 +544,6 @@ ucp_proto_perf_node_t *ucp_proto_perf_node_new_select(const char *name,
     return UCP_PROTO_PERF_NODE_NEW(SELECT, selected_child, name, desc_fmt);
 }
 
-ucp_proto_perf_node_t *
-ucp_proto_perf_node_new_compose(const char *name, const char *desc_fmt, ...)
-{
-    return UCP_PROTO_PERF_NODE_NEW(COMPOSE, 0, name, desc_fmt);
-}
-
 void ucp_proto_perf_node_ref(ucp_proto_perf_node_t *perf_node)
 {
     if (perf_node != NULL) {
@@ -604,9 +598,6 @@ ucp_proto_perf_node_dup(const ucp_proto_perf_node_t *perf_node)
         dup_perf_node = ucp_proto_perf_node_new_select(perf_node->name,
                                                        perf_node->selected_child,
                                                        "%s", perf_node->desc);
-    } else if (perf_node->type == UCP_PROTO_PERF_NODE_TYPE_COMPOSE) {
-        dup_perf_node = ucp_proto_perf_node_new_compose(perf_node->name, "%s",
-                                                        perf_node->desc);
     }
     if (dup_perf_node == NULL) {
         return NULL;
@@ -841,10 +832,6 @@ ucp_proto_perf_graph_dump_recurs(ucp_proto_perf_node_t *perf_node,
         break;
     case UCP_PROTO_PERF_NODE_TYPE_SELECT:
         shape = "oval";
-        break;
-    case UCP_PROTO_PERF_NODE_TYPE_COMPOSE:
-        shape = "box";
-        ucs_string_buffer_appendf(&node_style, "rounded,");
         break;
     }
 
