@@ -175,9 +175,9 @@ typedef struct ucp_context_config {
     size_t                                 rma_zcopy_max_seg_size;
     /** Enable global VA MR */
     int                                    gva_enable;
-    /** Lock memory when usign global VA MR */
+    /** Lock memory when using global VA MR */
     int                                    gva_mlock;
-    /** Prefetch memory when usign global VA MR */
+    /** Prefetch memory when using global VA MR */
     int                                    gva_prefetch;
     /** Protocol overhead */
     double                                 proto_overhead_single;

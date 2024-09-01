@@ -1838,8 +1838,11 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         }
 
         ucp_get_aliases_set(&avail_tls);
-        ucp_report_unavailable(&config->tls.array, tl_cfg_mask, "", "transport",
-                               &avail_tls);
+
+        if (config->tls.mode == UCS_CONFIG_ALLOW_LIST_ALLOW) {
+            ucp_report_unavailable(&config->tls.array, tl_cfg_mask, "", "transport",
+                                   &avail_tls);
+        }
     }
 
     /* Validate context resources */

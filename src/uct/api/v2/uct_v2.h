@@ -196,7 +196,7 @@ typedef struct {
      * operations simultaneously.
      * Protocols that require sending to multiple destinations at the same time
      * (such as keepalive) could benefit from using a transport that has a
-     * large number of maximum inflight endpoints.
+     * large number of maximum in-flight endpoints.
      * This field is set by the UCT layer.
      */
     size_t              max_inflight_eps;
@@ -938,7 +938,7 @@ typedef enum {
      * Memory domain supports invalidation of memory handle registered by
      * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_RMA flag and packed
      * key by @ref uct_md_mkey_pack_v2 with
-     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA flag.
      */
     UCT_MD_FLAG_INVALIDATE_RMA = UCT_MD_FLAG_V2_FIRST,
 
@@ -946,7 +946,7 @@ typedef enum {
      * Memory domain supports invalidation of memory handle registered by
      * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_REMOTE_ATOMIC flag and
      * packed key by @ref uct_md_mkey_pack_v2 with
-     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
     UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12)
 } uct_md_flags_v2_t;

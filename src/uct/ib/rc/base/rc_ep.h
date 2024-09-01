@@ -36,7 +36,7 @@ enum {
 };
 
 /*
- * Auxillary AM ID bits used by FC protocol.
+ * Auxiliary AM ID bits used by FC protocol.
  */
 enum {
     /* Keepalive Request scheduled: indicates that keepalive request

@@ -1613,7 +1613,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                                           sizeof(in), out, sizeof(out),
                                           "QUERY_HCA_CAP, ODP", 0);
     if (status != UCS_OK) {
-        reason = "faied to query HCA capabilities";
+        reason = "failed to query HCA capabilities";
         goto no_odp;
     }
 
@@ -1639,7 +1639,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, rc_odp_caps.send) ||
         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, rc_odp_caps.write) ||
         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, rc_odp_caps.read)) {
-        reason = "it's not suported for UD/RC transports";
+        reason = "it's not supported for UD/RC transports";
         goto no_odp;
     }
 
@@ -1647,7 +1647,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         (!UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, dc_odp_caps.send) ||
          !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, dc_odp_caps.write) ||
          !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, dc_odp_caps.read))) {
-        reason = "it's not suported for DC transport";
+        reason = "it's not supported for DC transport";
         goto no_odp;
     }
 
@@ -1883,20 +1883,6 @@ static void uct_ib_mlx5_md_port_counter_set_id_init(uct_ib_mlx5_md_t *md)
     }
 }
 
-static int uct_ib_mlx5_check_uar(uct_ib_mlx5_md_t *md)
-{
-    uct_ib_mlx5_devx_uar_t uar;
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_devx_uar_init(&uar, md, 0);
-    if (status != UCS_OK) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    uct_ib_mlx5_devx_uar_cleanup(&uar);
-    return UCS_OK;
-}
-
 ucs_status_t
 uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
                                   void **address_p, ucs_memory_type_t mem_type,
@@ -2127,7 +2113,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    status = uct_ib_mlx5_check_uar(md);
+    status = uct_ib_mlx5_devx_check_uar(md);
     if (status != UCS_OK) {
         goto err_free_md;
     }

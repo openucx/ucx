@@ -83,7 +83,7 @@ func family(a *net.TCPAddr) int {
 
 // Convert GO TCP address to C
 func toSockAddr(a *net.TCPAddr) (*C.ucs_sock_addr_t, error) {
-	// We can't assing to ucs_sock_addr_t->addr reference to Go's memory,
+	// We can't assign to ucs_sock_addr_t->addr reference to Go's memory,
 	// so need to allocate
 	sockaddrPtr := AllocateNativeMemory(C.sizeof_struct_sockaddr_storage)
 	sa := (*C.struct_sockaddr_storage)(sockaddrPtr)

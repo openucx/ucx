@@ -322,12 +322,15 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev);
  *
  * @param [in]  dev             IB device.
  * @param [in]  port_num        Port number.
+ * @param [in]  subnet_strs     List of allowed/restricted subnets to select
+ *                              from.
  * @param [out] gid_info        Filled with the selected gid index and the
  *                              port's RoCE version and address family.
  */
-ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev,
-                                      uint8_t port_num,
-                                      uct_ib_device_gid_info_t *gid_info);
+ucs_status_t
+uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
+                         const ucs_config_allow_list_t *subnets_array,
+                         uct_ib_device_gid_info_t *gid_info);
 
 
 /**
@@ -349,9 +352,9 @@ int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num);
 
 
 /**
- * @return 1 if the gid_raw is 0, 0 otherwise.
+ * @return whether the gid is valid
  */
-int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw);
+int uct_ib_device_is_gid_valid(const union ibv_gid *gid);
 
 
 /**
@@ -462,6 +465,10 @@ int uct_ib_get_cqe_size(int cqe_size_min);
 
 const char* uct_ib_ah_attr_str(char *buf, size_t max,
                                const struct ibv_ah_attr *ah_attr);
+
+ucs_status_t
+uct_ib_device_roce_gid_to_sockaddr(sa_family_t af, const void *gid,
+                                   struct sockaddr_storage *sock_storage);
 
 static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, struct ibv_wc *wcs)
 {

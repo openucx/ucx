@@ -343,7 +343,7 @@ uct_tcp_ep_t *uct_tcp_cm_get_ep(uct_tcp_iface_t *iface,
         /* when creating new endpoint from API, search for the arrived
          * connection requests and remove from the connection matching
          * context, since the EP with RX-only capability will be destroyed
-         * or re-used for the EP created through uct_ep_create() and
+         * or reused for the EP created through uct_ep_create() and
          * returned to the user (it will be inserted to expected queue) */
         queue_type      = UCS_CONN_MATCH_QUEUE_UNEXP;
         remove_from_ctx = 1;

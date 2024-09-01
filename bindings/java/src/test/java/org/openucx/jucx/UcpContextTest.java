@@ -48,14 +48,14 @@ public class UcpContextTest {
     public void testConfigMap() {
         UcpParams contextParams = new UcpParams().requestTagFeature()
             .setConfig("TLS", "abcd").setConfig("NOT_EXISTING_", "234");
-        boolean catched = false;
+        boolean caught = false;
         try {
             createContext(contextParams);
         } catch (UcxException exception) {
             assertEquals("No such device", exception.getMessage());
-            catched = true;
+            caught = true;
         }
-        assertTrue(catched);
+        assertTrue(caught);
 
         // Return back original config
         contextParams = new UcpParams().requestTagFeature().setConfig("TLS", "all");

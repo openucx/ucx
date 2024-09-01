@@ -87,7 +87,7 @@ class PRChecker(object):
                     self.commit_id = str(d[u'commit_id'])
             page += 1
         if not self.commit_id:
-            raise Exception("Could not find review commmit by user '%s'" %
+            raise Exception("Could not find review commit by user '%s'" %
                             self.approving_user)
         if self.verbose:
             print("github commit_id: %s (by '%s')" %

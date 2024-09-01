@@ -4,9 +4,9 @@
  * See file LICENSE for terms.
  */
 
+#include <common/cuda_context.h>
 #include <uct/test_md.h>
 #include <cuda.h>
-#include <cuda_runtime.h>
 
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
@@ -41,37 +41,6 @@ protected:
         EXPECT_EQ(CUDA_SUCCESS, cuMemFree(ptr));
         return rkey;
     }
-};
-
-class cuda_context {
-public:
-    cuda_context()
-    {
-        if (cudaSetDevice(0) != cudaSuccess) {
-            UCS_TEST_SKIP_R("can't set cuda device");
-        }
-
-        if (cuInit(0) != CUDA_SUCCESS) {
-            UCS_TEST_SKIP_R("can't init cuda device");
-        }
-
-        if (cuDeviceGet(&m_device, 0) != CUDA_SUCCESS) {
-            UCS_TEST_SKIP_R("can't get cuda device");
-        }
-
-        if (cuCtxCreate(&m_context, 0, m_device) != CUDA_SUCCESS) {
-            UCS_TEST_SKIP_R("can't create cuda context");
-        }
-    }
-
-    ~cuda_context()
-    {
-        EXPECT_EQ(CUDA_SUCCESS, cuCtxDestroy(m_context));
-    }
-
-protected:
-    CUdevice  m_device{CU_DEVICE_INVALID};
-    CUcontext m_context{NULL};
 };
 
 UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)

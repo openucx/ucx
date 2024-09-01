@@ -931,7 +931,7 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control_stats)
 
 #ifdef HAVE_MLX5_DV
 extern "C" {
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 }
 #endif
 

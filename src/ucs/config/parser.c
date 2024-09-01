@@ -30,8 +30,6 @@
 /* width of titles in docstring */
 #define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
-/* String literal for allow-list */
-#define UCS_CONFIG_PARSER_ALL "all"
 
 /* list of prefixes for a configuration variable, used to dump all possible
  * aliases.
@@ -1544,7 +1542,7 @@ static int ucs_config_parse_check_filter(const char *name, const char *value)
             /**
              * The value does not match the pattern for this filter. E.g.
              * configuration file contains the line: CPU model = v1.*, and
-             * ucs_cpu_model_name() retruns "v2.0".
+             * ucs_cpu_model_name() returns "v2.0".
              */
             return 1;
         }

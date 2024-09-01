@@ -2431,7 +2431,7 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  * is over, as part of the wake-up mechanism.
  *
  * The worker must be armed before waiting on an event (must be re-armed after
- * it has been signaled for re-use) with @ref ucp_worker_arm.
+ * it has been signaled for reuse) with @ref ucp_worker_arm.
  * The events triggering a signal of the file descriptor from
  * @ref ucp_worker_get_efd depend on the interfaces used by the worker and
  * defined in the transport layer, and typically represent a request completion
@@ -4072,7 +4072,8 @@ enum ucp_ep_attr_field {
     UCP_EP_ATTR_FIELD_NAME            = UCS_BIT(0), /**< UCP endpoint name */
     UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(1), /**< Sockaddr used by the endpoint */
     UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2), /**< Sockaddr the endpoint is connected to */
-    UCP_EP_ATTR_FIELD_TRANSPORTS      = UCS_BIT(3)  /**< Transport and device used by endpoint */
+    UCP_EP_ATTR_FIELD_TRANSPORTS      = UCS_BIT(3), /**< Transport and device used by endpoint */
+    UCP_EP_ATTR_FIELD_USER_DATA       = UCS_BIT(4)  /**< User data associated with the endpoint */
 };
 
 
@@ -4121,6 +4122,11 @@ typedef struct ucp_ep_attr {
      */
     ucp_transports_t        transports;
 
+    /**
+     * User data associated with an endpoint passed in
+     * @ref ucp_ep_params_t::user_data.
+     */
+    void                   *user_data;
 } ucp_ep_attr_t;
 
 

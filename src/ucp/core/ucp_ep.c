@@ -618,6 +618,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     if (params->field_mask & UCP_EP_PARAM_FIELD_USER_DATA) {
         /* user_data overrides err_handler.arg */
         ep->ext->user_data = params->user_data;
+        ep->flags |= UCP_EP_FLAG_USER_DATA_PARAM;
     }
 
     return UCS_OK;
@@ -3526,7 +3527,7 @@ int ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_rsc_index_t rsc_index, int is_p2p)
             /* Transport is not connected as point-to-point */
             !is_p2p &&
             /* Transport supports active messages */
-            (ucp_worker_iface(ep->worker, rsc_index)->flags &
+            (ucp_worker_iface(ep->worker, rsc_index)->attr.cap.flags &
              UCT_IFACE_FLAG_AM_BCOPY);
 }
 
@@ -3709,7 +3710,7 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
          lane_index++) {
         /* Since the caller may be using a different size ucp_transport_entry_t
          * structure definition than this code, array indexing cannot be used
-         * when accesing array elements. The array element's offset must be computed
+         * when accessing array elements. The array element's offset must be computed
          * as 'lane_index' * attr->transports.entry_size and that offset added to the
          * array's base address. */
         transport_entry =
@@ -3822,6 +3823,10 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_USER_DATA) {
+        attr->user_data = ep->flags & UCP_EP_FLAG_USER_DATA_PARAM ? ep->ext->user_data : NULL;
     }
 
     return UCS_OK;

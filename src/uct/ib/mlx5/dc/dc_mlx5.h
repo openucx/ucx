@@ -12,9 +12,9 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/rc/verbs/rc_verbs.h>
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/ud/base/ud_iface_common.h>
-#include <uct/ib/ud/accel/ud_mlx5_common.h>
+#include <uct/ib/mlx5/ud/ud_mlx5_common.h>
 
 
 /*
@@ -133,7 +133,7 @@ typedef struct uct_dc_mlx5_iface_flush_addr {
  *          - if there are no eps that are waiting for dci allocation
  *            ep goes back to normal state
  * - random
- *    - dci is choosen by random() % ndci
+ *    - dci is chosen by random() % ndci
  *    - ep keeps using dci as long as it has outstanding sends
  *
  * Not implemented policies:
@@ -227,7 +227,7 @@ typedef struct uct_dc_fc_request {
     uct_dc_fc_sender_data_t       sender;
     uint32_t                      dct_num;
 
-    /* Lid can be stored either in BE or in LE order. The endianess depends
+    /* Lid can be stored either in BE or in LE order. The endianness depends
      * on the transport (BE for mlx5 and LE for dc verbs) */
     uint16_t                      lid;
 } uct_dc_fc_request_t;
@@ -351,6 +351,9 @@ struct uct_dc_mlx5_iface {
 
 extern ucs_config_field_t uct_dc_mlx5_iface_config_table[];
 
+extern const char *uct_dc_tx_policy_names[];
+
+
 ucs_status_t
 uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
                              const uct_dc_mlx5_iface_config_t *config);
@@ -459,7 +462,7 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 #endif
 
 /* TODO:
- * use a better seach algorithm (perfect hash, bsearch, hash) ???
+ * use a better search algorithm (perfect hash, bsearch, hash) ???
  *
  * linear search is most probably the best way to go
  * because the number of dcis is usually small

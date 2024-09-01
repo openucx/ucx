@@ -98,9 +98,9 @@ static void set_msg_data_len(struct msg *msg, uint64_t data_len)
 
 static void request_init(void *request)
 {
-    struct ucx_context *contex = (struct ucx_context *)request;
+    struct ucx_context *context = (struct ucx_context *)request;
 
-    contex->completed = 0;
+    context->completed = 0;
 }
 
 static void send_handler(void *request, ucs_status_t status, void *ctx)
