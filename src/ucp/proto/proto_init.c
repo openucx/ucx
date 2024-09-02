@@ -350,12 +350,11 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     /* all allowed copy operations are one-sided */
     ucs_assert(perf_attr.recv_overhead < UCP_PROTO_PERF_EPSILON);
 
-    perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c =
-            ucp_tl_iface_latency(context, &perf_attr.latency);
     perf_factors[ucp_proto_buffer_copy_cpu_factor_id(local)].c =
             perf_attr.send_pre_overhead + perf_attr.send_post_overhead;
-    perf_factors[factor_id].m =
-            1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
+    perf_factors[factor_id] = ucs_linear_func_make(
+            ucp_tl_iface_latency(context, &perf_attr.latency),
+            1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth));
 
     if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
         (memtype_op == UCT_EP_OP_GET_ZCOPY)) {
