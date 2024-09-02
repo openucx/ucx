@@ -160,7 +160,7 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
 
 
 /**
- * Expand given perf by estimation that all meassages on interval
+ * Expand given perf by estimation that all messages on interval
  * [end of @a frag_seg + 1, @a max_length] would be sent in a pipeline async
  * manner using data provided by @a frag_seg as a performance for sending one
  * fragment.
@@ -182,7 +182,7 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
  * (2 from example).
  * 
  * LATENCY factor cannot be chosen as longest one since it overlaps with
- * other simultanious LATENCY factor operations.
+ * other simultaneous LATENCY factor operations.
  *
  * @param [in] perf       Performance data structure to update.
  * @param [in] frag_seg   Segment that is considered as a performance for
