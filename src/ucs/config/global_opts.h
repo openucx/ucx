@@ -54,7 +54,7 @@ typedef struct {
     int                        mpool_fifo;
 
     /* Handle errors mode */
-    unsigned                   handle_errors;
+    uint64_t                   handle_errors;
 
     /* Error signals */
     UCS_CONFIG_ARRAY_FIELD(int, signals) error_signals;
@@ -105,7 +105,7 @@ typedef struct {
     size_t                     memtrack_limit;
 
     /* Profiling mode */
-    unsigned                   profile_mode;
+    uint64_t                   profile_mode;
 
     /* Profiling output file name */
     char                       *profile_file;

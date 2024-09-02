@@ -186,7 +186,7 @@ typedef struct uct_ib_md_config {
 
     int                      mlx5dv; /**< mlx5 support */
     int                      devx; /**< DEVX support */
-    unsigned                 devx_objs;    /**< Objects to be created by DevX */
+    uint64_t                 devx_objs;    /**< Objects to be created by DevX */
     ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
     int                      xgvmi_umr_enable; /**< Enable UMR workflow for XGVMI */
