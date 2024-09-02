@@ -301,8 +301,16 @@ int uct_iface_scope_is_reachable(const uct_iface_h iface,
 
     ucs_assert(params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR);
 
-    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
-           uct_iface_is_same_device(iface, params->device_addr);
+    if (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) {
+        return 1;
+    }
+
+    if (!uct_iface_is_same_device(iface, params->device_addr)) {
+        uct_iface_fill_info_str_buf(params, "device address is different");
+        return 0;
+    }
+
+    return 1;
 }
 
 int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
@@ -992,7 +1000,8 @@ void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
 }
 
 int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
-                                 ucs_sys_namespace_type_t sys_ns_type)
+                                 ucs_sys_namespace_type_t sys_ns_type,
+                                 const uct_iface_is_reachable_params_t *params)
 {
     uct_iface_local_addr_ns_t my_addr = {};
 
@@ -1003,6 +1012,9 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
     /* Check if both processes are on same host and both of them are in root (or
      * non-root) pid namespace */
     if (addr_ns->super.id != my_addr.super.id) {
+        uct_iface_fill_info_str_buf(params,
+                                    "different host id local %lu vs %lu",
+                                    my_addr.super.id, addr_ns->super.id);
         return 0;
     }
 
@@ -1012,7 +1024,14 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
 
     /* We are in non-root PID namespace - return 1 if ID of namespaces are the
      * same */
-    return addr_ns->sys_ns == my_addr.sys_ns;
+    if (addr_ns->sys_ns != my_addr.sys_ns) {
+        uct_iface_fill_info_str_buf(
+                    params,
+                    "different pid namespaces %"PRIx64" vs %"PRIx64"",
+                    my_addr.sys_ns, addr_ns->sys_ns);
+        return 0;
+    }
+    return 1;
 }
 
 void uct_iface_mpool_config_copy(ucs_mpool_params_t *mp_params,

@@ -71,9 +71,19 @@ static int uct_cuda_copy_iface_is_reachable_v2(
     }
 
     addr = (uct_cuda_copy_iface_addr_t*)params->iface_addr;
+    if (addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "device address is empty");
+        return 0;
+    }
 
-    return (addr != NULL) && (iface->id == *addr) &&
-           uct_iface_scope_is_reachable(tl_iface, params);
+    if (iface->id != *addr) {
+        uct_iface_fill_info_str_buf(
+                params, "different iface id %"PRIx64" vs %"PRIx64"",
+                iface->id, *addr);
+        return 0;
+    }
+
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
