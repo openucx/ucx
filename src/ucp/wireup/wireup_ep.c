@@ -52,14 +52,14 @@ static ssize_t ucp_wireup_ep_bcopy_send_func(uct_ep_h uct_ep)
     return UCS_ERR_NO_RESOURCE;
 }
 
-static void ucp_wireup_ep_pending_req_append(uct_pending_req_t *self, void *arg)
+static void ucp_wireup_ep_append_pending_cb(uct_pending_req_t *self, void *arg)
 {
-    ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *proxy_req   = ucs_container_of(self, ucp_request_t,
+                                                  send.uct);
     ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
     ucs_queue_head_t *queue    = arg;
-
-    ucp_request_t *req = ucs_container_of(proxy_req->send.proxy.req,
-                                          ucp_request_t, send.uct);
+    const ucp_request_t *req   = ucs_container_of(proxy_req->send.proxy.req,
+                                                  ucp_request_t, send.uct);
 
     ucs_atomic_sub32(&wireup_ep->pending_count, 1);
     ucs_queue_push(queue, (ucs_queue_elem_t*)&req->send.uct.priv);
@@ -78,7 +78,7 @@ uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep,
     uct_ep_h msg_ep = ucp_wireup_ep_get_msg_ep(wireup_ep);
 
     uct_ep_pending_purge(&wireup_ep->super.super,
-                         ucp_wireup_ep_pending_req_append, pending_queue);
+                         ucp_wireup_ep_append_pending_cb, pending_queue);
     ucs_assert(wireup_ep->pending_count == 0);
 
     if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
