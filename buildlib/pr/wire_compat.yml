@@ -90,7 +90,9 @@ jobs:
           UCX_LEGACY_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)
         displayName: compare tls performance characteristics
         condition: ne(variables.ucx_tag, 'v1.14.0')
-      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
+      - bash: |
+          export WIRE_COMPAT_STAGE_ID=1
+          buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
@@ -98,14 +100,18 @@ jobs:
         displayName: ucp_client_server with UCX $(ucx_tag)
         condition: ne(variables.ucx_tag, 'v1.14.0')
         timeoutInMinutes: 2
-      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n
+      - bash: |
+          export WIRE_COMPAT_STAGE_ID=2
+          buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
           AZP_AGENT_ID: $(AZP_AGENT_ID)
         displayName: ucp_hello_world with UCX $(ucx_tag)
         timeoutInMinutes: 2
-      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
+      - bash: |
+          export WIRE_COMPAT_STAGE_ID=3
+          buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
         env:
           UCX_TLS: ^sm
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
@@ -114,7 +120,9 @@ jobs:
         displayName: ucp_client_server (no sm) with UCX $(ucx_tag)
         condition: ne(variables.ucx_tag, 'v1.14.0')
         timeoutInMinutes: 2
-      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n
+      - bash: |
+          export WIRE_COMPAT_STAGE_ID=4
+          buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n
         env:
           UCX_TLS: ^sm
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib

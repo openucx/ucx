@@ -5,6 +5,7 @@
 #include <ucm/api/ucm.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/ptr_arith.h>
+#include <common/cuda_context.h>
 #include <common/test.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -14,28 +15,7 @@ class cuda_hooks : public ucs::test {
 protected:
     virtual void init() {
         ucs_status_t result;
-        CUresult ret;
         ucs::test::init();
-
-        /* intialize device context */
-        if (cudaSetDevice(0) != cudaSuccess) {
-            UCS_TEST_SKIP_R("can't set cuda device");
-        }
-
-        ret = cuInit(0);
-        if (ret != CUDA_SUCCESS) {
-            UCS_TEST_SKIP_R("can't init cuda device");
-        }
-
-        ret = cuDeviceGet(&m_device, 0);
-        if (ret != CUDA_SUCCESS) {
-            UCS_TEST_SKIP_R("can't get cuda device");
-        }
-
-        ret = cuCtxCreate(&m_context, 0, m_device);
-        if (ret != CUDA_SUCCESS) {
-            UCS_TEST_SKIP_R("can't create cuda context");
-        }
 
         /* Avoid memory allocation in event callbacks */
         m_alloc_events.reserve(1000);
@@ -70,8 +50,6 @@ protected:
         ucm_unset_event_handler(UCM_EVENT_VM_MAPPED, cuda_vm_mapped_callback,
                                 this);
 
-        CUresult ret = cuCtxDestroy(m_context);
-        EXPECT_EQ(ret, CUDA_SUCCESS);
 
         ucs::test::cleanup();
     }
@@ -91,7 +69,7 @@ protected:
 
     CUdevice device() const
     {
-        return m_device;
+        return cuda_ctx.cuda_device();
     }
 
 private:
@@ -174,8 +152,7 @@ private:
         self->mem_free_event(event->mem_type.address, event->mem_type.size);
     }
 
-    CUdevice        m_device{CU_DEVICE_INVALID};
-    CUcontext       m_context{NULL};
+    cuda_context    cuda_ctx;
     mem_event_vec_t m_alloc_events;
     mem_event_vec_t m_free_events;
 };

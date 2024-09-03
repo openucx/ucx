@@ -510,7 +510,7 @@ local ucp_addr_fields = {
             base.BOOL, bitset, bit_shift(16)),
     iface_attr_flags_cb_sync = ProtoField.uint32(
             "ucp_addr.device.tl.iface.flags.cb_sync",
-            "Synchronuous Callback from Worker",
+            "Synchronous Callback from Worker",
             base.BOOL, bitset, bit_shift(17)),
     iface_attr_flags_cb_async = ProtoField.uint32(
             "ucp_addr.device.tl.iface.flags.cb_async",
@@ -693,7 +693,7 @@ function ucp_address_tl(tl_id, version, tvbuf, pinfo, tree)
     tvbuf = pull(tvbuf, 2)
     local csum = tl_name_csum:le_uint()
     local tl_name = get_tl_name(csum)
-    local tree = tree:add("Tranport Layer"):append_text(
+    local tree = tree:add("Transport Layer"):append_text(
         " " .. tl_id .. " (" .. tl_name  .. ")")
 
     tree:add_le(ucp_addr_fields.tl_name_csum, tl_name_csum)
@@ -1193,7 +1193,7 @@ function uct_tcp_desegment(tvbuf, pinfo, tree)
 
         local PUT_REQ_ID = 33
         if am_id == PUT_REQ_ID then
-            -- Overal length with actual data sent
+            -- Overall length with actual data sent
             local put_len = tvbuf(off + UCT_TCP_HDR + 8, 8)
             size = size + put_len:le_uint64():tonumber()
 

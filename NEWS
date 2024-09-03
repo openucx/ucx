@@ -120,7 +120,7 @@
 * Enabled v2 as default client/server connection establishment packet version
 * Enabled rendezvous protocol selection for reachable MDs only
 * Added ucp_rkey_compare API to enable rkey comparison
-* Added release version to worker address to enable wire compatability
+* Added release version to worker address to enable wire compatibility
 * Added support for memory invalidation for rendezvous through DC transport
 * Enabled the use of strong fence with new protocols infrastructure
 #### UCT
@@ -142,7 +142,7 @@
 * Adjusted gdr_copy estimated BW to improve protocol selection
 #### Shared Memory
 * Adjusted FIFO_SIZE to improve scalability
-* Removed redundent rcahce implementation in knem transport
+* Removed redundant rcahce implementation in knem transport
 * Added support for symmetric rkey to improve memory usage 
 #### UCS
 * Improved scalability of connection establishment flow
@@ -184,7 +184,7 @@
 * Fixed Intel OneAPI compilation error
 * Fixed CM address packing on server side
 * Fixed endpoint reconfiguration issue due to asymmetrical selection
-* Fixed asymmetrical selection due to wire compatability issue
+* Fixed asymmetrical selection due to wire compatibility issue
 * Fixed potential deadlock with cuda_copy and RTR protocol
 * Fixed tag_recv return value on immediate completion  
 * Fixed memory corruption by proper memh handling in tag offload rendezvous
@@ -204,7 +204,7 @@
 * Disabled MR multithreading registration
 * Fixed mlx5 WQE posting error due to compiler memory copy optimizations
 #### TCP
-* Fixed assymetric lanes selection issue due to inconsistent device listing 
+* Fixed asymmetric lanes selection issue due to inconsistent device listing 
 #### GPU (CUDA, ROCM)
 * Fixed compilation flags to support ROCm 6.0
 * Fixed values of D2H_THRESH and latencey params
@@ -1081,7 +1081,7 @@
 #### CUDA
 * Added support for global IPC cache
 #### RDMA CORE (IB, ROCE, etc.)
-* Added support for auto detection of adapative routing settings
+* Added support for auto detection of adaptive routing settings
 * Added an option to poll TX CQ every progress iteration
 * Added local and remote addresses to the reject error message
 * Added support for UAR allocation with non-cacheable memory type
@@ -1583,7 +1583,7 @@ list, for example: UCX_TLS=mm,rc,cuda_copy,cuda_ipc,gdr_copy.
 
 ## 1.0.0 (July 22, 2015)
 ### Features:
-- Added support for UCT `cma` shared memory transport (Cross-Memory Attatch)
+- Added support for UCT `cma` shared memory transport (Cross-Memory Attach)
 - Added support for UCT `mm` shared memory transport with mmap/sysv APIs
 - Added support for UCT `rc` transport based on Infiniband/RC with verbs
 - Added support for UCT `mlx5_rc` transport based on Infiniband/RC with accelerated verbs

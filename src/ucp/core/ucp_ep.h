@@ -909,7 +909,7 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
  * 
  * Changing of the configuration index deactivates UCP worker interfaces
  * corresponding to the previous endpoint configuration and activates interfaces
- * of the new configurtion.
+ * of the new configuration.
  *
  * @param [in] ep         Endpoint object.
  * @param [in] cfg_index  Endpoint configuration index.

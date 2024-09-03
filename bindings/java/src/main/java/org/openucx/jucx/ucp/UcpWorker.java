@@ -190,7 +190,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * as part of the wake-up mechanism.
      *
      * The worker must be armed before waiting on an event (must be re-armed after it has been
-     * signaled for re-use) with {@link UcpWorker#arm()}. The events triggering a signal of the
+     * signaled for reuse) with {@link UcpWorker#arm()}. The events triggering a signal of the
      * file descriptor from {@link UcpWorker#getEventFD()} depend on the interfaces used by
      * the worker and defined in the transport layer, and typically represent a request completion
      * or newly available resources. It can also be triggered by calling {@link UcpWorker#signal()}.

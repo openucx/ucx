@@ -27,7 +27,7 @@ extern ucs_config_field_t uct_scopy_iface_config_table[];
 typedef struct uct_scopy_iface_config {
     uct_sm_iface_config_t         super;
     size_t                        max_iov;    /* Maximum supported IOVs */
-    size_t                        seg_size;   /* Segment size that is used to perfrom
+    size_t                        seg_size;   /* Segment size that is used to perform
                                                * data transfer for RMA operations */
     unsigned                      tx_quota;   /* How many TX segments can be dispatched
                                                * during iface progress */

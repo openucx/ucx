@@ -740,7 +740,7 @@ static void ucs_debugger_attach()
     ucs_rcache_atfork_disable();
 
     /* Fork a process which will execute gdb and attach to the current process.
-     * We must avoid trigerring calls to malloc/free, since the heap may be corrupted.
+     * We must avoid triggering calls to malloc/free, since the heap may be corrupted.
      * Therefore all allocations are done with mmap() or use static arrays.
      */
 

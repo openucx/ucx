@@ -74,14 +74,55 @@ static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+#if HAVE_CUDA_FABRIC
+static int uct_cuda_ipc_iface_is_mnnvl_supported(uct_cuda_ipc_md_t *md)
+{
+    CUdevice cu_device;
+    int coherent;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDeviceGetAttribute(&coherent,
+                                 CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES,
+                                 cu_device));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return coherent && (md->enable_mnnvl != UCS_NO);
+}
+#endif
+
 static int
 uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
-    return uct_iface_is_reachable_params_addrs_valid(params) &&
-           (ucs_get_system_id() == *((const uint64_t*)params->device_addr)) &&
-           (getpid() != *(pid_t*)params->iface_addr) &&
-           uct_iface_scope_is_reachable(tl_iface, params);
+#if HAVE_CUDA_FABRIC
+    uct_base_iface_t *base_iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_cuda_ipc_md_t *md        = ucs_derived_of(base_iface->md, uct_cuda_ipc_md_t);
+#endif
+
+    if (!uct_iface_is_reachable_params_addrs_valid(params) ||
+        (getpid() == *(pid_t*)params->iface_addr) ||
+        !uct_iface_scope_is_reachable(tl_iface, params)) {
+        return 0;
+    };
+
+#if HAVE_CUDA_FABRIC
+    if (uct_cuda_ipc_iface_is_mnnvl_supported(md)) {
+        /* multi-node nvlink is supported and enabled */
+        return 1;
+    }
+#endif
+
+    /* Not fabric capable or multi-node nvlink disabled, so iface has to be on
+     * the same node for cuda-ipc to be reachable */
+    return ucs_get_system_id() == *((const uint64_t*)params->device_addr);
 }
 
 static double uct_cuda_ipc_iface_get_bw()
@@ -556,10 +597,18 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
 
 ucs_status_t
 uct_cuda_ipc_query_devices(
-        uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+        uct_md_h uct_md, uct_tl_device_resource_t **tl_devices_p,
         unsigned *num_tl_devices_p)
 {
-    return uct_cuda_base_query_devices_common(md, UCT_DEVICE_TYPE_SHM,
+    uct_device_type_t dev_type = UCT_DEVICE_TYPE_SHM;
+#if HAVE_CUDA_FABRIC
+    uct_cuda_ipc_md_t *md      = ucs_derived_of(uct_md, uct_cuda_ipc_md_t);
+
+    if (uct_cuda_ipc_iface_is_mnnvl_supported(md)) {
+        dev_type = UCT_DEVICE_TYPE_NET;
+    }
+#endif
+    return uct_cuda_base_query_devices_common(uct_md, dev_type,
                                               tl_devices_p, num_tl_devices_p);
 }
 

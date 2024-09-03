@@ -51,7 +51,7 @@ ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp);
 
 
 /**
- * Remove resore point created by @ref ucm_bistro_patch witout
+ * Remove restore point created by @ref ucm_bistro_patch without
  * restore original function body
  *
  * @param rp     restore point

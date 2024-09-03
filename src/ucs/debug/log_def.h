@@ -210,7 +210,7 @@ void ucs_log_print_backtrace(ucs_log_level_t level);
 
 
 /**
- * Set the name fo current thread, to appear in log messages
+ * Set the name for current thread, to appear in log messages
  *
  * @param name           Thread name to set
  */

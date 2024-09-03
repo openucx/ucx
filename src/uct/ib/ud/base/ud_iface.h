@@ -275,9 +275,9 @@ uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface);
 /*
 management of connecting endpoints (cep)
 
-Such endpoint are created either by explicitely calling ep_create_connected()
-or implicitely as a result of UD connection protocol. Calling
-ep_create_connected() may reuse already existing endpoint that was implicitely
+Such endpoint are created either by explicitly calling ep_create_connected()
+or implicitly as a result of UD connection protocol. Calling
+ep_create_connected() may reuse already existing endpoint that was implicitly
 created.
 
 UD connection protocol
@@ -314,7 +314,7 @@ Ack on connection reply. It may be send as part of the data packet.
 
 Implicit endpoints reuse
 
-Endpoints created upon receive of CREP request can be re-used when
+Endpoints created upon receive of CREP request can be reused when
 application calls ep_create_connected(). */
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);

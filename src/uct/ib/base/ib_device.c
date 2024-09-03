@@ -144,6 +144,9 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"ConnectX-7", {0x15b3, 4129},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 70},
+  {"ConnectX-8", {0x15b3, 4131},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 80},
   {"BlueField", {0x15b3, 0xa2d2},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 41},
@@ -1283,9 +1286,9 @@ ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)
     return UCS_OK;
 }
 
-int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
+int uct_ib_device_is_gid_valid(const union ibv_gid *gid)
 {
-    return (*(uint64_t *)gid_raw == 0) && (*(uint64_t *)(gid_raw + 8) == 0);
+    return gid->global.interface_id != 0;
 }
 
 ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
@@ -1301,7 +1304,7 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
         return status;
     }
 
-    if (uct_ib_device_is_gid_raw_empty(gid_info.gid.raw)) {
+    if (!uct_ib_device_is_gid_valid(&gid_info.gid)) {
         ucs_log(error_level, "invalid gid[%d] on %s:%d", gid_index,
                 uct_ib_device_name(dev), port_num);
         return UCS_ERR_INVALID_ADDR;
@@ -1501,3 +1504,4 @@ const char* uct_ib_ah_attr_str(char *buf, size_t max,
 
     return buf;
 }
+

@@ -28,19 +28,19 @@ public class UcpEndpointTest extends UcxTest {
 
     @DataPoints
     public static ArrayList<Integer> memTypes() {
-        ArrayList<Integer> resut = new ArrayList<>();
-        resut.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_HOST);
+        ArrayList<Integer> result = new ArrayList<>();
+        result.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_HOST);
         UcpContext testContext = new UcpContext(new UcpParams().requestTagFeature());
         long memTypeMask = testContext.getMemoryTypesMask();
         if (UcsConstants.MEMORY_TYPE.isMemTypeSupported(memTypeMask,
             UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA)) {
-            resut.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA);
+            result.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA);
         }
         if (UcsConstants.MEMORY_TYPE.isMemTypeSupported(memTypeMask,
             UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED)) {
-            resut.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED);
+            result.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED);
         }
-        return resut;
+        return result;
     }
 
     @Test

@@ -134,7 +134,7 @@ AC_DEFUN([COMPILER_CPU_OPTIMIZATION],
                 [AS_HELP_STRING([--with-$1], [Use $2 compiler option.])],
                 [],
                 [with_$1=$enable_optimizations])
-   
+
     AS_IF([test "x$with_$1" != "xno"],
           [SAVE_CFLAGS="$CFLAGS"
            CFLAGS="$BASE_CFLAGS $CFLAGS $3"
@@ -161,15 +161,15 @@ AC_DEFUN([DETECT_UARCH],
     cpuarch=`grep 'CPU architecture' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
     cpuvar=`grep 'CPU variant' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
     cpupart=`grep 'CPU part' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
-   
+
     ax_cpu=""
     ax_arch=""
-    
+
     AC_MSG_NOTICE(Detected CPU implementation: ${cpuimpl})
     AC_MSG_NOTICE(Detected CPU architecture: ${cpuarch})
     AC_MSG_NOTICE(Detected CPU variant: ${cpuvar})
     AC_MSG_NOTICE(Detected CPU part: ${cpupart})
-   
+
     case $cpuimpl in
       0x42) case $cpupart in
         0x516 | 0x0516)
@@ -205,7 +205,7 @@ AC_DEFUN([DETECT_UARCH],
         ;;
       *)
         ;;
-    esac 
+    esac
     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [test x$ax_cpu = xthunderx2t99])
     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [test x$ax_cpu = xthunderxt88])
     AM_CONDITIONAL([HAVE_AARCH64_HI1620], [test x$ax_cpu = xtsv110])
@@ -269,7 +269,7 @@ AC_DEFUN([ADD_COMPILER_FLAGS_IF_SUPPORTED],
 #
 # CHECK_DEPRECATED_DECL_FLAG (flag, variable)
 #
-# The macro checks if the given compiler flag enables usig deprecated declarations.
+# The macro checks if the given compiler flag enables using deprecated declarations.
 # If yes, it appends the flags to "variable".
 #
 AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
@@ -327,7 +327,7 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-diag-disable 269],
 # Set default datatype alignment to 16 bytes.
 # Some compilers (LLVM based, clang) expects allocation of datatypes by 32 bytes
 # to optimize operations memset/memcpy/etc using vectorized processor instructions
-# which requires alignment of memory buffer by 32 or higer bytes. Default malloc method
+# which requires alignment of memory buffer by 32 or higher bytes. Default malloc method
 # guarantee alignment for 16 bytes only. Force using compiler 16-bytes alignment
 # by default if option is supported.
 #
@@ -374,9 +374,9 @@ AS_IF([test "x$ax_cpu" != "x"],
       ])
 
 
-# 
+#
 # Architecture tuning
-# 
+#
 AS_IF([test "x$ax_arch" != "x"],
       [COMPILER_CPU_OPTIMIZATION([march], [architecture tuning], [-march=$ax_arch],
                                  [int main(int argc, char** argv) { return 0;}])
@@ -431,7 +431,7 @@ AS_IF([test "x$enable_asan" = xyes],
                                      [AS_MESSAGE([compiling with sanitizer])
                                       BASE_CXXFLAGS="-fsanitize=address -fno-omit-frame-pointer $BASE_CXXFLAGS"
                                       LDFLAGS="-fsanitize=address -fno-omit-frame-pointer $LDFLAGS"],
-                                     [AC_MSG_ERROR([ASAN check is requested but not supported. Check libasan package existance])])
+                                     [AC_MSG_ERROR([ASAN check is requested but not supported. Check libasan package existence])])
 
       AC_RUN_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],
                                      [[void *p = malloc(7); return 0;]])],
@@ -570,7 +570,7 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
 #
 # Intel Compiler specifics
 #
-if ! $CC -V | grep -q Intel.*Compiler; then
+if $CC --version 2>&1 | grep -q Intel; then
     ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-language-extension-token],
                                      [-fno-finite-math-only],
                                      [-Wno-recommended-option],

@@ -1542,7 +1542,7 @@ static int ucs_config_parse_check_filter(const char *name, const char *value)
             /**
              * The value does not match the pattern for this filter. E.g.
              * configuration file contains the line: CPU model = v1.*, and
-             * ucs_cpu_model_name() retruns "v2.0".
+             * ucs_cpu_model_name() returns "v2.0".
              */
             return 1;
         }

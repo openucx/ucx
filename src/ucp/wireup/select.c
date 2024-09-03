@@ -1287,7 +1287,7 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
     /* Apply dev num paths ratio after fp8 pack/unpack to make sure it is not
      * neglected because of fp8 inaccuracy
      */
-    path_index = dev_count->local[dev_index] - dev_count->local_skip[dev_index],
+    path_index = dev_count->local[dev_index] - dev_count->local_skip[dev_index];
     local_bw  *= ucp_tl_iface_bandwidth_ratio(context, path_index,
                                               wiface->attr.dev_num_paths);
 
@@ -2508,7 +2508,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 {
     ucp_worker_h worker                = ep->worker;
     ucp_tl_bitmap_t scalable_tl_bitmap = worker->scalable_tl_bitmap;
-    /* TO DO: remove initializtion after all ucp_wireup_add_X_lanes functions
+    /* TODO: remove initialization after all ucp_wireup_add_X_lanes functions
        will support specifying a reason */
     char wireup_info[256]              = {0};
     ucp_wireup_select_context_t select_ctx;

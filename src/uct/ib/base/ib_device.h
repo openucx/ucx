@@ -352,9 +352,9 @@ int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num);
 
 
 /**
- * @return 1 if the gid_raw is 0, 0 otherwise.
+ * @return whether the gid is valid
  */
-int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw);
+int uct_ib_device_is_gid_valid(const union ibv_gid *gid);
 
 
 /**
