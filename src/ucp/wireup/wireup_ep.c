@@ -66,12 +66,6 @@ static void ucp_wireup_ep_append_pending_cb(uct_pending_req_t *self, void *arg)
     ucs_free(proxy_req);
 }
 
-static int ucp_wireup_ep_is_next_ep_active(ucp_wireup_ep_t *wireup_ep)
-{
-    return (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) ||
-           (wireup_ep->aux_ep == NULL);
-}
-
 uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep,
                                       ucs_queue_head_t *pending_queue)
 {
