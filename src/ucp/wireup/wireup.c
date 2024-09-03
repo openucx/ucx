@@ -1358,7 +1358,6 @@ static int ucp_wireup_can_reconfigure_internal(
         const ucp_unpacked_address_t *remote_address,
         const unsigned *addr_indices)
 {
-    ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES];
     ucp_lane_index_t lane;
 
     if (ucp_ep_has_cm_lane(ep)) {
@@ -1368,16 +1367,6 @@ static int ucp_wireup_can_reconfigure_internal(
     /* Verify configuration have only wired-up lanes */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (!ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
-            return 0;
-        }
-    }
-
-    ucp_ep_config_lanes_intersect(&ucp_ep_config(ep)->key, new_key, ep,
-                                  remote_address, addr_indices, reuse_lane_map);
-
-    /* Verify no lanes are reused */
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (reuse_lane_map[lane] != UCP_NULL_LANE) {
             return 0;
         }
     }
@@ -1410,22 +1399,10 @@ ucp_wireup_can_reconfigure(ucp_ep_h ep, unsigned ep_init_flags,
                                                addr_indices);
 }
 
-static ucp_lane_index_t
-ucp_wireup_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key)
-{
-    if (ucp_ep_has_cm_lane(ep)) {
-        return key->cm_lane;
-    }
-
-    /* Just use first lane, as only non-reused lanes are allowed at the
-     * moment. */
-    ucs_assert(key->num_lanes > 0);
-    return 0;
-}
-
-static ucs_status_t ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep,
-                                                       ucp_ep_config_key_t *key,
-                                                       uct_ep_h *new_uct_eps)
+static ucs_status_t
+ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
+                                   uct_ep_h *new_uct_eps,
+                                   const ucp_lane_index_t *reuse_lane_map)
 {
     uct_ep_h uct_ep = NULL;
     ucp_lane_index_t old_lane, new_lane;
@@ -1490,7 +1467,8 @@ static ucs_status_t ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep,
     ucp_ep_set_lane(ep, old_lane, NULL);
 
     /* Select CM/non-reused lane as new wireup lane */
-    new_lane              = ucp_wireup_find_non_reused_lane(ep, key);
+    new_lane = ucp_ep_find_non_reused_lane(ep, key, reuse_lane_map);
+    ucs_assert(new_lane != UCP_NULL_LANE);
     new_uct_eps[new_lane] = &new_ep->super.super;
     key->wireup_msg_lane  = new_lane;
     return UCS_OK;
@@ -1557,7 +1535,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         /* previous wireup lane is not part of new configuration, so add it as
          * auxiliary endpoint inside CM/non-reused lane, to be able to
          * continue wireup messages exchange */
-        status = ucp_wireup_replace_wireup_msg_lane(ep, new_key, new_uct_eps);
+        status = ucp_wireup_replace_wireup_msg_lane(ep, new_key, new_uct_eps,
+                                                    reuse_lane_map);
         if (status != UCS_OK) {
             return status;
         }

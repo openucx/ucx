@@ -759,6 +759,10 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
                                    const unsigned *addr_indices,
                                    ucp_lane_index_t *lane_map);
 
+ucp_lane_index_t
+ucp_ep_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
+                            const ucp_lane_index_t *reuse_lane_map);
+
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
 
