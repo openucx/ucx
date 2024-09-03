@@ -947,8 +947,7 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
         goto err_free_memh;
     }
 
-    memh->reg_id = context->next_memh_reg_id++;
-    *memh_p      = memh;
+    *memh_p = memh;
 
 out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
@@ -1554,6 +1553,7 @@ ucp_mem_rcache_mem_reg_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
 
     ucp_memh_init(memh, context, 0, reg_ctx->uct_flags, UCT_ALLOC_METHOD_LAST,
                   reg_ctx->mem_type);
+    memh->reg_id = context->next_memh_reg_id++;
 
     if (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) {
         /* Hide errors during registration but fail if any memory domain failed
