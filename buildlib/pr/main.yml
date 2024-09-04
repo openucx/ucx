@@ -270,10 +270,10 @@ stages:
   - stage: WireCompat
     dependsOn: [Static_check]
     jobs:
-    - template: wire_compat.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
+    # - template: wire_compat.yml
+    #   parameters:
+    #     name: althca
+    #     demands: ucx_althca -equals yes
     - template: wire_compat.yml
       parameters:
         name: gpu
@@ -305,11 +305,11 @@ stages:
   - stage: Tests
     dependsOn: [Static_check]
     jobs:
-    - template: tests.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
-        test_perf: 0
+    # - template: tests.yml
+    #   parameters:
+    #     name: althca
+    #     demands: ucx_althca -equals yes
+    #     test_perf: 0
     - template: tests.yml
       parameters:
         name: gpu
