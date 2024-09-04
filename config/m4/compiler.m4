@@ -12,6 +12,8 @@
 #
 BASE_CFLAGS="-g -Wall -Werror"
 
+# Prevent libtool from suppression of warnings
+LT_CFLAGS="-no-suppress"
 
 #
 # Check that C++ is functional.
@@ -599,6 +601,7 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-pointer-sign],
 
 
 AC_SUBST([BASE_CFLAGS])
+AC_SUBST(LT_CFLAGS)
 AC_SUBST([BASE_CXXFLAGS])
 AC_SUBST([CFLAGS_PEDANTIC])
 AC_SUBST([LDFLAGS_DYNAMIC_LIST_DATA])

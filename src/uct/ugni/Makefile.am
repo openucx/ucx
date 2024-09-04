@@ -7,7 +7,8 @@ if HAVE_CRAY_UGNI
 
 module_LTLIBRARIES      = libuct_ugni.la
 libuct_ugni_la_CPPFLAGS = $(BASE_CPPFLAGS)
-libuct_ugni_la_CFLAGS   = $(BASE_CFLAGS) $(CRAY_UGNI_CFLAGS)
+libuct_ugni_la_CFLAGS   = $(BASE_CFLAGS) $(CRAY_UGNI_CFLAGS) \
+                          $(LT_CFLAGS)
 libuct_ugni_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la
 libuct_ugni_la_LDFLAGS  = $(CRAY_UGNI_LIBS) -version-info $(SOVERSION)
