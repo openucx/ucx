@@ -1156,13 +1156,17 @@ void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
 static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
                                           ucs_memory_type_t mem_type)
 {
+    if (md->reg_mem_types & UCS_BIT(mem_type)) {
+        return;
+    }
+
     if (!access(file, F_OK)) {
         md->reg_mem_types |= UCS_BIT(mem_type);
     }
 
-    ucs_debug("%s: %s GPUDirect RDMA is %s", uct_ib_device_name(&md->dev),
-              ucs_memory_type_names[mem_type],
-              md->reg_mem_types & UCS_BIT(mem_type) ? "enabled" : "disabled");
+    ucs_debug("%s: %s GPUDirect RDMA is %sdetected by checking %s",
+              uct_ib_device_name(&md->dev), ucs_memory_type_names[mem_type],
+              md->reg_mem_types & UCS_BIT(mem_type) ? "" : "not ", file);
 }
 
 static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
@@ -1235,10 +1239,18 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     /* Check for GPU-direct support */
     md->reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
-        /* check if GDR driver is loaded */
+        /* Check peer memory driver is loaded, different driver versions use 
+         * different paths */
         uct_ib_check_gpudirect_driver(
                 md, "/sys/kernel/mm/memory_peers/nv_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
+        uct_ib_check_gpudirect_driver(
+                md, "/sys/module/nvidia_peermem/version",
+                UCS_MEMORY_TYPE_CUDA);
+        uct_ib_check_gpudirect_driver(
+                md, "/sys/module/nv_peer_mem/version",
+                UCS_MEMORY_TYPE_CUDA);
+                
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
