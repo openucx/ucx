@@ -10,7 +10,9 @@
 
 #include "vfs_daemon.h"
 
+#include <ucs/sys/string.h>
 #include <ucs/debug/log_def.h>
+#include <ucs/debug/memtrack_int.h>
 #include <sys/wait.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -151,10 +153,17 @@ out:
 
 int vfs_mount(int pid)
 {
-    char mountpoint[PATH_MAX];
     char mountopts[1024];
     char name[NAME_MAX];
+    char *mountpoint;
     int fuse_fd, ret;
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(&mountpoint, "mountpoint");
+    if (status != UCS_OK) {
+        ret = -ENOMEM;
+        goto out;
+    }
 
     /* Add common mount options:
      * - File system name (source) : process name and pid
@@ -168,29 +177,36 @@ int vfs_mount(int pid)
             vfs_get_process_name(pid, name, sizeof(name)),
             (strlen(g_opts.mount_opts) > 0) ? "," : "", g_opts.mount_opts);
     if (ret >= sizeof(mountopts)) {
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto out_free_mountpoint;
     }
 
     /* Create the mount point directory, and ignore "already exists" error */
-    vfs_get_mountpoint(pid, mountpoint, sizeof(mountpoint));
+    vfs_get_mountpoint(pid, mountpoint, PATH_MAX);
     ret = mkdir(mountpoint, S_IRWXU);
     if ((ret < 0) && (errno != EEXIST)) {
         ret = -errno;
         vfs_error("failed to create directory '%s': %m", mountpoint);
-        return ret;
+        goto out_free_mountpoint;
     }
 
     /* Mount a new FUSE filesystem in the mount point directory */
     vfs_log("mounting directory '%s' with options '%s'", mountpoint, mountopts);
     fuse_fd = fuse_open_channel(mountpoint, mountopts);
     if (fuse_fd < 0) {
+        ret = fuse_fd;
         vfs_error("fuse_open_channel(%s,opts=%s) failed: %m", mountpoint,
                   mountopts);
-        return fuse_fd;
+        goto out_free_mountpoint;
     }
 
     vfs_log("mounted directory '%s' with fd %d", mountpoint, fuse_fd);
-    return fuse_fd;
+    ret = fuse_fd;
+
+out_free_mountpoint:
+    ucs_free(mountpoint);
+out:
+    return ret;
 }
 
 int vfs_unmount(int pid)
