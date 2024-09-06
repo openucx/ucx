@@ -899,13 +899,26 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_iface_t, uct_iface_t, uct_md_h,
 
 static int uct_tcp_is_bridge(const char *if_name)
 {
-    char path[PATH_MAX];
+    char *path;
+    int ret;
     struct stat st;
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(&path, "path");
+    if (status != UCS_OK) {
+        ret = 0;
+        goto out;
+    }
 
     ucs_snprintf_safe(path, PATH_MAX, UCT_TCP_IFACE_NETDEV_DIR "/%s/bridge",
                       if_name);
 
-    return (stat(path, &st) == 0) && S_ISDIR(st.st_mode);
+    ret = (stat(path, &st) == 0) && S_ISDIR(st.st_mode);
+
+out_free_path:
+    ucs_free(path);
+out:
+    return ret;
 }
 
 ucs_status_t uct_tcp_query_devices(uct_md_h md,
