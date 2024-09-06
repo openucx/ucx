@@ -242,15 +242,20 @@ out_unlock:
 static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
 {
 #ifdef HAVE_INOTIFY
+    char *dir_buf;
     char event_buf[sizeof(struct inotify_event) + NAME_MAX];
     const struct inotify_event *event;
     char watch_filename[NAME_MAX];
     const char *watch_dirname;
-    char dir_buf[PATH_MAX];
     ucs_status_t status;
     ssize_t nread;
     size_t offset;
     int ret;
+
+    status = ucs_string_alloc_path_buffer(&dir_buf, "dir_buf");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 
@@ -261,14 +266,14 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
      */
     if (ucs_vfs_fuse_context.stop) {
         status = UCS_ERR_CANCELED;
-        goto out;
+        goto out_unlock;
     }
 
     /* Create directory path */
     ret = ucs_vfs_sock_mkdir(path, UCS_LOG_LEVEL_DIAG);
     if (ret != 0) {
         status = UCS_ERR_IO_ERROR;
-        goto out;
+        goto out_unlock;
     }
 
     /* Create inotify channel */
@@ -283,11 +288,11 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             ucs_error("inotify_init() failed: %m");
         }
         status = UCS_ERR_IO_ERROR;
-        goto out;
+        goto out_unlock;
     }
 
     /* copy path components to 'dir_buf' and 'watch_filename' */
-    ucs_strncpy_safe(dir_buf, path, sizeof(dir_buf));
+    ucs_strncpy_safe(dir_buf, path, PATH_MAX);
     ucs_strncpy_safe(watch_filename, ucs_basename(path),
                      sizeof(watch_filename));
     watch_dirname = dirname(dir_buf);
@@ -366,8 +371,11 @@ out_close_watch_id:
 out_close_inotify_fd:
     close(ucs_vfs_fuse_context.inotify_fd);
     ucs_vfs_fuse_context.inotify_fd = -1;
-out:
+out_unlock:
     pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
+out_free_dir_buf:
+    ucs_free(dir_buf);
+out:
     return status;
 #else
     return UCS_ERR_UNSUPPORTED;
