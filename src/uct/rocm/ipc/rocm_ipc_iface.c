@@ -70,10 +70,21 @@ static int
 uct_rocm_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
-    return uct_iface_is_reachable_params_addrs_valid(params) &&
-           (ucs_get_system_id() == *((const uint64_t*)params->device_addr)) &&
-           (getpid() != *(pid_t*)params->iface_addr) &&
-           uct_iface_scope_is_reachable(tl_iface, params);
+    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+        return 0;
+    }
+
+    if (ucs_get_system_id() != *((const uint64_t*)params->device_addr)) {
+        uct_iface_fill_info_str_buf(params,
+                                    "the device addr is from another machine");
+        return 0;
+    }
+
+    if (getpid() == *(pid_t*)params->iface_addr) {
+        uct_iface_fill_info_str_buf(params, "same process");
+    }
+
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,

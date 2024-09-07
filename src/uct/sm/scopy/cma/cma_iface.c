@@ -79,21 +79,37 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     ucs_cma_iface_ext_device_addr_t *iface_addr;
     pid_t peer_pid;
 
-    if (!uct_iface_is_reachable_params_addrs_valid(params) ||
-        (params->device_addr == NULL) || (params->iface_addr == NULL)) {
+    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
         return 0;
     }
 
-    if (!uct_sm_iface_is_reachable(tl_iface, params->device_addr)) {
+    if (params->device_addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "device address is empty");
+        return 0;
+    }
+
+    if (params->iface_addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "iface address is empty");
+        return 0;
+    }
+
+    if (!uct_sm_iface_is_reachable(tl_iface, params)) {
         return 0;
     }
 
     iface_addr = (ucs_cma_iface_ext_device_addr_t*)params->iface_addr;
     if (iface_addr->super.id & UCT_CMA_IFACE_ADDR_FLAG_PID_NS) {
         if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != iface_addr->pid_ns) {
+            uct_iface_fill_info_str_buf(params,
+                                        "pid namespaces differ (%lu vs %lu)",
+                                        ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID),
+                                        iface_addr->pid_ns);
             return 0;
         }
     } else if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+        uct_iface_fill_info_str_buf(
+                params, "namespace %lu is not the host's default namespace",
+                ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID));
         return 0;
     }
 
@@ -103,6 +119,8 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     peer_pid = iface_addr->super.id & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
     if ((process_vm_readv(peer_pid, &iov, 1, &iov, 1, 0) == -1) &&
         (errno == EPERM)) {
+        uct_iface_fill_info_str_buf(params,
+                                    "no permissions to read from remote peer");
         return 0;
     }
 

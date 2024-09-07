@@ -44,7 +44,7 @@ uct_knem_iface_is_reachable_v2(const uct_iface_h tl_iface,
 {
     return uct_iface_is_reachable_params_valid(
                    params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR) &&
-           uct_sm_iface_is_reachable(tl_iface, params->device_addr) &&
+           uct_sm_iface_is_reachable(tl_iface, params) &&
            uct_iface_scope_is_reachable(tl_iface, params);
 }
 

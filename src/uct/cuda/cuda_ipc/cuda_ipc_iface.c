@@ -107,11 +107,14 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_cuda_ipc_md_t *md        = ucs_derived_of(base_iface->md, uct_cuda_ipc_md_t);
 #endif
 
-    if (!uct_iface_is_reachable_params_addrs_valid(params) ||
-        (getpid() == *(pid_t*)params->iface_addr) ||
-        !uct_iface_scope_is_reachable(tl_iface, params)) {
+    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
         return 0;
-    };
+    }
+
+    if (getpid() == *(pid_t*)params->iface_addr) {
+        uct_iface_fill_info_str_buf(params, "same process");
+        return 0;
+    }
 
 #if HAVE_CUDA_FABRIC
     if (uct_cuda_ipc_iface_is_mnnvl_supported(md)) {
@@ -122,7 +125,15 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     /* Not fabric capable or multi-node nvlink disabled, so iface has to be on
      * the same node for cuda-ipc to be reachable */
-    return ucs_get_system_id() == *((const uint64_t*)params->device_addr);
+    if ((ucs_get_system_id() != *((const uint64_t*)params->device_addr))) {
+        uct_iface_fill_info_str_buf(params,
+                                    "different system id %"PRIx64" vs %"PRIx64"",
+                                    ucs_get_system_id(),
+                                    *((const uint64_t*)params->device_addr));
+        return 0;
+    }
+
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static double uct_cuda_ipc_iface_get_bw()
