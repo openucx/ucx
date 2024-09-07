@@ -148,14 +148,13 @@ uct_self_iface_is_reachable_v2(const uct_iface_h tl_iface,
     const uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
     const uct_self_iface_addr_t *addr;
 
-    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+    if (!uct_iface_is_reachable_params_valid(
+                params, UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR)) {
         return 0;
     }
 
     addr = (const uct_self_iface_addr_t*)params->iface_addr;
-
-    return (addr != NULL) && (iface->id == *addr) &&
-           uct_iface_scope_is_reachable(tl_iface, params);
+    return (addr != NULL) && (iface->id == *addr);
 }
 
 static void uct_self_iface_sendrecv_am(uct_self_iface_t *iface, uint8_t am_id,
