@@ -172,6 +172,9 @@ err:
 
 void uct_component_register(uct_component_t *component)
 {
+    ucs_trace("component_list %p: register %p %s", &uct_components_list,
+              component, component->name);
+
     ucs_list_add_tail(&uct_components_list, &component->list);
     ucs_list_add_tail(&ucs_config_global_list, &component->md_config.list);
     ucs_list_add_tail(&ucs_config_global_list, &component->cm_config.list);
@@ -179,6 +182,9 @@ void uct_component_register(uct_component_t *component)
 
 void uct_component_unregister(uct_component_t *component)
 {
+    ucs_trace("component_list %p: unregister %p %s", &uct_components_list,
+              component, component->name);
+
     /* TODO: add ucs_list_del(uct_components_list) */
     ucs_list_del(&component->md_config.list);
     ucs_list_del(&component->cm_config.list);

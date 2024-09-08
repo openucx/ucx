@@ -793,14 +793,11 @@ ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
                                        uct_md_resource_desc_t **resources_p,
                                        unsigned *num_resources_p)
 {
-    UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
     int num_resources = 0;
     uct_md_resource_desc_t *resources;
     struct ibv_device **device_list;
     ucs_status_t status;
     int i, num_devices;
-
-    UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 
     /* Get device list from driver */
     device_list = ibv_get_device_list(&num_devices);
@@ -1517,6 +1514,7 @@ uct_component_t uct_ib_component = {
 
 void UCS_F_CTOR uct_ib_init()
 {
+    UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
     ssize_t i;
 
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(verbs).list);
@@ -1525,6 +1523,8 @@ void UCS_F_CTOR uct_ib_init()
     for (i = 0; i < ucs_static_array_size(uct_ib_tls); i++) {
         uct_tl_register(&uct_ib_component, uct_ib_tls[i]);
     }
+
+    UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 }
 
 void UCS_F_DTOR uct_ib_cleanup()
