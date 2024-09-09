@@ -443,7 +443,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
     }
 
     ret = 1;
-    *((unsigned*)dest) = 0;
+    *((uint64_t*)dest) = 0;
     p = strtok_r(str, ",", &saveptr);
     while (p != NULL) {
         i = ucs_string_find_in_list(p, (const char**)arg, 0);
@@ -451,7 +451,10 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
             ret = 0;
             break;
         }
-        *((unsigned*)dest) |= UCS_BIT(i);
+
+        ucs_assertv(i < (sizeof(uint64_t) * 8), "bit %d overflows for '%s'", i,
+                    p);
+        *((uint64_t*)dest) |= UCS_BIT(i);
         p = strtok_r(NULL, ",", &saveptr);
     }
 
@@ -462,7 +465,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_bitmap(char *buf, size_t max,
                               const void *src, const void *arg)
 {
-    ucs_flags_str(buf, max, *((unsigned*)src), (const char**)arg);
+    ucs_flags_str(buf, max, *((uint64_t*)src), (const char**)arg);
     return 1;
 }
 

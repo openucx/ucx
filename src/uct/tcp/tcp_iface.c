@@ -200,6 +200,7 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     uct_iface_local_addr_ns_t *local_addr_ns;
     uct_tcp_device_addr_t *tcp_dev_addr;
+    int is_local_loopback, is_remote_loopback;
 
     if (!uct_iface_is_reachable_params_valid(
                 params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
@@ -208,19 +209,29 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     tcp_dev_addr = (uct_tcp_device_addr_t*)params->device_addr;
     if (iface->config.ifaddr.ss_family != tcp_dev_addr->sa_family) {
+        uct_iface_fill_info_str_buf(
+                params, "different address family %d vs %d",
+                iface->config.ifaddr.ss_family, tcp_dev_addr->sa_family);
         return 0;
     }
 
     /* Loopback can connect only to loopback */
-    if (!!(tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) !=
-        ucs_sockaddr_is_inaddr_loopback(
-                (const struct sockaddr*)&iface->config.ifaddr)) {
+    is_remote_loopback = !!(tcp_dev_addr->flags &
+                            UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK);
+    is_local_loopback  = ucs_sockaddr_is_inaddr_loopback(
+            (const struct sockaddr*)&iface->config.ifaddr);
+    if (is_remote_loopback != is_local_loopback) {
+        uct_iface_fill_info_str_buf(params,
+                                    "incompatible loopback flags, "
+                                    "%d (local) vs %d (remote)",
+                                    is_local_loopback, is_remote_loopback);
         return 0;
     }
 
-    if (tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) {
+    if (is_remote_loopback) {
         local_addr_ns = (uct_iface_local_addr_ns_t*)(tcp_dev_addr + 1);
-        if (!uct_iface_local_is_reachable(local_addr_ns, UCS_SYS_NS_TYPE_NET)) {
+        if (!uct_iface_local_is_reachable(local_addr_ns, UCS_SYS_NS_TYPE_NET,
+                                          params)) {
             return 0;
         }
     }
