@@ -209,7 +209,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
     ucp_ep_config_key_set_err_mode(key, wireup_ep_init_flags);
     ucp_ep_config_key_init_flags(key, wireup_ep_init_flags);
     status = ucp_wireup_select_lanes(ucp_ep, wireup_ep_init_flags, *tl_bitmap,
-                                     &unpacked_addr, addr_indices, key, 0);
+                                     &unpacked_addr, addr_indices, key, 0, 0);
 
     ucs_free(unpacked_addr.address_list);
 free_ucp_addr:

@@ -20,8 +20,13 @@ protected:
 
     class entity {
     public:
-        entity(const ucp_test_base::entity *e, unsigned init_flags) :
-            m_worker_entity(e), m_init_flags(init_flags)
+        entity(const ucp_test_base::entity *e, unsigned init_flags,
+               bool reuse_lanes, bool asymmetric_scale, bool single_transport) :
+            m_worker_entity(e),
+            m_init_flags(init_flags),
+            m_reuse_lanes(reuse_lanes),
+            m_asymmetric_scale(asymmetric_scale),
+            m_single_transport(single_transport)
         {
         }
 
@@ -53,40 +58,35 @@ protected:
 
     private:
         void store_config();
-        ucp_tl_bitmap_t ep_tl_bitmap() const;
+        ucp_tl_bitmap_t ep_tl_bitmap(bool non_reused_only = false) const;
         address_p get_address(bool ep_only) const;
         bool has_matching_lane(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
+        unsigned num_reused() const;
 
         ucp_worker_cfg_index_t       m_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
         ucp_ep_h                     m_ep        = nullptr;
         std::vector<uct_ep_h>        m_uct_eps;
         const ucp_test_base::entity *m_worker_entity;
         unsigned                     m_init_flags;
+        bool                         m_reuse_lanes;
+        bool                         m_asymmetric_scale;
+        bool                         m_single_transport;
     };
 
     typedef enum {
         EXCLUDE_IFACES   = 0,
-        ASYMMETRIC_SCALE = 1
+        ASYMMETRIC_SCALE = 1,
+        RANK_UPDATE      = 2
     } method_t;
 
-    bool is_single_transport()
+    bool is_single_transport() const
     {
         return GetParam().transports.size() == 1;
     }
 
-    void create_entities_and_connect(unsigned init_flags, method_t method)
-    {
-        m_sender.reset(new entity(create_entity(true), init_flags));
-
-        if (method == ASYMMETRIC_SCALE) {
-            modify_config("NUM_EPS", "200");
-        }
-
-        m_receiver.reset(new entity(create_entity(false), init_flags));
-        m_sender->connect(*m_receiver.get(), method == EXCLUDE_IFACES);
-        m_receiver->connect(*m_sender.get(), method == EXCLUDE_IFACES);
-    }
+    void create_entities_and_connect(unsigned init_flags, method_t method,
+                                     bool reuse_lanes);
 
     std::unique_ptr<entity> m_sender;
     std::unique_ptr<entity> m_receiver;
@@ -121,7 +121,7 @@ public:
     }
 
     void run(method_t method, unsigned init_flags = UCP_EP_INIT_CREATE_AM_LANE,
-             bool bidirectional = false);
+             bool bidirectional = false, bool reuse_lanes = false);
 
     void send_message(const entity &e1, const entity &e2,
                       const std::string &sbuf, const std::string &rbuf,
@@ -139,34 +139,67 @@ public:
         reqs.push_back(sreq);
     }
 
-    void send_recv(bool bidirectional)
+    void init_buffers(std::vector<std::string> &sbufs,
+                      std::vector<std::string> &rbufs)
     {
-        static constexpr unsigned num_iterations = 1000;
-
         for (unsigned i = 0; i < num_iterations; ++i) {
-            std::string sbuf(msg_size, 'a'), rbuf(msg_size, 'b');
-            /* Buffers for the opposite direction */
-            std::string o_sbuf(msg_size, 'c'), o_rbuf(msg_size, 'd');
-
-            std::vector<void*> reqs;
-            send_message(*m_sender.get(), *m_receiver.get(), sbuf, rbuf, reqs);
-
-            if (bidirectional) {
-                send_message(*m_receiver.get(), *m_sender.get(), o_sbuf, o_rbuf,
-                             reqs);
-            }
-
-            requests_wait(reqs);
-            EXPECT_EQ(sbuf, rbuf);
-
-            if (bidirectional) {
-                EXPECT_EQ(o_sbuf, o_rbuf);
-            }
+            sbufs[i].resize(msg_size);
+            rbufs[i].resize(msg_size);
+            std::fill(sbufs[i].begin(), sbufs[i].end(), 'a');
+            std::fill(rbufs[i].begin(), rbufs[i].end(), 'b');
         }
     }
 
-    static constexpr size_t msg_size = 16 * UCS_KBYTE;
+    void send_recv(bool bidirectional = false)
+    {
+        std::vector<std::string> sbufs(num_iterations), rbufs(num_iterations);
+        /* Buffers for the opposite direction */
+        std::vector<std::string> o_sbufs(num_iterations),
+                o_rbufs(num_iterations);
+        std::vector<void*> reqs;
+
+        init_buffers(sbufs, rbufs);
+        init_buffers(o_sbufs, o_rbufs);
+
+        for (unsigned i = 0; i < num_iterations; ++i) {
+            send_message(*m_sender.get(), *m_receiver.get(), sbufs[i], rbufs[i],
+                         reqs);
+
+            if (bidirectional) {
+                send_message(*m_receiver.get(), *m_sender.get(), o_sbufs[i],
+                             o_rbufs[i], reqs);
+            }
+        }
+
+        requests_wait(reqs);
+        EXPECT_EQ(sbufs, rbufs);
+
+        if (bidirectional) {
+            EXPECT_EQ(o_sbufs, o_rbufs);
+        }
+    }
+
+    static constexpr size_t msg_size         = 16 * UCS_KBYTE;
+    static constexpr unsigned num_iterations = 1000;
 };
+
+unsigned test_ucp_reconfigure::entity::num_reused() const
+{
+    if (m_reuse_lanes) {
+        return ucp_ep_num_lanes(ep()) / 2;
+    }
+
+    unsigned num_shm = 0;
+    auto context     = m_worker_entity->ucph();
+
+    for (auto lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
+        auto rsc_idx = ucp_ep_get_rsc_index(ep(), lane);
+        num_shm     += (context->tl_rscs[rsc_idx].tl_rsc.dev_type ==
+                        UCT_DEVICE_TYPE_SHM);
+    }
+
+    return m_asymmetric_scale ? num_shm : 0;
+}
 
 void test_ucp_reconfigure::entity::store_config()
 {
@@ -184,16 +217,25 @@ void test_ucp_reconfigure::entity::store_config()
     m_cfg_index = ep()->cfg_index;
 }
 
-ucp_tl_bitmap_t test_ucp_reconfigure::entity::ep_tl_bitmap() const
+ucp_tl_bitmap_t
+test_ucp_reconfigure::entity::ep_tl_bitmap(bool non_reused_only) const
 {
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    size_t num_tls            = 0;
+    auto context              = m_worker_entity->ucph();
+    ucp_rsc_index_t rsc_idx;
 
-    if (ep() == NULL) {
-        return tl_bitmap;
-    }
-
-    for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
-        UCS_STATIC_BITMAP_SET(&tl_bitmap, ucp_ep_get_rsc_index(ep(), lane));
+    if ((ep() == NULL) && m_single_transport) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_idx, &context->tl_bitmap) {
+            if (++num_tls > (context->num_tls / 2)) {
+                UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
+            }
+        }
+    } else if (ep() != NULL) {
+        auto first_lane = non_reused_only ? num_reused() : 0;
+        for (auto lane = first_lane; lane < ucp_ep_num_lanes(ep()); ++lane) {
+            UCS_STATIC_BITMAP_SET(&tl_bitmap, ucp_ep_get_rsc_index(ep(), lane));
+        }
     }
 
     return tl_bitmap;
@@ -206,7 +248,8 @@ void test_ucp_reconfigure::entity::connect(const entity &other,
     ucp_tl_bitmap_t tl_bitmap;
     unsigned addr_indices[UCP_MAX_LANES];
 
-    tl_bitmap = is_exclude_iface ? UCS_STATIC_BITMAP_NOT(other.ep_tl_bitmap()) :
+    tl_bitmap = is_exclude_iface ? UCS_STATIC_BITMAP_NOT(
+                                           other.ep_tl_bitmap(m_reuse_lanes)) :
                                    ucp_tl_bitmap_max;
 
     UCS_ASYNC_BLOCK(&worker()->async);
@@ -262,13 +305,13 @@ void test_ucp_reconfigure::entity::verify_configuration(
         /* Verify local and remote lanes are identical */
         EXPECT_TRUE(has_matching_lane(ep(), lane, other));
 
-        /* Verify correct number of reused lanes is configured */
+        /* Verify correct number of reused lanes */
         auto uct_ep = ucp_ep_get_lane(ep(), lane);
         auto it     = std::find(m_uct_eps.begin(), m_uct_eps.end(), uct_ep);
         reused     += (it != m_uct_eps.end());
     }
 
-    EXPECT_EQ(reused, is_reconfigured() ? 0 : num_lanes);
+    EXPECT_EQ(reused, is_reconfigured() ? num_reused() : num_lanes);
 }
 
 test_ucp_reconfigure::address_p
@@ -296,10 +339,30 @@ test_ucp_reconfigure::entity::get_address(bool ep_only) const
     return address;
 }
 
-void test_ucp_reconfigure::run(method_t method, unsigned init_flags,
-                               bool bidirectional)
+void test_ucp_reconfigure::create_entities_and_connect(unsigned init_flags,
+                                                       method_t method,
+                                                       bool reuse_lanes)
 {
-    create_entities_and_connect(init_flags, method);
+    bool is_asymmetric_scale = (method == ASYMMETRIC_SCALE);
+
+    m_sender.reset(new entity(create_entity(true), init_flags, reuse_lanes,
+                              is_asymmetric_scale, is_single_transport()));
+
+    if (is_asymmetric_scale) {
+        modify_config("NUM_EPS", "200");
+    }
+
+    m_receiver.reset(new entity(create_entity(false), init_flags, reuse_lanes,
+                                is_asymmetric_scale, is_single_transport()));
+
+    m_sender->connect(*m_receiver.get(), method == EXCLUDE_IFACES);
+    m_receiver->connect(*m_sender.get(), method == EXCLUDE_IFACES);
+}
+
+void test_ucp_reconfigure::run(method_t method, unsigned init_flags,
+                               bool bidirectional, bool reuse_lanes)
+{
+    create_entities_and_connect(init_flags, method, reuse_lanes);
     send_recv(bidirectional);
 
     EXPECT_NE(m_sender->is_reconfigured(), m_receiver->is_reconfigured());
@@ -307,83 +370,99 @@ void test_ucp_reconfigure::run(method_t method, unsigned init_flags,
     m_receiver->verify_configuration(*m_sender.get());
 }
 
-/* TODO: Remove skip condition after next PRs are merged. */
-UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, basic,
-                     !has_transport("rc_x") || !has_transport("rc_v"))
+UCS_TEST_P(test_ucp_reconfigure, basic)
 {
     run(EXCLUDE_IFACES);
 }
 
 UCS_TEST_P(test_ucp_reconfigure, request_reset, "PROTO_REQUEST_RESET=y")
 {
-    if (is_single_transport()) {
-        /* One side will consume all ifaces and the other side will have no ifaces left to use */
-        UCS_TEST_SKIP_R("exclude_iface requires at least 2 transports to work "
-                        "(for example DC + SHM)");
-    }
-
-    if (has_transport("ib") && !has_resource(sender(), "rc_verbs")) {
-        UCS_TEST_SKIP_R("No IB devs available, config will be non-wireup");
-    }
-
     run(EXCLUDE_IFACES);
 }
 
-/* SHM causes lane reuse, disable for now. */
-UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, resolve_remote_id,
-                     has_transport("shm") || is_self(), "RNDV_THRESH=0")
+UCS_TEST_P(test_ucp_reconfigure, reuse_lanes)
 {
-    /* There's no support for multiple paths + AM_ONLY in UCX (Remove in next
-     * PRs) */
+    /* Use single path so that num_lanes/2 will only exclude some lanes and
+     * not all. */
     modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
-
-    if (has_transport("dc_x")) {
-        UCS_TEST_SKIP_R("extra path added for AM_LANE when using DC (will be"
-                        " removed)");
-    }
-
-    if (has_transport("tcp")) {
-        UCS_TEST_SKIP_R("lanes are reused (not supported yet)");
-    }
-
-    /* Create only AM_LANE to ensure we have only wireup EPs in
-     * configuration. */
-    run(EXCLUDE_IFACES, UCP_EP_INIT_CREATE_AM_LANE_ONLY, true);
+    run(EXCLUDE_IFACES, UCP_EP_INIT_CREATE_AM_LANE, false, true);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, rc_x_v, "rc");
-UCP_INSTANTIATE_TEST_CASE(test_ucp_reconfigure);
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, rc, "rc_v")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, shm_ib, "shm,ib")
+
+class test_reconfigure_resolve_remote : public test_ucp_reconfigure {
+};
+
+UCS_TEST_P(test_reconfigure_resolve_remote, resolve_id, "RNDV_THRESH=0")
+{
+    if (has_transport("tcp")) {
+        UCS_TEST_SKIP_R("asymmetric setup is not supported for this transport "
+                        "due to reachability bug in TCP (ib0 connects to ib1 "
+                        "and fails)");
+    }
+
+    if (has_transport("dc_x")) {
+        UCS_TEST_SKIP_R("extra path added for AM_LANE when using DC");
+    }
+
+    run(EXCLUDE_IFACES, UCP_EP_INIT_CREATE_AM_LANE, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_reconfigure_resolve_remote)
 
 class test_reconfigure_asym_scale : public test_ucp_reconfigure {
 };
 
-/* Will be relevant when reuse + non-wireup is supported */
-UCS_TEST_SKIP_COND_P(test_reconfigure_asym_scale, basic, has_transport("shm"))
+UCS_TEST_P(test_reconfigure_asym_scale, basic)
 {
     run(ASYMMETRIC_SCALE);
 }
 
-/* Will be relevant when reuse + non-wireup is supported */
-UCS_TEST_SKIP_COND_P(test_reconfigure_asym_scale, request_reset,
-                     has_transport("shm"), "PROTO_REQUEST_RESET=y")
+UCS_TEST_P(test_reconfigure_asym_scale, request_reset, "PROTO_REQUEST_RESET=y")
 {
-    if (has_transport("ib") && !has_resource(sender(), "rc_verbs")) {
-        UCS_TEST_SKIP_R("No IB devs available, config will be non-wireup");
-    }
-
     run(ASYMMETRIC_SCALE);
 }
 
-/* SHM causes lane reuse, disable for now. */
-UCS_TEST_SKIP_COND_P(test_reconfigure_asym_scale, resolve_remote_id,
-                     has_transport("shm") || is_self(), "RNDV_THRESH=0")
+UCS_TEST_P(test_reconfigure_asym_scale, resolve_id, "RNDV_THRESH=0")
 {
-    /* There's no support for multiple paths + AM_ONLY in UCX */
+    run(ASYMMETRIC_SCALE, UCP_EP_INIT_CREATE_AM_LANE, true);
+}
+
+UCS_TEST_P(test_reconfigure_asym_scale, reuse_lanes)
+{
     modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
-
-    /* Create only AM_LANE to ensure we have only wireup EPs in
-     * configuration. */
-    run(ASYMMETRIC_SCALE, UCP_EP_INIT_CREATE_AM_LANE_ONLY, true);
+    run(ASYMMETRIC_SCALE, UCP_EP_INIT_CREATE_AM_LANE, false, true);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_asym_scale, shm_ib, "shm,ib");
+
+class test_reconfigure_update_rank : public test_ucp_reconfigure {
+};
+
+UCS_TEST_P(test_reconfigure_update_rank, promote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=3s", "NUM_EPS=200", "RNDV_THRESH=inf")
+{
+    create_entities_and_connect(UCP_EP_INIT_CREATE_AM_LANE, RANK_UPDATE, false);
+    send_recv();
+
+    ucs_usage_tracker_set_min_score(m_sender->worker()->usage_tracker.handle,
+                                    m_sender->ep(), 0.7);
+    ucp_wireup_send_promotion_request(m_sender->ep(), NULL, 1);
+    send_recv();
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, demote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=3s", "RNDV_THRESH=inf")
+{
+    create_entities_and_connect(UCP_EP_INIT_CREATE_AM_LANE, RANK_UPDATE, false);
+    send_recv();
+
+    m_sender->worker()->context->config.est_num_eps   = 200;
+    m_receiver->worker()->context->config.est_num_eps = 200;
+    ucp_wireup_send_demotion_request(m_sender->ep(), NULL, 1);
+    send_recv();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_update_rank, shm_ib, "shm,ib");

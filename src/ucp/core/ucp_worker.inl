@@ -259,6 +259,12 @@ static UCS_F_ALWAYS_INLINE void ucp_worker_track_ep_usage(ucp_request_t *req)
     ucp_worker_track_ep_usage_always(req);
 }
 
+static UCS_F_ALWAYS_INLINE ucs_usage_tracker_h
+ucp_worker_get_usage_tracker(ucp_worker_h worker)
+{
+    return worker->usage_tracker.handle;
+}
+
 #define UCP_WORKER_GET_EP_BY_ID(_ep_p, _worker, _ep_id, _action, _fmt_str, ...) \
     { \
         ucs_status_t __status; \

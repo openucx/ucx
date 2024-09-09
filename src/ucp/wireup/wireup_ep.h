@@ -32,7 +32,10 @@ enum {
     UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID   = UCS_BIT(3),
 
     /* Indicates that aux_ep is CONNECT_TO_EP */
-    UCP_WIREUP_EP_FLAG_AUX_P2P          = UCS_BIT(4)
+    UCP_WIREUP_EP_FLAG_AUX_P2P          = UCS_BIT(4),
+
+    /* Flush outstanding messages */
+    UCP_WIREUP_EP_FLAG_FLUSH_REQUIRED   = UCS_BIT(5)
 };
 
 

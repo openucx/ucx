@@ -586,7 +586,8 @@ ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode)
 {
-    if (ucp_ep_config(ep)->key.err_mode != err_mode) {
+    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+        (ucp_ep_config(ep)->key.err_mode != err_mode)) {
         ucs_error("ep %p: asymmetric endpoint configuration is not supported,"
                   " error handling level mismatch (expected: %d, got: %d)",
                   ep, ucp_ep_config(ep)->key.err_mode, err_mode);
@@ -1074,9 +1075,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
      * in ep_match.
      */
     conn_sn = ucp_ep_match_get_sn(worker, remote_address.uuid);
-    ep      = ucp_ep_match_retrieve(worker, remote_address.uuid,
-                                    conn_sn ^
-                                    (remote_address.uuid == worker->uuid),
+    ep      = ucp_ep_match_retrieve(worker, remote_address.uuid, conn_sn,
                                     UCS_CONN_MATCH_QUEUE_UNEXP);
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
@@ -1653,6 +1652,10 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
         return;
     }
 
+    if (ucp_context_usage_tracker_enabled(worker->context)) {
+        ucs_usage_tracker_remove(ucp_worker_get_usage_tracker(ep->worker), ep);
+    }
+
     ucp_ep_match_remove_ep(worker, ep);
     ucp_ep_destroy_internal(ep);
 }
@@ -1840,6 +1843,65 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
         if ((uct_ep == ucp_ep_get_lane(ucp_ep, lane)) ||
             ucp_wireup_ep_is_owner(ucp_ep_get_lane(ucp_ep, lane), uct_ep)) {
+            return lane;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
+int ucp_ep_is_am_lane_replaced(ucp_ep_h ep,
+                               const ucp_lane_index_t *reuse_lane_map)
+{
+    ucp_lane_index_t old_lane = ucp_wireup_get_msg_lane(ep,
+                                                        UCP_WIREUP_MSG_REQUEST);
+    uct_ep_h uct_ep           = ucp_ep_get_lane(ep, old_lane);
+
+    ucs_assert(uct_ep != NULL);
+
+    /* Use AM lane if:
+     * 1. No race reconfig (no wireup_ep).
+     * 2. AM lane was created
+     * 3. AM lane is not reused */
+    return !ucp_wireup_ep_test(uct_ep) && (ep->am_lane != UCP_NULL_LANE) &&
+           (reuse_lane_map[ep->am_lane] == UCP_NULL_LANE);
+}
+
+static ucp_lane_index_t
+ucp_ep_get_reused_lane_source(ucp_ep_h ep,
+                              const ucp_lane_index_t *reuse_lane_map,
+                              ucp_lane_index_t new_lane)
+{
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
+        if (reuse_lane_map[lane] == new_lane) {
+            return lane;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
+ucp_lane_index_t
+ucp_ep_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
+                            const ucp_lane_index_t *reuse_lane_map,
+                            int am_replaced)
+{
+    ucp_lane_index_t lane;
+
+    if (ucp_ep_has_cm_lane(ep)) {
+        return key->cm_lane;
+    }
+
+    if (am_replaced) {
+        /* Use new am_lane as the holder for aux transport */
+        return key->am_lane;
+    }
+
+    for (lane = 0; lane < key->num_lanes; lane++) {
+        if (ucp_ep_get_reused_lane_source(ep, reuse_lane_map, lane) ==
+            UCP_NULL_LANE) {
             return lane;
         }
     }
