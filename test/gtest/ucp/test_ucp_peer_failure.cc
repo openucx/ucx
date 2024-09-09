@@ -647,7 +647,8 @@ public:
 protected:
     enum class rndv_mode {
         rndv_get,
-        rndv_put
+        rndv_put,
+        put_ppln
     };
 
     void init()
@@ -703,23 +704,39 @@ protected:
         return UCS_ERR_CONNECTION_RESET;
     }
 
-    void replace_rndv_ops(ucp_ep_h ep)
+    static ssize_t
+    bcopy_return_err_connection_reset(uct_ep_h ep, uint8_t id,
+                                      uct_pack_callback_t pack_cb,
+                                      void *arg, unsigned flags)
+    {
+        return UCS_ERR_CONNECTION_RESET;
+    }
+
+    ucs_status_t static
+    zcopy_return_err_connection_reset(uct_ep_h ep, uint8_t id,
+                                      const void *header,
+                                      unsigned header_length,
+                                      const uct_iov_t *iov, size_t iovcnt,
+                                      unsigned flags, uct_completion_t *comp)
+    {
+        return UCS_ERR_CONNECTION_RESET;
+    }
+
+    void replace_ops(ucp_ep_h ep)
     {
         for (auto lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            if (lane == ucp_ep_get_cm_lane(ep)) {
-                continue;
-            }
-
             auto iface  = ucp_ep_get_lane(ep, lane)->iface;
             auto result = m_sender_uct_ops.emplace(iface, iface->ops);
             if (result.second) {
                 iface->ops.ep_put_zcopy = return_err_connection_reset;
                 iface->ops.ep_get_zcopy = return_err_connection_reset;
+                iface->ops.ep_am_bcopy = bcopy_return_err_connection_reset;
+                iface->ops.ep_am_zcopy = zcopy_return_err_connection_reset;
             }
         }
     }
 
-    void restore_rndv_ops()
+    void restore_ops()
     {
         for (auto &elem : m_sender_uct_ops) {
             elem.first->ops = elem.second;
@@ -745,13 +762,16 @@ protected:
 
     static ucs_status_t progress_wrapper(uct_pending_req_t *uct_req)
     {
-        auto *req   = ucs_container_of(uct_req, ucp_request_t, send.uct);
-        auto stage  = req->send.proto_stage;
-        auto *proto = req->send.proto_config->proto;
+        auto *req              = ucs_container_of(uct_req, ucp_request_t, send.uct);
+        auto stage             = req->send.proto_stage;
+        auto *proto            = req->send.proto_config->proto;
+        bool is_proto_replaced = std::find(
+                self->m_protos_to_replace.begin(), self->m_protos_to_replace.end(),
+                proto->name) != self->m_protos_to_replace.end();
 
-        if (proto->name == self->m_proto_name) {
+        if (is_proto_replaced) {
             if (self->m_replace_ops) {
-                self->replace_rndv_ops(req->send.ep);
+                self->replace_ops(req->send.ep);
             }
 
             if (stage == UCP_PROTO_STAGE_START) {
@@ -761,8 +781,8 @@ protected:
 
         ucs_status_t status = self->m_progress_storage[proto][stage](uct_req);
 
-        if ((proto->name == self->m_proto_name) && self->m_replace_ops) {
-            self->restore_rndv_ops();
+        if ((is_proto_replaced) && self->m_replace_ops) {
+            self->restore_ops();
         }
 
         return status;
@@ -781,11 +801,16 @@ protected:
 
         switch (mode) {
         case rndv_mode::rndv_get:
-            m_proto_name    = "rndv/get/zcopy";
+            m_protos_to_replace.emplace_back("rndv/get/zcopy");
             m_peer_to_close = &self->sender();
             break;
+        case rndv_mode::put_ppln:
+            // MTYPE rndv_put doesn't support error handling, so need to replace
+            // all other options
+            m_protos_to_replace.emplace_back("rndv/am/bcopy");
+            m_protos_to_replace.emplace_back("rndv/am/zcopy");
         case rndv_mode::rndv_put:
-            m_proto_name    = "rndv/put/zcopy";
+            m_protos_to_replace.emplace_back("rndv/put/zcopy");
             m_peer_to_close = &self->receiver();
             break;
         default:
@@ -833,7 +858,7 @@ protected:
     progress_hash_map m_progress_storage{};
     ops_map           m_sender_uct_ops{};
     bool              m_is_peer_closed{false};
-    std::string       m_proto_name{};
+    std::vector<std::string> m_protos_to_replace{};
     entity            *m_peer_to_close{nullptr};
     /* Even if we close peer EP with the force flag, the next proto progress call
        probably would return UCS_OK. This option enables emulation of certain
@@ -913,7 +938,7 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
 {
     // Sender is supposed to use put_zcopy, because put_mtype is not supported
     // with error handling yet
-    rndv_progress_failure_test(rndv_mode::rndv_put, true);
+    rndv_progress_failure_test(rndv_mode::put_ppln, true);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);
