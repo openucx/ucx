@@ -1581,6 +1581,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     ucs_status_t status;
     const void *odp_cap;
     const char *reason;
@@ -1651,10 +1652,17 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         goto no_odp;
     }
 
-    ucs_debug("%s: ODP is supported, version %d",
-              uct_ib_device_name(&md->super.dev), version);
-    md->super.reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md->super.gva_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md->super.gva_mem_types          = md_config->ext.odp.mem_types;
+    md->super.reg_nonblock_mem_types = md_config->ext.odp.mem_types;
+
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+        ucs_string_buffer_append_flags(&strb, md->super.reg_nonblock_mem_types,
+                                       ucs_memory_type_names);
+        ucs_debug("%s: ODP is supported, version %d: memory=%s",
+                  uct_ib_device_name(&md->super.dev), version,
+                  ucs_string_buffer_cstr(&strb));
+        ucs_string_buffer_cleanup(&strb);
+    }
 
     return;
 

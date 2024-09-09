@@ -526,9 +526,9 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             ASSERT_UCS_OK(status);
 
             is_dummy           = (size == 0);
-            expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(mem_type) &&
-                                 (is_tl_rdma() || is_tl_shm()) &&
+            expect_rma_offload = (is_tl_rdma() || is_tl_shm()) &&
                                  check_reg_mem_types(sender(), mem_type);
+
             test_rkey_management(memh, is_dummy, expect_rma_offload);
 
             status = ucp_mem_unmap(sender().ucph(), memh);
@@ -571,8 +571,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
             EXPECT_EQ(alloc_mem_type, memh->mem_type);
         }
 
-        expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
-                             !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type) &&
+        expect_rma_offload = !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type) &&
                              is_tl_rdma() &&
                              check_reg_mem_types(sender(), alloc_mem_type);
         test_rkey_management(memh, is_dummy, expect_rma_offload);
@@ -941,6 +940,32 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         ptr.detach();
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
+    }
+}
+
+UCS_TEST_P(test_ucp_mmap, gva_allocate, "GVA_ENABLE=y",
+           "IB_MLX5_DEVX_OBJECTS?=")
+{
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        ucp_md_map_t md_map = sender().ucph()->gva_md_map[mem_type];
+        if (md_map == 0) {
+            continue;
+        }
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+        params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                             UCP_MEM_MAP_PARAM_FIELD_FLAGS |
+                             UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+        params.address     = NULL;
+        params.memory_type = mem_type;
+        params.length      = 1 * UCS_MBYTE;
+        params.flags       = UCP_MEM_MAP_ALLOCATE;
+
+        ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
+        EXPECT_TRUE(ucs_test_all_flags(memh->md_map, md_map));
+        ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
     }
 }
 
