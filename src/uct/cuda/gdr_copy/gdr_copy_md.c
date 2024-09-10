@@ -408,6 +408,7 @@ static void uct_gdr_copy_rcache_dump_region_cb(void *context,
 static ucs_rcache_ops_t uct_gdr_copy_rcache_ops = {
     .mem_reg     = uct_gdr_copy_rcache_mem_reg_cb,
     .mem_dereg   = uct_gdr_copy_rcache_mem_dereg_cb,
+    .merge       = (void*)ucs_empty_function,
     .dump_region = uct_gdr_copy_rcache_dump_region_cb
 };
 
