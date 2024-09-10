@@ -100,6 +100,10 @@ public:
         if (sender().ucph()->num_tls <= 2) {
             UCS_TEST_SKIP_R("test requires at least 2 ifaces to work");
         }
+
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("protov1 is not supported (has no protocol reset)");
+        }
     }
 
     void cleanup()
@@ -370,17 +374,30 @@ void test_ucp_reconfigure::run(method_t method, unsigned init_flags,
     m_receiver->verify_configuration(*m_sender.get());
 }
 
-UCS_TEST_P(test_ucp_reconfigure, basic)
+class test_reconfigure_exclude_ifaces : public test_ucp_reconfigure {
+public:
+    void init()
+    {
+        test_ucp_reconfigure::init();
+
+        if (has_transport("ib") && !has_resource(sender(), "rc_verbs")) {
+            UCS_TEST_SKIP_R("wireup is not triggered without p2p ifaces");
+        }
+    }
+};
+
+UCS_TEST_P(test_reconfigure_exclude_ifaces, basic)
 {
     run(EXCLUDE_IFACES);
 }
 
-UCS_TEST_P(test_ucp_reconfigure, request_reset, "PROTO_REQUEST_RESET=y")
+UCS_TEST_P(test_reconfigure_exclude_ifaces, request_reset,
+           "PROTO_REQUEST_RESET=y")
 {
     run(EXCLUDE_IFACES);
 }
 
-UCS_TEST_P(test_ucp_reconfigure, reuse_lanes)
+UCS_TEST_P(test_reconfigure_exclude_ifaces, reuse_lanes)
 {
     /* Use single path so that num_lanes/2 will only exclude some lanes and
      * not all. */
@@ -388,9 +405,9 @@ UCS_TEST_P(test_ucp_reconfigure, reuse_lanes)
     run(EXCLUDE_IFACES, UCP_EP_INIT_CREATE_AM_LANE, false, true);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, rc, "rc_v")
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, rcx, "rc_x")
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, shm_ib, "shm,ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_exclude_ifaces, rc, "rc_v")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_exclude_ifaces, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_exclude_ifaces, shm_ib, "shm,ib")
 
 class test_reconfigure_resolve_remote : public test_ucp_reconfigure {
 };
