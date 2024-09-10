@@ -586,8 +586,7 @@ ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode)
 {
-    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-        (ucp_ep_config(ep)->key.err_mode != err_mode)) {
+    if (ucp_ep_config(ep)->key.err_mode != err_mode) {
         ucs_error("ep %p: asymmetric endpoint configuration is not supported,"
                   " error handling level mismatch (expected: %d, got: %d)",
                   ep, ucp_ep_config(ep)->key.err_mode, err_mode);
