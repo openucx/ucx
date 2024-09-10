@@ -1119,7 +1119,18 @@ run_tests() {
 	do_distributed_task 0 4 run_nt_buffer_transfer_tests
 }
 
+error_handler() {
+	set +x
+	local test_name="$1"
+	local flag="$2"
+
+	azure_log_error "$test_name failed"
+	azure_log_error "To debug, rerun with: $flag $0"
+	exit 1
+}
+
 run_test_proto_disable() {
+	trap 'error_handler "Proto V1 test" "PROTO_ENABLE=no"' ERR
 	# build for devel tests and gtest
 	build devel --enable-gtest
 
@@ -1130,6 +1141,7 @@ run_test_proto_disable() {
 }
 
 run_asan_check() {
+	trap 'error_handler "AddressSanitizer check" "ASAN_CHECK=yes"' ERR
 	build devel --enable-gtest --enable-asan --without-valgrind
 
 	if ! ldd ${WORKSPACE}/build-test/test/gtest/gtest | grep -q "libasan.so"
@@ -1142,6 +1154,7 @@ run_asan_check() {
 }
 
 run_valgrind_check() {
+	trap 'error_handler "Valgrind check" "VALGRIND_CHECK=yes"' ERR
 	if [[ $(uname -m) =~ "aarch" ]] || [[ $(uname -m) =~ "ppc" ]]; then
 		echo "==== Skip valgrind tests on `uname -m` ===="
 		return
