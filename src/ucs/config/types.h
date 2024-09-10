@@ -94,6 +94,20 @@ typedef enum {
 } ucs_config_print_flags_t;
 
 
+static inline int
+ucs_ternary_auto_value_is_yes_or_try(ucs_ternary_auto_value_t value)
+{
+    return (value == UCS_YES) || (value == UCS_TRY);
+}
+
+
+static inline int
+ucs_ternary_auto_value_is_yes_or_no(ucs_ternary_auto_value_t value)
+{
+    return (value == UCS_YES) || (value == UCS_NO);
+}
+
+
 /**
  * Structure type for array configuration. Should be used inside the configuration
  * structure declaration.
