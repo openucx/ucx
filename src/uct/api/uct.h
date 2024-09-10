@@ -332,7 +332,10 @@ typedef struct uct_tl_resource_desc {
                                                 (e.g. UCT_DEVICE_TYPE_NET for a network interface) */
     ucs_sys_device_t         sys_device;   /**< The identifier associated with the device
                                                 bus_id as captured in ucs_sys_bus_id_t struct */
+    uint8_t                  flags;        /**< Associated flags to the resource */
 } uct_tl_resource_desc_t;
+
+#define UCT_TL_RESOURCE_FLAG_INTER_NODE UCS_BIT(0) /**< Inter-node capability */
 
 #define UCT_TL_RESOURCE_DESC_FMT              "%s/%s"
 #define UCT_TL_RESOURCE_DESC_ARG(_resource)   (_resource)->tl_name, (_resource)->dev_name

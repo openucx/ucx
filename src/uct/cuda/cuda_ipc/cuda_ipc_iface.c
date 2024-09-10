@@ -611,16 +611,25 @@ uct_cuda_ipc_query_devices(
         uct_md_h uct_md, uct_tl_device_resource_t **tl_devices_p,
         unsigned *num_tl_devices_p)
 {
+    uint8_t flags              = 0;
     uct_device_type_t dev_type = UCT_DEVICE_TYPE_SHM;
+    ucs_status_t status;
+
 #if HAVE_CUDA_FABRIC
     uct_cuda_ipc_md_t *md      = ucs_derived_of(uct_md, uct_cuda_ipc_md_t);
 
     if (uct_cuda_ipc_iface_is_mnnvl_supported(md)) {
-        dev_type = UCT_DEVICE_TYPE_NET;
+        flags = UCT_TL_RESOURCE_FLAG_INTER_NODE;
     }
 #endif
-    return uct_cuda_base_query_devices_common(uct_md, dev_type,
-                                              tl_devices_p, num_tl_devices_p);
+    status = uct_cuda_base_query_devices_common(uct_md, dev_type, tl_devices_p,
+                                                num_tl_devices_p);
+    if (status == UCS_OK) {
+        ucs_assert(*num_tl_devices_p == 1);
+        (*tl_devices_p)->flags = flags;
+    }
+
+    return status;
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_iface_t, uct_cuda_iface_t);
