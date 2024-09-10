@@ -27,6 +27,8 @@
 #   include <omp.h>
 #endif /* _OPENMP */
 
+#define UCT_PERF_HINT_MAX_LEN 256
+
 #define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _params, _status) \
     _status = __get_atomic_flag((_size), (_op32), (_op64), (_op)); \
     if (_status != UCS_OK) { \
@@ -1718,8 +1720,21 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
     return UCS_OK;
 }
 
+static void uct_perf_append_resource(char *resource_list, size_t max_length,
+                                     const char *rsc)
+{
+    int max_rsc_len = max_length - strlen(resource_list) - 1;
+    if (strlen(resource_list) > 0) {
+        strncat(resource_list, ",", max_rsc_len);
+    }
+
+    strncat(resource_list, rsc, max_rsc_len - 1);
+}
+
 static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
 {
+    char resources_hint[UCT_PERF_HINT_MAX_LEN] = {0};
+    int hints_are_devices                      = 0;
     uct_component_h *uct_components;
     uct_component_attr_t component_attr;
     uct_tl_resource_desc_t *tl_resources;
@@ -1778,14 +1793,25 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
             }
 
             for (tl_index = 0; tl_index < num_tl_resources; ++tl_index) {
-                if (!strcmp(perf->params.uct.tl_name,  tl_resources[tl_index].tl_name) &&
-                    !strcmp(perf->params.uct.dev_name, tl_resources[tl_index].dev_name))
-                {
-                    uct_release_tl_resource_list(tl_resources);
-                    perf->uct.cmpt = uct_components[cmpt_index];
-                    perf->uct.md   = md;
-                    status         = UCS_OK;
-                    goto out_release_components_list;
+                if (!strcmp(perf->params.uct.tl_name,
+                            tl_resources[tl_index].tl_name)) {
+                    if (!strcmp(perf->params.uct.dev_name,
+                                tl_resources[tl_index].dev_name)) {
+                        uct_release_tl_resource_list(tl_resources);
+                        perf->uct.cmpt = uct_components[cmpt_index];
+                        perf->uct.md   = md;
+                        status         = UCS_OK;
+                        goto out_release_components_list;
+                    }
+                    hints_are_devices = 1;
+                    uct_perf_append_resource(resources_hint,
+                                             sizeof(resources_hint),
+                                             tl_resources[tl_index].dev_name);
+                } else if (!strcmp(perf->params.uct.dev_name,
+                                   tl_resources[tl_index].dev_name)) {
+                    uct_perf_append_resource(resources_hint,
+                                             sizeof(resources_hint),
+                                             tl_resources[tl_index].tl_name);
                 }
             }
 
@@ -1796,6 +1822,15 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
 
     ucs_error("Cannot use "UCT_PERF_TEST_PARAMS_FMT,
               UCT_PERF_TEST_PARAMS_ARG(&perf->params));
+
+    if (strlen(resources_hint)) {
+        ucs_error("Available %s: %s",
+                  hints_are_devices ? "devices" : "transports", resources_hint);
+    } else {
+        ucs_error("Please check available transports and devices using "
+                  "ucx_info -d");
+    }
+
     status = UCS_ERR_NO_DEVICE;
 
 out_release_components_list:
