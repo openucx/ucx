@@ -201,9 +201,15 @@ enum {
     UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
     /* Device supports implicit ODP with PCI relaxed order */
     UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(18),
+    /* RoCE supports out-of-order RDMA for RC */
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC = UCS_BIT(19),
+    /* RoCE supports out-of-order RDMA for DC */
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC = UCS_BIT(20),
+    /* RoCE supports forcing ordering configuration */
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(21),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 19,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 22,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -954,6 +960,9 @@ uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p);
+
+void uct_ib_mlx5_devx_set_qpc_dp_ordering(
+        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo);
 
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,
