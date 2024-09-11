@@ -93,7 +93,7 @@ protected:
 
     virtual ucs_rcache_params_t rcache_params()
     {
-        static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb,
+        static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb, merge_cb,
                                              dump_region_cb};
         ucs_rcache_params_t params        = get_default_rcache_params(this, &ops);
         params.region_struct_size         = sizeof(region);
@@ -206,6 +206,11 @@ private:
     {
         reinterpret_cast<test_rcache*>(context)->mem_dereg(
                         ucs_derived_of(r, struct region));
+    }
+
+    static void merge_cb(void *context, ucs_rcache_t *rcache, void *arg,
+                         ucs_rcache_region_t *r)
+    {
     }
 
     static void dump_region_cb(void *context, ucs_rcache_t *rcache,

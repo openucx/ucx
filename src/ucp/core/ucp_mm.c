@@ -589,7 +589,7 @@ static void ucp_memh_set_uct_flags(ucp_mem_h memh, unsigned uct_flags)
                 "memh=%p memh->md_map=0x%" PRIx64
                 " memh->uct_flags=0x%x uct_flags=0x%x",
                 memh, memh->md_map, memh->uct_flags, uct_flags);
-    memh->uct_flags = uct_flags & UCP_MM_UCT_ACCESS_MASK;
+    memh->uct_flags = UCP_MM_UCT_ACCESS_FLAGS(uct_flags);
 }
 
 static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
@@ -793,6 +793,7 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
                    ucp_md_map_t reg_md_map, unsigned uct_flags,
                    const char *alloc_name, ucp_mem_h *memh_p)
 {
+    unsigned access_flags = UCP_MM_UCT_ACCESS_FLAGS(uct_flags);
     ucs_status_t status;
     ucp_mem_h memh;
 
@@ -816,11 +817,16 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
         ucs_ptr_check_align(ucp_memh_address(memh), ucp_memh_length(memh),
                             align);
 
-        if (ucs_test_all_flags(memh->uct_flags,
-                               uct_flags & UCP_MM_UCT_ACCESS_MASK)) {
+        if (ucs_test_all_flags(memh->uct_flags, access_flags)) {
             *memh_p = memh;
             return UCS_OK;
         }
+
+        ucs_trace("memh %p uct_flags mismatch, expected 0x%x got 0x%x", memh,
+                  access_flags, UCP_MM_UCT_ACCESS_FLAGS(memh->uct_flags));
+
+        /* Augment permissions to avoid back and forth invalidation */
+        uct_flags |= UCP_MM_UCT_ACCESS_FLAGS(memh->uct_flags);
 
         /* Invalidate the mismatching region and get a new one */
         ucs_rcache_region_invalidate(context->rcache, &memh->super,
@@ -1495,13 +1501,25 @@ static void ucp_mem_rcache_mem_dereg_cb(void *ctx, ucs_rcache_t *rcache,
     ucp_memh_dereg(context, memh, memh->md_map);
 }
 
-static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
-                                         ucs_rcache_region_t *rregion, char *buf,
-                                         size_t max)
+static void ucp_mem_rcache_merge_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
+                                    ucs_rcache_region_t *rregion)
+{
+    ucp_mem_rcache_reg_ctx_t *reg_ctx = arg;
+    ucp_mem_h memh                    = ucs_derived_of(rregion, ucp_mem_t);
+
+    ucs_log_indent(+1);
+    ucs_trace("merge with memh %p uct_flags 0x%x", memh, memh->uct_flags);
+    reg_ctx->uct_flags |= memh->uct_flags;
+    ucs_log_indent(-1);
+}
+
+static void ucp_mem_rcache_dump_region_cb(void *ctx, ucs_rcache_t *rcache,
+                                          ucs_rcache_region_t *rregion,
+                                          char *buf, size_t max)
 {
     UCS_STRING_BUFFER_FIXED(strb, buf, max);
     ucp_mem_h memh        = ucs_derived_of(rregion, ucp_mem_t);
-    ucp_context_h context = rcontext;
+    ucp_context_h context = ctx;
     unsigned md_index;
 
     if (memh->md_map == 0) {
@@ -1524,6 +1542,7 @@ static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
 static ucs_rcache_ops_t ucp_mem_rcache_ops = {
     .mem_reg     = ucp_mem_rcache_mem_reg_cb,
     .mem_dereg   = ucp_mem_rcache_mem_dereg_cb,
+    .merge       = ucp_mem_rcache_merge_cb,
     .dump_region = ucp_mem_rcache_dump_region_cb
 };
 

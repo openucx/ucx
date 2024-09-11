@@ -761,7 +761,7 @@ static void ucs_rcache_lru_evict(ucs_rcache_t *rcache)
 static ucs_status_t
 ucs_rcache_check_overlap_one(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
                              ucs_pgt_addr_t *end, size_t *alignment, int *prot,
-                             ucs_rcache_region_t *region)
+                             void *arg, ucs_rcache_region_t *region)
 {
     int mem_prot;
 
@@ -815,6 +815,9 @@ ucs_rcache_check_overlap_one(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
     ucs_rcache_region_trace(rcache, region,
                             "merge 0x%lx..0x%lx "UCS_RCACHE_PROT_FMT" with",
                             *start, *end, UCS_RCACHE_PROT_ARG(*prot));
+
+    rcache->params.ops->merge(rcache->params.context, rcache, arg, region);
+
     *alignment = ucs_max(*alignment, region->alignment);
     *start     = ucs_min(*start, region->super.start);
     *end       = ucs_max(*end, region->super.end);
@@ -829,7 +832,7 @@ ucs_rcache_check_overlap_one(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
 
 /* Lock must be held */
 static ucs_status_t
-ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
+ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
                          ucs_pgt_addr_t *end, size_t *alignment, int *prot,
                          int *merged, ucs_rcache_region_t **region_p)
 {
@@ -867,7 +870,7 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
 
         ucs_list_for_each_safe(region, tmp, &region_list, tmp_list) {
             status = ucs_rcache_check_overlap_one(rcache, start, end, alignment,
-                                                  prot, region);
+                                                  prot, arg, region);
             if (status == UCS_OK) {
                 *merged = 1;
             }
@@ -944,8 +947,8 @@ retry:
 
     /* Check overlap with existing regions */
     /* coverity[double_lock] */
-    status = UCS_PROFILE_CALL(ucs_rcache_check_overlap, rcache, &start, &end,
-                              &alignment, &prot, &merged, &region);
+    status = UCS_PROFILE_CALL(ucs_rcache_check_overlap, rcache, arg, &start,
+                              &end, &alignment, &prot, &merged, &region);
     if (status == UCS_ERR_ALREADY_EXISTS) {
         /* Found a matching region (it could have been added after we released
          * the lock)
