@@ -1168,11 +1168,26 @@ then
     set_ucx_common_test_env
 
     if [[ "$PROTO_ENABLE" == "no" ]]; then
-        run_test_proto_disable
+        run_test_proto_disable || {
+            set +x
+            azure_log_error "Proto V1 test failed"
+            azure_log_error "To debug, rerun with: PROTO_ENABLE=no $0"
+            exit 1
+        }
     elif [[ "$ASAN_CHECK" == "yes" ]]; then
-        run_asan_check
+        run_asan_check || {
+            set +x
+            azure_log_error "AddressSanitaizer check failed"
+            azure_log_error	"To debug, rerun with: ASAN_CHECK=yes $0"
+            exit 1
+        }
     elif [[ "$VALGRIND_CHECK" == "yes" ]]; then
-        run_valgrind_check
+        run_valgrind_check || {
+            set +x
+            azure_log_error "Valgrind test failed"
+            azure_log_error "To debug, rerun with: VALGRIND_CHECK=yes $0"
+            exit 1
+        }
     else
         run_tests
     fi
