@@ -301,7 +301,7 @@ public:
 private:
     typedef std::pair<void*, void*> range;
 
-    bool is_ptr_in_range(void *ptr, size_t size, const std::vector<range> &ranges) {
+    bool __attribute__((noinline)) is_ptr_in_range(void *ptr, size_t size, const std::vector<range> &ranges) {
         uintptr_t p = (uintptr_t)ptr;
         for (std::vector<range>::const_iterator iter = ranges.begin();
              iter != ranges.end(); ++iter) {
@@ -353,6 +353,39 @@ void test_thread::mem_event(ucm_event_type_t event_type, ucm_event_t *event)
     pthread_mutex_unlock(&m_stats_lock);
 }
 
+static void* perform_mmap(size_t size, char fill_value) {
+    void *ptr = mmap(NULL, size,
+                     PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                     -1, 0);
+    EXPECT_NE(MAP_FAILED, ptr);
+    memset(ptr, fill_value, size);
+    return ptr;
+}
+
+static void* perform_mremap(void *old_ptr, size_t old_size, size_t new_size,
+                            void *new_addr) {
+    void *new_ptr = mremap(old_ptr, old_size, new_size,
+                           MREMAP_MAYMOVE | MREMAP_FIXED, new_addr);
+    EXPECT_NE(MAP_FAILED, new_ptr) << strerror(errno);
+    return new_ptr;
+}
+
+static void set_and_check_env_variable(pthread_mutex_t* lock,
+                                       const std::string& var_name,
+                                       const std::string& value) {
+    pthread_mutex_lock(lock);
+    setenv(var_name.c_str(), value.c_str(), 1);
+    char* test_str = getenv(var_name.c_str());
+
+    if (test_str != NULL) {
+        EXPECT_EQ(value, std::string(test_str));
+    } else {
+        UCS_TEST_ABORT("getenv(\"" + var_name + "\") returned NULL");
+    }
+
+    pthread_mutex_unlock(lock);
+}
+
 void test_thread::test() {
     static const size_t large_alloc_size = 40 * 1024 * 1024;
     ucs_status_t result;
@@ -363,7 +396,6 @@ void test_thread::test() {
     const size_t small_alloc_size = malloc_hook::small_alloc_size;
     int num_ptrs_in_range;
     static volatile uint32_t total_ptrs_in_range = 0;
-    char *test_str;
 
     /* Allocate some pointers with old heap manager */
     for (unsigned i = 0; i < 10; ++i) {
@@ -425,15 +457,7 @@ void test_thread::test() {
     free(s);
 
     /* Test setenv */
-    pthread_mutex_lock(&lock);
-    setenv("TEST", "VALUE", 1);
-    test_str = getenv("TEST");
-    if (test_str != NULL) {
-        EXPECT_EQ(std::string("VALUE"), test_str);
-    } else {
-        UCS_TEST_ABORT("getenv(\"TEST\") returned NULL");
-    }
-    pthread_mutex_unlock(&lock);
+    set_and_check_env_variable(&lock, "TEST", "VALUE");
 
     /* Test username */
     ucs_get_user_name();
@@ -515,19 +539,11 @@ void test_thread::test() {
 
     /* mremap(FIXED) */
     {
-        ptr = mmap(NULL, shm_seg_size, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        EXPECT_NE(MAP_FAILED, ptr);
-        memset(ptr, 'a', shm_seg_size);
+        ptr = perform_mmap(shm_seg_size, 'a');
 
-        void *ptr2 = mmap(NULL, shm_seg_size, PROT_READ | PROT_WRITE,
-                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        EXPECT_NE(MAP_FAILED, ptr2) << strerror(errno);
-        memset(ptr2, 'b', shm_seg_size);
+        void *ptr2 = perform_mmap(shm_seg_size, 'b');
 
-        ptr_r = mremap(ptr, shm_seg_size, shm_seg_size,
-                       MREMAP_MAYMOVE | MREMAP_FIXED, ptr2);
-        EXPECT_NE(MAP_FAILED, ptr_r) << strerror(errno);
+        ptr_r = perform_mremap(ptr, shm_seg_size, shm_seg_size, ptr2);
         EXPECT_EQ(ptr2, ptr_r);
         EXPECT_TRUE(is_ptr_in_range(ptr, shm_seg_size, m_unmap_ranges));
 
