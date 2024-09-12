@@ -86,6 +86,8 @@ typedef struct {
     int                           show_error;       /* Global flag that controls showing
                                                      * errors from a selecting transport
                                                      * procedure */
+    int                           connect_to_ep;    /* Select ifaces that support EP
+                                                       connection */
 } ucp_wireup_select_params_t;
 
 /**
@@ -498,6 +500,14 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
             !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
             continue;
+        }
+
+        if (select_params->connect_to_ep &&
+            !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
+            local_iface_flags.mandatory |= UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                           /* Required for prioritizing RC over UD.
+                                            * TODO: Replace with dynamic NUM_EPS */
+                                           UCT_IFACE_FLAG_PUT_BCOPY;
         }
 
         has_cm = ucp_ep_init_flags_has_cm(select_params->ep_init_flags);
@@ -1558,29 +1568,6 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
     return num_lanes;
 }
 
-static unsigned ucp_wireup_get_current_num_lanes(
-        const ucp_wireup_select_params_t *select_params, ucp_lane_type_t type)
-{
-    ucp_ep_h ep                = select_params->ep;
-    unsigned current_num_lanes = 0;
-    ucp_lane_index_t lane;
-
-    /* First initialization (current lanes weren't chosen yet) or
-     * CM is enabled (so we can reconfigure the endpoint).
-     */
-    if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        ucp_ep_has_cm_lane(ep)) {
-        return ucp_wireup_bw_max_lanes(select_params);
-    }
-
-    for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; ++lane) {
-        if (ucp_ep_config(ep)->key.lanes[lane].lane_types & UCS_BIT(type)) {
-            ++current_num_lanes;
-        }
-    }
-    return current_num_lanes;
-}
-
 static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_bw_info_t *bw_info,
@@ -1602,25 +1589,17 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
     ucp_wireup_select_info_t *sinfo;
-    unsigned max_lanes, num_lanes;
+    unsigned num_lanes;
     unsigned local_num_paths, remote_num_paths;
 
     local_dev_bitmap      = bw_info->local_dev_bitmap;
     remote_dev_bitmap     = bw_info->remote_dev_bitmap;
     bw_info->criteria.arg = &dev_count;
 
-    /* Restrict choosing more lanes that were already chosen when CM is disabled
-     * to prevent EP reconfiguration in case of dropping lanes due to low BW.
-     * TODO: Remove when endpoint reconfiguration is supported.
-     */
-    max_lanes = ucp_wireup_get_current_num_lanes(select_params,
-                                                 bw_info->criteria.lane_type);
-    max_lanes = ucs_min(max_lanes, bw_info->max_lanes);
-
     /* lookup for requested number of lanes or limit of MD map
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
-    while (ucs_array_length(&sinfo_array) < max_lanes) {
+    while (ucs_array_length(&sinfo_array) < bw_info->max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
             sinfo  = ucs_array_append(&sinfo_array, break);
             status = ucp_wireup_select_transport(select_ctx, select_params,
@@ -2120,7 +2099,8 @@ static UCS_F_NOINLINE void
 ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
                               ucp_ep_h ep, unsigned ep_init_flags,
                               const ucp_unpacked_address_t *remote_address,
-                              ucp_tl_bitmap_t tl_bitmap, int show_error)
+                              ucp_tl_bitmap_t tl_bitmap, int show_error,
+                              int connect_to_ep)
 {
     select_params->ep            = ep;
     select_params->ep_init_flags = ep_init_flags;
@@ -2129,6 +2109,10 @@ ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
     select_params->allow_am      =
             ucp_wireup_allow_am_emulation_layer(ep_init_flags);
     select_params->show_error    = show_error;
+    select_params->connect_to_ep = connect_to_ep;
+
+    ucs_assert((connect_to_ep == 0) ||
+               !(ep_init_flags & UCP_EP_INIT_CONNECT_TO_IFACE_ONLY));
 }
 
 static double
@@ -2504,7 +2488,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                         ucp_tl_bitmap_t tl_bitmap,
                         const ucp_unpacked_address_t *remote_address,
                         unsigned *addr_indices, ucp_ep_config_key_t *key,
-                        int show_error)
+                        int show_error, int connect_to_ep)
 {
     ucp_worker_h worker                = ep->worker;
     ucp_tl_bitmap_t scalable_tl_bitmap = worker->scalable_tl_bitmap;
@@ -2519,7 +2503,8 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     if (!UCS_STATIC_BITMAP_IS_ZERO(scalable_tl_bitmap)) {
         ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
-                                      remote_address, scalable_tl_bitmap, 0);
+                                      remote_address, scalable_tl_bitmap, 0,
+                                      connect_to_ep);
         status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                          &select_ctx, wireup_info,
                                          sizeof(wireup_info));
@@ -2533,7 +2518,8 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
-                                  remote_address, tl_bitmap, show_error);
+                                  remote_address, tl_bitmap, show_error,
+                                  connect_to_ep);
     status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                      &select_ctx, wireup_info,
                                      sizeof(wireup_info));
@@ -2574,7 +2560,7 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_status_t status;
 
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
-                                  remote_address, tl_bitmap, 1);
+                                  remote_address, tl_bitmap, 1, 0);
 
     /* Select auxiliary transport that supports async active message callback */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,

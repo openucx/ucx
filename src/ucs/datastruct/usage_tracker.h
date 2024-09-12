@@ -27,7 +27,8 @@ typedef struct {
 
 
 /* Callback type for rank modify notification */
-typedef void (*ucs_usage_tracker_elem_update_cb_t)(void *entry, void *arg);
+typedef void (*ucs_usage_tracker_elem_update_cb_t)(void *entry, void *arg,
+                                                   int is_progress);
 
 
 typedef struct {
