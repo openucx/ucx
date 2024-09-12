@@ -313,8 +313,7 @@ ucp_proto_select_is_fetch_op(const ucp_proto_select_param_t *select_param)
                                      UCS_BIT(UCP_OP_ID_AMO_FETCH));
 }
 
-static int
-ucp_proto_select_is_rndv_op(const ucp_proto_select_param_t *select_param)
+int ucp_proto_select_is_rndv_op(const ucp_proto_select_param_t *select_param)
 {
     return ucp_proto_select_check_op(select_param, UCP_PROTO_RNDV_OP_ID_MASK);
 }

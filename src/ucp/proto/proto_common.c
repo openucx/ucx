@@ -766,7 +766,8 @@ void ucp_proto_request_restart(ucp_request_t *req)
     }
 
     /* Select a protocol with resume request support */
-    if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
+    if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter) ||
+        ucp_proto_select_is_rndv_op(&proto_config->select_param)) {
         select_param.op_id_flags |= UCP_PROTO_SELECT_OP_FLAG_RESUME;
     }
 
