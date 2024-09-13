@@ -18,6 +18,11 @@ ucp_memh_is_zero_length(const ucp_mem_h memh)
     return memh == &ucp_mem_dummy_handle.memh;
 }
 
+static UCS_F_ALWAYS_INLINE size_t ucp_memh_size(ucp_context_h context)
+{
+    return sizeof(ucp_mem_t) + (sizeof(uct_mem_h) * context->num_mds);
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_memh_rcache_print(ucp_mem_h memh, void *address, size_t length)
 {
