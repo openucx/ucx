@@ -175,17 +175,26 @@ static void ucs_module_init(const char *module_path, void *dl)
 
     const char *module_init_name =
                     UCS_PP_MAKE_STRING(UCS_MODULE_CONSTRUCTOR_NAME);
-    char *fullpath, buffer[PATH_MAX];
+    char *fullpath, *buffer;
     init_func_t init_func;
     ucs_status_t status;
 
+    status = ucs_string_alloc_path_buffer(&buffer, "buffer");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     fullpath = realpath(module_path, buffer);
+    if (fullpath == NULL) {
+        goto out_free_buffer;
+    }
+
     ucs_module_trace("loaded %s [%p]", fullpath, dl);
 
     init_func = (init_func_t)ucs_module_dlsym_shallow(module_path, dl,
                                                       module_init_name);
     if (init_func == NULL) {
-        return;
+        goto out_free_buffer;
     }
 
     ucs_module_trace("calling '%s' in '%s': [%p]", module_init_name, fullpath,
@@ -196,6 +205,11 @@ static void ucs_module_init(const char *module_path, void *dl)
                          ucs_status_string(status));
         dlclose(dl);
     }
+
+out_free_buffer:
+    ucs_free(buffer);
+out:
+    return;
 }
 
 
