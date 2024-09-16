@@ -211,12 +211,19 @@ out:
 
 int vfs_unmount(int pid)
 {
-    char mountpoint[PATH_MAX];
+    char *mountpoint;
     char *argv[5];
     int ret;
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(&mountpoint, "mountpoint");
+    if (status != UCS_OK) {
+        ret = -ENOMEM;
+        goto out;
+    }
 
     /* Unmount FUSE file system */
-    vfs_get_mountpoint(pid, mountpoint, sizeof(mountpoint));
+    vfs_get_mountpoint(pid, mountpoint, PATH_MAX);
     argv[0] = "-u";
     argv[1] = "-z";
     argv[2] = "--";
@@ -224,7 +231,7 @@ int vfs_unmount(int pid)
     argv[4] = NULL;
     ret     = vfs_run_fusermount(argv);
     if (ret < 0) {
-        return ret;
+        goto out_free_mountpoint;
     }
 
     /* Remove mount point directory */
@@ -232,10 +239,13 @@ int vfs_unmount(int pid)
     ret = rmdir(mountpoint);
     if (ret < 0) {
         vfs_error("failed to remove directory '%s': %m", mountpoint);
-        return ret;
+        goto out_free_mountpoint;
     }
 
-    return 0;
+out_free_mountpoint:
+    ucs_free(mountpoint);
+out:
+    return ret;
 }
 
 static int vfs_unlink_socket(int silent_notexist)
