@@ -87,7 +87,7 @@ static void print_size(const char *name, size_t size)
     print_size(UCS_PP_QUOTE(_type) "." UCS_PP_QUOTE(_field), \
                ucs_field_sizeof(_type, _field))
 
-void print_type_info(const char * tl_name)
+static void print_ucs(const char *tl_name)
 {
     if (tl_name == NULL) {
         printf("UCS:\n");
@@ -131,8 +131,13 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_rcache_region_t);
         PRINT_SIZE(ucs_conn_match_elem_t);
         PRINT_SIZE(ucs_memory_info_t);
+    }
+}
 
-        printf("\nUCT:\n");
+static void print_uct(const char *tl_name)
+{
+    if (tl_name == NULL) {
+        printf("UCT:\n");
         PRINT_SIZE(uct_am_handler_t);
         PRINT_SIZE(uct_base_iface_t);
         PRINT_SIZE(uct_completion_t);
@@ -152,13 +157,11 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_rkey_bundle_t);
         PRINT_SIZE(uct_tcp_ep_t);
         PRINT_SIZE(uct_self_ep_t);
+    }
+}
 
-#ifdef HAVE_TL_UGNI
-        PRINT_SIZE(uct_sockaddr_ugni_t);
-        PRINT_SIZE(uct_sockaddr_smsg_ugni_t);
-        PRINT_SIZE(uct_devaddr_ugni_t);
-#endif
-
+static void print_ib(const char *tl_name)
+{
 #if HAVE_IB
         printf("\nIB:\n");
         PRINT_SIZE(uct_ib_address_t);
@@ -170,13 +173,13 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_ib_iface_recv_desc_t);
         PRINT_SIZE(uct_ib_recv_wr_t);
 #endif
-        printf("\n");
-    }
+}
 
+static void print_rc(const char *tl_name)
+{
 #if HAVE_TL_RC
     if (tl_name == NULL || !strcasecmp(tl_name, "rc_verbs") ||
-        !strcasecmp(tl_name, "rc_mlx5"))
-    {
+        !strcasecmp(tl_name, "rc_mlx5")) {
         printf("RC:\n");
         PRINT_SIZE(uct_rc_am_short_hdr_t);
         PRINT_SIZE(uct_rc_ep_t);
@@ -185,14 +188,12 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_rc_iface_config_t);
         PRINT_SIZE(uct_rc_iface_send_op_t);
         PRINT_SIZE(uct_rc_iface_send_desc_t);
-
         PRINT_SIZE(uct_rc_iface_send_desc_t);
         if (tl_name == NULL || !strcasecmp(tl_name, "rc_verbs")) {
             PRINT_SIZE(uct_rc_verbs_ep_t);
             PRINT_SIZE(uct_rc_verbs_iface_config_t);
             PRINT_SIZE(uct_rc_verbs_iface_t);
         }
-
 #ifdef HAVE_MLX5_DV
         if (tl_name == NULL || !strcasecmp(tl_name, "rc_mlx5")) {
             PRINT_SIZE(uct_rc_mlx5_am_short_hdr_t);
@@ -205,7 +206,10 @@ void print_type_info(const char * tl_name)
         printf("\n");
     }
 #endif
+}
 
+static void print_dc(const char *tl_name)
+{
 #if HAVE_TL_DC
     if (tl_name == NULL || !strcasecmp(tl_name, "dc_mlx5"))
     {
@@ -217,11 +221,13 @@ void print_type_info(const char * tl_name)
         printf("\n");
     }
 #endif
+}
 
+static void print_ud(const char *tl_name)
+{
 #if HAVE_TL_UD
     if (tl_name == NULL || !strcasecmp(tl_name, "ud_verbs") ||
-        !strcasecmp(tl_name, "ud_mlx5"))
-    {
+        !strcasecmp(tl_name, "ud_mlx5")) {
         printf("UD:\n");
         PRINT_SIZE(uct_ud_ep_t);
         PRINT_SIZE(uct_ud_neth_t);
@@ -230,13 +236,11 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_ud_ep_pending_op_t);
         PRINT_SIZE(uct_ud_send_skb_t);
         PRINT_SIZE(uct_ud_recv_skb_t);
-
         PRINT_SIZE(uct_rc_iface_send_desc_t);
         if (tl_name == NULL || !strcasecmp(tl_name, "ud_verbs")) {
             PRINT_SIZE(uct_ud_verbs_ep_t);
             PRINT_SIZE(uct_ud_verbs_iface_t);
         }
-
 #ifdef HAVE_MLX5_HW_UD
         if (tl_name == NULL || !strcasecmp(tl_name, "ud_mlx5")) {
             PRINT_SIZE(uct_ud_mlx5_ep_t);
@@ -246,20 +250,28 @@ void print_type_info(const char * tl_name)
         printf("\n");
     }
 #endif
+}
 
+static void print_ugni(const char *tl_name)
+{
 #ifdef HAVE_TL_UGNI
     if (tl_name == NULL || !strcasecmp(tl_name, "ugni")) {
         printf("UGNI:\n");
+        PRINT_SIZE(uct_sockaddr_ugni_t);
+        PRINT_SIZE(uct_sockaddr_smsg_ugni_t);
+        PRINT_SIZE(uct_devaddr_ugni_t);
         PRINT_SIZE(uct_ugni_device_t);
         PRINT_SIZE(uct_ugni_ep_t);
         PRINT_SIZE(uct_ugni_iface_t);
         PRINT_SIZE(uct_ugni_md_t);
         PRINT_SIZE(uct_ugni_compact_smsg_attr_t);
-
         printf("\n");
     }
 #endif
+}
 
+static void print_ucp()
+{
     printf("\nUCP:\n");
     PRINT_SIZE(ucp_context_t);
     PRINT_SIZE(ucp_worker_t);
@@ -291,5 +303,16 @@ void print_type_info(const char * tl_name)
     PRINT_SIZE(ucp_mem_t);
     PRINT_SIZE(ucp_rkey_t);
     PRINT_SIZE(ucp_wireup_msg_t);
+}
 
+void print_type_info(const char *tl_name)
+{
+    print_ucs(tl_name);
+    print_uct(tl_name);
+    print_ib(tl_name);
+    print_rc(tl_name);
+    print_dc(tl_name);
+    print_ud(tl_name);
+    print_ugni(tl_name);
+    print_ucp();
 }
