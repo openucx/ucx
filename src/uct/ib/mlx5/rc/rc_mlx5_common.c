@@ -654,7 +654,7 @@ failure:
     ucs_error("%s: cannot set ar_enable=%d for RoCE on %s",
               uct_ib_device_name(&md->super.dev), config->super.ar_enable,
               tl_name);
-    return UCS_ERR_UNSUPPORTED;
+    return UCS_ERR_INVALID_PARAM;
 }
 
 #if IBV_HW_TM

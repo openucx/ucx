@@ -1610,7 +1610,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
             &self->super, UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC,
             &config->rc_mlx5_common, "dc");
     if (status != UCS_OK) {
-        return UCS_ERR_INVALID_PARAM;
+        return status;
     }
 
     tx_cq_size = uct_ib_cq_size(&self->super.super.super, &init_attr,
