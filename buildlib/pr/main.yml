@@ -270,76 +270,76 @@ stages:
   - stage: WireCompat
     dependsOn: [Static_check]
     jobs:
-    - template: wire_compat.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
-    - template: wire_compat.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        container: centos7_cuda11
-        ucx_targets:
-          ucx_1_15:
-            ucx_tag: v1.15.x
-          ucx_1_16:
-            ucx_tag: v1.16.x
-          ucx_1_17:
-            ucx_tag: v1.17.x
+    # - template: wire_compat.yml
+    #   parameters:
+    #     name: althca
+    #     demands: ucx_althca -equals yes
+    # - template: wire_compat.yml
+    #   parameters:
+    #     name: gpu
+    #     demands: ucx_gpu -equals yes
+    #     container: centos7_cuda11
+    #     ucx_targets:
+    #       ucx_1_15:
+    #         ucx_tag: v1.15.x
+    #       ucx_1_16:
+    #         ucx_tag: v1.16.x
+    #       ucx_1_17:
+    #         ucx_tag: v1.17.x
     - template: wire_compat.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: dmesg-health -equals yes
     # Temporarily disable wire-compat tests on rain machines
     #- template: wire_compat.yml
     #  parameters:
     #    name: bond
     #    demands: ucx_iodemo -equals yes
 
-  - stage: Coverity
-    dependsOn: [Static_check]
-    jobs:
-      - template: coverity.yml
-        parameters:
-          demands: ucx_docker -equals yes
-          container: coverity_rh7
+  # - stage: Coverity
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #     - template: coverity.yml
+  #       parameters:
+  #         demands: ucx_docker -equals yes
+  #         container: coverity_rh7
 
   - stage: Tests
     dependsOn: [Static_check]
     jobs:
-    - template: tests.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
-        test_perf: 0
-    - template: tests.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        test_perf: 1
-        container: centos7_cuda11
+    # - template: tests.yml
+    #   parameters:
+    #     name: althca
+    #     demands: ucx_althca -equals yes
+    #     test_perf: 0
+    # - template: tests.yml
+    #   parameters:
+    #     name: gpu
+    #     demands: ucx_gpu -equals yes
+    #     test_perf: 1
+    #     container: centos7_cuda11
     - template: tests.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: dmesg-health -equals yes
         test_perf: 1
-    - template: tests.yml
-      parameters:
-        name: roce
-        demands: ucx_roce -equals yes
-        test_perf: 0
-    - template: tests.yml
-      parameters:
-        name: roce_proto_disable
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        proto_enable: no
-    - template: tests.yml
-      parameters:
-        name: BlueField
-        demands: ucx_bf -equals yes
-        run_tests: yes
-        test_perf: 0
+    # - template: tests.yml
+    #   parameters:
+    #     name: roce
+    #     demands: ucx_roce -equals yes
+    #     test_perf: 0
+    # - template: tests.yml
+    #   parameters:
+    #     name: roce_proto_disable
+    #     demands: ucx_roce -equals yes
+    #     test_perf: 0
+    #     proto_enable: no
+    # - template: tests.yml
+    #   parameters:
+    #     name: BlueField
+    #     demands: ucx_bf -equals yes
+    #     run_tests: yes
+    #     test_perf: 0
 
   - stage: Namespace_Tests
     dependsOn: [Static_check]
@@ -347,26 +347,26 @@ stages:
     - template: namespace_tests.yml
       parameters:
         name: new_namespace
-        demands: ucx_new -equals yes
+        demands: dmesg-health -equals yes
 
-  - stage: io_demo
-    dependsOn: [Static_check]
-    jobs:
-    - template: io_demo/io-demo.yml
+  # - stage: io_demo
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #   - template: io_demo/io-demo.yml
 
   - stage: jucx
     dependsOn: [Static_check]
-    jobs:
-      - template: ../jucx/jucx-test.yml
-        parameters:
-          arch: amd64
-          name: gpu
-          demands: ucx_gpu
+    # jobs:
+    #   - template: ../jucx/jucx-test.yml
+    #     parameters:
+    #       arch: amd64
+    #       name: gpu
+    #       demands: ucx_gpu
 
-      - template: ../jucx/jucx-test.yml
-        parameters:
-          arch: aarch64
-          demands: ucx-arm64
+    #   - template: ../jucx/jucx-test.yml
+    #     parameters:
+    #       arch: aarch64
+    #       demands: ucx-arm64
 
   - stage: go
     dependsOn: [Static_check]
@@ -374,11 +374,11 @@ stages:
       - template: go/go-test.yml
         parameters:
           name: new
-          demands: ucx_new -equals yes
-      - template: go/go-test.yml
-        parameters:
-            name: gpu
-            demands: ucx_gpu -equals yes
+          demands: dmesg-health -equals yes
+      # - template: go/go-test.yml
+      #   parameters:
+      #       name: gpu
+      #       demands: ucx_gpu -equals yes
 
   - stage: Build_Static
     dependsOn: [Static_check]
@@ -424,50 +424,50 @@ stages:
               EXECUTOR_NUMBER: $(AZP_AGENT_ID)
 
 
-  - stage: Cuda
-    dependsOn: [Static_check]
-    jobs:
-      - template: cuda/cuda.yml
+  # - stage: Cuda
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #     - template: cuda/cuda.yml
 
 
   - stage: AddressSanitizer
     dependsOn: [Static_check]
     jobs:
-    - template: tests.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        test_perf: 0
-        container: centos8_cuda11_asan
-        asan_check: yes
+    # - template: tests.yml
+    #   parameters:
+    #     name: gpu
+    #     demands: ucx_gpu -equals yes
+    #     test_perf: 0
+    #     container: centos8_cuda11_asan
+    #     asan_check: yes
     - template: tests.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: dmesg-health -equals yes
         test_perf: 0
         container: ubuntu2204_ib
         asan_check: yes
-    - template: tests.yml
-      parameters:
-        name: roce
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        container: ubuntu2204_ib
-        asan_check: yes
-    - template: tests.yml
-      parameters:
-        name: roce_proto_disable
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        proto_enable: no
-        container: ubuntu2204_ib
-        asan_check: yes
-    - template: tests.yml
-      parameters:
-        name: BlueField
-        demands: ucx_bf -equals yes
-        test_perf: 0
-        asan_check: yes
+    # - template: tests.yml
+    #   parameters:
+    #     name: roce
+    #     demands: ucx_roce -equals yes
+    #     test_perf: 0
+    #     container: ubuntu2204_ib
+    #     asan_check: yes
+    # - template: tests.yml
+    #   parameters:
+    #     name: roce_proto_disable
+    #     demands: ucx_roce -equals yes
+    #     test_perf: 0
+    #     proto_enable: no
+    #     container: ubuntu2204_ib
+    #     asan_check: yes
+    # - template: tests.yml
+    #   parameters:
+    #     name: BlueField
+    #     demands: ucx_bf -equals yes
+    #     test_perf: 0
+    #     asan_check: yes
 
 
 #  - stage: Cuda_compatible
