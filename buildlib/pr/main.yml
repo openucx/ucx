@@ -354,8 +354,8 @@ stages:
   #   jobs:
   #   - template: io_demo/io-demo.yml
 
-  - stage: jucx
-    dependsOn: [Static_check]
+  # - stage: jucx
+  #   dependsOn: [Static_check]
     # jobs:
     #   - template: ../jucx/jucx-test.yml
     #     parameters:
