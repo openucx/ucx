@@ -833,6 +833,7 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     md->config.dmabuf_supported = 0;
     md->sync_memops_set         = 0;
     md->granularity             = SIZE_MAX;
+    md->have_c2c                = uct_cuda_base_have_c2c();
 
     if ((config->cuda_async_mem_type != UCS_MEMORY_TYPE_CUDA) &&
         (config->cuda_async_mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED)) {

@@ -61,6 +61,34 @@ err:
     *sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
+int uct_cuda_base_is_coherent()
+{
+    CUdevice cu_device;
+    int coherent;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDeviceGetAttribute(&coherent,
+                                 CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES,
+                                 cu_device));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return coherent;
+}
+
+int uct_cuda_base_have_c2c()
+{
+    /* TODO: not all coherent platforms have C2C; use nvml to check for it */
+    return uct_cuda_base_is_coherent();
+}
+
 ucs_status_t
 uct_cuda_base_query_md_resources(uct_component_t *component,
                                  uct_md_resource_desc_t **resources_p,

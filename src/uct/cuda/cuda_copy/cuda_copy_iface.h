@@ -76,6 +76,14 @@ typedef struct uct_cuda_copy_iface {
         void                    *event_arg;
         uct_async_event_cb_t    event_cb;
     } async;
+    /* bandwidth values used for perf estimate */
+    struct {
+        double d2d;
+        double h2d;
+        double d2h;
+        double h2d_zcopy;
+        double d2h_zcopy;
+    } bw;
 
     /* 2D bitmap representing which streams in queue_desc matrix 
        should sync during flush */

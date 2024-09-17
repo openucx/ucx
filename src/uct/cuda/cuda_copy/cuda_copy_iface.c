@@ -44,7 +44,6 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
     {NULL}
 };
 
-
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t)(uct_iface_t*);
 
@@ -407,14 +406,15 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
         perf_attr->bandwidth.dedicated = 0;
         if ((src_mem_type == UCS_MEMORY_TYPE_HOST) &&
             (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
-            perf_attr->bandwidth.shared = (zcopy ? 8300.0 : 7900.0) * UCS_MBYTE;
+            perf_attr->bandwidth.shared = zcopy ? iface->bw.h2d_zcopy :
+                                          iface->bw.h2d;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
-            perf_attr->bandwidth.shared = (zcopy ? 11660.0 : 9320.0) *
-                                          UCS_MBYTE;
+            perf_attr->bandwidth.shared = zcopy ? iface->bw.d2h_zcopy :
+                                          iface->bw.d2h;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
-            perf_attr->bandwidth.shared = 320.0 * UCS_GBYTE;
+            perf_attr->bandwidth.shared = iface->bw.d2d;
         } else {
             perf_attr->bandwidth.shared = iface->config.bandwidth;
         }
@@ -449,6 +449,20 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     }
 
     return UCS_OK;
+}
+
+static void uct_cuda_copy_iface_set_bw_vals(uct_cuda_copy_iface_t *iface)
+{
+   const uct_cuda_copy_md_t *md = ucs_derived_of(iface->super.super.md,
+                                                 uct_cuda_copy_md_t);
+    iface->bw.d2d       = 320.0 * UCS_GBYTE;
+    iface->bw.h2d_zcopy = (md->have_c2c ? 400000.0 : 8300.0)  * UCS_MBYTE;
+    iface->bw.d2h_zcopy = (md->have_c2c ? 400000.0 : 11660.0) * UCS_MBYTE;
+    /* non-zcopy operations invoke stream synchronizaion every time. Therefore,
+     * we set a lower bandwidth for them compared to the zcopy versions.
+     */
+    iface->bw.h2d       = iface->bw.h2d_zcopy * 0.95;
+    iface->bw.d2h       = iface->bw.d2h_zcopy * 0.95;
 }
 
 static ucs_mpool_ops_t uct_cuda_copy_event_desc_mpool_ops = {
@@ -517,6 +531,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 
     self->short_stream = 0;
     self->cuda_context = 0;
+    uct_cuda_copy_iface_set_bw_vals(self);
 
     return UCS_OK;
 }

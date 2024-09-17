@@ -16,10 +16,7 @@
 #include <ucs/sys/string.h>
 
 
-#define UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH (6911.0 * UCS_MBYTE)
 #define UCT_GDR_COPY_IFACE_OVERHEAD          0
-#define UCT_GDR_COPY_IFACE_GET_LATENCY       ucs_linear_func_make(1.4e-6, 0)
-#define UCT_GDR_COPY_IFACE_PUT_LATENCY       ucs_linear_func_make(0.4e-6, 0)
 
 static ucs_config_field_t uct_gdr_copy_iface_config_table[] = {
 
@@ -110,9 +107,9 @@ uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_iov          = 1;
 
     /* Report GET latency by default as worst case */
-    iface_attr->latency                 = UCT_GDR_COPY_IFACE_GET_LATENCY;
+    iface_attr->latency                 = iface->bw_lat.get_lat;
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
+    iface_attr->bandwidth.shared        = iface->bw_lat.put_bw;
     iface_attr->overhead                = UCT_GDR_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
@@ -120,19 +117,21 @@ uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 }
 
 static ucs_status_t
-uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+uct_gdr_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    uct_ep_operation_t op = UCT_ATTR_VALUE(PERF, perf_attr, operation,
-                                           OPERATION, UCT_EP_OP_LAST);
+    uct_ep_operation_t op             = UCT_ATTR_VALUE(PERF, perf_attr,
+                                                       operation, OPERATION,
+                                                       UCT_EP_OP_LAST);
+    const uct_gdr_copy_iface_t *iface = ucs_derived_of(tl_iface,
+                                                       uct_gdr_copy_iface_t);
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         if ((op == UCT_EP_OP_GET_SHORT) || (op == UCT_EP_OP_GET_ZCOPY)) {
-            perf_attr->bandwidth.dedicated = 250.0 * UCS_MBYTE;
+            perf_attr->bandwidth.dedicated = iface->bw_lat.get_bw;
             perf_attr->bandwidth.shared    = 0;
         } else {
             perf_attr->bandwidth.dedicated = 0;
-            perf_attr->bandwidth.shared    =
-                    UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
+            perf_attr->bandwidth.shared    = iface->bw_lat.put_bw;
         }
     }
 
@@ -150,9 +149,9 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         if (op == UCT_EP_OP_PUT_SHORT) {
-            perf_attr->latency = UCT_GDR_COPY_IFACE_PUT_LATENCY;
+            perf_attr->latency = iface->bw_lat.put_lat;
         } else {
-            perf_attr->latency = UCT_GDR_COPY_IFACE_GET_LATENCY;
+            perf_attr->latency = iface->bw_lat.get_lat;
         }
     }
 
@@ -165,6 +164,24 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     }
 
     return UCS_OK;
+}
+
+static void uct_gdr_copy_iface_set_bw_lat_vals(uct_gdr_copy_iface_t *iface)
+{
+    const uct_gdr_copy_md_t *md = ucs_derived_of(iface->super.md,
+                                                 uct_gdr_copy_md_t);
+
+    if (md->have_c2c) {
+        iface->bw_lat.get_bw  = 8170.0  * UCS_MBYTE;
+        iface->bw_lat.put_bw  = 13930.0 * UCS_MBYTE;
+        iface->bw_lat.get_lat = ucs_linear_func_make(0.003e-6, 0);
+        iface->bw_lat.put_lat = iface->bw_lat.get_lat;
+    } else {
+        iface->bw_lat.get_bw  = 250.0  * UCS_MBYTE;
+        iface->bw_lat.put_bw  = 6911.0 * UCS_MBYTE;
+        iface->bw_lat.get_lat = ucs_linear_func_make(1.4e-6, 0);
+        iface->bw_lat.put_lat = ucs_linear_func_make(0.4e-6, 0);
+    }
 }
 
 static uct_iface_ops_t uct_gdr_copy_iface_ops = {
@@ -216,6 +233,7 @@ static UCS_CLASS_INIT_FUNC(uct_gdr_copy_iface_t, uct_md_h md, uct_worker_h worke
     }
 
     self->id = ucs_generate_uuid((uintptr_t)self);
+    uct_gdr_copy_iface_set_bw_lat_vals(self);
 
     return UCS_OK;
 }

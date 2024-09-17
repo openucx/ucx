@@ -77,24 +77,7 @@ static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
 #if HAVE_CUDA_FABRIC
 static int uct_cuda_ipc_iface_is_mnnvl_supported(uct_cuda_ipc_md_t *md)
 {
-    CUdevice cu_device;
-    int coherent;
-    ucs_status_t status;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuDeviceGetAttribute(&coherent,
-                                 CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES,
-                                 cu_device));
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    return coherent && (md->enable_mnnvl != UCS_NO);
+    return uct_cuda_base_is_coherent() && (md->enable_mnnvl != UCS_NO);
 }
 #endif
 
