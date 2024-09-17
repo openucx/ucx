@@ -170,6 +170,20 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
     return UCS_OK;
 }
 
+ucs_status_t uct_md_query_tl_resources_v2(
+        uct_md_h UCS_V_UNUSED md,
+        uct_tl_resource_desc_v2_t **UCS_V_UNUSED resources_p,
+        unsigned *UCS_V_UNUSED num_resources_p,
+        uct_md_query_tl_resources_params_t *UCS_V_UNUSED params)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
+
+void uct_release_tl_resource_list_v2(
+        uct_tl_resource_desc_v2_t *UCS_V_UNUSED resources)
+{
+}
+
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p)

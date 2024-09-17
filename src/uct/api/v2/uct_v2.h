@@ -1052,6 +1052,83 @@ int uct_iface_is_reachable_v2(uct_iface_h iface,
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Parameters passed to @ref uct_md_query_tl_resources_v2.
+ */
+typedef struct uct_md_query_tl_resources_params {
+    /**
+     * Mask of valid fields which must currently be set to zero.
+     * Future fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                       field_mask;
+} uct_md_query_tl_resources_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Capability flags of @ref uct_tl_resource_desc_t.
+ *
+ * The enumeration defines bit mask of capabilities in @ref
+ * uct_tl_resource_desc_v2_t::flags, set by @ref uct_md_query_tl_resources_v2.
+ */
+enum {
+    /**
+     * If set, the resource supports inter-node communications.
+     */
+    UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Communication resource descriptor.
+ *
+ * Resource descriptor of a standalone communication resource with extraneous
+ * flags.
+ */
+typedef struct uct_tl_resource_desc_v2 {
+    uct_tl_resource_desc_t desc;  /**< Main resource descriptor */
+    uint64_t               flags; /**< Associated resource flags */
+} uct_tl_resource_desc_v2_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Query for transport resources.
+ *
+ * This routine queries the @ref uct_md_h "memory domain" for communication
+ * resources that are available for it.
+ *
+ * @param [in]  md              Handle to memory domain.
+ * @param [out] resources_p     Filled with a pointer to an array of resource
+ *                              descriptors.
+ * @param [out] num_resources_p Filled with the number of resources in the array.
+ * @param [in]  params          Parameters as defined in @ref
+ *                              uct_md_query_tl_resources_params_t.
+ *
+ * @return Error code.
+ */
+ucs_status_t
+uct_md_query_tl_resources_v2(uct_md_h md,
+                             uct_tl_resource_desc_v2_t **resources_p,
+                             unsigned *num_resources_p,
+                             uct_md_query_tl_resources_params_t *params);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Release the list of resources returned from @ref uct_md_query_tl_resources_v2.
+ *
+ * This routine releases the memory associated with the list of resources
+ * allocated by @ref uct_md_query_tl_resources_v2.
+ *
+ * @param [in] resources  Array of resource descriptors to release.
+ */
+void uct_release_tl_resource_list_v2(uct_tl_resource_desc_v2_t *resources);
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Connect endpoint to a remote endpoint.
  *
  * requires @ref UCT_IFACE_FLAG_CONNECT_TO_EP capability.
