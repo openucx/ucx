@@ -927,7 +927,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
             &self->super, UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC,
             &config->rc_mlx5_common, "rc_mlx5");
     if (status != UCS_OK) {
-        return UCS_ERR_INVALID_PARAM;
+        return status;
     }
 
     status = uct_rc_init_fc_thresh(&config->super, &self->super.super);

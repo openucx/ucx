@@ -496,6 +496,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
             ucs_derived_of(tl_config, uct_gga_mlx5_iface_config_t);
     uct_ib_mlx5_md_t *md                = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr  = {};
+    ucs_status_t status;
 
     init_attr.qp_type               = IBV_QPT_RC;
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
@@ -508,6 +509,13 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                               &uct_gga_mlx5_iface_ops, tl_md, worker, params,
                               &config->super.super, &config->rc_mlx5_common,
                               &init_attr);
+
+    status = uct_rc_mlx5_dp_ordering_ooo_init(
+            &self->super, UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC,
+            &config->rc_mlx5_common, "gga");
+    if (status != UCS_OK) {
+        return status;
+    }
 
     uct_gga_mlx5_iface_disable_rx(&self->super);
 
