@@ -76,16 +76,22 @@ void uct_md_close(uct_md_h md)
     md->ops->close(md);
 }
 
-ucs_status_t uct_md_query_tl_resources(uct_md_h md,
-                                       uct_tl_resource_desc_t **resources_p,
-                                       unsigned *num_resources_p)
+ucs_status_t
+uct_md_query_tl_resources_v2(uct_md_h md,
+                             uct_tl_resource_desc_v2_t **resources_p,
+                             unsigned *num_resources_p,
+                             uct_md_query_tl_resources_params_t *params)
 {
     uct_component_t *component = md->component;
-    uct_tl_resource_desc_t *resources, *tmp;
+    uct_tl_resource_desc_v2_t *resources, *tmp;
     uct_tl_device_resource_t *tl_devices;
     unsigned i, num_resources, num_tl_devices;
     ucs_status_t status;
     uct_tl_t *tl;
+
+    if (params->field_mask != 0) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     resources     = NULL;
     num_resources = 0;
@@ -114,12 +120,14 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
 
         /* add tl devices to overall list of resources */
         for (i = 0; i < num_tl_devices; ++i) {
-            ucs_strncpy_zero(tmp[num_resources + i].tl_name, tl->name,
-                             sizeof(tmp[num_resources + i].tl_name));
-            ucs_strncpy_zero(tmp[num_resources + i].dev_name, tl_devices[i].name,
-                             sizeof(tmp[num_resources + i].dev_name));
-            tmp[num_resources + i].dev_type   = tl_devices[i].type;
-            tmp[num_resources + i].sys_device = tl_devices[i].sys_device;
+            ucs_strncpy_zero(tmp[num_resources + i].desc.tl_name, tl->name,
+                             sizeof(tmp[num_resources + i].desc.tl_name));
+            ucs_strncpy_zero(tmp[num_resources + i].desc.dev_name,
+                             tl_devices[i].name,
+                             sizeof(tmp[num_resources + i].desc.dev_name));
+            tmp[num_resources + i].desc.dev_type   = tl_devices[i].type;
+            tmp[num_resources + i].desc.sys_device = tl_devices[i].sys_device;
+            tmp[num_resources + i].flags           = tl_devices[i].flags;
         }
 
         resources      = tmp;
@@ -134,6 +142,41 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
 err:
     ucs_free(resources);
     return status;
+}
+
+void uct_release_tl_resource_list_v2(uct_tl_resource_desc_v2_t *resources)
+{
+    ucs_free(resources);
+}
+
+ucs_status_t uct_md_query_tl_resources(uct_md_h md,
+                                       uct_tl_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p)
+{
+    uct_md_query_tl_resources_params_t params;
+    uct_tl_resource_desc_v2_t *resources_v2;
+    ucs_status_t status;
+    unsigned i;
+
+    params.field_mask = 0;
+    status            = uct_md_query_tl_resources_v2(md, &resources_v2,
+                                                     num_resources_p, &params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *resources_p = malloc(*num_resources_p * sizeof(**resources_p));
+    if (*resources_p == NULL) {
+        uct_release_tl_resource_list_v2(resources_v2);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    for (i = 0; i < *num_resources_p; ++i) {
+        (*resources_p)[i] = resources_v2[i].desc;
+    }
+
+    uct_release_tl_resource_list_v2(resources_v2);
+    return UCS_OK;
 }
 
 void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources)
@@ -168,20 +211,6 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
     *resources_p     = NULL;
     *num_resources_p = 0;
     return UCS_OK;
-}
-
-ucs_status_t uct_md_query_tl_resources_v2(
-        uct_md_h UCS_V_UNUSED md,
-        uct_tl_resource_desc_v2_t **UCS_V_UNUSED resources_p,
-        unsigned *UCS_V_UNUSED num_resources_p,
-        uct_md_query_tl_resources_params_t *UCS_V_UNUSED params)
-{
-    return UCS_ERR_NOT_IMPLEMENTED;
-}
-
-void uct_release_tl_resource_list_v2(
-        uct_tl_resource_desc_v2_t *UCS_V_UNUSED resources)
-{
 }
 
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,

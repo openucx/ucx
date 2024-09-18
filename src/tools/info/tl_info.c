@@ -122,7 +122,7 @@ static const char *size_limit_to_str(size_t min_size, size_t max_size)
 }
 
 static void print_iface_info(uct_worker_h worker, uct_md_h md,
-                             uct_tl_resource_desc_t *resource)
+                             uct_tl_resource_desc_v2_t *resource)
 {
     char buf[256]                   = {0};
     uct_iface_params_t iface_params = {
@@ -131,8 +131,8 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
                                  UCT_IFACE_PARAM_FIELD_STATS_ROOT  |
                                  UCT_IFACE_PARAM_FIELD_RX_HEADROOM,
         .open_mode             = UCT_IFACE_OPEN_MODE_DEVICE,
-        .mode.device.tl_name   = resource->tl_name,
-        .mode.device.dev_name  = resource->dev_name,
+        .mode.device.tl_name   = resource->desc.tl_name,
+        .mode.device.dev_name  = resource->desc.dev_name,
         .stats_root            = ucs_stats_get_root(),
         .rx_headroom           = 0
     };
@@ -142,18 +142,19 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     ucs_status_t status;
     uct_iface_h iface;
 
-    status = uct_md_iface_config_read(md, resource->tl_name, NULL, NULL, &iface_config);
+    status = uct_md_iface_config_read(md, resource->desc.tl_name, NULL, NULL, &iface_config);
     if (status != UCS_OK) {
         return;
     }
 
-    printf("#      Transport: %s\n", resource->tl_name);
-    printf("#         Device: %s\n", resource->dev_name);
-    printf("#           Type: %s\n", uct_device_type_names[resource->dev_type]);
+    printf("#      Transport: %s\n", resource->desc.tl_name);
+    printf("#         Device: %s\n", resource->desc.dev_name);
+    printf("#           Type: %s\n", uct_device_type_names[resource->desc.dev_type]);
+    printf("#          Flags: 0x%zx\n", resource->flags);
     printf("#  System device: %s",
-           ucs_topo_sys_device_get_name(resource->sys_device));
-    if (resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        printf(" (%d)", resource->sys_device);
+           ucs_topo_sys_device_get_name(resource->desc.sys_device));
+    if (resource->desc.sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        printf(" (%d)", resource->desc.sys_device);
     }
     printf("\n");
 
@@ -348,7 +349,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
 }
 
 static ucs_status_t print_tl_info(uct_md_h md, const char *tl_name,
-                                  uct_tl_resource_desc_t *resources,
+                                  uct_tl_resource_desc_v2_t *resources,
                                   unsigned num_resources,
                                   int print_opts,
                                   ucs_config_print_flags_t print_flags)
@@ -375,7 +376,7 @@ static ucs_status_t print_tl_info(uct_md_h md, const char *tl_name,
         printf("# (No supported devices found)\n");
     }
     for (i = 0; i < num_resources; ++i) {
-        ucs_assert(!strcmp(tl_name, resources[i].tl_name));
+        ucs_assert(!strcmp(tl_name, resources[i].desc.tl_name));
         print_iface_info(worker, md, &resources[i]);
     }
 
@@ -392,7 +393,7 @@ static void print_md_info(uct_component_h component,
                           const char *req_tl_name)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
-    uct_tl_resource_desc_t *resources, tmp;
+    uct_tl_resource_desc_v2_t *resources, tmp;
     unsigned resource_index, j, num_resources, count;
     ucs_memory_type_t mem_type;
     ucs_status_t status;
@@ -400,6 +401,7 @@ static void print_md_info(uct_component_h component,
     uct_md_config_t *md_config;
     uct_md_attr_v2_t md_attr;
     uct_md_h md;
+    uct_md_query_tl_resources_params_t params;
 
     status = uct_md_config_read(component, NULL, NULL, &md_config);
     if (status != UCS_OK) {
@@ -413,7 +415,9 @@ static void print_md_info(uct_component_h component,
         goto out;
     }
 
-    status = uct_md_query_tl_resources(md, &resources, &num_resources);
+    params.field_mask = 0;
+    status = uct_md_query_tl_resources_v2(md, &resources, &num_resources,
+                                          &params);
     if (status != UCS_OK) {
         printf("#   < failed to query memory domain resources >\n");
         goto out_close_md;
@@ -426,7 +430,7 @@ static void print_md_info(uct_component_h component,
     if (req_tl_name != NULL) {
         resource_index = 0;
         while (resource_index < num_resources) {
-            if (!strcmp(resources[resource_index].tl_name, req_tl_name)) {
+            if (!strcmp(resources[resource_index].desc.tl_name, req_tl_name)) {
                 break;
             }
             ++resource_index;
@@ -519,10 +523,10 @@ static void print_md_info(uct_component_h component,
     resource_index = 0;
     while (resource_index < num_resources) {
         /* Gather all resources for this transport */
-        tl_name = resources[resource_index].tl_name;
+        tl_name = resources[resource_index].desc.tl_name;
         count = 1;
         for (j = resource_index + 1; j < num_resources; ++j) {
-            if (!strcmp(tl_name, resources[j].tl_name)) {
+            if (!strcmp(tl_name, resources[j].desc.tl_name)) {
                 tmp = resources[count + resource_index];
                 resources[count + resource_index] = resources[j];
                 resources[j] = tmp;
@@ -539,7 +543,7 @@ static void print_md_info(uct_component_h component,
     }
 
 out_free_list:
-    uct_release_tl_resource_list(resources);
+    uct_release_tl_resource_list_v2(resources);
 out_close_md:
     uct_md_close(md);
 out:
