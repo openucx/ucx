@@ -278,6 +278,12 @@ AS_IF([test "x$with_ib" = "xyes"],
            AC_CHECK_DECLS([ibv_alloc_dm],
                [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])],
                [], [[#include <infiniband/verbs.h>]])])
+        
+        # DDP support
+        AS_IF([test "x$have_mlx5" = xyes], [
+           AC_CHECK_DECLS([MLX5DV_CONTEXT_MASK_OOO_RECV_WRS],
+               [AC_DEFINE([HAVE_OOO_RECV_WRS], 1, [Have DDP support])],
+               [], [[#include <infiniband/mlx5dv.h>]])])
 
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])

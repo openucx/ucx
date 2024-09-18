@@ -1055,6 +1055,9 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
                                         struct mlx5dv_qp_init_attr *dv_attr,
                                         unsigned scat2cqe_dir_mask)
 {
+    uct_ib_mlx5_md_t UCS_V_UNUSED *md = uct_ib_mlx5_iface_md(
+            &iface->super.super);
+
 #if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
     if ((scat2cqe_dir_mask & UCS_BIT(UCT_IB_DIR_RX)) &&
         (iface->super.super.config.max_inl_cqe[UCT_IB_DIR_RX] == 0)) {
@@ -1083,6 +1086,13 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
         }
 #endif
     }
+
+#ifdef HAVE_OOO_RECV_WRS
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DDP) {
+        dv_attr->create_flags |= MLX5DV_QP_CREATE_OOO_DP;
+        dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+    }
+#endif
 }
 #endif
 
