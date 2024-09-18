@@ -189,13 +189,13 @@ try_load_cuda_env() {
     [ "${num_gpus}" -gt 0 ] || return 0
 
     # Check cuda env module
-    az_module_load dev/cuda12.2.2 || return 0
+    az_module_load dev/cuda12.5.1 || return 0
     have_cuda=yes
 
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
     then
-        az_module_load dev/gdrcopy2.4.1_cuda12.2.2 && have_gdrcopy=yes
+        az_module_load dev/gdrcopy2.4.1_cuda12.5.1 && have_gdrcopy=yes
     fi
 
     # Set CUDA_VISIBLE_DEVICES
