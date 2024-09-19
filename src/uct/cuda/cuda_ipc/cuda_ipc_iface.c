@@ -611,7 +611,6 @@ uct_cuda_ipc_query_devices(
         uct_md_h uct_md, uct_tl_device_resource_t **tl_devices_p,
         unsigned *num_tl_devices_p)
 {
-    uct_device_type_t dev_type = UCT_DEVICE_TYPE_SHM;
     uint64_t flags             = 0;
     ucs_status_t status;
 #if HAVE_CUDA_FABRIC
@@ -621,7 +620,7 @@ uct_cuda_ipc_query_devices(
         flags = UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE;
     }
 #endif
-    status = uct_cuda_base_query_devices_common(uct_md, dev_type,
+    status = uct_cuda_base_query_devices_common(uct_md, UCT_DEVICE_TYPE_SHM,
                                                 tl_devices_p, num_tl_devices_p);
     if (status == UCS_OK) {
         ucs_assert(*num_tl_devices_p == 1);

@@ -1112,28 +1112,29 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
 static void ucp_add_tl_resource_if_enabled(
         ucp_context_h context, ucp_md_index_t md_index,
         const ucp_config_t *config, const ucs_string_set_t *aux_tls,
-        const uct_tl_resource_desc_v2_t *resource, unsigned *num_resources_p,
+        const uct_tl_resource_desc_v2_t *tl_resource, unsigned *num_resources_p,
         uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
 {
+    const uct_tl_resource_desc_t *resource = &tl_resource->desc;
     uint8_t rsc_flags;
     ucp_rsc_index_t dev_index, i;
 
-    if (ucp_is_resource_enabled(&resource->desc, config, aux_tls, &rsc_flags,
+    if (ucp_is_resource_enabled(resource, config, aux_tls, &rsc_flags,
                                 dev_cfg_masks, tl_cfg_mask)) {
-        if ((resource->desc.sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-            (resource->desc.sys_device >= UCP_MAX_SYS_DEVICES)) {
+        if ((resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+            (resource->sys_device >= UCP_MAX_SYS_DEVICES)) {
             ucs_diag(UCT_TL_RESOURCE_DESC_FMT
                      " system device is %d, which exceeds the maximal "
                      "supported (%d), system locality may be ignored",
-                     UCT_TL_RESOURCE_DESC_ARG(&resource->desc), resource->desc.sys_device,
+                     UCT_TL_RESOURCE_DESC_ARG(resource), resource->sys_device,
                      UCP_MAX_SYS_DEVICES);
         }
-        context->tl_rscs[context->num_tls].tl_rsc       = resource->desc;
+        context->tl_rscs[context->num_tls].tl_rsc       = *resource;
         context->tl_rscs[context->num_tls].md_index     = md_index;
         context->tl_rscs[context->num_tls].tl_name_csum =
-                                  ucs_crc16_string(resource->desc.tl_name);
+                                  ucs_crc16_string(resource->tl_name);
         context->tl_rscs[context->num_tls].flags        = rsc_flags;
-        if (resource->flags & UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE) {
+        if (tl_resource->flags & UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE) {
             context->tl_rscs[context->num_tls].flags |=
                     UCP_TL_RSC_FLAG_INTER_NODE;
         }
@@ -1141,7 +1142,7 @@ static void ucp_add_tl_resource_if_enabled(
         dev_index = 0;
         for (i = 0; i < context->num_tls; ++i) {
             if (ucp_tl_resource_is_same_device(&context->tl_rscs[i].tl_rsc,
-                                               &resource->desc)) {
+                                               resource)) {
                 dev_index = context->tl_rscs[i].dev_index;
                 break;
             } else {
