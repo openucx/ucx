@@ -3140,6 +3140,26 @@ out:
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops;
 
+static void uct_ib_mlx5dv_query_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
+{
+#ifdef HAVE_OOO_RECV_WRS
+    struct mlx5dv_context ctx_dv = {
+        .comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS
+    };
+    int ret;
+
+    ret = mlx5dv_query_device(ctx, &ctx_dv);
+    if (ret != 0) {
+        ucs_error("mlx5dv_query_device: Failed to query device capabilities, ret=%d\n", ret);
+        return;
+    }
+
+    if (ctx_dv.ooo_recv_wrs_caps.max_rc > 0) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_DDP;
+    }
+#endif
+}
+
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
                                           const uct_ib_md_config_t *md_config,
                                           uct_ib_md_t **p_md)
@@ -3174,6 +3194,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     if (status != UCS_OK) {
         goto err_md_free;
     }
+
+    uct_ib_mlx5dv_query_ddp(ctx, md);
 
     if (IBV_DEVICE_ATOMIC_HCA(dev)) {
         dev->atomic_arg_sizes = sizeof(uint64_t);

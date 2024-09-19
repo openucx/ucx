@@ -207,9 +207,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC = UCS_BIT(20),
     /* RoCE supports forcing ordering configuration */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(21),
+    /* Device supports DDP (OOO data placement)*/
+    UCT_IB_MLX5_MD_FLAG_DDP                   = UCS_BIT(22),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 22,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 23,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
