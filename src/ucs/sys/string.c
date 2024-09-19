@@ -451,3 +451,16 @@ char* ucs_string_split(char *str, const char *delim, int count, ...)
 
     return p;
 }
+
+ucs_status_t ucs_string_alloc_path_buffer(char **buffer_p, const char *name)
+{
+    char *temp_buffer = ucs_malloc(PATH_MAX, name);
+
+    if (temp_buffer == NULL) {
+        ucs_error("failed to allocate memory for %s", name);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *buffer_p = temp_buffer;
+    return UCS_OK;
+}

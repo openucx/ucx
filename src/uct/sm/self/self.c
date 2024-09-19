@@ -153,9 +153,18 @@ uct_self_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     addr = (const uct_self_iface_addr_t*)params->iface_addr;
+    if (addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "iface address is empty");
+        return 0;
+    }
 
-    return (addr != NULL) && (iface->id == *addr) &&
-           uct_iface_scope_is_reachable(tl_iface, params);
+    if (iface->id != *addr) {
+        uct_iface_fill_info_str_buf(
+                params, "iface id and iface address differ (%lu vs %lu)",
+                iface->id, *addr);
+        return 0;
+    }
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static void uct_self_iface_sendrecv_am(uct_self_iface_t *iface, uint8_t am_id,

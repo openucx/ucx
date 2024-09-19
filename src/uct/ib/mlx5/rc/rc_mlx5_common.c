@@ -594,6 +594,69 @@ void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
     ucs_mpool_put_inline(ib_desc);
 }
 
+ucs_status_t
+uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
+                                 uint64_t tl_flag,
+                                 uct_rc_mlx5_iface_common_config_t *config,
+                                 const char *tl_name)
+{
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
+    int dp_ordering_ooo, dp_ordering_ooo_force;
+
+    if (!uct_ib_iface_is_roce(&iface->super.super)) {
+        iface->super.super.config.dp_ordering_ooo = UCS_AUTO;
+        return UCS_OK;
+    }
+
+    dp_ordering_ooo       = !!(md->flags & tl_flag);
+    dp_ordering_ooo_force = !!(md->flags &
+                               UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE);
+
+    /*
+     * HCA has an mlxreg admin configuration to force enable adaptive routing
+     * (AR) or not.
+     *
+     * HCA cap/cap_2 booleans:
+     * - if dp_ordering_ooo is set, QPC/DCTC can enable AR.
+     * - if dp_ordering_ooo_force is set, QPC/DCTC can request mlxreg
+     *   configuration override, useful to force disable.
+     *
+     * QP modify behavior with returned values:
+     * - UCS_AUTO: Do not affect existing system behavior.
+     * - UCS_NO  : Force AR disabling on the QP if supported. QP modify will
+     *   return error on failure.
+     * - UCS_TRY : Set AR to enable, ignored if any failure.
+     * - UCS_YES : Force AR enabling on the QP if supported. QP modify will
+     *   return error on failure.
+     */
+
+    if ((config->super.ar_enable == UCS_TRY) && dp_ordering_ooo) {
+        iface->super.super.config.dp_ordering_ooo = UCS_TRY;
+    } else if (config->super.ar_enable == UCS_NO) {
+        if (!dp_ordering_ooo_force) {
+            goto failure;
+        }
+
+        iface->super.super.config.dp_ordering_ooo = UCS_NO;
+    } else if (config->super.ar_enable == UCS_YES) {
+        if (!dp_ordering_ooo_force || !dp_ordering_ooo) {
+            goto failure;
+        }
+
+        iface->super.super.config.dp_ordering_ooo = UCS_YES;
+    } else {
+        iface->super.super.config.dp_ordering_ooo = UCS_AUTO;
+    }
+
+    return UCS_OK;
+
+failure:
+    ucs_error("%s: cannot set ar_enable=%d for RoCE on %s",
+              uct_ib_device_name(&md->super.dev), config->super.ar_enable,
+              tl_name);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 #if IBV_HW_TM
 /* tag is passed as parameter, because some (but not all!) transports may need
  * to translate TMH to LE */
@@ -992,6 +1055,9 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
                                         struct mlx5dv_qp_init_attr *dv_attr,
                                         unsigned scat2cqe_dir_mask)
 {
+    uct_ib_mlx5_md_t UCS_V_UNUSED *md = uct_ib_mlx5_iface_md(
+            &iface->super.super);
+
 #if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
     if ((scat2cqe_dir_mask & UCS_BIT(UCT_IB_DIR_RX)) &&
         (iface->super.super.config.max_inl_cqe[UCT_IB_DIR_RX] == 0)) {
@@ -1020,6 +1086,13 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
         }
 #endif
     }
+
+#ifdef HAVE_OOO_RECV_WRS
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DDP) {
+        dv_attr->create_flags |= MLX5DV_QP_CREATE_OOO_DP;
+        dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+    }
+#endif
 }
 #endif
 

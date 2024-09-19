@@ -475,6 +475,13 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
 #define UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ 8
 
 
+ucs_status_t
+uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
+                                 uint64_t tl_flag,
+                                 uct_rc_mlx5_iface_common_config_t *config,
+                                 const char *tl_name);
+
+
 #if IBV_HW_TM
 void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
                                    struct ibv_tmh *tmh, uct_tag_t tag,

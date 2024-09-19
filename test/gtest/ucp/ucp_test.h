@@ -81,10 +81,11 @@ public:
                const ucp_worker_params_t& worker_params,
                const ucp_test_base* test_owner);
 
-        ~entity();
+        virtual ~entity();
 
-        void connect(const entity* other, const ucp_ep_params_t& ep_params,
-                     int ep_idx = 0, int do_set_ep = 1);
+        virtual void connect(const entity *other,
+                             const ucp_ep_params_t &ep_params, int ep_idx = 0,
+                             int do_set_ep = 1);
 
         bool verify_client_address(struct sockaddr_storage *client_address);
 
@@ -354,14 +355,12 @@ protected:
         }
     }
 
-    template <typename T>
-    void wait_for_value(volatile T *var, T value, double timeout = 10.0) const
+    template<typename T>
+    void wait_for_value(const volatile T *var, T value,
+                        double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
-        while ((ucs_get_time() < deadline) && (*var != value)) {
-            short_progress_loop();
-        }
+        test_base::wait_for_value(
+                var, value, [this]() { short_progress_loop(); }, timeout);
     }
 
     static const ucp_datatype_t DATATYPE;

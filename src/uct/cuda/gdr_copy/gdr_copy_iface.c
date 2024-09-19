@@ -16,16 +16,35 @@
 #include <ucs/sys/string.h>
 
 
-#define UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH (6911.0 * UCS_MBYTE)
-#define UCT_GDR_COPY_IFACE_OVERHEAD          0
-#define UCT_GDR_COPY_IFACE_GET_LATENCY       ucs_linear_func_make(1.4e-6, 0)
-#define UCT_GDR_COPY_IFACE_PUT_LATENCY       ucs_linear_func_make(0.4e-6, 0)
+#define UCT_GDR_COPY_IFACE_OVERHEAD 0
 
 static ucs_config_field_t uct_gdr_copy_iface_config_table[] = {
 
     {"", "", NULL,
      ucs_offsetof(uct_gdr_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+    {"BW", "0MBs,get_dedicated:250MBs,put_shared:6911MBs",
+     "Estimated memory copy bandwidth", 0,
+     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
+        {"get_dedicated", "dedicated get bandwidth",
+         ucs_offsetof(uct_gdr_copy_iface_config_t, get_bw.dedicated)},
+        {"get_shared", "shared get bandwidth",
+         ucs_offsetof(uct_gdr_copy_iface_config_t, get_bw.shared)},
+        {"put_dedicated", "dedicated put bandwidth",
+         ucs_offsetof(uct_gdr_copy_iface_config_t, put_bw.dedicated)},
+        {"put_shared", "shared put bandwidth",
+         ucs_offsetof(uct_gdr_copy_iface_config_t, put_bw.shared)},
+        {NULL})},
+
+    {"LAT", "get:1.4e-6,put:0.4e-6",
+     "Estimated latency", 0,
+     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
+        {"get", "get latency",
+         ucs_offsetof(uct_gdr_copy_iface_config_t, get_latency)},
+        {"put", "put latency",
+         ucs_offsetof(uct_gdr_copy_iface_config_t, put_latency)},
+        {NULL})},
 
     {NULL}
 };
@@ -55,9 +74,19 @@ uct_gdr_copy_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     addr = (uct_gdr_copy_iface_addr_t*)params->iface_addr;
+    if (addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "device address is empty");
+        return 0;
+    }
 
-    return (addr != NULL) && (iface->id == *addr) &&
-           uct_iface_scope_is_reachable(tl_iface, params);
+    if (iface->id != *addr) {
+        uct_iface_fill_info_str_buf(params,
+                                    "different iface id %"PRIx64" vs %"PRIx64"",
+                                    iface->id, *addr);
+        return 0;
+    }
+
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static ucs_status_t
@@ -100,9 +129,8 @@ uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_iov          = 1;
 
     /* Report GET latency by default as worst case */
-    iface_attr->latency                 = UCT_GDR_COPY_IFACE_GET_LATENCY;
-    iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
+    iface_attr->latency                 = iface->config.get_latency;
+    iface_attr->bandwidth               = iface->config.get_bw;
     iface_attr->overhead                = UCT_GDR_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
@@ -110,20 +138,17 @@ uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 }
 
 static ucs_status_t
-uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+uct_gdr_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    uct_ep_operation_t op = UCT_ATTR_VALUE(PERF, perf_attr, operation,
-                                           OPERATION, UCT_EP_OP_LAST);
+    uct_gdr_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_gdr_copy_iface_t);
+    uct_ep_operation_t op       = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                                 OPERATION, UCT_EP_OP_LAST);
+    int is_get_op               = (op == UCT_EP_OP_GET_SHORT) ||
+                                  (op == UCT_EP_OP_GET_ZCOPY);
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
-        if ((op == UCT_EP_OP_GET_SHORT) || (op == UCT_EP_OP_GET_ZCOPY)) {
-            perf_attr->bandwidth.dedicated = 250.0 * UCS_MBYTE;
-            perf_attr->bandwidth.shared    = 0;
-        } else {
-            perf_attr->bandwidth.dedicated = 0;
-            perf_attr->bandwidth.shared    =
-                    UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
-        }
+        perf_attr->bandwidth = is_get_op ? iface->config.get_bw :
+                                           iface->config.put_bw;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
@@ -139,11 +164,8 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
-        if (op == UCT_EP_OP_PUT_SHORT) {
-            perf_attr->latency = UCT_GDR_COPY_IFACE_PUT_LATENCY;
-        } else {
-            perf_attr->latency = UCT_GDR_COPY_IFACE_GET_LATENCY;
-        }
+        perf_attr->latency = is_get_op ? iface->config.get_latency :
+                                         iface->config.put_latency;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
@@ -192,6 +214,8 @@ static UCS_CLASS_INIT_FUNC(uct_gdr_copy_iface_t, uct_md_h md, uct_worker_h worke
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    uct_gdr_copy_iface_config_t *gdr_config =
+                    ucs_derived_of(tl_config, uct_gdr_copy_iface_config_t);
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_gdr_copy_iface_ops,
@@ -205,7 +229,11 @@ static UCS_CLASS_INIT_FUNC(uct_gdr_copy_iface_t, uct_md_h md, uct_worker_h worke
         return status;
     }
 
-    self->id = ucs_generate_uuid((uintptr_t)self);
+    self->id                 = ucs_generate_uuid((uintptr_t)self);
+    self->config.get_bw      = gdr_config->get_bw;
+    self->config.put_bw      = gdr_config->put_bw;
+    self->config.get_latency = ucs_linear_func_make(gdr_config->get_latency, 0);
+    self->config.put_latency = ucs_linear_func_make(gdr_config->put_latency, 0);
 
     return UCS_OK;
 }

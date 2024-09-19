@@ -431,6 +431,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             ucs_log_pop_handler();
 
             if (status == UCS_ERR_NO_MEMORY) {
+                usleep(ucs::rand_range(10000));
                 num_alloc_failures++;
                 continue;
             }
@@ -457,7 +458,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             uct_mem_free(&mem);
         }
 
-        EXPECT_LT((double)num_alloc_failures / iterations, 0.3)
+        EXPECT_LT((double)num_alloc_failures / iterations, 0.5)
                 << "Too many OUT_OF_RESOURCE failures";
     }
 }

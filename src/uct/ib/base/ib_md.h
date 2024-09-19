@@ -83,6 +83,7 @@ typedef struct uct_ib_md_ext_config {
     struct {
         int                  prefetch;     /**< Auto-prefetch non-blocking memory
                                                 registrations / allocations */
+        uint64_t             mem_types;    /**< Supported mem types for ODP */
     } odp;
 
     unsigned long            gid_index;    /**< IB GID index to use */
@@ -186,7 +187,7 @@ typedef struct uct_ib_md_config {
 
     int                      mlx5dv; /**< mlx5 support */
     int                      devx; /**< DEVX support */
-    unsigned                 devx_objs;    /**< Objects to be created by DevX */
+    uint64_t                 devx_objs;    /**< Objects to be created by DevX */
     ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
     int                      xgvmi_umr_enable; /**< Enable UMR workflow for XGVMI */
@@ -377,7 +378,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             uint64_t access_flags, size_t mr_num,
                             struct ibv_mr **mrs);
 
-uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh);
+uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order);
 
 ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,

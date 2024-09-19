@@ -359,6 +359,15 @@ static inline int ucs_string_is_empty(const char *str)
     return *str == '\0';
 }
 
+/**
+ * Allocates a path buffer of size PATH_MAX.
+ *
+ * @param buffer_p Pointer to the buffer.
+ * @param name     Name of the buffer for logging.
+ * @return         UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ */
+ucs_status_t ucs_string_alloc_path_buffer(char **buffer_p, const char *name);
+
 END_C_DECLS
 
 #endif
