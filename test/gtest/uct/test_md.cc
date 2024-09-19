@@ -563,13 +563,17 @@ UCS_TEST_P(test_md, tl_resource_desc_v1_v2) {
     uct_tl_resource_desc_t *v1;
     uct_tl_resource_desc_v2_t *v2;
     unsigned num_v1, num_v2;
+    ucs_status_t status_v1, status_v2;
 
-    ASSERT_UCS_OK(uct_md_query_tl_resources(md(), &v1, &num_v1));
-    ASSERT_UCS_OK(uct_md_query_tl_resources_v2(md(), &v2, &num_v2, &params));
-    ASSERT_TRUE(num_v2 > 0);
-    ASSERT_EQ(num_v2, num_v1);
+    status_v1 = uct_md_query_tl_resources(md(), &v1, &num_v1);
+    status_v2 = uct_md_query_tl_resources_v2(md(), &v2, &num_v2, &params);
 
-    for (auto i = 0; i < num_v1; ++i) {
+    EXPECT_UCS_OK(status_v1);
+    EXPECT_UCS_OK(status_v2);
+    EXPECT_GT(num_v2, 0);
+    EXPECT_EQ(num_v2, num_v1);
+
+    for (auto i = 0; (i < num_v1) && (num_v1 == num_v2) ; ++i) {
         EXPECT_TRUE(!strcmp(v1[i].tl_name, v2[i].desc.tl_name));
         EXPECT_TRUE(!strcmp(v1[i].dev_name, v2[i].desc.dev_name));
         EXPECT_EQ(v1[i].dev_type, v2[i].desc.dev_type);
@@ -578,8 +582,13 @@ UCS_TEST_P(test_md, tl_resource_desc_v1_v2) {
                     (v2[i].flags == UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE));
     }
 
-    uct_release_tl_resource_list(v1);
-    uct_release_tl_resource_list_v2(v2);
+    if (status_v1 == UCS_OK) {
+        uct_release_tl_resource_list(v1);
+    }
+
+    if (status_v2 == UCS_OK) {
+        uct_release_tl_resource_list_v2(v2);
+    }
 }
 
 UCS_TEST_P(test_md, sys_device) {

@@ -1052,9 +1052,24 @@ int uct_iface_is_reachable_v2(uct_iface_h iface,
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Capability flags of @ref uct_tl_resource_desc_t.
+ *
+ * The enumeration defines bit mask of capabilities in @ref
+ * uct_tl_resource_desc_v2_t::flags, set by @ref uct_md_query_tl_resources_v2.
+ */
+typedef enum {
+    /**
+     * If set, the resource supports inter-node communications.
+     */
+    UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE = UCS_BIT(0)
+} uct_md_query_tl_esources_flags_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Parameters passed to @ref uct_md_query_tl_resources_v2.
  */
-typedef struct uct_md_query_tl_resources_params {
+typedef struct {
     /**
      * Mask of valid fields which must currently be set to zero.
      * Future fields not specified in this mask will be ignored.
@@ -1066,29 +1081,22 @@ typedef struct uct_md_query_tl_resources_params {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Capability flags of @ref uct_tl_resource_desc_t.
- *
- * The enumeration defines bit mask of capabilities in @ref
- * uct_tl_resource_desc_v2_t::flags, set by @ref uct_md_query_tl_resources_v2.
- */
-enum {
-    /**
-     * If set, the resource supports inter-node communications.
-     */
-    UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE = UCS_BIT(0)
-};
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Communication resource descriptor.
  *
  * Resource descriptor of a standalone communication resource with extraneous
  * flags.
  */
 typedef struct uct_tl_resource_desc_v2 {
-    uct_tl_resource_desc_t desc;  /**< Main resource descriptor */
-    uint64_t               flags; /**< Associated resource flags */
+    /**
+     * Main resource descriptor
+     */
+    uct_tl_resource_desc_t desc;
+
+    /**
+     * Associated resource flags using bits from @ref
+     * uct_md_query_tl_resources_flags_t.
+     */
+    uint64_t               flags;
 } uct_tl_resource_desc_v2_t;
 
 

@@ -122,7 +122,7 @@ static const char *size_limit_to_str(size_t min_size, size_t max_size)
 }
 
 static void print_iface_info(uct_worker_h worker, uct_md_h md,
-                             uct_tl_resource_desc_v2_t *resource)
+                             const uct_tl_resource_desc_v2_t *resource)
 {
     char buf[256]                   = {0};
     uct_iface_params_t iface_params = {
@@ -349,7 +349,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
 }
 
 static ucs_status_t print_tl_info(uct_md_h md, const char *tl_name,
-                                  uct_tl_resource_desc_v2_t *resources,
+                                  const uct_tl_resource_desc_v2_t *resources,
                                   unsigned num_resources,
                                   int print_opts,
                                   ucs_config_print_flags_t print_flags)

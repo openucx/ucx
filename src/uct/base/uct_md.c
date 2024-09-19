@@ -90,6 +90,8 @@ uct_md_query_tl_resources_v2(uct_md_h md,
     uct_tl_t *tl;
 
     if (params->field_mask != 0) {
+        ucs_error("invalid field_mask 0x%" PRIu64 " passed",
+                  params->field_mask);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -165,8 +167,10 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
         return status;
     }
 
-    *resources_p = malloc(*num_resources_p * sizeof(**resources_p));
+    *resources_p = ucs_malloc(*num_resources_p * sizeof(**resources_p),
+                              "tl resource");
     if (*resources_p == NULL) {
+        ucs_error("failed to allocate tl resources descriptor");
         uct_release_tl_resource_list_v2(resources_v2);
         return UCS_ERR_NO_MEMORY;
     }
