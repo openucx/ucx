@@ -131,6 +131,11 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),
      UCS_CONFIG_TYPE_UINT},
 
+    {"DCIS_INITIAL_CAPACITY", "inf",
+     "Initial capacity of DCIs array.",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, dcis_initial_capacity),
+     UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -870,6 +875,8 @@ ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
                                     iface, size);
                           return UCS_ERR_NO_MEMORY, &old_buffer_p);
     if (old_buffer_p) {
+        /* FIXME: resizing the array can cause use-after-free in certain scenarios */
+        ucs_diag("currently DCI array reallocation is unsafe");
         uct_dc_mlx5_iface_dcis_array_copy(iface->tx.dcis.buffer, old_buffer_p,
                                           old_length);
         ucs_array_buffer_free(old_buffer_p);
@@ -886,7 +893,8 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
     uct_dc_dci_t *dci;
 
     ucs_array_init_dynamic(&iface->tx.dcis);
-    status = uct_dc_mlx5_iface_resize_and_fill_dcis(iface, 1);
+    status = uct_dc_mlx5_iface_resize_and_fill_dcis(
+            iface, iface->tx.dcis_initial_capacity);
     if (status != UCS_OK) {
         return status;
     }
@@ -1582,6 +1590,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     self->tx.policy = config->tx_policy;
     self->tx.ndci   = uct_dc_mlx5_iface_is_hw_dcs(self) ? 1 : config->ndci;
+    self->tx.dcis_initial_capacity =
+            ucs_min(config->dcis_initial_capacity,
+                    self->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
 
     init_attr.qp_type       = UCT_IB_QPT_DCI;
     init_attr.flags         = UCT_IB_TX_OPS_PER_PATH;

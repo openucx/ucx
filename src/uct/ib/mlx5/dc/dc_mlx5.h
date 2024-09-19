@@ -184,6 +184,7 @@ typedef struct uct_dc_mlx5_iface_config {
     ucs_time_t                          fc_hard_req_timeout;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
     unsigned                            num_dci_channels;
+    unsigned                            dcis_initial_capacity;
 } uct_dc_mlx5_iface_config_t;
 
 
@@ -330,6 +331,8 @@ struct uct_dc_mlx5_iface {
         uint8_t                      av_fl_mlid;
 
         uint8_t                      num_dci_channels;
+
+        uint16_t                     dcis_initial_capacity;
     } tx;
 
     struct {
