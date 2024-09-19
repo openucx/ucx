@@ -1099,20 +1099,20 @@ typedef struct uct_tl_resource_desc_v2 {
  * This routine queries the @ref uct_md_h "memory domain" for communication
  * resources that are available for it.
  *
- * @param [in]  md              Handle to memory domain.
- * @param [out] resources_p     Filled with a pointer to an array of resource
- *                              descriptors.
- * @param [out] num_resources_p Filled with the number of resources in the array.
- * @param [in]  params          Parameters as defined in @ref
- *                              uct_md_query_tl_resources_params_t.
+ * @param [in]    md              Handle to memory domain.
+ * @param [inout] params          Parameters as defined in @ref
+ *                                uct_md_query_tl_resources_params_t.
+ * @param [out]   resources_p     Filled with a pointer to an array of resource
+ *                                descriptors.
+ * @param [out]   num_resources_p Filled with the number of resources in the array.
  *
  * @return Error code.
  */
 ucs_status_t
 uct_md_query_tl_resources_v2(uct_md_h md,
+                             uct_md_query_tl_resources_params_t *params,
                              uct_tl_resource_desc_v2_t **resources_p,
-                             unsigned *num_resources_p,
-                             uct_md_query_tl_resources_params_t *params);
+                             unsigned *num_resources_p);
 
 
 /**

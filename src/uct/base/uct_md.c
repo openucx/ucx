@@ -172,9 +172,9 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
 
 ucs_status_t uct_md_query_tl_resources_v2(
         uct_md_h UCS_V_UNUSED md,
+        uct_md_query_tl_resources_params_t *UCS_V_UNUSED params,
         uct_tl_resource_desc_v2_t **UCS_V_UNUSED resources_p,
-        unsigned *UCS_V_UNUSED num_resources_p,
-        uct_md_query_tl_resources_params_t *UCS_V_UNUSED params)
+        unsigned *UCS_V_UNUSED num_resources_p)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
 }
