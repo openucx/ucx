@@ -16,6 +16,30 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+ucp_proto_common_init_params_t
+ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_common_init_params_t params = {
+        .super         = *init_params,
+        .latency       = 0,
+        .overhead      = 0,
+        .cfg_thresh    = UCS_MEMUNITS_AUTO,
+        .cfg_priority  = 0,
+        .min_length    = 0,
+        .max_length    = SIZE_MAX,
+        .min_iov       = 0,
+        .min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .hdr_size      = 0,
+        .send_op       = UCT_EP_OP_LAST,
+        .memtype_op    = UCT_EP_OP_LAST,
+        .flags         = 0,
+        .exclude_map   = 0
+    };
+    return params;
+}
+
 int ucp_proto_common_init_check_err_handling(
         const ucp_proto_common_init_params_t *init_params)
 {
@@ -643,15 +667,6 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
     }
 
     return num_valid_lanes;
-}
-
-void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
-                                const ucp_proto_caps_t *proto_caps,
-                                const void *priv, size_t priv_size)
-{
-    ucp_proto_select_add_proto(&params->super, params->cfg_thresh,
-                               params->cfg_priority, proto_caps, priv,
-                               priv_size);
 }
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self)

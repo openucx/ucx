@@ -182,6 +182,10 @@ typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
 typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
 
 
+ucp_proto_common_init_params_t
+ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params);
+
+
 /**
  * Check if protocol can be used according to error handling requirements.
  *
@@ -264,11 +268,6 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
 ucp_md_map_t
 ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
                             ucp_lane_map_t lane_map);
-
-
-void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
-                                const ucp_proto_caps_t *proto_caps,
-                                const void *priv, size_t priv_size);
 
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
