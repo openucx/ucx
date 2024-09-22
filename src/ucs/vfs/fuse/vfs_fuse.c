@@ -373,7 +373,6 @@ out_close_inotify_fd:
     ucs_vfs_fuse_context.inotify_fd = -1;
 out_unlock:
     pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
-out_free_dir_buf:
     ucs_free(dir_buf);
 out:
     return status;

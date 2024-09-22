@@ -268,7 +268,6 @@ static ucs_status_t uct_posix_file_open(const char *dir, uint64_t mmid,
     ret = open(file_path, open_flags | O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
     status = uct_posix_open_check_result("open", file_path, open_flags, ret, fd_p);
 
-out_free_file_path:
     ucs_free(file_path);
 out:
     return status;

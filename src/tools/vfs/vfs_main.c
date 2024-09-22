@@ -192,16 +192,15 @@ int vfs_mount(int pid)
 
     /* Mount a new FUSE filesystem in the mount point directory */
     vfs_log("mounting directory '%s' with options '%s'", mountpoint, mountopts);
-    fuse_fd = fuse_open_channel(mountpoint, mountopts);
-    if (fuse_fd < 0) {
-        ret = fuse_fd;
+    ret = fuse_open_channel(mountpoint, mountopts);
+    if (ret < 0) {
         vfs_error("fuse_open_channel(%s,opts=%s) failed: %m", mountpoint,
                   mountopts);
         goto out_free_mountpoint;
     }
 
+    fuse_fd = ret;
     vfs_log("mounted directory '%s' with fd %d", mountpoint, fuse_fd);
-    ret = fuse_fd;
 
 out_free_mountpoint:
     ucs_free(mountpoint);
@@ -239,7 +238,6 @@ int vfs_unmount(int pid)
     ret = rmdir(mountpoint);
     if (ret < 0) {
         vfs_error("failed to remove directory '%s': %m", mountpoint);
-        goto out_free_mountpoint;
     }
 
 out_free_mountpoint:

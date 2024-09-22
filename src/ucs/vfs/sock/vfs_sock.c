@@ -57,10 +57,8 @@ int ucs_vfs_sock_mkdir(const char *sock_path, ucs_log_level_t log_level)
         ucs_log(log_level, "failed to create directory '%s': %m",
                 sock_path_dir);
         ret = -errno;
-        goto out_free_sock_path_dir;
     }
 
-out_free_sock_path_dir:
     ucs_free(sock_path_dir);
 out:
     return ret;

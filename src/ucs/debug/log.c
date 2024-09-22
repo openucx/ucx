@@ -201,7 +201,6 @@ static void ucs_log_file_rotate()
         }
     }
 
-out_free_new_log_file_name:
     ucs_free(new_log_file_name);
 out_free_old_log_file_name:
     ucs_free(old_log_file_name);

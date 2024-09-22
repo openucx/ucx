@@ -305,8 +305,7 @@ static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
         token = strsep(&next_token, "/");
     }
 
-    ucs_vfs_node_build_path(current_node, token, abs_path_buf,
-                            PATH_MAX);
+    ucs_vfs_node_build_path(current_node, token, abs_path_buf, PATH_MAX);
 
     if (ucs_vfs_node_need_update_path(type, abs_path_buf, obj)) {
         ucs_vfs_node_update_path(obj, abs_path_buf, PATH_MAX);

@@ -915,7 +915,6 @@ static int uct_tcp_is_bridge(const char *if_name)
 
     ret = (stat(path, &st) == 0) && S_ISDIR(st.st_mode);
 
-out_free_path:
     ucs_free(path);
 out:
     return ret;

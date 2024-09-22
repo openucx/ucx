@@ -1767,7 +1767,7 @@ void ucs_config_parse_config_files()
 
     status = ucs_string_alloc_path_buffer(&path, "path");
     if (status != UCS_OK) {
-        goto out;
+        return;
     }
 
     /* System-wide configuration file */
@@ -1796,10 +1796,7 @@ void ucs_config_parse_config_files()
     /* Current working dir */
     ucs_config_parse_config_file(".", UCX_CONFIG_FILE_NAME, 1);
 
-out_free_path:
     ucs_free(path);
-out:
-    return;
 }
 
 ucs_status_t

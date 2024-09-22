@@ -179,7 +179,7 @@ unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
     status = ucs_string_alloc_path_buffer(&lowest_path_buf, "lowest_path_buf");
     if (status != UCS_OK) {
         ret = 1;
-        goto out_free_lowest_path_buf;
+        goto out;
     }
 
     status = ucs_netif_get_lowest_device_path(bond_name, lowest_path_buf,
