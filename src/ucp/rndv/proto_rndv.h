@@ -183,6 +183,21 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          ucp_proto_caps_t *caps);
 
 
+void
+ucp_proto_rndv_rtr_params_init(const ucp_proto_init_params_t *init_params,
+                               ucp_proto_rndv_ctrl_init_params_t *params);
+
+
+ucs_status_t
+ucp_proto_rndv_rtr_mtype_params_init(const ucp_proto_init_params_t *init_params,
+                                     ucp_proto_rndv_ctrl_init_params_t *params);
+
+
+ucs_status_t
+ucp_proto_rndv_predict_prev_stages(const ucp_proto_init_params_t *params,
+                                   ucp_proto_caps_t *caps);
+
+
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req);
 
 

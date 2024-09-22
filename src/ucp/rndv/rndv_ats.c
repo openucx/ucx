@@ -50,6 +50,11 @@ static void ucp_proto_rndv_ats_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
+    status = ucp_proto_rndv_predict_prev_stages(init_params, &caps);
+    if (status != UCS_OK) {
+        return;
+    }
+
     ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_AUTO, 80, &caps, &priv,
                                sizeof(priv));
 }

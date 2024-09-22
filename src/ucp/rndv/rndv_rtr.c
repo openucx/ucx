@@ -152,41 +152,14 @@ static ucs_status_t ucp_proto_rndv_rtr_progress(uct_pending_req_t *self)
 
 static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_h context                   = init_params->worker->context;
-    ucp_proto_rndv_ctrl_init_params_t params = {
-        .super.super         = *init_params,
-        .super.latency       = 0,
-        .super.overhead      = context->config.ext.proto_overhead_rndv_rtr,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context,
-                               UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY) |
-                               UCS_BIT(UCP_RNDV_MODE_AM)),
-        .super.cfg_priority  = 80,
-        .super.min_length    = 1,
-        .super.max_length    = SIZE_MAX,
-        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
-        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .super.hdr_size      = sizeof(ucp_rndv_rtr_hdr_t),
-        .super.send_op       = UCT_EP_OP_AM_BCOPY,
-        .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
-        .remote_op_id        = UCP_OP_ID_RNDV_SEND,
-        .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
-        .unpack_time         = UCS_LINEAR_FUNC_ZERO,
-        .unpack_perf_node    = NULL,
-        .perf_bias           = 0.0,
-        .mem_info.type       = init_params->select_param->mem_type,
-        .mem_info.sys_dev    = init_params->select_param->sys_dev,
-        .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
-        .md_map              = 0
-    };
+    ucp_proto_rndv_ctrl_init_params_t params;
     ucp_proto_rndv_rtr_priv_t rpriv;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0)) {
         return;
     }
+
+    ucp_proto_rndv_rtr_params_init(init_params, &params);
 
     if (init_params->select_param->dt_class == UCP_DATATYPE_CONTIG) {
         rpriv.pack_cb = ucp_proto_rndv_rtr_pack_with_rkey;
@@ -365,34 +338,8 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 static void
 ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_h context                    = init_params->worker->context;
-    ucp_proto_rndv_ctrl_init_params_t params = {
-        .super.super         = *init_params,
-        .super.latency       = 0,
-        .super.overhead      = context->config.ext.proto_overhead_rndv_rtr,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context,
-                               UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE)),
-        .super.cfg_priority  = 80,
-        .super.min_length    = 1,
-        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
-        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .super.hdr_size      = sizeof(ucp_rndv_rtr_hdr_t),
-        .super.send_op       = UCT_EP_OP_AM_BCOPY,
-        .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
-        .remote_op_id        = UCP_OP_ID_RNDV_SEND,
-        .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
-        .perf_bias           = 0.0,
-        .mem_info.type       = context->config.ext.rndv_frag_mem_type,
-        .mem_info.sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN,
-        .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
-    };
+    ucp_proto_rndv_ctrl_init_params_t params;
     ucp_proto_rndv_rtr_priv_t rpriv;
-    ucp_md_map_t dummy_md_map;
-    ucp_md_index_t md_index;
     ucs_status_t status;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 1) ||
@@ -400,26 +347,9 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    status = ucp_proto_rndv_mtype_init(init_params, &dummy_md_map,
-                                       &params.super.max_length);
+    status = ucp_proto_rndv_rtr_mtype_params_init(init_params, &params);
     if (status != UCS_OK) {
         return;
-    }
-
-    status = ucp_proto_init_buffer_copy_time(
-            init_params->worker, "rtr/mtype unpack", params.mem_info.type,
-            init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
-            &params.unpack_time, &params.unpack_perf_node);
-    if (status != UCS_OK) {
-        return;
-    }
-
-    status = ucp_mm_get_alloc_md_index(context, &md_index,
-                                       params.mem_info.type);
-    if ((status != UCS_OK) || (md_index == UCP_NULL_RESOURCE)) {
-        params.md_map = 0;
-    } else {
-        params.md_map = UCS_BIT(md_index);
     }
 
     rpriv.pack_cb       = ucp_proto_rndv_rtr_mtype_pack;
