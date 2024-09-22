@@ -1131,6 +1131,13 @@ run_test_proto_disable() {
 
 run_asan_check() {
 	build devel --enable-gtest --enable-asan --without-valgrind
+
+	if ! ldd ${WORKSPACE}/build-test/test/gtest/gtest | grep -q "libasan.so"
+	then
+		azure_log_error "Error: ASan is not loaded."
+		exit 1
+	fi
+
 	run_gtest "default"
 }
 
