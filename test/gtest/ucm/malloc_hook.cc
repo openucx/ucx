@@ -301,7 +301,7 @@ public:
 private:
     typedef std::pair<void*, void*> range;
 
-    bool __attribute__((noinline)) is_ptr_in_range(void *ptr, size_t size, const std::vector<range> &ranges) {
+    UCS_F_NOINLINE bool is_ptr_in_range(void *ptr, size_t size, const std::vector<range> &ranges) {
         uintptr_t p = (uintptr_t)ptr;
         for (std::vector<range>::const_iterator iter = ranges.begin();
              iter != ranges.end(); ++iter) {
@@ -353,7 +353,7 @@ void test_thread::mem_event(ucm_event_type_t event_type, ucm_event_t *event)
     pthread_mutex_unlock(&m_stats_lock);
 }
 
-static void* perform_mmap(size_t size, char fill_value) {
+static void *perform_mmap(size_t size, char fill_value) {
     void *ptr = mmap(NULL, size,
                      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
                      -1, 0);
@@ -362,7 +362,7 @@ static void* perform_mmap(size_t size, char fill_value) {
     return ptr;
 }
 
-static void* perform_mremap(void *old_ptr, size_t old_size, size_t new_size,
+static void *perform_mremap(void *old_ptr, size_t old_size, size_t new_size,
                             void *new_addr) {
     void *new_ptr = mremap(old_ptr, old_size, new_size,
                            MREMAP_MAYMOVE | MREMAP_FIXED, new_addr);
