@@ -463,11 +463,12 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
 }
 
 void uct_ib_mlx5_devx_set_qpc_dp_ordering(
-        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo)
+        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo,
+        uct_ib_iface_t *iface)
 {
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
                       ucs_ternary_auto_value_is_yes_or_try(dp_ordering_ooo));
-    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1, 0);
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1, !uct_ib_iface_is_roce(iface));
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
                       ucs_ternary_auto_value_is_yes_or_no(dp_ordering_ooo));
 }

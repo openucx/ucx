@@ -964,7 +964,8 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint16_t *ooo_sl_mask_p);
 
 void uct_ib_mlx5_devx_set_qpc_dp_ordering(
-        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo);
+        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo,
+        uct_ib_iface_t *iface);
 
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,
