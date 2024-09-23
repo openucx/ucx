@@ -1062,7 +1062,7 @@ typedef enum {
      * If set, the resource supports inter-node communications.
      */
     UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE = UCS_BIT(0)
-} uct_md_query_tl_esources_flags_t;
+} uct_md_query_tl_resources_flags_t;
 
 
 /**
@@ -1083,20 +1083,41 @@ typedef struct {
  * @ingroup UCT_RESOURCE
  * @brief Communication resource descriptor.
  *
- * Resource descriptor of a standalone communication resource with extraneous
- * flags.
+ * Resource descriptor is an object representing the network resource.
+ * Resource descriptor could represent a stand-alone communication resource
+ * such as an HCA port, network interface, or multiple resources such as
+ * multiple network interfaces or communication ports. It could also represent
+ * virtual communication resources that are defined over a single physical
+ * network interface.
  */
 typedef struct uct_tl_resource_desc_v2 {
     /**
-     * Main resource descriptor
+     * Transport name
      */
-    uct_tl_resource_desc_t desc;
+    char              tl_name[UCT_TL_NAME_MAX];
+
+    /**
+     * Hardware device name
+     */
+    char              dev_name[UCT_DEVICE_NAME_MAX];
+
+    /**
+     * Device represented by this resource
+     * (e.g. UCT_DEVICE_TYPE_NET for a network interface)
+     */
+    uct_device_type_t dev_type;
+
+    /**
+     * The identifier associated with the device bus_id as captured in
+     * @ref ucs_sys_bus_id_t
+     */
+    ucs_sys_device_t  sys_device;
 
     /**
      * Associated resource flags using bits from @ref
      * uct_md_query_tl_resources_flags_t.
      */
-    uint64_t               flags;
+    uint64_t          flags;
 } uct_tl_resource_desc_v2_t;
 
 
