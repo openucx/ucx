@@ -55,6 +55,7 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
 
     {"AR_ENABLE", "auto",
      "Enable Adaptive Routing (out of order) feature on SL that supports it.\n"
+     "On RoCE devices, this is done by modifying the QP directly.\n"
      "SLs are selected as follows:\n"
      "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
      "+                                         + UCX_IB_AR_ENABLE=yes  + UCX_IB_AR_ENABLE=no   + UCX_IB_AR_ENABLE=try  + UCX_IB_AR_ENABLE=auto +\n"
