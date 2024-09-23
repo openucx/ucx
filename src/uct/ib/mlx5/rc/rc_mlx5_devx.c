@@ -417,9 +417,9 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
         uct_ib_mlx5_get_av(ah, &mlx5_av);
         memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
-               &mlx5_av.rmac, sizeof(mlx5_av.rmac));
+               mlx5_av.rmac, sizeof(mlx5_av.rmac));
         memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
-               &mlx5_av.rgid, sizeof(mlx5_av.rgid));
+               mlx5_av.rgid, sizeof(mlx5_av.rgid));
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit,
                           mlx5_av.hop_limit);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index,
