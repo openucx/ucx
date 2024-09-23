@@ -1062,7 +1062,7 @@ typedef enum {
      * If set, the resource supports inter-node communications.
      */
     UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE = UCS_BIT(0)
-} uct_md_query_tl_esources_flags_t;
+} uct_md_query_tl_resources_flags_t;
 
 
 /**
@@ -1075,7 +1075,7 @@ typedef struct {
      * Future fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
-    uint64_t                       field_mask;
+    uint64_t field_mask;
 } uct_md_query_tl_resources_params_t;
 
 
@@ -1083,20 +1083,41 @@ typedef struct {
  * @ingroup UCT_RESOURCE
  * @brief Communication resource descriptor.
  *
- * Resource descriptor of a standalone communication resource with extraneous
- * flags.
+ * Resource descriptor is an object representing the network resource.
+ * Resource descriptor could represent a stand-alone communication resource
+ * such as an HCA port, network interface, or multiple resources such as
+ * multiple network interfaces or communication ports. It could also represent
+ * virtual communication resources that are defined over a single physical
+ * network interface.
  */
 typedef struct uct_tl_resource_desc_v2 {
     /**
-     * Main resource descriptor
+     * Transport name
      */
-    uct_tl_resource_desc_t desc;
+    char              tl_name[UCT_TL_NAME_MAX];
+
+    /**
+     * Hardware device name
+     */
+    char              dev_name[UCT_DEVICE_NAME_MAX];
+
+    /**
+     * Device represented by this resource
+     * (e.g. UCT_DEVICE_TYPE_NET for a network interface)
+     */
+    uct_device_type_t dev_type;
+
+    /**
+     * The identifier associated with the device bus_id as captured in
+     * @ref ucs_sys_bus_id_t
+     */
+    ucs_sys_device_t  sys_device;
 
     /**
      * Associated resource flags using bits from @ref
      * uct_md_query_tl_resources_flags_t.
      */
-    uint64_t               flags;
+    uint64_t          flags;
 } uct_tl_resource_desc_v2_t;
 
 
@@ -1107,20 +1128,20 @@ typedef struct uct_tl_resource_desc_v2 {
  * This routine queries the @ref uct_md_h "memory domain" for communication
  * resources that are available for it.
  *
- * @param [in]  md              Handle to memory domain.
- * @param [out] resources_p     Filled with a pointer to an array of resource
- *                              descriptors.
- * @param [out] num_resources_p Filled with the number of resources in the array.
- * @param [in]  params          Parameters as defined in @ref
- *                              uct_md_query_tl_resources_params_t.
+ * @param [in]    md              Handle to memory domain.
+ * @param [inout] params          Parameters as defined in @ref
+ *                                uct_md_query_tl_resources_params_t.
+ * @param [out]   resources_p     Filled with a pointer to an array of resource
+ *                                descriptors.
+ * @param [out]   num_resources_p Filled with the number of resources in the array.
  *
  * @return Error code.
  */
 ucs_status_t
 uct_md_query_tl_resources_v2(uct_md_h md,
+                             uct_md_query_tl_resources_params_t *params,
                              uct_tl_resource_desc_v2_t **resources_p,
-                             unsigned *num_resources_p,
-                             uct_md_query_tl_resources_params_t *params);
+                             unsigned *num_resources_p);
 
 
 /**

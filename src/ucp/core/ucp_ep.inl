@@ -97,7 +97,7 @@ static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t
     return ucp_ep_config(ep)->key.lanes[lane].rsc_index;
 }
 
-static inline const uct_tl_resource_desc_t *
+static inline const uct_tl_resource_desc_v2_t *
 ucp_ep_get_tl_rsc(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     return &ep->worker->context->tl_rscs[ucp_ep_get_rsc_index(ep, lane)].tl_rsc;

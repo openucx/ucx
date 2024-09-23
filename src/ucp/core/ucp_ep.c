@@ -3144,7 +3144,7 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  ucs_string_buffer_t *strbuf)
 {
     ucp_context_h context = worker->context;
-    uct_tl_resource_desc_t *rsc;
+    uct_tl_resource_desc_v2_t *rsc;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t dst_md_index;
     ucp_md_index_t md_index;
@@ -3485,7 +3485,7 @@ void ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                               ucs_string_buffer_t *lane_info_strb)
 {
     ucp_rsc_index_t rsc_index;
-    uct_tl_resource_desc_t *tl_rsc;
+    uct_tl_resource_desc_v2_t *tl_rsc;
 
     if (lane == UCP_NULL_LANE) {
         ucs_string_buffer_appendf(lane_info_strb, "NULL lane");
@@ -3691,7 +3691,7 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
 {
     ucp_worker_h worker     = ep->worker;
     ucp_ep_config_t *config = ucp_ep_config(ep);
-    const uct_tl_resource_desc_t *rsc;
+    const uct_tl_resource_desc_v2_t *rsc;
     ucp_transport_entry_t *transport_entry;
     size_t device_limit;
     size_t transport_limit;

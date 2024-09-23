@@ -918,7 +918,7 @@ ucp_config_is_tl_name_present(const ucs_config_names_array_t *tl_array,
                                       tl_cfg_mask));
 }
 
-static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
+static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_v2_t *resource,
                                           const ucs_config_names_array_t *devices,
                                           uint64_t *dev_cfg_mask,
                                           uct_device_type_t dev_type)
@@ -1075,7 +1075,7 @@ ucp_is_resource_in_transports_list(const char *tl_name,
     return 1;
 }
 
-static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
+static int ucp_is_resource_enabled(const uct_tl_resource_desc_v2_t *resource,
                                    const ucp_config_t *config,
                                    const ucs_string_set_t *aux_tls,
                                    uint8_t *rsc_flags, uint64_t dev_cfg_masks[],
@@ -1101,8 +1101,8 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
     return device_enabled && tl_enabled;
 }
 
-static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource1,
-                                          const uct_tl_resource_desc_t *resource2)
+static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_v2_t *resource1,
+                                          const uct_tl_resource_desc_v2_t *resource2)
 {
     return !strcmp(resource1->dev_name, resource2->dev_name) ||
            ((resource1->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
@@ -1112,10 +1112,9 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
 static void ucp_add_tl_resource_if_enabled(
         ucp_context_h context, ucp_md_index_t md_index,
         const ucp_config_t *config, const ucs_string_set_t *aux_tls,
-        const uct_tl_resource_desc_v2_t *tl_resource, unsigned *num_resources_p,
+        const uct_tl_resource_desc_v2_t *resource, unsigned *num_resources_p,
         uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
 {
-    const uct_tl_resource_desc_t *resource = &tl_resource->desc;
     uint8_t rsc_flags;
     ucp_rsc_index_t dev_index, i;
 
@@ -1134,10 +1133,6 @@ static void ucp_add_tl_resource_if_enabled(
         context->tl_rscs[context->num_tls].tl_name_csum =
                                   ucs_crc16_string(resource->tl_name);
         context->tl_rscs[context->num_tls].flags        = rsc_flags;
-        if (tl_resource->flags & UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE) {
-            context->tl_rscs[context->num_tls].flags |=
-                    UCP_TL_RSC_FLAG_INTER_NODE;
-        }
 
         dev_index = 0;
         for (i = 0; i < context->num_tls; ++i) {
@@ -1176,8 +1171,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     params.field_mask = 0;
 
     /* check what are the available uct resources */
-    status = uct_md_query_tl_resources_v2(md->md, &tl_resources,
-                                          &num_tl_resources, &params);
+    status = uct_md_query_tl_resources_v2(md->md, &params, &tl_resources,
+                                          &num_tl_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources: %s", ucs_status_string(status));
         goto out;
@@ -1206,10 +1201,10 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
     for (i = 0; i < num_tl_resources; ++i) {
-        ucs_string_set_addf(&avail_devices[tl_resources[i].desc.dev_type],
-                            "'%s'(%s)", tl_resources[i].desc.dev_name,
+        ucs_string_set_addf(&avail_devices[tl_resources[i].dev_type],
+                            "'%s'(%s)", tl_resources[i].dev_name,
                             context->tl_cmpts[md->cmpt_index].attr.name);
-        ucs_string_set_add(avail_tls, tl_resources[i].desc.tl_name);
+        ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
         ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
                                        &tl_resources[i], num_resources_p,
                                        dev_cfg_masks, tl_cfg_mask);

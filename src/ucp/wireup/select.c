@@ -239,7 +239,7 @@ ucp_wireup_test_select_flags(const ucp_wireup_select_flags_t *select_flags,
 }
 
 static int
-ucp_wireup_check_select_flags(const uct_tl_resource_desc_t *resource,
+ucp_wireup_check_select_flags(const uct_tl_resource_desc_v2_t *resource,
                               uint64_t flags,
                               const ucp_wireup_select_flags_t *select_flags,
                               const char *title, const char **flag_descs,
@@ -263,7 +263,7 @@ ucp_wireup_check_select_flags(const uct_tl_resource_desc_t *resource,
     return 1;
 }
 
-static int ucp_wireup_check_flags(const uct_tl_resource_desc_t *resource,
+static int ucp_wireup_check_flags(const uct_tl_resource_desc_v2_t *resource,
                                   uint64_t flags, uint64_t select_flags,
                                   const char *title, const char **flag_descs,
                                   char *reason, size_t max)
@@ -275,7 +275,7 @@ static int ucp_wireup_check_flags(const uct_tl_resource_desc_t *resource,
                                          flag_descs, reason, max);
 }
 
-static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
+static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_v2_t *resource,
                                       uint64_t flags, uint64_t required_flags,
                                       int op_size, int fetch,
                                       const char *title, char *reason,
@@ -306,9 +306,10 @@ ucp_wireup_check_keepalive(const ucp_wireup_select_params_t *select_params,
                            const char *title, int is_keepalive,
                            const char **flag_descs, char *reason, size_t max)
 {
-    ucp_worker_h worker                    = select_params->ep->worker;
-    ucp_context_h context                  = worker->context;
-    const uct_tl_resource_desc_t *resource = &context->tl_rscs[rsc_index].tl_rsc;
+    ucp_worker_h worker   = select_params->ep->worker;
+    ucp_context_h context = worker->context;
+    const uct_tl_resource_desc_v2_t *resource =
+            &context->tl_rscs[rsc_index].tl_rsc;
     char title_keepalive[128];
     char title_ep_check[128];
     char title_am_based[128];
@@ -404,7 +405,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_tl_addr_bitmap_t addr_index_map, rsc_addr_index_map;
     const ucp_wireup_lane_desc_t *lane_desc;
     unsigned addr_index;
-    uct_tl_resource_desc_t *resource;
+    uct_tl_resource_desc_v2_t *resource;
     const ucp_address_entry_t *ae;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
@@ -2072,7 +2073,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     ucp_context_h context          = worker->context;
     ucp_lane_index_t p2p_lane      = UCP_NULL_LANE;
     ucp_wireup_criteria_t criteria = {0};
-    uct_tl_resource_desc_t *resource;
+    uct_tl_resource_desc_v2_t *resource;
     ucp_rsc_index_t rsc_index;
     uct_iface_attr_t *attrs;
     ucp_lane_index_t lane;

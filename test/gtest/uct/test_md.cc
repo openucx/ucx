@@ -558,7 +558,8 @@ UCS_TEST_P(test_md, mem_query) {
     }
 }
 
-UCS_TEST_P(test_md, tl_resource_desc_v1_v2) {
+UCS_TEST_P(test_md, tl_resource_desc_v1_v2)
+{
     uct_md_query_tl_resources_params_t params = {};
     uct_tl_resource_desc_t *v1;
     uct_tl_resource_desc_v2_t *v2;
@@ -566,20 +567,19 @@ UCS_TEST_P(test_md, tl_resource_desc_v1_v2) {
     ucs_status_t status_v1, status_v2;
 
     status_v1 = uct_md_query_tl_resources(md(), &v1, &num_v1);
-    status_v2 = uct_md_query_tl_resources_v2(md(), &v2, &num_v2, &params);
+    status_v2 = uct_md_query_tl_resources_v2(md(), &params, &v2, &num_v2);
 
     EXPECT_UCS_OK(status_v1);
     EXPECT_UCS_OK(status_v2);
     EXPECT_GT(num_v2, 0);
     EXPECT_EQ(num_v2, num_v1);
 
-    if ((status_v1 == UCS_OK) && (status_v2 == UCS_OK) &&
-        (num_v1 == num_v2)) {
+    if ((status_v1 == UCS_OK) && (status_v2 == UCS_OK) && (num_v1 == num_v2)) {
         for (auto i = 0; i < num_v1; ++i) {
-            EXPECT_TRUE(!strcmp(v1[i].tl_name, v2[i].desc.tl_name));
-            EXPECT_TRUE(!strcmp(v1[i].dev_name, v2[i].desc.dev_name));
-            EXPECT_EQ(v1[i].dev_type, v2[i].desc.dev_type);
-            EXPECT_EQ(v1[i].sys_device, v2[i].desc.sys_device);
+            EXPECT_TRUE(!strcmp(v1[i].tl_name, v2[i].tl_name));
+            EXPECT_TRUE(!strcmp(v1[i].dev_name, v2[i].dev_name));
+            EXPECT_EQ(v1[i].dev_type, v2[i].dev_type);
+            EXPECT_EQ(v1[i].sys_device, v2[i].sys_device);
             EXPECT_TRUE((v2[i].flags == 0) ||
                         (v2[i].flags == UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE));
         }

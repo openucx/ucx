@@ -78,9 +78,9 @@ void uct_md_close(uct_md_h md)
 
 ucs_status_t
 uct_md_query_tl_resources_v2(uct_md_h md,
+                             uct_md_query_tl_resources_params_t *params,
                              uct_tl_resource_desc_v2_t **resources_p,
-                             unsigned *num_resources_p,
-                             uct_md_query_tl_resources_params_t *params)
+                             unsigned *num_resources_p)
 {
     uct_component_t *component = md->component;
     uct_tl_resource_desc_v2_t *resources, *tmp;
@@ -122,14 +122,14 @@ uct_md_query_tl_resources_v2(uct_md_h md,
 
         /* add tl devices to overall list of resources */
         for (i = 0; i < num_tl_devices; ++i) {
-            ucs_strncpy_zero(tmp[num_resources + i].desc.tl_name, tl->name,
-                             sizeof(tmp[num_resources + i].desc.tl_name));
-            ucs_strncpy_zero(tmp[num_resources + i].desc.dev_name,
+            ucs_strncpy_zero(tmp[num_resources + i].tl_name, tl->name,
+                             sizeof(tmp[num_resources + i].tl_name));
+            ucs_strncpy_zero(tmp[num_resources + i].dev_name,
                              tl_devices[i].name,
-                             sizeof(tmp[num_resources + i].desc.dev_name));
-            tmp[num_resources + i].desc.dev_type   = tl_devices[i].type;
-            tmp[num_resources + i].desc.sys_device = tl_devices[i].sys_device;
-            tmp[num_resources + i].flags           = tl_devices[i].flags;
+                             sizeof(tmp[num_resources + i].dev_name));
+            tmp[num_resources + i].dev_type   = tl_devices[i].type;
+            tmp[num_resources + i].sys_device = tl_devices[i].sys_device;
+            tmp[num_resources + i].flags      = tl_devices[i].flags;
         }
 
         resources      = tmp;
@@ -161,8 +161,8 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
     unsigned i;
 
     params.field_mask = 0;
-    status            = uct_md_query_tl_resources_v2(md, &resources_v2,
-                                                     num_resources_p, &params);
+    status            = uct_md_query_tl_resources_v2(md, &params, &resources_v2,
+                                                     num_resources_p);
     if (status != UCS_OK) {
         return status;
     }
@@ -176,7 +176,13 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
     }
 
     for (i = 0; i < *num_resources_p; ++i) {
-        (*resources_p)[i] = resources_v2[i].desc;
+        memcpy((*resources_p)[i].tl_name, resources_v2[i].tl_name,
+               sizeof(resources_v2[i].tl_name));
+        memcpy((*resources_p)[i].dev_name, resources_v2[i].dev_name,
+               sizeof(resources_v2[i].dev_name));
+
+        (*resources_p)[i].dev_type   = resources_v2[i].dev_type;
+        (*resources_p)[i].sys_device = resources_v2[i].sys_device;
     }
 
     uct_release_tl_resource_list_v2(resources_v2);

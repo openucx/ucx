@@ -2963,7 +2963,8 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
             if ((context->tl_rscs[tl_id].tl_rsc.dev_type ==
                  UCT_DEVICE_TYPE_NET) ||
-                (context->tl_rscs[tl_id].flags & UCP_TL_RSC_FLAG_INTER_NODE)) {
+                (context->tl_rscs[tl_id].tl_rsc.flags &
+                 UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE)) {
                 UCS_STATIC_BITMAP_SET(&tl_bitmap, tl_id);
             }
         }

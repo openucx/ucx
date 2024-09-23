@@ -242,7 +242,8 @@ void ucp_proto_common_lane_perf_node(ucp_context_h context,
                                      const uct_perf_attr_t *perf_attr,
                                      ucp_proto_perf_node_t **perf_node_p)
 {
-    const uct_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index].tl_rsc;
+    const uct_tl_resource_desc_v2_t *tl_rsc =
+            &context->tl_rscs[rsc_index].tl_rsc;
     ucp_proto_perf_node_t *perf_node;
 
     if (perf_attr->operation == UCT_EP_OP_LAST) {

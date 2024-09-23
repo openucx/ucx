@@ -611,7 +611,7 @@ uct_cuda_ipc_query_devices(
         uct_md_h uct_md, uct_tl_device_resource_t **tl_devices_p,
         unsigned *num_tl_devices_p)
 {
-    uint64_t flags             = 0;
+    uint64_t flags = 0;
     ucs_status_t status;
 #if HAVE_CUDA_FABRIC
     uct_cuda_ipc_md_t *md      = ucs_derived_of(uct_md, uct_cuda_ipc_md_t);
