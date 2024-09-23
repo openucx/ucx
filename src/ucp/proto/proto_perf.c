@@ -18,6 +18,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 
+#include <float.h>
 
 struct ucp_proto_perf_segment {
     /* List element */
@@ -228,6 +229,11 @@ int ucp_proto_perf_is_empty(const ucp_proto_perf_t *perf)
     return ucs_list_is_empty(&perf->segments);
 }
 
+const char *ucp_proto_perf_name(const ucp_proto_perf_t *perf)
+{
+    return perf->name;
+}
+
 ucs_status_t
 ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
                          const ucp_proto_perf_factors_t perf_factors,
@@ -414,6 +420,133 @@ err:
     return status;
 }
 
+ucs_status_t ucp_proto_perf_aggregate2(const char *name,
+                                       const ucp_proto_perf_t *perf1,
+                                       const ucp_proto_perf_t *perf2,
+                                       ucp_proto_perf_t **perf_p)
+{
+    const ucp_proto_perf_t *perf_elems[2] = {perf1, perf2};
+
+    return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
+}
+
+/* TODO:
+ * Reconsider correctness of PPLN perf estimation logic since in case of async
+ * operations it seems wrong to choose the longest factor without paying
+ * attention to actions that performed simultaneously but aren't a part of the
+ * pipeline.
+ * 
+ * E.g. RTS + rndv/get ppln, in case of async operations simultaneous
+ * RTS sends can potentially make another factor the longest one due
+ * to different factors overheads in RTS.
+ * 
+ * That can be potentially solved by calculating all the pipeline logic in the
+ * end during initialization of `flat_perf` structure but it is unclear how to
+ * distinguish which parts of the factors are part of pipeline and which aren't
+ * at that moment.
+ */
+const ucp_proto_perf_segment_t *
+ucp_proto_perf_add_ppln(const ucp_proto_perf_t *perf,
+                        ucp_proto_perf_t *ppln_perf, size_t max_length)
+{
+    ucp_proto_perf_factors_t factors   = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    ucp_proto_perf_segment_t *frag_seg = ucs_list_tail(&perf->segments,
+                                                       ucp_proto_perf_segment_t,
+                                                       list);
+    size_t frag_size                   = ucp_proto_perf_segment_end(frag_seg);
+    ucp_proto_perf_factor_id_t factor_id, max_factor_id;
+    ucs_linear_func_t factor_func;
+    ucs_status_t status;
+    char frag_str[64];
+
+    if (frag_size >= max_length) {
+        return NULL;
+    }
+
+    /* Turn all factors overheads to constant and choose longest one */
+    max_factor_id = 0;
+    ucs_assert(max_factor_id != UCP_PROTO_PERF_FACTOR_LATENCY);
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; factor_id++) {
+        factor_func          = ucp_proto_perf_segment_func(frag_seg, factor_id);
+        factors[factor_id].c = ucs_linear_func_apply(factor_func, frag_size);
+        if ((factors[factor_id].c > factors[max_factor_id].c) &&
+            (factor_id != UCP_PROTO_PERF_FACTOR_LATENCY)) {
+            max_factor_id = factor_id;
+        }
+    }
+
+    /* Longest factor still has linear part */
+    factors[max_factor_id]    = ucp_proto_perf_segment_func(frag_seg,
+                                                            max_factor_id);
+    /* Apply the fragment overhead to the performance function linear part
+     * since this overhead exists for each fragment */
+    factors[max_factor_id].m += factors[max_factor_id].c / frag_size;
+
+    ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
+    status = ucp_proto_perf_add_funcs(ppln_perf, frag_size + 1, max_length,
+                                      factors,
+                                      ucp_proto_perf_segment_node(frag_seg),
+                                      "pipeline", "frag size: %s", frag_str);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    return frag_seg;
+}
+
+ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,
+                                   ucp_proto_perf_t **perf_p)
+{
+    ucp_proto_perf_factor_id_t convert_map[][2] = {
+        {UCP_PROTO_PERF_FACTOR_LOCAL_CPU, UCP_PROTO_PERF_FACTOR_REMOTE_CPU},
+        {UCP_PROTO_PERF_FACTOR_LOCAL_TL, UCP_PROTO_PERF_FACTOR_REMOTE_TL},
+        {UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY,
+         UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY}
+    };
+    ucp_proto_perf_factor_id_t(*convert_pair)[2];
+    ucp_proto_perf_segment_t *remote_seg, *new_seg;
+    ucp_proto_perf_factors_t perf_factors;
+    ucp_proto_perf_t *perf;
+    ucs_status_t status;
+
+    ucp_proto_perf_check(remote_perf);
+
+    status = ucp_proto_perf_create("remote", &perf);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Convert local factors to remote and vice versa */
+    ucp_proto_perf_segment_foreach(remote_seg, remote_perf) {
+        ucs_carray_for_each(convert_pair, convert_map,
+                            ucs_static_array_size(convert_map)) {
+            perf_factors[(*convert_pair)[0]] =
+                    remote_seg->perf_factors[(*convert_pair)[1]];
+            perf_factors[(*convert_pair)[1]] =
+                    remote_seg->perf_factors[(*convert_pair)[0]];
+        }
+        perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY];
+
+        status = ucp_proto_perf_segment_new(perf, remote_seg->start,
+                                            remote_seg->end, &new_seg);
+        if (status != UCS_OK) {
+            goto err_cleanup_perf;
+        }
+
+        ucs_list_add_tail(&perf->segments, &new_seg->list);
+        ucp_proto_perf_segment_add_funcs(perf, new_seg, perf_factors,
+                                         remote_seg->node);
+    }
+
+    *perf_p = perf;
+    return UCS_OK;
+
+err_cleanup_perf:
+    ucp_proto_perf_destroy(perf);
+    return status;
+}
+
 static ucs_status_t
 ucp_proto_flat_perf_alloc(ucp_proto_flat_perf_t **flat_perf_p)
 {
@@ -572,16 +705,6 @@ ucp_proto_perf_segment_next(const ucp_proto_perf_t *perf,
     }
 
     return ucs_list_next(&seg->list, ucp_proto_perf_segment_t, list);
-}
-
-const ucp_proto_perf_segment_t *
-ucp_proto_perf_segment_last(const ucp_proto_perf_t *perf)
-{
-    if (ucs_list_is_empty(&perf->segments)) {
-        return NULL;
-    }
-
-    return ucs_list_tail(&perf->segments, ucp_proto_perf_segment_t, list);
 }
 
 void ucp_proto_perf_segment_str(const ucp_proto_perf_segment_t *seg,

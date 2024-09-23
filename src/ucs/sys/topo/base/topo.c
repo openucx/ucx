@@ -21,7 +21,6 @@
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <inttypes.h>
-#include <float.h>
 
 
 #define UCS_TOPO_MAX_SYS_DEVICES     256
@@ -86,7 +85,7 @@ typedef struct ucs_topo_global_ctx {
 
 const ucs_sys_dev_distance_t ucs_topo_default_distance = {
     .latency   = 0,
-    .bandwidth = DBL_MAX
+    .bandwidth = INFINITY
 };
 
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
@@ -847,7 +846,7 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 
 out_max_bw:
     ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
-    return DBL_MAX;
+    return INFINITY;
 }
 
 const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)

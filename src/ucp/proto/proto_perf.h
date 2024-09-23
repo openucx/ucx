@@ -95,6 +95,12 @@ int ucp_proto_perf_is_empty(const ucp_proto_perf_t *perf);
 
 
 /**
+ * @return Perf structure name.
+ */
+const char *ucp_proto_perf_name(const ucp_proto_perf_t *perf);
+
+
+/**
  * Add linear functions to several performance factors at the range
  * [ @a start, @a end ]. The performance functions to add are provided in the
  * array @a funcs, each entry corresponding to a factor id defined in
@@ -143,6 +149,65 @@ ucs_status_t ucp_proto_perf_aggregate(const char *name,
                                       const ucp_proto_perf_t *const *perf_elems,
                                       unsigned num_elems,
                                       ucp_proto_perf_t **perf_p);
+
+/**
+ * @ref ucp_proto_perf_aggregate() for two perf structures
+ */
+ucs_status_t ucp_proto_perf_aggregate2(const char *name,
+                                       const ucp_proto_perf_t *perf1,
+                                       const ucp_proto_perf_t *perf2,
+                                       ucp_proto_perf_t **perf_p);
+
+
+/**
+ * Expand given perf by estimation that all messages on interval
+ * [end of @a frag_seg + 1, @a max_length] would be sent in a pipeline async
+ * manner using data provided by @a frag_seg as a performance for sending one
+ * fragment.
+ *
+ * To understand what does it mean, please see the following example:
+ *
+ * 3-factor 3-msg pipeline:
+ * 1 msg: [=1=] [======2======] [=3=]
+ * 2 msg:       [=1=]           [======2======] [=3=]
+ * 3 msg:             [=1=]                     [======2======] [=3=]
+ * Approximation:
+ *        [=1=] [======================2======================] [=3=]
+ * 
+ * All the factors except longest one turn into constant fragment overhead
+ * due to overlapping (1 and 3 from example).
+ *
+ * Longest factor still saves the linear function part but has additional
+ * overhead turned to dynamic since it starts to depend on number of sent
+ * fragments.
+ * (2 from example).
+ * 
+ * LATENCY factor cannot be chosen as longest one since it overlaps with
+ * other simultaneous LATENCY factor operations.
+ *
+ * @param [in] perf       Performance data structure which includes fragment
+ *                        performance.
+ * @param [in] ppln_perf  Performance data structure which will be extended
+ *                        by pipeline performance.
+ * @param [in] max_length Message size until what @a perf would be updated.
+ * 
+ * @return NULL in case of error, last segment of `perf` which was used as
+ *         performance estimation for sending one fragment.
+ */
+const ucp_proto_perf_segment_t *
+ucp_proto_perf_add_ppln(const ucp_proto_perf_t *perf,
+                        ucp_proto_perf_t *ppln_perf, size_t max_length);
+
+
+/**
+ * Create a proto perf structure based on @a remote_perf, converting the values
+ * of local factors to remote ones and vice versa.
+ *
+ * @param [in]  remote_perf Performance data structure to turn.
+ * @param [out] perf_p      Filled with the new performance data structure.
+ */
+ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,
+                                   ucp_proto_perf_t **perf_p);
 
 
 /**
@@ -236,13 +301,6 @@ ucp_proto_perf_segment_next(const ucp_proto_perf_t *perf,
 
 
 /**
- * Get last segment, or NULL if none.
- */
-const ucp_proto_perf_segment_t *
-ucp_proto_perf_segment_last(const ucp_proto_perf_t *perf);
-
-
-/**
  * Dump the performance data of the segment to a string buffer.
  *
  * @param [in]  seg         Segment to dump.
@@ -295,5 +353,15 @@ ucp_proto_flat_perf_find_lb(const ucp_proto_flat_perf_t *flat_perf, size_t lb);
 */
 void ucp_proto_flat_perf_destroy(ucp_proto_flat_perf_t *flat_perf);
 
+
+/**
+ * Get factor for CPU operations.
+ */
+static UCS_F_ALWAYS_INLINE ucp_proto_perf_factor_id_t
+ucp_proto_buffer_copy_cpu_factor_id(int is_local)
+{
+    return is_local ? UCP_PROTO_PERF_FACTOR_LOCAL_CPU :
+                      UCP_PROTO_PERF_FACTOR_REMOTE_CPU;
+}
 
 #endif

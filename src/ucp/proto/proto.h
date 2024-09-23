@@ -84,82 +84,6 @@ enum {
 };
 
 
-/*
- * Some protocols can be pipelined, so the time they consume when multiple
- * such operations are issued is less than their cumulative time. Therefore we
- * define two metrics: "single" operation time and "multi" operation time.
- *
- * -------time---------->
- *
- *        +-------------------------+
- * op1:   |   "single" time         |
- *        +---------------+---------+---------------+
- *                op2:    | overlap | "multi" time  |
- *                        +---------+-----+---------+---------------+
- *                                op3:    | overlap | "multi" time  |
- *                                        +---------+---------------+
- */
-typedef enum {
-    UCP_PROTO_PERF_TYPE_FIRST,
-
-    /* Time to complete this operation assuming it's the only one. */
-    UCP_PROTO_PERF_TYPE_SINGLE = UCP_PROTO_PERF_TYPE_FIRST,
-
-    /* Time to complete this operation after all previous ones complete. */
-    UCP_PROTO_PERF_TYPE_MULTI,
-
-    /* CPU time the operation consumes (it would be less than or equal to the
-     * SINGLE and MULTI times).
-     */
-    UCP_PROTO_PERF_TYPE_CPU,
-
-    UCP_PROTO_PERF_TYPE_LAST
-} ucp_proto_perf_type_t;
-
-
-/*
- * Iterate over performance types.
- *
- * @param _perf_type  Performance type iterator variable.
- */
-#define UCP_PROTO_PERF_TYPE_FOREACH(_perf_type) \
-    for (_perf_type = UCP_PROTO_PERF_TYPE_FIRST; \
-         _perf_type < UCP_PROTO_PERF_TYPE_LAST; ++(_perf_type))
-
-
-/*
- * Performance estimation for a range of message sizes.
- */
-typedef struct {
-    /* Maximal payload size for this range */
-    size_t                max_length;
-
-    /* Estimated time in seconds, as a function of message size in bytes, to
-     * complete the operation. See @ref ucp_proto_perf_type_t for details
-     */
-    ucs_linear_func_t     perf[UCP_PROTO_PERF_TYPE_LAST];
-
-    /* Performance data tree */
-    ucp_proto_perf_node_t *node;
-} ucp_proto_perf_range_t;
-
-
-/**
- * UCP protocol capabilities (per operation parameters)
- * TODO rename to ucp_proto_perf_t ??
- */
-typedef struct {
-    /* Minimal message size */
-    size_t                 min_length;
-
-    /* Number of entries in 'ranges' */
-    unsigned               num_ranges;
-
-    /* Performance estimation function for different message sizes */
-    ucp_proto_perf_range_t ranges[UCP_PROTO_MAX_PERF_RANGES];
-} ucp_proto_caps_t;
-
-
 /**
  * Parameters for protocol initialization function
  */
@@ -336,17 +260,5 @@ unsigned ucp_protocols_count(void);
    description from proto->desc, and set config to an empty string. */
 void ucp_proto_default_query(const ucp_proto_query_params_t *params,
                              ucp_proto_query_attr_t *attr);
-
-
-void ucp_proto_perf_set(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
-                        ucs_linear_func_t func);
-
-
-void ucp_proto_perf_copy(ucs_linear_func_t dest[UCP_PROTO_PERF_TYPE_LAST],
-                         const ucs_linear_func_t src[UCP_PROTO_PERF_TYPE_LAST]);
-
-
-void ucp_proto_perf_add(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
-                        ucs_linear_func_t func);
 
 #endif
