@@ -290,6 +290,7 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
     void UCS_V_UNUSED *start        = ctx->address;
     int mr_idx                      = 0;
     size_t length                   = ctx->first_mr_size;
+    int i;
     ucs_status_t status;
 
     while (ctx->length > 0) {
@@ -304,6 +305,8 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
             if (status != UCS_OK) {
                 goto err;
             }
+
+            ctx->mrs[mr_idx] = NULL;
         }
         ctx->address = UCS_PTR_BYTE_OFFSET(ctx->address, length);
         ctx->length -= length;
@@ -318,9 +321,18 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
     return UCS_STATUS_PTR(UCS_OK);
 
 err_dereg:
-    for (; mr_idx >= 0; --mr_idx) {
-        uct_ib_dereg_mr(ctx->mrs[mr_idx]);
+    for (i = 0; i < mr_idx; i++) {
+        uct_ib_dereg_mr(ctx->mrs[i]);
+        ctx->mrs[i] = NULL;
     }
+
+    while (ctx->length > 0) {
+        ctx->mrs[mr_idx] = NULL;
+        ctx->length     -= length;
+        length           = ucs_min(ctx->length, chunk_size);
+        mr_idx++;
+    }
+
 err:
     return UCS_STATUS_PTR(status);
 }
@@ -413,6 +425,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
             ucs_error("pthread_create() failed: %m");
             status     = UCS_ERR_IO_ERROR;
             thread_num = thread_idx;
+            mr_num     = mr_idx;
             break;
         }
 
@@ -432,8 +445,10 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
 
     if (status != UCS_OK) {
         for (mr_idx = 0; mr_idx < mr_num; mr_idx++) {
-            /* coverity[check_return] */
-            uct_ib_dereg_mr(mrs[mr_idx]);
+            if (mrs[mr_idx] != NULL) {
+                /* coverity[check_return] */
+                uct_ib_dereg_mr(mrs[mr_idx]);
+            }
         }
     }
 
