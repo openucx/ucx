@@ -510,9 +510,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
         {NULL}
   )},
 
-  {"GVA_ENABLE", "n",
-   "Enable Global VA infrastructure",
-   ucs_offsetof(ucp_context_config_t, gva_enable), UCS_CONFIG_TYPE_BOOL},
+  {"GVA_ENABLE", "off",
+   "Enable Global VA infrastructure. Setting to 'auto' will try to enable, "
+   "but if error handling enabled will disable",
+   ucs_offsetof(ucp_context_config_t, gva_enable), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
   {"GVA_MLOCK", "y",
    "Lock memory with mlock() when using global VA MR",
@@ -1609,7 +1610,7 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
                         context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                     }
 
-                    if (context->config.ext.gva_enable &&
+                    if ((context->config.ext.gva_enable != UCS_CONFIG_OFF) &&
                         (md_attr->gva_mem_types & UCS_BIT(mem_type))) {
                         context->gva_md_map[mem_type] |= UCS_BIT(md_index);
                     }
