@@ -238,7 +238,6 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         return ptr;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
-        CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
         if (!async) {
             CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
         } else {
