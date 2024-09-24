@@ -107,7 +107,6 @@ public:
 
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);
-
     virtual ~mem_buffer();
 
     ucs_memory_type_t mem_type() const;
