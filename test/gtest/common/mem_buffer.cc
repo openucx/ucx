@@ -528,16 +528,16 @@ std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type, false)), m_size(size) {
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type, false)), m_size(size) {
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
     pattern_fill(seed);
 }
 
 mem_buffer::~mem_buffer() {
-    release(ptr(), mem_type(), false);
+    release(ptr(), mem_type());
 }
 
 ucs_memory_type_t mem_buffer::mem_type() const {
