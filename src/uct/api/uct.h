@@ -795,8 +795,8 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_FLAG_LOCK            = UCS_BIT(2),
 
     /**
-     * Hide errors on memory registration. In some cases registration failure
-     * is not an error (e. g. for merged memory regions).
+     * Hide errors on memory registration and allocation. If this flag is set,
+     * no error messages will be printed.
      */
     UCT_MD_MEM_FLAG_HIDE_ERRORS     = UCS_BIT(3),
 
