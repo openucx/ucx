@@ -238,11 +238,11 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         return ptr;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
-        if (!async) {
-            CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
-        } else {
+        if (async) {
             CUDA_CALL(cudaMallocAsync(&ptr, size, 0), ": size=" << size);
             cudaStreamSynchronize(0);
+        } else {
+            CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
         }
         return ptr;
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
@@ -272,13 +272,15 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
             break;
 #if HAVE_CUDA
         case UCS_MEMORY_TYPE_CUDA:
-        case UCS_MEMORY_TYPE_CUDA_MANAGED:
-            if (!async) {
-                CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
-            } else {
+            if (async) {
                 cudaStreamSynchronize(0);
                 CUDA_CALL(cudaFreeAsync(ptr, 0), ": ptr=" << ptr);
+            } else {
+                CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
             }
+            break;
+        case UCS_MEMORY_TYPE_CUDA_MANAGED:
+            CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
             break;
 #endif
 #if HAVE_ROCM
