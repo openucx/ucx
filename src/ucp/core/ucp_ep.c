@@ -2450,7 +2450,7 @@ ucp_ep_config_max_short(ucp_context_t *context, uct_iface_attr_t *iface_attr,
     ssize_t cfg_max_short;
 
     if (!(iface_attr->cap.flags & short_flag) ||
-        context->config.progress_wrapper_enabled) {
+        ucp_context_usage_tracker_enabled(context)) {
         return -1;
     }
 
