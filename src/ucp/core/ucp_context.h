@@ -39,7 +39,7 @@ KHASH_IMPL(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*, 1,
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX        = UCS_BIT(0)
+    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
 
