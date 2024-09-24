@@ -261,8 +261,8 @@ UCS_TEST_P(test_ucp_tag_mem_type, rndv_4mb, "RNDV_THRESH=0")
     ucp_datatype_t type = ucp_dt_make_contig(1);
     const size_t length = 4 * UCS_MBYTE;
 
-    mem_buffer recv_mem_buf(length, m_recv_mem_type, 1);
-    mem_buffer send_mem_buf(length, m_send_mem_type, 2);
+    mem_buffer recv_mem_buf(length, m_recv_mem_type, false, 1);
+    mem_buffer send_mem_buf(length, m_send_mem_type, false, 2);
 
     size_t recvd = do_xfer(send_mem_buf.ptr(), recv_mem_buf.ptr(), length, type,
                            type, true, false, false);

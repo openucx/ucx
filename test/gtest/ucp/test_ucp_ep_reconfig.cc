@@ -88,8 +88,9 @@ public:
 
         for (auto msg_size : msg_sizes) {
             for (unsigned i = 0; i < num_iterations; ++i) {
-                mem_buffer sbuf(msg_size, UCS_MEMORY_TYPE_HOST, i);
-                mem_buffer rbuf(msg_size, UCS_MEMORY_TYPE_HOST, ucs::rand());
+                mem_buffer sbuf(msg_size, UCS_MEMORY_TYPE_HOST, false, i);
+                mem_buffer rbuf(msg_size, UCS_MEMORY_TYPE_HOST, false,
+                                ucs::rand());
 
                 void *sreq = ucp_tag_send_nbx(sender().ep(), sbuf.ptr(),
                                               msg_size, 0, &param);

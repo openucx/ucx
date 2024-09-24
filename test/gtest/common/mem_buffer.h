@@ -28,10 +28,12 @@ public:
     static bool is_mem_type_supported(ucs_memory_type_t mem_type);
 
     /* allocate buffer of a given memory type */
-    static void *allocate(size_t size, ucs_memory_type_t mem_type);
+    static void *allocate(size_t size, ucs_memory_type_t mem_type,
+                          bool async = false);
 
     /* release buffer of a given memory type */
-    static void release(void *ptr, ucs_memory_type_t mem_type);
+    static void release(void *ptr, ucs_memory_type_t mem_type,
+                        bool async = false);
 
     /* fill pattern in a host-accessible buffer */
     static void pattern_fill(void *buffer, size_t length, uint64_t seed);
@@ -103,8 +105,10 @@ public:
         return m_bar1_free_size;
     }
 
-    mem_buffer(size_t size, ucs_memory_type_t mem_type);
-    mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);
+    mem_buffer(size_t size, ucs_memory_type_t mem_type, bool async = false);
+    mem_buffer(size_t size, ucs_memory_type_t mem_type, bool async,
+               uint64_t seed);
+
     virtual ~mem_buffer();
 
     ucs_memory_type_t mem_type() const;
@@ -120,6 +124,8 @@ public:
     void memset(int c);
 
 private:
+    bool async() const;
+
     static bool is_cuda_supported();
 
     static bool is_rocm_supported();
@@ -155,6 +161,7 @@ private:
     const ucs_memory_type_t m_mem_type;
     void * const            m_ptr;
     const size_t            m_size;
+    const bool              m_async;
 };
 
 

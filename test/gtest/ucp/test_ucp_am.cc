@@ -366,6 +366,16 @@ protected:
         return UCS_MEMORY_TYPE_HOST;
     }
 
+    virtual bool tx_memtype_async() const
+    {
+        return false;
+    }
+
+    virtual bool rx_memtype_async() const
+    {
+        return false;
+    }
+
     void reset_counters()
     {
         m_send_counter = 0;
@@ -495,7 +505,7 @@ protected:
                            unsigned flags = 0, unsigned data_cb_flags = 0,
                            uint32_t op_attr_mask = 0)
     {
-        mem_buffer sbuf(size, tx_memtype());
+        mem_buffer sbuf(size, tx_memtype(), tx_memtype_async());
         sbuf.pattern_fill(SEED);
         m_hdr.resize(header_size);
         ucs::fill_random(m_hdr);
@@ -562,7 +572,8 @@ protected:
     {
         ucs_status_t status;
 
-        m_rx_buf = mem_buffer::allocate(length, rx_memtype());
+        m_rx_buf = mem_buffer::allocate(length, rx_memtype(),
+                                        rx_memtype_async());
         mem_buffer::pattern_fill(m_rx_buf, length, 0ul, rx_memtype());
 
         m_rx_dt_desc.make(m_rx_dt, m_rx_buf, length);
@@ -638,7 +649,7 @@ protected:
         if (m_rx_memh != NULL) {
             receiver().mem_unmap(m_rx_memh);
         }
-        mem_buffer::release(m_rx_buf, rx_memtype());
+        mem_buffer::release(m_rx_buf, rx_memtype(), rx_memtype_async());
     }
 
     static ucs_status_t am_data_cb(void *arg, const void *header,
@@ -1358,10 +1369,7 @@ public:
 private:
     static void base_test_generator(variant_vec_t &variants)
     {
-        // 1. Do not instantiate test case if no GPU memtypes supported.
-        // 2. Do not exclude host memory type, because this generator is used by
-        //    test_ucp_am_nbx_rndv_memtype class to generate combinations like
-        //    host<->cuda, cuda-managed<->host, etc.
+        // Do not instantiate test case if no GPU memtypes supported.
         if (!mem_buffer::is_gpu_supported()) {
             return;
         }
@@ -1890,10 +1898,7 @@ class test_ucp_am_nbx_rndv_memtype : public test_ucp_am_nbx_rndv {
 public:
     static void get_test_variants(variant_vec_t &variants)
     {
-        // Test will not be instantiated if no GPU memtypes supported, because
-        // of the check for supported memory types in
-        // test_ucp_am_nbx_eager_memtype::get_test_variants
-        return test_ucp_am_nbx_eager_memtype::get_test_variants(variants);
+        add_variant_memtypes(variants, base_test_generator);
     }
 
     void init() override
@@ -1902,6 +1907,28 @@ public:
     }
 
 private:
+    static void base_test_generator(variant_vec_t &variants)
+    {
+        // Do not instantiate test case if no GPU memtypes supported.
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        add_variant_memtypes(variants,
+                             test_ucp_am_nbx_prereg::get_test_variants);
+    }
+
+    static void add_variant_memtypes(variant_vec_t &variants,
+                                     get_variants_func_t generator)
+    {
+        ucp_test::add_variant_memtypes(variants, generator);
+
+        if (mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            add_variant_values(variants, generator, MEMORY_TYPE_CUDA_ASYNC,
+                               "cuda-async");
+        }
+    }
+
     unsigned get_send_flag() const override
     {
         return test_ucp_am_nbx_rndv::get_send_flag() | UCP_AM_SEND_FLAG_RNDV;
@@ -1909,13 +1936,43 @@ private:
 
     ucs_memory_type_t tx_memtype() const override
     {
-        return static_cast<ucs_memory_type_t>(get_variant_value(2));
+        return variant_value_to_mem_type(2);
     }
 
     ucs_memory_type_t rx_memtype() const override
     {
-        return static_cast<ucs_memory_type_t>(get_variant_value(3));
+        return variant_value_to_mem_type(3);
     }
+
+    bool tx_memtype_async() const override
+    {
+        return get_variant_value(2) == MEMORY_TYPE_CUDA_ASYNC;
+    }
+
+    bool rx_memtype_async() const override
+    {
+        return get_variant_value(3) == MEMORY_TYPE_CUDA_ASYNC;
+    }
+
+    ucs_memory_type_t variant_value_to_mem_type(unsigned index) const
+    {
+        auto variant_value = get_variant_value(index);
+        switch (variant_value) {
+        case UCS_MEMORY_TYPE_HOST:
+        case UCS_MEMORY_TYPE_CUDA:
+        case UCS_MEMORY_TYPE_CUDA_MANAGED:
+        case UCS_MEMORY_TYPE_ROCM:
+        case UCS_MEMORY_TYPE_ROCM_MANAGED:
+            return static_cast<ucs_memory_type_t>(variant_value);
+        case MEMORY_TYPE_CUDA_ASYNC:
+            return UCS_MEMORY_TYPE_CUDA;
+        default:
+            UCS_TEST_ABORT("invalid memory type");
+            return UCS_MEMORY_TYPE_HOST;
+        }
+    }
+
+    static const int MEMORY_TYPE_CUDA_ASYNC = UCS_MEMORY_TYPE_LAST + 1;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)

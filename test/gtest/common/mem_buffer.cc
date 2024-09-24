@@ -221,7 +221,7 @@ void mem_buffer::get_bar1_free_size_nvml()
 #endif
 }
 
-void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
+void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
 {
     void *ptr;
 
@@ -239,6 +239,12 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
         CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
+        if (!async) {
+            CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
+        } else {
+            CUDA_CALL(cudaMallocAsync(&ptr, size, 0), ": size=" << size);
+            cudaStreamSynchronize(0);
+        }
         return ptr;
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_CALL(cudaMallocManaged(&ptr, size), ": size=" << size);
@@ -258,7 +264,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
     }
 }
 
-void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
+void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
 {
     try {
         switch (mem_type) {
@@ -268,7 +274,12 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
 #if HAVE_CUDA
         case UCS_MEMORY_TYPE_CUDA:
         case UCS_MEMORY_TYPE_CUDA_MANAGED:
-            CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
+            if (!async) {
+                CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
+            } else {
+                cudaStreamSynchronize(0);
+                CUDA_CALL(cudaFreeAsync(ptr, 0), ": ptr=" << ptr);
+            }
             break;
 #endif
 #if HAVE_ROCM
@@ -515,21 +526,28 @@ std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
     return ucs_memory_type_names[mem_type];
 }
 
-mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
+mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, bool async) :
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type, async)), m_size(size),
+    m_async(async) {
 }
 
-mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
+mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, bool async,
+                       uint64_t seed) :
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type, async)), m_size(size), 
+    m_async(async) {
     pattern_fill(seed);
 }
 
 mem_buffer::~mem_buffer() {
-    release(ptr(), mem_type());
+    release(ptr(), mem_type(), async());
 }
 
 ucs_memory_type_t mem_buffer::mem_type() const {
     return m_mem_type;
+}
+
+bool mem_buffer::async() const {
+    return m_async;
 }
 
 void *mem_buffer::ptr() const {
