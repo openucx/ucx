@@ -1032,7 +1032,7 @@ public:
 /* Use a buffer for send/recv, and then reuse it for atomic operations */
 UCS_TEST_P(test_ucp_mmap_atomic, reuse_buffer)
 {
-    mem_buffer sbuf(UCS_MBYTE, UCS_MEMORY_TYPE_HOST, false, 1);
+    mem_buffer sbuf(UCS_MBYTE, UCS_MEMORY_TYPE_HOST, 1);
     mem_buffer rbuf(UCS_MBYTE, UCS_MEMORY_TYPE_HOST);
 
     /* Send/receive from buffers to trigger adding them to registration cache */

@@ -481,8 +481,8 @@ void test_ucp_peer_failure::cleanup_rndv_descs() {
 }
 
 void test_ucp_peer_failure::init_buffers(size_t msg_size) {
-    m_sbuf.reset(new mem_buffer(msg_size, memtype(), false, TX_SEED));
-    m_rbuf.reset(new mem_buffer(msg_size, memtype(), false, RX_SEED));
+    m_sbuf.reset(new mem_buffer(msg_size, memtype(), TX_SEED));
+    m_rbuf.reset(new mem_buffer(msg_size, memtype(), RX_SEED));
 }
 
 ucs_memory_type_t test_ucp_peer_failure::memtype() const

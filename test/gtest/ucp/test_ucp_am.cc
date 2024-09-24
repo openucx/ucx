@@ -505,8 +505,9 @@ protected:
                            unsigned flags = 0, unsigned data_cb_flags = 0,
                            uint32_t op_attr_mask = 0)
     {
-        mem_buffer sbuf(size, tx_memtype(), tx_memtype_async());
-        sbuf.pattern_fill(SEED);
+        auto sbuf = mem_buffer::allocate(size, tx_memtype(),
+                                         tx_memtype_async());
+        mem_buffer::pattern_fill(sbuf, size, SEED, tx_memtype());
         m_hdr.resize(header_size);
         ucs::fill_random(m_hdr);
         reset_counters();
@@ -515,10 +516,10 @@ protected:
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this,
                             data_cb_flags);
 
-        ucp::data_type_desc_t sdt_desc(m_dt, sbuf.ptr(), size);
+        ucp::data_type_desc_t sdt_desc(m_dt, sbuf, size);
 
         if (prereg()) {
-            memh = sender().mem_map(sbuf.ptr(), size);
+            memh = sender().mem_map(sbuf, size);
         }
 
         ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag() | flags,
@@ -532,6 +533,7 @@ protected:
             sender().mem_unmap(memh);
         }
 
+        mem_buffer::release(sbuf, tx_memtype(), tx_memtype_async());
         EXPECT_EQ(m_recv_counter, m_send_counter);
     }
 
