@@ -65,7 +65,8 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
 
     ucs_for_each_bit(md_index, md_map) {
         tl_rkey_size = context->tl_mds[md_index].attr.rkey_packed_size;
-        ucs_assert_always(tl_rkey_size <= UINT8_MAX);
+        ucs_assertv_always(tl_rkey_size <= UINT8_MAX, "md %s: tl_rkey_size=%zu",
+                           context->tl_mds[md_index].rsc.md_name, tl_rkey_size);
         size += sizeof(uint8_t) + tl_rkey_size;
     }
 
@@ -93,7 +94,8 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
 
     ucs_for_each_bit(md_index, md_map) {
         tl_rkey_size = context->tl_mds[md_index].attr.rkey_packed_size;
-        ucs_assert_always(tl_rkey_size <= UINT8_MAX);
+        ucs_assertv_always(tl_rkey_size <= UINT8_MAX, "md %s: tl_rkey_size=%zu",
+                           context->tl_mds[md_index].rsc.md_name, tl_rkey_size);
         *ucs_serialize_next(&p, uint8_t) = tl_rkey_size;
         memcpy(ucs_serialize_next_raw(&p, void, tl_rkey_size), *(uct_rkeys++),
                tl_rkey_size);
