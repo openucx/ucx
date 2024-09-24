@@ -372,6 +372,11 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
  */
 void uct_ib_md_ece_check(uct_ib_md_t *md);
 
+/* Check if IB MD supports nonblocking registration */
+void uct_ib_md_check_odp(uct_ib_md_t *md);
+
+int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr);
+
 ucs_status_t
 uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             const uct_md_mem_reg_params_t *params,
