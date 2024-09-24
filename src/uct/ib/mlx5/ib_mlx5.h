@@ -201,17 +201,19 @@ enum {
     UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
     /* Device supports implicit ODP with PCI relaxed order */
     UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(18),
-    /* RoCE supports out-of-order RDMA for RC */
+    /* Device supports out-of-order RDMA for RC */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC = UCS_BIT(19),
-    /* RoCE supports out-of-order RDMA for DC */
+    /* Device supports out-of-order RDMA for DC */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC = UCS_BIT(20),
-    /* RoCE supports forcing ordering configuration */
+    /* Device supports forcing ordering configuration */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(21),
-    /* Device supports DDP (OOO data placement)*/
-    UCT_IB_MLX5_MD_FLAG_DDP                   = UCS_BIT(22),
+    /* Device supports direct data placement for RC */
+    UCT_IB_MLX5_MD_FLAG_DDP_RC                = UCS_BIT(22),
+    /* Device supports direct data placement for DC */
+    UCT_IB_MLX5_MD_FLAG_DDP_DC                = UCS_BIT(23),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 23,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 24,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -408,6 +410,10 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  max_rd_atomic_dc;
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
+    struct {
+        uint32_t max_rc;
+        uint32_t max_dct;
+    } dv_ooo_recv_cap;
 } uct_ib_mlx5_md_t;
 
 
@@ -963,9 +969,8 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p);
 
-void uct_ib_mlx5_devx_set_qpc_dp_ordering(
-        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo,
-        uct_ib_iface_t *iface);
+void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
+                                          uint8_t ordering);
 
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,

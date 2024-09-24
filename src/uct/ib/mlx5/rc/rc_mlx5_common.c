@@ -594,23 +594,27 @@ void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
     ucs_mpool_put_inline(ib_desc);
 }
 
+void uct_rc_mlx5_ddp_init_if_available(uct_rc_mlx5_iface_common_t *iface,
+                                       uct_ib_mlx5_md_t *md, uint64_t ddp_flags)
+{
+    if ((iface->config.ordering_level == UCT_IB_MLX5_ORDERING_OOO_RW) &&
+        (md->flags & ddp_flags)) {
+        iface->config.ordering_level = UCT_IB_MLX5_ORDERING_OOO_ALL;
+    }
+}
+
 ucs_status_t
 uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
                                  uint64_t tl_flag,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name)
 {
-    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
-    int dp_ordering_ooo, dp_ordering_ooo_force;
+    uct_ib_mlx5_md_t *md      = uct_ib_mlx5_iface_md(&iface->super.super);
+    int dp_ordering_ooo       = !!(md->flags & tl_flag);
+    int dp_ordering_ooo_force = !!(md->flags &
+                                   UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE);
 
-    if (!uct_ib_iface_is_roce(&iface->super.super)) {
-        iface->super.super.config.dp_ordering_ooo = UCS_AUTO;
-        return UCS_OK;
-    }
-
-    dp_ordering_ooo       = !!(md->flags & tl_flag);
-    dp_ordering_ooo_force = !!(md->flags &
-                               UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE);
+    iface->config.ordering_level = UCT_IB_MLX5_ORDERING_IBTA;
 
     /*
      * HCA has an mlxreg admin configuration to force enable adaptive routing
@@ -620,32 +624,18 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
      * - if dp_ordering_ooo is set, QPC/DCTC can enable AR.
      * - if dp_ordering_ooo_force is set, QPC/DCTC can request mlxreg
      *   configuration override, useful to force disable.
-     *
-     * QP modify behavior with returned values:
-     * - UCS_AUTO: Do not affect existing system behavior.
-     * - UCS_NO  : Force AR disabling on the QP if supported. QP modify will
-     *   return error on failure.
-     * - UCS_TRY : Set AR to enable, ignored if any failure.
-     * - UCS_YES : Force AR enabling on the QP if supported. QP modify will
-     *   return error on failure.
      */
 
-    if ((config->super.ar_enable == UCS_TRY) && dp_ordering_ooo) {
-        iface->super.super.config.dp_ordering_ooo = UCS_TRY;
-    } else if (config->super.ar_enable == UCS_NO) {
-        if (!dp_ordering_ooo_force) {
-            goto failure;
-        }
+    if ((/* Want to force configuration but can't force it*/
+         ucs_ternary_auto_value_is_yes_or_no(config->super.ar_enable) &&
+         !dp_ordering_ooo_force) ||
+        /* Want to force enable of adaptive routing but its unavailable */
+        ((config->super.ar_enable == UCS_YES) && !dp_ordering_ooo)) {
+        goto failure;
+    }
 
-        iface->super.super.config.dp_ordering_ooo = UCS_NO;
-    } else if (config->super.ar_enable == UCS_YES) {
-        if (!dp_ordering_ooo_force || !dp_ordering_ooo) {
-            goto failure;
-        }
-
-        iface->super.super.config.dp_ordering_ooo = UCS_YES;
-    } else {
-        iface->super.super.config.dp_ordering_ooo = UCS_AUTO;
+    if (dp_ordering_ooo) {
+        iface->config.ordering_level = UCT_IB_MLX5_ORDERING_OOO_RW;
     }
 
     return UCS_OK;
@@ -1088,9 +1078,15 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
     }
 
 #ifdef HAVE_OOO_RECV_WRS
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_DDP) {
+    if ((md->flags & UCT_IB_MLX5_MD_FLAG_DDP_RC) ||
+        (md->flags & UCT_IB_MLX5_MD_FLAG_DDP_DC)) {
         dv_attr->create_flags |= MLX5DV_QP_CREATE_OOO_DP;
         dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+
+        qp_attr->cap.max_recv_wr = (dv_attr->comp_mask &
+                                    MLX5DV_QP_INIT_ATTR_MASK_DC) ?
+                                           md->dv_ooo_recv_cap.max_dct :
+                                           md->dv_ooo_recv_cap.max_rc;
     }
 #endif
 }

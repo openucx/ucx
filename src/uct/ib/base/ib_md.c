@@ -176,6 +176,11 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      ucs_offsetof(uct_ib_md_config_t, ext.odp.mem_types),
      UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
+    {"DDP_ENABLE", "try",
+     "Enable direct data placement\n",
+     ucs_offsetof(uct_ib_md_config_t, ddp_enable),
+     UCS_CONFIG_TYPE_TERNARY},
+
     {NULL}
 };
 

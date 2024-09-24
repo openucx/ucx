@@ -164,6 +164,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     max_tx = uct_ib_mlx5_devx_sq_length(attr->super.cap.max_send_wr);
     len_tx = max_tx * MLX5_SEND_WQE_BB;
+    if (md->dv_ooo_recv_cap.max_rc > 0) {
+        attr->super.cap.max_recv_wr = md->dv_ooo_recv_cap.max_rc;
+    }
     max_rx = ucs_roundup_pow2_or0(attr->super.cap.max_recv_wr);
     len    = len_tx + max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
 
@@ -462,15 +465,14 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
     return UCS_OK;
 }
 
-void uct_ib_mlx5_devx_set_qpc_dp_ordering(
-        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo,
-        uct_ib_iface_t *iface)
+void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
+                                          uint8_t ordering)
 {
-    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
-                      ucs_ternary_auto_value_is_yes_or_try(dp_ordering_ooo));
-    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1, !uct_ib_iface_is_roce(iface));
-    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
-                      ucs_ternary_auto_value_is_yes_or_no(dp_ordering_ooo));
+    int dp_ordering_ooo_force = !!(md->flags &
+                                   UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE);
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0, ordering & UCS_BIT(0));
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1, ordering & UCS_BIT(1));
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force, dp_ordering_ooo_force);
 }
 
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,

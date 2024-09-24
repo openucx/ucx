@@ -132,6 +132,15 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG   = 0xA
 };
 
+enum {
+    /* IBTA-compliant ordering semantics */
+    UCT_IB_MLX5_ORDERING_IBTA,
+    /* Out-of-order RDMA reads and writes */
+    UCT_IB_MLX5_ORDERING_OOO_RW,
+    /* Out-of-order RDMA read/write/send/recv (DDP) */
+    UCT_IB_MLX5_ORDERING_OOO_ALL,
+};
+
 #define UCT_RC_MLX5_RMA_MAX_IOV(_av_size) \
     ((UCT_IB_MLX5_MAX_SEND_WQE_SIZE - ((_av_size) + \
      sizeof(struct mlx5_wqe_raddr_seg) + sizeof(struct mlx5_wqe_ctrl_seg))) / \
@@ -407,6 +416,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        atomic_fence_flag;
         uct_rc_mlx5_srq_topo_t         srq_topo;
         uint8_t                        log_ack_req_freq;
+        uint8_t                        ordering_level;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
@@ -481,6 +491,9 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name);
 
+void uct_rc_mlx5_ddp_init_if_available(uct_rc_mlx5_iface_common_t *iface,
+                                       uct_ib_mlx5_md_t *md,
+                                       uint64_t ddp_flags);
 
 #if IBV_HW_TM
 void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
