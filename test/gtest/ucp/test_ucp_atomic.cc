@@ -17,7 +17,8 @@ class test_ucp_atomic : public test_ucp_memheap {
 public:
     /* Test variants */
     enum {
-        ATOMIC_MODE = UCS_MASK(2)
+        ATOMIC_MODE = UCS_MASK(2),
+        ODP         = UCS_BIT(2)
     };
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants,
@@ -33,6 +34,7 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         get_test_variants(variants, 0, "");
+        get_test_variants(variants, ODP, "/odp");
     }
 
     struct send_func_data {
@@ -124,17 +126,26 @@ protected:
 
     virtual void init() {
         int atomic_mode = get_variant_value() & ATOMIC_MODE;
+        int odp         = get_variant_value() & ODP;
         const char *atomic_mode_cfg =
                         (atomic_mode == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
                         (atomic_mode == UCP_ATOMIC_MODE_DEVICE) ? "device" :
                         (atomic_mode == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
                         "";
         modify_config("ATOMIC_MODE", atomic_mode_cfg);
+
+        if (odp) {
+            modify_config("REG_NONBLOCK_MEM_TYPES", "host,cuda-managed");
+            modify_config("IB_ODP_MEM_TYPES", "host,cuda-managed",
+                          SETENV_IF_NOT_EXIST);
+            modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
+
+        }
         test_ucp_memheap::init();
     }
 
     static unsigned default_num_iters() {
-        return ucs_max((128 * 1024) / ucs::test_time_multiplier(), 1);
+        return ucs_max(32000 / ucs::test_time_multiplier(), 1);
     }
 
     void test(send_func_t send_func, uint64_t op_mask,
