@@ -1200,6 +1200,35 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
 #endif
 }
 
+int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
+{
+    if (IBV_ACCESS_ON_DEMAND == 0) {
+        *reason_ptr = "IBV_ACCESS_ON_DEMAND is not supported";
+        return 0;
+    }
+
+    if (!IBV_DEVICE_HAS_ODP(&md->dev)) {
+        *reason_ptr = "device does not support IBV_ACCESS_ON_DEMAND";
+        return 0;
+    }
+
+    return 1;
+}
+
+void uct_ib_md_check_odp(uct_ib_md_t *md)
+{
+    const char *device_name = uct_ib_device_name(&md->dev);
+    const char *reason;
+
+    if (!uct_ib_md_check_odp_common(md, &reason)) {
+        ucs_debug("%s: ODP is disabled because %s", device_name, reason);
+        return;
+    }
+
+    md->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    ucs_debug("%s: ODP is supported, version 1", device_name);
+}
+
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
                                    const uct_ib_md_config_t *md_config)
@@ -1460,6 +1489,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 
     uct_ib_md_ece_check(md);
     uct_ib_md_parse_relaxed_order(md, md_config, 0);
+    uct_ib_md_check_odp(md);
 
     *p_md = md;
     return UCS_OK;

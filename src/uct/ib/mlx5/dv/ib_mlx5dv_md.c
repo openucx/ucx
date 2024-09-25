@@ -1609,13 +1609,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     struct ibv_mr *mr;
     uint8_t version;
 
-    if (IBV_ACCESS_ON_DEMAND == 0) {
-        reason = "IBV_ACCESS_ON_DEMAND is not supported";
-        goto no_odp;
-    }
-
-    if (!IBV_DEVICE_HAS_ODP(&md->super.dev)) {
-        reason = "device does not support ODP";
+    if (!uct_ib_md_check_odp_common(&md->super, &reason)) {
         goto no_odp;
     }
 
@@ -3221,6 +3215,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
+    uct_ib_md_check_odp(&md->super);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 

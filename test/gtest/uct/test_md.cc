@@ -1138,44 +1138,16 @@ UCS_TEST_P(test_md_memlock_limit, md_open)
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_memlock_limit)
 
-class test_md_non_blocking : public test_md
-{
-protected:
-    void init() override {
-        /* ODPv1 IB feature can work only for certain DEVX configuration */
-        modify_config("IB_MLX5_DEVX_OBJECTS", "dct,dcsrq", IGNORE_IF_NOT_EXIST);
-        test_md::init();
-    }
-};
-
 UCS_TEST_SKIP_COND_P(test_md_non_blocking, reg_advise,
                      !check_caps(UCT_MD_FLAG_REG | UCT_MD_FLAG_ADVISE))
 {
-    test_reg_advise(UCS_KBYTE, UCS_KBYTE, 0, true);
-    test_reg_advise(UCS_KBYTE, UCS_KBYTE / 2, 0, true);
-    test_reg_advise(UCS_KBYTE, UCS_KBYTE / 2, UCS_KBYTE / 4, true);
-
-    /*
-     * TODO: These tests should be enabled
-     * when https://redmine.mellanox.com/issues/336376 fixed
-
-     * test_reg_advise(UCS_MBYTE, UCS_MBYTE, 0, true);
-     * test_reg_advise(UCS_MBYTE, UCS_MBYTE / 2, 0, true);
-     * test_reg_advise(UCS_MBYTE, UCS_MBYTE / 2, UCS_MBYTE / 4, true);
-     */
+    test_nb_reg_advise();
 }
 
 UCS_TEST_SKIP_COND_P(test_md_non_blocking, reg,
                      !check_caps(UCT_MD_FLAG_REG))
 {
-    test_reg_advise(UCS_KBYTE, 0, 0, true);
-
-    /*
-     * TODO: This test should be enabled
-     * when https://redmine.mellanox.com/issues/336376 fixed
-
-     * test_reg_advise(UCS_MBYTE, 0, 0, true);
-     */
+    test_nb_reg();
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_non_blocking)
