@@ -465,16 +465,6 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
     return UCS_OK;
 }
 
-void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
-                                          uint8_t ordering)
-{
-    int dp_ordering_ooo_force = !!(md->flags &
-                                   UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE);
-    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0, ordering & UCS_BIT(0));
-    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1, ordering & UCS_BIT(1));
-    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force, dp_ordering_ooo_force);
-}
-
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,
                                             uint32_t *opt_param_mask)

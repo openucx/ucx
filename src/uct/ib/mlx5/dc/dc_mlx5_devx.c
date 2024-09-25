@@ -21,8 +21,6 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
     uct_ib_mlx5_md_t *md       = uct_ib_mlx5_iface_md(ib_iface);
     const uct_ib_mlx5_cq_t *cq = &iface->super.cq[UCT_IB_DIR_RX];
-    int dp_ordering_ooo_force  = !!(md->flags &
-                                    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE);
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_out)] = {};
     void *dctc;
@@ -55,7 +53,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
                       iface->super.config.ordering_level & UCS_BIT(0));
     UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_1,
                       iface->super.config.ordering_level & UCS_BIT(1));
-    UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_force, dp_ordering_ooo_force);
+    UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_force,
+                      iface->super.config.force_ordering);
 
     if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, ib_iface->pkey_index);
@@ -157,8 +156,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
                           rc_iface->super.config.sl);
     }
 
-    uct_ib_mlx5_devx_set_qpc_dp_ordering(md, qpc,
-                                         iface->super.config.ordering_level);
+    uct_ib_mlx5_devx_set_qpc_dp_ordering(md, qpc, &iface->super);
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),

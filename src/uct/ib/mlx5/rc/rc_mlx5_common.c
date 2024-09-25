@@ -626,9 +626,11 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
      *   configuration override, useful to force disable.
      */
 
+    iface->config.force_ordering = ucs_ternary_auto_value_is_yes_or_no(
+            config->super.ar_enable);
+
     if ((/* Want to force configuration but can't force it*/
-         ucs_ternary_auto_value_is_yes_or_no(config->super.ar_enable) &&
-         !dp_ordering_ooo_force) ||
+         iface->config.force_ordering && !dp_ordering_ooo_force) ||
         /* Want to force enable of adaptive routing but its unavailable */
         ((config->super.ar_enable == UCS_YES) && !dp_ordering_ooo)) {
         goto failure;
@@ -637,6 +639,7 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
     if (dp_ordering_ooo) {
         iface->config.ordering_level = UCT_IB_MLX5_ORDERING_OOO_RW;
     }
+
 
     return UCS_OK;
 
@@ -1047,6 +1050,7 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_mlx5_md_t UCS_V_UNUSED *md = uct_ib_mlx5_iface_md(
             &iface->super.super);
+    int UCS_V_UNUSED is_dc;
 
 #if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
     if ((scat2cqe_dir_mask & UCS_BIT(UCT_IB_DIR_RX)) &&
@@ -1078,14 +1082,13 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
     }
 
 #ifdef HAVE_OOO_RECV_WRS
-    if ((md->flags & UCT_IB_MLX5_MD_FLAG_DDP_RC) ||
-        (md->flags & UCT_IB_MLX5_MD_FLAG_DDP_DC)) {
+    is_dc = !!(dv_attr->comp_mask & MLX5DV_QP_INIT_ATTR_MASK_DC);
+    if (((md->flags & UCT_IB_MLX5_MD_FLAG_DDP_RC) && !is_dc) ||
+        ((md->flags & UCT_IB_MLX5_MD_FLAG_DDP_DC) && is_dc)) {
         dv_attr->create_flags |= MLX5DV_QP_CREATE_OOO_DP;
         dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
 
-        qp_attr->cap.max_recv_wr = (dv_attr->comp_mask &
-                                    MLX5DV_QP_INIT_ATTR_MASK_DC) ?
-                                           md->dv_ooo_recv_cap.max_dct :
+        qp_attr->cap.max_recv_wr = is_dc ? md->dv_ooo_recv_cap.max_dct :
                                            md->dv_ooo_recv_cap.max_rc;
     }
 #endif
@@ -1264,4 +1267,15 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
     uct_ib_mlx5_update_db_cq_ci(mlx5_cq);
 
     return nfreed;
+}
+
+void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
+                                          uct_rc_mlx5_iface_common_t *iface)
+{
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
+                      iface->config.ordering_level & UCS_BIT(0));
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1,
+                      iface->config.ordering_level & UCS_BIT(1));
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
+                      iface->config.force_ordering);
 }

@@ -134,11 +134,11 @@ enum {
 
 enum {
     /* IBTA-compliant ordering semantics */
-    UCT_IB_MLX5_ORDERING_IBTA,
+    UCT_IB_MLX5_ORDERING_IBTA    = 0x0,
     /* Out-of-order RDMA reads and writes */
-    UCT_IB_MLX5_ORDERING_OOO_RW,
+    UCT_IB_MLX5_ORDERING_OOO_RW  = 0x1,
     /* Out-of-order RDMA read/write/send/recv (DDP) */
-    UCT_IB_MLX5_ORDERING_OOO_ALL,
+    UCT_IB_MLX5_ORDERING_OOO_ALL = 0x2,
 };
 
 #define UCT_RC_MLX5_RMA_MAX_IOV(_av_size) \
@@ -417,6 +417,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_srq_topo_t         srq_topo;
         uint8_t                        log_ack_req_freq;
         uint8_t                        ordering_level;
+        uint8_t                        force_ordering;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
@@ -674,6 +675,9 @@ ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                       const uct_rc_iface_common_config_t *config);
 
 void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq);
+
+void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
+                                          uct_rc_mlx5_iface_common_t *iface);
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
