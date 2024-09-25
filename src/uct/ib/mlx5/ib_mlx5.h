@@ -411,6 +411,7 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
     struct {
+        /* Max rq size per transport when adaptive routing (ooo dp) is enabled */
         uint32_t max_rc;
         uint32_t max_dct;
     } dv_ooo_recv_cap;
