@@ -1052,43 +1052,8 @@ int uct_iface_is_reachable_v2(uct_iface_h iface,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Capability flags of @ref uct_tl_resource_desc_t.
- *
- * The enumeration defines bit mask of capabilities in @ref
- * uct_tl_resource_desc_v2_t::flags, set by @ref uct_md_query_tl_resources_v2.
- */
-typedef enum {
-    /**
-     * If set, the resource supports inter-node communications.
-     */
-    UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE = UCS_BIT(0)
-} uct_md_query_tl_resources_flags_t;
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Parameters passed to @ref uct_md_query_tl_resources_v2.
- */
-typedef struct {
-    /**
-     * Mask of valid fields which must currently be set to zero.
-     * Future fields not specified in this mask will be ignored.
-     * Provides ABI compatibility with respect to adding new fields.
-     */
-    uint64_t field_mask;
-} uct_md_query_tl_resources_params_t;
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Communication resource descriptor.
  *
- * Resource descriptor is an object representing the network resource.
- * Resource descriptor could represent a stand-alone communication resource
- * such as an HCA port, network interface, or multiple resources such as
- * multiple network interfaces or communication ports. It could also represent
- * virtual communication resources that are defined over a single physical
- * network interface.
  */
 typedef struct uct_tl_resource_desc_v2 {
     /**
@@ -1123,6 +1088,72 @@ typedef struct uct_tl_resource_desc_v2 {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Capability flags in @ref uct_tl_resource_desc_v2_t.
+ *
+ * The enumeration defines bit mask of capabilities in @ref
+ * uct_tl_resource_desc_v2_t::flags.
+ */
+typedef enum {
+    /**
+     * If set, the resource supports inter-node communications.
+     */
+    UCT_TL_RESOURCE_DESC_FLAG_INTER_NODE = UCS_BIT(0)
+} uct_md_query_tl_resources_flags_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Describe valid input/output fields set in @ref
+ * uct_md_query_tl_resources_params_t::field_mask
+ */
+typedef enum {
+    /*
+     * The function @ref uct_md_query_tl_resources_v2 will return a populated
+     * resource array.
+     */
+    UCT_MD_QUERY_TL_RESOURCES_PARAM_FIELD_RESOURCES = UCS_BIT(0)
+} uct_md_query_tl_resources_params_flags_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters passed to @ref uct_md_query_tl_resources_v2.
+ */
+typedef struct {
+    /**
+     * Mask of valid or requested fields in this structure.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t field_mask;
+
+    /*
+     * Number of resources returned in the resource descriptor. It is an output
+     * parameter populated when @ref
+     * UCT_MD_QUERY_TL_RESOURCES_PARAM_FIELD_RESOURCES is set in @ref
+     * uct_md_query_tl_resources_params_t::field_mask.
+     */
+    unsigned num_resources;
+
+    /**
+     * Resource descriptor is an object representing the network resource.
+     * Resource descriptor could represent a stand-alone communication resource
+     * such as an HCA port, network interface, or multiple resources such as
+     * multiple network interfaces or communication ports. It could also represent
+     * virtual communication resources that are defined over a single physical
+     * network interface.
+     *
+     * It is an output parameter populated when @ref
+     * UCT_MD_QUERY_TL_RESOURCES_PARAM_FIELD_RESOURCES is set in @ref
+     * uct_md_query_tl_resources_params_t::field_mask, which must be released
+     * by @ref uct_release_tl_resource_list_v2.
+     */
+    uct_tl_resource_desc_v2_t *resources;
+} uct_md_query_tl_resources_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Query for transport resources.
  *
  * This routine queries the @ref uct_md_h "memory domain" for communication
@@ -1131,17 +1162,12 @@ typedef struct uct_tl_resource_desc_v2 {
  * @param [in]    md              Handle to memory domain.
  * @param [inout] params          Parameters as defined in @ref
  *                                uct_md_query_tl_resources_params_t.
- * @param [out]   resources_p     Filled with a pointer to an array of resource
- *                                descriptors.
- * @param [out]   num_resources_p Filled with the number of resources in the array.
  *
  * @return Error code.
  */
 ucs_status_t
 uct_md_query_tl_resources_v2(uct_md_h md,
-                             uct_md_query_tl_resources_params_t *params,
-                             uct_tl_resource_desc_v2_t **resources_p,
-                             unsigned *num_resources_p);
+                             uct_md_query_tl_resources_params_t *params);
 
 
 /**
