@@ -19,6 +19,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/type/serialize.h>
 #include <tools/perf/lib/libperf_int.h>
+#include <uct/api/v2/uct_v2.h>
 
 #include <string.h>
 #include <unistd.h>
@@ -633,6 +634,9 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 
 static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
+    uct_md_mkey_pack_params_t mkey_params = {
+        .field_mask = 0
+    };
     const size_t buffer_size = ADDR_BUF_SIZE;
     ucx_perf_ep_info_t info, *remote_info;
     unsigned group_size, i, group_index;
@@ -700,7 +704,10 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
     if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
         memset(rkey_buffer, 0, info.rkey_size);
-        status = uct_md_mkey_pack(perf->uct.md, perf->uct.recv_mem.memh, rkey_buffer);
+        status = uct_md_mkey_pack_v2(perf->uct.md, perf->uct.recv_mem.memh,
+                                     perf->uct.recv_mem.address,
+                                     perf->uct.recv_mem.length, &mkey_params,
+                                     rkey_buffer);
         if (status != UCS_OK) {
             ucs_error("Failed to uct_rkey_pack: %s", ucs_status_string(status));
             goto err_free;
