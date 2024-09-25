@@ -135,8 +135,8 @@ protected:
         modify_config("ATOMIC_MODE", atomic_mode_cfg);
 
         if (odp) {
-            modify_config("REG_NONBLOCK_MEM_TYPES", "host,cuda-managed");
-            modify_config("IB_ODP_MEM_TYPES", "host,cuda-managed",
+            modify_config("REG_NONBLOCK_MEM_TYPES", "host");
+            modify_config("IB_ODP_MEM_TYPES", "host",
                           SETENV_IF_NOT_EXIST);
             modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
 
