@@ -15,11 +15,6 @@
 
 #define UCP_PROTO_RNDV_GET_DESC "read from remote"
 
-enum {
-    UCP_PROTO_RNDV_GET_STAGE_FETCH = UCP_PROTO_STAGE_START,
-    UCP_PROTO_RNDV_GET_STAGE_ATS
-};
-
 static void
 ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
                                 uint64_t rndv_modes, size_t max_length,

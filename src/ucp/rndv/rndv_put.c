@@ -564,11 +564,15 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
     size_t frag_size;
+    unsigned flags;
 
     status = ucp_proto_rndv_mtype_init(init_params, &mdesc_md_map, &frag_size);
     if (status != UCS_OK) {
         return;
     }
+
+    flags = init_params->worker->context->config.ext.rndv_errh_ppln_enable ?
+                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING : 0;
 
     if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
         comp_cb = ucp_proto_rndv_put_mtype_frag_completion;
@@ -578,7 +582,7 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 
     ucp_proto_rndv_put_common_probe(init_params,
                                     UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE),
-                                    frag_size, UCT_EP_OP_GET_ZCOPY, 0,
+                                    frag_size, UCT_EP_OP_GET_ZCOPY, flags,
                                     mdesc_md_map, comp_cb, 1,
                                     UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY);
 }
@@ -606,6 +610,6 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_put_common_atp_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_rndv_stub_abort,
     .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };

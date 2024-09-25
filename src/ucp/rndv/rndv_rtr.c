@@ -295,6 +295,12 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 
     super_req->status = status;
 
+    /* When pipeline is used, there is a top-level 'recv' request that we also
+     * need to abort */
+    if (ucp_proto_rndv_request_is_ppln_frag(req)) {
+        ucp_request_get_super(super_req)->status = status;
+    }
+
     /*TODO: Invalidate memh */
     ucp_send_request_id_release(req);
     ucp_proto_rndv_rtr_mtype_complete(req, 1);

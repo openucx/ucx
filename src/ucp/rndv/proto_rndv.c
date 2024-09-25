@@ -1002,3 +1002,14 @@ void ucp_proto_rndv_bulk_request_init_lane_idx(
 
     req->send.multi_lane_idx = lane_idx - 1;
 }
+
+void ucp_proto_rndv_stub_abort(ucp_request_t *req, ucs_status_t status)
+{
+    /* FIXME: Proper abort functionality is not implemented yet.
+     * This stub function is used to advertise error-handling capability for
+     * pipeline protocols, but proper implementation is to be done */
+    ucs_diag("aborting rendezvous request %p with status %s. This may lead to "
+             "data corruption, since invalidation workflow isn't implemented",
+             req, ucs_status_string(status));
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
+}
