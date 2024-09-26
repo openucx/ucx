@@ -227,7 +227,8 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                                 uct_ep_operation_t memtype_op, unsigned flags,
                                 ucp_md_map_t initial_reg_md_map,
                                 uct_completion_callback_t comp_cb,
-                                int support_ppln, uint8_t stat_counter)
+                                int support_ppln, uint8_t stat_counter,
+                                ucs_memory_type_t reg_mem_type)
 {
     const size_t atp_size                = sizeof(ucp_rndv_ack_hdr_t);
     ucp_context_t *context               = init_params->worker->context;
@@ -251,6 +252,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .super.exclude_map   = 0,
+        .super.reg_mem_type  = reg_mem_type,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_PUT_ZCOPY,
@@ -418,7 +420,8 @@ ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
             UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
             UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
             0, ucp_proto_rndv_put_zcopy_completion, 0,
-            UCP_WORKER_STAT_RNDV_PUT_ZCOPY);
+            UCP_WORKER_STAT_RNDV_PUT_ZCOPY,
+            init_params->select_param->mem_type);
 }
 
 static void
@@ -500,12 +503,15 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_mtype_send_func(
 static ucs_status_t
 ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    ucp_request_t *req                     = ucs_container_of(uct_req,
+                                                              ucp_request_t,
+                                                              send.uct);
+    const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
     ucs_status_t status;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
 
-    status = ucp_proto_rndv_mtype_request_init(req);
+    status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type);
     if (status != UCS_OK) {
         ucp_proto_request_abort(req, status);
         return UCS_OK;
@@ -513,11 +519,9 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     ucp_proto_rndv_put_common_request_init(req);
     req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
-    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
-                              ucp_proto_rndv_mtype_get_req_memh(req),
-                              uct_ep_get_zcopy,
-                              ucp_proto_rndv_put_mtype_pack_completion,
-                              "in from");
+    ucp_proto_rndv_mdesc_mtype_copy(req, uct_ep_get_zcopy,
+                                    ucp_proto_rndv_put_mtype_pack_completion,
+                                    "in from");
 
     return UCS_OK;
 }
@@ -565,8 +569,20 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
     size_t frag_size;
     unsigned flags;
+    ucs_memory_type_t frag_mem_type;
 
-    status = ucp_proto_rndv_mtype_init(init_params, &mdesc_md_map, &frag_size);
+    if (init_params->rkey_config_key == NULL) {
+        return;
+    }
+
+    /* Can initialize only the same fragment type as received in RTR
+     * because pipeline protocols assume that both peers use the same
+     * fragment sizes (and they are different for different memory types by
+     * default). */
+    frag_mem_type = init_params->rkey_config_key->mem_type;
+
+    status = ucp_proto_rndv_mtype_init(init_params, frag_mem_type,
+                                       &mdesc_md_map, &frag_size);
     if (status != UCS_OK) {
         return;
     }
@@ -580,21 +596,22 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
         comp_cb = ucp_proto_rndv_put_mtype_completion;
     }
 
-    ucp_proto_rndv_put_common_probe(init_params,
-                                    UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE),
-                                    frag_size, UCT_EP_OP_GET_ZCOPY, flags,
-                                    mdesc_md_map, comp_cb, 1,
-                                    UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY);
+    ucp_proto_rndv_put_common_probe(
+            init_params, UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE), frag_size,
+            UCT_EP_OP_GET_ZCOPY, flags, mdesc_md_map, comp_cb, 1,
+            UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, frag_mem_type);
 }
 
 static void
 ucp_proto_rndv_put_mtype_query(const ucp_proto_query_params_t *params,
                                ucp_proto_query_attr_t *attr)
 {
+    const ucp_proto_rndv_put_priv_t *rpriv = params->priv;
     const char *put_desc;
 
     put_desc = ucp_proto_rndv_put_common_query(params, attr);
-    ucp_proto_rndv_mtype_query_desc(params, attr, put_desc);
+    ucp_proto_rndv_mtype_query_desc(params, rpriv->bulk.frag_mem_type, attr,
+                                    put_desc);
 }
 
 ucp_proto_t ucp_rndv_put_mtype_proto = {

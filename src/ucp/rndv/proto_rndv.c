@@ -209,6 +209,8 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_common_init_params_t *init_params,
         return status;
     }
 
+    ucs_assert(lane < UCP_MAX_LANES);
+
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
                            UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
@@ -295,7 +297,8 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
 
     /* Use only memory domains for which the unpacking of the remote key was
      * successful */
-    if (init_params->rkey_config_key != NULL) {
+    if ((init_params->rkey_config_key != NULL) &&
+        !(params->super.flags & UCP_PROTO_COMMON_KEEP_MD_MAP)) {
         rpriv->md_map &= ~init_params->rkey_config_key->unreachable_md_map;
     }
 
@@ -504,6 +507,7 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
                                             UCP_PROTO_COMMON_OFFSET_INVALID, 1,
                                             UCP_LANE_TYPE_AM,
+                                            UCS_MEMORY_TYPE_UNKNOWN,
                                             UCT_IFACE_FLAG_AM_BCOPY, 1, 0,
                                             &lane);
     if (num_lanes == 0) {
@@ -538,6 +542,7 @@ void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
@@ -641,6 +646,8 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     if (status != UCS_OK) {
         goto out_destroy_bulk_perf;
     }
+
+    rpriv->frag_mem_type = init_params->super.reg_mem_type;
 
     if (rpriv->super.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */

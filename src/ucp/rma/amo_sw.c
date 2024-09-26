@@ -424,6 +424,7 @@ static void ucp_proto_amo_sw_probe(const ucp_proto_init_params_t *init_params,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .super.exclude_map   = 0,
+        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = 0
     };

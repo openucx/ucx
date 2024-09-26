@@ -433,8 +433,9 @@ ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                             uct_ep_operation_t memtype_op, unsigned flags,
                             ptrdiff_t max_iov_offs, size_t min_iov,
-                            ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-                            ucp_lane_index_t max_lanes,
+                            ucp_lane_type_t lane_type,
+                            ucs_memory_type_t reg_mem_type,
+                            uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes)
 {
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
@@ -457,7 +458,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     }
 
     ucp_proto_select_info_str(params->worker, params->rkey_cfg_index,
-                              params->select_param, ucp_operation_names,
+                              select_param, ucp_operation_names,
                               &sel_param_strb);
 
     num_lanes = 0;
@@ -518,25 +519,29 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
         }
 
         /* Check memory registration capabilities for zero-copy case */
-        if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+        if (reg_mem_type != UCS_MEMORY_TYPE_UNKNOWN) {
+            ucs_assertv((reg_mem_type == select_param->mem_type) ||
+                        !(flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY),
+                        "flags=0x%x reg_mem_type=%s select_param->mem_type=%s",
+                        flags, ucs_memory_type_names[reg_mem_type],
+                        ucs_memory_type_names[select_param->mem_type]);
+
             if (md_attr->flags & UCT_MD_FLAG_NEED_MEMH) {
                 /* Memory domain must support registration on the relevant
                  * memory type */
-                if (!(context->reg_md_map[select_param->mem_type] &
-                      UCS_BIT(md_index))) {
+                if (!(context->reg_md_map[reg_mem_type] & UCS_BIT(md_index))) {
                     ucs_trace("%s: md %s cannot register %s memory", lane_desc,
                               context->tl_mds[md_index].rsc.md_name,
-                              ucs_memory_type_names[select_param->mem_type]);
+                              ucs_memory_type_names[reg_mem_type]);
                     continue;
                 }
-            } else if (!(md_attr->access_mem_types &
-                         UCS_BIT(select_param->mem_type))) {
+            } else if (!(md_attr->access_mem_types & UCS_BIT(reg_mem_type))) {
                 /*
                  * Memory domain which does not require a registration for zero
                  * copy operation must be able to access the relevant memory type
                  */
                 ucs_trace("%s: no access to mem type %s", lane_desc,
-                          ucs_memory_type_names[select_param->mem_type]);
+                          ucs_memory_type_names[reg_mem_type]);
                 continue;
             }
         }
@@ -629,11 +634,11 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
     const uct_iface_attr_t *iface_attr;
     size_t tl_min_frag, tl_max_frag;
 
-    num_lanes = ucp_proto_common_find_lanes(&params->super, params->memtype_op,
-                                            params->flags, params->max_iov_offs,
-                                            params->min_iov, lane_type,
-                                            tl_cap_flags, max_lanes,
-                                            exclude_map, lanes);
+    num_lanes = ucp_proto_common_find_lanes(
+                   &params->super, params->memtype_op, params->flags,
+                   params->max_iov_offs, params->min_iov, lane_type,
+                   params->reg_mem_type, tl_cap_flags, max_lanes, exclude_map,
+                   lanes);
 
     num_valid_lanes = 0;
     for (lane_index = 0; lane_index < num_lanes; ++lane_index) {
