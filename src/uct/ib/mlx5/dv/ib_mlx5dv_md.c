@@ -144,6 +144,8 @@ static void uct_ib_mlx5_devx_klm_entry_set(void **klm_p, size_t klm_idx,
               mr->addr, mr->length, mr->lkey);
     UCT_IB_MLX5DV_SET64(klm, klm, address, (uintptr_t)address);
     UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->lkey);
+    UCT_IB_MLX5DV_SET(klm, klm, byte_count, mr->length);
+
     *klm_p = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
 }
 
