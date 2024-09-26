@@ -448,25 +448,6 @@ then
 			'build_armclang')
 fi
 
-# Handle specific test execution
-if [ "$1" ]; then
-	test_name="$1"
-	if [[ " ${tests[@]} " =~ " ${test_name} " ]]; then
-		[ -d "${ucx_build_dir}" ] && rm -rf ${ucx_build_dir}/*
-
-		if [ $test_name ]; then
-			echo "Test succeeded: ${test_name}"
-			exit 0
-		else
-			echo "Test failed: ${test_name}"
-			exit 1
-		fi
-	else
-		echo "Error: Test '${test_name}' not found"
-		exit 1
-	fi
-fi
-
 num_tests=${#tests[@]}
 for ((i=0;i<${num_tests};++i))
 do
@@ -479,9 +460,6 @@ do
 	# cleanup build dir before the task
 	[ -d "${ucx_build_dir}" ] && rm -rf ${ucx_build_dir}/*
 
-	if ! $test_name; then
-		azure_log_error "Test failed: $test_name"
-		azure_log_error	"To debug, rerun the test with: $0 $test_name"
-		exit 1
-	fi
+	# run the test
+	$test_name || { azure_log_error "Test failed: $test_name"; exit 1; }
 done
