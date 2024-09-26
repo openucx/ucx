@@ -130,6 +130,13 @@ enum {
 };
 
 
+/* rndv_get stages */
+enum {
+    UCP_PROTO_RNDV_GET_STAGE_FETCH = UCP_PROTO_STAGE_START,
+    UCP_PROTO_RNDV_GET_STAGE_ATS
+};
+
+
 /* Initializes protocol which sends rendezvous control message using AM lane
  * (e.g. RTS and ATS). */
 void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
@@ -211,5 +218,8 @@ void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack);
 
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
                                             int abort);
+
+
+void ucp_proto_rndv_stub_abort(ucp_request_t *req, ucs_status_t status);
 
 #endif

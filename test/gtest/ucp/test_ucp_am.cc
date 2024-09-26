@@ -1992,6 +1992,9 @@ public:
         modify_config("RNDV_THRESH", "128");
         modify_config("RNDV_SCHEME", "put_ppln");
         modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
+        /* FIXME: Advertise error handling support for RNDV PPLN protocol.
+         * Remove this once invalidation workflow is implemented. */
+        modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
         test_ucp_am_nbx::init();
     }
 
@@ -2007,10 +2010,21 @@ public:
             return;
         }
 
-        add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           UCP_ERR_HANDLING_MODE_NONE);
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           UCP_ERR_HANDLING_MODE_PEER, "errh");
     }
 
 protected:
+    virtual ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t ep_params = test_ucp_am_nbx_rndv::get_ep_params();
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.err_mode        = get_err_mode();
+        return ep_params;
+    }
+
     void test_ppln_send(ucs_memory_type_t mem_type, size_t num_frags,
                         uint64_t stats_cntr_value)
     {
@@ -2048,6 +2062,11 @@ private:
 
         EXPECT_EQ(exp_value, value) << "counter is "
                                     << stats_node->cls->counter_names[cntr];
+    }
+
+    ucp_err_handling_mode_t get_err_mode() const
+    {
+        return static_cast<ucp_err_handling_mode_t>(get_variant_value(1));
     }
 
     ucs_memory_type_t m_mem_type;

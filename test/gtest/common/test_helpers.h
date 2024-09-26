@@ -28,6 +28,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <unordered_map>
 #include <sys/socket.h>
 #include <dirent.h>
 #include <stdint.h>
@@ -1052,6 +1053,76 @@ const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs();
  * Skip test if address sanitizer is enabled
  */
 void skip_on_address_sanitizer();
+
+/**
+ * Class for mocking C function pointers
+ * The class is used to mock C function pointers, by replacing the original
+ * function pointer with a mock function pointer. The original function pointer
+ * is restored when the object is destroyed.
+ */
+class mock {
+public:
+    using func = void (*)();
+
+    ~mock()
+    {
+        cleanup();
+    }
+
+    void cleanup()
+    {
+        m_mock_map.clear();
+    }
+
+    template<typename Fn> void setup(Fn *orig_ptr, Fn mock)
+    {
+        func *ptr = reinterpret_cast<func*>(orig_ptr);
+        auto it   = m_mock_map.find(ptr);
+        if (it == m_mock_map.end()) {
+            m_mock_map[ptr] = std::unique_ptr<mock_func>(
+                                                new mock_func(ptr, (func)mock));
+        } else {
+            *orig_ptr = mock;
+        }
+    }
+
+    template<typename Fn, typename... Args>
+    ucs_status_t orig_func(Fn *orig_ptr, Args &&...args) const
+    {
+        auto it    = m_mock_map.find((func*)orig_ptr);
+        Fn orig_fn = (it == m_mock_map.end()) ? *orig_ptr :
+                                                (Fn)it->second->m_orig;
+        return orig_fn(std::forward<Args>(args)...);
+    }
+
+private:
+    struct mock_func {
+        mock_func(func *orig_ptr, func mock) :
+            m_orig_ptr(orig_ptr), m_orig(*orig_ptr)
+        {
+            *m_orig_ptr = mock;
+        }
+
+        ~mock_func()
+        {
+            /* Reset value for mocked function pointer.
+             * Due to this side effect we make the class non-copyable, to avoid
+             * implementing copy/move semantics */
+            *m_orig_ptr = m_orig;
+        }
+
+        /* Non-copyable, non-moveable */
+        mock_func(const mock_func&) = delete;
+        mock_func(mock_func&&) = delete;
+        mock_func &operator=(const mock_func&) = delete;
+        mock_func &operator=(mock_func&&) = delete;
+
+        func *m_orig_ptr;
+        func m_orig;
+    };
+
+    std::unordered_map<func*, std::unique_ptr<mock_func>> m_mock_map;
+};
 
 } // ucs
 
