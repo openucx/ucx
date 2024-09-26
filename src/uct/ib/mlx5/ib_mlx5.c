@@ -608,8 +608,8 @@ ucs_status_t uct_ib_mlx5_devx_check_uar(uct_ib_mlx5_md_t *md)
                                             UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
                                             &uar.uar);
         if (status == UCS_ERR_UNSUPPORTED) {
-            ucs_error("%s: both WC and NC_DEDICATED UAR allocation types "
-                      " are not supported", uct_ib_device_name(&md->super.dev));
+            ucs_diag("%s: both WC and NC_DEDICATED UAR allocation types "
+                     "are not supported", uct_ib_device_name(&md->super.dev));
             return status;
         } else if (status != UCS_OK) {
             return status;
