@@ -61,14 +61,22 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
 
 static uct_cuda_ipc_dev_cache_t *
 uct_cuda_ipc_get_dev_cache(uct_cuda_ipc_component_t *component,
-                           const CUuuid *uuid)
+                           uct_cuda_ipc_rkey_t *rkey)
 {
     khash_t(cuda_ipc_uuid_hash) *hash = &component->uuid_hash;
+    uct_cuda_ipc_uuid_hash_key_t key;
     uct_cuda_ipc_dev_cache_t *cache;
     khiter_t iter;
     int ret;
 
-    iter = kh_put(cuda_ipc_uuid_hash, hash, *uuid, &ret);
+    key.uuid = rkey->uuid;
+#if HAVE_CUDA_FABRIC
+    key.type = rkey->ph.handle_type;
+#else
+    key.type = 0;
+#endif
+
+    iter = kh_put(cuda_ipc_uuid_hash, hash, key, &ret);
     if (ret == UCS_KH_PUT_KEY_PRESENT) {
         return kh_val(hash, iter);
     } else if ((ret == UCS_KH_PUT_BUCKET_EMPTY) ||
@@ -258,7 +266,7 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
 
     pthread_mutex_lock(&component->lock);
 
-    cache = uct_cuda_ipc_get_dev_cache(component, &rkey->uuid);
+    cache = uct_cuda_ipc_get_dev_cache(component, rkey);
     if (ucs_unlikely(NULL == cache)) {
         status = UCS_ERR_NO_RESOURCE;
         goto err;
