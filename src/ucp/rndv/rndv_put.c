@@ -138,6 +138,14 @@ ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
         return UCS_OK;
     }
 
+    /* Ensure ATP is sent on the same lane as the data to prevent ATP from
+     * arriving before the data. If data transmission starts from a non-zero
+     * lane, ATP may never be sent on the data lane. */
+    if (ucs_unlikely((req->send.state.dt_iter.length < rpriv->atp_num_lanes) &&
+                     (lane < req->send.multi_lane_idx))) {
+        return UCS_OK;
+    }
+
     pack_ctx.req = req;
 
     /* When we need to send multiple ATP messages: each will acknowledge 1 byte,
