@@ -75,6 +75,13 @@ extern ucs_config_field_t ucs_config_rcache_table[];
 typedef void (*ucs_rcache_invalidate_comp_func_t)(void *arg);
 
 
+typedef struct {
+    ucs_list_link_t                   list;
+    ucs_rcache_invalidate_comp_func_t func;
+    void                              *arg;
+} ucs_rcache_comp_entry_t;
+
+
 /*
  * Registration cache operations.
  */
@@ -261,15 +268,13 @@ void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region);
   *
   * @param [in] rcache    Memory registration cache.
   * @param [in] region    Memory region to invalidate.
-  * @param [in] cb        Completion callback, is called when region is
-  *                       released. Callback cannot do any operations which may
-  *                       access the rcache.
-  * @param [in] arg       Completion argument passed to completion callback.
+  * @param [in] comp      Completion entry, called when region is released.
+  *                       Callback cannot do any operations which may access the
+  *                       rcache.
   */
 void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
                                   ucs_rcache_region_t *region,
-                                  ucs_rcache_invalidate_comp_func_t cb,
-                                  void *arg);
+                                  ucs_rcache_comp_entry_t *comp);
 
 
 /**

@@ -379,7 +379,7 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
 }
 
 void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                         ucs_rcache_invalidate_comp_func_t cb, void *arg,
+                         ucs_rcache_comp_entry_t *comp,
                          ucp_md_map_t inv_md_map)
 {
     ucs_trace("memh %p: invalidate address %p length %zu md_map %" PRIx64
@@ -393,7 +393,7 @@ void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
     UCP_THREAD_CS_ENTER(&context->mt_lock);
     memh->inv_md_map |= inv_md_map;
     UCP_THREAD_CS_EXIT(&context->mt_lock);
-    ucs_rcache_region_invalidate(context->rcache, &memh->super, cb, arg);
+    ucs_rcache_region_invalidate(context->rcache, &memh->super, comp);
 }
 
 static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
@@ -903,8 +903,7 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
         uct_flags |= UCP_MM_UCT_ACCESS_FLAGS(memh->uct_flags);
 
         /* Invalidate the mismatching region and get a new one */
-        ucs_rcache_region_invalidate(context->rcache, &memh->super,
-                                     ucs_empty_function, NULL);
+        ucs_rcache_region_invalidate(context->rcache, &memh->super, NULL);
         ucp_memh_put(memh);
     }
 }
@@ -1930,8 +1929,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                             "This may indicate that exported memory handle was "
                             "destroyed, but imported memory handle was not",
                             rregion->refcount);
-                ucs_rcache_region_invalidate(rcache, rregion,
-                                             ucs_empty_function, NULL);
+                ucs_rcache_region_invalidate(rcache, rregion, NULL);
                 ucs_rcache_region_put_unsafe(rcache, rregion);
             }
         }

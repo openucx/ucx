@@ -3568,7 +3568,8 @@ static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
     ucs_assertv(UCS_STATUS_IS_ERR(status), "req %p: status %s", req,
                 ucs_status_string(status));
 
-    if (ucp_request_memh_invalidate(req, status)) {
+    if (ucp_request_memh_check_invalidate(req)) {
+        ucp_request_memh_invalidate(req, status);
         return;
     }
 

@@ -174,7 +174,7 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                const char *alloc_name);
 
 void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                         ucs_rcache_invalidate_comp_func_t cb, void *arg,
+                         ucs_rcache_comp_entry_t *comp,
                          ucp_md_map_t inv_md_map);
 
 void ucp_memh_put_slow(ucp_context_h context, ucp_mem_h memh);
