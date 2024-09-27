@@ -287,6 +287,64 @@ void test_ib_md::test_mkey_pack_mt(bool invalidate)
     test_mkey_pack_mt_internal(UCT_MD_MEM_ACCESS_ALL, invalidate);
 }
 
+UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail, has_ksm(), "IB_REG_MT_THRESH=128K",
+                     "IB_REG_MT_CHUNK=16K")
+{
+    size_t size             = UCS_MBYTE;
+    const size_t align_mask = (8 * UCS_KBYTE) - 1;
+    size_t lower_size       = ((size / 3)) & ~align_mask;
+    size_t upper_size       = (size - (size / 2)) & ~align_mask;
+    void *base, *start, *mid, *last;
+    uct_mem_h memh;
+
+    auto mmap_anon = [](void *ptr, size_t size) {
+        ptr = mmap(ptr, size, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS |
+                           ((ptr != nullptr) ? MAP_FIXED : 0),
+                   -1, 0);
+        return ptr != MAP_FAILED ? ptr : nullptr;
+    };
+
+    /* Find an available VMA */
+    base = mmap_anon(nullptr, size);
+    ASSERT_NE(nullptr, base);
+    munmap(base, size);
+
+    start = base;
+    mid   = reinterpret_cast<char*>(base) + lower_size;
+    last  = reinterpret_cast<char*>(base) + size - upper_size;
+
+    /* Allocate lower half and upper half */
+    start = mmap_anon(start, lower_size);
+    last  = mmap_anon(last, upper_size);
+    EXPECT_NE(nullptr, start);
+    EXPECT_NE(nullptr, last);
+
+    /* Trigger MT registration failure */
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    EXPECT_NE(UCS_OK, reg_mem(UCT_MD_MEM_ACCESS_ALL, base, size, &memh));
+
+    /* Fill the hole with the middle VMA */
+    mid = mmap_anon(mid, size - lower_size - upper_size);
+    EXPECT_NE(nullptr, mid);
+
+    /* Trigger a successful MT registration */
+    EXPECT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, base, size, &memh));
+    EXPECT_TRUE(((uct_ib_mem_t*)memh)->flags & UCT_IB_MEM_MULTITHREADED);
+
+    ASSERT_UCS_OK(uct_md_mem_dereg(md(), memh));
+
+    if (start != nullptr) {
+        munmap(start, lower_size);
+    }
+    if (mid != nullptr) {
+        munmap(mid, size - upper_size - lower_size);
+    }
+    if (last != nullptr) {
+        munmap(last, upper_size);
+    }
+}
+
 UCS_TEST_P(test_ib_md, pack_mkey_mt, "IB_REG_MT_THRESH=128K",
            "IB_REG_MT_CHUNK=128K")
 {
