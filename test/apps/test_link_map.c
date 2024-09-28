@@ -35,6 +35,8 @@ int main(int argc, char **argv)
 
     ucp_cleanup(context);
 
+    undefined_function_call();
+
     printf("SUCCESS\n");
     return 0;
 }
