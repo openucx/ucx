@@ -665,7 +665,7 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
                                                 uct_dc_mlx5_iface_t);
     ucs_status_t status;
 
-    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
+    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
         UCS_TEST_SKIP_R("shared dcis are not supported - no pending wait");
     }
 
