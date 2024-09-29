@@ -1034,7 +1034,7 @@ private:
 #define TEST_CASE_ALL_AM(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, 0, 0)
 
-static ucs_status_t dispatch_osd(ucx_perf_context_t *perf)
+static ucs_status_t ucp_perf_dispatch_osd(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_OSD, perf,
                    (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG),
@@ -1049,7 +1049,7 @@ static ucs_status_t dispatch_osd(ucx_perf_context_t *perf)
     return UCS_ERR_INVALID_PARAM;
 }
 
-static ucs_status_t dispatch_tag(ucx_perf_context_t *perf)
+static ucs_status_t ucp_perf_dispatch_tag(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_TAG, perf,
                    (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG),
@@ -1060,7 +1060,7 @@ static ucs_status_t dispatch_tag(ucx_perf_context_t *perf)
     return UCS_ERR_INVALID_PARAM;
 }
 
-static ucs_status_t dispatch_stream(ucx_perf_context_t *perf)
+static ucs_status_t ucp_perf_dispatch_stream(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_STREAM, perf,
                    (UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI),
@@ -1069,7 +1069,7 @@ static ucs_status_t dispatch_stream(ucx_perf_context_t *perf)
     return UCS_ERR_INVALID_PARAM;
 }
 
-static ucs_status_t dispatch_am(ucx_perf_context_t *perf)
+static ucs_status_t ucp_perf_dispatch_am(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_AM, perf,
                    (UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG),
@@ -1080,14 +1080,14 @@ static ucs_status_t dispatch_am(ucx_perf_context_t *perf)
 
 typedef ucs_status_t (*ucp_dispatch_func_t)(ucx_perf_context_t *perf);
 
-ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf) {
-    std::vector<ucp_dispatch_func_t> dispatchers = {
-        &dispatch_osd,
-        &dispatch_tag,
-        &dispatch_stream,
-        &dispatch_am
+ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
+{
+    const std::vector<ucp_dispatch_func_t> dispatchers = {
+        &ucp_perf_dispatch_osd,
+        &ucp_perf_dispatch_tag,
+        &ucp_perf_dispatch_stream,
+        &ucp_perf_dispatch_am
     };
-
     ucs_status_t status;
 
     for (auto& dispatcher : dispatchers) {

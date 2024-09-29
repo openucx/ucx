@@ -106,7 +106,7 @@ void check_bitwise_equality(const uint8_t *buffer1,
 UCS_TEST_F(test_bitops, is_equal) {
     uint8_t buffer1[20]      = {0};
     uint8_t buffer2[20]      = {0};
-    std::vector<int> indices = {0, 1, 8, 64, 65, 128, 130, 159, 160};
+    const std::vector<int> indices = {0, 1, 8, 64, 65, 128, 130, 159, 160};
 
     check_bitwise_equality(buffer1, buffer2, indices, 160);
 
