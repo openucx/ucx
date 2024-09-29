@@ -247,3 +247,23 @@ get_arch() {
         echo "$arch"
     fi
 }
+
+git_clone_with_retry() {
+    local branch="$1"
+    local target_dir="$2"
+    local depth="$3"
+    local max_attempts=5
+
+    for attempt in $(seq 1 $max_attempts); do
+        echo "Attempt $attempt of $max_attempts: Cloning UCX (branch: $branch)"
+        if git clone --depth "$depth" -b "$branch" "$BUILD_REPOSITORY_URI" "$target_dir"; then
+            echo "Clone successful"
+            return 0
+        fi
+        echo "Clone failed. Retrying in 5 seconds..."
+        sleep 5
+    done
+
+    echo "Failed to clone UCX after $max_attempts attempts"
+    return 1
+}
