@@ -21,7 +21,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
                                 uct_ep_operation_t memtype_op, unsigned flags,
                                 ucp_md_map_t initial_reg_md_map,
                                 int support_ppln,
-                                ucs_memory_type_t reg_mem_type)
+                                const ucp_memory_info_t *reg_mem_info)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -46,7 +46,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .super.exclude_map   = 0,
-        .super.reg_mem_type  = reg_mem_type,
+        .super.reg_mem_info  = *reg_mem_info,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
@@ -118,12 +118,17 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
 static void
 ucp_proto_rndv_get_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
+    ucp_memory_info_t reg_mem_info = {
+        .type    = init_params->select_param->mem_type,
+        .sys_dev = init_params->select_param->sys_dev
+    };
+
     ucp_proto_rndv_get_common_probe(
             init_params, UCS_BIT(UCP_RNDV_MODE_GET_ZCOPY), SIZE_MAX,
             UCT_EP_OP_LAST,
             UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
             UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-            0, 0, init_params->select_param->mem_type);
+            0, 0, &reg_mem_info);
 }
 
 static void
@@ -312,19 +317,29 @@ ucp_proto_rndv_get_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
     size_t frag_size;
-    ucs_memory_type_t frag_mem_type;
+    ucp_md_index_t UCS_V_UNUSED dummy_md_id;
+    ucp_memory_info_t frag_mem_info;
 
-    ucs_for_each_bit(frag_mem_type, context->config.ext.rndv_frag_mem_types) {
-        status = ucp_proto_rndv_mtype_init(init_params, frag_mem_type,
+    ucs_for_each_bit(frag_mem_info.type,
+                     context->config.ext.rndv_frag_mem_types) {
+        status = ucp_proto_rndv_mtype_init(init_params, frag_mem_info.type,
                                            &mdesc_md_map, &frag_size);
         if (status != UCS_OK) {
             continue;
         }
 
+        status = ucp_mm_get_alloc_md_index(context, frag_mem_info.type,
+                                           &dummy_md_id,
+                                           &frag_mem_info.sys_dev);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+
         ucp_proto_rndv_get_common_probe(init_params,
                                         UCS_BIT(UCP_RNDV_MODE_GET_PIPELINE),
                                         frag_size, UCT_EP_OP_PUT_ZCOPY, 0,
-                                        mdesc_md_map, 1, frag_mem_type);
+                                        mdesc_md_map, 1, &frag_mem_info);
     }
 }
 

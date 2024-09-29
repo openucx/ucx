@@ -228,7 +228,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                                 ucp_md_map_t initial_reg_md_map,
                                 uct_completion_callback_t comp_cb,
                                 int support_ppln, uint8_t stat_counter,
-                                ucs_memory_type_t reg_mem_type)
+                                const ucp_memory_info_t *reg_mem_info)
 {
     const size_t atp_size                = sizeof(ucp_rndv_ack_hdr_t);
     ucp_context_t *context               = init_params->worker->context;
@@ -252,7 +252,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .super.exclude_map   = 0,
-        .super.reg_mem_type  = reg_mem_type,
+        .super.reg_mem_info  = *reg_mem_info,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_PUT_ZCOPY,
@@ -414,14 +414,18 @@ ucp_proto_rndv_put_zcopy_send_progress(uct_pending_req_t *uct_req)
 static void
 ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
+    ucp_memory_info_t reg_mem_info = {
+        .type    = init_params->select_param->mem_type,
+        .sys_dev = init_params->select_param->sys_dev
+    };
+
     ucp_proto_rndv_put_common_probe(
             init_params, UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY), SIZE_MAX,
             UCT_EP_OP_LAST,
             UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
             UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
             0, ucp_proto_rndv_put_zcopy_completion, 0,
-            UCP_WORKER_STAT_RNDV_PUT_ZCOPY,
-            init_params->select_param->mem_type);
+            UCP_WORKER_STAT_RNDV_PUT_ZCOPY, &reg_mem_info);
 }
 
 static void
@@ -564,12 +568,14 @@ static void ucp_proto_rndv_put_mtype_frag_completion(uct_completion_t *uct_comp)
 static void
 ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
+    ucp_context_t *context = init_params->worker->context;
     uct_completion_callback_t comp_cb;
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
     size_t frag_size;
     unsigned flags;
-    ucs_memory_type_t frag_mem_type;
+    ucp_md_index_t UCS_V_UNUSED dummy_md_id;
+    ucp_memory_info_t frag_mem_info;
 
     if (init_params->rkey_config_key == NULL) {
         return;
@@ -579,16 +585,23 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
      * because pipeline protocols assume that both peers use the same
      * fragment sizes (and they are different for different memory types by
      * default). */
-    frag_mem_type = init_params->rkey_config_key->mem_type;
+    frag_mem_info.type = init_params->rkey_config_key->mem_type;
 
-    status = ucp_proto_rndv_mtype_init(init_params, frag_mem_type,
+    status = ucp_proto_rndv_mtype_init(init_params, frag_mem_info.type,
                                        &mdesc_md_map, &frag_size);
     if (status != UCS_OK) {
         return;
     }
 
-    flags = init_params->worker->context->config.ext.rndv_errh_ppln_enable ?
-                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING : 0;
+    status = ucp_mm_get_alloc_md_index(context, frag_mem_info.type,
+                                       &dummy_md_id,
+                                       &frag_mem_info.sys_dev);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    flags = context->config.ext.rndv_errh_ppln_enable ?
+            UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING : 0;
 
     if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
         comp_cb = ucp_proto_rndv_put_mtype_frag_completion;
@@ -599,7 +612,7 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_put_common_probe(
             init_params, UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE), frag_size,
             UCT_EP_OP_GET_ZCOPY, flags, mdesc_md_map, comp_cb, 1,
-            UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, frag_mem_type);
+            UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, &frag_mem_info);
 }
 
 static void

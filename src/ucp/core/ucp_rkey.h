@@ -10,6 +10,7 @@
 #include "ucp_types.h"
 
 #include <ucp/core/ucp_context.h>
+#include <ucp/proto/proto_select.h>
 
 
 /**

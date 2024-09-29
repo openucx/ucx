@@ -23,6 +23,7 @@
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/memory/rcache.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
@@ -302,7 +303,8 @@ typedef struct ucp_context_alloc_md_index {
     int            initialized;
     /* Index of memory domain that is used to allocate memory of the given type
      * using ucp_memh_alloc(). */
-    ucp_md_index_t md_index;
+    ucp_md_index_t   md_index;
+    ucs_sys_device_t sys_dev;
 } ucp_context_alloc_md_index_t;
 
 

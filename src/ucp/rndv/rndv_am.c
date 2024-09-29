@@ -115,7 +115,7 @@ static void ucp_rndv_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
                                UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
-        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
@@ -189,7 +189,8 @@ static void ucp_rndv_am_zcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
-        .super.reg_mem_type  = init_params->select_param->mem_type,
+        .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
+                                                     init_params->select_param),
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };
