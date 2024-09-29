@@ -930,8 +930,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         return status;
     }
 
-    uct_rc_mlx5_ddp_init_if_available(&self->super, md,
-                                      UCT_IB_MLX5_MD_FLAG_DDP_RC);
+    status = uct_rc_mlx5_ddp_init(&self->super, md, UCT_IB_MLX5_MD_FLAG_DDP_RC,
+                                  &config->rc_mlx5_common, "rc_mlx5");
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = uct_rc_init_fc_thresh(&config->super, &self->super.super);
     if (status != UCS_OK) {

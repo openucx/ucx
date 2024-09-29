@@ -437,6 +437,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
     } tm;
     unsigned                             exp_backoff;
     unsigned                             log_ack_req_freq;
+    ucs_ternary_auto_value_t             ddp_enable;
     UCS_CONFIG_STRING_ARRAY_FIELD(types) srq_topo;
 } uct_rc_mlx5_iface_common_config_t;
 
@@ -492,15 +493,17 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name);
 
-void uct_rc_mlx5_ddp_init_if_available(uct_rc_mlx5_iface_common_t *iface,
-                                       uct_ib_mlx5_md_t *md,
-                                       uint64_t ddp_flags);
+ucs_status_t uct_rc_mlx5_ddp_init(uct_rc_mlx5_iface_common_t *iface,
+                                  uct_ib_mlx5_md_t *md, uint64_t ddp_flags,
+                                  uct_rc_mlx5_iface_common_config_t *config,
+                                  const char *tl_name);
 
 #if IBV_HW_TM
-void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
-                                   struct ibv_tmh *tmh, uct_tag_t tag,
-                                   struct mlx5_cqe64 *cqe, unsigned flags,
-                                   unsigned byte_len, int poll_flags);
+        void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
+                                           struct ibv_tmh *tmh, uct_tag_t tag,
+                                           struct mlx5_cqe64 *cqe,
+                                           unsigned flags, unsigned byte_len,
+                                           int poll_flags);
 
 
 static UCS_F_ALWAYS_INLINE void

@@ -50,9 +50,9 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode,
                       uct_ib_mlx5_get_atomic_mode(ib_iface));
     UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_0,
-                      iface->super.config.ordering_level & UCS_BIT(0));
+                      UCS_GET_BIT(iface->super.config.ordering_level, 0));
     UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_1,
-                      iface->super.config.ordering_level & UCS_BIT(1));
+                      UCS_GET_BIT(iface->super.config.ordering_level, 1));
     UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_force,
                       iface->super.config.force_ordering);
 

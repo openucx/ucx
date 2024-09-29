@@ -1880,18 +1880,6 @@ static void uct_ib_mlx5_devx_check_xgvmi(uct_ib_mlx5_md_t *md, void *cap_2,
     }
 }
 
-static ucs_status_t
-uct_ib_mlx5_ddp_check_status(uct_ib_mlx5_md_t *md,
-                             ucs_ternary_auto_value_t ddp_enable)
-{
-    if (!(md->flags &
-          (UCT_IB_MLX5_MD_FLAG_DDP_RC | UCT_IB_MLX5_MD_FLAG_DDP_DC))) {
-        return (ddp_enable == UCS_YES) ? UCS_ERR_UNSUPPORTED : UCS_OK;
-    }
-
-    return UCS_OK;
-}
-
 static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
                                                void *cap_2,
                                                uct_ib_device_t *dev)
@@ -1916,10 +1904,8 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC));
 }
 
-static ucs_status_t
-uct_ib_mlx5_devx_check_ddp(uct_ib_mlx5_md_t *md, void *cap, void *cap_2,
-                           uct_ib_device_t *dev,
-                           ucs_ternary_auto_value_t ddp_enable)
+static void uct_ib_mlx5_devx_check_ddp(uct_ib_mlx5_md_t *md, void *cap,
+                                       void *cap_2, uct_ib_device_t *dev)
 {
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_rc)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_DDP_RC;
@@ -1933,8 +1919,6 @@ uct_ib_mlx5_devx_check_ddp(uct_ib_mlx5_md_t *md, void *cap, void *cap_2,
               uct_ib_device_name(dev),
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DDP_RC),
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DDP_DC));
-
-    return uct_ib_mlx5_ddp_check_status(md, ddp_enable);
 }
 
 static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
@@ -2362,13 +2346,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     uct_ib_mlx5_devx_check_dp_ordering(md, cap, cap_2, dev);
 
-    if (ucs_ternary_auto_value_is_yes_or_try(md_config->ddp_enable)) {
-        status = uct_ib_mlx5_devx_check_ddp(md, cap, cap_2, dev,
-                                            md_config->ddp_enable);
-        if (status != UCS_OK) {
-            goto err_lru_cleanup;
-        }
-    }
+    uct_ib_mlx5_devx_check_ddp(md, cap, cap_2, dev);
 
     uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 
@@ -3181,9 +3159,8 @@ out:
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops;
 
-static ucs_status_t uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx,
-                                            uct_ib_mlx5_md_t *md,
-                                            ucs_ternary_auto_value_t ddp_enable)
+static ucs_status_t 
+uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
 {
 #ifdef HAVE_OOO_RECV_WRS
     struct mlx5dv_context ctx_dv = {
@@ -3208,8 +3185,7 @@ static ucs_status_t uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx,
         md->flags |= UCT_IB_MLX5_MD_FLAG_DDP_DC;
     }
 #endif
-
-    return uct_ib_mlx5_ddp_check_status(md, ddp_enable);
+    return UCS_OK;
 }
 
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
@@ -3247,11 +3223,9 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
-    if (ucs_ternary_auto_value_is_yes_or_try(md_config->ddp_enable)) {
-        status = uct_ib_mlx5dv_check_ddp(ctx, md, md_config->ddp_enable);
-        if (status != UCS_OK) {
-            goto err_md_free;
-        }
+    status = uct_ib_mlx5dv_check_ddp(ctx, md);
+    if (status != UCS_OK) {
+        goto err_md_free;
     }
 
     if (IBV_DEVICE_ATOMIC_HCA(dev)) {
