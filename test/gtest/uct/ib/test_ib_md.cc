@@ -287,8 +287,33 @@ void test_ib_md::test_mkey_pack_mt(bool invalidate)
     test_mkey_pack_mt_internal(UCT_MD_MEM_ACCESS_ALL, invalidate);
 }
 
-UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail, has_ksm(), "IB_REG_MT_THRESH=128K",
-                     "IB_REG_MT_CHUNK=16K")
+UCS_TEST_P(test_ib_md, pack_mkey_mt, "IB_REG_MT_THRESH=128K",
+           "IB_REG_MT_CHUNK=128K")
+{
+    test_mkey_pack_mt(false);
+}
+
+UCS_TEST_P(test_ib_md, pack_mkey_mt_invalidate, "IB_REG_MT_THRESH=128K",
+           "IB_REG_MT_CHUNK=128K")
+{
+    test_mkey_pack_mt(true);
+}
+
+UCS_TEST_P(test_ib_md, smkey_reg_atomic)
+{
+    test_smkey_reg_atomic();
+}
+
+UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
+           "IB_REG_MT_CHUNK=1k")
+{
+    test_smkey_reg_atomic();
+}
+
+UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
+                     has_ksm() &&
+                             check_invalidate_support(UCT_MD_MEM_ACCESS_ALL),
+                     "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
 {
     size_t size             = UCS_MBYTE;
     const size_t align_mask = (8 * UCS_KBYTE) - 1;
@@ -343,29 +368,6 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail, has_ksm(), "IB_REG_MT_THRESH=128K",
     if (last != nullptr) {
         munmap(last, upper_size);
     }
-}
-
-UCS_TEST_P(test_ib_md, pack_mkey_mt, "IB_REG_MT_THRESH=128K",
-           "IB_REG_MT_CHUNK=128K")
-{
-    test_mkey_pack_mt(false);
-}
-
-UCS_TEST_P(test_ib_md, pack_mkey_mt_invalidate, "IB_REG_MT_THRESH=128K",
-           "IB_REG_MT_CHUNK=128K")
-{
-    test_mkey_pack_mt(true);
-}
-
-UCS_TEST_P(test_ib_md, smkey_reg_atomic)
-{
-    test_smkey_reg_atomic();
-}
-
-UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
-           "IB_REG_MT_CHUNK=1k")
-{
-    test_smkey_reg_atomic();
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)
