@@ -10,14 +10,19 @@
 
 #include "vfs_sock.h"
 
+#include <ucs/config/global_opts.h>
+#include <ucs/debug/log_def.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
 #include <pwd.h>
+#include <libgen.h>
 
 
 typedef struct {
@@ -27,23 +32,26 @@ typedef struct {
 
 void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr)
 {
-    struct passwd *pw;
-    uid_t euid;
-
     memset(un_addr, 0, sizeof(*un_addr));
     un_addr->sun_family = AF_UNIX;
+    ucs_fill_filename_template(ucs_global_opts.vfs_sock_path, un_addr->sun_path,
+                               sizeof(un_addr->sun_path));
+}
 
-    euid = geteuid();
-    pw   = getpwuid(euid);
-    if (pw != NULL) {
-        /* By name */
-        snprintf(un_addr->sun_path, sizeof(un_addr->sun_path) - 1,
-                 "/tmp/ucx-vfs-%s.sock", pw->pw_name);
-    } else {
-        /* By number */
-        snprintf(un_addr->sun_path, sizeof(un_addr->sun_path) - 1,
-                 "/tmp/ucx-vfs-%u.sock", euid);
+int ucs_vfs_sock_mkdir(const char *sock_path, ucs_log_level_t log_level)
+{
+    char sock_path_dir[PATH_MAX];
+    int ret;
+
+    ucs_strncpy_safe(sock_path_dir, sock_path, sizeof(sock_path_dir));
+    ret = mkdir(dirname(sock_path_dir), S_IRWXU);
+    if ((ret < 0) && (errno != EEXIST)) {
+        ucs_log(log_level, "failed to create directory '%s': %m",
+                sock_path_dir);
+        return -errno;
     }
+
+    return 0;
 }
 
 int ucs_vfs_sock_setopt_passcred(int sockfd)

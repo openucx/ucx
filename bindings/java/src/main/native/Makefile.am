@@ -48,7 +48,7 @@ $(STAMP_FILE): \
 
 $(JUCX_GENERATED_H_FILES): $(STAMP_FILE)
 
-# Return CPU architecure in Java format
+# Return CPU architecture in Java format
 arch = $(if $(filter x86_64,$(shell uname -p)),amd64,$(shell uname -p))
 
 # Append non-x86_64 arch as filename suffix

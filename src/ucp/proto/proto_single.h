@@ -25,7 +25,7 @@ typedef struct {
 
 
 ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
-                                   ucp_proto_caps_t *caps,
+                                   ucp_proto_perf_t **perf_p,
                                    ucp_proto_single_priv_t *spriv);
 
 

@@ -340,11 +340,15 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "and the resulting performance.",
    ucs_offsetof(ucp_context_config_t, estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"RNDV_FRAG_MEM_TYPE", "host",
-   "Memory type of fragments used for RNDV pipeline protocol.\n"
-   "Allowed memory types is one of: host, cuda, rocm, ze-host, ze-device",
-   ucs_offsetof(ucp_context_config_t, rndv_frag_mem_type),
-   UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
+  {"RNDV_FRAG_MEM_TYPE", NULL, "",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_mem_types),
+   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+  {"RNDV_FRAG_MEM_TYPES", "host,cuda",
+   "Memory types of fragments used for RNDV pipeline protocol.\n"
+   "Allowed memory types are: host, cuda, rocm, ze-host, ze-device",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_mem_types),
+   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type",
@@ -353,6 +357,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"RNDV_PIPELINE_SHM_ENABLE", "y",
    "Use two stage pipeline rendezvous protocol for intra-node GPU to GPU transfers",
    ucs_offsetof(ucp_context_config_t, rndv_shm_ppln_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"RNDV_PIPELINE_ERROR_HANDLING", "n",
+   "Allow using error handling protocol in the rendezvous pipeline protocol\n"
+   "even if invalidation workflow isn't supported",
+   ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
@@ -509,6 +518,18 @@ static ucs_config_field_t ucp_context_config_table[] = {
          ucs_offsetof(ucp_context_config_t, proto_overhead_rkey_ptr)},
         {NULL}
   )},
+
+  {"GVA_ENABLE", "n",
+   "Enable Global VA infrastructure",
+   ucs_offsetof(ucp_context_config_t, gva_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"GVA_MLOCK", "y",
+   "Lock memory with mlock() when using global VA MR",
+   ucs_offsetof(ucp_context_config_t, gva_mlock), UCS_CONFIG_TYPE_BOOL},
+
+  {"GVA_PREFETCH", "y",
+   "Prefetch memory when using global VA MR",
+   ucs_offsetof(ucp_context_config_t, gva_prefetch), UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -1296,13 +1317,15 @@ const char *ucp_tl_bitmap_str(ucp_context_h context,
     return str;
 }
 
-
 static void ucp_free_resources(ucp_context_t *context)
 {
     ucp_rsc_index_t i;
 
     ucs_free(context->tl_rscs);
     for (i = 0; i < context->num_mds; ++i) {
+        if (context->tl_mds[i].gva_mr != NULL) {
+            uct_md_mem_dereg(context->tl_mds[i].md, context->tl_mds[i].gva_mr);
+        }
         uct_md_close(context->tl_mds[i].md);
     }
     ucs_free(context->tl_mds);
@@ -1594,6 +1617,11 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
                     if (md_attr->cache_mem_types & UCS_BIT(mem_type)) {
                         context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                     }
+
+                    if (context->config.ext.gva_enable &&
+                        (md_attr->gva_mem_types & UCS_BIT(mem_type))) {
+                        context->gva_md_map[mem_type] |= UCS_BIT(md_index);
+                    }
                 }
             }
 
@@ -1714,6 +1742,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         context->reg_md_map[mem_type]           = 0;
         context->reg_block_md_map[mem_type]     = 0;
         context->cache_md_map[mem_type]         = 0;
+        context->gva_md_map[mem_type]           = 0;
         context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].initialized = 0;
@@ -1779,7 +1808,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     /* Allocate actual array of MDs */
-    context->tl_mds = ucs_malloc(max_mds * sizeof(*context->tl_mds),
+    context->tl_mds = ucs_calloc(max_mds, sizeof(*context->tl_mds),
                                  "ucp_tl_mds");
     if (context->tl_mds == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -1818,8 +1847,11 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         }
 
         ucp_get_aliases_set(&avail_tls);
-        ucp_report_unavailable(&config->tls.array, tl_cfg_mask, "", "transport",
-                               &avail_tls);
+
+        if (config->tls.mode == UCS_CONFIG_ALLOW_LIST_ALLOW) {
+            ucp_report_unavailable(&config->tls.array, tl_cfg_mask, "", "transport",
+                                   &avail_tls);
+        }
     }
 
     /* Validate context resources */

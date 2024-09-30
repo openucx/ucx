@@ -36,6 +36,9 @@ struct ucs_async_context {
     ucs_async_mode_t  mode;          /* Event delivery mode */
     ucs_mpmc_queue_t  missed;        /* Miss queue */
     ucs_time_t        last_wakeup;   /* time of the last wakeup */
+#if UCS_ENABLE_ASSERT
+    pthread_t         owner;         /* Context owner */
+#endif
 };
 
 
@@ -118,6 +121,26 @@ static inline int ucs_async_is_blocked(const ucs_async_context_t *async)
     return async->poll_block > 0;
 }
 
+/**
+ * Returns whether thread ownership has changed
+ * @param async Event context to check for ownership.
+ *
+ * @return 1 only if ownership is unchanged
+ */
+static inline int ucs_async_check_owner_thread(ucs_async_context_t *async)
+{
+#if UCS_ENABLE_ASSERT
+    if (async->owner != pthread_self()) {
+        if (async->owner != UCS_ASYNC_PTHREAD_ID_NULL) {
+            return 0;
+        }
+
+        async->owner = pthread_self();
+    }
+#endif
+
+    return 1;
+}
 
 /**
  * Block the async handler (if its currently running, wait until it exits and

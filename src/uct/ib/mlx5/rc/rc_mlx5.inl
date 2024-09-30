@@ -1808,3 +1808,66 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
     }
     return UCS_OK;
 }
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_iface_update_tx_res(uct_rc_iface_t *rc_iface,
+                                uct_rc_mlx5_base_ep_t *rc_mlx5_base_ep,
+                                uint16_t hw_ci)
+{
+    uct_ib_mlx5_txwq_t *txwq = &rc_mlx5_base_ep->tx.wq;
+    uct_rc_txqp_t *txqp      = &rc_mlx5_base_ep->super.txqp;
+    uint16_t bb_num;
+
+    bb_num = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci) -
+             uct_rc_txqp_available(txqp);
+
+    /* Must always have positive number of released resources. The first
+     * completion will report bb_num=1 (because prev_sw_pi is initialized to -1)
+     * and all the rest report the amount of BBs the previous WQE has consumed.
+     */
+    ucs_assertv(bb_num > 0, "hw_ci=%d prev_sw_pi=%d available=%d bb_num=%d",
+                hw_ci, txwq->prev_sw_pi, txqp->available, bb_num);
+
+    uct_rc_txqp_available_add(txqp, bb_num);
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+
+    uct_rc_iface_update_reads(rc_iface);
+    uct_rc_iface_add_cq_credits(rc_iface, bb_num);
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
+{
+    struct mlx5_cqe64 *cqe;
+    uct_rc_mlx5_base_ep_t *ep;
+    unsigned qp_num;
+    uint16_t hw_ci;
+
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX],
+                              poll_flags, uct_ib_mlx5_check_completion);
+    if (cqe == NULL) {
+        return 0;
+    }
+
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_TX_COMPLETION, 1);
+
+    ucs_memory_cpu_load_fence();
+
+    qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
+                            uct_rc_mlx5_base_ep_t);
+    ucs_assert(ep != NULL);
+
+    hw_ci = ntohs(cqe->wqe_counter);
+    ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
+                   ep, qp_num, hw_ci);
+
+    uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
+    ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
+    uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
+    uct_rc_iface_arbiter_dispatch(&iface->super);
+    uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
+
+    return 1;
+}

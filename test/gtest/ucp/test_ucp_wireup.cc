@@ -295,7 +295,7 @@ void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
         ucp_request_param_t param = {};
         void *req = ucp_ep_flush_nbx(ep, &param);
         ASSERT_UCS_PTR_OK(req);
-        reqs.push_back(req);
+        request_wait(req);
 
         req = ucp_put_nb(ep, &m_send_data[0], sizeof(m_send_data[0]),
                          (uintptr_t)&m_recv_data[length], rkey,

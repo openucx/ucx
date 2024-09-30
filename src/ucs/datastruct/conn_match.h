@@ -74,7 +74,7 @@ typedef const void*
  *
  * @param [in] elem  Pointer to the connection matching element.
  *
- * @return Sequnce number of the given connection between the peers.
+ * @return Sequence number of the given connection between the peers.
  */
 typedef ucs_conn_sn_t
 (*ucs_conn_match_get_conn_sn_t)(const ucs_conn_match_elem_t *elem);

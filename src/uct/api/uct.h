@@ -343,7 +343,7 @@ typedef struct uct_tl_resource_desc {
  * uct_ep_atomic32_fetch and uct_ep_atomic64_fetch.
  *
  * This enumeration defines which atomic memory operation should be
- * performed by the uct_ep_atomic family of fuctions.
+ * performed by the uct_ep_atomic family of functions.
  */
 typedef enum uct_atomic_op {
     UCT_ATOMIC_OP_ADD,   /**< Atomic add  */
@@ -795,8 +795,8 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_FLAG_LOCK            = UCS_BIT(2),
 
     /**
-     * Hide errors on memory registration. In some cases registration failure
-     * is not an error (e. g. for merged memory regions).
+     * Hide errors on memory registration and allocation. If this flag is set,
+     * no error messages will be printed.
      */
     UCT_MD_MEM_FLAG_HIDE_ERRORS     = UCS_BIT(3),
 
@@ -834,6 +834,11 @@ enum uct_md_mem_flags {
      * interchangeably, avoiding the need to keep all of them in memory.
      */
     UCT_MD_MEM_SYMMETRIC_RKEY       = UCS_BIT(10),
+
+    /**
+     * Register global VA to access all process virtual address space.
+     */
+    UCT_MD_MEM_GVA                  = UCS_BIT(11),
 
     /**
      * Enable local and remote access for all operations.

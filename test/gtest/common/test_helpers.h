@@ -880,10 +880,31 @@ static inline O& operator<<(O& os, const size_value& sz)
 class auto_buffer {
 public:
     auto_buffer(size_t size);
-    ~auto_buffer();
-    void* operator*() const;
+    void* operator*();
+    template <typename T> T* as();
 private:
-    void *m_ptr;
+    std::vector<uint8_t> m_buf;
+};
+
+
+template <typename T>
+T* auto_buffer::as()
+{
+    return reinterpret_cast<T*>(m_buf.data());
+}
+
+
+template <typename T>
+class typed_auto_buffer : private auto_buffer {
+public:
+    typed_auto_buffer(size_t size) : auto_buffer(size)
+    {
+    }
+
+    T* operator*()
+    {
+        return as<T>();
+    }
 };
 
 
@@ -1033,9 +1054,11 @@ const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs();
  */
 void skip_on_address_sanitizer();
 
-
 /**
  * Class for mocking C function pointers
+ * The class is used to mock C function pointers, by replacing the original
+ * function pointer with a mock function pointer. The original function pointer
+ * is restored when the object is destroyed.
  */
 class mock {
 public:
@@ -1051,35 +1074,33 @@ public:
         m_mock_map.clear();
     }
 
-    template <typename Fn> void setup(Fn *orig_ptr, Fn mock)
+    template<typename Fn> void setup(Fn *orig_ptr, Fn mock)
     {
-        func *ptr    = reinterpret_cast<func*>(orig_ptr);
-        func mock_fn = reinterpret_cast<func>(mock);
-        auto it      = m_mock_map.find(ptr);
+        func *ptr = reinterpret_cast<func*>(orig_ptr);
+        auto it   = m_mock_map.find(ptr);
         if (it == m_mock_map.end()) {
-            mock_func *new_mock = new mock_func(ptr, mock_fn);
-            m_mock_map[ptr]     = std::unique_ptr<mock_func>(new_mock);
+            m_mock_map[ptr] = std::unique_ptr<mock_func>(
+                                                new mock_func(ptr, (func)mock));
         } else {
-            it->second->m_mock = mock_fn;
+            *orig_ptr = mock;
         }
     }
 
-    template <typename Fn, typename... Args>
-    ucs_status_t actual_call(Fn *orig_ptr, Args&&... args) const
+    template<typename Fn, typename... Args>
+    ucs_status_t orig_func(Fn *orig_ptr, Args &&...args) const
     {
-        auto it      = m_mock_map.find(reinterpret_cast<func*>(orig_ptr));
-        Fn orig_func = (it == m_mock_map.end()) ?
-                                *orig_ptr :
-                                reinterpret_cast<Fn>(it->second->m_orig);
-        return orig_func(std::forward<Args>(args)...);
+        auto it    = m_mock_map.find((func*)orig_ptr);
+        Fn orig_fn = (it == m_mock_map.end()) ? *orig_ptr :
+                                                (Fn)it->second->m_orig;
+        return orig_fn(std::forward<Args>(args)...);
     }
 
 private:
     struct mock_func {
         mock_func(func *orig_ptr, func mock) :
-            m_orig_ptr(orig_ptr), m_orig(*orig_ptr), m_mock(mock)
+            m_orig_ptr(orig_ptr), m_orig(*orig_ptr)
         {
-            *m_orig_ptr = m_mock;
+            *m_orig_ptr = mock;
         }
 
         ~mock_func()
@@ -1091,17 +1112,16 @@ private:
         }
 
         /* Non-copyable, non-moveable */
-        mock_func(const mock_func &) = delete;
-        mock_func(mock_func &&)      = delete;
-        mock_func & operator=(const mock_func &) = delete;
-        mock_func & operator=(mock_func &&)      = delete;
+        mock_func(const mock_func&) = delete;
+        mock_func(mock_func&&) = delete;
+        mock_func &operator=(const mock_func&) = delete;
+        mock_func &operator=(mock_func&&) = delete;
 
         func *m_orig_ptr;
         func m_orig;
-        func m_mock;
     };
 
-    std::unordered_map<func *, std::unique_ptr<mock_func>> m_mock_map;
+    std::unordered_map<func*, std::unique_ptr<mock_func>> m_mock_map;
 };
 
 } // ucs

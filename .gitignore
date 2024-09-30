@@ -108,6 +108,7 @@ test/apps/test_tcmalloc
 test/apps/profiling/ucx_profiling
 test/apps/uct_info/uct_info
 test/apps/uct_info/uct_info_static
+test/apps/uct_info/ucp_hello_world_static
 cmake/*.cmake
 *.gcno
 *.gcda

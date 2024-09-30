@@ -113,6 +113,8 @@ enum {
     UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
                                                         indirect endpoint id instead of pointer,
                                                         can be replaced with looking at local ID */
+    UCP_EP_FLAG_USER_DATA_PARAM        = UCS_BIT(15),/* EP's user_data was passed via
+                                                        @ref ucp_ep_params_t::user_data */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
@@ -695,9 +697,6 @@ ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode);
 
-ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
-                                       ucp_wireup_ep_t **wireup_ep);
-
 ucs_status_t
 ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                              const ucp_tl_bitmap_t *local_tl_bitmap,
@@ -907,7 +906,7 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
  * 
  * Changing of the configuration index deactivates UCP worker interfaces
  * corresponding to the previous endpoint configuration and activates interfaces
- * of the new configurtion.
+ * of the new configuration.
  *
  * @param [in] ep         Endpoint object.
  * @param [in] cfg_index  Endpoint configuration index.

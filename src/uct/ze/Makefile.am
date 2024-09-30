@@ -9,7 +9,7 @@ SUBDIRS = .
 
 module_LTLIBRARIES    = libuct_ze.la
 libuct_ze_la_CPPFLAGS = $(BASE_CPPFLAGS) $(ZE_CPPFLAGS)
-libuct_ze_la_CFLAGS   = $(BASE_CFLAGS)
+libuct_ze_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_ze_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la
 libuct_ze_la_LDFLAGS  = $(ZE_LDFLAGS) $(ZE_LIBS) -version-info $(SOVERSION) \

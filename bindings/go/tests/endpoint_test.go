@@ -112,7 +112,7 @@ func TestUcpEpTag(t *testing.T) {
 		receiver := prepareContext(t, nil)
 		t.Logf("Testing tag %v -> %v", memType.senderMemType, memType.recvMemType)
 
-		ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_SINGLE)
+		ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
 		ucpWorkerParams.WakeupTagSend().WakeupTagRecv()
 
 		receiver.worker, _ = receiver.context.NewWorker(ucpWorkerParams)
@@ -196,7 +196,7 @@ func TestUcpEpAm(t *testing.T) {
 		// t.Fatalf can't be called from non main thread need to pass an error
 		threadErr := make(chan error)
 
-		// Test eager handler with data persistance
+		// Test eager handler with data persistence
 		receiver.worker.SetAmRecvHandler(1, UCP_AM_FLAG_WHOLE_MSG|UCP_AM_FLAG_PERSISTENT_DATA, func(header unsafe.Pointer, headerSize uint64,
 			data *UcpAmData, replyEp *UcpEp) UcsStatus {
 			if !data.IsDataValid() {

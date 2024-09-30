@@ -30,8 +30,6 @@
 /* width of titles in docstring */
 #define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
-/* String literal for allow-list */
-#define UCS_CONFIG_PARSER_ALL "all"
 
 /* list of prefixes for a configuration variable, used to dump all possible
  * aliases.
@@ -445,7 +443,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
     }
 
     ret = 1;
-    *((unsigned*)dest) = 0;
+    *((uint64_t*)dest) = 0;
     p = strtok_r(str, ",", &saveptr);
     while (p != NULL) {
         i = ucs_string_find_in_list(p, (const char**)arg, 0);
@@ -453,7 +451,10 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
             ret = 0;
             break;
         }
-        *((unsigned*)dest) |= UCS_BIT(i);
+
+        ucs_assertv(i < (sizeof(uint64_t) * 8), "bit %d overflows for '%s'", i,
+                    p);
+        *((uint64_t*)dest) |= UCS_BIT(i);
         p = strtok_r(NULL, ",", &saveptr);
     }
 
@@ -464,7 +465,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_bitmap(char *buf, size_t max,
                               const void *src, const void *arg)
 {
-    ucs_flags_str(buf, max, *((unsigned*)src), (const char**)arg);
+    ucs_flags_str(buf, max, *((uint64_t*)src), (const char**)arg);
     return 1;
 }
 
@@ -1544,7 +1545,7 @@ static int ucs_config_parse_check_filter(const char *name, const char *value)
             /**
              * The value does not match the pattern for this filter. E.g.
              * configuration file contains the line: CPU model = v1.*, and
-             * ucs_cpu_model_name() retruns "v2.0".
+             * ucs_cpu_model_name() returns "v2.0".
              */
             return 1;
         }

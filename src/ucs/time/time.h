@@ -11,6 +11,7 @@
 #include <ucs/time/time_def.h>
 #include <sys/time.h>
 #include <limits.h>
+#include <math.h>
 
 BEGIN_C_DECLS
 

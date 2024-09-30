@@ -97,7 +97,7 @@ func (w *UcpWorker) Query(attrs ...UcpWorkerAttribute) (*UcpWorkerAttributes, er
 // is over, as part of the wake-up mechanism.
 //
 // The worker must be armed before waiting on an event (must be re-armed after
-// it has been signaled for re-use) with UcpWorker.Arm().
+// it has been signaled for reuse) with UcpWorker.Arm().
 // The events triggering a signal of the file descriptor from
 // UcpWorker.GetEfd() depend on the interfaces used by the worker and
 // defined in the transport layer, and typically represent a request completion

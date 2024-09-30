@@ -39,7 +39,7 @@ public:
         enable_tag_mp_offload();
 
         if (RUNNING_ON_VALGRIND) {
-            // Alow using TM MP offload for messages with a size of at least
+            // Allow using TM MP offload for messages with a size of at least
             // 10000 bytes by setting HW TM segment size to 10 kB, since each
             // packet in TM MP offload is MTU-size buffer (i.e., in most cases
             // it is 4 kB segments)

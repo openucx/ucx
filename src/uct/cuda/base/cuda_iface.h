@@ -60,6 +60,10 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
+#define UCT_CUDADRV_FUNC_LOG_WARN(_func) \
+    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_WARN)
+
+
 #define UCT_CUDADRV_FUNC_LOG_DEBUG(_func) \
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
 
@@ -72,10 +76,22 @@ static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_active()
 }
 
 
+static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_valid(CUcontext ctx)
+{
+    unsigned version;
+    ucs_status_t status;
+
+    /* Check if CUDA context is valid by running a dummy operation on it */
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetApiVersion(ctx, &version));
+    return (status == UCS_OK);
+}
+
+
 static UCS_F_ALWAYS_INLINE int uct_cuda_base_context_match(CUcontext ctx1,
                                                            CUcontext ctx2)
 {
-    return ((ctx1 != NULL) && (ctx1 == ctx2));
+    return ((ctx1 != NULL) && (ctx1 == ctx2) &&
+            uct_cuda_base_is_context_valid(ctx1));
 }
 
 

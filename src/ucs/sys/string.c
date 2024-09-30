@@ -48,45 +48,39 @@ void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max)
         length = ucs_min(pp - pf, end - p);
         strncpy(p, pf, length);
         p += length;
+        /* default length of the modifier (e.g. %p) */
+        length = 2;
 
         switch (*(pp + 1)) {
         case 'p':
             snprintf(p, end - p, "%d", getpid());
-            pf = pp + 2;
-            p += strlen(p);
             break;
         case 'h':
             snprintf(p, end - p, "%s", ucs_get_host_name());
-            pf = pp + 2;
-            p += strlen(p);
             break;
         case 'c':
             snprintf(p, end - p, "%02d", ucs_get_first_cpu());
-            pf = pp + 2;
-            p += strlen(p);
             break;
         case 't':
             t = time(NULL);
             strftime(p, end - p, "%Y-%m-%d-%H-%M-%S", localtime(&t));
-            pf = pp + 2;
-            p += strlen(p);
             break;
         case 'u':
             snprintf(p, end - p, "%s", ucs_basename(ucs_get_user_name()));
-            pf = pp + 2;
-            p += strlen(p);
             break;
         case 'e':
             snprintf(p, end - p, "%s", ucs_basename(ucs_get_exe()));
-            pf = pp + 2;
-            p += strlen(p);
+            break;
+        case 'i':
+            snprintf(p, end - p, "%u", geteuid());
             break;
         default:
             *(p++) = *pp;
-            pf = pp + 1;
+            length = 1;
             break;
         }
 
+        pf = pp + length;
         p += strlen(p);
     }
     *p = 0;
@@ -456,4 +450,17 @@ char* ucs_string_split(char *str, const char *delim, int count, ...)
     va_end(ap);
 
     return p;
+}
+
+ucs_status_t ucs_string_alloc_path_buffer(char **buffer_p, const char *name)
+{
+    char *temp_buffer = ucs_malloc(PATH_MAX, name);
+
+    if (temp_buffer == NULL) {
+        ucs_error("failed to allocate memory for %s", name);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *buffer_p = temp_buffer;
+    return UCS_OK;
 }

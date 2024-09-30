@@ -204,6 +204,9 @@ struct uct_ib_iface_config {
     /* Length of subnet prefix for reachability check */
     unsigned long           rocev2_subnet_pfx_len;
 
+    /* List of included/excluded subnets to filter RoCE GID entries by */
+    ucs_config_allow_list_t rocev2_subnet_filter;
+
     /* Multiplier for RoCE LAG UDP source port calculation */
     unsigned                roce_path_factor;
 
@@ -342,6 +345,7 @@ struct uct_ib_iface {
         enum ibv_mtu                 path_mtu;
         uint8_t                      counter_set_id;
         uct_ib_iface_send_overhead_t send_overhead;
+        ucs_ternary_auto_value_t     dp_ordering_ooo; /* Activate RW OOO */
     } config;
 
     uct_ib_iface_ops_t        *ops;
@@ -543,9 +547,12 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface);
  *
  * @param iface                 IB interface
  * @param md_config_index       Gid index from the md configuration.
+ * @param subnets_list          Subnets list to filter GIDs by.
  */
-ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             unsigned long cfg_gid_index);
+ucs_status_t
+uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
+                                unsigned long cfg_gid_index,
+                                const ucs_config_allow_list_t *subnets_list);
 
 
 static inline uct_ib_md_t* uct_ib_iface_md(uct_ib_iface_t *iface)

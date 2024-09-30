@@ -53,6 +53,48 @@ protected:
             EXPECT_EQ(exp_str, test_str);
         }
     }
+
+    void verify_subnet_match(const char *ip_addr1,
+                             const char *ip_addr2,
+                             unsigned longest_common_prefix) const
+    {
+        struct sockaddr_storage saddr1, saddr2;
+        int matched;
+
+        ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr(ip_addr1, &saddr1));
+        ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr(ip_addr2, &saddr2));
+
+        size_t addr_size;
+        ASSERT_UCS_OK(ucs_sockaddr_inet_addr_sizeof((struct sockaddr *)&saddr1,
+                                                    &addr_size));
+        size_t addr_size_bits = addr_size * CHAR_BIT;
+
+        /* Add extra iterations to check prefix truncation */
+        constexpr size_t extra_iters = 10;
+
+        for (size_t prefix = 0; prefix <= addr_size_bits + extra_iters; ++prefix) {
+            matched = ucs_sockaddr_is_same_subnet((struct sockaddr*)&saddr1,
+                                                  (struct sockaddr*)&saddr2,
+                                                  prefix);
+            EXPECT_EQ(std::min(prefix, addr_size_bits) <= longest_common_prefix,
+                      matched)
+                    << "failed to match subnet: ip1=" << ip_addr1
+                    << " ip2=" << ip_addr2 << " prefix=" << prefix
+                    << " max_common=" << longest_common_prefix
+                    << " (matched=" << matched << ")";
+        }
+    }
+
+    void verify_subnet_error(sa_family_t af1, sa_family_t af2, unsigned prefix) const
+    {
+        struct sockaddr_storage storage1 = {0}, storage2 = {0};
+        struct sockaddr *sa1             = (struct sockaddr *)&storage1;
+        struct sockaddr *sa2             = (struct sockaddr *)&storage2;
+
+        sa1->sa_family = af1;
+        sa2->sa_family = af2;
+        EXPECT_FALSE(ucs_sockaddr_is_same_subnet(sa1, sa2, prefix));
+    }
 };
 
 UCS_TEST_F(test_socket, sockaddr_sizeof) {
@@ -672,6 +714,44 @@ UCS_TEST_F(test_socket, sockaddr_cmp_err) {
 
     sockaddr_cmp_err_test((const struct sockaddr*)&sa_un,
                           (const struct sockaddr*)&sa_in);
+}
+
+UCS_TEST_F(test_socket, subnet_match) {
+    /* IPv4 non byte-aligned */
+    verify_subnet_match("192.168.122.28", "192.168.122.13", 27);
+    verify_subnet_match("192.168.3.28", "192.168.7.13", 21);
+    verify_subnet_match("192.45.3.28", "192.14.7.13", 10);
+
+    /* IPv4 byte-aligned */
+    verify_subnet_match("192.168.173.157", "10.33.44.100", 0);
+    verify_subnet_match("192.168.173.157", "192.33.44.100", 8);
+    verify_subnet_match("192.168.173.157", "192.168.44.100", 16);
+    verify_subnet_match("192.168.173.157", "192.168.173.100", 24);
+    verify_subnet_match("192.168.173.157", "192.168.173.157", 32);
+
+    /* IPv6 non byte-aligned */
+    verify_subnet_match("fe80::218:e7ff:fe16:fb97", "fe80::219:e7ff:fe16:fb97",
+                        79);
+    verify_subnet_match("fe80::218:e7ff:fef8:fb97", "fe80::218:e7ff:feff:fb97",
+                        109);
+
+    /* IPv6 byte-aligned */
+    verify_subnet_match("fe80::218:e7ff:fe16:fb97", "fe80::218:e77f:fe16:fb97",
+                        88);
+    verify_subnet_match("fe80::218:e7ff:fe16:fb97", "fe80::218:e7ff:fe16:fb97",
+                        128);
+}
+
+UCS_TEST_F(test_socket, subnet_match_failure) {
+    scoped_log_handler log_handler(socket_error_handler);
+
+    /* Unknown address family */
+    socket_err_exp_str = "unknown address family: ";
+    verify_subnet_error(AF_UNIX, AF_INET, 10);
+    verify_subnet_error(AF_INET, AF_UNIX, 10);
+
+    /* Different address families */
+    verify_subnet_error(AF_INET, AF_INET6, 10);
 }
 
 static void sockaddr_get_ipstr_check(const struct sockaddr *sockaddr,

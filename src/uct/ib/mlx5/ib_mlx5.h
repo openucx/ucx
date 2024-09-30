@@ -78,10 +78,10 @@
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC 0x0
 #endif
 
-#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_NC
-#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC MLX5DV_UAR_ALLOC_TYPE_NC
+#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED
 #else
-#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC 0x1
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC (1U << 31)
 #endif
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
@@ -197,9 +197,21 @@ enum {
     UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(15),
     /* Device supports XGVMI UMR workflow */
     UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(16),
+    /* Device supports UAR WC allocation type */
+    UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
+    /* Device supports implicit ODP with PCI relaxed order */
+    UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(18),
+    /* RoCE supports out-of-order RDMA for RC */
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC = UCS_BIT(19),
+    /* RoCE supports out-of-order RDMA for DC */
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC = UCS_BIT(20),
+    /* RoCE supports forcing ordering configuration */
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(21),
+    /* Device supports DDP (OOO data placement)*/
+    UCT_IB_MLX5_MD_FLAG_DDP                   = UCS_BIT(22),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 17,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 23,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -440,6 +452,7 @@ typedef struct uct_ib_mlx5_dbrec {
 typedef enum {
     UCT_IB_MLX5_OBJ_TYPE_VERBS,
     UCT_IB_MLX5_OBJ_TYPE_DEVX,
+    UCT_IB_MLX5_OBJ_TYPE_NULL,
     UCT_IB_MLX5_OBJ_TYPE_LAST
 } uct_ib_mlx5_obj_type_t;
 
@@ -857,6 +870,8 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
                              uct_ib_mlx5_md_t *md,
                              uct_ib_mlx5_mmio_mode_t mmio_mode);
 
+ucs_status_t uct_ib_mlx5_devx_check_uar(uct_ib_mlx5_md_t *md);
+
 ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_md_t *md,
                                        uct_ib_mlx5_mmio_mode_t mmio_mode);
@@ -907,17 +922,49 @@ uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
                             size_t inlen, void *out, size_t outlen,
                             char *msg_arg, ucs_log_level_t log_level);
 
-ucs_status_t
-uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg);
+static inline ucs_status_t
+uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg)
+{
+    int ret;
 
-ucs_status_t uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
-                                          const void *in, size_t inlen,
-                                          void *out, size_t outlen,
-                                          char *msg_arg, int silent);
+    ret = mlx5dv_devx_obj_destroy(obj);
+    if (ret != 0) {
+        ucs_warn("mlx5dv_devx_obj_destroy(%s) failed: %m", msg_arg);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static inline ucs_status_t
+uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
+                             const void *in, size_t inlen,
+                             void *out, size_t outlen,
+                             char *msg_arg, int silent)
+{
+    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    int ret;
+    unsigned syndrome;
+
+    ret = mlx5dv_devx_general_cmd(context, in, inlen, out, outlen);
+    if (ret != 0) {
+        syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        ucs_log(level,
+                "mlx5dv_devx_general_cmd(%s) failed on %s, syndrome 0x%x: %m",
+                msg_arg, ibv_get_device_name(context->device), syndrome);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p);
+
+void uct_ib_mlx5_devx_set_qpc_dp_ordering(
+        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo);
 
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,

@@ -501,6 +501,7 @@ static void print_md_info(uct_component_h component,
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, cache);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, detect);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, dmabuf);
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, gva);
             ucs_string_buffer_rtrim(&strb, ",");
 
             ucs_string_buffer_appendf(&strb, "), ");

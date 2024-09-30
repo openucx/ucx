@@ -54,6 +54,11 @@ void ucs_expand_path(const char *path, char *fullpath, size_t max);
  * Fill a filename template. The following values in the string are replaced:
  *  %p - replaced by process id
  *  %h - replaced by host name
+ *  %c - replaced by the first CPU we are bound to
+ *  %t - replaced by local time
+ *  %u - replaced by user name
+ *  %e - replaced by executable basename
+ *  %i - replaced by user id
  *
  * @param tmpl   File name template (possibly containing formatting sequences)
  * @param buf    Filled with resulting file name
@@ -353,6 +358,15 @@ static inline int ucs_string_is_empty(const char *str)
 {
     return *str == '\0';
 }
+
+/**
+ * Allocates a path buffer of size PATH_MAX.
+ *
+ * @param buffer_p Pointer to the buffer.
+ * @param name     Name of the buffer for logging.
+ * @return         UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ */
+ucs_status_t ucs_string_alloc_path_buffer(char **buffer_p, const char *name);
 
 END_C_DECLS
 

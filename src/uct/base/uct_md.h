@@ -238,8 +238,6 @@ ucs_status_t uct_md_dummy_mem_reg(uct_md_h md, void *address, size_t length,
 ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
                                     const uct_md_mem_dereg_params_t *params);
 
-double uct_md_rcache_overhead(const ucs_rcache_config_t *rcache_config);
-
 extern ucs_config_field_t uct_md_config_table[];
 
 static inline ucs_log_level_t uct_md_reg_log_lvl(uint64_t flags)

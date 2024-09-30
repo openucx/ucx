@@ -122,9 +122,9 @@ private:
     {
         mock_component *self = mock_component_test::find(md->component);
         uct_tl_t *tl         = self->find_tl(params);
-        ucs_status_t status  = self->m_mock.actual_call(&tl->iface_open, md,
-                                                        worker, params, config,
-                                                        iface_p);
+        ucs_status_t status  = self->m_mock.orig_func(&tl->iface_open, md,
+                                                      worker, params, config,
+                                                      iface_p);
         if (status != UCS_OK) {
             return status;
         }
@@ -144,7 +144,7 @@ private:
     {
         uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
         mock_component *self   = mock_component_test::find(base->md->component);
-        ucs_status_t status    = self->m_mock.actual_call(
+        ucs_status_t status    = self->m_mock.orig_func(
                                     &base->internal_ops->iface_estimate_perf,
                                     iface, perf_attr);
         if (status != UCS_OK) {
@@ -164,7 +164,7 @@ private:
     {
         uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
         mock_component *self   = mock_component_test::find(base->md->component);
-        ucs_status_t status    = self->m_mock.actual_call(
+        ucs_status_t status    = self->m_mock.orig_func(
                                     &iface->ops.iface_query, iface, iface_attr);
         if (status != UCS_OK) {
             return status;
@@ -394,12 +394,10 @@ UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr, "NET_DEVICES=mlx5_0:1")
 
     check_ep_config(sender(), {
         {"0",          "200",    "short",                "rc_mlx5/mlx5_0:1"},
-        {"201",        "257",    "copy-in",              "rc_mlx5/mlx5_0:1"},
-        {"258",        "8246",   "zero-copy",            "rc_mlx5/mlx5_0:1"},
-        {"8247",       "288939", "multi-frag zero-copy", "rc_mlx5/mlx5_0:1"},
-        {"288940",     "1G",     "rendezvous zero-copy read from remote",
-                                                         "rc_mlx5/mlx5_0:1"},
-        {"1073741825", "inf",    "rendezvous zero-copy fenced write to remote",
+        {"201",        "404",    "copy-in",              "rc_mlx5/mlx5_0:1"},
+        {"405",        "8246",   "zero-copy",            "rc_mlx5/mlx5_0:1"},
+        {"8247",       "452179", "multi-frag zero-copy", "rc_mlx5/mlx5_0:1"},
+        {"452180",     "inf",    "rendezvous zero-copy read from remote",
                                                          "rc_mlx5/mlx5_0:1"},
     }, key);
 }

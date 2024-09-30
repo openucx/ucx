@@ -475,6 +475,13 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
 #define UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ 8
 
 
+ucs_status_t
+uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
+                                 uint64_t tl_flag,
+                                 uct_rc_mlx5_iface_common_config_t *config,
+                                 const char *tl_name);
+
+
 #if IBV_HW_TM
 void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
                                    struct ibv_tmh *tmh, uct_tag_t tag,
@@ -513,7 +520,7 @@ uct_rc_mlx5_fill_tmh_priv_data(struct ibv_tmh *tmh, const void *hdr,
 {
     uct_rc_mlx5_tmh_priv_data_t *priv = (uct_rc_mlx5_tmh_priv_data_t*)tmh->reserved;
 
-    /* If header length is bigger tha max_rndv_priv_data size, need to add the
+    /* If header length is bigger than max_rndv_priv_data size, need to add the
      * rest to the TMH reserved field. */
     if (hdr_len > max_rndv_priv_data) {
         priv->length = hdr_len - max_rndv_priv_data;

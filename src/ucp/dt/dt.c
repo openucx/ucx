@@ -15,7 +15,7 @@
 
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.h>
-#include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_mm.inl>
 #include <ucs/profile/profile.h>
 
 
@@ -31,7 +31,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
                       ucp_worker_h worker, void *buffer, const void *recv_data,
                       size_t recv_length, ucs_memory_type_t mem_type)
 {
-    ucp_ep_h ep         = worker->mem_type_ep[mem_type];
+    ucp_ep_h ep = worker->mem_type_ep[mem_type];
     ucp_lane_index_t lane;
     unsigned md_index;
     ucp_mem_h memh;
@@ -42,11 +42,12 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
         return;
     }
 
+    memh     = ucs_alloca(ucp_memh_size(worker->context));
     lane     = ucp_ep_config(ep)->key.rma_lanes[0];
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, buffer, recv_length, mem_type,
-                                      md_index, &memh, &rkey_bundle);
+                                      md_index, memh, &rkey_bundle);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);
@@ -67,7 +68,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
                       ucp_worker_h worker, void *dest, const void *src,
                       size_t length, ucs_memory_type_t mem_type)
 {
-    ucp_ep_h ep         = worker->mem_type_ep[mem_type];
+    ucp_ep_h ep = worker->mem_type_ep[mem_type];
     ucp_lane_index_t lane;
     ucp_md_index_t md_index;
     ucs_status_t status;
@@ -78,11 +79,12 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
         return;
     }
 
+    memh     = ucs_alloca(ucp_memh_size(worker->context));
     lane     = ucp_ep_config(ep)->key.rma_lanes[0];
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,
-                                      md_index, &memh, &rkey_bundle);
+                                      md_index, memh, &rkey_bundle);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);

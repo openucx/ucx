@@ -1,0 +1,3 @@
+[codespell]
+skip = ./test/gtest/common,./src/ucs/datastruct/sglib.h,./docs/doxygen/Architecture*,./docs/doxygen/header.tex.in,./src/ucm/ptmalloc286,./config/m4/ax_prog_doxygen.m4,./VENV/*
+ignore-words-list = hsa,inout,scoll,warmup,pullrequest,shft

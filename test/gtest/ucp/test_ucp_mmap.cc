@@ -18,6 +18,7 @@ extern "C" {
 }
 
 #include <cmath>
+#include <list>
 
 class test_ucp_mmap : public ucp_test {
 public:
@@ -103,6 +104,11 @@ public:
         ucs::skip_on_address_sanitizer();
         if (get_variant_value() == VARIANT_PROTO_DISABLE) {
             modify_config("PROTO_ENABLE", "n");
+        }
+
+        if (get_variant_value() == VARIANT_MAP_NONBLOCK) {
+            // ODPv1 cannot interact with DEVX objects
+            modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
         }
 
         if (get_variant_value() == VARIANT_NO_RCACHE) {
@@ -420,6 +426,9 @@ void test_ucp_mmap::check_distance_precision(double rkey_value,
     } else if (rkey_value == pack_max) {
         /* Capped by pack_max, no cache entry */
         EXPECT_GE(std::lround(topo_value), pack_max);
+    } else if (topo_value == INFINITY) {
+        /* Infinity values can be packed without loss */
+        EXPECT_EQ(topo_value, rkey_value);
     } else {
         /* Inside the borders or cache entry */
         EXPECT_NEAR(rkey_value, topo_value, topo_value * allowed_diff_ratio);
@@ -525,9 +534,9 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             ASSERT_UCS_OK(status);
 
             is_dummy           = (size == 0);
-            expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(mem_type) &&
-                                 (is_tl_rdma() || is_tl_shm()) &&
+            expect_rma_offload = (is_tl_rdma() || is_tl_shm()) &&
                                  check_reg_mem_types(sender(), mem_type);
+
             test_rkey_management(memh, is_dummy, expect_rma_offload);
 
             status = ucp_mem_unmap(sender().ucph(), memh);
@@ -546,7 +555,11 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         size_t size    = ucs::rand() % UCS_MBYTE;
-        alloc_mem_type = mem_types.at(ucs::rand() % mem_types.size());
+        auto flags     = mem_map_flags();
+        /* Test ODP registration with host buffer only */
+        alloc_mem_type = (flags & VARIANT_MAP_NONBLOCK) ?
+                UCS_MEMORY_TYPE_HOST :
+                mem_types.at(ucs::rand() % mem_types.size());
         mem_buffer buf(size, alloc_mem_type);
         mem_buffer::pattern_fill(buf.ptr(), size, 0, alloc_mem_type);
 
@@ -560,7 +573,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
         params.address     = buf.ptr();
         params.length      = size;
         params.memory_type = alloc_mem_type;
-        params.flags       = mem_map_flags();
+        params.flags       = flags;
 
         status = ucp_mem_map(sender().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
@@ -570,8 +583,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
             EXPECT_EQ(alloc_mem_type, memh->mem_type);
         }
 
-        expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
-                             !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type) &&
+        expect_rma_offload = !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type) &&
                              is_tl_rdma() &&
                              check_reg_mem_types(sender(), alloc_mem_type);
         test_rkey_management(memh, is_dummy, expect_rma_offload);
@@ -907,7 +919,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
     /* Make sure eps are connected, because UCX async thread may add some
      * progress callbacks to worker callback queue
      * (e.g. ucp_worker_iface_check_events_progress) and mmap some memory
-     * for it (see ucs_callbackq_array_grow->ucs_sys_realloc). This mmaped
+     * for it (see ucs_callbackq_array_grow->ucs_sys_realloc). This mapped
      * address may conflict with the one used in this test, because
      * ucs::mmap_fixed_address() does mmap/munmap to obtain a pointer for
      * ucp_mem_map() with UCP_MEM_MAP_FIXED which creates a race with async
@@ -942,6 +954,77 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         ASSERT_UCS_OK(status);
     }
 }
+
+UCS_TEST_P(test_ucp_mmap, gva_allocate, "GVA_ENABLE=y")
+{
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        ucp_md_map_t md_map = sender().ucph()->gva_md_map[mem_type];
+        if (md_map == 0) {
+            continue;
+        }
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+        params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                             UCP_MEM_MAP_PARAM_FIELD_FLAGS |
+                             UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+        params.address     = NULL;
+        params.memory_type = mem_type;
+        params.length      = 1 * UCS_MBYTE;
+        params.flags       = UCP_MEM_MAP_ALLOCATE;
+
+        ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
+        EXPECT_TRUE(ucs_test_all_flags(memh->md_map, md_map));
+        ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+    }
+}
+
+UCS_TEST_P(test_ucp_mmap, gva, "GVA_ENABLE=y")
+{
+    std::list<void*> bufs;
+    ucp_mem_h first     = NULL;
+    ucp_md_map_t md_map = 0;
+
+    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
+        size_t size  = (i + 1) * ((i % 2) ? 1000 : 1);
+        void *buffer = ucs_malloc(size, "gva");
+        bufs.push_back(buffer);
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = buffer;
+        params.length     = size;
+
+        ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
+
+        if (i == 0) {
+            first  = memh;
+            md_map = memh->md_map & sender().ucph()->gva_md_map[memh->mem_type];
+            if (md_map == 0) {
+                UCS_TEST_MESSAGE << "no GVA";
+                break;
+            }
+        } else {
+            ucp_md_index_t md_index;
+
+            ucs_for_each_bit(md_index, md_map) {
+                EXPECT_EQ(memh->uct[md_index], first->uct[md_index]);
+            }
+
+            ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+        }
+    }
+
+    ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), first));
+    for (auto *buffer : bufs) {
+        ucs_free(buffer);
+    }
+}
+
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap)
 

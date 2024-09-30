@@ -859,7 +859,8 @@ public:
         }
 
         for (const auto &file : sysfs_files) {
-            if (file.find("slave_") != std::string::npos) {
+            if ((file.find("slave_") != std::string::npos) ||
+                (file.find("lower_") != std::string::npos)) {
                 dev_path += "/" + file;
                 break;
             }

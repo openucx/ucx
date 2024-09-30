@@ -94,8 +94,10 @@ static ucs_stats_class_t ucp_worker_stats_class = {
         [UCP_WORKER_STAT_RNDV_RX_EXP]              = "rndv_rx_exp",
         [UCP_WORKER_STAT_RNDV_RX_UNEXP]            = "rndv_rx_unexp",
         [UCP_WORKER_STAT_RNDV_PUT_ZCOPY]           = "rndv_put_zcopy",
+        [UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY]     = "rndv_put_mtype_zcopy",
         [UCP_WORKER_STAT_RNDV_GET_ZCOPY]           = "rndv_get_zcopy",
         [UCP_WORKER_STAT_RNDV_RTR]                 = "rndv_rtr",
+        [UCP_WORKER_STAT_RNDV_RTR_MTYPE]           = "rndv_rtr_mtype",
         [UCP_WORKER_STAT_RNDV_RKEY_PTR]            = "rndv_rkey_ptr"
     }
 };
@@ -576,7 +578,7 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 {
     ucp_worker_h worker = wiface->worker;
 
-    ucs_trace("activate " UCP_WIFACE_FMT " acount=%u aifaces=%u",
+    ucs_trace("activate " UCP_WIFACE_FMT " a_count=%u a_ifaces=%u",
               UCP_WIFACE_ARG(wiface), wiface->activate_count,
               worker->num_active_ifaces);
 
@@ -730,7 +732,7 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
 {
     ucp_worker_h worker = wiface->worker;
 
-    ucs_trace("deactivate " UCP_WIFACE_FMT " force=%d acount=%u aifaces=%u",
+    ucs_trace("deactivate " UCP_WIFACE_FMT " force=%d a_count=%u a_ifaces=%u",
               UCP_WIFACE_ARG(wiface), force, wiface->activate_count,
               worker->num_active_ifaces);
 
@@ -2099,6 +2101,8 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     ep_config      = ucs_array_append_safe(&worker->ep_config, &old_ep_cfg_buf,
                                            return UCS_ERR_NO_MEMORY);
     if (old_ep_cfg_buf != NULL) {
+        memcpy(worker->ep_config.buffer, old_ep_cfg_buf,
+               sizeof(ucp_ep_config_t) * ucs_array_length(&worker->ep_config));
         /* Schedule release of old ep configs array backing buffer on the main
          * thread (this func can be called by async thread).
          * So the main thread can still access the old configuration buffer
@@ -3131,7 +3135,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
 
     if (worker->keepalive.timerfd >= 0) {
         /* Do read() of 8-byte unsigned integer containing the number of
-         * expirations that have occured to make sure no events will be
+         * expirations that have occurred to make sure no events will be
          * triggered again until timer isn't expired again.
          */
         status = ucp_worker_fd_read(worker, worker->keepalive.timerfd,

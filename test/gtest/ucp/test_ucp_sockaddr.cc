@@ -1755,7 +1755,7 @@ private:
         }
 
         if (test_ucp_sockaddr_wireup_fail::test_all_ep_flags(e, flags)) {
-            UCS_TEST_SKIP_R("trying the next CM calback wasn't scheduled");
+            UCS_TEST_SKIP_R("trying the next CM callback wasn't scheduled");
         }
 
         /* Waiting for ucp_cm_client_try_next_cm_progress() callback being
@@ -2104,7 +2104,7 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_sforce) {
 }
 
 /* The test check that a client disconnection works fine when a server received
- * a conenction request, but a conenction wasn't fully established */
+ * a connection request, but a connection wasn't fully established */
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
 {
     ucp_test_base::entity::listen_cb_type_t listen_cb_type = cb_type();
@@ -2132,7 +2132,7 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
             }
         }
 
-        /* Disconnect from a peer while conenction is not fully established with
+        /* Disconnect from a peer while connection is not fully established with
          * a peer */
         one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
 
@@ -3116,7 +3116,6 @@ class test_ucp_sockaddr_protocols_err_sender
 protected:
     virtual void init() {
         m_err_count = 0;
-        modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
         /* receiver should try to read wrong data, instead of detecting error
            in keepalive process and closing the connection */
         disable_keepalive();

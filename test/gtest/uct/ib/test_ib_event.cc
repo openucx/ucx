@@ -14,7 +14,7 @@ extern "C" {
 #include <uct/ib/base/ib_device.h>
 #if HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
-#include <uct/ib/rc/accel/rc_mlx5.h>
+#include <uct/ib/mlx5/rc/rc_mlx5.h>
 #endif
 #include <uct/ib/rc/verbs/rc_verbs.h>
 }

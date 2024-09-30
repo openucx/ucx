@@ -73,7 +73,7 @@ protected:
         size_t len, total_size, test_window_size, hole_size, align;
 
         align            = 64;
-        test_window_size = 2 * 1024;
+        test_window_size = 8 * 1024;
         hole_size        = 2 * align;
 
         /*
@@ -94,7 +94,9 @@ protected:
         memset(test_window_src, 0xdeaddead, total_size);
         memset(test_window_dst, 0x0, total_size);
 
-        for (len = 0; len < test_window_size; len++) {
+        len = 0;
+
+        while (len < test_window_size) {
             for (i = 0; i < align; i++) {
                 for (j = 0; j < align; j++) {
                     /* Perform the transfer */
@@ -109,6 +111,14 @@ protected:
                     result = memcmp(test_window_dst, dup, total_size);
                     EXPECT_EQ(0, result);
                 }
+            }
+            /* Check for each len for less than 1k sizes
+             * Above 1k test steps of 53
+             */
+            if (len < 1024) {
+                len++;
+            } else {
+                len += 53;
             }
         }
 
