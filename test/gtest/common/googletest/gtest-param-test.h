@@ -457,6 +457,11 @@ internal::CartesianProductHolder<Generator...> Combine(const Generator&... g) {
 #define GTEST_GET_FIRST_(first, ...) first
 #define GTEST_GET_SECOND_(first, second, ...) second
 
+// Modified to reduce stack frame size per test file.
+// The registration logic is moved to a separate function (gen_##prefix##test_suite_name)
+// to minimize the complexity of static initialization.
+// This defers execution of complex logic, reduces the initial stack frame,
+// and prevents inlining, leading to a more efficient initialization process.
 #define INSTANTIATE_TEST_SUITE_P(prefix, test_suite_name, ...)                \
   static ::testing::internal::ParamGenerator<test_suite_name::ParamType>      \
       gtest_##prefix##test_suite_name##_EvalGenerator_() {                    \
@@ -478,9 +483,8 @@ internal::CartesianProductHolder<Generator...> Combine(const Generator&... g) {
         ::testing::internal::DefaultParamName<test_suite_name::ParamType>,    \
         DUMMY_PARAM_))))(info);                                               \
   }                                                                           \
-  static int gtest_##prefix##test_suite_name##_dummy_                         \
-      GTEST_ATTRIBUTE_UNUSED_ =                                               \
-          ::testing::UnitTest::GetInstance()                                  \
+  int __attribute__((noinline)) gen_##prefix##test_suite_name() {             \
+    return ::testing::UnitTest::GetInstance()                                 \
               ->parameterized_test_registry()                                 \
               .GetTestSuitePatternHolder<test_suite_name>(                    \
                   #test_suite_name,                                           \
@@ -488,7 +492,10 @@ internal::CartesianProductHolder<Generator...> Combine(const Generator&... g) {
               ->AddTestSuiteInstantiation(                                    \
                   #prefix, &gtest_##prefix##test_suite_name##_EvalGenerator_, \
                   &gtest_##prefix##test_suite_name##_EvalGenerateName_,       \
-                  __FILE__, __LINE__)
+                  __FILE__, __LINE__);                                        \
+  }                                                                           \
+  static int gtest_##prefix##test_suite_name##_dummy_                         \
+      GTEST_ATTRIBUTE_UNUSED_ = gen_##prefix##test_suite_name();
 
 // Legacy API is deprecated but still available
 #ifndef GTEST_REMOVE_LEGACY_TEST_CASEAPI_
