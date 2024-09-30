@@ -416,13 +416,14 @@ int ucp_request_memh_check_invalidate(ucp_request_t *req)
 {
     ucp_ep_h ep                      = req->send.ep;
     ucp_err_handling_mode_t err_mode = ucp_ep_config(ep)->key.err_mode;
-    ucp_mem_h *memh_p                = ucp_request_get_memh(req);
+    ucp_mem_h *memh_p;
 
     if ((err_mode != UCP_ERR_HANDLING_MODE_PEER) ||
         !(req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
         return 0;
     }
 
+    memh_p = ucp_request_get_memh(req);
     if ((*memh_p == NULL) || ucp_memh_is_user_memh(*memh_p)) {
         return 0;
     }
