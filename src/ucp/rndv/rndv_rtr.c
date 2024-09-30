@@ -226,8 +226,8 @@ static void ucp_proto_rndv_rtr_abort(ucp_request_t *req, ucs_status_t status)
         if (req->send.rndv.rkey != NULL) {
             ucp_proto_rndv_rkey_destroy(req);
         }
-        ucp_proto_request_zcopy_id_reset(req);
         ucp_request_memh_invalidate(req, status);
+        ucp_proto_request_zcopy_id_reset(req);
         return;
     }
 

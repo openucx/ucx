@@ -443,6 +443,7 @@ void ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
     req->send.invalidate.comp.func = ucp_request_mem_invalidate_completion;
     req->send.invalidate.comp.arg  = req;
     req->status                    = status;
+    req->flags                    |= UCP_REQUEST_FLAG_INVALIDATED;
 
     invalidate_map = ucp_request_get_invalidation_map(ep);
     ucp_trace_req(req, "mem invalidate buffer md_map 0x%" PRIx64 "/0x%" PRIx64,
