@@ -923,15 +923,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                               tl_md, worker, params, &config->super.super,
                               &config->rc_mlx5_common, &init_attr);
 
-    status = uct_rc_mlx5_dp_ordering_ooo_init(
-            &self->super, UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC,
-            &config->rc_mlx5_common, "rc_mlx5");
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = uct_rc_mlx5_ddp_init(&self->super, md, UCT_IB_MLX5_MD_FLAG_DDP_RC,
-                                  &config->rc_mlx5_common, "rc_mlx5");
+    status = uct_rc_mlx5_dp_ordering_ooo_init(&self->super,
+                                              md->dv_ooo_cap.max_dp_ordering_rc,
+                                              &config->rc_mlx5_common,
+                                              "rc_mlx5");
     if (status != UCS_OK) {
         return status;
     }

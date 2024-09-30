@@ -201,19 +201,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
     /* Device supports implicit ODP with PCI relaxed order */
     UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(18),
-    /* Device supports out-of-order RDMA for RC */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC = UCS_BIT(19),
-    /* Device supports out-of-order RDMA for DC */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC = UCS_BIT(20),
     /* Device supports forcing ordering configuration */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(21),
-    /* Device supports direct data placement for RC */
-    UCT_IB_MLX5_MD_FLAG_DDP_RC                = UCS_BIT(22),
-    /* Device supports direct data placement for DC */
-    UCT_IB_MLX5_MD_FLAG_DDP_DC                = UCS_BIT(23),
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(19),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 24,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -365,6 +357,16 @@ KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
 #endif
 
 
+typedef enum {
+    /* IBTA-compliant ordering semantics */
+    UCT_IB_MLX5_DP_ORDERING_IBTA    = 0x0,
+    /* Out-of-order RDMA reads and writes */
+    UCT_IB_MLX5_DP_ORDERING_OOO_RW  = 0x1,
+    /* Out-of-order RDMA read/write/send/recv (DDP) */
+    UCT_IB_MLX5_DP_ORDERING_OOO_ALL = 0x2,
+} uct_ib_mlx5_dp_ordering_t;
+
+
 /**
  * MLX5 IB memory domain.
  */
@@ -412,9 +414,13 @@ typedef struct uct_ib_mlx5_md {
     uint32_t                 smkey_index;
     struct {
         /* Max rq size per transport when adaptive routing (ooo dp) is enabled */
-        uint32_t max_rc;
-        uint32_t max_dct;
-    } dv_ooo_recv_cap;
+        unsigned             max_rc_rq_size;
+        unsigned             max_dct_rq_size;
+        /* Max dp ordering level per transport, 
+           as listed in uct_ib_mlx5_dp_ordering_t */
+        uint8_t              max_dp_ordering_rc;
+        uint8_t              max_dp_ordering_dc;
+    } dv_ooo_cap;
 } uct_ib_mlx5_md_t;
 
 

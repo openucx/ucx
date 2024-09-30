@@ -1884,12 +1884,31 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
                                                void *cap_2,
                                                uct_ib_device_t *dev)
 {
+    md->dv_ooo_cap.max_dp_ordering_rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    md->dv_ooo_cap.max_dp_ordering_dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_rc)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC;
+        md->dv_ooo_cap.max_dp_ordering_rc =
+                ucs_max(UCT_IB_MLX5_DP_ORDERING_OOO_RW,
+                        md->dv_ooo_cap.max_dp_ordering_rc);
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_dc)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC;
+        md->dv_ooo_cap.max_dp_ordering_dc =
+                ucs_max(UCT_IB_MLX5_DP_ORDERING_OOO_RW,
+                        md->dv_ooo_cap.max_dp_ordering_dc);
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_rc)) {
+        md->dv_ooo_cap.max_dp_ordering_rc =
+                ucs_max(UCT_IB_MLX5_DP_ORDERING_OOO_ALL,
+                        md->dv_ooo_cap.max_dp_ordering_rc);
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_dc)) {
+        md->dv_ooo_cap.max_dp_ordering_dc =
+                ucs_max(UCT_IB_MLX5_DP_ORDERING_OOO_ALL,
+                        md->dv_ooo_cap.max_dp_ordering_dc);
     }
 
     if ((cap_2 != NULL) &&
@@ -1900,25 +1919,8 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
     ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
               uct_ib_device_name(dev),
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
-              !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC),
-              !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC));
-}
-
-static void uct_ib_mlx5_devx_check_ddp(uct_ib_mlx5_md_t *md, void *cap,
-                                       void *cap_2, uct_ib_device_t *dev)
-{
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_rc)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_DDP_RC;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_dc)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_DDP_DC;
-    }
-
-    ucs_debug("%s: ddp support: ooo_all_rc=%d ooo_all_dc=%d",
-              uct_ib_device_name(dev),
-              !!(md->flags & UCT_IB_MLX5_MD_FLAG_DDP_RC),
-              !!(md->flags & UCT_IB_MLX5_MD_FLAG_DDP_DC));
+              md->dv_ooo_cap.max_dp_ordering_rc,
+              md->dv_ooo_cap.max_dp_ordering_dc);
 }
 
 static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
@@ -2345,8 +2347,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     uct_ib_mlx5_devx_check_dp_ordering(md, cap, cap_2, dev);
-
-    uct_ib_mlx5_devx_check_ddp(md, cap, cap_2, dev);
 
     uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 
@@ -3174,15 +3174,15 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
         return UCS_ERR_NO_RESOURCE;
     }
 
-    md->dv_ooo_recv_cap.max_rc  = ctx_dv.ooo_recv_wrs_caps.max_rc;
-    md->dv_ooo_recv_cap.max_dct = ctx_dv.ooo_recv_wrs_caps.max_rc;
+    // md->dv_ooo_cap.max_rc  = ctx_dv.ooo_recv_wrs_caps.max_rc;
+    // md->dv_ooo_cap.max_dct = ctx_dv.ooo_recv_wrs_caps.max_rc;
 
     if (ctx_dv.ooo_recv_wrs_caps.max_rc > 0) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_DDP_RC;
+        md->dv_ooo_cap.max_dp_ordering_rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     }
 
     if (ctx_dv.ooo_recv_wrs_caps.max_dct > 0) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_DDP_DC;
+        md->dv_ooo_cap.max_dp_ordering_dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     }
 #endif
     return UCS_OK;
