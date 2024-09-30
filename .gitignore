@@ -114,3 +114,7 @@ cmake/*.cmake
 *.gcda
 lcov_data/
 .noinst/
+go.work
+go.work.sum
+bindings/go/pkg/
+bindings/go/go.sum
