@@ -413,9 +413,6 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
     struct {
-        /* Max rq size per transport when adaptive routing (ooo dp) is enabled */
-        unsigned             max_rc_rq_size;
-        unsigned             max_dct_rq_size;
         /* Max dp ordering level per transport, 
            as listed in uct_ib_mlx5_dp_ordering_t */
         uint8_t              max_dp_ordering_rc;

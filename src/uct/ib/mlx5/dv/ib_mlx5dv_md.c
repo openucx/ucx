@@ -3174,9 +3174,6 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
         return UCS_ERR_NO_RESOURCE;
     }
 
-    // md->dv_ooo_cap.max_rc  = ctx_dv.ooo_recv_wrs_caps.max_rc;
-    // md->dv_ooo_cap.max_dct = ctx_dv.ooo_recv_wrs_caps.max_rc;
-
     if (ctx_dv.ooo_recv_wrs_caps.max_rc > 0) {
         md->dv_ooo_cap.max_dp_ordering_rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     }

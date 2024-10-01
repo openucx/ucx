@@ -647,7 +647,7 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
                                         UCT_IB_MLX5_DP_ORDERING_OOO_ALL :
                                         UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     if ((iface->config.dp_ordering > dp_ordering_cap) &&
-        dp_ordering_ooo_force) {
+        (iface->config.force_ordering)) {
         goto failure;
     }
 
@@ -1094,9 +1094,6 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
     if (iface->config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
         dv_attr->create_flags |= MLX5DV_QP_CREATE_OOO_DP;
         dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
-
-        // qp_attr->cap.max_recv_wr = is_dc ? md->dv_ooo_recv_cap.max_dct :
-        //                                    md->dv_ooo_recv_cap.max_rc;
     }
 #endif
 }

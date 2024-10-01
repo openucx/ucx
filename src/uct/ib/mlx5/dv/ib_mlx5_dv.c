@@ -164,9 +164,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     max_tx = uct_ib_mlx5_devx_sq_length(attr->super.cap.max_send_wr);
     len_tx = max_tx * MLX5_SEND_WQE_BB;
-    // if (md->dv_ooo_recv_cap.max_rc > 0) {
-        // attr->super.cap.max_recv_wr = md->dv_ooo_recv_cap.max_rc;
-    // }
     max_rx = ucs_roundup_pow2_or0(attr->super.cap.max_recv_wr);
     len    = len_tx + max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
 
