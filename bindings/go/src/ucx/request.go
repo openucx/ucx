@@ -21,6 +21,8 @@ type UcpRequestParams struct {
 	memTypeSet bool
 	memType    UcsMemoryType
 	Cb         UcpCallback
+	multi	   bool
+	Memory	   *UcpMemory
 }
 
 func (p *UcpRequestParams) SetMemType(memType UcsMemoryType) *UcpRequestParams {
@@ -29,16 +31,50 @@ func (p *UcpRequestParams) SetMemType(memType UcsMemoryType) *UcpRequestParams {
 	return p
 }
 
-func setMemType(params *UcpRequestParams, p *C.ucp_request_param_t) {
-	if (params != nil) && params.memTypeSet {
-		p.op_attr_mask = C.UCP_OP_ATTR_FIELD_MEMORY_TYPE
-		p.memory_type = C.ucs_memory_type_t(params.memType)
-	}
+func (p *UcpRequestParams) SetMulti() *UcpRequestParams {
+	p.multi = true
+	return p
+}
+
+func (p *UcpRequestParams) SetMemory(m *UcpMemory) *UcpRequestParams {
+	p.Memory = m
+	return p
 }
 
 func (p *UcpRequestParams) SetCallback(cb UcpCallback) *UcpRequestParams {
 	p.Cb = cb
 	return p
+}
+
+func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Pointer) uint64 {
+	if params == nil {
+		return 0
+	}
+
+	var cbId uint64
+	if params.Cb != nil {
+		cbId = register(params.Cb)
+		p.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
+		cbAddr := (*unsafe.Pointer)(unsafe.Pointer(&p.cb[0]))
+		*cbAddr = cb
+		p.user_data = unsafe.Pointer(uintptr(cbId))
+	}
+
+	if params.memTypeSet {
+		p.op_attr_mask = C.UCP_OP_ATTR_FIELD_MEMORY_TYPE
+		p.memory_type = C.ucs_memory_type_t(params.memType)
+	}
+
+	if params.multi {
+		p.op_attr_mask |= C.UCP_OP_ATTR_FLAG_MULTI_SEND
+	}
+
+	if params.Memory != nil {
+		p.op_attr_mask |= C.UCP_OP_ATTR_FIELD_MEMH
+		p.memh = params.Memory.memHandle
+	}
+
+	return cbId
 }
 
 // Checks whether request is a pointer
