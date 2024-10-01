@@ -333,12 +333,12 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
     /* Find an available VMA */
     start = mmap_anon(nullptr, size);
     ASSERT_NE(nullptr, start);
-    munmap(start, size);
-
     mid  = reinterpret_cast<char*>(start) + lower_size;
     last = reinterpret_cast<char*>(start) + size - upper_size;
+    munmap(start, size);
 
     /* Allocate lower half and upper half */
+    /* coverity[pass_freed_arg] */
     start = mmap_anon(start, lower_size);
     last  = mmap_anon(last, upper_size);
     EXPECT_NE(nullptr, start);
@@ -349,7 +349,7 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
     EXPECT_NE(UCS_OK, reg_mem(UCT_MD_MEM_ACCESS_RMA, start, size, &memh));
 
     /* Fill the hole with the middle VMA */
-    mid = mmap_anon(mid, size - lower_size - upper_size);
+    mid = mmap_anon(mid, size - upper_size - lower_size);
     EXPECT_NE(nullptr, mid);
 
     /* Trigger a successful MT registration */
@@ -358,14 +358,15 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
 
     EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
 
-    if (start != nullptr) {
-        munmap(start, lower_size);
-    }
     if (mid != nullptr) {
+        /* coverity[incorrect_free] */
         munmap(mid, size - upper_size - lower_size);
     }
     if (last != nullptr) {
         munmap(last, upper_size);
+    }
+    if (start != nullptr) {
+        munmap(start, lower_size);
     }
 }
 
