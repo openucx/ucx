@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_types.h> /* for atomic mode */
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_mm.h>
 }
 
@@ -207,6 +208,27 @@ private:
         return request_wait(status_ptr);
     }
 
+    bool has_amo_odp_lane(const entity& e, ucs_memory_type_t mem_type) {
+        const auto *config = ucp_ep_config(e.ep());
+        const auto *ctx    = e.ucph();
+
+        for (int i = 0; i < config->key.num_lanes; ++i) {
+            auto lane = config->key.amo_lanes[i];
+            if (lane == UCP_NULL_LANE) {
+                break;
+            }
+
+            auto md_index = ucp_ep_md_index(e.ep(), lane);
+            // std::cout << "lane " << lane << " md_index " << md_index << " ctx->reg_md_map[mem_type] " << ctx->reg_md_map[mem_type] << std::endl;
+            ucs_info("lane=%u md_index=%u ctx->reg_md_map[mem_type]=%zu", lane, md_index, ctx->reg_md_map[mem_type]);
+            if (ctx->reg_md_map[mem_type] & UCS_BIT(md_index)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void test_mem_types(send_func_t send_func, unsigned num_iters,
                         uint64_t op_mask, int is_ep_flush) {
         const int atomic_mode                                     =
@@ -241,6 +263,13 @@ private:
                     !check_reg_mem_types(sender(), recv_mem_type)) {
                     continue;
                 }
+            }
+
+            /* Skip test if ODP requested but not supported */
+            if ((get_variant_value() & ODP) &&
+                 (!has_amo_odp_lane(sender(), send_mem_type) ||
+                  !has_amo_odp_lane(sender(), recv_mem_type))) {
+                continue;
             }
 
             test_all_opcodes(send_func, num_iters, op_mask, is_ep_flush,
