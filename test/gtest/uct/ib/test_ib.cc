@@ -68,8 +68,8 @@ void test_uct_ib::send_recv_short() {
     EXPECT_TRUE((status == UCS_OK) || (status == UCS_INPROGRESS));
 
     flush();
-    wait_for_value(&test_uct_ib::m_ib_am_handler_counter,
-                   start_am_counter + 1, true);
+    wait_for_value(&test_uct_ib::m_ib_am_handler_counter, start_am_counter + 1,
+                   true, 2);
 
     ASSERT_EQ(sizeof(send_data), recv_buffer->length);
     EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
@@ -446,6 +446,7 @@ protected:
 UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config) {
     // go over all SLs, check UCTs could be initialized on a specific SL
     // and able to send/recv traffic
+    scoped_log_handler log_handler(wrap_fatal_logger);
     for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl)  {
         if (!has_transport("rc_verbs") && !has_transport("ud_verbs")) {
             // if AR is configured on the given SL, set AR_ENABLE to "y",
