@@ -312,14 +312,14 @@ UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
 
 UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
                      has_ksm() &&
-                             check_invalidate_support(UCT_MD_MEM_ACCESS_ALL),
+                             check_invalidate_support(UCT_MD_MEM_ACCESS_RMA),
                      "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
 {
     size_t size             = UCS_MBYTE;
     const size_t align_mask = (8 * UCS_KBYTE) - 1;
     size_t lower_size       = ((size / 3)) & ~align_mask;
     size_t upper_size       = (size - (size / 2)) & ~align_mask;
-    void *base, *start, *mid, *last;
+    void *start, *mid, *last;
     uct_mem_h memh;
 
     auto mmap_anon = [](void *ptr, size_t size) {
@@ -331,13 +331,12 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
     };
 
     /* Find an available VMA */
-    base = mmap_anon(nullptr, size);
-    ASSERT_NE(nullptr, base);
-    munmap(base, size);
+    start = mmap_anon(nullptr, size);
+    ASSERT_NE(nullptr, start);
+    munmap(start, size);
 
-    start = base;
-    mid   = reinterpret_cast<char*>(base) + lower_size;
-    last  = reinterpret_cast<char*>(base) + size - upper_size;
+    mid  = reinterpret_cast<char*>(start) + lower_size;
+    last = reinterpret_cast<char*>(start) + size - upper_size;
 
     /* Allocate lower half and upper half */
     start = mmap_anon(start, lower_size);
@@ -347,17 +346,17 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
 
     /* Trigger MT registration failure */
     scoped_log_handler wrap_err(wrap_errors_logger);
-    EXPECT_NE(UCS_OK, reg_mem(UCT_MD_MEM_ACCESS_ALL, base, size, &memh));
+    EXPECT_NE(UCS_OK, reg_mem(UCT_MD_MEM_ACCESS_RMA, start, size, &memh));
 
     /* Fill the hole with the middle VMA */
     mid = mmap_anon(mid, size - lower_size - upper_size);
     EXPECT_NE(nullptr, mid);
 
     /* Trigger a successful MT registration */
-    EXPECT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, base, size, &memh));
+    EXPECT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_RMA, start, size, &memh));
     EXPECT_TRUE(((uct_ib_mem_t*)memh)->flags & UCT_IB_MEM_MULTITHREADED);
 
-    ASSERT_UCS_OK(uct_md_mem_dereg(md(), memh));
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
 
     if (start != nullptr) {
         munmap(start, lower_size);
