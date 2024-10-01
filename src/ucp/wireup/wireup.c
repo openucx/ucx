@@ -723,7 +723,7 @@ ucp_wireup_resolve_local_ep(ucp_worker_h worker, ucp_ep_h msg_ep,
             }
         }
 
-        if (!ucp_wireup_is_score_valid(msg->type)) {
+        else if (!ucp_wireup_is_score_valid(msg->type)) {
             status = ucp_ep_config_err_mode_check_mismatch(ep, msg->err_mode);
             if (status != UCS_OK) {
                 ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
