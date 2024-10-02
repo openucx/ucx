@@ -340,14 +340,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
                                               uct_rkey_t rkey, void *handle)
 {
-#if HAVE_CUDA_FABRIC
-    uct_cuda_ipc_rkey_t *key = (uct_cuda_ipc_rkey_t *)rkey;
-
-    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
-        cuMemPoolDestroy(key->ph.pool);
-    }
-#endif
-
     ucs_assert(NULL == handle);
     ucs_free((void *)rkey);
     return UCS_OK;
