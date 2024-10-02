@@ -219,8 +219,6 @@ private:
             }
 
             auto md_index = ucp_ep_md_index(e.ep(), lane);
-            // std::cout << "lane " << lane << " md_index " << md_index << " ctx->reg_md_map[mem_type] " << ctx->reg_md_map[mem_type] << std::endl;
-            ucs_info("lane=%u md_index=%u ctx->reg_md_map[mem_type]=%zu", lane, md_index, ctx->reg_md_map[mem_type]);
             if (ctx->reg_md_map[mem_type] & UCS_BIT(md_index)) {
                 return true;
             }
