@@ -95,9 +95,9 @@ static int uct_cuda_ipc_iface_is_mnnvl_supported(uct_cuda_ipc_md_t *md)
     }
 
     return coherent && (md->enable_mnnvl != UCS_NO);
-#endif
-
+#else
     return 0;
+#endif
 }
 
 static int
@@ -239,6 +239,8 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                              uct_iface_attr_t *iface_attr)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
+                                                 uct_cuda_ipc_md_t);
 
     uct_base_iface_query(&iface->super.super, iface_attr);
 
@@ -251,6 +253,10 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_PENDING          |
                                           UCT_IFACE_FLAG_GET_ZCOPY        |
                                           UCT_IFACE_FLAG_PUT_ZCOPY;
+    if (uct_cuda_ipc_iface_is_mnnvl_supported(md)) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_INTER_NODE;
+    }
+
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                           UCT_IFACE_FLAG_EVENT_RECV      |
                                           UCT_IFACE_FLAG_EVENT_FD;
