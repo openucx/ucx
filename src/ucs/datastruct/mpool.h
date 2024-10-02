@@ -310,6 +310,15 @@ unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
                                        ucs_mpool_chunk_t *chunk,
                                        size_t chunk_size);
 
+
+/**
+ * Append all chunk elements to the memory pool freelist.
+ * @param mp               Memory pool structure.
+ * @param chunk            Pointer to memory pool chunk.
+ */
+void ucs_mpool_add_chunk_to_freelist(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk);
+
+
 /**
  * heap-based chunk allocator.
  */

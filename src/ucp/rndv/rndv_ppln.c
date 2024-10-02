@@ -68,9 +68,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     uint8_t proto_flags;
 
     ack_params = ucp_proto_common_init_params(init_params);
-    if (worker->context->config.ext.rndv_errh_ppln_enable) {
-        ack_params.flags |= UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING;
-    }
+    ack_params.flags |= UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||

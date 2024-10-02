@@ -285,7 +285,14 @@ typedef enum {
      * invalidated and will not be accessed anymore by zero-copy or remote
      * memory access operations.
      */
-    UCT_MD_MEM_DEREG_FLAG_INVALIDATE = UCS_BIT(0)
+    UCT_MD_MEM_DEREG_FLAG_INVALIDATE           = UCS_BIT(0),
+
+    /**
+     * This flag indicates that during de-registration only indirect remote keys
+     * associated with the memory region should be invalidated. This flag is
+     * used in conjunction with @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag.
+     */
+    UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY = UCS_BIT(1)
 } uct_md_mem_dereg_flags_t;
 
 

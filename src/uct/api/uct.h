@@ -844,6 +844,11 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_GVA                  = UCS_BIT(11),
 
     /**
+     * Avoid using registration cache for the particular memory region.
+     */
+    UCT_MD_MEM_FLAG_NO_RCACHE       = UCS_BIT(12),
+
+    /**
      * Enable local and remote access for all operations.
      */
     UCT_MD_MEM_ACCESS_ALL           = (UCT_MD_MEM_ACCESS_REMOTE_PUT |

@@ -578,7 +578,8 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_am_release_user_header(req);
 
-    if (ucp_request_memh_invalidate(req, status)) {
+    if (ucp_request_memh_check_invalidate(req, 0)) {
+        ucp_request_memh_invalidate(req, status, 0);
         ucp_proto_rndv_rts_reset(req);
         return;
     }
@@ -1012,11 +1013,5 @@ void ucp_proto_rndv_bulk_request_init_lane_idx(
 
 void ucp_proto_rndv_stub_abort(ucp_request_t *req, ucs_status_t status)
 {
-    /* FIXME: Proper abort functionality is not implemented yet.
-     * This stub function is used to advertise error-handling capability for
-     * pipeline protocols, but proper implementation is to be done */
-    ucs_diag("aborting rendezvous request %p with status %s. This may lead to "
-             "data corruption, since invalidation workflow isn't implemented",
-             req, ucs_status_string(status));
     ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }

@@ -13,6 +13,7 @@
 #include "ucp_worker.h"
 #include "ucp_mm.inl"
 
+#include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
@@ -326,8 +327,8 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
     return flags;
 }
 
-static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
-                           ucp_md_map_t md_map)
+static void ucp_memh_dereg_internal(ucp_context_h context, ucp_mem_h memh,
+                                    ucp_md_map_t md_map, int rkey_only)
 {
     uct_completion_t comp            = {
         .count = 1,
@@ -351,20 +352,28 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
             continue;
         }
 
-        ucs_trace("de-registering memh[%d]=%p", md_index, memh->uct[md_index]);
-        ucs_assert(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG);
-
         params.memh = memh->uct[md_index];
         if (memh->inv_md_map & UCS_BIT(md_index)) {
             params.flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
+            if (rkey_only) {
+                params.flags |= UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY;
+            }
             comp.count++;
         } else {
+            if (rkey_only) {
+                continue;
+            }
             params.flags = 0;
         }
 
+        ucs_trace("de-registering %smemh[%d]=%p", (rkey_only ? "rkey of " : ""),
+                  md_index, memh->uct[md_index]);
+        ucs_assert(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG);
+
         status = uct_md_mem_dereg_v2(context->tl_mds[md_index].md, &params);
         if (status != UCS_OK) {
-            ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
+            ucs_warn("failed to dereg %sfrom md[%d]=%s: %s",
+                     (rkey_only? "rkey " : ""), md_index,
                      context->tl_mds[md_index].rsc.md_name,
                      ucs_status_string(status));
             if (params.flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
@@ -372,7 +381,16 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
             }
         }
 
-        memh->uct[md_index] = NULL;
+        if (rkey_only) {
+            memh->inv_md_map &= ~UCS_BIT(md_index);
+        } else {
+            memh->uct[md_index] = NULL;
+        }
+    }
+
+    ucs_assert(comp.count == 1);
+    if (rkey_only) {
+        return;
     }
 
     if ((memh->flags & UCP_MEMH_FLAG_MLOCKED) &&
@@ -380,12 +398,25 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         munlock(ucp_memh_address(memh), ucp_memh_length(memh));
         memh->flags &= ~UCP_MEMH_FLAG_MLOCKED;
     }
+}
 
-    ucs_assert(comp.count == 1);
+static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
+                           ucp_md_map_t md_map)
+{
+    ucp_memh_dereg_internal(context, memh, md_map, 0);
+}
+
+static void ucp_memh_dereg_rkey(ucp_context_h context, ucp_mem_h memh,
+                                ucp_md_map_t md_map)
+{
+    ucs_trace("memh %p: invalidate only indirect rkeys: md_map %" PRIx64
+              " inv_md_map %" PRIx64, memh, memh->md_map, md_map);
+
+    ucp_memh_dereg_internal(context, memh, md_map, 1);
 }
 
 void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                         ucs_rcache_invalidate_comp_func_t cb, void *arg,
+                         ucs_rcache_comp_entry_t *comp,
                          ucp_md_map_t inv_md_map)
 {
     ucs_trace("memh %p: invalidate address %p length %zu md_map %" PRIx64
@@ -399,7 +430,7 @@ void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
     UCP_THREAD_CS_ENTER(&context->mt_lock);
     memh->inv_md_map |= inv_md_map;
     UCP_THREAD_CS_EXIT(&context->mt_lock);
-    ucs_rcache_region_invalidate(context->rcache, &memh->super, cb, arg);
+    ucs_rcache_region_invalidate(context->rcache, &memh->super, comp);
 }
 
 static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
@@ -658,7 +689,6 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
                           uint8_t memh_flags, unsigned uct_flags,
                           uct_alloc_method_t method, ucs_memory_type_t mem_type)
 {
-
     memh->md_map         = 0;
     memh->inv_md_map     = 0;
     memh->uct_flags      = UCP_MM_UCT_ACCESS_FLAGS(uct_flags);
@@ -798,7 +828,8 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
 
     cache_md_map = context->cache_md_map[mem_type] & reg_md_map;
 
-    if ((context->rcache == NULL) || (cache_md_map == 0)) {
+    if ((context->rcache == NULL) || (cache_md_map == 0) ||
+        (uct_flags & UCT_MD_MEM_FLAG_NO_RCACHE)) {
         status = ucp_memh_register(context, memh, reg_md_map, uct_flags,
                                    alloc_name);
         if (status != UCS_OK) {
@@ -909,8 +940,7 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
         uct_flags |= UCP_MM_UCT_ACCESS_FLAGS(memh->uct_flags);
 
         /* Invalidate the mismatching region and get a new one */
-        ucs_rcache_region_invalidate(context->rcache, &memh->super,
-                                     ucs_empty_function, NULL);
+        ucs_rcache_region_invalidate(context->rcache, &memh->super, NULL);
         ucp_memh_put(memh);
     }
 }
@@ -1357,7 +1387,8 @@ void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
     ucp_mem_desc_t *elem_hdr  = obj;
     ucp_mem_desc_t *chunk_hdr = (ucp_mem_desc_t*)((ucp_mem_desc_t*)chunk - 1);
-    elem_hdr->memh = chunk_hdr->memh;
+    elem_hdr->memh  = chunk_hdr->memh;
+    elem_hdr->chunk = NULL;
 }
 
 static ucs_status_t
@@ -1367,6 +1398,9 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     ucp_context_h context        = mpriv->worker->context;
     ucs_memory_type_t mem_type   = mpriv->mem_type;
     size_t frag_size             = context->config.ext.rndv_frag_size[mem_type];
+    unsigned uct_flags           = UCT_MD_MEM_ACCESS_RMA |
+                                   UCT_MD_MEM_FLAG_LOCK |
+                                   UCT_MD_MEM_FLAG_NO_RCACHE;
     ucp_rndv_frag_mp_chunk_hdr_t *chunk_hdr;
     ucs_status_t status;
     unsigned num_elems;
@@ -1382,11 +1416,13 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 
     /* payload; need to get default flags from ucp_mem_map_params2uct_flags() */
     status = ucp_memh_alloc(context, NULL, frag_size * num_elems, mem_type,
-                            UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK,
-                            ucs_mpool_name(mp), &chunk_hdr->memh);
+                            uct_flags, ucs_mpool_name(mp), &chunk_hdr->memh);
     if (status != UCS_OK) {
         return status;
     }
+
+    /* We don't use rcache, but reuse rcache region part of memh */
+    ucs_list_head_init(&chunk_hdr->memh->super.comp_list);
 
     chunk_hdr->next_frag_ptr = ucp_memh_address(chunk_hdr->memh);
     *chunk_p                 = chunk_hdr + 1;
@@ -1417,7 +1453,92 @@ void ucp_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
     frag_size                = context->config.ext.rndv_frag_size[mem_type];
     elem_hdr->memh           = chunk_hdr->memh;
     elem_hdr->ptr            = next_frag_ptr;
+    elem_hdr->chunk          = chunk;
     chunk_hdr->next_frag_ptr = UCS_PTR_BYTE_OFFSET(next_frag_ptr, frag_size);
+}
+
+ucp_mem_desc_t *ucp_frag_mpool_get(ucs_mpool_t *mpool)
+{
+    ucp_mem_desc_t *mdesc = ucp_worker_mpool_get(mpool);
+
+    mdesc->memh->super.refcount ++;
+    return mdesc;
+}
+
+void ucp_frag_mpool_put(ucp_mem_desc_t *mdesc)
+{
+    ucp_mem_h memh               = mdesc->memh;
+    ucs_rcache_region_t *region  = &memh->super;
+    ucs_mpool_t *mpool           = ucs_mpool_obj_owner(mdesc);
+    ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(mpool);
+    ucp_context_h context        = mpriv->worker->context;
+
+    ucs_assert(region->refcount > 0);
+    region->refcount --;
+
+    if (!(region->flags & UCS_RCACHE_REGION_FLAG_INVALIDATE)) {
+        ucs_mpool_put(mdesc);
+        return;
+    }
+
+    if (region->refcount != 0) {
+        return;
+    }
+
+    /* If we reach this point, it means that chunk is marked for invalidation,
+     * and all of its inflight operations are completed. Now we can de-register
+     * its indirect rkeys and revive the chunk = return it back to mpool. */
+    ucp_memh_dereg_rkey(context, memh, memh->inv_md_map);
+    ucs_assert(0 == memh->inv_md_map);
+
+    ucs_rcache_region_completion(region);
+    region->flags &= ~UCS_RCACHE_REGION_FLAG_INVALIDATE;
+    ucs_mpool_add_chunk_to_freelist(mpool, mdesc->chunk);
+}
+
+static void ucp_frag_mpool_remove_from_freelist(ucp_mem_desc_t *mdesc)
+{
+    ucs_mpool_t *mpool    = ucs_mpool_obj_owner(mdesc);
+    ucs_mpool_elem_t **it = &mpool->freelist;
+    unsigned count        = 0;
+    ucp_mem_desc_t *it_mdesc;
+
+    while ((*it) != NULL) {
+        it_mdesc = (void*)((*it) + 1);
+        if (it_mdesc->chunk == mdesc->chunk) {
+            *it = (*it)->next;
+            ++ count;
+        } else {
+            it = &(*it)->next;
+        }
+    }
+
+    ucs_debug("mpool %s: removed %u elements of chunk %p from the freelist",
+              ucs_mpool_name(mpool), count, mdesc->chunk);
+}
+
+void ucp_frag_mpool_invalidate(ucp_mem_desc_t *mdesc,
+                               ucs_rcache_comp_entry_t *comp,
+                               ucp_md_map_t inv_md_map)
+{
+    ucs_rcache_region_t *region = &mdesc->memh->super;
+
+    ucs_assert(region->refcount > 0);
+    mdesc->memh->inv_md_map |= inv_md_map;
+    if (comp != NULL) {
+        ucs_list_add_tail(&region->comp_list, &comp->list);
+    }
+
+    /* Mark chunk as invalidated and remove all of its elements from the
+     * freelist to avoid reuse in the future. Indirect rkeys of the chunk memory
+     * handle will be invalidated once all of its inflight operations completed
+     */
+    if (!(region->flags & UCS_RCACHE_REGION_FLAG_INVALIDATE)) {
+        region->flags |= UCS_RCACHE_REGION_FLAG_INVALIDATE;
+        ucp_frag_mpool_remove_from_freelist(mdesc);
+    }
+
+    ucp_frag_mpool_put(mdesc);
 }
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
@@ -1948,8 +2069,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                             "This may indicate that exported memory handle was "
                             "destroyed, but imported memory handle was not",
                             rregion->refcount);
-                ucs_rcache_region_invalidate(rcache, rregion,
-                                             ucs_empty_function, NULL);
+                ucs_rcache_region_invalidate(rcache, rregion, NULL);
                 ucs_rcache_region_put_unsafe(rcache, rregion);
             }
         }

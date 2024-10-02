@@ -1992,9 +1992,6 @@ public:
         modify_config("RNDV_THRESH", "128");
         modify_config("RNDV_SCHEME", "put_ppln");
         modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
-        /* FIXME: Advertise error handling support for RNDV PPLN protocol.
-         * Remove this once invalidation workflow is implemented. */
-        modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
         test_ucp_am_nbx::init();
     }
 

@@ -918,6 +918,13 @@ static ucs_status_t uct_ib_devx_dereg_invalidate_params_check(
     unsigned flags;
 
     flags = UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    if ((flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY) &&
+        !(flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE)) {
+        ucs_debug("%s: invalid params: rkey_only flag without invalidate flag",
+                  uct_ib_device_name(&md->super.dev));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     if (!(flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE)) {
         return UCS_OK;
     }
@@ -948,6 +955,9 @@ uct_ib_mlx5_devx_dereg_keys(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
         if (status != UCS_OK) {
             return status;
         }
+
+        memh->atomic_dvmr = NULL;
+        memh->atomic_rkey = UCT_IB_INVALID_MKEY;
     }
 
     if (memh->indirect_dvmr != NULL) {
@@ -960,6 +970,9 @@ uct_ib_mlx5_devx_dereg_keys(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
         if (status != UCS_OK) {
             return status;
         }
+
+        memh->indirect_dvmr = NULL;
+        memh->indirect_rkey = UCT_IB_INVALID_MKEY;
     }
 
     return UCS_OK;
@@ -1474,6 +1487,7 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     uct_ib_mlx5_devx_mem_t *memh;
     ucs_status_t status;
+    unsigned flags;
     int ret;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
@@ -1488,6 +1502,16 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
     status = uct_ib_mlx5_devx_dereg_keys(md, memh);
     if (status != UCS_OK) {
         return status;
+    }
+
+    /* If requested invalidation of only rkeys, then return success */
+    flags = UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    if (flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY) {
+        ucs_trace("%s: completed rkey_only de-registration of memh %p",
+                  uct_ib_device_name(&md->super.dev), memh);
+        ucs_assert(params->comp != NULL);
+        uct_invoke_completion(params->comp, UCS_OK);
+        return UCS_OK;
     }
 
     if (memh->smkey_mr != NULL) {
@@ -1542,8 +1566,7 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
         }
     }
 
-    if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
-        UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
+    if (flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
         ucs_assert(params->comp != NULL); /* suppress coverity false-positive */
         uct_invoke_completion(params->comp, UCS_OK);
     }

@@ -84,13 +84,14 @@ typedef struct ucp_mem {
 struct ucp_mem_desc {
     ucp_mem_h           memh;
     void                *ptr;
+    void                *chunk;
 };
 
 
 /**
  * Memory descriptor details for rndv fragments.
  */
-typedef struct ucp_rndv_frag_mp_chunk_hdr {
+typedef struct {
     ucp_mem_h           memh;
     void                *next_frag_ptr;
 } ucp_rndv_frag_mp_chunk_hdr_t;
@@ -128,6 +129,13 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
+ucp_mem_desc_t *ucp_frag_mpool_get(ucs_mpool_t *mpool);
+
+void ucp_frag_mpool_put(ucp_mem_desc_t *mdesc);
+
+void ucp_frag_mpool_invalidate(ucp_mem_desc_t *mdesc,
+                               ucs_rcache_comp_entry_t *comp,
+                               ucp_md_map_t inv_md_map);
 
 /**
  * Update memory registration to a specified set of memory domains.
@@ -177,7 +185,7 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                const char *alloc_name);
 
 void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                         ucs_rcache_invalidate_comp_func_t cb, void *arg,
+                         ucs_rcache_comp_entry_t *comp,
                          ucp_md_map_t inv_md_map);
 
 void ucp_memh_put_slow(ucp_context_h context, ucp_mem_h memh);

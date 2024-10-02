@@ -245,6 +245,20 @@ unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
     return ucs_min(data->quota, elem_size / ucs_mpool_elem_total_size(data));
 }
 
+void ucs_mpool_add_chunk_to_freelist(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
+{
+    ucs_mpool_elem_t *elem;
+    unsigned i;
+
+    for (i = 0; i < chunk->num_elems; ++i) {
+        elem = ucs_mpool_chunk_elem(mp->data, chunk, i);
+        ucs_mpool_add_to_freelist(mp, elem);
+    }
+
+    ucs_debug("mpool %s: added %u elements of chunk %p to the freelist",
+              ucs_mpool_name(mp), chunk->num_elems, chunk);
+}
+
 void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
 {
     ucs_mpool_data_t *data = mp->data;
