@@ -519,9 +519,31 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     len   = ntohl(cqe->byte_cnt);
     VALGRIND_MAKE_MEM_DEFINED(packet, len);
 
+    /*
+     * Take the packet type from CQE, because:
+     * 1. According to Annex17_RoCEv2 (A17.4.5.1):
+     * For UD, the Completion Queue Entry (CQE) includes remote address
+     * information (InfiniBand Specification Vol. 1 Rev 1.2.1 Section 11.4.2.1).
+     * For RoCEv2, the remote address information comprises the source L2
+     * Address and a flag that indicates if the received frame is an IPv4,
+     * IPv6 or RoCE packet.
+     *
+     * According to PRM, for responder UD/DC over RoCE sl represents RoCE
+     * packet type as:
+     * bit 3    : when set R-RoCE frame contains an UDP header otherwise not
+     * Bits[2:0]: L3_Header_Type, as defined below
+     *     - 0x0 : GRH - (RoCE v1.0)
+     *     - 0x1 : IPv6 - (RoCE v1.5/v2.0)
+     *     - 0x2 : IPv4 - (RoCE v1.5/v2.0)
+     *
+     * The service level is the most significant byte of cqe->flags_rqpn.
+     *
+     * Alternatively, this could be detected by examining the packet contents
+     * as is done for non-mlx5 transports (see
+     */
     if (!uct_ud_iface_check_grh(&iface->super, packet,
                                 uct_ib_mlx5_cqe_is_grh_present(cqe),
-                                cqe->flags_rqpn & 0xFF)) {
+                                uct_ib_mlx5_cqe_roce_gid_len(cqe))) {
         ucs_mpool_put_inline(desc);
         goto out_polled;
     }

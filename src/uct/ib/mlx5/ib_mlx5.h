@@ -65,6 +65,9 @@
 #define UCT_IB_MLX5_ATOMIC_MODE_EXT      3
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA  UCS_BIT(28) /* GRH/IP in the receive buffer */
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE   UCS_BIT(29) /* GRH/IP in the CQE */
+#define UCT_IB_MLX5_RQPN_ROCE_PKT_TYPE   (0x07 << 24) /* RoCE packet type in flags_rqpn */
+#define UCT_IB_MLX5_ROCE_PKT_TYPE_IPV6   (0x01 << 24)
+#define UCT_IB_MLX5_ROCE_PKT_TYPE_IPV4   (0x02 << 24)
 #define UCT_IB_MLX5_CQE_FORMAT_MASK      0xc
 #define UCT_IB_MLX5_MINICQE_ARR_MAX_SIZE 7
 #define UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK  0x0000FFFF  /* Byte count mask for multi-packet RQs */
