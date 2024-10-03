@@ -177,12 +177,11 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
-        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
+        .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
+                                                     init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = 0.0,
-        .mem_info.type       = init_params->select_param->mem_type,
-        .mem_info.sys_dev    = init_params->select_param->sys_dev,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
         .md_map              = 0
     };
@@ -393,11 +392,9 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
                                UCP_PROTO_COMMON_KEEP_MD_MAP,
         .super.exclude_map   = 0,
-        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = 0.0,
-        .mem_info.sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
     };
     ucs_memory_type_t frag_mem_type;
@@ -419,9 +416,10 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
             continue;
         }
 
-        params.mem_info.type = frag_mem_type;
+        params.super.reg_mem_info.type = frag_mem_type;
 
-        status = ucp_mm_get_alloc_md_index(context, &md_index, frag_mem_type);
+        status = ucp_mm_get_alloc_md_index(context, frag_mem_type, &md_index,
+                                           &params.super.reg_mem_info.sys_dev);
         if ((status == UCS_OK) && (md_index != UCP_NULL_RESOURCE)) {
             params.md_map = UCS_BIT(md_index);
         } else if (frag_mem_type == UCS_MEMORY_TYPE_HOST) {

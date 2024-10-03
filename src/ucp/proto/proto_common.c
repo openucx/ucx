@@ -64,6 +64,17 @@ ucp_proto_common_get_seg_size(const ucp_proto_common_init_params_t *params,
     return params->super.ep_config_key->lanes[lane].seg_size;
 }
 
+ucp_memory_info_t ucp_proto_common_select_param_mem_info(
+                                   const ucp_proto_select_param_t *select_param)
+{
+    ucp_memory_info_t mem_info = {
+        .type = select_param->mem_type,
+        .sys_dev = select_param->sys_dev
+    };
+
+    return mem_info;
+}
+
 void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
                                      ucp_md_map_t md_map, ucp_lane_index_t lane,
                                      ucp_proto_common_lane_priv_t *lane_priv)
@@ -378,9 +389,18 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                     &lane_perf_node);
     ucp_proto_perf_node_own_child(perf_node, &lane_perf_node);
 
-    /* For zero copy send, consider local system topology distance */
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        sys_dev = params->super.select_param->sys_dev;
+    /* If reg_mem_info type is not unknown we assume the protocol is going to
+     * send that mem type in a zero copy fashion. So, need to consider the
+     * system device distance. */
+    if (params->reg_mem_info.type != UCS_MEMORY_TYPE_UNKNOWN) {
+        sys_dev = params->reg_mem_info.sys_dev;
+
+        ucs_assertv((sys_dev == params->super.select_param->sys_dev) ||
+                    !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY),
+                    "flags=0x%x sys_dev=%u select_param->sys_dev=%u",
+                    params->flags, sys_dev,
+                    params->super.select_param->sys_dev);
+
         ucp_proto_common_get_lane_distance(&params->super, lane, sys_dev,
                                            &distance);
         ucp_proto_common_update_lane_perf_by_distance(
@@ -637,8 +657,8 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
     num_lanes = ucp_proto_common_find_lanes(
                    &params->super, params->memtype_op, params->flags,
                    params->max_iov_offs, params->min_iov, lane_type,
-                   params->reg_mem_type, tl_cap_flags, max_lanes, exclude_map,
-                   lanes);
+                   params->reg_mem_info.type, tl_cap_flags, max_lanes,
+                   exclude_map, lanes);
 
     num_valid_lanes = 0;
     for (lane_index = 0; lane_index < num_lanes; ++lane_index) {

@@ -395,8 +395,8 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
         /* TODO: This mem_type initialization is specific to put and get mtype
          * protocols. Consider moving it to the corresponding probe functions.
          */
-        if (params->reg_mem_type != UCS_MEMORY_TYPE_UNKNOWN) {
-            buffer_mem_type = params->reg_mem_type;
+        if (params->reg_mem_info.type != UCS_MEMORY_TYPE_UNKNOWN) {
+            buffer_mem_type = params->reg_mem_info.type;
         } else {
             buffer_mem_type = UCS_MEMORY_TYPE_HOST;
         }

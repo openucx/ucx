@@ -10,7 +10,6 @@
 #define UCP_DT_H_
 
 #include <ucp/api/ucp.h>
-#include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_types.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/profile/profile.h>

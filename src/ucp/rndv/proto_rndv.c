@@ -71,7 +71,8 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
          * it is capable of registering the memory type
          */
         if (!(params->md_map & UCS_BIT(md_index)) &&
-            !(context->reg_md_map[params->mem_info.type] & UCS_BIT(md_index))) {
+            !(context->reg_md_map[params->super.reg_mem_info.type] &
+             UCS_BIT(md_index))) {
             continue;
         }
 
@@ -86,7 +87,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
         *sys_dev_map |= UCS_BIT(ep_sys_dev);
     }
 
-    mem_sys_dev = params->super.super.select_param->sys_dev;
+    mem_sys_dev = params->super.reg_mem_info.sys_dev;
     ucs_for_each_bit(ep_sys_dev, *sys_dev_map) {
         status = ucs_topo_get_distance(mem_sys_dev, ep_sys_dev, sys_distance);
         ucs_assertv_always(status == UCS_OK, "mem_info->sys_dev=%d sys_dev=%d",
@@ -150,14 +151,14 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     rkey_config_key.md_map       = ucp_proto_rndv_md_map_to_remote(params,
                                                                    md_map);
     rkey_config_key.ep_cfg_index = ep_cfg_index;
-    rkey_config_key.sys_dev      = params->mem_info.sys_dev;
-    rkey_config_key.mem_type     = params->mem_info.type;
+    rkey_config_key.sys_dev      = params->super.reg_mem_info.sys_dev;
+    rkey_config_key.mem_type     = params->super.reg_mem_info.type;
 
     rkey_config_key.unreachable_md_map = 0;
 
     for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
         ucp_proto_common_get_lane_distance(&params->super.super, lane,
-                                           params->mem_info.sys_dev,
+                                           params->super.reg_mem_info.sys_dev,
                                            &lanes_distance[lane]);
     }
 
@@ -305,7 +306,7 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
     rpriv->lane             = lane;
     rpriv->packed_rkey_size = ucp_rkey_packed_size(
             init_params->worker->context, rpriv->md_map,
-            init_params->select_param->sys_dev, rpriv->sys_dev_map);
+            params->super.reg_mem_info.sys_dev, rpriv->sys_dev_map);
 }
 
 void ucp_proto_rndv_set_variant_config(
@@ -542,12 +543,11 @@ void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
-        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
+        .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
+                                                     init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
-        .mem_info.type       = init_params->select_param->mem_type,
-        .mem_info.sys_dev    = init_params->select_param->sys_dev,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
         .md_map              = 0
     };
@@ -647,7 +647,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
         goto out_destroy_bulk_perf;
     }
 
-    rpriv->frag_mem_type = init_params->super.reg_mem_type;
+    rpriv->frag_mem_type = init_params->super.reg_mem_info.type;
 
     if (rpriv->super.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */

@@ -42,6 +42,12 @@ ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
     .uct = { UCT_MEM_HANDLE_NULL }
 };
 
+const ucp_memory_info_t ucp_mem_info_unknown = {
+    .type    = UCS_MEMORY_TYPE_UNKNOWN,
+    .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN
+};
+
+
 static void
 ucp_memh_register_log_fail(ucs_log_level_t log_level, void *address,
                            size_t length, ucs_memory_type_t mem_type,
@@ -1697,11 +1703,13 @@ void ucp_mem_rcache_cleanup(ucp_context_h context)
 }
 
 ucs_status_t
-ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx,
-                          ucs_memory_type_t alloc_mem_type)
+ucp_mm_get_alloc_md_index(ucp_context_h context,
+                          ucs_memory_type_t alloc_mem_type,
+                          ucp_md_index_t *md_idx, ucs_sys_device_t *sys_dev)
 {
     ucs_status_t status;
     uct_allocated_memory_t mem;
+    ucp_memory_info_t mem_info;
 
     if (!context->alloc_md[alloc_mem_type].initialized) {
         status = ucp_mem_do_alloc(context, NULL, 1,
@@ -1713,13 +1721,23 @@ ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx,
             return status;
         }
 
+        ucp_memory_detect(context, mem.address, mem.length, &mem_info);
+
+        ucs_assertv(mem_info.type == alloc_mem_type,
+                    "mem_info.mem_type=%s alloc_mem_type=%s",
+                    ucs_memory_type_names[mem_info.type],
+                    ucs_memory_type_names[alloc_mem_type]);
+
         context->alloc_md[alloc_mem_type].initialized = 1;
+        context->alloc_md[alloc_mem_type].sys_dev     = mem_info.sys_dev;
         context->alloc_md[alloc_mem_type].md_index    =
                 ucp_mem_get_md_index(context, mem.md, mem.method);
+
         uct_mem_free(&mem);
     }
 
-    *md_idx = context->alloc_md[alloc_mem_type].md_index;
+    *md_idx  = context->alloc_md[alloc_mem_type].md_index;
+    *sys_dev = context->alloc_md[alloc_mem_type].sys_dev;
     return UCS_OK;
 }
 
