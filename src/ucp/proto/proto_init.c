@@ -389,7 +389,7 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
         if (status != UCS_OK) {
             return status;
         }
-    } else if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) {
+    } else {
         ucs_assert(reg_md_map == 0);
 
         /* TODO: This mem_type initialization is specific to put and get mtype
@@ -485,6 +485,12 @@ ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
         return status;
     }
 
+    /* Buffer copy and TL overheads are not applicable to rkey_ptr protos
+     * in common case */
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) {
+        goto out;
+    }
+
     status = ucp_proto_init_add_tl_perf(params, tl_perf, tl_perf_node,
                                         range_start, range_end, perf);
     if (status != UCS_OK) {
@@ -509,6 +515,7 @@ ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
         }
     }
 
+out:
     *perf_p = perf;
     return UCS_OK;
 

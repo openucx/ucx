@@ -42,12 +42,20 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
     ucp_proto_perf_t *perf, *ack_perf;
     ucs_status_t status;
 
-    ucs_assert(!ucp_proto_perf_is_empty(rndv_op_perf));
+    ucs_assert(ucp_proto_perf_is_empty(rndv_op_perf));
+    status = ucp_proto_init_add_buffer_copy_time(
+            init_params->super.worker, "local copy", UCS_MEMORY_TYPE_HOST,
+            init_params->super.select_param->mem_type, init_params->memtype_op,
+            ucs_max(1, init_params->min_length), init_params->max_length, 1,
+            rndv_op_perf);
+    if (status != UCS_OK) {
+        goto err_destroy_rndv_op_perf;
+    }
 
     status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME, 0,
                                      &ack_perf, &rpriv->ack);
     if (status != UCS_OK) {
-        return;
+        goto err_destroy_rndv_op_perf;
     }
 
     if (rpriv->ack.lane == UCP_NULL_LANE) {
@@ -66,6 +74,10 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
     ucp_proto_select_add_proto(&init_params->super, init_params->cfg_thresh,
                                init_params->cfg_priority, perf, rpriv,
                                priv_size);
+    return;
+
+err_destroy_rndv_op_perf:
+    ucp_proto_perf_destroy(rndv_op_perf);
 }
 
 static void
@@ -73,6 +85,7 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context                = init_params->worker->context;
     uint64_t rndv_modes                   = UCS_BIT(UCP_RNDV_MODE_RKEY_PTR);
+    // Use ucp_proto_common_init_params????
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
@@ -378,7 +391,7 @@ ucp_proto_t ucp_rndv_rkey_ptr_mtype_proto = {
     .name     = "rndv/rkey_ptr/mtype",
     .desc     = "copy to mapped remote memory",
     .flags    = 0,
-    .probe     = ucp_proto_rndv_rkey_ptr_mtype_probe,
+    .probe    = ucp_proto_rndv_rkey_ptr_mtype_probe,
     .query    = ucp_proto_rndv_rkey_ptr_mtype_query,
     .progress = {
         [UCP_PROTO_RNDV_RKEY_PTR_STAGE_COPY] = ucp_proto_rndv_rkey_ptr_mtype_copy_progress,
