@@ -292,14 +292,15 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_tcp_iface_addr_t);
     attr->device_addr_len  = uct_tcp_iface_get_device_address_length(iface);
-    attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                             UCT_IFACE_FLAG_CONNECT_TO_EP    |
-                             UCT_IFACE_FLAG_AM_SHORT         |
-                             UCT_IFACE_FLAG_AM_BCOPY         |
-                             UCT_IFACE_FLAG_PENDING          |
-                             UCT_IFACE_FLAG_CB_SYNC          |
-                             UCT_IFACE_FLAG_EP_CHECK         |
-                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+    attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
+                             UCT_IFACE_FLAG_CONNECT_TO_EP          |
+                             UCT_IFACE_FLAG_AM_SHORT               |
+                             UCT_IFACE_FLAG_AM_BCOPY               |
+                             UCT_IFACE_FLAG_PENDING                |
+                             UCT_IFACE_FLAG_CB_SYNC                |
+                             UCT_IFACE_FLAG_EP_CHECK               |
+                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                             UCT_IFACE_FLAG_INTER_NODE;
     attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                              UCT_IFACE_FLAG_EVENT_RECV      |
                              UCT_IFACE_FLAG_EVENT_FD;

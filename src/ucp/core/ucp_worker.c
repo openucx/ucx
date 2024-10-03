@@ -2951,6 +2951,7 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
     unsigned flags        = ucp_worker_default_address_pack_flags(worker);
     ucp_tl_bitmap_t tl_bitmap;
     ucp_rsc_index_t tl_id;
+    const uct_iface_attr_t *iface_attr;
 
     /* Make sure that UUID is packed to the address intended for the user,
      * because ucp_worker_address_query routine assumes that uuid is always
@@ -2961,7 +2962,8 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
     if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
         UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap);
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
-            if (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+            iface_attr = ucp_worker_iface_get_attr(worker, tl_id);
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE) {
                 UCS_STATIC_BITMAP_SET(&tl_bitmap, tl_id);
             }
         }
