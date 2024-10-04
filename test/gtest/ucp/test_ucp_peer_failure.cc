@@ -779,7 +779,6 @@ protected:
         }
 
         init_buffers(16 * UCS_KBYTE);
-
         define_test_settings(mode, replace_ops);
 
         smoke_test(true);
@@ -884,13 +883,13 @@ public:
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
 {
-    rndv_progress_failure_test(rndv_mode::put_ppln, true);
+    rndv_progress_failure_test(rndv_mode::put_ppln, false);
 }
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
            "RNDV_FRAG_SIZE=host:4K")
 {
-    rndv_progress_failure_test(rndv_mode::put_ppln, true);
+    rndv_progress_failure_test(rndv_mode::put_ppln, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);
