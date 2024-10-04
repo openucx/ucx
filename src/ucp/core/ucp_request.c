@@ -395,25 +395,34 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
     return inv_map;
 }
 
-static UCS_F_ALWAYS_INLINE ucp_mem_h*
-ucp_request_get_memh(ucp_request_t *req, int is_fragment)
+static UCS_F_ALWAYS_INLINE ucp_mem_h
+ucp_request_get_memh(ucp_request_t *req, int extract, int is_fragment)
 {
     ucp_context_h context = req->send.ep->worker->context;
+    ucp_mem_h *memh_p;
+    ucp_mem_h memh;
 
     /* Get the contig memh from the request basing on the proto version */
     if (context->config.ext.proto_enable) {
         if (is_fragment) {
-            return &req->send.rndv.mdesc->memh;
+            return req->send.rndv.mdesc->memh;
         }
+
         ucs_assertv(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG,
                     "dt_class=%s",
                     ucp_datatype_class_names[req->send.state.dt_iter.dt_class]);
-        return &req->send.state.dt_iter.type.contig.memh;
+        memh_p = &req->send.state.dt_iter.type.contig.memh;
     } else {
         ucs_assertv(UCP_DT_IS_CONTIG(req->send.datatype), "datatype=0x%" PRIx64,
                     req->send.datatype);
-        return &req->send.state.dt.dt.contig.memh;
+        memh_p = &req->send.state.dt.dt.contig.memh;
     }
+
+    memh = *memh_p;
+    if (extract) {
+        *memh_p = NULL;
+    }
+    return memh;
 }
 
 int ucp_request_memh_check_invalidate(ucp_request_t *req, int is_fragment)
@@ -429,7 +438,7 @@ int ucp_request_memh_check_invalidate(ucp_request_t *req, int is_fragment)
         return 0;
     }
 
-    memh = *ucp_request_get_memh(req, is_fragment);
+    memh = ucp_request_get_memh(req, 0, is_fragment);
     return (memh != NULL) && (is_fragment || !ucp_memh_is_user_memh(memh));
 }
 
@@ -439,7 +448,7 @@ void ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status,
     ucp_ep_h ep           = req->send.ep;
     ucp_context_h context = ep->worker->context;
     ucp_mem_desc_t *mdesc = req->send.rndv.mdesc;
-    ucp_mem_h *memh_p     = ucp_request_get_memh(req, is_fragment);
+    ucp_mem_h memh        = ucp_request_get_memh(req, 1, is_fragment);
     ucp_md_map_t invalidate_map;
 
     ucs_assert(status != UCS_OK);
@@ -455,16 +464,15 @@ void ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status,
 
     invalidate_map = ucp_request_get_invalidation_map(ep);
     ucp_trace_req(req, "mem invalidate buffer md_map 0x%" PRIx64 "/0x%" PRIx64,
-                  invalidate_map, (*memh_p)->md_map);
+                  invalidate_map, memh->md_map);
 
     if (is_fragment) {
         ucp_frag_mpool_invalidate(mdesc, &req->send.invalidate.comp,
                                   invalidate_map);
     } else {
-        ucp_memh_invalidate(context, *memh_p, &req->send.invalidate.comp,
+        ucp_memh_invalidate(context, memh, &req->send.invalidate.comp,
                             invalidate_map);
-        ucp_memh_put(*memh_p);
-        *memh_p = NULL;
+        ucp_memh_put(memh);
     }
 }
 
