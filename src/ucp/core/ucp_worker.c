@@ -2607,10 +2607,16 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_close_ifaces;
     }
 
+    /* Create usage tracker to support dynamic TL switching */
+    status = ucp_worker_usage_tracker_create(worker);
+    if (status != UCS_OK) {
+        goto err_close_cms;
+    }
+
     /* Create loopback endpoints to copy across memory types */
     status = ucp_worker_mem_type_eps_create(worker);
     if (status != UCS_OK) {
-        goto err_close_cms;
+        goto err_destroy_usage_tracker;
     }
 
     /* Initialize memory pools, should be done after resources are added */
@@ -2646,22 +2652,17 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
-    status = ucp_worker_usage_tracker_create(worker);
-    if (status != UCS_OK) {
-        goto err_am_cleanup;
-    }
-
     *worker_p = worker;
     return UCS_OK;
 
-err_am_cleanup:
-    ucp_am_cleanup(worker);
 err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
 err_destroy_mpools:
     ucp_worker_destroy_mpools(worker);
 err_destroy_memtype_eps:
     ucp_worker_mem_type_eps_destroy(worker);
+err_destroy_usage_tracker:
+    ucp_worker_usage_tracker_destroy(worker);
 err_close_cms:
     ucp_worker_close_cms(worker);
 err_close_ifaces:
@@ -2921,10 +2922,10 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_vfs_obj_remove(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_destroy_mpools(worker);
+    ucp_worker_usage_tracker_destroy(worker);
     ucp_worker_close_cms(worker);
     ucp_worker_close_ifaces(worker);
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
-    ucp_worker_usage_tracker_destroy(worker);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
