@@ -19,20 +19,7 @@ type UcpEp struct {
 var errorHandles = make(map[C.ucp_ep_h]UcpEpErrHandler)
 
 func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_request_param_t) uint64 {
-	var cbId uint64
-	if goRequestParams != nil {
-		if goRequestParams.Cb != nil {
-			cbId = register(goRequestParams.Cb)
-			cRequestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
-			cbAddr := (*C.ucp_send_nbx_callback_t)(unsafe.Pointer(&cRequestParams.cb[0]))
-			*cbAddr = (C.ucp_send_nbx_callback_t)(C.ucxgo_completeGoSendRequest)
-			cRequestParams.user_data = unsafe.Pointer(uintptr(cbId))
-		}
-
-		setMemType(goRequestParams, cRequestParams)
-	}
-
-	return cbId
+	return packParams(goRequestParams, cRequestParams, unsafe.Pointer(C.ucxgo_completeGoSendRequest))
 }
 
 // This routine flushes all outstanding AMO and RMA communications on the endpoint.
