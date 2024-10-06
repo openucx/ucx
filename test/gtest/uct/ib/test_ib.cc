@@ -4,6 +4,9 @@
 * See file LICENSE for terms.
 */
 
+#include <algorithm>
+#include <string>
+
 #include <uct/ib/test_ib.h>
 #ifdef HAVE_MLX5_DV
 extern "C" {
@@ -13,9 +16,12 @@ extern "C" {
 #endif
 
 
-test_uct_ib::test_uct_ib() : m_e1(NULL), m_e2(NULL) { }
+test_uct_ib::test_uct_ib() : m_e1(NULL), m_e2(NULL)
+{
+}
 
-void test_uct_ib::create_connected_entities() {
+void test_uct_ib::create_connected_entities()
+{
     m_e1 = uct_test::create_entity(0);
     m_e2 = uct_test::create_entity(0);
 
@@ -26,28 +32,31 @@ void test_uct_ib::create_connected_entities() {
     m_e2->connect(0, *m_e1, 0);
 }
 
-void test_uct_ib::init() {
+void test_uct_ib::init()
+{
     uct_test::init();
     create_connected_entities();
     test_uct_ib::m_ib_am_handler_counter = 0;
 }
 
-ucs_status_t test_uct_ib::ib_am_handler(void *arg, void *data,
-                                        size_t length, unsigned flags) {
-    recv_desc_t *my_desc  = (recv_desc_t *) arg;
-    uint64_t *test_ib_hdr = (uint64_t *) data;
-    uint64_t *actual_data = (uint64_t *) test_ib_hdr + 1;
+ucs_status_t
+test_uct_ib::ib_am_handler(void *arg, void *data, size_t length, unsigned flags)
+{
+    recv_desc_t *my_desc  = (recv_desc_t*)arg;
+    uint64_t *test_ib_hdr = (uint64_t*)data;
+    uint64_t *actual_data = (uint64_t*)test_ib_hdr + 1;
     unsigned data_length  = length - sizeof(test_ib_hdr);
 
     my_desc->length = data_length;
     if (*test_ib_hdr == 0xbeef) {
-        memcpy(my_desc + 1, actual_data , data_length);
+        memcpy(my_desc + 1, actual_data, data_length);
     }
     ++test_uct_ib::m_ib_am_handler_counter;
     return UCS_OK;
 }
 
-void test_uct_ib::send_recv_short() {
+void test_uct_ib::send_recv_short()
+{
     size_t start_am_counter = test_uct_ib::m_ib_am_handler_counter;
     uint64_t send_data      = 0xdeadbeef;
     uint64_t test_ib_hdr    = 0xbeef;
@@ -56,23 +65,23 @@ void test_uct_ib::send_recv_short() {
 
     check_caps_skip(UCT_IFACE_FLAG_AM_SHORT);
 
-    recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
+    recv_buffer = (recv_desc_t*)malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
     uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler, recv_buffer, 0);
 
     /* send the data */
-    status = uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr,
-                             &send_data, sizeof(send_data));
+    status = uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data,
+                             sizeof(send_data));
     EXPECT_TRUE((status == UCS_OK) || (status == UCS_INPROGRESS));
 
     flush();
-    wait_for_value(&test_uct_ib::m_ib_am_handler_counter,
-                   start_am_counter + 1, true);
+    wait_for_value(&test_uct_ib::m_ib_am_handler_counter, start_am_counter + 1,
+                   true);
 
     ASSERT_EQ(sizeof(send_data), recv_buffer->length);
-    EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
+    EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer + 1));
 
     free(recv_buffer);
 }
@@ -81,11 +90,13 @@ size_t test_uct_ib::m_ib_am_handler_counter = 0;
 
 class test_uct_ib_addr : public test_uct_ib {
 public:
-    uct_ib_iface_config_t *ib_config() {
+    uct_ib_iface_config_t *ib_config()
+    {
         return ucs_derived_of(m_iface_config, uct_ib_iface_config_t);
     }
 
-    void test_address_pack(uint64_t subnet_prefix) {
+    void test_address_pack(uint64_t subnet_prefix)
+    {
         uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
         static const uint16_t lid_in = 0x1ee7;
         union ibv_gid gid_in;
@@ -112,7 +123,8 @@ public:
 
         if (uct_ib_iface_is_roce(iface)) {
             EXPECT_TRUE(iface->config.force_global_addr);
-            EXPECT_TRUE((unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) != 0);
+            EXPECT_TRUE((unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) !=
+                        0);
             EXPECT_EQ(iface->gid_info.roce_info.addr_family,
                       unpack_params.roce_info.addr_family);
             EXPECT_EQ(iface->gid_info.roce_info.ver,
@@ -123,11 +135,15 @@ public:
 
         if (ib_config()->is_global &&
             !(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH)) {
-            EXPECT_TRUE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX);
-            EXPECT_EQ(gid_in.global.subnet_prefix, unpack_params.gid.global.subnet_prefix);
+            EXPECT_TRUE(unpack_params.flags &
+                        UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX);
+            EXPECT_EQ(gid_in.global.subnet_prefix,
+                      unpack_params.gid.global.subnet_prefix);
 
-            EXPECT_TRUE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID);
-            EXPECT_EQ(gid_in.global.interface_id, unpack_params.gid.global.interface_id);
+            EXPECT_TRUE(unpack_params.flags &
+                        UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID);
+            EXPECT_EQ(gid_in.global.interface_id,
+                      unpack_params.gid.global.interface_id);
         }
 
         if (iface->config.path_mtu == IBV_MTU_4096) {
@@ -140,7 +156,8 @@ public:
             EXPECT_EQ(iface->config.path_mtu, unpack_params.path_mtu);
         }
 
-        EXPECT_TRUE(!(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX));
+        EXPECT_TRUE(
+                !(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX));
         EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, unpack_params.gid_index);
 
         EXPECT_TRUE((unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) != 0);
@@ -149,21 +166,23 @@ public:
         free(ib_addr);
     }
 
-    void test_fill_ah_attr(uint64_t subnet_prefix) {
-        uct_ib_iface_t *iface      = ucs_derived_of(m_e1->iface(),
-                                                    uct_ib_iface_t);
-        static const uint16_t lid  = 0x1ee7;
-        const int config_is_global = ib_config()->is_global ||
-                                     /* compatibility UCT_IB_ADDRESS_TYPE_GLOBAL */
-                                     (ib_config()->addr_type == 2);
+    void test_fill_ah_attr(uint64_t subnet_prefix)
+    {
+        uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+        static const uint16_t lid = 0x1ee7;
+        const int config_is_global =
+                ib_config()->is_global ||
+                /* compatibility UCT_IB_ADDRESS_TYPE_GLOBAL */
+                (ib_config()->addr_type == 2);
         union ibv_gid gid;
         struct ibv_ah_attr ah_attr;
 
         ASSERT_EQ(iface->config.force_global_addr,
                   config_is_global || uct_ib_iface_is_roce(iface));
 
-        gid.global.subnet_prefix = subnet_prefix ?: iface->gid_info.gid.global.subnet_prefix;
-        gid.global.interface_id  = 0xdeadbeef;
+        gid.global.subnet_prefix =
+                subnet_prefix ?: iface->gid_info.gid.global.subnet_prefix;
+        gid.global.interface_id = 0xdeadbeef;
 
         uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid,
                                                iface->gid_info.gid_index, 0,
@@ -175,17 +194,20 @@ public:
         } else if (config_is_global) {
             /* in case of global address is forced - ah_attr should use GRH */
             EXPECT_TRUE(ah_attr.is_global);
-        } else if (iface->gid_info.gid.global.subnet_prefix == gid.global.subnet_prefix) {
+        } else if (iface->gid_info.gid.global.subnet_prefix ==
+                   gid.global.subnet_prefix) {
             /* in case of subnets are same - ah_attr depend from forced/nonforced GRH */
             EXPECT_FALSE(ah_attr.is_global);
-        } else if (iface->gid_info.gid.global.subnet_prefix != gid.global.subnet_prefix) {
+        } else if (iface->gid_info.gid.global.subnet_prefix !=
+                   gid.global.subnet_prefix) {
             /* in case of subnets are different - ah_attr should use GRH */
             EXPECT_TRUE(ah_attr.is_global);
         }
     }
 };
 
-UCS_TEST_P(test_uct_ib_addr, address_pack) {
+UCS_TEST_P(test_uct_ib_addr, address_pack)
+{
     test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
     test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
     test_address_pack(0xdeadfeedbeefa880ul);
@@ -205,20 +227,23 @@ UCS_TEST_P(test_uct_ib_addr, address_pack_path_mtu, "IB_PATH_MTU=2048")
     EXPECT_EQ(IBV_MTU_2048, params.path_mtu);
 }
 
-UCS_TEST_P(test_uct_ib_addr, fill_ah_attr) {
+UCS_TEST_P(test_uct_ib_addr, fill_ah_attr)
+{
     test_fill_ah_attr(UCT_IB_LINK_LOCAL_PREFIX);
     test_fill_ah_attr(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
     test_fill_ah_attr(0xdeadfeedbeefa880ul);
     test_fill_ah_attr(0l);
 }
 
-UCS_TEST_P(test_uct_ib_addr, address_pack_global, "IB_IS_GLOBAL=y") {
+UCS_TEST_P(test_uct_ib_addr, address_pack_global, "IB_IS_GLOBAL=y")
+{
     test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
     test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
     test_address_pack(0xdeadfeedbeefa880ul);
 }
 
-UCS_TEST_P(test_uct_ib_addr, fill_ah_attr_global, "IB_IS_GLOBAL=y") {
+UCS_TEST_P(test_uct_ib_addr, fill_ah_attr_global, "IB_IS_GLOBAL=y")
+{
     test_fill_ah_attr(UCT_IB_LINK_LOCAL_PREFIX);
     test_fill_ah_attr(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
     test_fill_ah_attr(0xdeadfeedbeefa880ul);
@@ -228,7 +253,8 @@ UCS_TEST_P(test_uct_ib_addr, fill_ah_attr_global, "IB_IS_GLOBAL=y") {
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_addr);
 
 
-test_uct_ib_with_specific_port::test_uct_ib_with_specific_port() {
+test_uct_ib_with_specific_port::test_uct_ib_with_specific_port()
+{
     m_ibctx    = NULL;
     m_port     = 0;
     m_dev_name = "";
@@ -236,7 +262,8 @@ test_uct_ib_with_specific_port::test_uct_ib_with_specific_port() {
     memset(&m_port_attr, 0, sizeof(m_port_attr));
 }
 
-void test_uct_ib_with_specific_port::init() {
+void test_uct_ib_with_specific_port::init()
+{
     size_t colon_pos = GetParam()->dev_name.find(":");
     std::string port_num_str;
 
@@ -245,12 +272,12 @@ void test_uct_ib_with_specific_port::init() {
 
     /* port number */
     if (sscanf(port_num_str.c_str(), "%d", &m_port) != 1) {
-        UCS_TEST_ABORT("Failed to get the port number on device: " << m_dev_name);
+        UCS_TEST_ABORT(
+                "Failed to get the port number on device: " << m_dev_name);
     }
 
-    std::string abort_reason =
-        "The requested device " + m_dev_name +
-        " wasn't found in the device list.";
+    std::string abort_reason = "The requested device " + m_dev_name +
+                               " wasn't found in the device list.";
     struct ibv_device **device_list;
     int i, num_devices;
 
@@ -258,7 +285,7 @@ void test_uct_ib_with_specific_port::init() {
     device_list = ibv_get_device_list(&num_devices);
     if (device_list == NULL) {
         abort_reason = "Failed to get the device list.";
-        num_devices = 0;
+        num_devices  = 0;
     }
 
     /* search for the given device in the device list */
@@ -281,8 +308,8 @@ void test_uct_ib_with_specific_port::init() {
     }
 
     if (ibv_query_port(m_ibctx, m_port, &m_port_attr) != 0) {
-        UCS_TEST_ABORT("Failed to query port " << m_port <<
-                       "on device: " << m_dev_name);
+        UCS_TEST_ABORT("Failed to query port " << m_port
+                                               << "on device: " << m_dev_name);
     }
 
     try {
@@ -293,7 +320,8 @@ void test_uct_ib_with_specific_port::init() {
     }
 }
 
-void test_uct_ib_with_specific_port::cleanup() {
+void test_uct_ib_with_specific_port::cleanup()
+{
     if (m_ibctx != NULL) {
         ibv_close_device(m_ibctx);
         m_ibctx = NULL;
@@ -312,17 +340,20 @@ UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_roce);
 
 class test_uct_ib_lmc : public test_uct_ib_with_specific_port {
 public:
-    void init() {
+    void init()
+    {
         test_uct_ib_with_specific_port::init();
         test_uct_ib::init();
     }
 
-    void cleanup() {
+    void cleanup()
+    {
         test_uct_ib::cleanup();
         test_uct_ib_with_specific_port::cleanup();
     }
 
-    void check_port_attr() {
+    void check_port_attr()
+    {
         /* check if a non zero lmc is set on the port */
         if (!m_port_attr.lmc) {
             UCS_TEST_SKIP_R("lmc is set to zero on an IB port");
@@ -330,7 +361,8 @@ public:
     }
 };
 
-UCS_TEST_P(test_uct_ib_lmc, non_default_lmc, "IB_LID_PATH_BITS=1") {
+UCS_TEST_P(test_uct_ib_lmc, non_default_lmc, "IB_LID_PATH_BITS=1")
+{
     send_recv_short();
 }
 
@@ -338,17 +370,20 @@ UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_lmc);
 
 class test_uct_ib_gid_idx : public test_uct_ib_with_specific_port {
 public:
-    void init() {
+    void init()
+    {
         test_uct_ib_with_specific_port::init();
         test_uct_ib::init();
     }
 
-    void cleanup() {
+    void cleanup()
+    {
         test_uct_ib::cleanup();
         test_uct_ib_with_specific_port::cleanup();
     }
 
-    void check_port_attr() {
+    void check_port_attr()
+    {
         std::stringstream device_str;
         device_str << ibv_get_device_name(m_ibctx->device) << ":" << m_port;
 
@@ -357,8 +392,8 @@ public:
         }
 
         union ibv_gid gid;
-        uct_ib_md_config_t *md_config =
-            ucs_derived_of(m_md_config, uct_ib_md_config_t);
+        uct_ib_md_config_t *md_config = ucs_derived_of(m_md_config,
+                                                       uct_ib_md_config_t);
         ucs_config_allow_list_t dummy_subnet_list;
         ucs::handle<uct_md_h> uct_md;
         uct_ib_iface_t dummy_ib_iface;
@@ -368,7 +403,8 @@ public:
 
         UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
                                &uct_ib_component,
-                               ibv_get_device_name(m_ibctx->device), m_md_config);
+                               ibv_get_device_name(m_ibctx->device),
+                               m_md_config);
 
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
 
@@ -408,7 +444,8 @@ public:
     }
 };
 
-UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "IB_GID_INDEX=1") {
+UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "IB_GID_INDEX=1")
+{
     send_recv_short();
 }
 
@@ -418,7 +455,8 @@ UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_gid_idx);
 #if HAVE_DEVX
 class test_uct_ib_sl : public test_uct_ib_with_specific_port {
 public:
-    void check_port_attr() {
+    void check_port_attr()
+    {
         ucs_status_t status;
         ucs::handle<uct_md_h> uct_md;
 
@@ -439,21 +477,52 @@ public:
         }
     }
 
+    bool transport_has_ddp() {
+        ucs::handle<uct_md_h> uct_md;
+        if (!has_transport("rc_mlx5") && !has_transport("dc_mlx5")) {
+            return false;
+        }
+
+        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
+                               &uct_ib_component,
+                               ibv_get_device_name(m_ibctx->device),
+                               m_md_config);
+
+        uct_ib_mlx5_md_t *ib_md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+        int rc_has_ddp = has_transport("rc_mlx5") &&
+                         (ib_md->dv_ooo_cap.max_dp_ordering_rc ==
+                          UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
+        int dc_has_ddp = has_transport("dc_mlx5") &&
+                         (ib_md->dv_ooo_cap.max_dp_ordering_dc ==
+                          UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
+        return rc_has_ddp || dc_has_ddp;
+    }
+
 protected:
     uint16_t m_ooo_sl_mask;
 };
 
-UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config) {
+UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config)
+{
     // go over all SLs, check UCTs could be initialized on a specific SL
     // and able to send/recv traffic
-    for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl)  {
+    for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl) {
+        uint8_t sl_supports_ar = (m_ooo_sl_mask & UCS_BIT(sl));
         if (!has_transport("rc_verbs") && !has_transport("ud_verbs")) {
             // if AR is configured on the given SL, set AR_ENABLE to "y",
             // otherwise - to "n" in order to test that AR_ENABLE parameter
             // works as expected w/o errors and warnings
-            modify_config("IB_AR_ENABLE",
-                          (m_ooo_sl_mask & UCS_BIT(sl)) ? "y" : "n");
+            modify_config("IB_AR_ENABLE", sl_supports_ar ? "y" : "n");
         }
+
+        // if (sl_supports_ar && transport_has_ddp()) {
+        //     std::string transport(GetParam()->tl_name);
+        //     std::transform(transport.begin(), transport.end(),
+        //                    transport.begin(), ::toupper);
+        //     modify_config((transport + std::string("_DDP_ENABLE")).c_str(),
+        //                   "y");
+        // }
+
         modify_config("IB_SL", ucs::to_string(static_cast<uint16_t>(sl)));
 
         test_uct_ib::init();
@@ -488,20 +557,23 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_qp_time) {
         uint8_t prev_index = index - 1;
 
         // the time defined for the (i)th element
-        qp_val = uct_ib_to_qp_fabric_time(4.096 * pow(2, index) / UCS_USEC_PER_SEC);
+        qp_val = uct_ib_to_qp_fabric_time(4.096 * pow(2, index) /
+                                          UCS_USEC_PER_SEC);
         EXPECT_EQ(index % UCT_IB_FABRIC_TIME_MAX, qp_val);
 
         // avg = (the average time defined for the [(i - 1)th element, (i)th element])
-        avg = (4.096 * pow(2, prev_index) + 4.096 * pow(2, index)) * 0.5;
+        avg    = (4.096 * pow(2, prev_index) + 4.096 * pow(2, index)) * 0.5;
         qp_val = uct_ib_to_qp_fabric_time(avg / UCS_USEC_PER_SEC);
         EXPECT_EQ(index % UCT_IB_FABRIC_TIME_MAX, qp_val);
 
         // the average time defined for the [(i - 1)th element, avg]
-        qp_val = uct_ib_to_qp_fabric_time((4.096 * pow(2, prev_index) + avg) * 0.5 / UCS_USEC_PER_SEC);
+        qp_val = uct_ib_to_qp_fabric_time((4.096 * pow(2, prev_index) + avg) *
+                                          0.5 / UCS_USEC_PER_SEC);
         EXPECT_EQ(prev_index, qp_val);
 
         // the average time defined for the [avg, (i)th element]
-        qp_val = uct_ib_to_qp_fabric_time((avg +  4.096 * pow(2, index)) * 0.5 / UCS_USEC_PER_SEC);
+        qp_val = uct_ib_to_qp_fabric_time((avg + 4.096 * pow(2, index)) * 0.5 /
+                                          UCS_USEC_PER_SEC);
         EXPECT_EQ(index % UCT_IB_FABRIC_TIME_MAX, qp_val);
     }
 }
@@ -515,7 +587,7 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
     EXPECT_EQ(1, rnr_val);
 
     // the average time defined for the [0, 1st element]
-    avg = uct_ib_qp_rnr_time_ms[1] * 0.5;
+    avg     = uct_ib_qp_rnr_time_ms[1] * 0.5;
     rnr_val = uct_ib_to_rnr_fabric_time(avg / UCS_MSEC_PER_SEC);
     EXPECT_EQ(1, rnr_val);
 
@@ -523,26 +595,32 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
         uint8_t next_index = (index + 1) % UCT_IB_FABRIC_TIME_MAX;
 
         // the time defined for the (i)th element
-        rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[index] / UCS_MSEC_PER_SEC);
+        rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[index] /
+                                            UCS_MSEC_PER_SEC);
         EXPECT_EQ(index, rnr_val);
 
         // avg = (the average time defined for the [(i)th element, (i + 1)th element])
-        avg = (uct_ib_qp_rnr_time_ms[index] + uct_ib_qp_rnr_time_ms[next_index]) * 0.5;
+        avg     = (uct_ib_qp_rnr_time_ms[index] +
+                   uct_ib_qp_rnr_time_ms[next_index]) *
+                  0.5;
         rnr_val = uct_ib_to_rnr_fabric_time(avg / UCS_MSEC_PER_SEC);
         EXPECT_EQ(next_index, rnr_val);
 
         // the average time defined for the [(i)th element, avg]
-        rnr_val = uct_ib_to_rnr_fabric_time((uct_ib_qp_rnr_time_ms[index] + avg) * 0.5 / UCS_MSEC_PER_SEC);
+        rnr_val = uct_ib_to_rnr_fabric_time(
+                (uct_ib_qp_rnr_time_ms[index] + avg) * 0.5 / UCS_MSEC_PER_SEC);
         EXPECT_EQ(index, rnr_val);
 
         // the average time defined for the [avg, (i + 1)th element]
-        rnr_val = uct_ib_to_rnr_fabric_time((avg + uct_ib_qp_rnr_time_ms[next_index]) *
-                                             0.5 / UCS_MSEC_PER_SEC);
+        rnr_val = uct_ib_to_rnr_fabric_time(
+                (avg + uct_ib_qp_rnr_time_ms[next_index]) * 0.5 /
+                UCS_MSEC_PER_SEC);
         EXPECT_EQ(next_index, rnr_val);
     }
 
     // the time defined for the biggest value
-    rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[0] / UCS_MSEC_PER_SEC);
+    rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[0] /
+                                        UCS_MSEC_PER_SEC);
     EXPECT_EQ(0, rnr_val);
 
     // 1 sec
@@ -554,13 +632,14 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
 #if HAVE_DEVX
 class test_uct_ib_sl_utils : public test_uct_ib_utils {
 protected:
-    ucs_status_t ib_select_sl(ucs_ternary_auto_value_t ar_enable,
-                              uint64_t test_ooo_sl_mask,
-                              const uct_ib_iface_config_t &config,
-                              uint8_t &sl) const {
+    ucs_status_t
+    ib_select_sl(ucs_ternary_auto_value_t ar_enable, uint64_t test_ooo_sl_mask,
+                 const uct_ib_iface_config_t &config, uint8_t &sl) const
+    {
         uint16_t ooo_sl_mask = (test_ooo_sl_mask !=
                                 m_ooo_sl_mask_not_detected) ?
-                               static_cast<uint16_t>(test_ooo_sl_mask) : 0;
+                                       static_cast<uint16_t>(test_ooo_sl_mask) :
+                                       0;
         return uct_ib_mlx5_select_sl(&config, ar_enable, ooo_sl_mask,
                                      (test_ooo_sl_mask !=
                                       m_ooo_sl_mask_not_detected),
@@ -568,9 +647,9 @@ protected:
     }
 
     ucs_status_t select_sl_ok(ucs_ternary_auto_value_t ar_enable,
-                              unsigned long config_sl,
-                              uint64_t ooo_sl_mask,
-                              const uct_ib_iface_config_t &config) const {
+                              unsigned long config_sl, uint64_t ooo_sl_mask,
+                              const uct_ib_iface_config_t &config) const
+    {
         uint16_t sls_with_ar, sls_without_ar;
         ucs_status_t status;
         uint8_t sl;
@@ -579,8 +658,7 @@ protected:
             sls_with_ar    = static_cast<uint16_t>(ooo_sl_mask);
             sls_without_ar = static_cast<uint16_t>(~ooo_sl_mask);
         } else {
-            sls_with_ar    =
-            sls_without_ar = 0;
+            sls_with_ar = sls_without_ar = 0;
         }
 
         status = ib_select_sl(ar_enable, ooo_sl_mask, config, sl);
@@ -608,13 +686,10 @@ protected:
         return status;
     }
 
-    static ucs_log_func_rc_t
-    wrap_errors_check_sl_masks_logger(const char *file, unsigned line,
-                                      const char *function,
-                                      ucs_log_level_t level,
-                                      const ucs_log_component_config_t *
-                                      comp_conf,
-                                      const char *message, va_list ap)
+    static ucs_log_func_rc_t wrap_errors_check_sl_masks_logger(
+            const char *file, unsigned line, const char *function,
+            ucs_log_level_t level, const ucs_log_component_config_t *comp_conf,
+            const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
@@ -636,11 +711,12 @@ protected:
 
     ucs_status_t select_sl_nok(ucs_ternary_auto_value_t ar_enable,
                                unsigned long config_sl, uint64_t ooo_sl_mask,
-                               const uct_ib_iface_config_t &config) const {
+                               const uct_ib_iface_config_t &config) const
+    {
         scoped_log_handler slh(((ooo_sl_mask != m_ooo_sl_mask_not_detected) &&
                                 (config_sl == UCS_ULUNITS_AUTO)) ?
-                               wrap_errors_check_sl_masks_logger :
-                               wrap_errors_logger);
+                                       wrap_errors_check_sl_masks_logger :
+                                       wrap_errors_logger);
         uint8_t sl;
 
         EXPECT_NE(UCS_AUTO, ar_enable);
@@ -649,7 +725,8 @@ protected:
     }
 
     void select_sl(ucs_ternary_auto_value_t ar_enable, unsigned long config_sl,
-                   uint64_t ooo_sl_mask, ucs_status_t exp_status) const {
+                   uint64_t ooo_sl_mask, ucs_status_t exp_status) const
+    {
         uct_ib_iface_config_t config = {};
         ucs_status_t status;
 
@@ -665,12 +742,12 @@ protected:
 
 protected:
     const static uint64_t m_ooo_sl_mask_not_detected;
-    const static uint8_t  m_default_sl;
+    const static uint8_t m_default_sl;
 };
 
 const uint64_t test_uct_ib_sl_utils::m_ooo_sl_mask_not_detected =
-                                     std::numeric_limits<uint64_t>::max();
-const uint8_t  test_uct_ib_sl_utils::m_default_sl               = 0;
+        std::numeric_limits<uint64_t>::max();
+const uint8_t test_uct_ib_sl_utils::m_default_sl = 0;
 
 
 UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
@@ -678,7 +755,7 @@ UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
 
     for (unsigned i = 0; i < static_cast<unsigned>(UCS_TERNARY_LAST); i++) {
         ucs_ternary_auto_value_t ar_enable =
-            static_cast<ucs_ternary_auto_value_t>(i);
+                static_cast<ucs_ternary_auto_value_t>(i);
 
         // select the default SL, with empty OOO SL mask
         select_sl(ar_enable, UCS_ULUNITS_AUTO, 0,
@@ -687,7 +764,8 @@ UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
         // select the default SL, without OOO SL mask (not detected)
         select_sl(ar_enable, UCS_ULUNITS_AUTO, m_ooo_sl_mask_not_detected,
                   ((ar_enable != UCS_TRY) && (ar_enable != UCS_AUTO)) ?
-                  err_status : UCS_OK);
+                          err_status :
+                          UCS_OK);
 
         for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl) {
             // select the default SL, with OOO SL mask which contains only <sl>
@@ -700,7 +778,8 @@ UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
             // select SL=<sl>, without OOO SL mask (not detected)
             select_sl(ar_enable, sl, m_ooo_sl_mask_not_detected,
                       ((ar_enable != UCS_TRY) && (ar_enable != UCS_AUTO)) ?
-                      err_status : UCS_OK);
+                              err_status :
+                              UCS_OK);
 
             /* select SL=<sl>, with OOO SL mask which contains only <sl> */
             select_sl(ar_enable, sl, UCS_BIT(sl),
@@ -714,16 +793,15 @@ UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
             // select SL=<sl>, with OOO SL mask which contains <sl> and two
             // other elements
             select_sl(ar_enable, sl,
-                      UCS_BIT(sl)                       |
-                      UCS_BIT((sl + 1) % UCT_IB_SL_NUM) |
-                      UCS_BIT((sl + 2) % UCT_IB_SL_NUM),
+                      UCS_BIT(sl) | UCS_BIT((sl + 1) % UCT_IB_SL_NUM) |
+                              UCS_BIT((sl + 2) % UCT_IB_SL_NUM),
                       (ar_enable == UCS_NO) ? err_status : UCS_OK);
 
             // select SL=<sl>, with OOO SL mask which doesn't contain <sl>
             select_sl(ar_enable, sl,
                       UCS_BIT((sl + 1) % UCT_IB_SL_NUM) |
-                      UCS_BIT((sl + 2) % UCT_IB_SL_NUM) |
-                      UCS_BIT((sl + 3) % UCT_IB_SL_NUM),
+                              UCS_BIT((sl + 2) % UCT_IB_SL_NUM) |
+                              UCS_BIT((sl + 3) % UCT_IB_SL_NUM),
                       (ar_enable == UCS_YES) ? err_status : UCS_OK);
 
             // select SL=<sl>, with full OOO SL mask
@@ -774,8 +852,8 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
         ib_mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
         dev        = &ib_mlx5_md->super.dev;
 
-        for (uint8_t port_num = dev->first_port;
-             port_num <= dev->num_ports; ++port_num) {
+        for (uint8_t port_num = dev->first_port; port_num <= dev->num_ports;
+             ++port_num) {
             uint16_t ooo_sl_mask = 0;
             ucs_string_buffer_t strb;
 
@@ -794,7 +872,7 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
 
         uct_md_close(md);
 
-out_md_config_release:
+    out_md_config_release:
         uct_config_release(md_config);
     }
 
@@ -807,14 +885,16 @@ out_md_config_release:
 
 class test_uct_event_ib : public test_uct_ib {
 public:
-    test_uct_event_ib() {
+    test_uct_event_ib()
+    {
         length      = 8;
         test_ib_hdr = 0xbeef;
         m_buf1      = NULL;
         m_buf2      = NULL;
     }
 
-    void init() {
+    void init()
+    {
         test_uct_ib::init();
 
         check_skip_test();
@@ -831,7 +911,8 @@ public:
 
     /* overload `test_uct_ib` variant to pass the async event handler to
      * the receive entity */
-    void create_connected_entities() {
+    void create_connected_entities()
+    {
         /* `m_e1` entity is used as a receiver in UCT IB Event tests */
         m_e1 = uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
                                        async_event_handler, this);
@@ -844,33 +925,39 @@ public:
         m_e2->connect(0, *m_e1, 0);
     }
 
-    static void async_event_handler(void *arg, unsigned flags) {
+    static void async_event_handler(void *arg, unsigned flags)
+    {
         test_uct_event_ib *self = static_cast<test_uct_event_ib*>(arg);
         self->m_async_event_ctx.signal();
     }
 
-    static size_t pack_cb(void *dest, void *arg) {
-        const mapped_buffer *buf = (const mapped_buffer *)arg;
+    static size_t pack_cb(void *dest, void *arg)
+    {
+        const mapped_buffer *buf = (const mapped_buffer*)arg;
         memcpy(dest, buf->ptr(), buf->length());
         ++test_uct_event_ib::bcopy_pack_count;
         return buf->length();
     }
 
     /* Use put_bcopy here to provide send_cq entry */
-    void send_msg_e1_e2(size_t count = 1) {
+    void send_msg_e1_e2(size_t count = 1)
+    {
         for (size_t i = 0; i < count; ++i) {
-            ssize_t status = uct_ep_put_bcopy(m_e1->ep(0), pack_cb, (void *)m_buf1,
-                                              m_buf2->addr(), m_buf2->rkey());
+            ssize_t status = uct_ep_put_bcopy(m_e1->ep(0), pack_cb,
+                                              (void*)m_buf1, m_buf2->addr(),
+                                              m_buf2->rkey());
             if (status < 0) {
                 ASSERT_UCS_OK((ucs_status_t)status);
             }
         }
     }
 
-    void send_msg_e2_e1(size_t count = 1) {
+    void send_msg_e2_e1(size_t count = 1)
+    {
         for (size_t i = 0; i < count; ++i) {
             ucs_status_t status = uct_ep_am_short(m_e2->ep(0), 0, test_ib_hdr,
-                                                  m_buf2->ptr(), m_buf2->length());
+                                                  m_buf2->ptr(),
+                                                  m_buf2->length());
             ASSERT_UCS_OK(status);
         }
     }
@@ -904,15 +991,15 @@ public:
         if (value != completed_events) {
             /* acknowledge the completion to prevent iface dtor hung */
             ack_cq(iface, dir);
-            UCS_TEST_ABORT(
-                    "completed_events have to be 1 but the value "
-                    << completed_events);
+            UCS_TEST_ABORT("completed_events have to be 1 but the value "
+                           << completed_events);
         }
     }
 
-    void cleanup() {
-        delete(m_buf1);
-        delete(m_buf2);
+    void cleanup()
+    {
+        delete (m_buf1);
+        delete (m_buf2);
         test_uct_ib::cleanup();
     }
 
@@ -932,8 +1019,8 @@ size_t test_uct_event_ib::bcopy_pack_count = 0;
 UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY |
                                  UCT_IFACE_FLAG_CB_SYNC) ||
-                     !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                       UCT_IFACE_FLAG_EVENT_RECV))
+                             !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                               UCT_IFACE_FLAG_EVENT_RECV))
 {
     ucs_status_t status;
 
@@ -949,9 +1036,8 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
     send_msg_e1_e2();
 
     /* make sure the file descriptor is signaled once */
-    EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e1,
-                                                 1000 *
-                                                 ucs::test_time_multiplier()));
+    EXPECT_TRUE(m_async_event_ctx.wait_for_event(
+            *m_e1, 1000 * ucs::test_time_multiplier()));
 
     status = uct_iface_event_arm(m_e1->iface(), EVENTS);
     ASSERT_EQ(status, UCS_ERR_BUSY);
@@ -966,10 +1052,10 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
 
 UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY |
-                                 UCT_IFACE_FLAG_CB_SYNC   |
+                                 UCT_IFACE_FLAG_CB_SYNC |
                                  UCT_IFACE_FLAG_AM_SHORT) ||
-                     !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                       UCT_IFACE_FLAG_EVENT_RECV))
+                             !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                               UCT_IFACE_FLAG_EVENT_RECV))
 {
     const size_t msg_count = 1;
     ucs_status_t status;
@@ -989,15 +1075,14 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
     twait(150); /* Let completion to be generated */
 
     /* Make sure all messages delivered */
-    while ((test_uct_ib::m_ib_am_handler_counter   < msg_count) ||
+    while ((test_uct_ib::m_ib_am_handler_counter < msg_count) ||
            (test_uct_event_ib::bcopy_pack_count < msg_count)) {
         progress();
     }
 
     /* make sure the file descriptor is signaled */
-    EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e1,
-                                                 1000 *
-                                                 ucs::test_time_multiplier()));
+    EXPECT_TRUE(m_async_event_ctx.wait_for_event(
+            *m_e1, 1000 * ucs::test_time_multiplier()));
 
     /* Acknowledge all the requests */
     short_progress_loop();
