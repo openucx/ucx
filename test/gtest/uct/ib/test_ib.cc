@@ -442,6 +442,7 @@ public:
     bool transport_has_ddp()
     {
         ucs::handle<uct_md_h> uct_md;
+
         if (!has_transport("rc_mlx5") && !has_transport("dc_mlx5")) {
             return false;
         }
@@ -466,26 +467,25 @@ protected:
 };
 
 UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config) {
+    bool has_ddp = transport_has_ddp();
     // go over all SLs, check UCTs could be initialized on a specific SL
     // and able to send/recv traffic
     for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl)  {
-        uint8_t sl_supports_ar = 0;
+        uint16_t sl_supports_ar = (m_ooo_sl_mask & UCS_BIT(sl));
         if (!has_transport("rc_verbs") && !has_transport("ud_verbs")) {
             // if AR is configured on the given SL, set AR_ENABLE to "y",
             // otherwise - to "n" in order to test that AR_ENABLE parameter
             // works as expected w/o errors and warnings
-            sl_supports_ar = (m_ooo_sl_mask & UCS_BIT(sl));
             modify_config("IB_AR_ENABLE", sl_supports_ar ? "y" : "n");
         }
 
         modify_config("IB_SL", ucs::to_string(static_cast<uint16_t>(sl)));
-
-        if (sl_supports_ar && transport_has_ddp()) {
+        if (has_transport("rc_mlx5") || has_transport("dc_mlx5")) {
             std::string transport(GetParam()->tl_name);
             std::transform(transport.begin(), transport.end(),
                            transport.begin(), ::toupper);
             modify_config((transport + std::string("_DDP_ENABLE")).c_str(),
-                          "y");
+                          (sl_supports_ar && has_ddp) ? "y" : "n");
         }
 
         test_uct_ib::init();
