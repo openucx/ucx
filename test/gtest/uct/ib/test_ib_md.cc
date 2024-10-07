@@ -342,6 +342,7 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
     EXPECT_NE(UCS_OK, reg_mem(UCT_MD_MEM_ACCESS_RMA, start, size, &memh));
 
     /* Fill the hole with the middle VMA */
+    /* coverity[pass_freed_arg] */
     mid = mmap_anon(mid, size - upper_size - lower_size);
     EXPECT_NE(nullptr, mid);
 
