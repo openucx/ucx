@@ -10,29 +10,30 @@ import (
 )
 
 func TestUcpRma(t *testing.T) {
-	const sendData string = "Hello GO"
+	const data string = "Hello GO"
+	const length uint64 = uint64(len(data))
 
 	for _, memType := range get_mem_types() {
-		sender := prepareContext(t, (&UcpParams{}).EnableRMA().EnableTag())
-		receiver := prepareContext(t, (&UcpParams{}).EnableRMA().EnableTag())
+		requester := prepareContext(t, (&UcpParams{}).EnableRMA().EnableTag())
+		responder := prepareContext(t, (&UcpParams{}).EnableRMA().EnableTag())
 		t.Logf("Testing RMA %v -> %v", memType.senderMemType, memType.recvMemType)
 
 		ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_MULTI)
 
-		receiver.worker, _ = receiver.context.NewWorker(ucpWorkerParams)
-		sender.worker, _ = sender.context.NewWorker(ucpWorkerParams)
-		connect(sender, receiver)
+		requester.worker, _ = requester.context.NewWorker(ucpWorkerParams)
+		responder.worker, _ = responder.context.NewWorker(ucpWorkerParams)
+		connect(requester, responder)
 
-		sendMem := memoryAllocate(sender, uint64(len(sendData)), memType.senderMemType)
-		memorySet(sender, []byte(sendData))
+		localMem := memoryAllocate(requester, length, memType.senderMemType)
+		memorySet(requester, []byte(data))
 
-		receiveMem := memoryAllocate(receiver, 4096, memType.recvMemType)
+		remoteMem := memoryAllocate(responder, 4096, memType.recvMemType)
 
-		rkeyBuf, _ := receiver.mem.Pack()
-		rkey, _ := sender.ep.Unpack(rkeyBuf)
+		rkeyBuf, _ := responder.mem.Pack()
+		rkey, _ := requester.ep.Unpack(rkeyBuf)
 		rkeyBuf.Close()
 
-		sendRequest, _ := sender.ep.RmaPut(sendMem, uint64(len(sendData)), uint64(uintptr(receiveMem)), rkey, &UcpRequestParams{
+		putRequest, _ := requester.ep.RmaPut(localMem, length, uint64(uintptr(remoteMem)), rkey, &UcpRequestParams{
 			Cb: func(request *UcpRequest, status UcsStatus) {
 				if status != UCS_OK {
 					t.Fatalf("Request failed with status: %d", status)
@@ -41,23 +42,44 @@ func TestUcpRma(t *testing.T) {
 				request.Close()
 			}})
 
-		for sendRequest.GetStatus() == UCS_INPROGRESS {
-			sender.worker.Progress()
-			receiver.worker.Progress()
-		}
-		if recvString := string(memoryGet(receiver)[:len(sendData)]); recvString != sendData {
-			t.Fatalf("Send data %s != recv data %s", sendData, recvString)
+		for putRequest.GetStatus() == UCS_INPROGRESS {
+			requester.worker.Progress()
+			responder.worker.Progress()
 		}
 
-		closeReq, _ := sender.ep.CloseNonBlockingFlush(nil)
+		if remoteData := string(memoryGet(responder)[:length]); remoteData != data {
+			t.Fatalf("Remote data %s != data %s", remoteData, data)
+		}
+
+		memorySet(requester, make([]byte, length))
+
+		getRequest, _ := requester.ep.RmaGet(localMem, length, uint64(uintptr(remoteMem)), rkey, &UcpRequestParams{
+			Cb: func(request *UcpRequest, status UcsStatus) {
+				if status != UCS_OK {
+					t.Fatalf("Request failed with status: %d", status)
+				}
+
+				request.Close()
+			}})
+
+		for getRequest.GetStatus() == UCS_INPROGRESS {
+			requester.worker.Progress()
+			responder.worker.Progress()
+		}
+
+		if localData := string(memoryGet(responder)[:length]); localData != data {
+			t.Fatalf("Local data %s != data %s", localData, data)
+		}
+
+		closeReq, _ := requester.ep.CloseNonBlockingFlush(nil)
 		for closeReq.GetStatus() == UCS_INPROGRESS {
-			sender.worker.Progress()
-			receiver.worker.Progress()
+			requester.worker.Progress()
+			responder.worker.Progress()
 		}
 		closeReq.Close()
 		rkey.Close()
 
-		sender.Close()
-		receiver.Close()
+		requester.Close()
+		responder.Close()
 	}
 }
