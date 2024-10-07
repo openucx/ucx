@@ -469,11 +469,12 @@ UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config) {
     // go over all SLs, check UCTs could be initialized on a specific SL
     // and able to send/recv traffic
     for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl)  {
-        uint8_t sl_supports_ar = (m_ooo_sl_mask & UCS_BIT(sl));
+        uint8_t sl_supports_ar = 0;
         if (!has_transport("rc_verbs") && !has_transport("ud_verbs")) {
             // if AR is configured on the given SL, set AR_ENABLE to "y",
             // otherwise - to "n" in order to test that AR_ENABLE parameter
             // works as expected w/o errors and warnings
+            sl_supports_ar = (m_ooo_sl_mask & UCS_BIT(sl));
             modify_config("IB_AR_ENABLE", sl_supports_ar ? "y" : "n");
         }
 

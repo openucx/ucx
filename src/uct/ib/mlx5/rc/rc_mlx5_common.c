@@ -649,7 +649,6 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
 
     if (config->super.ar_enable == UCS_NO) {
         iface->config.dp_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
-        ucs_info("AR is disabled by force");
         return UCS_OK;
     }
 
@@ -659,10 +658,6 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
 
     iface->config.dp_ordering = ucs_min(iface->config.dp_ordering,
                                         dp_ordering_cap);
-
-    ucs_info("%s: set ar_enable=%d, ddp_enable=%d, capability=%d on %s",
-              uct_ib_device_name(&md->super.dev), config->super.ar_enable,
-              config->ddp_enable, dp_ordering_cap, tl_name);
 
     return UCS_OK;
 
