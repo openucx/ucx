@@ -319,7 +319,7 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
     const size_t align_mask = (8 * UCS_KBYTE) - 1;
     size_t lower_size       = ((size / 3)) & ~align_mask;
     size_t upper_size       = (size / 2) & ~align_mask;
-    void *start, *mid;
+    void *start, *mid, *last;
     uct_mem_h memh;
 
     auto mmap_anon = [](void *ptr, size_t size) {
@@ -333,7 +333,8 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
     /* Find an available VMA */
     start = mmap_anon(nullptr, size);
     ASSERT_NE(nullptr, start);
-    mid = UCS_PTR_BYTE_OFFSET(start, lower_size);
+    mid  = UCS_PTR_BYTE_OFFSET(start, lower_size);
+    last = UCS_PTR_BYTE_OFFSET(start, size - upper_size);
     munmap(mid, size - upper_size - lower_size);
 
     /* Trigger MT registration failure */
@@ -356,6 +357,7 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
     }
     if (start != nullptr) {
         munmap(start, lower_size);
+        munmap(last, upper_size);
     }
 }
 
