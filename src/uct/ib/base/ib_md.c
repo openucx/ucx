@@ -302,7 +302,10 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
             }
 
         } else {
-            (void)uct_ib_dereg_mr(ctx->mrs[ctx->mr_idx]);
+            status = uct_ib_dereg_mr(ctx->mrs[ctx->mr_idx]);
+            if (status != UCS_OK) {
+                ucs_warn("failed to deregister mr_idx=%d", ctx->mr_idx);
+            }
         }
         ctx->address = UCS_PTR_BYTE_OFFSET(ctx->address, length);
         ctx->length -= length;
