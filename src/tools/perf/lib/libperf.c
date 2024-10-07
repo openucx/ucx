@@ -1737,27 +1737,24 @@ static void uct_perf_log_avaiable_resources(ucs_string_set_t *available_resource
     ucs_string_buffer_cleanup(&strb);
 }
 
-static int
+static void
 uct_perf_collect_available_devices(unsigned num_tl_resources,
                                    uct_tl_resource_desc_t *tl_resources,
                                    ucx_perf_context_t *perf,
                                    ucs_string_set_t *devices_hint,
-                                   ucs_string_set_t *tls_hint)
+                                   ucs_string_set_t *tls_hint, int all)
 {
     unsigned tl_index;
-    int same_device_name, same_tl_name;
 
     for (tl_index = 0; tl_index < num_tl_resources; ++tl_index) {
-        if (!strcmp(perf->params.uct.tl_name, tl_resources[tl_index].tl_name)) {
+        if (!strcmp(perf->params.uct.tl_name, tl_resources[tl_index].tl_name) || all) {
             ucs_string_set_add(devices_hint, tl_resources[tl_index].dev_name);
         }
 
         if (!strcmp(perf->params.uct.dev_name,
-                    tl_resources[tl_index].dev_name)) {
+                    tl_resources[tl_index].dev_name) || all) {
             ucs_string_set_add(tls_hint, tl_resources[tl_index].tl_name);
         }
-
-        
     }
 }
 
@@ -1775,8 +1772,8 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
     uct_md_h md;
     uct_md_config_t *md_config;
     int same_device_name, same_tl_name;
-    ucs_string_set_t devices_hint;
-    ucs_string_set_t tls_hint;
+    ucs_string_set_t devices_hint, all_devices_hint;
+    ucs_string_set_t tls_hint, all_tls_hint;
 
     status = uct_query_components(&uct_components, &num_components);
     if (status != UCS_OK) {
@@ -1785,6 +1782,8 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
 
     ucs_string_set_init(&devices_hint);
     ucs_string_set_init(&tls_hint);
+    ucs_string_set_init(&all_devices_hint);
+    ucs_string_set_init(&all_tls_hint);
 
     for (cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
         component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
@@ -1826,6 +1825,13 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
                 goto out_release_components_list;
             }
 
+            uct_perf_collect_available_devices(num_tl_resources, tl_resources,
+                                               perf, &devices_hint, &tls_hint,
+                                               0);
+            uct_perf_collect_available_devices(num_tl_resources, tl_resources,
+                                               perf, &all_devices_hint,
+                                               &all_tls_hint, 1);
+
             for (tl_index = 0; tl_index < num_tl_resources; ++tl_index) {
                 same_device_name = !strcmp(perf->params.uct.dev_name,
                                            tl_resources[tl_index].dev_name);
@@ -1837,14 +1843,15 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
                     perf->uct.md   = md;
                     status         = UCS_OK;
                     goto out_release_components_list;
-                } else if (same_device_name) {
-                    valid_device_param |= same_device_name;
-                } else if (same_tl_name) {
-                    valid_tl_param     |= same_tl_name;
                 }
-                ucs_string_set_add(&tls_hint, tl_resources[tl_index].tl_name);
-                ucs_string_set_add(&devices_hint,
-                                   tl_resources[tl_index].dev_name);
+
+                if (same_device_name) {
+                    valid_device_param |= same_device_name;
+                }
+
+                if (same_tl_name) {
+                    valid_tl_param |= same_tl_name;
+                }
             }
 
             uct_md_close(md);
@@ -1855,13 +1862,17 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
     ucs_error("Cannot use "UCT_PERF_TEST_PARAMS_FMT,
               UCT_PERF_TEST_PARAMS_ARG(&perf->params));
 
-    if (!valid_device_param) {
-        uct_perf_log_avaiable_resources(&devices_hint, perf->params.uct.dev_name,
-                                        "Device");
-    }
-    if (!valid_tl_param) {
+    if (!valid_device_param && !valid_tl_param) {
+        uct_perf_log_avaiable_resources(&all_devices_hint,
+                                        perf->params.uct.dev_name, "Device");
+        uct_perf_log_avaiable_resources(&all_tls_hint, perf->params.uct.tl_name,
+                                        "Transport");
+    } else if (!valid_tl_param) {
         uct_perf_log_avaiable_resources(&tls_hint, perf->params.uct.tl_name,
                                         "Transport");
+    } else {
+        uct_perf_log_avaiable_resources(&devices_hint,
+                                        perf->params.uct.dev_name, "Device");
     }
 
     status = UCS_ERR_NO_DEVICE;
@@ -1869,6 +1880,8 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
 out_release_components_list:
     ucs_string_set_cleanup(&tls_hint);
     ucs_string_set_cleanup(&devices_hint);
+    ucs_string_set_cleanup(&all_tls_hint);
+    ucs_string_set_cleanup(&all_devices_hint);
     uct_release_component_list(uct_components);
 out:
     return status;
