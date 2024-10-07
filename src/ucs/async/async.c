@@ -332,12 +332,19 @@ ucs_status_t ucs_async_dispatch_handlers(int *handler_ids, size_t count,
 ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
                                        ucs_time_t current_time)
 {
-    size_t max_timers, num_timers = 0;
+    size_t num_timers = 0;
+    ucs_status_t status;
+    size_t max_timers, size;
     int *expired_timers;
     ucs_timer_t *timer;
 
-    max_timers     = ucs_max(1, ucs_timerq_size(timerq));
-    expired_timers = ucs_alloca(max_timers * sizeof(*expired_timers));
+    max_timers = ucs_max(1, ucs_timerq_size(timerq));
+    size       = max_timers * sizeof(*expired_timers);
+
+    expired_timers = ucs_alloc_on_stack(size, "async_dispatch_timerq");
+    if (expired_timers == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
 
     ucs_timerq_for_each_expired(timer, timerq, current_time, {
         expired_timers[num_timers++] = timer->id;
@@ -346,8 +353,10 @@ ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
         }
     })
 
-    return ucs_async_dispatch_handlers(expired_timers, num_timers,
-                                       UCS_ASYNC_EVENT_DUMMY);
+    status = ucs_async_dispatch_handlers(expired_timers, num_timers,
+                                         UCS_ASYNC_EVENT_DUMMY);
+    ucs_free_on_stack(expired_timers, size);
+    return status;
 }
 
 ucs_status_t ucs_async_context_init(ucs_async_context_t *async, ucs_async_mode_t mode)
