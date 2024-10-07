@@ -90,23 +90,23 @@ UCS_TEST_F(test_bitops, ptr_ctz) {
     ASSERT_EQ(88, ucs_count_ptr_trailing_zero_bits(buffer, 160));
 }
 
-void check_bitwise_equality(const uint8_t *buffer1,
-                            const uint8_t *buffer2,
-                            const std::vector<int>& indices,
-                            int max_equal_index) {
-    for (int i : indices) {
-        if (i <= max_equal_index) {
-            ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, i));
-        } else {
-            ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, i));
-        }
-    }
-}
-
 UCS_TEST_F(test_bitops, is_equal) {
-    uint8_t buffer1[20]      = {0};
-    uint8_t buffer2[20]      = {0};
-    const std::vector<int> indices = {0, 1, 8, 64, 65, 128, 130, 159, 160};
+    uint8_t buffer1[20]         = {0};
+    uint8_t buffer2[20]         = {0};
+    std::vector<int> indices    = {0, 1, 8, 64, 65, 128, 130, 159, 160};
+
+    auto check_bitwise_equality = [](const uint8_t* buffer1,
+                                     const uint8_t* buffer2,
+                                     const std::vector<int>& indices,
+                                     int max_equal_index) {
+        for (int i : indices) {
+            if (i <= max_equal_index) {
+                ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, i));
+            } else {
+                ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, i));
+            }
+        }
+    };
 
     check_bitwise_equality(buffer1, buffer2, indices, 160);
 
