@@ -179,7 +179,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
     ib_pkey_pairs_t pairs = supported_pkey_pairs(false);
 
     for (size_t i = 0; i < pairs.first.size(); i++) {
-        uct_iface_attr_t iface_attr;
+        uct_iface_attr_t* iface_attr = new uct_iface_attr_t;
         ucs_status_t status;
 
         m_pkey[0]       = pairs.first[i][0];
@@ -206,10 +206,10 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
 
         /* pack-unpack the first IB iface address */
         uct_ib_iface_t *iface1 = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
-        status = uct_iface_query(m_e1->iface(), &iface_attr);
+        status = uct_iface_query(m_e1->iface(), iface_attr);
         ASSERT_UCS_OK(status);
         ucs::typed_auto_buffer<uct_iface_addr_t> iface_addr1(
-                iface_attr.iface_addr_len);
+                iface_attr->iface_addr_len);
         status = uct_iface_get_address(m_e1->iface(), *iface_addr1);
         ASSERT_UCS_OK(status);
 
@@ -220,10 +220,10 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
 
         /* pack-unpack the second IB iface address */
         uct_ib_iface_t *iface2 = ucs_derived_of(m_e2->iface(), uct_ib_iface_t);
-        status = uct_iface_query(m_e2->iface(), &iface_attr);
+        status = uct_iface_query(m_e2->iface(), iface_attr);
         ASSERT_UCS_OK(status);
         ucs::typed_auto_buffer<uct_iface_addr_t> iface_addr2(
-                iface_attr.iface_addr_len);
+                iface_attr->iface_addr_len);
         status = uct_iface_get_address(m_e2->iface(), *iface_addr2);
         ASSERT_UCS_OK(status);
 
@@ -248,6 +248,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
         }
 
         cleanup_entities();
+        delete iface_attr;
     }
 }
 
