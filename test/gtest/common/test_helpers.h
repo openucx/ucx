@@ -33,6 +33,7 @@
 #include <dirent.h>
 #include <stdint.h>
 #include <ifaddrs.h>
+#include <sys/resource.h>
 
 
 #ifndef UINT16_MAX
@@ -1122,6 +1123,49 @@ private:
     };
 
     std::unordered_map<func*, std::unique_ptr<mock_func>> m_mock_map;
+};
+
+// Used to manipulate and restore rlimits
+class rlimit_setter {
+public:
+    rlimit_setter(int resource, rlim_t new_limit) :
+        m_resource(resource), m_limit(0), m_orig_limit({})
+    {
+        if (getrlimit(m_resource, &m_orig_limit)) {
+            UCS_TEST_MESSAGE << "could not get rlimit " << resource
+                             << ", err: " << strerror(errno);
+            return;
+        }
+
+        struct rlimit limit = {
+            .rlim_cur = std::min(new_limit, m_orig_limit.rlim_max),
+            .rlim_max = m_orig_limit.rlim_max
+        };
+        if (setrlimit(m_resource, &limit) == 0) {
+            m_limit = limit.rlim_cur;
+        } else {
+            m_limit = m_orig_limit.rlim_cur;
+            UCS_TEST_MESSAGE << "could not set rlimit " << resource << " to "
+                             << limit.rlim_cur << ", err: " << strerror(errno);
+        }
+    }
+
+    ~rlimit_setter()
+    {
+        if (m_orig_limit.rlim_cur != m_limit) {
+            (void)setrlimit(m_resource, &m_orig_limit);
+        }
+    }
+
+    rlim_t limit() const
+    {
+        return m_limit;
+    }
+
+private:
+    const int     m_resource;
+    rlim_t        m_limit;
+    struct rlimit m_orig_limit;
 };
 
 } // ucs
