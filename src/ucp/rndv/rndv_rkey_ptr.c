@@ -192,7 +192,6 @@ static ucs_status_t ucp_proto_rndv_rkey_ptr_reset(ucp_request_t *request)
 {
     switch (request->send.proto_stage) {
     case UCP_PROTO_RNDV_RKEY_PTR_STAGE_COPY:
-        ucp_proto_rndv_rkey_destroy(request);
         ucs_queue_remove(&request->send.ep->worker->rkey_ptr_reqs,
                          &request->send.rndv.rkey_ptr.queue_elem);
         break;
