@@ -136,7 +136,8 @@ static void uct_ib_mlx5_devx_ksm_list_log(uct_ib_mlx5_md_t *md, void *address,
 }
 
 static void uct_ib_mlx5_devx_klm_entry_set(void **klm_p, size_t klm_idx,
-                                           void *address, struct ibv_mr *mr)
+                                           void *address, size_t byte_count,
+                                           struct ibv_mr *mr)
 {
     void *klm = *klm_p;
 
@@ -144,6 +145,8 @@ static void uct_ib_mlx5_devx_klm_entry_set(void **klm_p, size_t klm_idx,
               mr->addr, mr->length, mr->lkey);
     UCT_IB_MLX5DV_SET64(klm, klm, address, (uintptr_t)address);
     UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->lkey);
+    UCT_IB_MLX5DV_SET(klm, klm, byte_count, byte_count);
+
     *klm_p = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
 }
 
@@ -178,13 +181,13 @@ uct_ib_mlx5_devx_reg_ksm_data_mt(uct_ib_mlx5_md_t *md, void *address,
     klm = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
     ucs_carray_for_each(mr, ksm_data->mrs, ksm_data->mr_num) {
         uct_ib_mlx5_devx_klm_entry_set(&klm, mr - ksm_data->mrs, mr_address,
-                                       *mr);
+                                       chunk_size, *mr);
         mr_address = UCS_PTR_BYTE_OFFSET(mr_address, chunk_size);
     }
 
     if ((void*)iova != address) {
         /* Add offset to workaround CREATE_MKEY range check issue */
-        uct_ib_mlx5_devx_klm_entry_set(&klm, list_size, mr_address,
+        uct_ib_mlx5_devx_klm_entry_set(&klm, list_size, mr_address, chunk_size,
                                        ksm_data->mrs[ksm_data->mr_num - 1]);
         ++list_size;
     }
@@ -223,7 +226,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_addr(
     for (i = 0; i < list_size; i++) {
         uct_ib_mlx5_devx_klm_entry_set(
                 &klm, i,
-                UCS_PTR_BYTE_OFFSET(address, i * UCT_IB_MD_MAX_MR_SIZE), mr);
+                UCS_PTR_BYTE_OFFSET(address, i * UCT_IB_MD_MAX_MR_SIZE),
+                UCT_IB_MD_MAX_MR_SIZE, mr);
     }
     ucs_log_indent(-1);
 
