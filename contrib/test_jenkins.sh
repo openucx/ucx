@@ -1121,13 +1121,12 @@ run_tests() {
 
 error_handler() {
 	set +x
-	local exit_code=$?
 	local test_name="$1"
 	local flag="$2"
 
 	azure_log_error "$test_name failed"
 	azure_log_error "To debug, rerun with: $flag $0"
-	exit $exit_code
+	exit 1
 }
 
 run_test_proto_disable() {
