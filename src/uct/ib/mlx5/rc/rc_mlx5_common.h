@@ -132,7 +132,6 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG   = 0xA
 };
 
-
 #define UCT_RC_MLX5_RMA_MAX_IOV(_av_size) \
     ((UCT_IB_MLX5_MAX_SEND_WQE_SIZE - ((_av_size) + \
      sizeof(struct mlx5_wqe_raddr_seg) + sizeof(struct mlx5_wqe_ctrl_seg))) / \
@@ -486,11 +485,11 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
                                  const char *tl_name);
 
 #if IBV_HW_TM
-        void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
-                                           struct ibv_tmh *tmh, uct_tag_t tag,
-                                           struct mlx5_cqe64 *cqe,
-                                           unsigned flags, unsigned byte_len,
-                                           int poll_flags);
+void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
+                                    struct ibv_tmh *tmh, uct_tag_t tag,
+                                    struct mlx5_cqe64 *cqe,
+                                    unsigned flags, unsigned byte_len,
+                                    int poll_flags);
 
 
 static UCS_F_ALWAYS_INLINE void

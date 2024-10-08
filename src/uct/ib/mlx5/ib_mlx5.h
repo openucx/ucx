@@ -415,9 +415,9 @@ typedef struct uct_ib_mlx5_md {
     struct {
         /* Max dp ordering level per transport, 
            as listed in uct_ib_mlx5_dp_ordering_t */
-        uint8_t              max_dp_ordering_rc;
-        uint8_t              max_dp_ordering_dc;
-    } dv_ooo_cap;
+        uint8_t              rc;
+        uint8_t              dc;
+    } dp_ordering_cap;
 } uct_ib_mlx5_md_t;
 
 

@@ -621,19 +621,18 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
      * 
      * Fail at the following cases:
      * - Want to force configuration but can't force it
-     * - Want to force enable or force disable of adaptive routing but its unavailable
+     * - Want to force enable or force disable adaptive routing but it is unavailable
      * - Want to force disable adaptive routing but force enabling DDP
      */
 
     iface->config.dp_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    min_forced_ordering       = UCT_IB_MLX5_DP_ORDERING_IBTA;
 
-    min_forced_ordering = (config->ddp_enable == UCS_YES) ?
-                                  UCT_IB_MLX5_DP_ORDERING_OOO_ALL :
-                                  UCT_IB_MLX5_DP_ORDERING_IBTA;
-    min_forced_ordering = (config->super.ar_enable == UCS_YES) ?
-                                  ucs_max(min_forced_ordering,
-                                          UCT_IB_MLX5_DP_ORDERING_OOO_RW) :
-                                  min_forced_ordering;
+    if (config->ddp_enable == UCS_YES) {
+        min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+    } else if (config->super.ar_enable == UCS_YES) {
+        min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+    }
 
     iface->config.force_ordering = ucs_ternary_auto_value_is_yes_or_no(
                                            config->super.ar_enable) ||
@@ -1282,9 +1281,9 @@ void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
                                           uct_rc_mlx5_iface_common_t *iface)
 {
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
-                      UCS_GET_BIT(iface->config.dp_ordering, 0));
+                      UCS_BIT_IS_SET(iface->config.dp_ordering, 0));
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1,
-                      UCS_GET_BIT(iface->config.dp_ordering, 1));
+                      UCS_BIT_IS_SET(iface->config.dp_ordering, 1));
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
                       iface->config.force_ordering);
 }
