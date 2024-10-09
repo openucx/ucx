@@ -357,6 +357,16 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
                 ucp_datatype_class_names[dt_iter->dt_class]);
 
     memh = dt_iter->type.contig.memh;
+
+    /* Since global VA registration doesn't support invalidation yet, and error
+     * handling is enabled on this EP, we replace GVA registrations with
+     * regular ones */
+    if (ucp_ep_config_err_mode_eq(req->send.ep,
+                                  UCP_ERR_HANDLING_MODE_PEER) &&
+        ucs_unlikely(memh->flags & UCP_MEMH_FLAG_HAS_AUTO_GVA)) {
+        ucp_memh_disable_gva(memh, md_map);
+    }
+
     if (!ucs_test_all_flags(memh->md_map, md_map)) {
         ucs_trace("dt_iter_md_map=0x%"PRIx64" md_map=0x%"PRIx64, memh->md_map,
                   md_map);
