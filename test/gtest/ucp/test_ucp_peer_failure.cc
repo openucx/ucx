@@ -887,7 +887,7 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
 }
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
-           "RNDV_FRAG_SIZE=host:4K")
+           "RNDV_FRAG_SIZE=host:8K")
 {
     rndv_progress_failure_test(rndv_mode::put_ppln, false);
 }

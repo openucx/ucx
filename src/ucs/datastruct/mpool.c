@@ -255,7 +255,7 @@ void ucs_mpool_add_chunk_to_freelist(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
         ucs_mpool_add_to_freelist(mp, elem);
     }
 
-    ucs_debug("mpool %s: added %u elements of chunk %p to the freelist",
+    ucs_trace("mpool %s: added %u elements of chunk %p to the freelist",
               ucs_mpool_name(mp), chunk->num_elems, chunk);
 }
 

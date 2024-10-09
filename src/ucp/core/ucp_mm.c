@@ -409,8 +409,8 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
 static void ucp_memh_dereg_rkey(ucp_context_h context, ucp_mem_h memh,
                                 ucp_md_map_t md_map)
 {
-    ucs_trace("memh %p: invalidate only indirect rkeys: md_map %" PRIx64
-              " inv_md_map %" PRIx64, memh, memh->md_map, md_map);
+    ucs_trace("memh %p: invalidate only rkeys: md_map %" PRIx64 " inv_md_map %"
+              PRIx64, memh, memh->md_map, md_map);
 
     ucp_memh_dereg_internal(context, memh, md_map, 1);
 }
@@ -1461,7 +1461,7 @@ ucp_mem_desc_t *ucp_frag_mpool_get(ucs_mpool_t *mpool)
 {
     ucp_mem_desc_t *mdesc = ucp_worker_mpool_get(mpool);
 
-    mdesc->memh->super.refcount ++;
+    mdesc->memh->super.refcount++;
     return mdesc;
 }
 
@@ -1474,7 +1474,7 @@ void ucp_frag_mpool_put(ucp_mem_desc_t *mdesc)
     ucp_context_h context        = mpriv->worker->context;
 
     ucs_assert(region->refcount > 0);
-    region->refcount --;
+    region->refcount--;
 
     if (!(region->flags & UCS_RCACHE_REGION_FLAG_INVALIDATE)) {
         ucs_mpool_put(mdesc);
@@ -1487,9 +1487,9 @@ void ucp_frag_mpool_put(ucp_mem_desc_t *mdesc)
 
     /* If we reach this point, it means that chunk is marked for invalidation,
      * and all of its inflight operations are completed. Now we can de-register
-     * its indirect rkeys and revive the chunk = return it back to mpool. */
+     * its rkeys and revive the chunk = return it back to mpool. */
     ucp_memh_dereg_rkey(context, memh, memh->inv_md_map);
-    ucs_assert(0 == memh->inv_md_map);
+    ucs_assertv(0 == memh->inv_md_map, "inv_md_map=0x%lx", memh->inv_md_map);
 
     ucs_rcache_region_completion(region);
     region->flags &= ~UCS_RCACHE_REGION_FLAG_INVALIDATE;
@@ -1507,13 +1507,13 @@ static void ucp_frag_mpool_remove_from_freelist(ucp_mem_desc_t *mdesc)
         it_mdesc = (void*)((*it) + 1);
         if (it_mdesc->chunk == mdesc->chunk) {
             *it = (*it)->next;
-            ++ count;
+            ++count;
         } else {
             it = &(*it)->next;
         }
     }
 
-    ucs_debug("mpool %s: removed %u elements of chunk %p from the freelist",
+    ucs_trace("mpool %s: removed %u elements of chunk %p from the freelist",
               ucs_mpool_name(mpool), count, mdesc->chunk);
 }
 
