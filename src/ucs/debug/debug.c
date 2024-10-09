@@ -27,6 +27,9 @@
 #ifdef HAVE_DETAILED_BACKTRACE
 #  include <bfd.h>
 #endif /* HAVE_DETAILED_BACKTRACE */
+#ifdef __SANITIZE_ADDRESS__
+#  include <sanitizer/asan_interface.h>
+#endif
 
 
 KHASH_MAP_INIT_INT64(ucs_debug_symbol, char*);
@@ -1326,4 +1329,14 @@ void ucs_debug_disable_signals()
     kh_foreach_key(&ucs_signal_orig_action_map, signum,
                    ucs_debug_disable_signal_nolock(signum));
     ucs_recursive_spin_unlock(&ucs_kh_lock);
+}
+
+void ucs_debug_asan_validate_address(const char *ptr_name, void *address,
+                                     size_t size)
+{
+#ifdef __SANITIZE_ADDRESS__
+    if (__asan_region_is_poisoned(address, size)) {
+        ucs_fatal("%s at: %p is poisoned", ptr_name, address);
+    }
+#endif
 }
