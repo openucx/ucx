@@ -15,8 +15,9 @@ am_short_iov_bw  -t am_bw  -D shortiov
 am_bcopy_bw      -t am_bw  -D bcopy
 am_zcopy_bw      -t am_bw  -D zcopy
 # GET
-get_bcopy     -t get -D bcopy
-get_zcopy     -t get -D zcopy
+get_bcopy_lat -t get    -D bcopy
+get_zcopy_lat -t get    -D zcopy
+get_zcopy_bw  -t get_bw -D zcopy
 # ATOMICS
 add_lat       -t add_lat
 add_mr        -t add_mr
