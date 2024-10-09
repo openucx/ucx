@@ -44,18 +44,6 @@ ucp_proto_select_thresholds_search(const ucp_proto_select_elem_t *select_elem,
     return ucp_proto_thresholds_search_slow(thresholds + 4, msg_length);
 }
 
-static UCS_F_ALWAYS_INLINE const ucp_proto_perf_range_t *
-ucp_proto_perf_range_search(const ucp_proto_select_elem_t *select_elem,
-                            size_t msg_length)
-{
-    const ucp_proto_perf_range_t *range;
-
-    for (range = select_elem->perf_ranges; range->max_length < msg_length;
-         ++range)
-        ;
-    return range;
-}
-
 static UCS_F_ALWAYS_INLINE uint8_t
 ucp_proto_select_op_attr_pack(uint32_t op_attr_mask)
 {
@@ -192,17 +180,6 @@ ucp_proto_select_is_short(ucp_ep_h ep,
     return ucs_likely(length <= proto_short->max_length_unknown_mem) ||
            ((length <= proto_short->max_length_host_mem) &&
             ucs_memtype_cache_is_empty());
-}
-
-static UCS_F_ALWAYS_INLINE ucp_proto_perf_type_t
-ucp_proto_select_param_perf_type(const ucp_proto_select_param_t *select_param)
-{
-    if (ucp_proto_select_op_attr_unpack(select_param->op_attr) &
-        UCP_OP_ATTR_FLAG_MULTI_SEND) {
-        return UCP_PROTO_PERF_TYPE_MULTI;
-    } else {
-        return UCP_PROTO_PERF_TYPE_SINGLE;
-    }
 }
 
 #endif

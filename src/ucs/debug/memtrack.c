@@ -134,9 +134,17 @@ static void ucs_memtrack_dump_internal(FILE* output_stream)
         return;
     }
 
-    /* collect all entries to one array */
-    all_entries = ucs_alloca(sizeof(*all_entries) *
-                             kh_size(&ucs_memtrack_context.entries));
+    /* collect all entries to one array
+     * - do not use ucs_alloca() since stack may have not enough space
+     * - do not use ucs_malloc since it affects memtrack structures
+     */
+    all_entries = malloc(sizeof(*all_entries) *
+                         kh_size(&ucs_memtrack_context.entries));
+    if (all_entries == NULL) {
+        ucs_error("cannot allocate memory to dump memtrack entries");
+        return;
+    }
+
     num_entries = 0;
     kh_foreach_value(&ucs_memtrack_context.entries, entry, {
         all_entries[num_entries++] = entry;
@@ -158,6 +166,8 @@ static void ucs_memtrack_dump_internal(FILE* output_stream)
         fprintf(output_stream, UCS_MEMTRACK_FORMAT_STRING, entry->name,
                 entry->size, entry->peak_size, entry->count, entry->peak_count);
     }
+
+    free(all_entries);
 }
 
 static void ucs_memtrack_generate_report()

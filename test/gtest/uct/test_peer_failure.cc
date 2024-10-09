@@ -26,7 +26,7 @@ void test_uct_peer_failure::init()
 
     reduce_tl_send_queues();
 
-    /* To reduce test execution time decrease retransmition timeouts
+    /* To reduce test execution time decrease retransmission timeouts
      * where it is relevant */
     set_config("RC_TIMEOUT?=100us"); /* 100 us should be enough */
     set_config("RC_RETRY_COUNT?=4");

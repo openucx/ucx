@@ -196,7 +196,7 @@ func TestUcpEpAm(t *testing.T) {
 		// t.Fatalf can't be called from non main thread need to pass an error
 		threadErr := make(chan error)
 
-		// Test eager handler with data persistance
+		// Test eager handler with data persistence
 		receiver.worker.SetAmRecvHandler(1, UCP_AM_FLAG_WHOLE_MSG|UCP_AM_FLAG_PERSISTENT_DATA, func(header unsafe.Pointer, headerSize uint64,
 			data *UcpAmData, replyEp *UcpEp) UcsStatus {
 			if !data.IsDataValid() {

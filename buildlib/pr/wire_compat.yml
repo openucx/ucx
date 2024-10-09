@@ -72,8 +72,10 @@ jobs:
       - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/$(ucx_current)/bin/ucx_info
       - bash: |
           set -eEx
+          source buildlib/az-helpers.sh
           ucx_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)
-          git clone --depth 1 -b $(ucx_tag) https://github.com/openucx/ucx.git ${ucx_dir}
+          depth=1
+          git_clone_with_retry "$(ucx_tag)" "${ucx_dir}" "${depth}"
           cd ${ucx_dir}
           ./autogen.sh
           ./contrib/configure-release --enable-assertions --prefix=${PWD} --without-java --without-go
@@ -90,7 +92,9 @@ jobs:
           UCX_LEGACY_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)
         displayName: compare tls performance characteristics
         condition: ne(variables.ucx_tag, 'v1.14.0')
-      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
+      - bash: |
+          export WIRE_COMPAT_STAGE_ID=1
+          buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
@@ -98,14 +102,18 @@ jobs:
         displayName: ucp_client_server with UCX $(ucx_tag)
         condition: ne(variables.ucx_tag, 'v1.14.0')
         timeoutInMinutes: 2
-      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n
+      - bash: |
+          export WIRE_COMPAT_STAGE_ID=2
+          buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
           AZP_AGENT_ID: $(AZP_AGENT_ID)
         displayName: ucp_hello_world with UCX $(ucx_tag)
         timeoutInMinutes: 2
-      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
+      - bash: |
+          export WIRE_COMPAT_STAGE_ID=3
+          buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "-c tag"
         env:
           UCX_TLS: ^sm
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
@@ -114,7 +122,9 @@ jobs:
         displayName: ucp_client_server (no sm) with UCX $(ucx_tag)
         condition: ne(variables.ucx_tag, 'v1.14.0')
         timeoutInMinutes: 2
-      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n
+      - bash: |
+          export WIRE_COMPAT_STAGE_ID=4
+          buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n
         env:
           UCX_TLS: ^sm
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib

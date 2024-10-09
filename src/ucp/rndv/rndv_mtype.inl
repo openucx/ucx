@@ -13,11 +13,9 @@
 
 
 static ucp_ep_h ucp_proto_rndv_mtype_ep(ucp_worker_t *worker,
+                                        ucs_memory_type_t frag_mem_type,
                                         ucs_memory_type_t buf_mem_type)
 {
-    ucs_memory_type_t frag_mem_type =
-                                 worker->context->config.ext.rndv_frag_mem_type;
-
     if (worker->mem_type_ep[buf_mem_type] != NULL) {
         return worker->mem_type_ep[buf_mem_type];
     }
@@ -27,15 +25,15 @@ static ucp_ep_h ucp_proto_rndv_mtype_ep(ucp_worker_t *worker,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
+                          ucs_memory_type_t frag_mem_type,
                           ucp_md_map_t *mdesc_md_map_p, size_t *frag_size_p)
 {
-    ucp_worker_h worker             = init_params->worker;
-    ucp_context_h context           = worker->context;
-    ucs_memory_type_t mem_type      = init_params->select_param->mem_type;
-    ucs_memory_type_t frag_mem_type = context->config.ext.rndv_frag_mem_type;
+    ucp_worker_h worker        = init_params->worker;
+    ucp_context_h context      = worker->context;
+    ucs_memory_type_t mem_type = init_params->select_param->mem_type;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        (ucp_proto_rndv_mtype_ep(worker, mem_type) == NULL) ||
+        (ucp_proto_rndv_mtype_ep(worker, frag_mem_type, mem_type) == NULL) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -47,11 +45,10 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_rndv_mtype_request_init(ucp_request_t *req)
+ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
+                                  ucs_memory_type_t frag_mem_type)
 {
-    ucp_worker_h worker             = req->send.ep->worker;
-    ucs_memory_type_t frag_mem_type =
-                                 worker->context->config.ext.rndv_frag_mem_type;
+    ucp_worker_h worker = req->send.ep->worker;
 
     req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
                                               UCS_SYS_DEVICE_ID_UNKNOWN);
@@ -82,6 +79,7 @@ static ucp_ep_h ucp_proto_rndv_req_mtype_ep(ucp_request_t *req)
     ucp_ep_h mem_type_ep;
 
     mem_type_ep = ucp_proto_rndv_mtype_ep(req->send.ep->worker,
+                                          req->send.rndv.mdesc->memh->mem_type,
                                           req->send.state.dt_iter.mem_info.type);
     ucs_assert(mem_type_ep != NULL);
 
@@ -130,10 +128,12 @@ ucp_proto_rndv_mtype_next_iov(ucp_request_t *req,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
         ucp_request_t *req, void *buffer, uct_mem_h memh,
-        uct_ep_put_zcopy_func_t copy_func, uct_completion_callback_t comp_func,
-        const char *mode)
+        ucs_memory_type_t frag_mem_type, uct_ep_put_zcopy_func_t copy_func,
+        uct_completion_callback_t comp_func, const char *mode)
 {
-    ucp_ep_h mtype_ep     = ucp_proto_rndv_req_mtype_ep(req);
+    ucp_ep_h mtype_ep     = ucp_proto_rndv_mtype_ep(
+                              req->send.ep->worker, frag_mem_type,
+                              req->send.state.dt_iter.mem_info.type);
     ucp_lane_index_t lane = ucp_ep_config(mtype_ep)->key.rma_bw_lanes[0];
     ucp_context_t UCS_V_UNUSED *context = req->send.ep->worker->context;
     ucs_status_t status;
@@ -142,7 +142,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
     ucp_trace_req(req, "buffer %p copy-%s %p %s-%s using memtype-ep %p lane[%d]",
                   buffer, mode, req->send.state.dt_iter.type.contig.buffer,
                   ucs_memory_type_names[req->send.state.dt_iter.mem_info.type],
-                  ucs_memory_type_names[context->config.ext.rndv_frag_mem_type],
+                  ucs_memory_type_names[frag_mem_type],
                   mtype_ep, lane);
 
     ucp_proto_completion_init(&req->send.state.uct_comp, comp_func);
@@ -167,20 +167,39 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
     return status;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_mdesc_mtype_copy(ucp_request_t *req,
+                                uct_ep_put_zcopy_func_t copy_func,
+                                uct_completion_callback_t comp_func,
+                                const char *mode)
+{
+    ucp_mem_desc_t *mdesc = req->send.rndv.mdesc;
+
+    return ucp_proto_rndv_mtype_copy(
+                 req, mdesc->ptr, ucp_proto_rndv_mtype_get_req_memh(req),
+                 mdesc->memh->mem_type, copy_func, comp_func, mode);
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_query_desc(const ucp_proto_query_params_t *params,
+                                ucs_memory_type_t frag_mem_type,
                                 ucp_proto_query_attr_t *attr,
                                 const char *xfer_desc)
 {
     UCS_STRING_BUFFER_FIXED(strb, attr->desc, sizeof(attr->desc));
     ucp_context_h context      = params->worker->context;
     ucs_memory_type_t mem_type = params->select_param->mem_type;
-    ucp_ep_h mtype_ep          = ucp_proto_rndv_mtype_ep(params->worker,
-                                                         mem_type);
+    ucp_ep_h mtype_ep;
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_index;
     const char *tl_name;
 
+    /* Make coverity happy */
+    ucs_assertv(frag_mem_type < UCS_MEMORY_TYPE_UNKNOWN, "frag_mem_type = %u",
+                frag_mem_type);
+
+    mtype_ep  = ucp_proto_rndv_mtype_ep(params->worker, frag_mem_type,
+                                        mem_type);
     ucs_assert(mtype_ep != NULL);
 
     lane      = ucp_ep_config(mtype_ep)->key.rma_bw_lanes[0];
@@ -196,6 +215,9 @@ ucp_proto_rndv_mtype_query_desc(const ucp_proto_query_params_t *params,
     if (ucp_proto_select_op_id(params->select_param) == UCP_OP_ID_RNDV_RECV) {
         ucs_string_buffer_appendf(&strb, ", %s", tl_name);
     }
+
+    ucs_string_buffer_appendf(&strb, ", frag %s",
+                              ucs_memory_type_names[frag_mem_type]);
 }
 
 #endif

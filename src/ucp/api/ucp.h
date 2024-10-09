@@ -2431,7 +2431,7 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  * is over, as part of the wake-up mechanism.
  *
  * The worker must be armed before waiting on an event (must be re-armed after
- * it has been signaled for re-use) with @ref ucp_worker_arm.
+ * it has been signaled for reuse) with @ref ucp_worker_arm.
  * The events triggering a signal of the file descriptor from
  * @ref ucp_worker_get_efd depend on the interfaces used by the worker and
  * defined in the transport layer, and typically represent a request completion

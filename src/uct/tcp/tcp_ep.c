@@ -1082,7 +1082,7 @@ static inline ucs_status_t uct_tcp_ep_handle_send_err(uct_tcp_ep_t *ep,
     status = uct_tcp_ep_handle_io_err(ep, "send", status);
     if (status == UCS_ERR_CANCELED) {
         /* If no data were read to the allocated buffer,
-         * we can safely reset it for further re-use and to
+         * we can safely reset it for further reuse and to
          * avoid overwriting this buffer, because `rx::length == 0` */
         if (ep->tx.length == 0) {
             uct_tcp_ep_ctx_reset(&ep->tx);
@@ -1267,7 +1267,7 @@ static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,
     status = uct_tcp_ep_handle_io_err(ep, "recv", status);
     if ((status == UCS_ERR_NO_PROGRESS) || (status == UCS_ERR_CANCELED)) {
         /* If no data were read to the allocated buffer,
-         * we can safely reset it for further re-use and to
+         * we can safely reset it for further reuse and to
          * avoid overwriting this buffer, because `rx::length == 0` */
         if (ep->rx.length == 0) {
             uct_tcp_ep_ctx_reset(&ep->rx);

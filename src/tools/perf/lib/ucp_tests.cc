@@ -177,7 +177,7 @@ public:
             m_am_rx_params.user_data    = this;
             m_am_rx_buffer              = *recv_buffer;
             m_am_rx_length              = *recv_length;
-            fill_prereg_params(m_am_rx_params, m_perf.ucp.recv_memh);
+            fill_common_params(m_am_rx_params, m_perf.ucp.recv_memh);
         }
 
         fill_send_params(m_send_params, *send_buffer, *send_dt, send_cb, 0);
@@ -190,7 +190,7 @@ public:
         m_recv_params.datatype     = *recv_dt;
         m_recv_params.cb.recv      = tag_recv_cb;
         m_recv_params.user_data    = this;
-        fill_prereg_params(m_recv_params, m_perf.ucp.recv_memh);
+        fill_common_params(m_recv_params, m_perf.ucp.recv_memh);
     }
 
     void fill_send_params(ucp_request_param_t &params, void *reply_buffer,
@@ -214,14 +214,18 @@ public:
             params.reply_buffer  = reply_buffer;
         }
 
-        fill_prereg_params(params, m_perf.ucp.send_memh);
+        fill_common_params(params, m_perf.ucp.send_memh);
     }
 
-    void fill_prereg_params(ucp_request_param_t &params, ucp_mem_h memh)
+    void fill_common_params(ucp_request_param_t &params, ucp_mem_h memh)
     {
         if (m_perf.params.flags & UCX_PERF_TEST_FLAG_PREREG) {
             params.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
             params.memh          = memh;
+        }
+
+        if (TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI) {
+            params.op_attr_mask |= UCP_OP_ATTR_FLAG_MULTI_SEND;
         }
     }
 

@@ -213,12 +213,12 @@ typedef struct ucm_global_config {
     ucm_mmap_hook_mode_t mmap_hook_mode;              /* MMAP hook mode */
     int                  enable_malloc_hooks;         /* Enable installing malloc hooks */
     int                  enable_malloc_reloc;         /* Enable installing malloc relocations */
-    int                  cuda_hook_modes;             /* Bitmap of allowed cuda hooks modes */
+    uint64_t             cuda_hook_modes;             /* Bitmap of allowed cuda hooks modes */
     int                  enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
     size_t               alloc_alignment;             /* Alignment for memory allocations */
     int                  dlopen_process_rpath;        /* Process RPATH section in dlopen hook */
     int                  module_unload_prevent_mode;  /* Module unload prevention mode */
-    int                  bistro_force_far_jump;       /* Force far jump with bistro pathcing */
+    int                  bistro_force_far_jump;       /* Force far jump with bistro patching */
 } ucm_global_config_t;
 
 

@@ -1,7 +1,7 @@
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
   DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/ --net=host
-  DOCKER_OPT_GPU: --gpus all --device=/dev/gdrdrv $(DOCKER_OPT_IB)
+  DOCKER_OPT_GPU: --gpus all --device=/dev/gdrdrv --ipc=host $(DOCKER_OPT_IB)
   DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
 
 resources:
@@ -290,7 +290,7 @@ stages:
       parameters:
         name: new
         demands: ucx_new -equals yes
-    # Temporaly disable wire-compat tests on rain machines
+    # Temporarily disable wire-compat tests on rain machines
     #- template: wire_compat.yml
     #  parameters:
     #    name: bond

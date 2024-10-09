@@ -116,7 +116,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     if (remote_agent.handle == 0) {
-        /* No access to remote agent, e.g. because of limited visability of devices to
+        /* No access to remote agent, e.g. because of limited visibility of devices to
          * this process. Using local_agent as a backup plan. */
         remote_agent = local_agent;
     } else {

@@ -7,8 +7,7 @@ if HAVE_MLX5_DV
 
 module_LTLIBRARIES         = libuct_ib_mlx5.la
 libuct_ib_mlx5_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)
-
-libuct_ib_mlx5_la_CFLAGS   = $(BASE_CFLAGS)
+libuct_ib_mlx5_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_ib_mlx5_la_LDFLAGS  = $(LIB_MLX5) $(IBVERBS_LDFLAGS) -version-info $(SOVERSION)
 libuct_ib_mlx5_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                              $(top_builddir)/src/uct/libuct.la \

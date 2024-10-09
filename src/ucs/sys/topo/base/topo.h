@@ -181,7 +181,7 @@ ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev);
  * @param [in]  sys_dev  System device to set the name for.
  * @param [in]  name     Name to set for this system device. Note: the name can
  *                       be released after this call.
- * @param [in]  priority Determine whether device name will be overriden,
+ * @param [in]  priority Determine whether device name will be overridden,
  *                       in case it already exists.
  *
  * @return UCS_OK if the name was set, error otherwise.

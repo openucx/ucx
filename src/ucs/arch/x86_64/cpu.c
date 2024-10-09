@@ -472,7 +472,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
                 break;
             }
             break;
-        /* AMD Zen3 */
+        /* AMD Zen3/Zen4 */
         case 0x19:
             switch (model) {
             case 0x00:
@@ -480,6 +480,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
                 cpu_model = UCS_CPU_MODEL_AMD_MILAN;
                 break;
             case 0x11:
+            case 0x90:
                 cpu_model = UCS_CPU_MODEL_AMD_GENOA;
                 break;
             }

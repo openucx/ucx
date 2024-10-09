@@ -556,7 +556,7 @@ UCS_MT_TEST_F(test_rcache, merge_with_unwritable, 6) {
     munmap(mem, size1 + size2);
 }
 
-/* don't expand prot of our region if our pages cant support it */
+/* don't expand prot of our region if our pages can't support it */
 UCS_MT_TEST_F(test_rcache, merge_merge_unwritable, 6) {
     static const size_t size1 = 10 * ucs_get_page_size();
     static const size_t size2 =  8 * ucs_get_page_size();

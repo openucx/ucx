@@ -55,7 +55,7 @@ function azure_log_warning() {
     echo "##vso[task.logissue type=warning]${msg}"
 }
 
-# Complete the task as "succeeeded with issues"
+# Complete the task as "succeeded with issues"
 function azure_complete_with_issues() {
     test "x$RUNNING_IN_AZURE" = "xno" && return
     msg=$1
@@ -189,13 +189,13 @@ try_load_cuda_env() {
     [ "${num_gpus}" -gt 0 ] || return 0
 
     # Check cuda env module
-    az_module_load dev/cuda12.2.2 || return 0
+    az_module_load dev/cuda12.5.1 || return 0
     have_cuda=yes
 
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
     then
-        az_module_load dev/gdrcopy2.4.1_cuda12.2.2 && have_gdrcopy=yes
+        az_module_load dev/gdrcopy2.4.1_cuda12.5.1 && have_gdrcopy=yes
     fi
 
     # Set CUDA_VISIBLE_DEVICES
@@ -214,15 +214,25 @@ check_release_build() {
     build_reason=$1
     build_sourceversion=$2
     title_mask=$3
+    launch=False
 
-
-    if [ "${build_reason}" == "IndividualCI" ] || \
-       [ "${build_reason}" == "ResourceTrigger" ]
+    # DRP release scheduled testing
+    if [[ $build_reason = "Schedule" && $BUILD_DEFINITIONNAME = *"DRP" ]]
     then
         launch=True
+
+    elif [ "${build_reason}" == "IndividualCI" ] || [ "${build_reason}" == "ResourceTrigger" ]
+    then
+        if [[ "$BUILD_DEFINITIONNAME" == *"DRP" ]]
+        then
+            # Release from DRP only if main pipeline is disabled
+            launch=$(check_main_pipeline_status)
+        else
+            launch=True
+        fi
+
     elif [ "${build_reason}" == "PullRequest" ]
     then
-        launch=False
         # In case of pull request, HEAD^ is the branch commit we merge with
         range="$(git rev-parse HEAD^)..${build_sourceversion}"
         for sha1 in `git log $range --format="%h"`
@@ -235,6 +245,20 @@ check_release_build() {
     echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
 }
 
+check_main_pipeline_status() {
+    status=$(az pipelines show \
+        --name "UCX release" \
+        --project "UCX" \
+        --organization "https://dev.azure.com/ucfconsort" \
+        --query 'queueStatus' \
+        -o tsv)
+
+    if [ "$status" == "disabled" ]; then
+        echo "True"
+    else
+        echo "False"
+    fi
+}
 
 #
 # Return arch in the same format as Java System.getProperty("os.arch")
@@ -246,4 +270,24 @@ get_arch() {
     else
         echo "$arch"
     fi
+}
+
+git_clone_with_retry() {
+    local branch="$1"
+    local target_dir="$2"
+    local depth="$3"
+    local max_attempts=5
+
+    for attempt in $(seq 1 $max_attempts); do
+        echo "Attempt $attempt of $max_attempts: Cloning UCX (branch: $branch)"
+        if git clone --depth "$depth" -b "$branch" "$BUILD_REPOSITORY_URI" "$target_dir"; then
+            echo "Clone successful"
+            return 0
+        fi
+        echo "Clone failed. Retrying in 5 seconds..."
+        sleep 5
+    done
+
+    echo "Failed to clone UCX after $max_attempts attempts"
+    return 1
 }

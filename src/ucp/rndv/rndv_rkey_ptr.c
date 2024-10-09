@@ -32,6 +32,42 @@ typedef struct {
 } ucp_proto_rndv_rkey_ptr_mtype_priv_t;
 
 
+static void ucp_proto_rndv_rkey_ptr_probe_common(
+        const ucp_proto_common_init_params_t *init_params,
+        ucp_proto_perf_t *rndv_op_perf, ucp_proto_rndv_rkey_ptr_priv_t *rpriv,
+        size_t priv_size)
+{
+    const char *proto_name = ucp_proto_id_field(init_params->super.proto_id,
+                                                name);
+    ucp_proto_perf_t *perf, *ack_perf;
+    ucs_status_t status;
+
+    ucs_assert(!ucp_proto_perf_is_empty(rndv_op_perf));
+
+    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME, 0,
+                                     &ack_perf, &rpriv->ack);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    if (rpriv->ack.lane == UCP_NULL_LANE) {
+        /* Add perf without ACK in case of pipeline */
+        perf = rndv_op_perf;
+    } else {
+        status = ucp_proto_perf_aggregate2(proto_name, rndv_op_perf, ack_perf,
+                                           &perf);
+        ucp_proto_perf_destroy(ack_perf);
+        ucp_proto_perf_destroy(rndv_op_perf);
+        if (status != UCS_OK) {
+            return;
+        }
+    }
+
+    ucp_proto_select_add_proto(&init_params->super, init_params->cfg_thresh,
+                               init_params->cfg_priority, perf, rpriv,
+                               priv_size);
+}
+
 static void
 ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
 {
@@ -57,11 +93,12 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
     };
     ucp_proto_rndv_rkey_ptr_priv_t rpriv;
-    ucp_proto_caps_t caps, rkey_ptr_caps;
+    ucp_proto_perf_t *perf;
     ucs_status_t status;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
@@ -69,21 +106,13 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    status = ucp_proto_single_init(&params, &rkey_ptr_caps, &rpriv.spriv);
+    status = ucp_proto_single_init(&params, &perf, &rpriv.spriv);
     if (status != UCS_OK) {
         return;
     }
 
-    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
-                                     &rkey_ptr_caps, UCS_LINEAR_FUNC_ZERO,
-                                     &rpriv.ack, &caps);
-    ucp_proto_select_caps_cleanup(&rkey_ptr_caps);
-
-    if (status != UCS_OK) {
-        return;
-    }
-
-    ucp_proto_common_add_proto(&params.super, &caps, &rpriv, sizeof(rpriv));
+    ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv,
+                                         sizeof(rpriv));
 }
 
 static void
@@ -225,13 +254,14 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
         .super.exclude_map   = (rkey_ptr_lane == UCP_NULL_LANE) ?
                                0 : UCS_BIT(rkey_ptr_lane),
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_LAST,
         .tl_cap_flags        = 0
     };
     ucp_proto_rndv_rkey_ptr_mtype_priv_t rpriv;
-    ucp_proto_caps_t caps, rkey_ptr_caps;
-    ucp_lane_index_t lane;
     ucp_md_map_t mdesc_md_map;
+    ucp_proto_perf_t *perf;
+    ucp_lane_index_t lane;
     ucs_status_t status;
 
     if (!context->config.ext.rndv_shm_ppln_enable ||
@@ -240,13 +270,14 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    status = ucp_proto_rndv_mtype_init(init_params, &mdesc_md_map,
-                                       &params.super.max_length);
+    /* 2-stage ppln protocols work with host staging buffers only */
+    status = ucp_proto_rndv_mtype_init(init_params, UCS_MEMORY_TYPE_HOST,
+                                       &mdesc_md_map, &params.super.max_length);
     if (status != UCS_OK) {
         return;
     }
 
-    status = ucp_proto_single_init(&params, &rkey_ptr_caps, &rpriv.super.spriv);
+    status = ucp_proto_single_init(&params, &perf, &rpriv.super.spriv);
     if (status != UCS_OK) {
         return;
     }
@@ -259,16 +290,8 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                 "dst_md_index %u rkey->md_map 0x%lx", rpriv.dst_md_index,
                 init_params->rkey_config_key->md_map);
 
-    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_RKEY_PTR_DESC,
-                                     &rkey_ptr_caps, UCS_LINEAR_FUNC_ZERO,
-                                     &rpriv.super.ack, &caps);
-    ucp_proto_select_caps_cleanup(&rkey_ptr_caps);
-
-    if (status != UCS_OK) {
-        return;
-    }
-
-    ucp_proto_common_add_proto(&params.super, &caps, &rpriv, sizeof(rpriv));
+    ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv.super,
+                                         sizeof(rpriv));
 }
 
 static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_completion(ucp_request_t *req)
@@ -322,7 +345,7 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     ucp_proto_rndv_mtype_copy(req, ppln_data->local_ptr, ppln_data->uct_memh,
-                              uct_ep_get_zcopy,
+                              UCS_MEMORY_TYPE_HOST, uct_ep_get_zcopy,
                               ucp_proto_rndv_rkey_ptr_mtype_copy_completion,
                               "in from");
 
@@ -348,7 +371,7 @@ ucp_proto_rndv_rkey_ptr_mtype_query(const ucp_proto_query_params_t *params,
     const char *desc = UCP_PROTO_RNDV_RKEY_PTR_DESC;
 
     ucp_rndv_rkey_ptr_query_common(params, attr);
-    ucp_proto_rndv_mtype_query_desc(params, attr, desc);
+    ucp_proto_rndv_mtype_query_desc(params, UCS_MEMORY_TYPE_HOST, attr, desc);
 }
 
 ucp_proto_t ucp_rndv_rkey_ptr_mtype_proto = {

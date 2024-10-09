@@ -30,7 +30,7 @@
  */
 typedef struct {
     ucs_linear_func_t func; /* Function that applies on the segment range */
-    size_t            end;  /* End of the segment (inlcusive) */
+    size_t            end;  /* End of the segment (inclusive) */
     ucs_list_link_t   list; /* List entry */
 } ucs_piecewise_segment_t;
 
@@ -39,7 +39,7 @@ typedef struct {
  * A piecewise function consisting of one or more segments.
  */
 typedef struct {
-    /* List of segments (list of the initalized function is always non-empty) */
+    /* List of segments (list of the initialized function is always non-empty) */
     ucs_list_link_t head;
 } ucs_piecewise_func_t;
 

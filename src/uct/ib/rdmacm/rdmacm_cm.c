@@ -779,7 +779,7 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         break;
     case RDMA_CM_EVENT_TIMEWAIT_EXIT:
         /* This event is generated when the QP associated with the connection
-         * has exited its timewait state and is now ready to be re-used.
+         * has exited its timewait state and is now ready to be reused.
          * After a QP has been disconnected, it is maintained in a timewait
          * state to allow any in flight packets to exit the network.
          * After the timewait state has completed, the rdma_cm will report this event.*/

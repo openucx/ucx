@@ -177,7 +177,7 @@ static void ucs_pgtable_expand(ucs_pgtable_t *pgtable)
 /**
  * Shrink the page table address span if possible
  *
- * @return Whether it was shrinked.
+ * @return Whether it was shrank.
  */
 static int ucs_pgtable_shrink(ucs_pgtable_t *pgtable)
 {

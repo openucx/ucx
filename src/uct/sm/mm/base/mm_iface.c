@@ -138,8 +138,12 @@ uct_mm_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     iface_addr = (void*)params->iface_addr;
+    if (iface_addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "iface address is empty");
+        return 0;
+    }
 
-    return uct_sm_iface_is_reachable(tl_iface, params->device_addr) &&
+    return uct_sm_iface_is_reachable(tl_iface, params) &&
            uct_mm_md_mapper_ops(md)->is_reachable(md, iface_addr->fifo_seg_id,
                                                   iface_addr + 1) &&
            uct_iface_scope_is_reachable(tl_iface, params);

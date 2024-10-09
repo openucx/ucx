@@ -159,7 +159,8 @@ typedef ucs_status_t (*ucp_proto_multi_lane_send_func_t)(ucp_request_t *req,
 
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
-                                  ucp_proto_caps_t *caps,
+                                  const char *perf_name,
+                                  ucp_proto_perf_t **perf_p,
                                   ucp_proto_multi_priv_t *mpriv);
 
 

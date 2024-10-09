@@ -64,7 +64,8 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_GET_ZCOPY      |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_ATOMIC_DEVICE |
-                                         UCT_IFACE_FLAG_PENDING;
+                                         UCT_IFACE_FLAG_PENDING |
+                                         UCT_IFACE_FLAG_INTER_NODE;
 
     iface_attr->cap.atomic64.op_flags  = UCS_BIT(UCT_ATOMIC_OP_ADD)|
                                          UCS_BIT(UCT_ATOMIC_OP_AND) |

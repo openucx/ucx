@@ -35,6 +35,7 @@ typedef struct uct_cuda_copy_md {
         int                      dmabuf_supported;
         ucs_ternary_auto_value_t enable_fabric;
         uct_cuda_pref_loc_t      pref_loc;
+        int                      cuda_async_managed;
     } config;
 } uct_cuda_copy_md_t;
 
@@ -48,6 +49,7 @@ typedef struct uct_cuda_copy_md_config {
     ucs_ternary_auto_value_t    enable_dmabuf;
     ucs_ternary_auto_value_t    enable_fabric;
     uct_cuda_pref_loc_t         pref_loc;
+    ucs_memory_type_t           cuda_async_mem_type;
 } uct_cuda_copy_md_config_t;
 
 /**

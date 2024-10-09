@@ -23,6 +23,7 @@
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/memory/rcache.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
@@ -78,12 +79,14 @@ typedef struct ucp_context_config {
     size_t                                 rndv_frag_size[UCS_MEMORY_TYPE_LAST];
     /** Number of RNDV pipeline fragments per allocation */
     size_t                                 rndv_num_frags[UCS_MEMORY_TYPE_LAST];
-    /** Memory type of fragments used for RNDV pipeline protocol */
-    ucs_memory_type_t                      rndv_frag_mem_type;
+    /** Memory types of fragments used for RNDV pipeline protocol */
+    uint64_t                               rndv_frag_mem_types;
     /** RNDV pipeline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Enabling 2-stage pipeline rndv protocol */
     int                                    rndv_shm_ppln_enable;
+    /** Enable error handling for rndv pipeline protocol */
+    int                                    rndv_errh_ppln_enable;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
@@ -147,7 +150,7 @@ typedef struct ucp_context_config {
     /** Enable indirect IDs to object pointers in wire protocols */
     ucs_on_off_auto_value_t                proto_indirect_id;
     /** Bitmap of memory types whose allocations are registered fully */
-    unsigned                               reg_whole_alloc_bitmap;
+    uint64_t                               reg_whole_alloc_bitmap;
     /** Always use flush operation in rendezvous put */
     int                                    rndv_put_force_flush;
     /** Maximum size of mem type direct rndv*/
@@ -175,9 +178,9 @@ typedef struct ucp_context_config {
     size_t                                 rma_zcopy_max_seg_size;
     /** Enable global VA MR */
     int                                    gva_enable;
-    /** Lock memory when usign global VA MR */
+    /** Lock memory when using global VA MR */
     int                                    gva_mlock;
-    /** Prefetch memory when usign global VA MR */
+    /** Prefetch memory when using global VA MR */
     int                                    gva_prefetch;
     /** Protocol overhead */
     double                                 proto_overhead_single;
@@ -300,7 +303,8 @@ typedef struct ucp_context_alloc_md_index {
     int            initialized;
     /* Index of memory domain that is used to allocate memory of the given type
      * using ucp_memh_alloc(). */
-    ucp_md_index_t md_index;
+    ucp_md_index_t   md_index;
+    ucs_sys_device_t sys_dev;
 } ucp_context_alloc_md_index_t;
 
 

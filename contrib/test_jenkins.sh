@@ -51,7 +51,7 @@ have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
 have_strace=$(strace -V || true)
 
 #
-# Override maven repository path, to cache the downloaded packages accross tests
+# Override maven repository path, to cache the downloaded packages across tests
 #
 export maven_repo=${WORKSPACE}/.deps
 
@@ -1200,6 +1200,13 @@ run_test_proto_disable() {
 
 run_asan_check() {
 	build devel --enable-gtest --enable-asan --without-valgrind
+
+	if ! ldd ${WORKSPACE}/build-test/test/gtest/gtest | grep -q "libasan.so"
+	then
+		azure_log_error "Error: ASan is not loaded."
+		exit 1
+	fi
+
 	run_gtest "default"
 }
 

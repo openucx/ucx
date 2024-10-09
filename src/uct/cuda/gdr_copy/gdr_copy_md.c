@@ -42,8 +42,8 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
      "shared across all contexts",
      ucs_offsetof(uct_gdr_copy_md_config_t, shared), UCS_CONFIG_TYPE_BOOL},
 
-    {"RCACHE", "try", "Enable using memory registration cache",
-     ucs_offsetof(uct_gdr_copy_md_config_t, enable_rcache), UCS_CONFIG_TYPE_TERNARY},
+    {"RCACHE", "yes", "Enable using memory registration cache",
+     ucs_offsetof(uct_gdr_copy_md_config_t, enable_rcache), UCS_CONFIG_TYPE_BOOL},
 
     {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
      ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.m), UCS_CONFIG_TYPE_TIME},
@@ -62,7 +62,6 @@ uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     uct_md_base_md_query(md_attr);
     md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->rkey_packed_size = sizeof(uct_gdr_copy_key_t);
 
@@ -430,6 +429,7 @@ uct_gdr_copy_md_create(uct_component_t *component,
     md->super.component = &uct_gdr_copy_component;
     md->reg_cost        = md_config->uc_reg_cost;
     md->super.ops       = &uct_gdr_copy_md_ops;
+    md->rcache          = NULL;
 
     md->gdrcpy_ctx = gdr_open();
     if (md->gdrcpy_ctx == NULL) {
@@ -438,7 +438,7 @@ uct_gdr_copy_md_create(uct_component_t *component,
         goto err_free;
     }
 
-    if (md_config->enable_rcache == UCS_NO) {
+    if (!md_config->enable_rcache) {
         goto out;
     }
 
@@ -449,17 +449,16 @@ uct_gdr_copy_md_create(uct_component_t *component,
     rcache_params.ops                = &uct_gdr_copy_rcache_ops;
     rcache_params.flags              = 0;
 
-    status = ucs_rcache_create(&rcache_params, "gdr_copy", NULL, &md->rcache);
-    if (status == UCS_OK) {
-        md->super.ops = &uct_gdr_copy_md_rcache_ops;
-        md->reg_cost  = UCS_LINEAR_FUNC_ZERO;
-    } else if (md_config->enable_rcache == UCS_YES) {
-        status = UCS_ERR_IO_ERROR;
-        goto err_close_gdr;
-    } else {
+    status = ucs_rcache_create(&rcache_params, "gdr_copy", ucs_stats_get_root(),
+                               &md->rcache);
+    if (status != UCS_OK) {
         ucs_debug("ucs_rcache_create() failed with: %s",
                   ucs_status_string(status));
+        goto err_close_gdr;
     }
+
+    md->super.ops = &uct_gdr_copy_md_rcache_ops;
+    md->reg_cost  = UCS_LINEAR_FUNC_ZERO;
 
 out:
     *md_p = md;
@@ -492,9 +491,8 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
 
     pthread_mutex_lock(&uct_gdr_copy_context.lock);
     if (uct_gdr_copy_context.refcount > 0) {
-        if ((md_config->enable_rcache != UCS_TRY) &&
-            ((uct_gdr_copy_context.md->rcache == NULL) !=
-             (md_config->enable_rcache == UCS_NO))) {
+        if ((uct_gdr_copy_context.md->rcache != NULL) !=
+             md_config->enable_rcache) {
             ucs_error("inconsistent gdr_copy rcache enable param");
             status = UCS_ERR_INVALID_PARAM;
         } else {

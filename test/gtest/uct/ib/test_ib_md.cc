@@ -311,3 +311,18 @@ UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)
+
+class test_ib_md_non_blocking : public test_md_non_blocking {
+};
+
+UCS_TEST_P(test_ib_md_non_blocking, reg_advise_odp_no_devx, "IB_MLX5_DEVX=no")
+{
+    test_nb_reg_advise();
+}
+
+UCS_TEST_P(test_ib_md_non_blocking, reg_odp_no_devx, "IB_MLX5_DEVX=no")
+{
+    test_nb_reg();
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md_non_blocking, ib)

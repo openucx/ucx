@@ -764,8 +764,9 @@ void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
-                                       ucp_wireup_ep_t **wireup_ep)
+static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
+                                              unsigned ep_init_flags,
+                                              ucp_wireup_ep_t **wireup_ep)
 {
     ucp_ep_config_key_t key;
     uct_ep_h uct_ep;
@@ -2449,7 +2450,7 @@ ucp_ep_config_max_short(ucp_context_t *context, uct_iface_attr_t *iface_attr,
     ssize_t cfg_max_short;
 
     if (!(iface_attr->cap.flags & short_flag) ||
-        context->config.progress_wrapper_enabled) {
+        ucp_context_usage_tracker_enabled(context)) {
         return -1;
     }
 
@@ -3527,7 +3528,7 @@ int ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_rsc_index_t rsc_index, int is_p2p)
             /* Transport is not connected as point-to-point */
             !is_p2p &&
             /* Transport supports active messages */
-            (ucp_worker_iface(ep->worker, rsc_index)->flags &
+            (ucp_worker_iface(ep->worker, rsc_index)->attr.cap.flags &
              UCT_IFACE_FLAG_AM_BCOPY);
 }
 
@@ -3710,7 +3711,7 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
          lane_index++) {
         /* Since the caller may be using a different size ucp_transport_entry_t
          * structure definition than this code, array indexing cannot be used
-         * when accesing array elements. The array element's offset must be computed
+         * when accessing array elements. The array element's offset must be computed
          * as 'lane_index' * attr->transports.entry_size and that offset added to the
          * array's base address. */
         transport_entry =

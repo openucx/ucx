@@ -11,14 +11,6 @@
 #include "proto_rndv.inl"
 
 
-static size_t
-ucp_rndv_am_cfg_thresh(ucp_context_t *context, size_t am_thresh)
-{
-    size_t cfg_thresh = ucp_proto_rndv_cfg_thresh(context,
-                                                  UCS_BIT(UCP_RNDV_MODE_AM));
-    return (cfg_thresh == UCS_MEMUNITS_AUTO) ? am_thresh : cfg_thresh;
-}
-
 static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
 {
     ucp_context_h context = params->super.super.worker->context;
@@ -28,15 +20,19 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
         return;
     }
 
-    params->super.min_length = 0;
-    params->super.max_length = SIZE_MAX;
-    params->super.overhead   = context->config.ext.proto_overhead_multi;
-    params->super.latency    = 0;
-    params->first.lane_type  = UCP_LANE_TYPE_AM;
-    params->middle.lane_type = UCP_LANE_TYPE_AM_BW;
-    params->super.hdr_size   = sizeof(ucp_request_data_hdr_t);
-    params->max_lanes        = context->config.ext.max_rndv_lanes;
-    params->opt_align_offs   = UCP_PROTO_COMMON_OFFSET_INVALID;
+    params->super.cfg_thresh   = ucp_proto_rndv_cfg_thresh(
+                                         context, UCS_BIT(UCP_RNDV_MODE_AM)),
+    params->super.cfg_priority = 80;
+    params->super.exclude_map  = 0;
+    params->super.min_length   = 0;
+    params->super.max_length   = SIZE_MAX;
+    params->super.overhead     = context->config.ext.proto_overhead_multi;
+    params->super.latency      = 0;
+    params->first.lane_type    = UCP_LANE_TYPE_AM;
+    params->middle.lane_type   = UCP_LANE_TYPE_AM_BW;
+    params->super.hdr_size     = sizeof(ucp_request_data_hdr_t);
+    params->max_lanes          = context->config.ext.max_rndv_lanes;
+    params->opt_align_offs     = UCP_PROTO_COMMON_OFFSET_INVALID;
 
     ucp_proto_multi_probe(params);
 }
@@ -107,12 +103,8 @@ static ucs_status_t ucp_proto_rndv_am_bcopy_progress(uct_pending_req_t *uct_req)
 
 static void ucp_rndv_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = ucp_rndv_am_cfg_thresh(context,
-                                                      context->config.ext.bcopy_thresh),
-        .super.cfg_priority  = 80,
         .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
@@ -123,6 +115,7 @@ static void ucp_rndv_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
                                UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
@@ -184,12 +177,8 @@ static ucs_status_t ucp_rndv_am_zcopy_proto_progress(uct_pending_req_t *uct_req)
 
 static void ucp_rndv_am_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = ucp_rndv_am_cfg_thresh(context,
-                                                      context->config.ext.zcopy_thresh),
-        .super.cfg_priority  = 90,
         .super.min_iov       = 1,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
@@ -199,6 +188,9 @@ static void ucp_rndv_am_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY   |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+        .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
+                                                     init_params->select_param),
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };

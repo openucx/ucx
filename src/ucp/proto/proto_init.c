@@ -25,95 +25,15 @@
  */
 #define UCP_PROTO_MSGLEN_EPSILON   0.5
 
-void ucp_proto_common_add_ppln_range(ucp_proto_caps_t *caps,
-                                     const ucp_proto_perf_range_t *frag_range,
-                                     size_t max_length)
-{
-    ucp_proto_perf_range_t *ppln_range = &caps->ranges[caps->num_ranges];
-    size_t frag_size                   = frag_range->max_length;
-    ucs_linear_func_t *ppln_perf       = ppln_range->perf;
-    ucp_proto_perf_type_t perf_type;
-    double frag_overhead;
-    char frag_str[64];
-
-    ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
-    ppln_range->node = ucp_proto_perf_node_new_data("pipeline", "frag size: %s",
-                                                    frag_str);
-
-    UCP_PROTO_PERF_TYPE_FOREACH(perf_type) {
-        /* For multi-fragment protocols, we need to apply the fragment
-         * size to the performance function linear factor.
-         */
-        ppln_perf[perf_type]    = frag_range->perf[perf_type];
-        ppln_perf[perf_type].m += frag_range->perf[perf_type].c / frag_size;
-    }
-
-    /* Overhead of sending one fragment before starting the pipeline */
-    /* Calculation of frag-overhead should be based on frag_range->perf
-     * but it causes significant performance degradation in the current perf
-     * prediction scheme */
-    frag_overhead =
-            ucs_linear_func_apply(ppln_perf[UCP_PROTO_PERF_TYPE_SINGLE], frag_size) -
-            ucs_linear_func_apply(ppln_perf[UCP_PROTO_PERF_TYPE_MULTI], frag_size);
-
-    ucs_trace("frag-size: %zd" UCP_PROTO_TIME_FMT(frag_overhead), frag_size,
-              UCP_PROTO_TIME_ARG(frag_overhead));
-
-    /* In certain cases multi perf can be bigger than single (e.g. FAST_CMPL
-     * with huge send_post_overhead) so the fragment overhead can be negative
-     * according to the logic above. The simplest estimation is to ignore
-     * fragment overhead in that particular case.
-     */
-    frag_overhead = ucs_max(frag_overhead, 0);
-
-    /* Apply the pipelining effect when sending multiple fragments */
-    ppln_perf[UCP_PROTO_PERF_TYPE_SINGLE] =
-            ucs_linear_func_add(ppln_perf[UCP_PROTO_PERF_TYPE_MULTI],
-                                ucs_linear_func_make(frag_overhead, 0));
-
-    ppln_range->max_length = max_length;
-
-    ucp_proto_perf_range_add_data(ppln_range);
-    ucp_proto_perf_node_add_scalar(ppln_range->node, "frag-ovh", frag_overhead);
-    ucp_proto_perf_node_add_child(ppln_range->node, frag_range->node);
-
-    ++caps->num_ranges;
-}
-
-void ucp_proto_common_init_base_caps(
-        const ucp_proto_common_init_params_t *params, ucp_proto_caps_t *caps,
-        size_t min_length)
-{
-    caps->min_length = ucs_max(params->min_length, min_length);
-    caps->num_ranges = 0;
-}
-
-static int ucp_proto_perf_range_is_zero(const ucp_proto_perf_range_t *range)
-{
-    return ucs_linear_func_is_zero(range->perf[UCP_PROTO_PERF_TYPE_SINGLE],
-                                   UCP_PROTO_PERF_EPSILON) &&
-           ucs_linear_func_is_zero(range->perf[UCP_PROTO_PERF_TYPE_MULTI],
-                                   UCP_PROTO_PERF_EPSILON);
-}
-
-void ucp_proto_perf_range_add_data(const ucp_proto_perf_range_t *range)
-{
-    ucp_proto_perf_node_add_data(range->node, "sngl",
-                                 range->perf[UCP_PROTO_PERF_TYPE_SINGLE]);
-    ucp_proto_perf_node_add_data(range->node, "mult",
-                                 range->perf[UCP_PROTO_PERF_TYPE_MULTI]);
-    ucp_proto_perf_node_add_data(range->node, "cpu",
-                                 range->perf[UCP_PROTO_PERF_TYPE_CPU]);
-}
+const char *ucp_envelope_convex_names[] = {"concave envelope",
+                                           "convex envelope"};
 
 ucs_status_t
-ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
+ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs, uint64_t funcs_num,
                              size_t range_start, size_t range_end, int convex,
                              ucp_proto_perf_envelope_t *envelope_list)
 {
-    const ucs_linear_func_t *perf_list_ptr = ucs_array_begin(perf_list);
-    const unsigned perf_list_length        = ucs_array_length(perf_list);
-    size_t start                           = range_start;
+    size_t start = range_start;
     char num_str[64];
     struct {
         unsigned index;
@@ -125,20 +45,25 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
     double x_sample, x_intersect;
     uint64_t mask;
 
-    ucs_assert_always(perf_list_length < 64);
-    mask = UCS_MASK(perf_list_length);
+    ucs_assertv_always((funcs_num > 0) && (funcs_num < 64),
+                       "funcs_num=%zu", funcs_num);
+    mask = UCS_MASK(funcs_num);
 
     do {
-        ucs_assert(mask != 0);
-
         /* Find best trend at the 'start' point */
         best.index  = UINT_MAX;
         best.result = DBL_MAX;
+        x_sample    = start;
+        if (x_sample < range_end) {
+            x_sample += UCP_PROTO_MSGLEN_EPSILON;
+        }
         ucs_for_each_bit(curr.index, mask) {
-            x_sample    = start + UCP_PROTO_MSGLEN_EPSILON;
-            curr.result = ucs_linear_func_apply(perf_list_ptr[curr.index],
-                                                x_sample);
-            ucs_assert(curr.result != DBL_MAX);
+            curr.result = ucs_linear_func_apply(funcs[curr.index], x_sample);
+            ucs_assertv((curr.result != DBL_MAX) && !isnan(curr.result),
+                        "curr.index=%u curr.result=%f x_sample=%f "
+                        "funcs[curr.index]="UCP_PROTO_PERF_FUNC_FMT,
+                        curr.index, curr.result, x_sample,
+                        UCP_PROTO_PERF_FUNC_ARG(&funcs[curr.index]));
             if ((best.index == UINT_MAX) ||
                 ((curr.result < best.result) == convex)) {
                 best = curr;
@@ -159,13 +84,14 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
         midpoint = range_end;
         mask    &= ~UCS_BIT(best.index);
         ucs_for_each_bit(curr.index, mask) {
-            status = ucs_linear_func_intersect(perf_list_ptr[curr.index],
-                                               perf_list_ptr[best.index],
-                                               &x_intersect);
-            if ((status == UCS_OK) && (x_intersect > start)) {
-                /* We care only if the intersection is after 'start', since
-                 * otherwise 'best' is better than 'curr' at
-                 * 'end' as well as at 'start'.
+            status = ucs_linear_func_intersect(funcs[curr.index],
+                                               funcs[best.index], &x_intersect);
+            if ((status == UCS_OK) && (x_intersect > x_sample)) {
+                /* We care only if the intersection is after 'x_sample', since
+                 * otherwise 'best' is better than 'curr' at 'end' as well as
+                 * at 'x_sample'. Since 'x_sample' differs from start only
+                 * for 0.5 we make an estimation and set it as 'best' for
+                 * 'start' as well.
                  */
                 midpoint = ucs_min(ucs_double_to_sizet(x_intersect, SIZE_MAX),
                                    midpoint);
@@ -189,179 +115,163 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
     return UCS_OK;
 }
 
-ucs_status_t
-ucp_proto_init_parallel_stages(const char *proto_name, size_t range_start,
-                               size_t range_end, double bias,
-                               const ucp_proto_perf_range_t **stages,
-                               unsigned num_stages, ucp_proto_caps_t *caps)
+static int
+ucp_proto_init_skip_recv_overhead(const ucp_proto_common_init_params_t *params,
+                                  uint32_t op_attr_mask)
 {
-    ucs_linear_func_t bias_func = ucs_linear_func_make(0.0, 1.0 - bias);
-    UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_perf_envelope_t, concave, 16);
-    UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_perf_list_t, stage_list, 16);
-    ucs_linear_func_t sum_single_perf, sum_cpu_perf;
-    const ucp_proto_perf_range_t **stage_elem;
-    ucp_proto_perf_envelope_elem_t *elem;
-    ucp_proto_perf_node_t *stage_node;
-    ucp_proto_perf_range_t *range;
-    ucs_linear_func_t *perf_elem;
-    ucs_status_t status;
-    char range_str[64];
-
-    ucs_memunits_range_str(range_start, range_end, range_str,
-                           sizeof(range_str));
-    ucs_trace("%s bias %.0f%%", range_str, bias * 100.0);
-
-    ucs_log_indent(1);
-    sum_single_perf = UCS_LINEAR_FUNC_ZERO;
-    sum_cpu_perf    = UCS_LINEAR_FUNC_ZERO;
-    ucs_carray_for_each(stage_elem, stages, num_stages) {
-        /* Summarize single and CPU time */
-        ucs_linear_func_add_inplace(&sum_single_perf,
-                                    (*stage_elem)->perf[UCP_PROTO_PERF_TYPE_SINGLE]);
-        ucs_linear_func_add_inplace(&sum_cpu_perf,
-                                    (*stage_elem)->perf[UCP_PROTO_PERF_TYPE_CPU]);
-
-        /* Add all multi perf ranges to envelope array */
-        perf_elem  = ucs_array_append(&stage_list, status = UCS_ERR_NO_MEMORY;
-                                      goto out);
-        *perf_elem = (*stage_elem)->perf[UCP_PROTO_PERF_TYPE_MULTI];
-
-        ucs_trace("stage[%zu] %s " UCP_PROTO_PERF_FUNC_TYPES_FMT
-                  UCP_PROTO_PERF_FUNC_FMT(perf_elem),
-                  stage_elem - stages,
-                  ucp_proto_perf_node_name((*stage_elem)->node),
-                  UCP_PROTO_PERF_FUNC_TYPES_ARG((*stage_elem)->perf),
-                  UCP_PROTO_PERF_FUNC_ARG(perf_elem));
-    }
-
-    /* Add CPU time as another parallel stage */
-    perf_elem  = ucs_array_append(&stage_list, status = UCS_ERR_NO_MEMORY;
-                                 goto out);
-    *perf_elem = sum_cpu_perf;
-
-    /* Multi-fragment is pipelining overheads and network transfer */
-    status = ucp_proto_perf_envelope_make(&stage_list, range_start, range_end,
-                                          0, &concave);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    ucs_array_for_each(elem, &concave) {
-        range             = &caps->ranges[caps->num_ranges];
-        range->max_length = elem->max_length;
-        if (fabs(bias) > UCP_PROTO_PERF_EPSILON) {
-            range->node = ucp_proto_perf_node_new_data(proto_name, "bias %f",
-                                                       bias);
-        } else {
-            range->node = ucp_proto_perf_node_new_data(proto_name, "");
-        }
-
-        /* "single" performance estimation is sum of "stages" with the bias */
-        range->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
-                ucs_linear_func_compose(bias_func, sum_single_perf);
-
-        /* "multiple" performance estimation is concave envelope of "stages" */
-        range->perf[UCP_PROTO_PERF_TYPE_MULTI] = ucs_linear_func_compose(
-                bias_func, ucs_array_elem(&stage_list, elem->index));
-
-        /* CPU overhead is the sum of all stages */
-        range->perf[UCP_PROTO_PERF_TYPE_CPU] = sum_cpu_perf;
-
-        ucp_proto_perf_range_add_data(range);
-
-        ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
-                  caps->num_ranges,
-                  ucs_memunits_range_str(range_start, range->max_length,
-                                         range_str, sizeof(range_str)),
-                  UCP_PROTO_PERF_FUNC_TYPES_ARG(range->perf));
-
-        stage_node = ucp_proto_perf_node_new_compose("stage", "");
-
-        ucs_carray_for_each(stage_elem, stages, num_stages) {
-            if (ucp_proto_perf_range_is_zero(*stage_elem)) {
-                continue;
-            }
-
-            /* range->node ---> stage_node ---> [ stage{i}->node ... ] */
-            ucp_proto_perf_node_add_child(stage_node, (*stage_elem)->node);
-        }
-
-        ucp_proto_perf_node_own_child(range->node, &stage_node);
-
-        ++caps->num_ranges;
-        range_start = range->max_length + 1;
-    }
-    ucs_assertv(range_start == (range_end + 1), "range_start=%zu range_end=%zu",
-                range_start, range_end);
-
-    status = UCS_OK;
-
-out:
-    ucs_log_indent(-1);
-    return status;
+    return (/* Don't care about receiver time for one-sided remote access */
+            (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) ||
+            /* Count only send completion time without waiting for a response */
+            ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+             !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE)));
 }
 
-void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
-                                ucp_md_map_t reg_md_map,
-                                ucs_linear_func_t *memreg_time,
-                                ucp_proto_perf_node_t **perf_node_p)
+static ucs_status_t
+ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
+                           const ucp_proto_common_tl_perf_t *tl_perf,
+                           ucp_proto_perf_node_t *const tl_perf_node,
+                           size_t range_start, size_t range_end,
+                           ucp_proto_perf_t *perf)
 {
-    ucp_context_h context            = params->super.worker->context;
-    ucp_proto_perf_node_t *perf_node = NULL;
+    ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    const double send_overhead            = tl_perf->send_pre_overhead +
+                                            tl_perf->send_post_overhead;
+    uint32_t op_attr_mask;
+
+    ucs_trace("caps" UCP_PROTO_TIME_FMT(send_pre_overhead)
+              UCP_PROTO_TIME_FMT(send_post_overhead)
+              UCP_PROTO_TIME_FMT(recv_overhead) UCP_PROTO_TIME_FMT(latency)
+              UCP_PROTO_TIME_FMT(sys_latency),
+              UCP_PROTO_TIME_ARG(tl_perf->send_pre_overhead),
+              UCP_PROTO_TIME_ARG(tl_perf->send_post_overhead),
+              UCP_PROTO_TIME_ARG(tl_perf->recv_overhead),
+              UCP_PROTO_TIME_ARG(tl_perf->latency),
+              UCP_PROTO_TIME_ARG(tl_perf->sys_latency));
+
+    op_attr_mask = ucp_proto_select_op_attr_unpack(
+            params->super.select_param->op_attr);
+
+    perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU].c += send_overhead;
+    perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c   += tl_perf->latency;
+    perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c   += tl_perf->sys_latency;
+
+    /* Add remote CPU TL overhead */
+    if (!ucp_proto_init_skip_recv_overhead(params, op_attr_mask)) {
+        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU].c +=
+                tl_perf->recv_overhead;
+    }
+
+    /* With non-zcopy fast-completion we don't count transport time */
+    if (!(op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
+        perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL].m += 1.0 /
+                                                          tl_perf->bandwidth;
+    }
+
+    if (/* Protocol is waiting for response */
+        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE) ||
+        /* Send time is representing request completion, which in case of zcopy
+           waits for ACK from remote side. */
+        ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY))) {
+        perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c    += tl_perf->latency;
+        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU].c +=
+                tl_perf->send_post_overhead;
+    }
+
+    return ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
+                                    tl_perf_node, "transport", "");
+}
+
+ucs_status_t
+ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
+                               ucp_md_map_t reg_md_map,
+                               ucp_proto_perf_factor_id_t cpu_factor_id,
+                               const char *perf_node_name, size_t range_start,
+                               size_t range_end, ucp_proto_perf_t *perf)
+{
+    ucp_context_h context                 = params->super.worker->context;
+    ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    ucp_proto_perf_node_t *reg_perf_node;
     const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
+    ucs_status_t status;
     const char *md_name;
 
-    *memreg_time = UCS_LINEAR_FUNC_ZERO;
-
     if (reg_md_map == 0) {
-        goto out;
+        return UCS_OK;
     }
 
     if (context->rcache != NULL) {
-        perf_node = ucp_proto_perf_node_new_data("rcache lookup", "");
-
-        *memreg_time = ucs_linear_func_make(context->config.ext.rcache_overhead,
-                                            0);
-
-        ucp_proto_perf_node_add_data(perf_node, "lookup", *memreg_time);
-
-        goto out;
+        perf_factors[cpu_factor_id] =
+                ucs_linear_func_make(context->config.ext.rcache_overhead, 0);
+        return ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                        perf_factors, NULL, "rcache lookup",
+                                        "");
     }
 
-    perf_node = ucp_proto_perf_node_new_data("mem reg", "");
+    reg_perf_node = ucp_proto_perf_node_new_data("mem reg", "");
 
     /* Go over all memory domains */
     ucs_for_each_bit(md_index, reg_md_map) {
         md_attr = &context->tl_mds[md_index].attr;
         md_name = context->tl_mds[md_index].rsc.md_name;
-        ucs_linear_func_add_inplace(memreg_time, md_attr->reg_cost);
-        ucs_trace("md %s" UCP_PROTO_PERF_FUNC_FMT(reg_cost), md_name,
+        ucs_linear_func_add_inplace(&perf_factors[cpu_factor_id],
+                                    md_attr->reg_cost);
+        ucs_trace("md %s reg: " UCP_PROTO_PERF_FUNC_FMT, md_name,
                   UCP_PROTO_PERF_FUNC_ARG(&md_attr->reg_cost));
-
-        ucp_proto_perf_node_add_data(perf_node, md_name, md_attr->reg_cost);
+        ucp_proto_perf_node_add_data(reg_perf_node, md_name, md_attr->reg_cost);
     }
 
     if (!ucs_is_pow2(reg_md_map)) {
         /* Multiple memory domains */
-        ucp_proto_perf_node_add_data(perf_node, "total", *memreg_time);
+        ucp_proto_perf_node_add_data(reg_perf_node, "total",
+                                     perf_factors[cpu_factor_id]);
     }
 
-out:
-    *perf_node_p = perf_node;
+    status = ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                      perf_factors, reg_perf_node,
+                                      perf_node_name, "%u mds",
+                                      ucs_popcount(reg_md_map));
+    ucp_proto_perf_node_deref(&reg_perf_node);
+    return status;
+}
+
+static ucp_proto_perf_factor_id_t
+ucp_proto_buffer_copy_factor_id(ucs_memory_type_t local_mem_type,
+                                ucs_memory_type_t remote_mem_type,
+                                uct_ep_operation_t memtype_op, int is_local)
+{
+    int h2h = UCP_MEM_IS_HOST(local_mem_type) &&
+              UCP_MEM_IS_HOST(remote_mem_type);
+
+    /* RNDV mtype protocols which do async copy set ZCOPY as `memtype_op`
+     * while eager procols that imply blocking copy set SHORT */
+    if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
+        (memtype_op == UCT_EP_OP_PUT_SHORT) || h2h) {
+        return ucp_proto_buffer_copy_cpu_factor_id(is_local);
+    }
+
+    ucs_assertv((memtype_op == UCT_EP_OP_GET_ZCOPY) ||
+                (memtype_op == UCT_EP_OP_PUT_ZCOPY), "memtype_op=%d",
+                memtype_op);
+    return is_local ? UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY :
+                      UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY;
 }
 
 ucs_status_t
-ucp_proto_init_buffer_copy_time(ucp_worker_h worker, const char *title,
-                                ucs_memory_type_t local_mem_type,
-                                ucs_memory_type_t remote_mem_type,
-                                uct_ep_operation_t memtype_op,
-                                ucs_linear_func_t *copy_time,
-                                ucp_proto_perf_node_t **perf_node_p)
+ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
+                                    ucs_memory_type_t local_mem_type,
+                                    ucs_memory_type_t remote_mem_type,
+                                    uct_ep_operation_t memtype_op,
+                                    size_t range_start, size_t range_end,
+                                    int local, ucp_proto_perf_t *perf)
 {
-    ucp_context_h context = worker->context;
+    ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    ucp_context_h context                 = worker->context;
+    ucp_proto_perf_factor_id_t buffer_copy_factor_id;
     ucs_memory_type_t src_mem_type, dst_mem_type;
-    ucp_proto_perf_node_t *perf_node, *tl_perf_node;
+    ucp_proto_perf_node_t *tl_perf_node;
     const ucp_ep_config_t *ep_config;
     ucp_worker_iface_t *wiface;
     uct_perf_attr_t perf_attr;
@@ -369,15 +279,14 @@ ucp_proto_init_buffer_copy_time(ucp_worker_h worker, const char *title,
     ucp_lane_index_t lane;
     ucs_status_t status;
 
+    buffer_copy_factor_id = ucp_proto_buffer_copy_factor_id(local_mem_type,
+                                                            remote_mem_type,
+                                                            memtype_op, local);
     if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
-        *copy_time = ucs_linear_func_make(0,
-                                          1.0 / context->config.ext.bcopy_bw);
-
-        perf_node = ucp_proto_perf_node_new_data("memcpy", "");
-        ucp_proto_perf_node_add_bandwidth(perf_node, "bcopy_bw",
-                                          context->config.ext.bcopy_bw);
-        *perf_node_p = perf_node;
-        return UCS_OK;
+        perf_factors[buffer_copy_factor_id] =
+                ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
+        return ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                        perf_factors, NULL, title, "memcpy");
     }
 
     if (worker->mem_type_ep[local_mem_type] != NULL) {
@@ -429,11 +338,15 @@ ucp_proto_init_buffer_copy_time(ucp_worker_h worker, const char *title,
     }
 
     /* all allowed copy operations are one-sided */
-    ucs_assert(perf_attr.recv_overhead < 1e-15);
-    copy_time->c = ucp_tl_iface_latency(context, &perf_attr.latency) +
-                   perf_attr.send_pre_overhead + perf_attr.send_post_overhead +
-                   perf_attr.recv_overhead;
-    copy_time->m = 1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
+    ucs_assert(perf_attr.recv_overhead < UCP_PROTO_PERF_EPSILON);
+
+    perf_factors[ucp_proto_buffer_copy_cpu_factor_id(local)].c +=
+            perf_attr.send_pre_overhead + perf_attr.send_post_overhead +
+            perf_attr.recv_overhead;
+    perf_factors[buffer_copy_factor_id].c +=
+            ucp_tl_iface_latency(context, &perf_attr.latency);
+    perf_factors[buffer_copy_factor_id].m +=
+            1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
 
     if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
         (memtype_op == UCT_EP_OP_GET_ZCOPY)) {
@@ -444,231 +357,83 @@ ucp_proto_init_buffer_copy_time(ucp_worker_h worker, const char *title,
         dst_mem_type = remote_mem_type;
     }
 
-    perf_node = ucp_proto_perf_node_new_data(
-            title, "%s to %s", ucs_memory_type_names[src_mem_type],
-            ucs_memory_type_names[dst_mem_type]);
-
-    ucp_proto_perf_node_add_data(perf_node, "", *copy_time);
-
     ucp_proto_common_lane_perf_node(context, rsc_index, &perf_attr,
                                     &tl_perf_node);
-    ucp_proto_perf_node_own_child(perf_node, &tl_perf_node);
 
-    *perf_node_p = perf_node;
+    status = ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                      perf_factors, tl_perf_node, title,
+                                      "%s to %s",
+                                      ucs_memory_type_names[src_mem_type],
+                                      ucs_memory_type_names[dst_mem_type]);
+    ucp_proto_perf_node_deref(&tl_perf_node);
 
-    return UCS_OK;
+    return status;
 }
 
 static ucs_status_t
-ucp_proto_common_init_send_perf(const ucp_proto_common_init_params_t *params,
-                                const ucp_proto_common_tl_perf_t *tl_perf,
-                                ucp_md_map_t reg_md_map, int empty_msg,
-                                ucp_proto_perf_range_t *send_perf)
-{
-    ucp_proto_perf_node_t *child_perf_node;
-    ucs_linear_func_t send_overhead;
-    ucs_status_t status;
-
-    send_perf->node = ucp_proto_perf_node_new_data("send-ovrh", "");
-
-    /* Remote access implies zero copy on receiver */
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
-        ucs_assert(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY);
-    }
-
-    /* Calculate sender overhead */
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        ucp_proto_init_memreg_time(params, reg_md_map, &send_overhead,
-                                   &child_perf_node);
-        ucp_proto_perf_node_own_child(send_perf->node, &child_perf_node);
-    } else if ((params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) ||
-               empty_msg) {
-        send_overhead = UCS_LINEAR_FUNC_ZERO;
-    } else {
-        ucs_assert(reg_md_map == 0);
-        status = ucp_proto_init_buffer_copy_time(
-                params->super.worker, "send copy", UCS_MEMORY_TYPE_HOST,
-                params->super.select_param->mem_type, params->memtype_op,
-                &send_overhead, &child_perf_node);
-        if (status != UCS_OK) {
-            ucp_proto_perf_node_deref(&send_perf->node);
-            return status;
-        }
-
-        ucp_proto_perf_node_own_child(send_perf->node, &child_perf_node);
-    }
-
-    send_overhead.c                            += tl_perf->send_pre_overhead;
-    send_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE] = send_overhead;
-
-    send_overhead.c                           += tl_perf->send_post_overhead;
-    send_perf->perf[UCP_PROTO_PERF_TYPE_MULTI] = send_overhead;
-    send_perf->perf[UCP_PROTO_PERF_TYPE_CPU]   = send_overhead;
-
-    ucp_proto_perf_range_add_data(send_perf);
-
-    return UCS_OK;
-}
-
-static void
-ucp_proto_common_init_xfer_perf(const ucp_proto_common_init_params_t *params,
-                                const ucp_proto_common_tl_perf_t *tl_perf,
-                                ucp_proto_perf_node_t *const tl_perf_node,
-                                ucp_proto_perf_range_t *xfer_perf)
+ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
+                               size_t range_start, size_t range_end,
+                               ucp_md_map_t reg_md_map, ucp_proto_perf_t *perf)
 {
     const ucp_proto_select_param_t *select_param = params->super.select_param;
-    ucs_linear_func_t xfer_time;
-    uint32_t op_attr_mask;
-
-    xfer_perf->node = ucp_proto_perf_node_new_data("xfer", "");
-
-    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
-
-    if ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-        !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
-        /* If we care only about time to start sending the message, ignore
-           the transport time */
-        xfer_time = UCS_LINEAR_FUNC_ZERO;
-    } else {
-        xfer_time = ucs_linear_func_make(0, 1.0 / tl_perf->bandwidth);
-    }
-
-    xfer_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE]    = xfer_time;
-    xfer_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE].c += tl_perf->latency +
-                                                     tl_perf->sys_latency;
-    xfer_perf->perf[UCP_PROTO_PERF_TYPE_MULTI]     = xfer_time;
-    xfer_perf->perf[UCP_PROTO_PERF_TYPE_CPU]       = UCS_LINEAR_FUNC_ZERO;
-
-    /*
-     * Add the latency of response/ACK back from the receiver.
-     */
-    if (/* Protocol is waiting for response */
-        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE) ||
-        /* Send time is representing request completion, which in case of zcopy
-           waits for ACK from remote side. */
-        ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY))) {
-        xfer_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE].c += tl_perf->latency;
-        xfer_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE].c +=
-                tl_perf->send_post_overhead;
-    }
-
-    ucp_proto_perf_range_add_data(xfer_perf);
-    ucp_proto_perf_node_add_child(xfer_perf->node, tl_perf_node);
-}
-
-static ucs_status_t
-ucp_proto_common_init_recv_perf(const ucp_proto_common_init_params_t *params,
-                                const ucp_proto_common_tl_perf_t *tl_perf,
-                                ucp_md_map_t reg_md_map, int empty_msg,
-                                ucp_proto_perf_range_t *recv_perf)
-{
-    const ucp_proto_select_param_t *select_param = params->super.select_param;
-    ucp_proto_perf_node_t *child_perf_node;
-    ucs_linear_func_t recv_overhead;
+    ucs_memory_type_t buffer_mem_type;
     ucs_memory_type_t recv_mem_type;
     uint32_t op_attr_mask;
     ucs_status_t status;
 
-    recv_perf->node = ucp_proto_perf_node_new_data("recv-ovrh", "");
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+        status = ucp_proto_init_add_memreg_time(params, reg_md_map,
+                                                UCP_PROTO_PERF_FACTOR_LOCAL_CPU,
+                                                "local memory registration",
+                                                range_start, range_end, perf);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) {
+        ucs_assert(reg_md_map == 0);
+
+        /* TODO: This mem_type initialization is specific to put and get mtype
+         * protocols. Consider moving it to the corresponding probe functions.
+         */
+        if (params->reg_mem_info.type != UCS_MEMORY_TYPE_UNKNOWN) {
+            buffer_mem_type = params->reg_mem_info.type;
+        } else {
+            buffer_mem_type = UCS_MEMORY_TYPE_HOST;
+        }
+        status = ucp_proto_init_add_buffer_copy_time(
+                params->super.worker, "local copy", buffer_mem_type,
+                select_param->mem_type, params->memtype_op, range_start,
+                range_end, 1, perf);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
+    if (ucp_proto_init_skip_recv_overhead(params, op_attr_mask)) {
+        return UCS_OK;
+    }
 
-    if (/* Don't care about receiver time for one-sided remote access */
-        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) ||
-        /* Count only send completion time without waiting for a response */
-        ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE)) ||
-        empty_msg) {
-        recv_overhead = UCS_LINEAR_FUNC_ZERO;
-    } else {
-        if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {
-            /* Receiver has to register its buffer */
-            ucp_proto_init_memreg_time(params, reg_md_map, &recv_overhead,
-                                       &child_perf_node);
-        } else {
-            if (params->super.rkey_config_key == NULL) {
-                /* Assume same memory type as sender */
-                recv_mem_type = select_param->mem_type;
-            } else {
-                recv_mem_type = params->super.rkey_config_key->mem_type;
-            }
-
-            /* Silence cppcheck */
-            recv_overhead = UCS_LINEAR_FUNC_ZERO;
-
-            /* Receiver has to copy data */
-            status = ucp_proto_init_buffer_copy_time(
-                    params->super.worker, "recv copy", UCS_MEMORY_TYPE_HOST,
-                    recv_mem_type, UCT_EP_OP_PUT_SHORT, &recv_overhead,
-                    &child_perf_node);
-            if (status != UCS_OK) {
-                ucp_proto_perf_node_deref(&recv_perf->node);
-                return status;
-            }
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {
+        /* Receiver has to register its buffer */
+        status = ucp_proto_init_add_memreg_time(
+                params, reg_md_map, UCP_PROTO_PERF_FACTOR_REMOTE_CPU,
+                "remote memory registration", range_start, range_end, perf);
+        if (status != UCS_OK) {
+            return status;
         }
-
-        /* Receiver has to process the incoming message */
-        if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS)) {
-            /* latency measure: add remote-side processing time */
-            recv_overhead.c += tl_perf->recv_overhead;
-        }
-
-        ucp_proto_perf_node_own_child(recv_perf->node, &child_perf_node);
     }
 
-    recv_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE] = recv_overhead;
-    recv_perf->perf[UCP_PROTO_PERF_TYPE_MULTI]  = recv_overhead;
-    recv_perf->perf[UCP_PROTO_PERF_TYPE_CPU]    = UCS_LINEAR_FUNC_ZERO;
+    /* Receiver has to copy data.
+     * Assume same memory type as sender if no rkey */
+    recv_mem_type = (params->super.rkey_config_key == NULL) ?
+                            select_param->mem_type :
+                            params->super.rkey_config_key->mem_type;
+    status        = ucp_proto_init_add_buffer_copy_time(
+            params->super.worker, "remote copy", UCS_MEMORY_TYPE_HOST,
+            recv_mem_type, UCT_EP_OP_PUT_SHORT, range_start, range_end, 0,
+            perf);
 
-    ucp_proto_perf_range_add_data(recv_perf);
-
-    return UCS_OK;
-}
-
-static ucs_status_t
-ucp_proto_init_single_frag_ranges(const ucp_proto_common_init_params_t *params,
-                                  const ucp_proto_common_tl_perf_t *tl_perf,
-                                  ucp_proto_perf_node_t *const tl_perf_node,
-                                  ucp_md_map_t reg_md_map, size_t range_start,
-                                  size_t range_end, ucp_proto_caps_t *caps)
-{
-    const char *proto_name = ucp_proto_id_field(params->super.proto_id, name);
-    int empty_msg          = (range_end == 0);
-    ucp_proto_perf_range_t xfer_perf, send_perf, recv_perf;
-    const ucp_proto_perf_range_t *parallel_stages[3];
-    ucs_status_t status;
-
-    /* Network transfer time */
-    ucp_proto_common_init_xfer_perf(params, tl_perf, tl_perf_node, &xfer_perf);
-
-    /* Sender overhead */
-    status = ucp_proto_common_init_send_perf(params, tl_perf, reg_md_map,
-                                             empty_msg, &send_perf);
-    if (status != UCS_OK) {
-        goto out_deref_xfer_perf;
-    }
-
-    /* Receiver overhead */
-    status = ucp_proto_common_init_recv_perf(params, tl_perf, reg_md_map,
-                                             empty_msg, &recv_perf);
-    if (status != UCS_OK) {
-        goto out_deref_send_perf;
-    }
-
-    parallel_stages[0] = &send_perf;
-    parallel_stages[1] = &xfer_perf;
-    parallel_stages[2] = &recv_perf;
-
-    /* Add ranges representing sending single fragment */
-    status = ucp_proto_init_parallel_stages(proto_name, range_start, range_end,
-                                            0.0, parallel_stages, 3, caps);
-
-    ucp_proto_perf_node_deref(&recv_perf.node);
-out_deref_send_perf:
-    ucp_proto_perf_node_deref(&send_perf.node);
-out_deref_xfer_perf:
-    ucp_proto_perf_node_deref(&xfer_perf.node);
     return status;
 }
 
@@ -689,67 +454,67 @@ ucp_proto_common_check_mem_access(const ucp_proto_common_init_params_t *params)
            (params->memtype_op != UCT_EP_OP_LAST);
 }
 
-ucs_status_t
-ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
-                           const ucp_proto_common_tl_perf_t *tl_perf,
-                           ucp_proto_perf_node_t *const tl_perf_node,
-                           ucp_md_map_t reg_md_map, ucp_proto_caps_t *caps)
+ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
+                                 const ucp_proto_common_tl_perf_t *tl_perf,
+                                 ucp_proto_perf_node_t *const tl_perf_node,
+                                 ucp_md_map_t reg_md_map, const char *perf_name,
+                                 ucp_proto_perf_t **perf_p)
 {
-    size_t range_end;
+    const ucp_proto_perf_segment_t *frag_seg;
+    size_t range_start, range_end;
+    ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    ucs_trace("caps" UCP_PROTO_TIME_FMT(send_pre_overhead)
-              UCP_PROTO_TIME_FMT(send_post_overhead)
-              UCP_PROTO_TIME_FMT(recv_overhead) UCP_PROTO_TIME_FMT(latency),
-              UCP_PROTO_TIME_ARG(tl_perf->send_pre_overhead),
-              UCP_PROTO_TIME_ARG(tl_perf->send_post_overhead),
-              UCP_PROTO_TIME_ARG(tl_perf->recv_overhead),
-              UCP_PROTO_TIME_ARG(tl_perf->latency));
+    range_start = ucs_max(params->min_length, tl_perf->min_length);
 
-    /* Initialize capabilities */
-    ucp_proto_common_init_base_caps(params, caps, tl_perf->min_length);
-
-    /* Add range representing sending empty message */
-    if (caps->min_length == 0) {
-        status = ucp_proto_init_single_frag_ranges(params, tl_perf,
-                                                   tl_perf_node, reg_md_map, 0,
-                                                   0, caps);
-        if (status != UCS_OK) {
-            return status;
-        }
+    if (ucp_proto_common_check_mem_access(params)) {
+        ucs_assert(tl_perf->max_frag >= params->hdr_size);
+        range_end = ucs_min(params->max_length,
+                            tl_perf->max_frag - params->hdr_size);
+    } else {
+        /* If memory access is not possible, support only empty message */
+        range_end = 0;
     }
 
-    /* Get fragment size */
-    ucs_assert(tl_perf->max_frag >= params->hdr_size);
-    range_end = ucs_min(params->max_length,
-                        tl_perf->max_frag - params->hdr_size);
-    if ((range_end == 0) || !ucp_proto_common_check_mem_access(params)) {
-        /* Return UNSUPPORTED if protocol cannot be used on any range */
-        return (caps->min_length == 0) ? UCS_OK : UCS_ERR_UNSUPPORTED;
+    if (range_end < tl_perf->min_length) {
+        return UCS_ERR_UNSUPPORTED;
     }
 
-    ucs_assertv_always(range_end >= caps->min_length,
-                       "range_end=%zu caps->min_length=%zu",
-                       range_end, caps->min_length);
-
-    /* Add ranges representing sending single fragment */
-    status = ucp_proto_init_single_frag_ranges(params, tl_perf, tl_perf_node,
-                                               reg_md_map, caps->min_length,
-                                               range_end, caps);
+    status = ucp_proto_perf_create(perf_name, &perf);
     if (status != UCS_OK) {
         return status;
     }
 
-    /* Append range representing sending rest of the fragments, if range_end is
-       not the max length and the protocol supports fragmentation */
-    if ((range_end < params->max_length) &&
-        !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
-        ucp_proto_common_add_ppln_range(caps,
-                                        &caps->ranges[caps->num_ranges - 1],
-                                        params->max_length);
+    status = ucp_proto_init_add_tl_perf(params, tl_perf, tl_perf_node,
+                                        range_start, range_end, perf);
+    if (status != UCS_OK) {
+        goto err_cleanup_perf;
     }
 
+    if (range_end > 0) {
+        /* Add buffer copy/register cost for non-empty messages */
+        status = ucp_proto_init_add_buffer_perf(params, ucs_max(1, range_start),
+                                                range_end, reg_md_map, perf);
+        if (status != UCS_OK) {
+            goto err_cleanup_perf;
+        }
+
+        /* Add range that represents sending many fragments */
+        if ((range_end < params->max_length) &&
+            !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
+            frag_seg = ucp_proto_perf_add_ppln(perf, perf, params->max_length);
+            if (frag_seg == NULL) {
+                goto err_cleanup_perf;
+            }
+        }
+    }
+
+    *perf_p = perf;
     return UCS_OK;
+
+err_cleanup_perf:
+    ucp_proto_perf_destroy(perf);
+    return status;
 }
 
 int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
