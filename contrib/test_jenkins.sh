@@ -576,6 +576,13 @@ start_perftest_daemon() {
 	# unless we run both processes on host for testing purposes.
 
 	# Mandatory options to run the daemon
+	# - UCX_RNDV_THRESH=0 is needed to enforce RNDV protocol usage, as it's the
+	# only supported protocol between host and DPU
+	# - UCX_RNDV_SCHEME=put_zcopy. On low buffer dimensions (below ~8KB) UCX
+	# prefers bcopy over zero-copy, but bcopy workflow is not supported by DPU
+	# daemon. The workaround is to force rendezvous scheme to use zero-copy.
+	# get_zcopy option is not good enough, because bcopy is still selected for
+	# tiny messages (below 64 bytes)
 	dmn_env="UCX_TLS=^cuda UCX_TCP_CM_REUSEADDR=y UCX_RNDV_THRESH=0 UCX_RNDV_SCHEME=put_zcopy"
 
 	# Run the daemon
@@ -609,7 +616,6 @@ run_ucx_perftest_with_daemon() {
 		fi
 
 		export UCX_NET_DEVICES=$ucx_dev
-		export UCX_MAX_RNDV_LANES=1
 
 		# Start client and server daemons
 		start_perftest_daemon $ucx_perftest_daemon server_dmn_pid server_dmn_port

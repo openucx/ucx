@@ -163,7 +163,7 @@ typedef struct uct_ib_md {
 
 
 typedef struct uct_ib_md_packed_mkey {
-    uint64_t uuid;
+    uint64_t md_uuid;
     uint32_t lkey;
     uint16_t vhca_id;
 } UCS_S_PACKED uct_ib_md_packed_mkey_t;
@@ -271,7 +271,7 @@ uct_ib_md_pack_exported_mkey(uct_ib_md_t *md, uint32_t lkey, void *buffer)
 {
     uct_ib_md_packed_mkey_t *mkey = (uct_ib_md_packed_mkey_t*)buffer;
 
-    mkey->uuid    = md->uuid;
+    mkey->md_uuid = md->uuid;
     mkey->lkey    = lkey;
     mkey->vhca_id = md->vhca_id;
 

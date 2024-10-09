@@ -1429,12 +1429,13 @@ uct_ib_mlx5_devx_umr_mkey_hash_find(uct_ib_mlx5_md_t *md,
     }
 
     *umr_alias = kh_val(md->umr.mkey_hash, khiter);
+
     /* Check if alias is from the same MD as packed_mkey */
-    if (packed_mkey->uuid != umr_alias->uuid) {
+    if (packed_mkey->md_uuid != umr_alias->md_uuid) {
         ucs_debug("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " in hash, but uuid %"
                   PRIu64 " doesn't match, removing stale alias",
                   uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
-                  packed_mkey->uuid);
+                  packed_mkey->md_uuid);
         /* Remove stale entry from hash, and destroy */
         kh_del(umr_mkey_map, md->umr.mkey_hash, khiter);
         uct_ib_mlx5_devx_umr_mkey_alias_destroy(md, umr_alias);
@@ -2425,7 +2426,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
     md->super.name       = UCT_IB_MD_NAME(mlx5);
     md->super.vhca_id    = vhca_id;
-    md->super.uuid       = ucs_generate_uuid(0);
+    md->super.uuid       = ucs_generate_uuid((uintptr_t)md);
 
     if ((md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI) &&
         (md_config->xgvmi_umr_enable == UCS_YES)) {
@@ -2981,7 +2982,7 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     ucs_strncpy_zero(access_key, uct_ib_mkey_token,
                      UCT_IB_MLX5DV_FLD_SZ_BYTES(alias_context, access_key));
 
-    umr_alias.uuid     = packed_mkey->uuid;
+    umr_alias.md_uuid  = packed_mkey->md_uuid;
     umr_alias.cross_mr = uct_ib_mlx5_devx_obj_create(md->super.dev.ibv_context,
                                                      in, sizeof(in), out,
                                                      sizeof(out), "MKEY_ALIAS",

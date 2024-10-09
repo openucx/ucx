@@ -89,7 +89,7 @@ public:
     import_memh(const uct_ib_mlx5_devx_mem_t *exported_memh,
                 uint64_t uuid = 0) const {
         uct_ib_md_packed_mkey_t packed_mkey = {
-            .uuid    = uuid,
+            .md_uuid = uuid,
             .lkey    = exported_memh->exported_lkey,
             .vhca_id = md()->super.vhca_id
         };
@@ -297,7 +297,7 @@ UCS_TEST_P(test_devx_umr_mkey, import_same_mkey_from_different_md)
     EXPECT_EQ(1, kh_size(md()->umr.mkey_hash));
     uct_ib_mlx5_devx_umr_alias_t mkey_alias;
     kh_foreach_value(md()->umr.mkey_hash, mkey_alias, {
-        EXPECT_EQ(1, mkey_alias.uuid);
+        EXPECT_EQ(1, mkey_alias.md_uuid);
     });
 
     /* Import the same UMR key, but from another MD with uuid 2 */
@@ -306,7 +306,7 @@ UCS_TEST_P(test_devx_umr_mkey, import_same_mkey_from_different_md)
     EXPECT_EQ(1, kh_size(md()->umr.mkey_hash));
     /* Check that stale mkey had been replaced by a new one */
     kh_foreach_value(md()->umr.mkey_hash, mkey_alias, {
-        EXPECT_EQ(2, mkey_alias.uuid);
+        EXPECT_EQ(2, mkey_alias.md_uuid);
     });
 
     destroy_memh(imported_memh);

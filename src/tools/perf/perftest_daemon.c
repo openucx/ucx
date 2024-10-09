@@ -112,7 +112,6 @@ static void ucp_perf_daemon_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
     } else {
         ucs_error("ep %p: peer error handler called with status %s", ep,
                   ucs_status_string(status));
-
         terminated = 1;
     }
 }
