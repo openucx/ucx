@@ -88,6 +88,15 @@ uct_ib_mlx5_cqe_is_grh_present(struct mlx5_cqe64* cqe)
                                    UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE);
 }
 
+static inline UCS_F_ALWAYS_INLINE size_t
+uct_ib_mlx5_cqe_roce_gid_len(struct mlx5_cqe64* cqe)
+{
+  return ((htonl(cqe->flags_rqpn) & UCT_IB_MLX5_RQPN_ROCE_PKT_TYPE) ==
+          UCT_IB_MLX5_ROCE_PKT_TYPE_IPV4) ? UCS_IPV4_ADDR_LEN :
+      UCS_IPV6_ADDR_LEN;
+}
+
+
 static UCS_F_ALWAYS_INLINE void*
 uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
 {
