@@ -395,22 +395,19 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
     return inv_map;
 }
 
-int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
+static UCS_F_ALWAYS_INLINE ucp_mem_h
+ucp_request_get_memh(ucp_request_t *req, int extract, int is_fragment)
 {
-    ucp_ep_h ep                      = req->send.ep;
-    ucp_err_handling_mode_t err_mode = ucp_ep_config(ep)->key.err_mode;
-    ucp_worker_h worker              = ep->worker;
-    ucp_context_h context            = worker->context;
+    ucp_context_h context = req->send.ep->worker->context;
     ucp_mem_h *memh_p;
-    ucp_md_map_t invalidate_map;
-
-    if ((err_mode != UCP_ERR_HANDLING_MODE_PEER) ||
-        !(req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
-        return 0;
-    }
+    ucp_mem_h memh;
 
     /* Get the contig memh from the request basing on the proto version */
     if (context->config.ext.proto_enable) {
+        if (is_fragment) {
+            return req->send.rndv.mdesc->memh;
+        }
+
         ucs_assertv(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG,
                     "dt_class=%s",
                     ucp_datatype_class_names[req->send.state.dt_iter.dt_class]);
@@ -421,24 +418,62 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
         memh_p = &req->send.state.dt.dt.contig.memh;
     }
 
-    if ((*memh_p == NULL) || ucp_memh_is_user_memh(*memh_p)) {
+    memh = *memh_p;
+    if (extract) {
+        *memh_p = NULL;
+    }
+    return memh;
+}
+
+int ucp_request_memh_check_invalidate(ucp_request_t *req, int is_fragment)
+{
+    ucp_ep_h ep                      = req->send.ep;
+    ucp_err_handling_mode_t err_mode = ucp_ep_config(ep)->key.err_mode;
+    ucp_mem_h memh;
+
+    ucs_assert(!ucp_request_is_invalidated(req));
+
+    if ((err_mode != UCP_ERR_HANDLING_MODE_PEER) ||
+        !(req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
         return 0;
     }
 
-    ucs_assert(status != UCS_OK);
+    memh = ucp_request_get_memh(req, 0, is_fragment);
+    return (memh != NULL) && (is_fragment || !ucp_memh_is_user_memh(memh));
+}
 
-    req->send.invalidate.worker = worker;
-    req->status                 = status;
+void ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status,
+                                 int is_fragment)
+{
+    ucp_ep_h ep           = req->send.ep;
+    ucp_context_h context = ep->worker->context;
+    ucp_mem_desc_t *mdesc = req->send.rndv.mdesc;
+    ucp_mem_h memh        = ucp_request_get_memh(req, 1, is_fragment);
+    ucp_md_map_t invalidate_map;
+
+    ucs_assert(status != UCS_OK);
+    ucs_assert(!ucp_request_is_invalidated(req));
+
+    /* Here we overwrite the request union, all union fields must be extracted
+     * before this happens */
+    req->send.invalidate.worker    = ep->worker;
+    req->send.invalidate.comp.func = ucp_request_mem_invalidate_completion;
+    req->send.invalidate.comp.arg  = req;
+    req->status                    = status;
+    req->flags                    |= UCP_REQUEST_FLAG_INVALIDATED;
 
     invalidate_map = ucp_request_get_invalidation_map(ep);
     ucp_trace_req(req, "mem invalidate buffer md_map 0x%" PRIx64 "/0x%" PRIx64,
-                  invalidate_map, (*memh_p)->md_map);
-    ucp_memh_invalidate(context, *memh_p, ucp_request_mem_invalidate_completion,
-                        req, invalidate_map);
+                  invalidate_map, memh->md_map);
 
-    ucp_memh_put(*memh_p);
-    *memh_p = NULL;
-    return 1;
+    if (is_fragment) {
+        ucp_frag_mpool_invalidate(mdesc, &req->send.invalidate.comp,
+                                  invalidate_map);
+    } else {
+        ucp_memh_invalidate(context, memh, &req->send.invalidate.comp,
+                            invalidate_map);
+        ucp_memh_put(memh);
+    }
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,

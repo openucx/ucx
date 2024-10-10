@@ -321,6 +321,7 @@ UCS_MT_TEST_F(test_rcache, put_and_invalidate, 1)
 {
     static const size_t size = 1 * UCS_MBYTE;
     std::vector<region*> regions;
+    std::vector<std::unique_ptr<ucs_rcache_comp_entry_t>> comps;
     region *reg;
     void *ptr;
     size_t region_get_count; /* how many get operation to apply */
@@ -340,8 +341,11 @@ UCS_MT_TEST_F(test_rcache, put_and_invalidate, 1)
             ASSERT_EQ(0, m_comp_count);
             region *region = regions.back();
             if ((iter & 1) == 0) { /* on even iteration invalidate region */
-                ucs_rcache_region_invalidate(m_rcache, &region->super,
-                                             &completion_cb, this);
+                auto *comp = new ucs_rcache_comp_entry_t();
+                comp->func = completion_cb;
+                comp->arg  = this;
+                comps.emplace_back(comp);
+                ucs_rcache_region_invalidate(m_rcache, &region->super, comp);
                 /* after invalidation region should not be acquired again */
                 reg = get(ptr, size);
                 EXPECT_NE(reg, region);
