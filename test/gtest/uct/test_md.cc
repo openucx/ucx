@@ -153,11 +153,14 @@ void test_md::test_reg_mem(unsigned access_mask,
 std::vector<test_md_param> test_md::enum_mds(const std::string& cmpt_name) {
 
     std::vector<md_resource> md_resources = enum_md_resources();
+    static const char *str                = getenv("GTEST_UCT_MD_NAME");
+    std::string md_name                   = (str != NULL) ? str : "";
 
     std::vector<test_md_param> result;
     for (std::vector<md_resource>::iterator iter = md_resources.begin();
          iter != md_resources.end(); ++iter) {
-        if (iter->cmpt_attr.name == cmpt_name) {
+        if ((iter->cmpt_attr.name == cmpt_name) &&
+            (md_name.empty() || (md_name == iter->rsc_desc.md_name))) {
             result.push_back(test_md_param());
             result.back().component = iter->cmpt;
             result.back().md_name   = iter->rsc_desc.md_name;
