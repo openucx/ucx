@@ -187,7 +187,8 @@ out:
     return err_status;
 }
 
-static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
+static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, unsigned op_flags,
+                                       void *qstart, void *qend,
                                        struct ibv_sge *sg_list, int *sg_index,
                                        int *is_inline)
 {
@@ -202,7 +203,8 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
         *dseg_p = qstart;
     }
     inl = *dseg_p;
-    if (inl->byte_count & htonl(MLX5_INLINE_SEG)) {
+    if (!(op_flags & UCT_IB_OPCODE_FLAG_HAS_DMA) &&
+        (inl->byte_count & htonl(MLX5_INLINE_SEG))) {
         addr       = inl + 1;
         sg->addr   = (uintptr_t)addr;
         sg->lkey   = 0;
@@ -235,6 +237,15 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
         *dseg_p = UCS_PTR_BYTE_OFFSET(*dseg_p, -UCS_PTR_BYTE_DIFF(qstart, qend));
     }
     return ds;
+}
+
+static void* uct_ib_mlx5_dump_dma_seg(uct_ib_mlx5_dma_seg_t *dma_seg,
+                                      char *buf, size_t max)
+{
+    snprintf(buf, max, " DMA[lkey 0x%x va 0x%"PRIx64"]",
+             be32toh(dma_seg->be_opaque_lkey),
+             be64toh(dma_seg->be_opaque_vaddr));
+    return dma_seg + 1;
 }
 
 static uint64_t network_to_host(void *ptr, int size)
@@ -282,16 +293,22 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
                                            UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
         [MLX5_OPCODE_ATOMIC_MASKED_FA] = { "MASKED_FETCH_ADD",
                                            UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
-   };
+#if HAVE_MLX5_MMO
+        [MLX5_OPCODE_MMO]              = { "MMO",
+                                           UCT_IB_OPCODE_FLAG_HAS_DMA }
+#endif
+    };
 
     struct mlx5_wqe_ctrl_seg *ctrl = wqe;
-    uint8_t opcode      = ctrl->opmod_idx_opcode >> 24;
-    uint8_t opmod       = ctrl->opmod_idx_opcode & 0xff;
-    uint32_t qp_num     = ntohl(ctrl->qpn_ds) >> 8;
-    int ds              = ctrl->qpn_ds >> 24;
-    uct_ib_opcode_t *op = &opcodes[opcode];
-    char *s             = buffer;
-    char *ends          = buffer + max;
+    uint8_t opcode                 = ctrl->opmod_idx_opcode >> 24;
+    uint8_t opmod                  = ctrl->opmod_idx_opcode & 0xff;
+    uint32_t qp_num                = ntohl(ctrl->qpn_ds) >> 8;
+    int ds                         = ctrl->qpn_ds >> 24;
+    uct_ib_opcode_t *op            = &opcodes[opcode];
+    char *s                        = buffer;
+    char *ends                     = buffer + max;
+    const char* sg_prefix_arr      = (op->flags & UCT_IB_OPCODE_FLAG_HAS_DMA) ?
+                                     "GS" : NULL;
     struct ibv_sge sg_list[16];
     uint64_t inline_bitmap;
     int i, is_inline, is_eth;
@@ -402,24 +419,37 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
         s += strlen(s);
     }
 
+    /* DMA/MMO segment */
+    if (op->flags & UCT_IB_OPCODE_FLAG_HAS_DMA) {
+        seg = uct_ib_mlx5_dump_dma_seg(seg, s, ends - s);
+        if (seg == qend) {
+            seg = qstart;
+        }
+
+        s += strlen(s);
+        --ds;
+    }
+
     /* Data segments*/
     if (log_sge == NULL) {
         i = 0;
         inline_bitmap = 0;
 
         while ((ds > 0) && (i < sizeof(sg_list) / sizeof(sg_list[0]))) {
-            ds -= uct_ib_mlx5_parse_dseg(&seg, qstart, qend, sg_list, &i, &is_inline);
+            ds -= uct_ib_mlx5_parse_dseg(&seg, op->flags, qstart, qend, sg_list,
+                                         &i, &is_inline);
             if (is_inline) {
                 inline_bitmap |= UCS_BIT(i-1);
             }
         }
-        uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, sg_list, i,
-                                inline_bitmap, packet_dump_cb, max_sge, s,
-                                ends - s);
+        uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, sg_prefix_arr,
+                                sg_list, i, inline_bitmap, packet_dump_cb,
+                                max_sge, s, ends - s);
     } else {
-        uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, log_sge->sg_list,
-                                log_sge->num_sge, log_sge->inline_bitmap,
-                                packet_dump_cb, log_sge->num_sge, s, ends - s);
+        uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, sg_prefix_arr,
+                                log_sge->sg_list, log_sge->num_sge,
+                                log_sge->inline_bitmap, packet_dump_cb,
+                                log_sge->num_sge, s, ends - s);
     }
 }
 
@@ -540,4 +570,3 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
                                     packet_dump_cb, buf, sizeof(buf) - 1);
     uct_log_data(file, line, function, buf);
 }
-

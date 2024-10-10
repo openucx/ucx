@@ -181,6 +181,10 @@ AS_IF([test "x$with_ib" = "xyes"],
                                   [have_dc_dv=yes], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_DECLS([ibv_alloc_td],
                                   [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])
+                       AC_CHECK_DECL([MLX5_OPCODE_MMO], [
+                               AC_DEFINE([HAVE_MLX5_MMO], [1], [MLX5_MMO support])
+                               has_mlx5_mmo=yes
+                               ], [], [[#include <infiniband/mlx5dv.h>]])
                        AS_IF([test x$with_devx != xno], [
                                AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
                                           AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
@@ -315,6 +319,7 @@ AM_CONDITIONAL([HAVE_DC_DV],   [test -n "$have_dc_dv"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$have_mlx5" = xyes -a "x$has_get_av" != xno])
+AM_CONDITIONAL([HAVE_MLX5_MMO],   [test -n "$has_mlx5_mmo"])
 
 m4_include([src/uct/ib/rdmacm/configure.m4])
 m4_include([src/uct/ib/mlx5/configure.m4])
