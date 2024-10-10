@@ -2,6 +2,7 @@
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+* Copyright (C) Dandan Zhang, 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -56,6 +57,10 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
         .max = UCS_MEMUNITS_INF
     },
     [UCS_CPU_VENDOR_GENERIC_ARM] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_GENERIC_LOONGARCH64] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
     },
@@ -164,6 +169,7 @@ const char *ucs_cpu_vendor_name()
         [UCS_CPU_VENDOR_INTEL]         = "Intel",
         [UCS_CPU_VENDOR_AMD]           = "AMD",
         [UCS_CPU_VENDOR_GENERIC_ARM]   = "Generic ARM",
+        [UCS_CPU_VENDOR_GENERIC_LOONGARCH64] = "Generic LoongArch64",
         [UCS_CPU_VENDOR_GENERIC_PPC]   = "Generic PPC",
         [UCS_CPU_VENDOR_GENERIC_RV64G] = "Generic RV64G",
         [UCS_CPU_VENDOR_FUJITSU_ARM]   = "Fujitsu ARM",
@@ -189,6 +195,7 @@ const char *ucs_cpu_model_name()
         [UCS_CPU_MODEL_ARM_AARCH64]        = "ARM 64-bit",
         [UCS_CPU_MODEL_AMD_NAPLES]         = "Naples",
         [UCS_CPU_MODEL_AMD_ROME]           = "Rome",
+        [UCS_CPU_MODEL_LOONGARCH64]        = "LoongArch 64-bit",
         [UCS_CPU_MODEL_AMD_MILAN]          = "Milan",
         [UCS_CPU_MODEL_AMD_GENOA]          = "Genoa",
         [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG] = "Zhangjiang",
