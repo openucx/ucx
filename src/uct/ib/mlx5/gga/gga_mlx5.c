@@ -14,14 +14,48 @@
 
 #include <uct/ib/mlx5/rc/rc_mlx5.inl>
 
+#include <ucs/datastruct/khash.h>
+
 #define UCT_GGA_MLX5_OPAQUE_BUF_LEN 64
 #define UCT_GGA_MAX_MSG_SIZE        (2u * UCS_MBYTE)
 
+
+/**
+ * Hashed per MD part of rkey
+ */
 typedef struct {
+    uct_ib_mlx5_devx_mem_t *memh;
+    uct_rkey_bundle_t      rkey_ob;
+} uct_gga_mlx5_md_rkey_handle_t;
+
+/**
+ * Pointer to @ref uct_gga_mlx5_rkey_handle_t is a key in the hash
+ */
+typedef uintptr_t uct_gga_mlx5_rkey_hash_key_t;
+
+KHASH_MAP_INIT_INT64(resolved_rkeys, uct_gga_mlx5_md_rkey_handle_t*);
+
+typedef struct {
+    uct_ib_mlx5_md_t        super;
+    khash_t(resolved_rkeys) rkey_cache;
+} uct_gga_mlx5_md_t;
+
+/**
+ * Entry of uct_gga_mlx5_rkey_handle_t::mds to implement many-to-many
+ * relationship between rkeys and mds
+ */
+typedef struct {
+    ucs_list_link_t   list_link;
+    uct_gga_mlx5_md_t *md;
+} uct_gga_mlx5_rkey_handle_md_link_t;
+
+typedef struct {
+    /* Cached fields */
+    uct_gga_mlx5_md_t       *md;
+    uct_rkey_t              rkey;
+
     uct_ib_md_packed_mkey_t packed_mkey;
-    uct_ib_mlx5_devx_mem_t  *memh;
-    uct_ib_mlx5_md_t        *md;
-    uct_rkey_bundle_t       rkey_ob;
+    ucs_list_link_t         mds;
 } uct_gga_mlx5_rkey_handle_t;
 
 typedef struct {
@@ -73,21 +107,6 @@ ucs_config_field_t uct_gga_mlx5_iface_config_table[] = {
 };
 
 static ucs_status_t
-uct_ib_mlx5_gga_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
-{
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_devx_md_query(uct_md, md_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* GGA always packs exported mkey */
-    md_attr->rkey_packed_size = md_attr->exported_mkey_packed_size;
-    return UCS_OK;
-}
-
-static ucs_status_t
 uct_ib_mlx5_gga_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                           void *address, size_t length,
                           const uct_md_mkey_pack_params_t *params,
@@ -118,41 +137,102 @@ uct_gga_mlx5_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
         return UCS_ERR_NO_MEMORY;
     }
 
-    rkey_handle->packed_mkey    = *mkey;
-    /* memh and rkey_ob will be initialized on demand since MD
-     * (required for memh import) is not available at this point */
-    rkey_handle->memh           = NULL;
-    rkey_handle->md             = NULL;
-    rkey_handle->rkey_ob.rkey   = UCT_INVALID_RKEY;
-    rkey_handle->rkey_ob.handle = NULL;
-    rkey_handle->rkey_ob.type   = NULL;
+    ucs_list_head_init(&rkey_handle->mds);
+    rkey_handle->md          = NULL;
+    rkey_handle->rkey        = UCT_INVALID_RKEY;
+    rkey_handle->packed_mkey = *mkey;
 
     *rkey_p   = (uintptr_t)rkey_handle;
     *handle_p = NULL;
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_gga_mlx5_md_put_rkey(uct_gga_mlx5_md_t *md,
+                         const uct_gga_mlx5_rkey_hash_key_t key,
+                         uct_gga_mlx5_md_rkey_handle_t *rkey_handle)
+{
+    khint_t iter;
+    ucs_kh_put_t ret;
+
+    iter = kh_put(resolved_rkeys, &md->rkey_cache, key, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("md %p: failed to add rkey to hash", md);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
+    kh_val(&md->rkey_cache, iter) = rkey_handle;
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE uct_gga_mlx5_md_rkey_handle_t*
+uct_gga_mlx5_md_get_rkey(const uct_gga_mlx5_md_t *md,
+                         const uct_gga_mlx5_rkey_hash_key_t key)
+{
+    khint_t iter = kh_get(resolved_rkeys, &md->rkey_cache, key);
+
+    return ucs_unlikely(iter == kh_end(&md->rkey_cache)) ? NULL :
+           kh_val(&md->rkey_cache, iter);
+}
+
+static uct_gga_mlx5_md_rkey_handle_t*
+uct_gga_mlx5_md_extract_rkey(uct_gga_mlx5_md_t *md,
+                             const uct_gga_mlx5_rkey_hash_key_t key)
+{
+    khint_t iter = kh_get(resolved_rkeys, &md->rkey_cache, key);
+    uct_gga_mlx5_md_rkey_handle_t* handle;
+
+    ucs_assert(iter != kh_end(&md->rkey_cache));
+    handle = kh_val(&md->rkey_cache, iter);
+    kh_del(resolved_rkeys, &md->rkey_cache, iter);
+    return handle;
+}
+
 static void
-uct_gga_mlx5_rkey_handle_dereg(uct_gga_mlx5_rkey_handle_t *rkey_handle)
+uct_gga_mlx5_md_rkey_handle_release(uct_gga_mlx5_md_t *md,
+                                    uct_gga_mlx5_md_rkey_handle_t *md_rkeyh)
 {
     uct_md_mem_dereg_params_t params = {
         .field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH,
-        .memh       = rkey_handle->memh
+        .memh       = md_rkeyh->memh
     };
     ucs_status_t status;
 
-    if (rkey_handle->memh == NULL) {
+    ucs_free(md_rkeyh);
+    status = uct_ib_mlx5_devx_mem_dereg(&md->super.super.super, &params);
+    if (status != UCS_OK) {
+        ucs_warn("md %p: failed to deregister GGA memh %p with status %s",
+                 md, params.memh, ucs_status_string(status));
+    }
+}
+
+static void
+uct_gga_mlx5_rkey_handle_dereg(uct_gga_mlx5_rkey_handle_t *rkey_handle)
+{
+    uct_gga_mlx5_rkey_hash_key_t hash_key = (uintptr_t)rkey_handle;
+    uct_gga_mlx5_rkey_handle_md_link_t *md_link;
+    uct_gga_mlx5_md_t *md;
+    uct_gga_mlx5_md_rkey_handle_t *md_rkeyh;
+
+    if (rkey_handle->md == NULL) {
+        /* the rkey wasn't used and resolved */
+        ucs_assert(rkey_handle->rkey == UCT_INVALID_RKEY);
         return;
     }
 
-    status = uct_ib_mlx5_devx_mem_dereg(&rkey_handle->md->super.super, &params);
-    if (status != UCS_OK) {
-        ucs_warn("md %p: failed to deregister GGA memh %p", rkey_handle->md,
-                 rkey_handle->memh);
+    while (!ucs_list_is_empty(&rkey_handle->mds)) {
+        md_link  = ucs_list_extract_head(&rkey_handle->mds,
+                                         uct_gga_mlx5_rkey_handle_md_link_t,
+                                         list_link);
+        md       = md_link->md;
+        md_rkeyh = uct_gga_mlx5_md_extract_rkey(md, hash_key);
+        uct_gga_mlx5_md_rkey_handle_release(md, md_rkeyh);
+        ucs_free(md_link);
     }
 
-    rkey_handle->memh = NULL;
     rkey_handle->md   = NULL;
+    rkey_handle->rkey = UCT_INVALID_RKEY;
 }
 
 static ucs_status_t uct_gga_mlx5_rkey_release(uct_component_t *component,
@@ -192,55 +272,117 @@ static uct_component_t uct_gga_component = {
 };
 
 static UCS_F_ALWAYS_INLINE
-void uct_gga_mlx5_rkey_trace(uct_ib_mlx5_md_t *md,
+void uct_gga_mlx5_rkey_trace(uct_gga_mlx5_md_t *md,
                              uct_gga_mlx5_rkey_handle_t *rkey_handle,
                              const char *prefix)
 {
-    ucs_trace("md %p: %s resolved rkey %p: rkey_ob %"PRIx64"/%p", md, prefix,
-              rkey_handle, rkey_handle->rkey_ob.rkey,
-              rkey_handle->rkey_ob.handle);
+    ucs_trace("md %p: %s resolved rkey_handle %p: rkey %"PRIx64, md, prefix,
+              rkey_handle, rkey_handle->rkey);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_gga_mlx5_rkey_resolve(uct_ib_mlx5_md_t *md,
-                          uct_gga_mlx5_rkey_handle_t *rkey_handle)
+static void
+uct_gga_mlx5_rkey_cache_update(uct_gga_mlx5_rkey_handle_t *rkey_handle,
+                               uct_gga_mlx5_md_t *md,
+                               const uct_gga_mlx5_md_rkey_handle_t *md_rkey_handle)
 {
-    uct_md_h uct_md                         = &md->super.super;
-    uct_md_mem_attach_params_t atach_params = { 0 };
-    uct_md_mkey_pack_params_t repack_params = { 0 };
+    rkey_handle->md   = md;
+    rkey_handle->rkey = md_rkey_handle->rkey_ob.rkey;
+    ucs_assert(rkey_handle->rkey != UCT_INVALID_RKEY);
+}
+
+static ucs_status_t
+uct_gga_mlx5_rkey_resolve_slow(uct_gga_mlx5_md_t *md,
+                               uct_gga_mlx5_rkey_handle_t *rkey_handle)
+{
+    uct_md_h uct_md                       = &md->super.super.super;
+    uct_gga_mlx5_rkey_hash_key_t hash_key = (uintptr_t)rkey_handle;
+    uct_gga_mlx5_md_rkey_handle_t* md_rkey_handle;
+    uct_gga_mlx5_rkey_handle_md_link_t *md_link;
+    uct_md_mem_attach_params_t atach_params;
+    uct_md_mkey_pack_params_t repack_params;
     uint64_t repack_mkey;
     ucs_status_t status;
 
-    if (ucs_likely(rkey_handle->memh != NULL)) {
-        uct_gga_mlx5_rkey_trace(md, rkey_handle, "reuse");
-        return UCS_OK;
-    }
-
-    status = uct_ib_mlx5_devx_mem_attach(uct_md, &rkey_handle->packed_mkey,
-                                         &atach_params,
-                                         (uct_mem_h *)&rkey_handle->memh);
-    if (status != UCS_OK) {
+    md_rkey_handle = ucs_malloc(sizeof(*md_rkey_handle), "gga_md_rkey_handle");
+    if (md_rkey_handle == NULL) {
+        ucs_error("failed to allocate GGA MD rkey handle");
+        status = UCS_ERR_NO_MEMORY;
         goto err_out;
     }
 
-    rkey_handle->md = md;
+    atach_params.field_mask = 0;
+    status = uct_ib_mlx5_devx_mem_attach(uct_md,
+                                         &rkey_handle->packed_mkey,
+                                         &atach_params,
+                                         (uct_mem_h*)&md_rkey_handle->memh);
+    if (status != UCS_OK) {
+        goto err_free_handle;
+    }
 
-    status = uct_ib_mlx5_devx_mkey_pack(uct_md, (uct_mem_h)rkey_handle->memh,
+    UCS_STATIC_ASSERT(sizeof(repack_mkey) <= UCT_IB_MD_PACKED_RKEY_SIZE);
+    repack_params.field_mask = 0;
+    status = uct_ib_mlx5_devx_mkey_pack(uct_md,
+                                        (uct_mem_h)md_rkey_handle->memh,
                                         NULL, 0, &repack_params, &repack_mkey);
     if (status != UCS_OK) {
         goto err_dereg;
     }
 
     status = uct_ib_rkey_unpack(NULL, &repack_mkey,
-                                &rkey_handle->rkey_ob.rkey,
-                                &rkey_handle->rkey_ob.handle);
-    uct_gga_mlx5_rkey_trace(md, rkey_handle, "new");
-    return status;
+                                &md_rkey_handle->rkey_ob.rkey,
+                                &md_rkey_handle->rkey_ob.handle);
+    if (status != UCS_OK) {
+        goto err_dereg;
+    }
 
+    md_link = ucs_malloc(sizeof(*md_link), "gga_rkey_md_link");
+    if (md_link == NULL) {
+        goto err_dereg;
+    }
+
+    md_link->md = md;
+    ucs_list_add_tail(&rkey_handle->mds, &md_link->list_link);
+
+    status = uct_gga_mlx5_md_put_rkey(md, hash_key, md_rkey_handle);
+    if (status != UCS_OK) {
+        goto err_free_link;
+    }
+
+    uct_gga_mlx5_rkey_cache_update(rkey_handle, md, md_rkey_handle);
+    uct_gga_mlx5_rkey_trace(md, rkey_handle, "new");
+    return UCS_OK;
+
+err_free_link:
+    ucs_free(md_link);
 err_dereg:
     uct_gga_mlx5_rkey_handle_dereg(rkey_handle);
+err_free_handle:
+    ucs_free(md_rkey_handle);
 err_out:
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_gga_mlx5_rkey_resolve(uct_gga_mlx5_md_t *md,
+                          uct_gga_mlx5_rkey_handle_t *rkey_handle)
+{
+    uct_gga_mlx5_rkey_hash_key_t hash_key = (uintptr_t)rkey_handle;
+    const uct_gga_mlx5_md_rkey_handle_t* md_rkey_handle;
+
+    if (ucs_likely(rkey_handle->md == md)) {
+        ucs_assert(rkey_handle->rkey != UCT_INVALID_RKEY);
+        uct_gga_mlx5_rkey_trace(md, rkey_handle, "cached");
+        return UCS_OK;
+    } else if (rkey_handle->rkey != UCT_INVALID_RKEY) {
+        md_rkey_handle = uct_gga_mlx5_md_get_rkey(md, hash_key);
+        if (ucs_likely(md_rkey_handle != NULL)) {
+            uct_gga_mlx5_rkey_cache_update(rkey_handle, md, md_rkey_handle);
+            uct_gga_mlx5_rkey_trace(md, rkey_handle, "hashed");
+            return UCS_OK;
+        }
+    }
+
+    return uct_gga_mlx5_rkey_resolve_slow(md, rkey_handle);
 }
 
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_gga_mlx5_iface_t, uct_iface_t);
@@ -471,8 +613,8 @@ uct_gga_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_gga_mlx5_ep_t *gga_ep = ucs_derived_of(ep, uct_gga_mlx5_ep_t);
-    uct_ib_mlx5_md_t *md      = ucs_derived_of(iface->super.super.super.md,
-                                               uct_ib_mlx5_md_t);
+    uct_gga_mlx5_md_t *md     = ucs_derived_of(iface->super.super.super.md,
+                                               uct_gga_mlx5_md_t);
     uct_gga_mlx5_rkey_handle_t *rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
     uint8_t fm_ce_se                        = MLX5_WQE_CTRL_CQ_UPDATE;
     uct_rkey_t rkey_copy;
@@ -489,7 +631,7 @@ uct_gga_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
-    rkey_copy = rkey_handle->rkey_ob.rkey;
+    rkey_copy = rkey_handle->rkey;
     uct_gga_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey_copy, &remote_addr,
                               &fm_ce_se);
 
@@ -519,8 +661,8 @@ uct_gga_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_gga_mlx5_ep_t *gga_ep = ucs_derived_of(ep, uct_gga_mlx5_ep_t);
-    uct_ib_mlx5_md_t *md      = ucs_derived_of(iface->super.super.super.md,
-                                               uct_ib_mlx5_md_t);
+    uct_gga_mlx5_md_t *md     = ucs_derived_of(iface->super.super.super.md,
+                                               uct_gga_mlx5_md_t);
     uct_gga_mlx5_rkey_handle_t *rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
     size_t total_length                     = uct_iov_total_length(iov, iovcnt);
     uint8_t fm_ce_se                        = MLX5_WQE_CTRL_CQ_UPDATE;
@@ -539,7 +681,7 @@ uct_gga_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
-    rkey_copy   = rkey_handle->rkey_ob.rkey;
+    rkey_copy   = rkey_handle->rkey;
     uct_rc_mlx5_ep_fence_get(iface, &ep->tx.wq, &rkey_copy, &fm_ce_se);
     status = uct_rc_mlx5_base_ep_zcopy_post(
             ep, MLX5_OPCODE_MMO | UCT_RC_MLX5_OPCODE_FLAG_MMO_GET, iov, iovcnt,
@@ -739,9 +881,60 @@ UCT_TL_DEFINE_ENTRY(&uct_gga_component, gga_mlx5, uct_gga_mlx5_query_tl_devices,
 
 UCT_SINGLE_TL_INIT(&uct_gga_component, gga_mlx5, ctor,,)
 
+static void uct_ib_mlx5_gga_md_close(uct_md_h md)
+{
+    uct_gga_mlx5_md_t *gga_md = ucs_derived_of(md, uct_gga_mlx5_md_t);
+    uct_gga_mlx5_rkey_handle_md_link_t *md_link, *md_link_tmp;
+    uct_gga_mlx5_md_rkey_handle_t *md_rkey_handle;
+    union {
+        uct_gga_mlx5_rkey_hash_key_t key;
+        uct_gga_mlx5_rkey_handle_t   *handle;
+    } rkey;
+    size_t rkey2md_refcount UCS_V_UNUSED;
+
+    kh_foreach_key(&gga_md->rkey_cache, rkey.key, {
+        md_rkey_handle = uct_gga_mlx5_md_get_rkey(gga_md, rkey.key);
+        uct_gga_mlx5_md_rkey_handle_release(gga_md, md_rkey_handle);
+
+        rkey2md_refcount = 0;
+        ucs_list_for_each_safe(md_link, md_link_tmp, &rkey.handle->mds,
+                               list_link) {
+            if (md_link->md == gga_md) {
+                ucs_list_del(&md_link->list_link);
+                free(md_link);
+                ++rkey2md_refcount;
+                ucs_assertv(rkey2md_refcount == 1,
+                            "gga rkey %p references to md %p wrong number of "
+                            "times: %lu", rkey.handle, gga_md, rkey2md_refcount);
+                if (!UCS_ENABLE_ASSERT) {
+                    break;
+                }
+            }
+        }
+    });
+
+    kh_destroy_inplace(resolved_rkeys, &gga_md->rkey_cache);
+    uct_ib_mlx5_devx_md_close(md);
+}
+
+static ucs_status_t
+uct_ib_mlx5_gga_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
+{
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_md_query(uct_md, md_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* GGA always packs exported mkey */
+    md_attr->rkey_packed_size = md_attr->exported_mkey_packed_size;
+    return UCS_OK;
+}
+
 /* TODO: separate memh since atomic_mr is not relevant for GGA */
 static uct_md_ops_t uct_mlx5_gga_md_ops = {
-    .close              = uct_ib_mlx5_devx_md_close,
+    .close              = uct_ib_mlx5_gga_md_close,
     .query              = uct_ib_mlx5_gga_md_query,
     .mem_alloc          = uct_ib_mlx5_devx_device_mem_alloc,
     .mem_free           = uct_ib_mlx5_devx_device_mem_free,
@@ -762,7 +955,7 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
     struct ibv_device **ib_device_list, *ib_device;
     int num_devices, fork_init;
     ucs_status_t status;
-    uct_ib_md_t *md;
+    uct_gga_mlx5_md_t *md;
 
     ucs_trace("opening GGA device %s", md_name);
 
@@ -789,16 +982,25 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
         goto out_free_dev_list;
     }
 
-    status = uct_ib_mlx5_devx_md_open(ib_device, md_config, &md);
+    status = uct_ib_mlx5_devx_md_alloc(ib_device, sizeof(*md),
+                                       (uct_ib_mlx5_md_t**)&md);
     if (status != UCS_OK) {
-        goto out_free_dev_list;
+        return status;
     }
 
-    md->super.component = &uct_gga_component;
-    md->super.ops       = &uct_mlx5_gga_md_ops;
-    md->name            = UCT_IB_MD_NAME(gga);
-    md->fork_init       = fork_init;
-    *md_p               = &md->super;
+    status = uct_ib_mlx5_devx_md_init(&md->super, ib_device, md_config);
+    if (status != UCS_OK) {
+        uct_ib_mlx5_devx_md_free(&md->super);
+        return status;
+    }
+
+    md->super.super.super.component = &uct_gga_component;
+    md->super.super.super.ops       = &uct_mlx5_gga_md_ops;
+    md->super.super.name            = UCT_IB_MD_NAME(gga);
+    md->super.super.fork_init       = fork_init;
+    kh_init_inplace(resolved_rkeys, &md->rkey_cache);
+
+    *md_p = &md->super.super.super;
 
 out_free_dev_list:
     ibv_free_device_list(ib_device_list);

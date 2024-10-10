@@ -165,3 +165,51 @@ UCS_TEST_SKIP_COND_P(test_p2p_rma_madvise, madvise,
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_p2p_rma_madvise)
+
+class uct_rma_common_receiver : public uct_test {
+protected:
+    virtual void init() override {
+        uct_test::init();
+        EXPECT_EQ(0, m_entities.size());
+
+        const size_t rx_headroom = 0;
+        entity* e0 = create_entity(rx_headroom);
+        m_entities.push_back(e0);
+        check_skip_test();
+
+        entity* e1 = create_entity(rx_headroom);
+        entity* e2 = create_entity(rx_headroom);
+        m_entities.push_back(e1);
+        m_entities.push_back(e2);
+
+        e0->connect(0, *e2, 0);
+        e1->connect(0, *e2, 1);
+        flush();
+    }
+};
+
+UCS_TEST_SKIP_COND_P(uct_rma_common_receiver, reuse_rkey,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY|
+                                 UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    const size_t size      = 4 * UCS_KBYTE;
+    const uint64_t seed    = 0;
+    const entity &sender1  = ent(0);
+    const entity &sender2  = ent(1);
+    const entity &receiver = ent(2);
+    mapped_buffer sendbuf1(size, seed, sender1);
+    mapped_buffer sendbuf2(size, seed, sender2);
+    mapped_buffer recvbuf(size, seed, receiver);
+
+    ucs_status_t status;
+    status = uct_ep_put_zcopy(sender1.ep(0), sendbuf1.iov(), 1, recvbuf.addr(),
+                              recvbuf.rkey(), NULL);
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+
+    status = uct_ep_put_zcopy(sender2.ep(0), sendbuf2.iov(), 1, recvbuf.addr(),
+                              recvbuf.rkey(), NULL);
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+    flush();
+}
+
+UCT_INSTANTIATE_TEST_CASE(uct_rma_common_receiver)
