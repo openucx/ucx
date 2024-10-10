@@ -1885,26 +1885,18 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
                                                uct_ib_device_t *dev)
 {
     md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
-    md->dp_ordering_cap.dc      = UCT_IB_MLX5_DP_ORDERING_IBTA;
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_rc)) {
-        md->dp_ordering_cap.rc = ucs_max(UCT_IB_MLX5_DP_ORDERING_OOO_RW,
-                                         md->dp_ordering_cap.rc);
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_dc)) {
-        md->dp_ordering_cap.dc = ucs_max(UCT_IB_MLX5_DP_ORDERING_OOO_RW,
-                                         md->dp_ordering_cap.dc);
-    }
+    md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_rc)) {
-        md->dp_ordering_cap.rc = ucs_max(UCT_IB_MLX5_DP_ORDERING_OOO_ALL,
-                                         md->dp_ordering_cap.rc);
+        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+    } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_rc)) {
+        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_dc)) {
-        md->dp_ordering_cap.dc = ucs_max(UCT_IB_MLX5_DP_ORDERING_OOO_ALL,
-                                         md->dp_ordering_cap.dc);
+        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+    } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_dc)) {
+        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     }
 
     if ((cap_2 != NULL) &&

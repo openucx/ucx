@@ -493,8 +493,9 @@ UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config) {
 
         modify_config("IB_SL", ucs::to_string(static_cast<uint16_t>(sl)));
 
-        for (int test_ddp = 0; test_ddp <= has_ddp; ++test_ddp) {
-            set_ddp_enable(test_ddp && sl_supports_ar);
+        for (int test_ddp = 0; test_ddp <= (has_ddp && sl_supports_ar);
+             ++test_ddp) {
+            set_ddp_enable(test_ddp);
             test_uct_ib::init();
             send_recv_short();
             test_uct_ib::cleanup();

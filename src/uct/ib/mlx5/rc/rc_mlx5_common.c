@@ -624,8 +624,16 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
      * - Want to force enable or force disable adaptive routing but it is unavailable
      * - Want to force disable adaptive routing but force enabling DDP
      */
+    iface->config.force_ordering = ucs_ternary_auto_value_is_yes_or_no(
+                                           config->super.ar_enable) ||
+                                   (config->ddp_enable == UCS_YES);
 
-    iface->config.dp_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    if ((iface->config.force_ordering && !dp_ordering_ooo_force) ||
+        ((config->super.ar_enable == UCS_NO) &&
+         (config->ddp_enable == UCS_YES))) {
+        goto failure;
+    }
+
     min_forced_ordering       = UCT_IB_MLX5_DP_ORDERING_IBTA;
 
     if (config->ddp_enable == UCS_YES) {
@@ -634,15 +642,7 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
         min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     }
 
-    iface->config.force_ordering = ucs_ternary_auto_value_is_yes_or_no(
-                                           config->super.ar_enable) ||
-                                   (config->ddp_enable == UCS_YES);
-
-    if ((iface->config.force_ordering && !dp_ordering_ooo_force) ||
-        ((config->super.ar_enable == UCS_YES) && !dp_ordering_cap) ||
-        ((config->super.ar_enable == UCS_NO) &&
-         (config->ddp_enable == UCS_YES)) ||
-         (min_forced_ordering > dp_ordering_cap)) {
+    if (min_forced_ordering > dp_ordering_cap) {
         goto failure;
     }
 
