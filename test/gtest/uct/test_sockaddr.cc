@@ -547,7 +547,6 @@ protected:
         remote_data = connect_args->remote_data;
         status      = connect_args->status;
 
-        self->handle_client_connecting_status(status);
         if (status == UCS_OK) {
             EXPECT_TRUE(ucs_test_all_flags(remote_data->field_mask,
                                            (UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH |
@@ -565,6 +564,8 @@ protected:
         } else {
             self->del_user_data(sa_user_data);
         }
+
+        self->handle_client_connecting_status(status);
     }
 
     static void
