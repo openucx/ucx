@@ -42,4 +42,12 @@ uct_cuda_base_query_devices(uct_md_h md,
  */
 ucs_status_t uct_cuda_base_check_device_name(const uct_iface_params_t *params);
 
+
+/**
+ * Check whether the platform is coherent.
+ *
+ * @return 1 if coherent, or 0 otherwise.
+ */
+int uct_cuda_base_is_coherent();
+
 #endif
