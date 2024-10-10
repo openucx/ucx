@@ -69,7 +69,12 @@ typedef struct uct_cuda_copy_iface {
     struct {
         unsigned                max_poll;
         unsigned                max_cuda_events;
-        double                  bandwidth;
+        struct {
+            double              h2d;
+            double              d2h;
+            double              d2d;
+            double              other;
+        } bw;
     } config;
     /* handler to support arm/wakeup feature */
     struct {
@@ -87,7 +92,12 @@ typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
     unsigned                max_cuda_events;
-    double                  bandwidth;
+    struct {
+        double              h2d;
+        double              d2h;
+        double              d2d;
+        double              other;
+    } bw;
 } uct_cuda_copy_iface_config_t;
 
 
