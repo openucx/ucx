@@ -449,6 +449,26 @@ AS_IF([test "x$enable_gcov" = xyes],
                                        [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])])],
       [:])
 
+#
+# Enable stack usage check
+#
+# To suppress -Wframe-larger-than=8192 for specific functions, use:
+# #pragma GCC diagnostic push
+# #pragma GCC diagnostic ignored "-Wframe-larger-than="
+# void specific_function() {
+#     /* Function code */
+# }
+# #pragma GCC diagnostic pop
+#
+AC_ARG_ENABLE([stack-usage-check],
+        AS_HELP_STRING([--enable-stack-usage-check], [Enable stack usage check with -Wframe-larger-than=8192]),
+        [],
+        [enable_stack_usage_check=yes])
+
+AS_IF([test "x$enable_stack_usage_check" = xyes],
+      [ADD_COMPILER_FLAG_IF_SUPPORTED([stack_usage_check], [-Wframe-larger-than=8192],
+                                      [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])])],
+      [:])
 
 #
 # Check for C++ support

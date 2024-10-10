@@ -1634,15 +1634,21 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
         .section_info = {.name = "",
                          .skip = 0}
     };
-    char file_path[MAXPATHLEN];
+    char *file_path;
     int parse_result;
     FILE* file;
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(&file_path, "file_path");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     ucs_snprintf_safe(file_path, MAXPATHLEN, "%s/%s", dir_path, file_name);
     file = fopen(file_path, "r");
     if (file == NULL) {
         ucs_debug("failed to open config file %s: %m", file_path);
-        return;
+        goto out_free_file_path;
     }
 
     parse_result = ini_parse_file(file, ucs_config_parse_config_file_line,
@@ -1653,6 +1659,11 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
 
     ucs_debug("parsed config file %s", file_path);
     fclose(file);
+
+out_free_file_path:
+    ucs_free(file_path);
+out:
+    return;
 }
 
 static ucs_status_t
@@ -1770,8 +1781,14 @@ static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
 
 void ucs_config_parse_config_files()
 {
+    char *path;
     const char *path_p;
-    char path[PATH_MAX];
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(&path, "path");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     /* System-wide configuration file */
     ucs_config_parse_config_file(UCX_CONFIG_DIR, UCX_CONFIG_FILE_NAME, 1);
@@ -1798,6 +1815,11 @@ void ucs_config_parse_config_files()
 
     /* Current working dir */
     ucs_config_parse_config_file(".", UCX_CONFIG_FILE_NAME, 1);
+
+out_free_path:
+    ucs_free(path);
+out:
+    return;
 }
 
 ucs_status_t

@@ -27,9 +27,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 {
     ucp_context_h context         = params->super.super.worker->context;
     const double max_bw_ratio     = context->config.ext.multi_lane_max_ratio;
-    ucp_proto_perf_node_t *lanes_perf_nodes[UCP_PROTO_MAX_LANES];
-    ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
-    ucp_proto_common_tl_perf_t *lane_perf, perf;
+    ucp_proto_perf_node_t **lanes_perf_nodes;
+    ucp_proto_common_tl_perf_t *lanes_perf, *lane_perf, perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     double max_bandwidth, max_frag_ratio, min_bandwidth;
     ucp_lane_index_t i, lane, num_lanes;
@@ -41,17 +40,29 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     uint32_t weight_sum;
     ucs_status_t status;
 
+    lanes_perf_nodes = ucs_malloc(UCP_PROTO_MAX_LANES *
+                                  sizeof(*lanes_perf_nodes),
+                                  "lanes_perf_nodes");
+    lanes_perf = ucs_malloc(UCP_PROTO_MAX_LANES * sizeof(*lanes_perf),
+                            "lanes_perf");
+    if ((lanes_perf_nodes == NULL) || (lanes_perf == NULL)) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
     ucs_assert(params->max_lanes >= 1);
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
     if ((ucp_proto_select_op_flags(params->super.super.select_param) &
          UCP_PROTO_SELECT_OP_FLAG_RESUME) &&
         !(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_RESUME)) {
-        return UCS_ERR_UNSUPPORTED;
+        status = UCS_ERR_UNSUPPORTED;
+        goto out;
     }
 
     if (!ucp_proto_common_init_check_err_handling(&params->super)) {
-        return UCS_ERR_UNSUPPORTED;
+        status = UCS_ERR_UNSUPPORTED;
+        goto out;
     }
 
     /* Find first lane */
@@ -61,7 +72,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s",
                   ucp_proto_id_field(params->super.super.proto_id, name));
-        return UCS_ERR_NO_ELEM;
+        status = UCS_ERR_NO_ELEM;
+        goto out;
     }
 
     /* Find rest of the lanes */
@@ -79,7 +91,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         status = ucp_proto_common_get_lane_perf(&params->super, lane, lane_perf,
                                                 &lanes_perf_nodes[lane]);
         if (status != UCS_OK) {
-            return status;
+            goto out;
         }
 
         /* Calculate maximal bandwidth of all lanes, to skip slow lanes */
@@ -249,6 +261,10 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         ucp_proto_perf_node_deref(&lanes_perf_nodes[lanes[i]]);
     }
     ucp_proto_perf_node_deref(&perf_node);
+
+out:
+    ucs_free(lanes_perf_nodes);
+    ucs_free(lanes_perf);
 
     return status;
 }
