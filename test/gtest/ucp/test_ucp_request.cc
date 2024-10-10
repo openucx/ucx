@@ -374,10 +374,9 @@ public:
     }
 
     void reset_protocol(operation_t op, bool sync = false,
-                        unsigned reqs_count = 1000)
+                        unsigned reqs_count = 1000,
+                        size_t msg_size = UCS_KBYTE * 70)
     {
-        static const size_t msg_size = UCS_KBYTE * 70;
-
         for (int i = 0; i < reqs_count; ++i) {
             mapped_buffer *rbuf = new mapped_buffer(msg_size, receiver());
             rbuf->memset(0);
@@ -467,6 +466,8 @@ protected:
         return (!!(req->flags & UCP_REQUEST_FLAG_PROTO_SEND) == is_send) ? req :
                                                                            NULL;
     }
+
+    const ucp_request_t *get_rndv_request(const void *ureq);
 
     std::vector<std::vector<uint8_t>>           m_sbufs;
     std::vector<std::unique_ptr<mapped_buffer>> m_rbufs;
@@ -578,22 +579,23 @@ UCP_INSTANTIATE_TEST_CASE(test_proto_reset)
 /* The following tests require ENABLE_DEBUG_DATA flag in order to access
  * req->recv.proto_rndv_request, which is only present with this flag. */
 #if ENABLE_DEBUG_DATA
+const ucp_request_t *test_proto_reset::get_rndv_request(const void *ureq)
+{
+    auto req = get_request(ureq, false);
+    if ((req == NULL) || (req->recv.proto_rndv_request == NULL)) {
+        return NULL;
+    }
+
+    return req->recv.proto_rndv_request;
+}
+
 class test_proto_reset_rndv_get : public test_proto_reset {
 protected:
     void wait_and_restart(const std::vector<void*> &reqs) override
     {
         wait_any(reqs, [this](const void *ureq) {
-            const ucp_request_t *req = get_request(ureq, false);
-            if (req == NULL) {
-                return false;
-            }
-
-            const ucp_request_t *rndv_req = req->recv.proto_rndv_request;
-            if (rndv_req == NULL) {
-                return false;
-            }
-
-            return is_request_in_the_middle(rndv_req);
+            auto rndv_req = get_rndv_request(ureq);
+            return (rndv_req != NULL) && is_request_in_the_middle(rndv_req);
         });
 
         restart(receiver().ep());
@@ -612,6 +614,40 @@ UCS_TEST_P(test_proto_reset_rndv_get, rndv_get, "RNDV_THRESH=0",
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_proto_reset_rndv_get)
+
+class test_proto_reset_rkey_ptr : public test_proto_reset {
+protected:
+    void wait_and_restart(const std::vector<void*> &reqs) override
+    {
+        wait_any(reqs, [this](const void *ureq) {
+            auto rndv_req = get_rndv_request(ureq);
+            return (rndv_req != NULL) &&
+                   (rndv_req->send.state.completed_size > 0);
+        });
+
+        ucs_queue_iter_t iter;
+        ucp_request_t *req;
+
+        ucs_queue_for_each_safe(req, iter, &receiver().worker()->rkey_ptr_reqs,
+                                send.rndv.rkey_ptr.queue_elem) {
+            m_pending.push_back(req);
+        }
+
+        restart(receiver().ep());
+    }
+};
+
+UCS_TEST_P(test_proto_reset_rkey_ptr, rkey_ptr, "RNDV_THRESH=0",
+           "RKEY_PTR_SEG_SIZE=1024")
+{
+    if (!has_resource(sender(), "xpmem")) {
+        UCS_TEST_SKIP_R("xpmem must be present for rkey_ptr protocol");
+    }
+
+    reset_protocol(TAG, false, 1000, UCS_KBYTE * 20);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_rkey_ptr, shm_ib, "shm,ib")
 
 /* This test is intended to check resetting request during ATP phase for
  * RNDV_PUT protocol.

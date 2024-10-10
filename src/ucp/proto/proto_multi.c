@@ -41,7 +41,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     uint32_t weight_sum;
     ucs_status_t status;
 
-    ucs_assert(params->max_lanes >= 1);
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
     if ((ucp_proto_select_op_flags(params->super.super.select_param) &
@@ -50,7 +49,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (!ucp_proto_common_init_check_err_handling(&params->super)) {
+    if (!ucp_proto_common_init_check_err_handling(&params->super) ||
+        (params->max_lanes == 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
