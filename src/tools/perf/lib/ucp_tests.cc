@@ -16,7 +16,6 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/string.h>
 #include <limits>
-#include <vector>
 
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
@@ -1080,18 +1079,20 @@ static ucs_status_t ucp_perf_dispatch_am(ucx_perf_context_t *perf)
 
 typedef ucs_status_t (*ucp_dispatch_func_t)(ucx_perf_context_t *perf);
 
+static ucp_dispatch_func_t dispatchers[] = {
+    ucp_perf_dispatch_osd,
+    ucp_perf_dispatch_tag,
+    ucp_perf_dispatch_stream,
+    ucp_perf_dispatch_am
+};
+
 ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
 {
-    const std::vector<ucp_dispatch_func_t> dispatchers = {
-        &ucp_perf_dispatch_osd,
-        &ucp_perf_dispatch_tag,
-        &ucp_perf_dispatch_stream,
-        &ucp_perf_dispatch_am
-    };
     ucs_status_t status;
+    int num_dispatchers = sizeof(dispatchers) / sizeof(dispatchers[0]);
 
-    for (auto& dispatcher : dispatchers) {
-        status = dispatcher(perf);
+    for (int i = 0; i < num_dispatchers; ++i) {
+        status = dispatchers[i](perf);
         if (status != UCS_ERR_INVALID_PARAM) {
             return status;
         }

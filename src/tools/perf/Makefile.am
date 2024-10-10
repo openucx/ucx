@@ -33,7 +33,7 @@ ucx_perftest_LDADD    = \
 	$(abs_top_builddir)/src/uct/libuct.la \
 	$(abs_top_builddir)/src/ucp/libucp.la \
 	$(abs_top_builddir)/src/ucs/libucs.la \
-	lib/libucxperf.la -lstdc++
+	lib/libucxperf.la
 
 perftestdir = $(pkgdatadir)/perftest
 dist_perftest_DATA = \
