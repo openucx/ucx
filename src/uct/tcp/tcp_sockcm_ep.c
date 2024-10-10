@@ -874,7 +874,7 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     }
 
     server_addr = params->sockaddr->addr;
-    status = ucs_socket_create(server_addr->sa_family, SOCK_STREAM, &cep->fd);
+    status = ucs_socket_create(server_addr->sa_family, SOCK_STREAM, 0, &cep->fd);
     if (status != UCS_OK) {
         goto err;
     }
