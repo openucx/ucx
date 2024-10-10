@@ -775,7 +775,7 @@ uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md, size_t length,
 static int
 uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
 {
-    if (memh->mrs[UCT_IB_MR_DEFAULT].super.ib->length == SIZE_MAX) {
+    if (memh->super.flags & UCT_IB_MEM_FLAG_GVA) {
         return md->flags & UCT_IB_MLX5_MD_FLAG_GVA_RO;
     }
 
@@ -783,7 +783,7 @@ uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, uct_mem_h *memh_p)
+uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
 {
     uct_ib_mlx5_md_t *md           = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     uct_md_mem_reg_params_t params = {};
@@ -792,7 +792,8 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, uct_mem_h *memh_p)
     ucs_status_t status;
     int relaxed_order;
 
-    status = uct_ib_mlx5_devx_memh_alloc(md, SIZE_MAX, UCT_MD_MEM_FLAG_NONBLOCK,
+    status = uct_ib_mlx5_devx_memh_alloc(md, SIZE_MAX,
+                                         UCT_MD_MEM_FLAG_NONBLOCK | flags,
                                          sizeof(memh->mrs[0]), &memh);
     if (status != UCS_OK) {
         goto err;
@@ -841,7 +842,7 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
     uint32_t dummy_mkey;
 
     if (flags & UCT_MD_MEM_GVA) {
-        return uct_ib_mlx5_devx_mem_reg_gva(uct_md, memh_p);
+        return uct_ib_mlx5_devx_mem_reg_gva(uct_md, flags, memh_p);
     }
 
     status = uct_ib_mlx5_devx_memh_alloc(md, length, flags,

@@ -29,6 +29,7 @@ void test_uct_ib::create_connected_entities() {
 void test_uct_ib::init() {
     uct_test::init();
     create_connected_entities();
+    check_skip_test();
     test_uct_ib::m_ib_am_handler_counter = 0;
 }
 
