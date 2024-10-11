@@ -87,16 +87,16 @@ public:
 
     uct_ib_mlx5_devx_mem_t *
     import_memh(const uct_ib_mlx5_devx_mem_t *exported_memh, uint64_t uuid = 0,
-                uint8_t rkey_size = sizeof(uct_ib_md_packed_mkey_t)) const {
+                uint8_t mkey_size = sizeof(uct_ib_md_packed_mkey_t)) const {
         uct_ib_md_packed_mkey_t packed_mkey = {
             .lkey    = exported_memh->exported_lkey,
             .vhca_id = md()->super.vhca_id,
             .md_uuid = uuid
         };
-        uct_md_mem_attach_params_t params = {
-            .field_mask = UCT_MD_MEM_ATTACH_FIELD_MKEY_SIZE,
-            .mkey_size  = rkey_size
-        };
+
+        uct_md_mem_attach_params_t params = {};
+        params.field_mask = UCT_MD_MEM_ATTACH_FIELD_MKEY_SIZE;
+        params.mkey_size  = mkey_size;
 
         uct_ib_mlx5_devx_mem_t *imported_memh;
         ASSERT_UCS_OK(uct_ib_mlx5_devx_mem_attach(m_e->md(), &packed_mkey,
