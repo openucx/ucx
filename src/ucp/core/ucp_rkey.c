@@ -174,7 +174,8 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
         }
 
         ucs_trace("rkey %s for md[%d]=%s",
-                  ucs_str_dump_hex(p, tl_rkey_size, buf, sizeof(buf), SIZE_MAX),
+                  ucs_str_dump_hex(tl_rkey_buf, tl_rkey_size, buf, sizeof(buf),
+                                   SIZE_MAX),
                   md_index, context->tl_mds[md_index].rsc.md_name);
     }
 
@@ -395,6 +396,7 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
     ucp_md_index_t md_index;
     size_t tl_mkey_size, global_id_size;
     size_t tl_mkey_data_size;
+    void *tl_mkey_buf;
 
     ucs_log_indent(1);
 
@@ -423,9 +425,10 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
                     "tl_mkey_size %zu", tl_mkey_size);
         *ucs_serialize_next(&p, uint8_t) = tl_mkey_size;
 
-        status = uct_md_mkey_pack_v2(
-                tl_mds[md_index].md, memh->uct[md_index], address, length,
-                &params, ucs_serialize_next_raw(&p, void, tl_mkey_size));
+        tl_mkey_buf = ucs_serialize_next_raw(&p, void, tl_mkey_size);
+        status      = uct_md_mkey_pack_v2(tl_mds[md_index].md,
+                                          memh->uct[md_index], address, length,
+                                          &params, tl_mkey_buf);
         if (status != UCS_OK) {
             result = status;
             goto out;
@@ -437,7 +440,7 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
 
         ucs_trace("exported mkey[%d]=%s for md[%d]=%s",
                   ucs_bitmap2idx(export_md_map, md_index),
-                  ucs_str_dump_hex(p, tl_mkey_size, buf, sizeof(buf),
+                  ucs_str_dump_hex(tl_mkey_buf, tl_mkey_size, buf, sizeof(buf),
                                    SIZE_MAX),
                   md_index, tl_mds[md_index].rsc.md_name);
     }
