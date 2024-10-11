@@ -604,8 +604,7 @@ run_ucx_perftest_with_daemon() {
 	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_daemon"
 
 	devices="$(get_ib_bf_devices $(get_active_ib_devices))"
-	my_devices=$(get_my_tasks $devices)
-	for ucx_dev in $my_devices
+	for ucx_dev in $devices
 	do
 		echo "==== Running ucx_perftest over a daemon on $ucx_dev ===="
 		ip_addr=$(get_rdma_device_ip_addr $ucx_dev)
