@@ -36,8 +36,9 @@ enum {
     /*
      * Memory handle was imported and points to some peer's memory buffer.
      */
-    UCP_MEMH_FLAG_IMPORTED = UCS_BIT(0),
-    UCP_MEMH_FLAG_MLOCKED  = UCS_BIT(1),
+    UCP_MEMH_FLAG_IMPORTED     = UCS_BIT(0),
+    UCP_MEMH_FLAG_MLOCKED      = UCS_BIT(1),
+    UCP_MEMH_FLAG_HAS_AUTO_GVA = UCS_BIT(2),
 };
 
 
@@ -186,6 +187,8 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
                                  const ucs_rcache_config_t *rcache_config);
 
 void ucp_mem_rcache_cleanup(ucp_context_h context);
+
+void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
 
 /**
  * Get memory domain index that is used to allocate certain memory type.

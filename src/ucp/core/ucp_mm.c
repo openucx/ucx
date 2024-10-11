@@ -513,6 +513,10 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
         memh->md_map |= UCS_BIT(md_index);
     }
 
+    if (context->config.ext.gva_enable == UCS_CONFIG_AUTO) {
+        memh->flags |= UCP_MEMH_FLAG_HAS_AUTO_GVA;
+    }
+
     return UCS_OK;
 }
 
@@ -520,7 +524,7 @@ static ucs_status_t
 ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map, unsigned uct_flags,
                            const char *alloc_name, ucs_log_level_t err_level,
-                           int allow_partial_reg)
+                           int allow_partial_reg, int gva_enable)
 {
     ucs_memory_type_t mem_type          = memh->mem_type;
     ucp_md_index_t dmabuf_prov_md_index = context->dmabuf_mds[mem_type];
@@ -537,9 +541,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_length;
     size_t reg_align;
 
-    status = ucp_memh_register_gva(context, memh, md_map);
-    if ((status != UCS_OK) && !(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
-        return status;
+    if (gva_enable) {
+        status = ucp_memh_register_gva(context, memh, md_map);
+        if ((status != UCS_OK) && !(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
+            return status;
+        }
     }
 
     reg_md_map = ~memh->md_map & md_map;
@@ -651,7 +657,20 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                         UCS_LOG_LEVEL_ERROR;
 
     return ucp_memh_register_internal(context, memh, md_map, uct_flags,
-                                      alloc_name, err_level, 1);
+                                      alloc_name, err_level, 1, 1);
+}
+
+void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map)
+{
+    ucp_context_h context = memh->context;
+    ucs_status_t UCS_V_UNUSED status;
+
+    memh->md_map &= ~context->gva_md_map[memh->mem_type];
+    memh->flags  &= ~UCP_MEMH_FLAG_HAS_AUTO_GVA;
+    status = ucp_memh_register_internal(context, memh, md_map, 0, "disable gva",
+                                        UCS_LOG_LEVEL_DIAG, 1, 0);
+    /* When allow_partial_reg == 1 registration should not fail */
+    ucs_assert_always(status == UCS_OK);
 }
 
 static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
@@ -1572,7 +1591,7 @@ ucp_mem_rcache_mem_reg_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
                                           reg_ctx->uct_flags |
                                                   UCT_MD_MEM_FLAG_HIDE_ERRORS,
                                           reg_ctx->alloc_name,
-                                          UCS_LOG_LEVEL_DEBUG, 0);
+                                          UCS_LOG_LEVEL_DEBUG, 0, 1);
     }
 
     return ucp_memh_register(context, memh, reg_ctx->reg_md_map,

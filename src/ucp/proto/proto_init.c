@@ -168,12 +168,14 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
                                                           tl_perf->bandwidth;
     }
 
-    if (/* Protocol is waiting for response */
-        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE) ||
-        /* Send time is representing request completion, which in case of zcopy
-           waits for ACK from remote side. */
-        ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY))) {
+    /* Send time is representing request completion, which in case of zcopy
+       waits for ACK from remote side. */
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+        perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c += tl_perf->latency;
+    }
+
+    /* Protocol is waiting for response */
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE) {
         perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c    += tl_perf->latency;
         perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU].c +=
                 tl_perf->send_post_overhead;

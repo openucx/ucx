@@ -799,6 +799,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
                          /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
                          /* RDMA */ uint64_t remote_addr, uct_rkey_t rkey,
                          /* TAG  */ uct_tag_t tag, uint32_t app_ctx, uint32_t ib_imm_be,
+                         /* MMO  */ const uct_ib_mlx5_dma_opaque_mr_t *opaque_mr,
                                     size_t av_size, uint8_t fm_ce_se,
                                     uint16_t dci_channel, int max_log_sge)
 {
@@ -807,8 +808,14 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
     struct mlx5_wqe_data_seg     *dptr;
     struct mlx5_wqe_inl_data_seg *inl;
     uct_rc_mlx5_hdr_t            *rch;
-    unsigned                      wqe_size, inl_seg_size, ctrl_av_size;
+    unsigned                     wqe_size, inl_seg_size, ctrl_av_size;
     void                         *next_seg;
+    uint8_t                      opmod;
+#if HAVE_MLX5_MMO
+    uct_ib_mlx5_dma_seg_t        *dma_seg;
+    const void                   *dma_src_buf, *dma_dst_buf;
+    uint32_t                     dma_src_key, dma_dst_key;
+#endif
 
     if (!(fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
         fm_ce_se |= uct_rc_iface_tx_moderation(&iface->super, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
@@ -839,6 +846,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         dptr             = (struct mlx5_wqe_data_seg *)((char *)inl + inl_seg_size);
         wqe_size         = ctrl_av_size + inl_seg_size +
                            uct_ib_mlx5_set_data_seg_iov(txwq, dptr, iov, iovcnt);
+        opmod            = 0;
 
         ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
         break;
@@ -853,6 +861,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         dptr             = uct_ib_mlx5_txwq_wrap_exact(txwq, (char *)inl + inl_seg_size);
         wqe_size         = ctrl_av_size + inl_seg_size +
                            uct_ib_mlx5_set_data_seg_iov(txwq, dptr, iov, iovcnt);
+        opmod            = 0;
 
         uct_rc_mlx5_fill_tmh((struct ibv_tmh*)(inl + 1), tag, app_ctx,
                              IBV_TMH_EAGER);
@@ -874,15 +883,51 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         wqe_size         = ctrl_av_size + sizeof(*raddr) +
                            uct_ib_mlx5_set_data_seg_iov(txwq, (void*)(raddr + 1),
                                                         iov, iovcnt);
+        opmod            = 0;
         break;
 
+#if HAVE_MLX5_MMO
+    case MLX5_OPCODE_MMO|UCT_RC_MLX5_OPCODE_FLAG_MMO_PUT:
+    case MLX5_OPCODE_MMO|UCT_RC_MLX5_OPCODE_FLAG_MMO_GET:
+        ucs_assert(av_size == 0);
+        dma_seg                  = next_seg;
+#if ENABLE_DEBUG_DATA
+        dma_seg->padding         = 0xdeadbeef;
+#endif
+        dma_seg->be_opaque_lkey  = opaque_mr->be_lkey;
+        dma_seg->be_opaque_vaddr = opaque_mr->be_vaddr;
+
+        ucs_assertv(iovcnt == 1, "iovcnt %zu is not supported by MMO", iovcnt);
+        if (opcode_flags & UCT_RC_MLX5_OPCODE_FLAG_MMO_PUT) {
+            dma_src_buf = iov[0].buffer;
+            dma_src_key = uct_ib_memh_get_lkey(iov[0].memh);
+            dma_dst_buf = (const void*)remote_addr;
+            dma_dst_key = rkey;
+        } else /* UCT_RC_MLX5_OPCODE_FLAG_MMO_GET */ {
+            dma_src_buf = (const void*)remote_addr;
+            dma_src_key = rkey;
+            dma_dst_buf = iov[0].buffer;
+            dma_dst_key = uct_ib_memh_get_lkey(iov[0].memh);
+        }
+
+        dptr = uct_ib_mlx5_txwq_wrap_none(txwq, dma_seg + 1);
+        uct_ib_mlx5_set_data_seg(dptr /* gather segment */,
+                                 dma_src_buf, iov[0].length, dma_src_key);
+        dptr = uct_ib_mlx5_txwq_wrap_none(txwq, dptr + 1);
+        uct_ib_mlx5_set_data_seg(dptr /* scatter segment */,
+                                 dma_dst_buf, iov[0].length, dma_dst_key);
+
+        wqe_size = sizeof(*ctrl) + sizeof(*dma_seg) + (2 * sizeof(*dptr));
+        opmod    = UCT_IB_MLX5_OPMOD_MMO_DMA;
+        break;
+#endif
     default:
         ucs_fatal("invalid send opcode");
     }
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
-                                 opcode_flags & UCT_RC_MLX5_OPCODE_MASK,
-                                 0, fm_ce_se, dci_channel, wqe_size, ib_imm_be,
+                                 opcode_flags & UCT_RC_MLX5_OPCODE_MASK, opmod,
+                                 fm_ce_se, dci_channel, wqe_size, ib_imm_be,
                                  max_log_sge, NULL);
 }
 
@@ -1870,4 +1915,42 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
 
     return 1;
+}
+
+/*
+ * Helper function for zero-copy post.
+ * Adds user completion to the callback queue.
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_base_ep_zcopy_post(
+        uct_rc_mlx5_base_ep_t *ep, unsigned opcode, const uct_iov_t *iov,
+        size_t iovcnt, size_t iov_total_length,
+        /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
+        /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
+        /* TAG  */ uct_tag_t tag, uint32_t app_ctx, uint32_t ib_imm_be,
+        /* MMO */ const uct_ib_mlx5_dma_opaque_mr_t *opaque_mr,
+        uint8_t wqe_flags, uct_rc_send_handler_t handler, uint16_t op_flags,
+        uct_completion_t *comp)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                       uct_rc_mlx5_iface_common_t);
+    uint8_t fm_ce_se                  = (comp == NULL) ? wqe_flags :
+                                        (wqe_flags | MLX5_WQE_CTRL_CQ_UPDATE);
+    uint16_t sn;
+
+    sn = ep->tx.wq.sw_pi;
+    uct_rc_mlx5_txqp_dptr_post_iov(iface, IBV_QPT_RC,
+                                   &ep->super.txqp, &ep->tx.wq, opcode,
+                                   iov, iovcnt,
+                                   am_id, am_hdr, am_hdr_len,
+                                   rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
+                                   tag, app_ctx, ib_imm_be,
+                                   opaque_mr,
+                                   0, fm_ce_se, 0,
+                                   UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
+
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp, sn,
+                              op_flags | UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
+                              iov, iovcnt, iov_total_length);
+
+    return UCS_INPROGRESS;
 }

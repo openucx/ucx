@@ -186,6 +186,13 @@ const test_perf::test_spec test_uct_perf::tests[] =
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 3.5,
     0 },
 
+  { "get zcopy bw", "MB/sec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCT_PERF_DATA_LAYOUT_ZCOPY, 0, 1, { 2048 }, 32, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 620.0, 50000.0,
+    0 },
+
   { "atomic add latency", "usec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,

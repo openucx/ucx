@@ -136,7 +136,8 @@ static void uct_ib_mlx5_devx_ksm_list_log(uct_ib_mlx5_md_t *md, void *address,
 }
 
 static void uct_ib_mlx5_devx_klm_entry_set(void **klm_p, size_t klm_idx,
-                                           void *address, struct ibv_mr *mr)
+                                           void *address, size_t byte_count,
+                                           struct ibv_mr *mr)
 {
     void *klm = *klm_p;
 
@@ -144,6 +145,8 @@ static void uct_ib_mlx5_devx_klm_entry_set(void **klm_p, size_t klm_idx,
               mr->addr, mr->length, mr->lkey);
     UCT_IB_MLX5DV_SET64(klm, klm, address, (uintptr_t)address);
     UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->lkey);
+    UCT_IB_MLX5DV_SET(klm, klm, byte_count, byte_count);
+
     *klm_p = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
 }
 
@@ -178,13 +181,13 @@ uct_ib_mlx5_devx_reg_ksm_data_mt(uct_ib_mlx5_md_t *md, void *address,
     klm = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
     ucs_carray_for_each(mr, ksm_data->mrs, ksm_data->mr_num) {
         uct_ib_mlx5_devx_klm_entry_set(&klm, mr - ksm_data->mrs, mr_address,
-                                       *mr);
+                                       chunk_size, *mr);
         mr_address = UCS_PTR_BYTE_OFFSET(mr_address, chunk_size);
     }
 
     if ((void*)iova != address) {
         /* Add offset to workaround CREATE_MKEY range check issue */
-        uct_ib_mlx5_devx_klm_entry_set(&klm, list_size, mr_address,
+        uct_ib_mlx5_devx_klm_entry_set(&klm, list_size, mr_address, chunk_size,
                                        ksm_data->mrs[ksm_data->mr_num - 1]);
         ++list_size;
     }
@@ -223,7 +226,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_addr(
     for (i = 0; i < list_size; i++) {
         uct_ib_mlx5_devx_klm_entry_set(
                 &klm, i,
-                UCS_PTR_BYTE_OFFSET(address, i * UCT_IB_MD_MAX_MR_SIZE), mr);
+                UCS_PTR_BYTE_OFFSET(address, i * UCT_IB_MD_MAX_MR_SIZE),
+                UCT_IB_MD_MAX_MR_SIZE, mr);
     }
     ucs_log_indent(-1);
 
@@ -775,7 +779,7 @@ uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md, size_t length,
 static int
 uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
 {
-    if (memh->mrs[UCT_IB_MR_DEFAULT].super.ib->length == SIZE_MAX) {
+    if (memh->super.flags & UCT_IB_MEM_FLAG_GVA) {
         return md->flags & UCT_IB_MLX5_MD_FLAG_GVA_RO;
     }
 
@@ -783,7 +787,7 @@ uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, uct_mem_h *memh_p)
+uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
 {
     uct_ib_mlx5_md_t *md           = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     uct_md_mem_reg_params_t params = {};
@@ -792,7 +796,8 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, uct_mem_h *memh_p)
     ucs_status_t status;
     int relaxed_order;
 
-    status = uct_ib_mlx5_devx_memh_alloc(md, SIZE_MAX, UCT_MD_MEM_FLAG_NONBLOCK,
+    status = uct_ib_mlx5_devx_memh_alloc(md, SIZE_MAX,
+                                         UCT_MD_MEM_FLAG_NONBLOCK | flags,
                                          sizeof(memh->mrs[0]), &memh);
     if (status != UCS_OK) {
         goto err;
@@ -841,7 +846,7 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
     uint32_t dummy_mkey;
 
     if (flags & UCT_MD_MEM_GVA) {
-        return uct_ib_mlx5_devx_mem_reg_gva(uct_md, memh_p);
+        return uct_ib_mlx5_devx_mem_reg_gva(uct_md, flags, memh_p);
     }
 
     status = uct_ib_mlx5_devx_memh_alloc(md, length, flags,

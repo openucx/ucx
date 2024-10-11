@@ -57,6 +57,7 @@
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP  0x93
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_PSN  0x99
 #define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK  0x80
+#define UCT_IB_MLX5_WQE_ALIGNMENT        (1 * MLX5_SEND_WQE_BB)
 #define UCT_IB_MLX5_MAX_SEND_WQE_SIZE    (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB)
 #define UCT_IB_MLX5_CQ_SET_CI            0
 #define UCT_IB_MLX5_CQ_ARM_DB            1
@@ -86,6 +87,8 @@
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
+
+#define UCT_IB_MLX5_OPMOD_MMO_DMA   0x1
 
 #ifdef HAVE_STRUCT_MLX5_WQE_AV_BASE
 
@@ -247,7 +250,27 @@ enum {
 };
 
 
+typedef struct uct_ib_mlx5_dma_opaque_mr {
+    uint64_t be_vaddr;
+    uint32_t be_lkey;
+} uct_ib_mlx5_dma_opaque_mr_t;
+
+
 #if HAVE_DEVX
+/**
+ * full WQE format:
+ * struct mlx5_wqe_ctrl_seg;
+ * struct uct_ib_mlx5_dma_qwe_seg;
+ * struct mlx5_wqe_data_seg gather;
+ * struct mlx5_wqe_data_seg scatter;
+ */
+typedef struct uct_ib_mlx5_dma_seg {
+    uint32_t padding;   /* unused for dma */
+    uint32_t be_opaque_lkey;
+    uint64_t be_opaque_vaddr;
+} UCS_S_PACKED uct_ib_mlx5_dma_seg_t;
+
+
 typedef struct {
     struct mlx5dv_devx_obj *dvmr;
     int                    mr_num;

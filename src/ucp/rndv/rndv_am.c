@@ -127,6 +127,7 @@ static void
 ucp_proto_rndv_am_bcopy_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_rndv_am_destroy_rkey(req);
+    ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
     ucp_proto_request_bcopy_abort(req,status);
 }
 

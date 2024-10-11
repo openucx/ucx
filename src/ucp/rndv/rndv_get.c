@@ -43,7 +43,6 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
         .super.memtype_op    = memtype_op,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = *reg_mem_info,

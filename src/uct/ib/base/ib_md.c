@@ -601,6 +601,10 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
         memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_RMA;
     }
 
+    if (mem_flags & UCT_MD_MEM_GVA) {
+        memh->flags |= UCT_IB_MEM_FLAG_GVA;
+    }
+
     *memh_p = memh;
     return UCS_OK;
 }

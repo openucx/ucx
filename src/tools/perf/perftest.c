@@ -54,7 +54,10 @@ test_type_t tests[] = {
      "active message bandwidth / message rate", "overhead", 1},
 
     {"put_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "put bandwidth / message rate", "overhead", 1},
+     "put bandwidth / message rate", "overhead", 32},
+
+    {"get_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "get bandwidth / message rate", "overhead", 32},
 
     {"add_mr", UCX_PERF_API_UCT, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "atomic add message rate", "overhead", 1},

@@ -61,6 +61,7 @@ typedef struct {
 } coach_opts_t;
 
 typedef struct {
+    const char      *model;
     unsigned        volume;
     unsigned long   power;
 } engine_opts_t;
@@ -131,6 +132,9 @@ ucs_config_field_t coach_opts_table[] = {
 };
 
 ucs_config_field_t engine_opts_table[] = {
+  {"MODEL", "auto", "Engine model",
+   ucs_offsetof(engine_opts_t, model), UCS_CONFIG_TYPE_STRING},
+
   {"VOLUME", "6000", "Engine volume",
    ucs_offsetof(engine_opts_t, volume), UCS_CONFIG_TYPE_UINT},
 
@@ -329,8 +333,15 @@ protected:
             delete [] m_value;
         }
 
-        ucs_status_t set(const char *name, const char *value) {
-            return ucs_config_parser_set_value(&m_opts, car_opts_table, NULL,
+        ucs_status_t set(const char *name, const char *value)
+        {
+            return set(NULL, name, value);
+        }
+
+        ucs_status_t set(const char *prefix, const char *name,
+                         const char *value)
+        {
+            return ucs_config_parser_set_value(&m_opts, car_opts_table, prefix,
                                                name, value);
         }
 
@@ -579,6 +590,45 @@ UCS_TEST_F(test_config, set_get) {
     EXPECT_EQ(1, m_num_errors);
 }
 
+UCS_TEST_F(test_config, set_blob)
+{
+    static const char ucs_cars_prefix[] = UCS_DEFAULT_ENV_PREFIX"CARS_";
+    ucs::scoped_setenv ucx_config_dir("UCX_CONFIG_DIR", TEST_CONFIG_DIR);
+    car_opts mazda(ucs_cars_prefix, "MAZDA_");
+
+    const std::string val_auto("auto");
+    const std::string model2("2"), model3("3"), model6("6"), modelcx5("cx5");
+    ucs_status_t status;
+
+    // Check initial values
+    ASSERT_EQ(val_auto, mazda.get("ENGINE_MODEL"));
+    ASSERT_EQ(std::string("Corvette"), mazda.get("MODEL"));
+
+    // no prefix
+    status = mazda.set("MODEL", model2.c_str());
+    ASSERT_UCS_OK(status);
+    ASSERT_EQ(model2, mazda.get("MODEL"));
+    ASSERT_EQ(val_auto, mazda.get("ENGINE_MODEL")); // TODO: Is this expected?
+
+    // with exact prefix
+    status = mazda.set("MAZDA_", "MAZDA_MODEL", model3.c_str());
+    ASSERT_UCS_OK(status);
+    ASSERT_EQ(model3, mazda.get("MODEL"));
+    ASSERT_EQ(model3, mazda.get("ENGINE_MODEL")); // TODO: Is this expected?
+
+    // with prefix ignored by wildcard
+    status = mazda.set("MAZDA_", "*MODEL", model6.c_str());
+    ASSERT_UCS_OK(status);
+    ASSERT_EQ(model6, mazda.get("MODEL"));
+    ASSERT_EQ(model6, mazda.get("ENGINE_MODEL"));
+
+    // without prefix and with wildcard
+    status = mazda.set("*MODEL", modelcx5.c_str());
+    ASSERT_UCS_OK(status);
+    ASSERT_EQ(modelcx5, mazda.get("MODEL"));
+    ASSERT_EQ(modelcx5, mazda.get("ENGINE_MODEL"));
+}
+
 UCS_TEST_F(test_config, set_get_with_table_prefix) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env1("UCX_COLOR", "black");
@@ -660,23 +710,23 @@ UCS_TEST_F(test_config, unused) {
 
 UCS_TEST_F(test_config, dump) {
     /* aliases must not be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 34u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 35u);
 }
 
 UCS_TEST_F(test_config, dump_hidden) {
     /* aliases must be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN, 41u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN, 42u);
 }
 
 UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
     /* aliases must be counted here */
     test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN |
                                    UCS_CONFIG_PRINT_DOC,
-                           41u);
+                           42u);
 
     test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN |
                                    UCS_CONFIG_PRINT_DOC,
-                           41u, TEST_ENV_PREFIX);
+                           42u, TEST_ENV_PREFIX);
 }
 
 UCS_TEST_F(test_config, deprecated) {

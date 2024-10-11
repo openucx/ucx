@@ -177,7 +177,7 @@ typedef struct ucp_context_config {
     /** RMA zcopy segment size */
     size_t                                 rma_zcopy_max_seg_size;
     /** Enable global VA MR */
-    int                                    gva_enable;
+    ucs_on_off_auto_value_t                gva_enable;
     /** Lock memory when using global VA MR */
     int                                    gva_mlock;
     /** Prefetch memory when using global VA MR */

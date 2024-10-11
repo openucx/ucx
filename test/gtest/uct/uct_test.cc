@@ -1625,16 +1625,32 @@ void test_uct_iface_attrs::basic_iov_test()
 
     EXPECT_FALSE(max_iov_map.empty());
 
-    if (max_iov_map.find("am")  != max_iov_map.end()) {
+    if (m_e->iface_attr().cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
+                                       UCT_IFACE_FLAG_AM_BCOPY |
+                                       UCT_IFACE_FLAG_AM_ZCOPY)) {
+        EXPECT_NE(max_iov_map.end(), max_iov_map.find("am"));
         EXPECT_EQ(max_iov_map.at("am"), m_e->iface_attr().cap.am.max_iov);
     }
-    if (max_iov_map.find("tag") != max_iov_map.end()) {
+
+    if (m_e->iface_attr().cap.flags & (UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+                                       UCT_IFACE_FLAG_TAG_EAGER_BCOPY|
+                                       UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                                       UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)) {
+        EXPECT_NE(max_iov_map.end(), max_iov_map.find("tag"));
         EXPECT_EQ(max_iov_map.at("tag"), m_e->iface_attr().cap.tag.eager.max_iov);
     }
-    if (max_iov_map.find("put") != max_iov_map.end()) {
+
+    if (m_e->iface_attr().cap.flags & (UCT_IFACE_FLAG_PUT_SHORT |
+                                       UCT_IFACE_FLAG_PUT_BCOPY |
+                                       UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        EXPECT_NE(max_iov_map.end(), max_iov_map.find("put"));
         EXPECT_EQ(max_iov_map.at("put"), m_e->iface_attr().cap.put.max_iov);
     }
-    if (max_iov_map.find("get") != max_iov_map.end()) {
+
+    if (m_e->iface_attr().cap.flags & (UCT_IFACE_FLAG_GET_SHORT |
+                                       UCT_IFACE_FLAG_GET_BCOPY |
+                                       UCT_IFACE_FLAG_GET_ZCOPY)) {
+        EXPECT_NE(max_iov_map.end(), max_iov_map.find("get"));
         EXPECT_EQ(max_iov_map.at("get"), m_e->iface_attr().cap.get.max_iov);
     }
 }

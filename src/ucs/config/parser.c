@@ -1390,6 +1390,27 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
     return UCS_OK;
 }
 
+static int
+ucs_config_prefix_name_match(const char *prefix, size_t prefix_len,
+                             const char *name, const char *pattern)
+{
+    const char *match_name;
+    char *full_name;
+    size_t full_name_len;
+
+    if (prefix_len == 0) {
+        match_name = name;
+    } else {
+        full_name_len = prefix_len + strlen(name) + 1;
+        full_name     = ucs_alloca(full_name_len);
+
+        ucs_snprintf_safe(full_name, full_name_len, "%s%s", prefix, name);
+        match_name = full_name;
+    }
+
+    return !fnmatch(pattern, match_name, 0);
+}
+
 /**
  * table_prefix == NULL  -> unused
  */
@@ -1420,8 +1441,8 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
             /* Check with sub-table prefix */
             if (recurse) {
                 status = ucs_config_parser_set_value_internal(var, sub_fields,
-                                                             name, value,
-                                                             field->name, 1);
+                                                              name, value,
+                                                              field->name, 1);
                 if (status == UCS_OK) {
                     ++count;
                 } else if (status != UCS_ERR_NO_ELEM) {
@@ -1432,17 +1453,16 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
             /* Possible override with my prefix */
             if (table_prefix != NULL) {
                 status = ucs_config_parser_set_value_internal(var, sub_fields,
-                                                             name, value,
-                                                             table_prefix, 0);
+                                                              name, value,
+                                                              table_prefix, 0);
                 if (status == UCS_OK) {
                     ++count;
                 } else if (status != UCS_ERR_NO_ELEM) {
                     return status;
                 }
             }
-        } else if (((table_prefix == NULL) || !strncmp(name, table_prefix, prefix_len)) &&
-                   !strcmp(name + prefix_len, field->name))
-        {
+        } else if (ucs_config_prefix_name_match(table_prefix, prefix_len,
+                                                field->name, name)) {
             if (ucs_config_is_deprecated_field(field)) {
                 return UCS_ERR_NO_ELEM;
             }
