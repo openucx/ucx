@@ -164,10 +164,10 @@ typedef struct uct_ib_md {
 } uct_ib_md_t;
 
 
-typedef struct uct_ib_md_packed_mkey {
-    uint64_t md_uuid;
+typedef struct {
     uint32_t lkey;
     uint16_t vhca_id;
+    uint64_t md_uuid;
 } UCS_S_PACKED uct_ib_md_packed_mkey_t;
 
 
@@ -273,9 +273,9 @@ uct_ib_md_pack_exported_mkey(uct_ib_md_t *md, uint32_t lkey, void *buffer)
 {
     uct_ib_md_packed_mkey_t *mkey = (uct_ib_md_packed_mkey_t*)buffer;
 
-    mkey->md_uuid = md->uuid;
     mkey->lkey    = lkey;
     mkey->vhca_id = md->vhca_id;
+    mkey->md_uuid = md->uuid;
 
     ucs_trace("packed exported mkey on %s: lkey 0x%x",
               uct_ib_device_name(&md->dev), lkey);
