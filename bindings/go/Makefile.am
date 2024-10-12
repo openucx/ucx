@@ -10,7 +10,6 @@ EXTRA_DIST = \
 	tests
 
 GOOBJDIR=$(abs_top_builddir)/bindings/go/$(objdir)
-GOPATH=$(abs_top_srcdir)/bindings/go/
 CGOCFLAGS=-I$(abs_top_builddir)/src -I$(abs_top_srcdir)/src
 CGOLDFLAGS=-L$(abs_top_builddir)/src/ucp/$(objdir) -lucp -L$(abs_top_builddir)/src/ucs/$(objdir) -lucs
 
@@ -27,7 +26,6 @@ GOCACHE=$(GOTMPDIR)
 
 export GOTMPDIR
 export GOCACHE
-export GOPATH
 export CGO_CFLAGS=$(CGOCFLAGS)
 export CGO_LDFLAGS=$(CGOLDFLAGS)
 
@@ -43,31 +41,45 @@ clean-local:
 
 test: $(GOTMPDIR)
 	cd $(abs_top_srcdir)/bindings/go/tests ;\
-	$(GO) env -w GO111MODULE=off ; \
 	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} $(GO) test -v --tags=$(GOTAGS)
 
 bench: $(GOTMPDIR)
 	cd $(abs_top_srcdir)/bindings/go/tests ;\
-	$(GO) env -w GO111MODULE=off ; \
 	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} $(GO) test -v --tags=$(GOTAGS) -bench=.
 
 goperftest: $(GOTMPDIR)
-	$(GO) env -w GO111MODULE=off ; \
 	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
 	$(GO) build --tags=$(GOTAGS) -o ${GOTMPDIR}/goperftest
 
-run-perftest:
+run-perftest: goperftest
 	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
 	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} ${GOTMPDIR}/goperftest ${ARGS}
 
-install-exec-hook: goperftest
+gohttptest: $(GOTMPDIR)
+	cd $(abs_top_srcdir)/bindings/go/src/examples/httptest ;\
+	$(GO) build --tags=$(GOTAGS) -o ${GOTMPDIR}/gohttptest
+
+run-httptest: gohttptest
+	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} ${GOTMPDIR}/gohttptest ${ARGS}
+
+gominiotest: $(GOTMPDIR)
+	cd $(abs_top_srcdir)/bindings/go/src/examples/miniotest ;\
+	$(GO) mod tidy ;\
+	$(GO) build --tags=$(GOTAGS) -o ${GOTMPDIR}/gominiotest
+
+run-miniotest: gominiotest
+	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} ${GOTMPDIR}/gominiotest ${ARGS}
+
+install-exec-hook: goperftest gohttptest gominiotest
 	$(INSTALL) ${GOTMPDIR}/goperftest $(DESTDIR)$(bindir)
+	$(INSTALL) ${GOTMPDIR}/gohttptest $(DESTDIR)$(bindir)
+	$(INSTALL) ${GOTMPDIR}/gominiotest $(DESTDIR)$(bindir)
 
 uninstall-hook:
 	$(RM) $(DESTDIR)$(bindir)/goperftest
 
-all: goperftest build
+all: goperftest gohttptest gominiotest build
 
-.PHONY: all build run_perftest test bench
+.PHONY: all build run_perftest run_httptest test bench
 
 endif
