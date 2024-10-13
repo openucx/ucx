@@ -452,6 +452,29 @@ function log_cpu_affinity() {
     taskset -p $$ | sed 's/^/    /'
 }
 
+function log_cpu_utilization() {
+    echo -e "\n${COLORS[CYAN]}CPU Utilization${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    echo "##[group]    CPU Utilization Info"
+    if command -v mpstat &> /dev/null; then
+        echo "##[group]    mpstat Output"
+        mpstat -P ALL 1 1 | sed 's/^/    /'
+        echo "##[endgroup]"
+    else
+        echo -e "${COLORS[RED]}    mpstat command not found.${COLORS[NC]}"
+    fi
+
+    if command -v sar &> /dev/null; then
+        echo "##[group]    sar Output"
+        sar -u 1 1 | sed 's/^/    /'
+        echo "##[endgroup]"
+    else
+        echo -e "${COLORS[RED]}    sar command not found.${COLORS[NC]}"
+    fi
+
+    echo "##[endgroup]"
+}
+
 function log_gpu_info() {
     echo -e "\n${COLORS[CYAN]}GPU Information${COLORS[NC]}"
     echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
@@ -519,6 +542,7 @@ function log_info_on_exit() {
     log_loaded_modules
     log_cpu_info
     log_cpu_affinity
+    log_cpu_utilization
     log_gpu_info
     log_ibv_info
     log_lshca_info
