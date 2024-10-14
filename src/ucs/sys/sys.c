@@ -316,22 +316,29 @@ uint64_t ucs_generate_uuid(uint64_t seed)
            __sumup_host_name(5);
 }
 
-int ucs_sys_max_open_files()
+static ucs_status_t
+ucs_get_rlimit(int resource, rlim_t *rlimit_value, const char *name)
 {
-    static int file_limit = 0;
     struct rlimit rlim;
-    int ret;
 
-    if (file_limit == 0) {
-        ret = getrlimit(RLIMIT_NOFILE, &rlim);
-        if (ret == 0) {
-            file_limit = (int)rlim.rlim_cur;
-        } else {
-            file_limit = 1024;
-        }
+    if (getrlimit(resource, &rlim) != 0) {
+        ucs_debug("unable to get %s limit: %m", name);
+        return UCS_ERR_IO_ERROR;
     }
 
-    return file_limit;
+    *rlimit_value = rlim.rlim_cur;
+    return UCS_OK;
+}
+
+int ucs_sys_max_open_files()
+{
+    rlim_t value;
+
+    if (ucs_get_rlimit(RLIMIT_NOFILE, &value, "max opened file") != UCS_OK) {
+        return -1;
+    }
+
+    return (int)value;
 }
 
 ucs_status_t
@@ -1585,8 +1592,8 @@ err:
 
 ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value)
 {
-    struct rlimit limit_info;
-    int res;
+    ucs_status_t status;
+    rlim_t value;
 
     /* Privileged users have no lock limit */
     if (ucs_sys_get_mlock_cap()) {
@@ -1596,15 +1603,12 @@ ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value)
 
     /* Check the value of the max locked memory which is set on the system
      * (ulimit -l) */
-    res = getrlimit(RLIMIT_MEMLOCK, &limit_info);
-    if (res != 0) {
-        ucs_debug("unable to get the max locked memory limit: %m");
+    status = ucs_get_rlimit(RLIMIT_MEMLOCK, &value, "max locked memory");
+    if (status != UCS_OK) {
         return UCS_ERR_IO_ERROR;
     }
 
-    *rlimit_value = (limit_info.rlim_cur == RLIM_INFINITY) ?
-                            SIZE_MAX :
-                            limit_info.rlim_cur;
+    *rlimit_value = (value == RLIM_INFINITY) ? SIZE_MAX : value;
     return UCS_OK;
 }
 
