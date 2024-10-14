@@ -644,7 +644,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     uct_iface_addr_t *iface_addr;
     uct_ep_addr_t *ep_addr;
     uct_iface_attr_t iface_attr;
-    uct_md_attr_v2_t md_attr;
+    uct_md_attr_t md_attr;
     uct_ep_params_t ep_params;
     unsigned peer_index;
     void *rkey_buffer;
@@ -666,19 +666,14 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    md_attr.field_mask = UCT_MD_ATTR_FIELD_FLAGS |
-                         UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE |
-                         UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE;
-    status = uct_md_query_v2(perf->uct.md, &md_attr);
+    status = uct_md_query(perf->uct.md, &md_attr);
     if (status != UCS_OK) {
         ucs_error("Failed to uct_md_query: %s", ucs_status_string(status));
         goto err_free;
     }
 
-    if (md_attr.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
-        info.rkey_size      = md_attr.flags & UCT_MD_FLAG_EXPORTED_MKEY ?
-                                    md_attr.exported_mkey_packed_size :
-                                    md_attr.rkey_packed_size;
+    if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+        info.rkey_size      = md_attr.rkey_packed_size;
     } else {
         info.rkey_size      = 0;
     }
@@ -707,7 +702,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    if (md_attr.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+    if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
         memset(rkey_buffer, 0, info.rkey_size);
         status = uct_md_mkey_pack_v2(perf->uct.md, perf->uct.recv_mem.memh,
                                      perf->uct.recv_mem.address,
@@ -786,7 +781,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
             goto err_destroy_eps;
         }
 
-        if (md_attr.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+        if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
             status = uct_rkey_unpack(perf->uct.cmpt, rkey_buffer,
                                      &perf->uct.peers[i].rkey);
             if (status != UCS_OK) {
