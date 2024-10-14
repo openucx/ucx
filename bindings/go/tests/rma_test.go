@@ -6,6 +6,7 @@ package goucxtests
 
 import (
 	"testing"
+	"unsafe"
 	. "ucx"
 )
 
@@ -33,7 +34,8 @@ func TestUcpRma(t *testing.T) {
 		rkey, _ := requester.ep.Unpack(rkeyBuf)
 		rkeyBuf.Close()
 
-		putRequest, _ := requester.ep.RmaPut(localMem, length, uint64(uintptr(remoteMem)), rkey, &UcpRequestParams{
+		testOp := func(op func(buffer unsafe.Pointer, size uint64, remote_addr uint64, rkey *UcpRKey, params *UcpRequestParams) (*UcpRequest, error)) {
+			req, _ := op(localMem, length, uint64(uintptr(remoteMem)), rkey, &UcpRequestParams{
 			Cb: func(request *UcpRequest, status UcsStatus) {
 				if status != UCS_OK {
 					t.Fatalf("Request failed with status: %d", status)
@@ -42,34 +44,21 @@ func TestUcpRma(t *testing.T) {
 				request.Close()
 			}})
 
-		for putRequest.GetStatus() == UCS_INPROGRESS {
-			requester.worker.Progress()
-			responder.worker.Progress()
+			for req.GetStatus() == UCS_INPROGRESS {
+				requester.worker.Progress()
+				responder.worker.Progress()
+			}
+
+			if xferData := string(memoryGet(responder)[:length]); xferData != data {
+				t.Fatalf("Transferred data %s != data %s", xferData, data)
+			}
 		}
 
-		if remoteData := string(memoryGet(responder)[:length]); remoteData != data {
-			t.Fatalf("Remote data %s != data %s", remoteData, data)
-		}
+		testOp(requester.ep.RmaPut)
 
 		memorySet(requester, make([]byte, length))
 
-		getRequest, _ := requester.ep.RmaGet(localMem, length, uint64(uintptr(remoteMem)), rkey, &UcpRequestParams{
-			Cb: func(request *UcpRequest, status UcsStatus) {
-				if status != UCS_OK {
-					t.Fatalf("Request failed with status: %d", status)
-				}
-
-				request.Close()
-			}})
-
-		for getRequest.GetStatus() == UCS_INPROGRESS {
-			requester.worker.Progress()
-			responder.worker.Progress()
-		}
-
-		if localData := string(memoryGet(responder)[:length]); localData != data {
-			t.Fatalf("Local data %s != data %s", localData, data)
-		}
+		testOp(requester.ep.RmaGet)
 
 		closeReq, _ := requester.ep.CloseNonBlockingFlush(nil)
 		for closeReq.GetStatus() == UCS_INPROGRESS {
