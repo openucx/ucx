@@ -239,13 +239,18 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, unsigned op_flags,
     return ds;
 }
 
-static void* uct_ib_mlx5_dump_dma_seg(uct_ib_mlx5_dma_seg_t *dma_seg,
-                                      char *buf, size_t max)
+static void* uct_ib_mlx5_dump_dma_seg(void *seg, char *buf, size_t max)
 {
+#if HAVE_MLX5_MMO
+    uct_ib_mlx5_dma_seg_t *dma_seg = seg;
+
     snprintf(buf, max, " DMA[lkey 0x%x va 0x%"PRIx64"]",
              be32toh(dma_seg->be_opaque_lkey),
              be64toh(dma_seg->be_opaque_vaddr));
     return dma_seg + 1;
+#else
+    ucs_fatal("WQE dump: unexpected DMA segment at %p", seg);
+#endif
 }
 
 static uint64_t network_to_host(void *ptr, int size)
