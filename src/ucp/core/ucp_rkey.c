@@ -517,10 +517,7 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
     const void *p = export_mkey_buffer;
     uint16_t memh_info_size;
     uint16_t UCS_V_UNUSED mem_info_parsed_size;
-    ucp_md_map_t local_md_map;
     ucp_md_index_t remote_md_index;
-    ucp_md_index_t md_index;
-    const void *tl_mkey_buf;
     ucp_unpacked_exported_tl_mkey_t *tl_mkey;
 
     ucs_assert(p != NULL);
@@ -555,15 +552,11 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
 
     unpacked->num_tl_mkeys = 0;
     ucs_for_each_bit(remote_md_index, unpacked->remote_md_map) {
-        ucp_memh_exported_tl_mkey_data_unpack(context, &p, &tl_mkey_buf,
-                                              &local_md_map);
-
-        ucs_for_each_bit(md_index, local_md_map) {
-            tl_mkey              = &unpacked->tl_mkeys[unpacked->num_tl_mkeys];
-            tl_mkey->md_index    = md_index;
-            tl_mkey->tl_mkey_buf = tl_mkey_buf;
-            ++unpacked->num_tl_mkeys;
-        }
+        ucs_assertv(unpacked->num_tl_mkeys < UCP_MAX_MDS, "num_tl_mkeys=%u"
+                    " UCP_MAX_MDS=%u", unpacked->num_tl_mkeys, UCP_MAX_MDS);
+        tl_mkey = &unpacked->tl_mkeys[unpacked->num_tl_mkeys++];
+        ucp_memh_exported_tl_mkey_data_unpack(context, &p, &tl_mkey->tl_mkey_buf,
+                                              &tl_mkey->local_md_map);
     }
 
     if (unpacked->num_tl_mkeys == 0) {
