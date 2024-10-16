@@ -385,6 +385,8 @@ void uct_test::set_cm_resources(std::vector<resource>& all_resources)
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name)
 {
     static bool tcp_fastest_dev = (getenv("GTEST_UCT_TCP_FASTEST_DEV") != NULL);
+    static const char *str      = getenv("GTEST_UCT_RSC_NAME");
+    std::string dev_name        = (str != NULL) ? str : "";
     static std::vector<resource> all_resources;
 
     if (all_resources.empty()) {
@@ -429,6 +431,11 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             resource_speed tcp_fastest_rsc;
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
+                if (!dev_name.empty() &&
+                    (tl_resources[j].dev_name != dev_name)) {
+                    continue;
+                }
+
                 if (tcp_fastest_dev && (std::string("tcp") ==
                                         tl_resources[j].tl_name)) {
                     resource_speed rsc(iter->cmpt, iter->cmpt_attr, worker, md,
@@ -459,6 +466,10 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
         uct_worker_destroy(worker);
         ucs_async_context_destroy(async);
+    }
+
+    if (all_resources.empty()) {
+        UCS_TEST_ABORT("Could not add any resource");
     }
 
     return filter_resources(all_resources, resource::is_equal_tl_name, tl_name);
