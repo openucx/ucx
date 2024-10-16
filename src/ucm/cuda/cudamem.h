@@ -49,5 +49,6 @@ cudaError_t ucm_cudaMallocFromPoolAsync(void **devPtr, size_t size,
                                         cudaMemPool_t memPool,
                                         cudaStream_t hStream);
 #endif
+cudaError_t ucm_cudaGetSymbolAddress(void **devPtr, const void *symbol);
 
 #endif
