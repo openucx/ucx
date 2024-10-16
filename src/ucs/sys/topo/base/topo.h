@@ -72,6 +72,10 @@ typedef ucs_status_t
 extern ucs_list_link_t ucs_sys_topo_providers_list;
 
 
+/* Selected topo provider */
+extern struct ucs_sys_topo_provider *ucs_sys_topo_provider;
+
+
 /**
  * Find system device by pci bus id.
  *
