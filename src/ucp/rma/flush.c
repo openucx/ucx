@@ -11,6 +11,7 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.inl>
+#include <ucs/datastruct/list.h>
 
 #include "rma.inl"
 
@@ -632,6 +633,12 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
                                          when finished going over all endpoints */
     req->flush_worker.uct_flags  = uct_flags;
     req->flush_worker.prog_id    = UCS_CALLBACKQ_ID_NULL;
+
+    ucs_info("Before mixing all EPs order");
+    ucs_list_print_links(&worker->all_eps, worker->num_all_eps);
+    ucs_list_mix_order(&worker->all_eps, worker->num_all_eps);
+    ucs_info("After mixing all EPs order");
+    ucs_list_print_links(&worker->all_eps, worker->num_all_eps);
 
     ucp_worker_flush_req_set_next_ep(req, 0, worker->all_eps.next);
     ucp_request_set_send_callback_param(param, req, flush_worker);
