@@ -407,6 +407,58 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     return UCS_OK;
 }
 
+static int
+uct_cuda_ipc_md_init_fabric_info(uct_cuda_ipc_md_t *md,
+                                 ucs_ternary_auto_value_t mnnvl_enable)
+{
+    int mnnvl_supported = 0;
+#if HAVE_NVML_FABRIC_INFO
+    nvmlDevice_t device;
+    ucs_status_t status;
+
+    if (!uct_cuda_base_is_coherent() || (mnnvl_enable == UCS_NO)) {
+        goto err;
+    }
+
+    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(0, &device));
+    if (status != UCS_OK) {
+        goto err_sd;
+    }
+
+    md->fabric_info.version = nvmlGpuFabricInfo_v2;
+    status                  = UCT_NVML_FUNC_LOG_ERR(
+                         nvmlDeviceGetGpuFabricInfoV(device, &md->fabric_info));
+    if (status != UCS_OK) {
+        goto err_sd;
+    }
+
+    ucs_debug("Fabric_info: clique %u healthmask %u state %u status %u",
+              md->fabric_info.cliqueId, md->fabric_info.healthMask,
+              md->fabric_info.state, md->fabric_info.status);
+
+    if ((md->fabric_info.state != NVML_GPU_FABRIC_STATE_COMPLETED) ||
+        (md->fabric_info.status != NVML_SUCCESS)) {
+        goto err_sd;
+    }
+
+    mnnvl_supported = 1;
+
+err_sd:
+    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
+err:
+#endif
+    if ((mnnvl_enable == UCS_YES) && !mnnvl_supported) {
+        ucs_warn("multi-node NVLINK support is requested but not supported");
+    }
+
+    return mnnvl_supported;
+}
+
 static void uct_cuda_ipc_md_close(uct_md_h md)
 {
     ucs_free(md);
@@ -436,9 +488,10 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops       = &md_ops;
     md->super.component = &uct_cuda_ipc_component.super;
-    md->enable_mnnvl    = ipc_config->enable_mnnvl;
     *md_p               = &md->super;
-  
+    md->enable_mnnvl    = uct_cuda_ipc_md_init_fabric_info(
+                                                  md, ipc_config->enable_mnnvl);
+
     return UCS_OK;
 }
 
