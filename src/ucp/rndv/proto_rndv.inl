@@ -154,9 +154,7 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 {
     ucs_assert(req->send.rndv.rkey != NULL);
     ucp_rkey_destroy(req->send.rndv.rkey);
-#if UCS_ENABLE_ASSERT
     req->send.rndv.rkey = NULL;
-#endif
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -369,8 +367,9 @@ ucp_proto_rndv_recv_req_complete(ucp_request_t *recv_req, ucs_status_t status)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_recv_complete_status(ucp_request_t *req, ucs_status_t status)
 {
-    /* Remote key should already be released */
-    ucs_assert(req->send.rndv.rkey == NULL);
+    /* Remote key should already be released for non-invalidated requests */
+    ucs_assert((req->send.rndv.rkey == NULL) ||
+               ucp_request_is_invalidated(req));
     ucs_assert(!ucp_proto_rndv_request_is_ppln_frag(req));
 
     ucp_proto_rndv_recv_req_complete(ucp_request_get_super(req), status);
@@ -384,6 +383,15 @@ ucp_proto_rndv_recv_complete(ucp_request_t *req)
     ucp_request_t *rreq = ucp_request_get_super(req);
 
     return ucp_proto_rndv_recv_complete_status(req, rreq->status);
+}
+
+static UCS_F_ALWAYS_INLINE void ucs_mpool_rndv_put(ucp_mem_desc_t *mdesc)
+{
+    if (mdesc->chunk != NULL) {
+        ucp_frag_mpool_put(mdesc);
+    } else {
+        ucs_mpool_put_inline(mdesc);
+    }
 }
 
 #endif

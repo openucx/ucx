@@ -45,6 +45,11 @@
     if (UCT_MD_MEM_DEREG_FIELD_VALUE(_params, memh, FIELD_MEMH, NULL) == NULL) { \
         return UCS_ERR_INVALID_PARAM; \
     } \
+    if ((UCT_MD_MEM_DEREG_FIELD_VALUE(_params, flags, FIELD_FLAGS, 0) & \
+         UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY) && \
+         (!(_invalidate_supported))) { \
+        return UCS_ERR_UNSUPPORTED; \
+    } \
     if (ENABLE_PARAMS_CHECK) { \
         if (UCT_MD_MEM_DEREG_FIELD_VALUE(_params, flags, FIELD_FLAGS, 0) & \
             UCT_MD_MEM_DEREG_FLAG_INVALIDATE) { \
