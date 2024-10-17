@@ -14,10 +14,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	. "ucx"
 	"unsafe"
-	. "cuda"
 	"runtime"
+
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
+	. "github.com/openucx/ucx/bindings/go/src/cuda"
 )
 
 type PerfTestParams struct {
