@@ -475,12 +475,13 @@ static void
 ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context, 
                                       const void **start_p,
                                       const void **tl_mkey_buf_p,
+                                      uint8_t *tl_mkey_size_p,
                                       ucp_md_map_t *md_map_p)
 {
     const void *p = *start_p;
     const void *next_tl_md_p;
     size_t tl_mkey_data_size;
-    size_t tl_mkey_size, global_id_size;
+    uint8_t tl_mkey_size, global_id_size;
     const void *tl_mkey_buf;
     ucp_md_map_t md_map;
 
@@ -505,9 +506,10 @@ ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context,
     next_tl_md_p = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
     ucs_assertv(p <= next_tl_md_p, "p=%p, next_tl_md_p=%p", p, next_tl_md_p);
 
-    *start_p       = next_tl_md_p;
-    *tl_mkey_buf_p = tl_mkey_buf;
-    *md_map_p      = md_map;
+    *start_p        = next_tl_md_p;
+    *tl_mkey_buf_p  = tl_mkey_buf;
+    *tl_mkey_size_p = tl_mkey_size;
+    *md_map_p       = md_map;
 }
 
 ucs_status_t
@@ -521,6 +523,7 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
     ucp_md_index_t remote_md_index;
     ucp_md_index_t md_index;
     const void *tl_mkey_buf;
+    uint8_t tl_mkey_size;
     ucp_unpacked_exported_tl_mkey_t *tl_mkey;
 
     ucs_assert(p != NULL);
@@ -556,12 +559,13 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
     unpacked->num_tl_mkeys = 0;
     ucs_for_each_bit(remote_md_index, unpacked->remote_md_map) {
         ucp_memh_exported_tl_mkey_data_unpack(context, &p, &tl_mkey_buf,
-                                              &local_md_map);
+                                              &tl_mkey_size, &local_md_map);
 
         ucs_for_each_bit(md_index, local_md_map) {
-            tl_mkey              = &unpacked->tl_mkeys[unpacked->num_tl_mkeys];
-            tl_mkey->md_index    = md_index;
-            tl_mkey->tl_mkey_buf = tl_mkey_buf;
+            tl_mkey               = &unpacked->tl_mkeys[unpacked->num_tl_mkeys];
+            tl_mkey->md_index     = md_index;
+            tl_mkey->tl_mkey_size = tl_mkey_size;
+            tl_mkey->tl_mkey_buf  = tl_mkey_buf;
             ++unpacked->num_tl_mkeys;
         }
     }

@@ -62,10 +62,10 @@ ucp_perf_daemon_ep_close(ucp_perf_daemon_context_t *ctx, ucp_ep_h ep)
         return;
     }
 
+    ucs_debug("closing ep %p", ep);
     param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
     param.flags        = UCP_EP_CLOSE_FLAG_FORCE;
     close_req          = ucp_ep_close_nbx(ep, &param);
-
     if (UCS_PTR_IS_PTR(close_req)) {
         do {
             ucp_worker_progress(ctx->worker);
@@ -81,9 +81,39 @@ ucp_perf_daemon_ep_close(ucp_perf_daemon_context_t *ctx, ucp_ep_h ep)
     }
 }
 
+static void ucp_perf_daemon_cleanup_connections(ucp_perf_daemon_context_t *ctx)
+{
+    ucs_trace("cleaning up daemon connections");
+
+    if (NULL != ctx->send_memh) {
+        /* coverity[check_return] */
+        ucp_mem_unmap(ctx->context, ctx->send_memh);
+        ctx->send_memh = NULL;
+    }
+
+    if (NULL != ctx->recv_memh) {
+        /* coverity[check_return] */
+        ucp_mem_unmap(ctx->context, ctx->recv_memh);
+        ctx->recv_memh = NULL;
+    }
+
+    ucp_perf_daemon_ep_close(ctx, ctx->host_ep);
+    ctx->host_ep = NULL;
+}
+
 static void ucp_perf_daemon_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
-    terminated = 1;
+    ucp_perf_daemon_context_t *ctx = arg;
+
+    if (ep == ctx->host_ep) {
+        ucs_debug("ep %p: host error handler called with status %s", ep,
+                  ucs_status_string(status));
+        ucp_perf_daemon_cleanup_connections(arg);
+    } else {
+        ucs_error("ep %p: peer error handler called with status %s", ep,
+                  ucs_status_string(status));
+        terminated = 1;
+    }
 }
 
 static void
@@ -107,6 +137,8 @@ ucp_perf_daemon_server_conn_handle_cb(ucp_conn_request_h conn_request,
     if (status != UCS_OK) {
         ucs_error("failed to create an endpoint on the daemon: %s",
                   ucs_status_string(status));
+    } else {
+        ucs_debug("new ep %p accepted", ep);
     }
 }
 
@@ -129,7 +161,7 @@ ucp_perf_daemon_set_am_recv_handler(ucp_perf_daemon_context_t *ctx,
 
     status = ucp_worker_set_am_recv_handler(ctx->worker, &param);
     if (UCS_OK != status) {
-        ucs_error("failed to set am recv handler: %s",
+        ucs_error("ucp_worker_set_am_recv_handler() failed with error: %s",
                   ucs_status_string(status));
         return status;
     }
@@ -138,7 +170,8 @@ ucp_perf_daemon_set_am_recv_handler(ucp_perf_daemon_context_t *ctx,
 }
 
 static ucs_status_t
-ucp_perf_daemon_send_am_eager_reply(ucp_ep_h ep, ucp_perf_daemon_am_id_t am_id)
+ucp_perf_daemon_send_am_eager_reply(ucp_ep_h ep, ucp_perf_daemon_am_id_t am_id,
+                                    ucs_status_t status)
 {
     ucp_request_param_t param = {};
     ucs_status_ptr_t sreq;
@@ -146,11 +179,12 @@ ucp_perf_daemon_send_am_eager_reply(ucp_ep_h ep, ucp_perf_daemon_am_id_t am_id)
     param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
     param.flags        = UCP_AM_SEND_FLAG_REPLY | UCP_AM_SEND_FLAG_EAGER;
 
-    sreq = ucp_am_send_nbx(ep, am_id, NULL, 0ul, NULL, 0ul, &param);
+    sreq = ucp_am_send_nbx(ep, am_id, NULL, 0ul, &status, sizeof(status),
+                           &param);
     if (UCS_PTR_IS_PTR(sreq)) {
         ucp_request_free(sreq);
     } else if (UCS_PTR_IS_ERR(sreq)) {
-        ucs_error("failed to send am id %u: %s", am_id,
+        ucs_error("ucp_am_send_nbx(AM_ID=%u) failed with: %s", am_id,
                   ucs_status_string(UCS_PTR_STATUS(sreq)));
         return UCS_PTR_STATUS(sreq);
     }
@@ -163,8 +197,15 @@ ucp_perf_daemon_send_cb(void *request, ucs_status_t status, void *user_data)
 {
     ucp_perf_daemon_context_t *ctx = user_data;
 
+    if (status != UCS_OK) {
+        ucs_error("SEND operation failed: %s", ucs_status_string(status));
+    } else {
+        ucs_trace_data("SEND completed");
+    }
+
     ucp_perf_daemon_send_am_eager_reply(ctx->host_ep,
-                                        UCP_PERF_DAEMON_AM_ID_SEND_CMPL);
+                                        UCP_PERF_DAEMON_AM_ID_SEND_CMPL,
+                                        status);
     ucp_request_free(request);
 }
 
@@ -195,8 +236,15 @@ static void ucp_perf_daemon_recv_cb(void *request, ucs_status_t status,
 {
     ucp_perf_daemon_context_t *ctx = user_data;
 
+    if (status != UCS_OK) {
+        ucs_error("RECV operation failed: %s", ucs_status_string(status));
+    } else {
+        ucs_trace_data("RECV completed");
+    }
+
     ucp_perf_daemon_send_am_eager_reply(ctx->host_ep,
-                                        UCP_PERF_DAEMON_AM_ID_RECV_CMPL);
+                                        UCP_PERF_DAEMON_AM_ID_RECV_CMPL,
+                                        status);
     ucp_request_free(request);
 }
 
@@ -222,13 +270,15 @@ ucp_perf_daemon_create_peer_ep(ucp_perf_daemon_context_t *ctx,
 
     status = ucp_ep_create(ctx->worker, &ep_params, &ctx->peer_ep);
     if (status != UCS_OK) {
-        ucs_error("daemon failed to create an endpoint: %s",
-                  ucs_status_string(status));
+        ucs_error("ucp_ep_create() failed with: %s", ucs_status_string(status));
         return status;
+    } else {
+        ucs_debug("peer ep %p created", ctx->peer_ep);
     }
 
     return ucp_perf_daemon_send_am_eager_reply(ctx->peer_ep,
-                                               UCP_PERF_DAEMON_AM_ID_PEER_INIT);
+                                               UCP_PERF_DAEMON_AM_ID_PEER_INIT,
+                                               UCS_OK);
 }
 
 static void ucp_perf_daemon_check_am_msg(const ucp_am_recv_param_t *param,
@@ -296,11 +346,10 @@ ucp_perf_daemon_init_handler(void *arg, const void *header,
     ucp_perf_daemon_check_am_msg(param, header_length, 1, 0,
                                  UCP_PERF_DAEMON_AM_ID_INIT);
 
-    /* Peer EP must not be initialized on receiving HOST_INIT message.
+    /* Host EP must not be initialized on receiving HOST_INIT message.
      * Otherwise it means that daemon was already initialized from host. For now
-     * we don't support multiple host processes, or connection reestablishment
-     */
-    if (ctx->peer_ep != NULL) {
+     * we don't support multiple host processes */
+    if (ctx->host_ep != NULL) {
         ucs_error("duplicate daemon init req");
         return UCS_ERR_ALREADY_EXISTS;
     }
@@ -308,7 +357,9 @@ ucp_perf_daemon_init_handler(void *arg, const void *header,
     ctx->host_ep = param->reply_ep;
 
     ucp_perf_unpack_array(&ptr, &value_length, &value);
-    if (value_length != 0) {
+    /* Peer EP is persistent during daemon lifetime, create it only if it does
+     * not exist yet */
+    if ((value_length != 0) && (ctx->peer_ep == NULL)) {
         status = ucp_perf_daemon_create_peer_ep(ctx, value, value_length);
         if (status != UCS_OK) {
             return status;
@@ -348,18 +399,6 @@ ucp_perf_daemon_send_handler(void *arg, const void *header,
 }
 
 static ucs_status_t
-ucp_perf_daemon_fin_handler(void *arg, const void *header, size_t header_length,
-                            void *data, size_t length,
-                            const ucp_am_recv_param_t *param)
-{
-    ucp_perf_daemon_check_am_msg(param, header_length, 0, 0,
-                                 UCP_PERF_DAEMON_AM_ID_FIN);
-
-    terminated = 1;
-    return UCS_OK;
-}
-
-static ucs_status_t
 ucp_perf_daemon_peer_init_handler(void *arg, const void *header,
                                   size_t header_length, void *data,
                                   size_t length,
@@ -370,7 +409,13 @@ ucp_perf_daemon_peer_init_handler(void *arg, const void *header,
     ucp_perf_daemon_check_am_msg(param, header_length, 1, 0,
                                  UCP_PERF_DAEMON_AM_ID_PEER_INIT);
 
+    if (ctx->peer_ep != NULL) {
+        ucs_error("duplicate peer init req");
+        return UCS_ERR_ALREADY_EXISTS;
+    }
+
     ctx->peer_ep = param->reply_ep;
+    ucs_debug("peer ep %p received", ctx->peer_ep);
     return UCS_OK;
 }
 
@@ -409,18 +454,11 @@ ucp_perf_daemon_peer_tx_handler(void *arg, const void *header,
 
 static void ucp_perf_daemon_cleanup(ucp_perf_daemon_context_t *ctx)
 {
-    if (NULL != ctx->send_memh) {
-        /* coverity[check_return] */
-        ucp_mem_unmap(ctx->context, ctx->send_memh);
-    }
+    ucs_trace("cleaning up daemon");
 
-    if (NULL != ctx->recv_memh) {
-        /* coverity[check_return] */
-        ucp_mem_unmap(ctx->context, ctx->recv_memh);
-    }
+    ucp_perf_daemon_cleanup_connections(ctx);
 
     ucp_perf_daemon_ep_close(ctx, ctx->peer_ep);
-    ucp_perf_daemon_ep_close(ctx, ctx->host_ep);
     ucp_listener_destroy(ctx->listener);
     ucp_worker_destroy(ctx->worker);
     ucp_cleanup(ctx->context);
@@ -435,7 +473,6 @@ ucp_perf_daemon_set_am_handlers(ucp_perf_daemon_context_t *ctx)
     } handlers[] = {
         {UCP_PERF_DAEMON_AM_ID_INIT, ucp_perf_daemon_init_handler},
         {UCP_PERF_DAEMON_AM_ID_SEND_REQ, ucp_perf_daemon_send_handler},
-        {UCP_PERF_DAEMON_AM_ID_FIN, ucp_perf_daemon_fin_handler},
         {UCP_PERF_DAEMON_AM_ID_PEER_INIT, ucp_perf_daemon_peer_init_handler},
         {UCP_PERF_DAEMON_AM_ID_PEER_TX, ucp_perf_daemon_peer_tx_handler},
     };
