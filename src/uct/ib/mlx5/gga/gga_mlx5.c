@@ -73,6 +73,21 @@ ucs_config_field_t uct_gga_mlx5_iface_config_table[] = {
 };
 
 static ucs_status_t
+uct_ib_mlx5_gga_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
+{
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_md_query(uct_md, md_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* GGA always packs exported mkey */
+    md_attr->rkey_packed_size = md_attr->exported_mkey_packed_size;
+    return UCS_OK;
+}
+
+static ucs_status_t
 uct_ib_mlx5_gga_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                           void *address, size_t length,
                           const uct_md_mkey_pack_params_t *params,
@@ -727,7 +742,7 @@ UCT_SINGLE_TL_INIT(&uct_gga_component, gga_mlx5, ctor,,)
 /* TODO: separate memh since atomic_mr is not relevant for GGA */
 static uct_md_ops_t uct_mlx5_gga_md_ops = {
     .close              = uct_ib_mlx5_devx_md_close,
-    .query              = uct_ib_mlx5_devx_md_query,
+    .query              = uct_ib_mlx5_gga_md_query,
     .mem_alloc          = uct_ib_mlx5_devx_device_mem_alloc,
     .mem_free           = uct_ib_mlx5_devx_device_mem_free,
     .mem_reg            = uct_ib_mlx5_devx_mem_reg,
