@@ -66,15 +66,6 @@
         {#_func, ucm_override_##_func}, (void**)&ucm_orig_##_func \
     }
 
-#define UCM_CUDA_GET_SYMBOL_SIZE(_symbol) \
-    ({ \
-        size_t _size; \
-        if (cudaGetSymbolSize(&_size, _symbol) != cudaSuccess) { \
-            _size = 1; \
-        } \
-        _size; \
-    })
-
 typedef struct {
     ucm_reloc_patch_t patch;
     void              **orig_func_ptr;
@@ -244,6 +235,17 @@ static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
     {{NULL}, NULL}
 };
 
+static size_t ucm_cuda_get_symbol_size(const void *symbol)
+{
+    size_t size;
+
+    if (cudaGetSymbolSize(&size, symbol) != cudaSuccess) {
+        return 1;
+    }
+
+    return size;
+}
+
 /* Runtime API replacements */
 UCM_CUDA_ALLOC_FUNC(cudaMalloc, cudaError_t, cudaSuccess, arg0, void*, *,
                     "size=%zu", size_t)
@@ -260,7 +262,7 @@ UCM_CUDA_ALLOC_FUNC(cudaMallocFromPoolAsync, cudaError_t, cudaSuccess, arg0,
                     cudaMemPool_t, cudaStream_t)
 #endif
 UCM_CUDA_ALLOC_FUNC(cudaGetSymbolAddress, cudaError_t, cudaSuccess,
-                    UCM_CUDA_GET_SYMBOL_SIZE(arg0), void*, *, "symbol=%p",
+                    ucm_cuda_get_symbol_size(arg0), void*, *, "symbol=%p",
                     const void*)
 UCM_CUDA_FREE_FUNC(cudaFree, UCS_MEMORY_TYPE_CUDA, cudaError_t, arg0, 0,
                    "devPtr=%p", void*)
