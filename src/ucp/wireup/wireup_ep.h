@@ -113,6 +113,8 @@ uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 
 uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep);
 
+int ucp_wireup_ep_is_next_ep_active(ucp_wireup_ep_t *wireup_ep);
+
 void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep);
 
 int ucp_wireup_ep_test(uct_ep_h uct_ep);

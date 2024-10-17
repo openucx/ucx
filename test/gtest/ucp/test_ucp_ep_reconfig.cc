@@ -52,6 +52,17 @@ protected:
         bool                   m_exclude_ifaces;
     };
 
+    bool is_single_transport()
+    {
+        return GetParam().transports.size() == 1;
+    }
+
+    bool has_p2p_transport()
+    {
+        return has_resource(sender(), "rc_verbs") ||
+               has_resource(sender(), "rc_mlx5");
+    }
+
     void create_entity(bool push_front, bool exclude_ifaces)
     {
         auto e = new entity(GetParam(), m_ucp_config, get_worker_params(), this,
@@ -64,40 +75,85 @@ protected:
         }
     }
 
-    void create_entities_and_connect(bool exclude_ifaces)
+    virtual void create_entities_and_connect()
     {
-        create_entity(true, exclude_ifaces);
-        create_entity(false, exclude_ifaces);
+        create_entity(true, true);
+        create_entity(false, true);
         sender().connect(&receiver(), get_ep_params());
         receiver().connect(&sender(), get_ep_params());
     }
 
 public:
+    void init()
+    {
+        ucp_test::init();
+
+        /* num_tls = single device + UD */
+        if (sender().ucph()->num_tls <= 2) {
+            UCS_TEST_SKIP_R("test requires at least 2 ifaces to work");
+        }
+    }
+
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
     }
 
-    void send_recv()
+    void run(bool bidirectional = false);
+    void skip_non_p2p();
+
+    void send_message(const ucp_test_base::entity &e1,
+                      const ucp_test_base::entity &e2, const mem_buffer &sbuf,
+                      const mem_buffer &rbuf, size_t msg_size,
+                      std::vector<void*> &reqs)
     {
-        static const unsigned num_iterations = 100;
-        static const size_t msg_sizes[]      = {8, 1024, 16384, UCS_MBYTE};
-        const ucp_request_param_t param      = {
+        const ucp_request_param_t param = {
             .op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL
         };
+
+        void *sreq = ucp_tag_send_nbx(e1.ep(), sbuf.ptr(), msg_size, 0, &param);
+        void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(), sbuf.ptr(), msg_size,
+                                                0, &param);
+        reqs.insert(reqs.end(), {sreq, sreq_sync});
+
+        for (unsigned iter = 0; iter < 2; iter++) {
+            void *rreq = ucp_tag_recv_nbx(e2.worker(), rbuf.ptr(), msg_size, 0,
+                                          0, &param);
+            reqs.push_back(rreq);
+        }
+    }
+
+    void send_recv(bool bidirectional)
+    {
+        static const unsigned num_iterations = 1000;
+/* TODO: remove this when 100MB asan bug is solved */
+#ifdef __SANITIZE_ADDRESS__
+        static const size_t msg_sizes[] = {8, 1024, 16384, 65536};
+#else
+        static const size_t msg_sizes[] = {8, 1024, 16384, UCS_MBYTE};
+#endif
 
         for (auto msg_size : msg_sizes) {
             for (unsigned i = 0; i < num_iterations; ++i) {
                 mem_buffer sbuf(msg_size, UCS_MEMORY_TYPE_HOST, i);
                 mem_buffer rbuf(msg_size, UCS_MEMORY_TYPE_HOST, ucs::rand());
+                mem_buffer o_sbuf(msg_size, UCS_MEMORY_TYPE_HOST, i);
+                mem_buffer o_rbuf(msg_size, UCS_MEMORY_TYPE_HOST, ucs::rand());
 
-                void *sreq = ucp_tag_send_nbx(sender().ep(), sbuf.ptr(),
-                                              msg_size, 0, &param);
-                void *rreq = ucp_tag_recv_nbx(receiver().worker(), rbuf.ptr(),
-                                              msg_size, 0, 0, &param);
-                request_wait(rreq);
-                request_wait(sreq);
+                std::vector<void*> reqs;
+                send_message(sender(), receiver(), sbuf, rbuf, msg_size, reqs);
+
+                if (bidirectional) {
+                    send_message(receiver(), sender(), o_sbuf, o_rbuf, msg_size,
+                                 reqs);
+                }
+
+                requests_wait(reqs);
                 rbuf.pattern_check(i);
+
+                if (bidirectional) {
+                    o_rbuf.pattern_check(i);
+                }
             }
         }
     }
@@ -161,7 +217,9 @@ void test_ucp_ep_reconfig::entity::connect(const ucp_test_base::entity *other,
             ucs::handle<ucp_ep_h, ucp_test_base::entity*>(ucp_ep,
                                                           ucp_ep_destroy));
 
-    ASSERT_UCS_OK(ucp_wireup_send_request(ucp_ep));
+    if (!(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        ASSERT_UCS_OK(ucp_wireup_send_request(ucp_ep));
+    }
 
     store_config();
     UCS_ASYNC_UNBLOCK(&worker()->async);
@@ -230,10 +288,10 @@ test_ucp_ep_reconfig::entity::get_address(const ucp_tl_bitmap_t &tl_bitmap) cons
     return address;
 }
 
-UCS_TEST_P(test_ucp_ep_reconfig, basic)
+void test_ucp_ep_reconfig::run(bool bidirectional)
 {
-    create_entities_and_connect(true);
-    send_recv();
+    create_entities_and_connect();
+    send_recv(bidirectional);
 
     auto r_sender   = static_cast<const entity*>(&sender());
     auto r_receiver = static_cast<const entity*>(&receiver());
@@ -243,4 +301,79 @@ UCS_TEST_P(test_ucp_ep_reconfig, basic)
     r_receiver->verify_configuration(*r_sender);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_reconfig, rc, "rc");
+void test_ucp_ep_reconfig::skip_non_p2p()
+{
+    if (!has_p2p_transport()) {
+        UCS_TEST_SKIP_R("No p2p TLs available, config will be non-wireup");
+    }
+}
+
+/* TODO: Remove skip condition after next PRs are merged. */
+UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, basic,
+                     !has_transport("rc_x") || !has_transport("rc_v"))
+{
+    run();
+}
+
+UCS_TEST_P(test_ucp_ep_reconfig, request_reset, "PROTO_REQUEST_RESET=y")
+{
+    if (is_single_transport()) {
+        /* One side will consume all ifaces and the other side will have no ifaces left to use */
+        UCS_TEST_SKIP_R("exclude_iface requires at least 2 transports to work "
+                        "(for example DC + SHM)");
+    }
+
+    skip_non_p2p();
+    run();
+}
+
+/* SHM causes lane reuse, disable for now. */
+UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, resolve_remote_id,
+                     has_transport("shm") || is_self(), "MAX_RNDV_LANES=0")
+{
+    if (has_transport("tcp")) {
+        UCS_TEST_SKIP_R("lanes are reused (not supported yet)");
+    }
+
+    run(true);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_ep_reconfig);
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_reconfig, rc_x_v, "rc");
+
+class test_reconfig_asymmetric : public test_ucp_ep_reconfig {
+protected:
+    void create_entities_and_connect() override
+    {
+        create_entity(true, false);
+
+        modify_config("NUM_EPS", "200");
+        create_entity(false, false);
+
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+};
+
+/* Will be relevant when reuse + non-wireup is supported */
+UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, basic, has_transport("shm"))
+{
+    run();
+}
+
+/* Will be relevant when reuse + non-wireup is supported */
+UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, request_reset,
+                     has_transport("shm"), "PROTO_REQUEST_RESET=y")
+{
+    skip_non_p2p();
+    run();
+}
+
+/* SHM causes lane reuse, disable for now. */
+UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, resolve_remote_id,
+                     has_transport("shm") || is_self(), "MAX_RNDV_LANES=0")
+{
+    run(true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfig_asymmetric, shm_ib, "shm,ib");
