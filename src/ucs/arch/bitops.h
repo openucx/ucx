@@ -2,6 +2,7 @@
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+* Copyright (C) Dandan Zhang, 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -23,6 +24,8 @@ BEGIN_C_DECLS
 #  include "aarch64/bitops.h"
 #elif defined(__riscv)
 #  include "rv64/bitops.h"
+#elif defined(__loongarch64)
+#  include "loongarch64/bitops.h"
 #else
 #  error "Unsupported architecture"
 #endif
