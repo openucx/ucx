@@ -398,7 +398,8 @@ static void ucp_proto_rndv_ctrl_variant_probe(
     if (remote_proto->cfg_thresh != UCS_MEMUNITS_AUTO) {
         /* If RNDV_SCHEME is set, all protocols except forced one report INF */
         ucs_assertv(remote_proto->cfg_thresh == UCS_MEMUNITS_INF,
-                    "remote_proto->cfg_thresh=%zu", remote_proto->cfg_thresh);
+                    "variant_name=%s remote_proto->cfg_thresh=%zu",
+                    variant_name, remote_proto->cfg_thresh);
         cfg_thresh = remote_proto->cfg_thresh;
     }
 
