@@ -542,7 +542,7 @@ UCS_TEST_F(test_socket, socket_setopt) {
 
     optlen = sizeof(optval);
 
-    status = ucs_socket_create(AF_INET, SOCK_STREAM, &fd);
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, 0, &fd);
     EXPECT_UCS_OK(status);
     EXPECT_GE(fd, 0);
 

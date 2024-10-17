@@ -186,7 +186,7 @@ private:
         int fd;
         EXPECT_TRUE((dest_addr.ss_family == AF_INET) ||
                     (dest_addr.ss_family == AF_INET6));
-        status = ucs_socket_create(dest_addr.ss_family, SOCK_STREAM, &fd);
+        status = ucs_socket_create(dest_addr.ss_family, SOCK_STREAM, 0, &fd);
         ASSERT_UCS_OK(status);
 
         status = ucs_socket_connect(fd, (struct sockaddr*)&dest_addr);

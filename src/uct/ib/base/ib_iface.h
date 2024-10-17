@@ -107,6 +107,18 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
 };
 
+
+/**
+ * Reachability mode.
+ */
+typedef enum {
+    UCT_IB_REACHABILITY_MODE_ROUTE        = 0,
+    UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET = 1,
+    UCT_IB_REACHABILITY_MODE_NONE         = 2,
+    UCT_IB_REACHABILITY_MODE_LAST
+} uct_ib_reachability_mode_t;
+
+
 enum {
     UCT_IB_IFACE_STAT_RX_COMPLETION,
     UCT_IB_IFACE_STAT_TX_COMPLETION,
@@ -114,6 +126,7 @@ enum {
     UCT_IB_IFACE_STAT_TX_COMPLETION_ZIPPED,
     UCT_IB_IFACE_STAT_LAST
 };
+
 
 typedef struct uct_ib_address_pack_params {
     /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
@@ -175,40 +188,43 @@ struct uct_ib_iface_config {
     } rx;
 
     /* Inline space to reserve in CQ */
-    size_t                  inl[UCT_IB_DIR_LAST];
+    size_t                       inl[UCT_IB_DIR_LAST];
 
     /* Change the address type */
-    int                     addr_type;
+    int                          addr_type;
 
     /* Force global routing */
-    int                     is_global;
+    int                          is_global;
 
     /* Use FLID based routing */
-    int                     flid_enabled;
+    int                          flid_enabled;
 
     /* IB SL to use (default: AUTO) */
-    unsigned long           sl;
+    unsigned long                sl;
 
     /* IB Traffic Class to use */
-    unsigned long           traffic_class;
+    unsigned long                traffic_class;
 
     /* IB hop limit / TTL */
-    unsigned                hop_limit;
+    unsigned                     hop_limit;
 
     /* Number of paths to expose for the interface  */
-    unsigned long           num_paths;
+    unsigned long                num_paths;
 
     /* Whether to check RoCEv2 reachability by IP address and local subnet */
-    int                     rocev2_local_subnet;
+    int                          rocev2_local_subnet;
 
     /* Length of subnet prefix for reachability check */
-    unsigned long           rocev2_subnet_pfx_len;
+    unsigned long                rocev2_subnet_pfx_len;
+
+    /* The mode used for performing the reachability check */
+    uct_ib_reachability_mode_t   reachability_mode;
 
     /* List of included/excluded subnets to filter RoCE GID entries by */
-    ucs_config_allow_list_t rocev2_subnet_filter;
+    ucs_config_allow_list_t      rocev2_subnet_filter;
 
     /* Multiplier for RoCE LAG UDP source port calculation */
-    unsigned                roce_path_factor;
+    unsigned                     roce_path_factor;
 
     /* Ranges of path bits */
     UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
@@ -346,6 +362,7 @@ struct uct_ib_iface {
         uint8_t                      counter_set_id;
         uct_ib_iface_send_overhead_t send_overhead;
         ucs_ternary_auto_value_t     dp_ordering_ooo; /* Activate RW OOO */
+        uct_ib_reachability_mode_t   reachability_mode;
     } config;
 
     uct_ib_iface_ops_t        *ops;
