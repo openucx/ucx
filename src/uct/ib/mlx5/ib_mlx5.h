@@ -1161,9 +1161,14 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                            const uct_md_mkey_pack_params_t *params,
                            void *mkey_buffer);
 
-ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
-                                      const uct_ib_md_config_t *md_config,
-                                      uct_ib_md_t **p_md);
+ucs_status_t uct_ib_mlx5_devx_md_alloc(struct ibv_device *ibv_device,
+                                       size_t size, uct_ib_mlx5_md_t **md_p);
+
+void uct_ib_mlx5_devx_md_free(uct_ib_mlx5_md_t *md);
+
+ucs_status_t uct_ib_mlx5_devx_md_init(uct_ib_mlx5_md_t *md,
+                                      struct ibv_device *ibv_device,
+                                      const uct_ib_md_config_t *md_config);
 
 ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
                                                uct_ib_mlx5_devx_mem_t *memh);
