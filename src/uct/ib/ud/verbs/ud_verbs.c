@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) Google, LLC, 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -393,6 +394,20 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface, int is_async)
     return 1;
 }
 
+static UCS_F_ALWAYS_INLINE size_t uct_ud_verbs_iface_get_gid_len(void *packet)
+{
+  /* The GRH will contain either an IPv4 or IPv6 header. If the former is
+   * present the header will start at offset 20 in the buffer otherwise it
+   * will start at offset 0. Since the two headers are of fixed size (20 or
+   * 40 bytes) this means we will either see 0x6? at offset 0 (IPv6) or 0x45
+   * at offset 20. The detection is a little tricky for IPv6 given that the
+   * first 20B are undefined for IPv4. To overcome this the first byte of
+   * the posted receive buffer is set to 0xff.
+   */
+  return ((((uint8_t*)packet)[0] & 0xf0) == 0x60) ? UCS_IPV6_ADDR_LEN :
+                                                    UCS_IPV4_ADDR_LEN;
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 {
@@ -413,7 +428,8 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, packet, wc, num_wcs) {
         if (!uct_ud_iface_check_grh(&iface->super, packet,
-                                    wc[i].wc_flags & IBV_WC_GRH, wc[i].sl)) {
+                                    wc[i].wc_flags & IBV_WC_GRH,
+                                    uct_ud_verbs_iface_get_gid_len(packet))) {
             ucs_mpool_put_inline((void*)wc[i].wr_id);
             continue;
         }
@@ -696,7 +712,7 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
     struct ibv_recv_wr *bad_wr;
     uct_ib_recv_wr_t *wrs;
     unsigned count;
-    int ret;
+    int ret, i;
 
     wrs  = ucs_alloca(sizeof *wrs  * max);
 
@@ -704,6 +720,14 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
                                         wrs, max);
     if (count == 0) {
         return;
+    }
+
+    /* Set the first byte in the receive buffer grh to a known value not equal to
+     * 0x6?. This should aid in the detection of IPv6 vs IPv4 because the first
+     * byte is undefined in the later and 0x6? in the former. It is unlikely
+     * this byte is touched with IPv4. */
+    for (i = 0; i < count; ++i) {
+        ((uint8_t*)wrs[i].sg.addr)[0] = 0xff;
     }
 
     ret = ibv_post_recv(iface->super.qp, &wrs[0].ibwr, &bad_wr);
