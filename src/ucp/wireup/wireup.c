@@ -1012,14 +1012,10 @@ ucp_wireup_ep_lane_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
 static int ucp_wireup_should_activate_wiface(ucp_worker_iface_t *wiface,
                                              ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    ucp_context_h context = wiface->worker->context;
-
     /* Activate worker iface if: a) new protocol selection logic is disabled; or
-     * b) stream support is requested, because stream API does not support new
-     * protocol selection logic; or c) lane is used for checking a connection
-     * state; or d) the endpoint is a mem-type ep. */
-    return !context->config.ext.proto_enable ||
-           (context->config.features & UCP_FEATURE_STREAM) ||
+     * b) lane is used for checking a connection state; or c) the endpoint is a
+     * mem-type ep. */
+    return !wiface->worker->context->config.ext.proto_enable ||
            (ucp_ep_config(ep)->key.keepalive_lane == lane) ||
            (ep->flags & UCP_EP_FLAG_INTERNAL);
 }
