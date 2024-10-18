@@ -702,9 +702,10 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
                         uct_ib_mr_type_t mr_type, uint64_t access_mask,
                         uint32_t *lkey_p, uint32_t *rkey_p)
 {
-    uint64_t access_flags = uct_ib_memh_access_flags(&memh->super,
-                                                     md->super.relaxed_order) &
-                            access_mask;
+    uint64_t access_flags =
+            uct_ib_memh_access_flags(&memh->super, md->super.relaxed_order,
+                                     md->super.dev.mr_access_flags) &
+            access_mask;
     unsigned flags        = UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
                                                        FIELD_FLAGS, 0);
     ucs_status_t status;
@@ -804,7 +805,8 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
     }
 
     relaxed_order = md->flags & UCT_IB_MLX5_MD_FLAG_GVA_RO;
-    access_flags  = uct_ib_memh_access_flags(&memh->super, relaxed_order);
+    access_flags  = uct_ib_memh_access_flags(&memh->super, relaxed_order,
+                                             md->super.dev.mr_access_flags);
     status = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params, access_flags,
                            NULL, &memh->mrs[UCT_IB_MR_DEFAULT].super.ib);
     if (status != UCS_OK) {
@@ -2389,6 +2391,8 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     md->super.super.ops = &uct_ib_mlx5_devx_md_ops.super;
 
+    uct_ib_device_configure(&md->super.dev);
+
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {
         goto err_lru_cleanup;
@@ -3220,6 +3224,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     }
 
     uct_ib_mlx5dv_check_dc(dev);
+
+    uct_ib_device_configure(&md->super.dev);
 
     md->super.super.ops  = &uct_ib_mlx5_md_ops.super;
     md->max_rd_atomic_dc = IBV_DEV_ATTR(dev, max_qp_rd_atom);
