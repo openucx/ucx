@@ -260,7 +260,7 @@ typedef struct uct_ib_mlx5_dma_opaque_mr {
 } uct_ib_mlx5_dma_opaque_mr_t;
 
 
-#if HAVE_DEVX
+#if HAVE_MLX5_MMO
 /**
  * full WQE format:
  * struct mlx5_wqe_ctrl_seg;
@@ -273,8 +273,10 @@ typedef struct uct_ib_mlx5_dma_seg {
     uint32_t be_opaque_lkey;
     uint64_t be_opaque_vaddr;
 } UCS_S_PACKED uct_ib_mlx5_dma_seg_t;
+#endif
 
 
+#if HAVE_DEVX
 typedef struct {
     struct mlx5dv_devx_obj *dvmr;
     int                    mr_num;
