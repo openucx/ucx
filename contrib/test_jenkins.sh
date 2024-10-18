@@ -878,7 +878,7 @@ run_malloc_hook_gtest() {
 
 	echo "==== Running cuda hooks with far jump, $compiler_name compiler ===="
 	$TIMEOUT env \
-		UCM_BISTRO_FORCE_FAR_JUMP=y \
+		UCX_MEM_BISTRO_FORCE_FAR_JUMP=y \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
 }
