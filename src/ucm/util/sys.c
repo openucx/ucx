@@ -150,11 +150,11 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
 {
     static char  *buffer         = MAP_FAILED;
     static size_t buffer_size    = 32768;
-    static pthread_rwlock_t lock = PTHREAD_RWLOCK_INITIALIZER;
+    static pthread_mutex_t lock  = PTHREAD_MUTEX_INITIALIZER;
     ssize_t read_size, offset;
     unsigned long start, end;
     char prot_c[4];
-    int line_num, length;
+    int line_num;
     int prot;
     char *ptr, *newline, *orig_buffer;
     int maps_fd;
@@ -168,7 +168,7 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
     }
 
     /* read /proc/self/maps fully into the buffer */
-    pthread_rwlock_wrlock(&lock);
+    pthread_mutex_lock(&lock);
 
     if (buffer == MAP_FAILED) {
         buffer = ucm_orig_mmap(NULL, buffer_size, PROT_READ|PROT_WRITE,
@@ -223,11 +223,8 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
             offset += read_size;
         }
     }
-    pthread_rwlock_unlock(&lock);
 
     close(maps_fd);
-
-    pthread_rwlock_rdlock(&lock);
 
     ptr      = buffer;
     line_num = 1;
@@ -235,14 +232,14 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
         /* address           perms offset   dev   inode   pathname
          * 00400000-0040b000 r-xp  00001a00 0a:0b 12345   /dev/mydev
          */
-        length = newline - ptr;
+        *newline = '\0';
         ret = sscanf(ptr, "%lx-%lx %4c %*x %*x:%*x %*d %n",
                      &start, &end, prot_c,
                      /* ignore offset, dev, inode */
                      &n /* save number of chars before path begins */);
         if (ret < 3) {
-            ucm_warn("failed to parse %s line %d: '%.*s'",
-                     UCM_PROC_SELF_MAPS, line_num, length, ptr);
+            ucm_warn("failed to parse %s line %d: '%s'",
+                     UCM_PROC_SELF_MAPS, line_num, ptr);
         } else {
             prot = 0;
             if (prot_c[0] == 'r') {
@@ -265,7 +262,7 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
     }
 
 out:
-    pthread_rwlock_unlock(&lock);
+    pthread_mutex_unlock(&lock);
 }
 
 typedef struct {

@@ -436,10 +436,6 @@ INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache,
 class test_memtype_cache_deferred_create : public test_memtype_cache {
 protected:
     virtual void init() {
-        /* do nothing */
-    }
-
-    virtual void cleanup() {
         /* Clean the global memtype cache */
         ucs_memtype_cache_cleanup();
         ucs_memtype_cache_global_init();
