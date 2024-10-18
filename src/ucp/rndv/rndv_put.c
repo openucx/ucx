@@ -559,7 +559,7 @@ static void ucp_proto_rndv_put_mtype_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucp_trace_req(req, "rndv_put_mtype_completion");
-    ucs_mpool_put(req->send.rndv.mdesc);
+    ucs_mpool_rndv_put(req->send.rndv.mdesc);
     ucp_proto_rndv_put_common_complete(req);
 }
 
@@ -569,7 +569,7 @@ static void ucp_proto_rndv_put_mtype_frag_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucp_trace_req(req, "rndv_put_mtype_frag_completion");
-    ucs_mpool_put(req->send.rndv.mdesc);
+    ucs_mpool_rndv_put(req->send.rndv.mdesc);
     ucp_proto_rndv_ppln_send_frag_complete(req, 1);
 }
 
@@ -581,7 +581,6 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
     size_t frag_size;
-    unsigned flags;
     ucp_md_index_t UCS_V_UNUSED dummy_md_id;
     ucp_memory_info_t frag_mem_info;
 
@@ -608,9 +607,6 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    flags = context->config.ext.rndv_errh_ppln_enable ?
-            UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING : 0;
-
     if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
         comp_cb = ucp_proto_rndv_put_mtype_frag_completion;
     } else {
@@ -619,8 +615,9 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 
     ucp_proto_rndv_put_common_probe(
             init_params, UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE), frag_size,
-            UCT_EP_OP_GET_ZCOPY, flags, mdesc_md_map, comp_cb, 1,
-            UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, &frag_mem_info);
+            UCT_EP_OP_GET_ZCOPY, UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+            mdesc_md_map, comp_cb, 1, UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
+            &frag_mem_info);
 }
 
 static void
