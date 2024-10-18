@@ -95,6 +95,7 @@ init_config()
 	log_dir="$PWD"
 	iodemo_exe=""
 	iodemo_client_args=""
+	client_time_limits=""
 	extra_env_client=""
 	extra_env_server=""
 	extra_env_all=""
@@ -111,7 +112,7 @@ show_config()
 			host_list net_ifs duration bind_local base_port_num \
 			num_clients num_servers tasks_per_node map_by \
 			client_wait_time launcher dry_run log_dir \
-			iodemo_exe iodemo_client_args
+			iodemo_exe iodemo_client_args client_time_limits
 	do
 		show_var ${key}
 	done
@@ -180,6 +181,10 @@ parse_args()
 			;;
 		--bind)
 			bind_local=1
+			;;
+		--client_exit_times)
+			client_time_limits="$2"
+			shift
 			;;
 		--env)
 			role="$2"
@@ -492,6 +497,9 @@ make_scripts()
 
 	exe_basename=$(basename ${iodemo_exe})
 
+	client_time_limits=(${client_time_limits//,/ })
+	time_limits_array_length=${#client_time_limits[@]}
+	idx=0
 	# create run scripts
 	for host in $(split_list ${host_list})
 	do
@@ -678,6 +686,14 @@ make_scripts()
 			else
 				client_bind=""
 			fi
+
+			if [ $idx -lt $time_limits_array_length ]; then
+				client_time_limit="-l ${client_time_limits[$idx]}"
+				idx=$((idx+1))
+			else
+				client_time_limit="-l inf"
+			fi
+
 			is_verbose && echo ${log_file}
 			cat >>${command_file} <<-EOF
 				function start_client_${i}() {
@@ -685,6 +701,7 @@ make_scripts()
 				    env IODEMO_ROLE=client_${i} ${extra_env_client} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
 				            ${iodemo_client_args} \\
+				            ${client_time_limit} \\
 				            ${client_connect_list} \\
 				            ${client_bind} \\
 				            ${log_redirect} ${log_file} &
