@@ -913,6 +913,10 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
                                  ucs_sys_namespace_type_t sys_ns_type,
                                  const uct_iface_is_reachable_params_t *params);
 
+int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *params,
+                                      const char *ndev_name,
+                                      struct sockaddr_storage *sa_remote);
+
 void uct_iface_fill_info_str_buf(const uct_iface_is_reachable_params_t *params,
                                  const char *fmt, ...);
 
