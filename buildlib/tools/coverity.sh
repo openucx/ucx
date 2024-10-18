@@ -104,21 +104,19 @@ run_coverity() {
 	fi
 	cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
 	nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
-	rc=$(($rc+$nerrors))
 
 	if [ $nerrors -gt 0 ]; then
-		cov-format-errors --dir $cov_build --emacs-style
+		error_log_file="$WORKSPACE/cov_error_log.txt"
+		cov-format-errors --dir $cov_build --emacs-style > "$error_log_file"
 		if [ -d "$WORKSPACE/$cov_build_id" ]; then
 			rm -rf $WORKSPACE/$cov_build_id
 		fi
 		cp -ar $cov_build $WORKSPACE/$cov_build_id
-		echo "not ok 1 Coverity Detected $nerrors failures"
 	else
-		echo "ok 1 Coverity found no issues"
 		rm -rf $cov_build
 	fi
 	modules_for_coverity_unload
-	return $rc
+	return $nerrors
 }
 
 parse_args $*
@@ -135,4 +133,10 @@ else
 	cd "${ucx_build_dir}"
 fi
 
-run_coverity "$mode"
+run_coverity "$mode" || {
+	set +x
+	azure_log_error "Coverity found $nerrors issues:"
+	cat "$WORKSPACE/cov_error_log.txt"
+	rm -f "$WORKSPACE/cov_error_log.txt"
+	exit 1
+}
