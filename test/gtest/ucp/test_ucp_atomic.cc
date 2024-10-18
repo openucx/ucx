@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_types.h> /* for atomic mode */
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_mm.h>
 }
 
@@ -17,7 +18,8 @@ class test_ucp_atomic : public test_ucp_memheap {
 public:
     /* Test variants */
     enum {
-        ATOMIC_MODE = UCS_MASK(2)
+        ATOMIC_MODE = UCS_MASK(2),
+        ODP         = UCS_BIT(2)
     };
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants,
@@ -28,6 +30,7 @@ public:
         add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_CPU, "cpu" + name);
         add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_DEVICE, "device" + name);
         add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_GUESS, "guess" + name);
+        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_CPU | ODP, "cpu/odp" + name);
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
@@ -124,17 +127,31 @@ protected:
 
     virtual void init() {
         int atomic_mode = get_variant_value() & ATOMIC_MODE;
+        int odp         = get_variant_value() & ODP;
         const char *atomic_mode_cfg =
                         (atomic_mode == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
                         (atomic_mode == UCP_ATOMIC_MODE_DEVICE) ? "device" :
                         (atomic_mode == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
                         "";
         modify_config("ATOMIC_MODE", atomic_mode_cfg);
+
+        if (odp) {
+            // Do not test device atomics with ODP since SW atomic emulation
+            // is disabled with device atomics and there can be configurations
+            // without atomic lanes with ODP support which would lead to failure
+            ASSERT_NE(atomic_mode, UCP_ATOMIC_MODE_DEVICE);
+
+            modify_config("REG_NONBLOCK_MEM_TYPES", "host");
+            modify_config("IB_ODP_MEM_TYPES", "host",
+                          SETENV_IF_NOT_EXIST);
+            modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
+
+        }
         test_ucp_memheap::init();
     }
 
     static unsigned default_num_iters() {
-        return ucs_max(100 / ucs::test_time_multiplier(), 1);
+        return ucs_max(32000 / ucs::test_time_multiplier(), 1);
     }
 
     void test(send_func_t send_func, uint64_t op_mask,
