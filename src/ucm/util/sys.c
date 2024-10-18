@@ -154,7 +154,7 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
     ssize_t read_size, offset;
     unsigned long start, end;
     char prot_c[4];
-    int line_num;
+    int line_num, length;
     int prot;
     char *ptr, *newline, *orig_buffer;
     int maps_fd;
@@ -235,14 +235,14 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
         /* address           perms offset   dev   inode   pathname
          * 00400000-0040b000 r-xp  00001a00 0a:0b 12345   /dev/mydev
          */
-        *newline = '\0';
+        length = newline - ptr;
         ret = sscanf(ptr, "%lx-%lx %4c %*x %*x:%*x %*d %n",
                      &start, &end, prot_c,
                      /* ignore offset, dev, inode */
                      &n /* save number of chars before path begins */);
         if (ret < 3) {
-            ucm_warn("failed to parse %s line %d: '%s'",
-                     UCM_PROC_SELF_MAPS, line_num, ptr);
+            ucm_warn("failed to parse %s line %d: '%.*s'",
+                     UCM_PROC_SELF_MAPS, line_num, length, ptr);
         } else {
             prot = 0;
             if (prot_c[0] == 'r') {

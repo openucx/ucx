@@ -439,6 +439,12 @@ protected:
         /* do nothing */
     }
 
+    virtual void cleanup() {
+        /* Clean the global memtype cache */
+        ucs_memtype_cache_cleanup();
+        ucs_memtype_cache_global_init();
+    }
+
     void test_unknown_region_found(const mem_buffer &b) const {
         test_ptr_found(b.ptr(), b.size(),
                        ((b.mem_type() == UCS_MEMORY_TYPE_HOST) ?
@@ -492,6 +498,10 @@ UCS_TEST_P(test_memtype_cache_deferred_create, lookup_adjacent_regions) {
 
 UCS_TEST_P(test_memtype_cache_deferred_create, lookup_overlapped_regions) {
     test_alloc_before_init(1000000, false, 1);
+}
+
+UCS_MT_TEST_P(test_memtype_cache_deferred_create, mt_cache_init, 8) {
+    test_alloc_before_init(1000000, false, 0);
 }
 
 INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache_deferred_create,
