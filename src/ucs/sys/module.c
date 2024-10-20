@@ -238,15 +238,10 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
     int mode;
     ucs_status_t status;
 
-    status = ucs_string_alloc_path_buffer(&module_path, "module_path");
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     if (!ucs_module_is_enabled(module_name)) {
         ucs_module_trace("module '%s' is disabled by configuration",
                          module_name);
-        goto out_free_module_path;
+        goto out;
     }
 
     mode = RTLD_LAZY;
@@ -260,6 +255,11 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
     }
 
     ucs_module_trace("loading module '%s' with mode 0x%x", module_name, mode);
+
+    status = ucs_string_alloc_path_buffer(&module_path, "module_path");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     for (i = 0; i < ucs_module_loader_state.srchpath_cnt; ++i) {
         snprintf(module_path, PATH_MAX, "%s/lib%s_%s%s",

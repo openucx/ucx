@@ -958,20 +958,21 @@ ucp_proto_select_write_info(ucp_worker_h worker,
     char *dir_path;
     int ret;
 
-    status = ucs_string_alloc_path_buffer(&dir_path, "dir_path");
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     ucp_proto_select_param_dump(worker, selected_config->ep_cfg_index,
                                 selected_config->rkey_cfg_index,
                                 &selected_config->select_param,
                                 ucp_operation_names, &ep_cfg_strb,
                                 &sel_param_strb);
     if (!ucp_proto_debug_is_info_enabled(
-                 worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
-        goto out_free_dir_path;
+                worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
+        goto out;
     }
+
+    status = ucs_string_alloc_path_buffer(&dir_path, "dir_path");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     ucs_fill_filename_template(worker->context->config.ext.proto_info_dir,
                                dir_path, PATH_MAX);
     ret = mkdir(dir_path, S_IRWXU | S_IRGRP | S_IXGRP);

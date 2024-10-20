@@ -284,16 +284,16 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     char *path_buffer;
     const char *sysfs_path;
 
-    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     uct_base_iface_query(&iface->super, attr);
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.c, &network_bw);
     if (status != UCS_OK) {
-        goto out_free_path_buffer;
+        goto out;
+    }
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        goto out;
     }
 
     sysfs_path             = uct_tcp_iface_get_sysfs_path(iface->if_name, path_buffer);
@@ -904,14 +904,14 @@ static int uct_tcp_is_bridge(const char *if_name)
     struct stat st;
     ucs_status_t status;
 
-    status = ucs_string_alloc_path_buffer(&path, "path");
+    status = ucs_string_alloc_formatted_path(&path, "path",
+                                             UCT_TCP_IFACE_NETDEV_DIR
+                                             "/%s/bridge",
+                                             if_name);
     if (status != UCS_OK) {
         ret = 0;
         goto out;
     }
-
-    ucs_snprintf_safe(path, PATH_MAX, UCT_TCP_IFACE_NETDEV_DIR "/%s/bridge",
-                      if_name);
 
     ret = (stat(path, &st) == 0) && S_ISDIR(st.st_mode);
 
@@ -932,24 +932,24 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     int is_active, i, n;
     ucs_status_t status;
     const char *sysfs_path;
-    char *path_buffer = ucs_malloc(PATH_MAX, "path_buffer");
+    char *path_buffer;
     ucs_sys_device_t sys_dev;
-
-    if (path_buffer == NULL) {
-        ucs_error("Failed to allocate memory for path buffer");
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
-    }
 
     n = scandir(UCT_TCP_IFACE_NETDEV_DIR, &entries, NULL, alphasort);
     if (n == -1) {
         ucs_error("scandir(%s) failed: %m", UCT_TCP_IFACE_NETDEV_DIR);
         status = UCS_ERR_IO_ERROR;
-        goto out_free_buffer;
+        goto out;
     }
 
     devices     = NULL;
     num_devices = 0;
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     ucs_carray_for_each(entry, entries, n) {
         /* According to the sysfs(5) manual page, all of entries
          * has to be a symbolic link representing one of the real
@@ -1012,7 +1012,6 @@ out_release:
     }
 
     free(entries);
-out_free_buffer:
     ucs_free(path_buffer);
 out:
     return status;

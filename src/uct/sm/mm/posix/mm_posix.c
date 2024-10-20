@@ -259,14 +259,16 @@ static ucs_status_t uct_posix_file_open(const char *dir, uint64_t mmid,
     int ret;
     ucs_status_t status;
 
-    status = ucs_string_alloc_path_buffer(&file_path, "file_path");
+    status = ucs_string_alloc_formatted_path(&file_path, "file_path",
+                                             "%s" UCT_POSIX_FILE_FMT, dir,
+                                             mmid);
     if (status != UCS_OK) {
         goto out;
     }
 
-    ucs_snprintf_safe(file_path, PATH_MAX, "%s" UCT_POSIX_FILE_FMT, dir, mmid);
     ret = open(file_path, open_flags | O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
-    status = uct_posix_open_check_result("open", file_path, open_flags, ret, fd_p);
+    status = uct_posix_open_check_result("open", file_path, open_flags, ret,
+                                         fd_p);
 
     ucs_free(file_path);
 out:
@@ -279,16 +281,16 @@ static ucs_status_t uct_posix_procfs_open(int pid, int peer_fd, int* fd_p)
     int ret;
     ucs_status_t status;
 
-    status = ucs_string_alloc_path_buffer(&file_path, "file_path");
+    status = ucs_string_alloc_formatted_path(&file_path, "file_path",
+                                             UCT_POSIX_PROCFS_FILE_FMT, pid,
+                                             peer_fd);
     if (status != UCS_OK) {
         goto out;
     }
 
-    ucs_snprintf_safe(file_path, PATH_MAX, UCT_POSIX_PROCFS_FILE_FMT, pid, peer_fd);
     ret = open(file_path, O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
     status = uct_posix_open_check_result("open", file_path, 0, ret, fd_p);
 
-out_free_file_path:
     ucs_free(file_path);
 out:
     return status;
@@ -303,15 +305,14 @@ uct_posix_unlink(uct_mm_md_t *md, uint64_t seg_id, ucs_log_level_t err_level)
     int ret;
     ucs_status_t status;
 
-
-    status = ucs_string_alloc_path_buffer(&file_path, "file_path");
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     if (seg_id & UCT_POSIX_SEG_FLAG_SHM_OPEN) {
-        ucs_snprintf_safe(file_path, PATH_MAX, UCT_POSIX_FILE_FMT,
-                          seg_id & UCT_POSIX_SEG_MMID_MASK);
+        status = ucs_string_alloc_formatted_path(
+                &file_path, "file_path", UCT_POSIX_FILE_FMT,
+                seg_id & UCT_POSIX_SEG_MMID_MASK);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
         ret = shm_unlink(file_path);
         if (ret < 0) {
             ucs_log(err_level, "shm_unlink(%s) failed: %m", file_path);
@@ -319,8 +320,13 @@ uct_posix_unlink(uct_mm_md_t *md, uint64_t seg_id, ucs_log_level_t err_level)
             goto out_free_file_path;
         }
     } else {
-        ucs_snprintf_safe(file_path, PATH_MAX, "%s" UCT_POSIX_FILE_FMT,
-                          posix_config->dir, seg_id & UCT_POSIX_SEG_MMID_MASK);
+        status = ucs_string_alloc_formatted_path(
+                &file_path, "file_path", "%s" UCT_POSIX_FILE_FMT,
+                posix_config->dir, seg_id & UCT_POSIX_SEG_MMID_MASK);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
         ret = unlink(file_path);
         if (ret < 0) {
             ucs_error("unlink(%s) failed: %m", file_path);

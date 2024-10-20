@@ -458,8 +458,8 @@ static bool netif_has_sysfs_file(const char *ifa_name, const char *file_name)
 {
     std::string path(PATH_MAX, '\0');
 
-    ucs_snprintf_safe(&path[0], path.size(), "/sys/class/net/%s/%s",
-                      ifa_name, file_name);
+    ucs_snprintf_safe(&path[0], path.size(), "/sys/class/net/%s/%s", ifa_name,
+                      file_name);
 
     struct stat st;
     return stat(path.c_str(), &st) >= 0;

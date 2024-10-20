@@ -907,11 +907,11 @@ UCS_TEST_P(test_pci_bw, get_pci_bw)
     const ucp_worker_iface_t *wiface;
 
     for (auto i = 0; i < worker->num_ifaces; ++i) {
-        wiface                = worker->ifaces[i];
-        const auto dev_name   = ctx->tl_rscs[wiface->rsc_index].tl_rsc.dev_name;
+        wiface              = worker->ifaces[i];
+        const auto dev_name = ctx->tl_rscs[wiface->rsc_index].tl_rsc.dev_name;
         const auto tcp_device = get_tcp_device(dev_name);
         const auto dev_path   = !tcp_device.empty() ? tcp_device :
-                                                      get_ib_device(dev_name);
+                                                        get_ib_device(dev_name);
 
         const char *sysfs_path = ucs_topo_resolve_sysfs_path(dev_path.c_str(),
                                                              &path_buffer[0]);

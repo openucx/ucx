@@ -252,11 +252,6 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
     size_t offset;
     int ret;
 
-    status = ucs_string_alloc_path_buffer(&dir_buf, "dir_buf");
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 
     /* Check 'stop' flag before entering the loop. If the main thread sets
@@ -288,6 +283,11 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             ucs_error("inotify_init() failed: %m");
         }
         status = UCS_ERR_IO_ERROR;
+        goto out_unlock;
+    }
+
+    status = ucs_string_alloc_path_buffer(&dir_buf, "dir_buf");
+    if (status != UCS_OK) {
         goto out_unlock;
     }
 
@@ -371,9 +371,9 @@ out_close_watch_id:
 out_close_inotify_fd:
     close(ucs_vfs_fuse_context.inotify_fd);
     ucs_vfs_fuse_context.inotify_fd = -1;
+    ucs_free(dir_buf);
 out_unlock:
     pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
-    ucs_free(dir_buf);
 out:
     return status;
 #else

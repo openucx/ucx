@@ -510,14 +510,9 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     uint8_t i;
     int ret;
 
-    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
     if (status != UCS_OK) {
-        goto out_free_path_buffer;
+        goto out;
     }
 
     /* Check device type */
@@ -546,8 +541,13 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
         if (ret != 0) {
             ucs_error("ibv_query_port() returned %d: %m", ret);
             status = UCS_ERR_IO_ERROR;
-            goto out_free_path_buffer;
+            goto out;
         }
+    }
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        goto out;
     }
 
     sysfs_path   = ucs_topo_resolve_sysfs_path(dev_path, path_buffer);
@@ -556,7 +556,6 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     uct_ib_device_set_pci_id(dev, sysfs_path);
     dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
-out_free_path_buffer:
     ucs_free(path_buffer);
 out:
     return status;

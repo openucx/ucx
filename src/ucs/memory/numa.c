@@ -132,12 +132,13 @@ ucs_numa_node_t ucs_numa_node_of_cpu(int cpu)
     ucs_assert(cpu < __CPU_SETSIZE);
 
     if (cpu_numa_node[cpu] == 0) {
-        status = ucs_string_alloc_path_buffer(&core_dir_path, "core_dir_path");
+        status = ucs_string_alloc_formatted_path(&core_dir_path,
+                                                 "core_dir_path",
+                                                 UCS_NUMA_CORE_DIR_PATH, cpu);
         if (status != UCS_OK) {
             return UCS_NUMA_NODE_UNDEFINED;
         }
 
-        ucs_snprintf_safe(core_dir_path, PATH_MAX, UCS_NUMA_CORE_DIR_PATH, cpu);
         node = ucs_numa_get_max_dirent(core_dir_path, "node",
                                        ucs_numa_num_configured_nodes(),
                                        UCS_NUMA_NODE_DEFAULT);

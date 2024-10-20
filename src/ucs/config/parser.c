@@ -1619,12 +1619,12 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
     FILE* file;
     ucs_status_t status;
 
-    status = ucs_string_alloc_path_buffer(&file_path, "file_path");
+    status = ucs_string_alloc_formatted_path(&file_path, "file_path", "%s/%s",
+                                             dir_path, file_name);
     if (status != UCS_OK) {
         goto out;
     }
 
-    ucs_snprintf_safe(file_path, MAXPATHLEN, "%s/%s", dir_path, file_name);
     file = fopen(file_path, "r");
     if (file == NULL) {
         ucs_debug("failed to open config file %s: %m", file_path);
@@ -1765,16 +1765,17 @@ void ucs_config_parse_config_files()
     const char *path_p;
     ucs_status_t status;
 
-    status = ucs_string_alloc_path_buffer(&path, "path");
-    if (status != UCS_OK) {
-        return;
-    }
-
     /* System-wide configuration file */
     ucs_config_parse_config_file(UCX_CONFIG_DIR, UCX_CONFIG_FILE_NAME, 1);
 
     /* Library dir */
     path_p = ucs_sys_get_lib_path();
+
+    status = ucs_string_alloc_path_buffer(&path, "path");
+    if (status != UCS_OK) {
+        return;
+    }
+
     if (path_p != NULL) {
         ucs_strncpy_safe(path, path_p, PATH_MAX);
         ucs_config_parse_config_file(dirname(path),

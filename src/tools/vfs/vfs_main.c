@@ -107,9 +107,18 @@ static int vfs_run_fusermount(char **extra_argv)
     return 0;
 }
 
-static void vfs_get_mountpoint(pid_t pid, char *mountpoint, size_t max_length)
+static char *vfs_get_mountpoint(pid_t pid)
 {
-    snprintf(mountpoint, max_length, "%s/%d", g_opts.mountpoint_dir, pid);
+    ucs_status_t status;
+    char *mountpoint;
+
+    status = ucs_string_alloc_formatted_path(&mountpoint, "mountpoint", "%s/%d",
+                                             g_opts.mountpoint_dir, pid);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    return mountpoint;
 }
 
 static const char *vfs_get_process_name(int pid, char *buf, size_t max_length)
@@ -157,13 +166,6 @@ int vfs_mount(int pid)
     char name[NAME_MAX];
     char *mountpoint;
     int fuse_fd, ret;
-    ucs_status_t status;
-
-    status = ucs_string_alloc_path_buffer(&mountpoint, "mountpoint");
-    if (status != UCS_OK) {
-        ret = -ENOMEM;
-        goto out;
-    }
 
     /* Add common mount options:
      * - File system name (source) : process name and pid
@@ -178,11 +180,16 @@ int vfs_mount(int pid)
             (strlen(g_opts.mount_opts) > 0) ? "," : "", g_opts.mount_opts);
     if (ret >= sizeof(mountopts)) {
         ret = -ENOMEM;
-        goto out_free_mountpoint;
+        goto out;
     }
 
     /* Create the mount point directory, and ignore "already exists" error */
-    vfs_get_mountpoint(pid, mountpoint, PATH_MAX);
+    mountpoint = vfs_get_mountpoint(pid);
+    if (mountpoint == NULL) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
     ret = mkdir(mountpoint, S_IRWXU);
     if ((ret < 0) && (errno != EEXIST)) {
         ret = -errno;
@@ -213,16 +220,14 @@ int vfs_unmount(int pid)
     char *mountpoint;
     char *argv[5];
     int ret;
-    ucs_status_t status;
 
-    status = ucs_string_alloc_path_buffer(&mountpoint, "mountpoint");
-    if (status != UCS_OK) {
+    /* Unmount FUSE file system */
+    mountpoint = vfs_get_mountpoint(pid);
+    if (mountpoint == NULL) {
         ret = -ENOMEM;
         goto out;
     }
 
-    /* Unmount FUSE file system */
-    vfs_get_mountpoint(pid, mountpoint, PATH_MAX);
     argv[0] = "-u";
     argv[1] = "-z";
     argv[2] = "--";
