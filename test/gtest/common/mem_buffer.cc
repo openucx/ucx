@@ -221,7 +221,7 @@ void mem_buffer::get_bar1_free_size_nvml()
 #endif
 }
 
-void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
+void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
 {
     void *ptr;
 
@@ -238,7 +238,16 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
         return ptr;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
-        CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
+#if CUDA_VERSION >= 11020
+        if (async) {
+            CUDA_CALL(cudaMallocAsync(&ptr, size, 0), ": size=" << size);
+            cudaStreamSynchronize(0);
+        } else {
+#endif
+            CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
+#if CUDA_VERSION >= 11020
+        }
+#endif
         return ptr;
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_CALL(cudaMallocManaged(&ptr, size), ": size=" << size);
@@ -258,7 +267,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
     }
 }
 
-void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
+void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
 {
     try {
         switch (mem_type) {
@@ -267,6 +276,17 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
             break;
 #if HAVE_CUDA
         case UCS_MEMORY_TYPE_CUDA:
+#if CUDA_VERSION >= 11020
+            if (async) {
+                cudaStreamSynchronize(0);
+                CUDA_CALL(cudaFreeAsync(ptr, 0), ": ptr=" << ptr);
+            } else {
+#endif
+                CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
+#if CUDA_VERSION >= 11020
+            }
+#endif
+            break;
         case UCS_MEMORY_TYPE_CUDA_MANAGED:
             CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
             break;
