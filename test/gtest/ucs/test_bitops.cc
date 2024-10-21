@@ -9,6 +9,19 @@ extern "C" {
 }
 
 class test_bitops : public ucs::test {
+protected:
+    static void
+    check_bitwise_equality(const uint8_t *buffer1, const uint8_t *buffer2,
+                           const std::vector<int> &indices, int max_equal_index)
+    {
+        for (int i : indices) {
+            if (i <= max_equal_index) {
+                ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, i));
+            } else {
+                ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, i));
+            }
+        }
+    }
 };
 
 UCS_TEST_F(test_bitops, ffs32) {
@@ -91,111 +104,38 @@ UCS_TEST_F(test_bitops, ptr_ctz) {
 }
 
 UCS_TEST_F(test_bitops, is_equal) {
-    uint8_t buffer1[20] = {0};
-    uint8_t buffer2[20] = {0};
+    uint8_t buffer1[20]            = {0};
+    uint8_t buffer2[20]            = {0};
+    const std::vector<int> indices = {0, 1, 8, 64, 65, 128, 130, 159, 160};
 
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 65));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 128));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 130));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 159));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 160));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 160);
 
     buffer1[19] = 0x1; /* 00000001 */
-
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 65));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 128));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 130));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 159));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 160));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 159);
 
     buffer1[19] = 0x10; /* 00010000 */
-
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 65));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 128));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 130));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 159));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 160));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 130);
 
     buffer1[16] = 0xff; /* 11111111 */
-
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 65));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 128));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 130));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 159));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 160));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 128);
 
     buffer1[9] = 0xff; /* 11111111 */
-
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 65));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 128));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 130));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 159));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 160));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 65);
 
     buffer1[7] = 0xff; /* 11111111 */
-
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 65));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 128));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 130));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 159));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 160));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 8);
 
     buffer1[1] = 0xff; /* 11111111 */
-
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 65));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 128));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 130));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 159));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 160));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 8);
 
     buffer1[0] = 0x1; /* 00000001 */
-
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 1);
 
     buffer2[0] = 0x1; /* 00000001 */
-
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 8);
 
     buffer2[0] = 0xff; /* 11111111 */
-
-    ASSERT_TRUE(ucs_bitwise_is_equal(buffer1, buffer2, 0));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 1));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
-    ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
+    test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 0);
 }
 
 template<typename Type> void test_mask()
