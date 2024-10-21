@@ -547,7 +547,6 @@ protected:
         remote_data = connect_args->remote_data;
         status      = connect_args->status;
 
-        self->handle_client_connecting_status(status);
         if (status == UCS_OK) {
             EXPECT_TRUE(ucs_test_all_flags(remote_data->field_mask,
                                            (UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH |
@@ -560,11 +559,15 @@ protected:
             status = uct_cm_client_ep_conn_notify(ep);
             ASSERT_UCS_OK(status);
 
-            self->m_state |= TEST_STATE_CLIENT_CONNECTED;
             self->m_client_connect_cb_cnt++;
+            self->m_state |= TEST_STATE_CLIENT_CONNECTED;
         } else {
             self->del_user_data(sa_user_data);
         }
+
+        /* m_state must only be modified after all cross-thread variables are
+         * updated */
+        self->handle_client_connecting_status(status);
     }
 
     static void
@@ -610,8 +613,8 @@ protected:
                                                  TEST_STATE_CLIENT_DISCONNECTED)));
     }
 
-    void wait_for_client_server_counters(volatile int *server_cnt,
-                                         volatile int *client_cnt, int val,
+    void wait_for_client_server_counters(std::atomic<int> *server_cnt,
+                                         std::atomic<int> *client_cnt, int val,
                                          double timeout = 10 * DEFAULT_TIMEOUT_SEC) {
         ucs_time_t deadline;
 
@@ -775,9 +778,9 @@ protected:
     entity                 *m_server;
     entity                 *m_client;
     std::atomic<int>       m_server_recv_req_cnt;
-    volatile int           m_client_connect_cb_cnt,
+    std::atomic<int>       m_client_connect_cb_cnt,
                            m_server_connect_cb_cnt;
-    volatile int           m_server_disconnect_cnt, m_client_disconnect_cnt;
+    std::atomic<int>       m_server_disconnect_cnt, m_client_disconnect_cnt;
     bool                   m_reject_conn_request;
     bool                   m_server_start_disconnect;
     bool                   m_delay_conn_reply;
@@ -1206,17 +1209,12 @@ public:
         }
     }
 
-    void disconnect_cnt_increment(volatile int *cnt) {
-        ucs::scoped_mutex_lock lock(m_lock);
-        (*cnt)++;
-    }
-
     static void server_disconnect_cb(uct_ep_h ep, void *arg) {
         test_uct_sockaddr_stress *self =
                         reinterpret_cast<test_uct_sockaddr_stress *>(arg);
 
         self->common_test_disconnect(ep);
-        self->disconnect_cnt_increment(&self->m_server_disconnect_cnt);
+        self->m_server_disconnect_cnt++;
     }
 
     static void client_disconnect_cb(uct_ep_h ep, void *arg) {
@@ -1227,7 +1225,7 @@ public:
 
         EXPECT_EQ(sa_user_data->get_ep(), ep);
         self->common_test_disconnect(ep);
-        self->disconnect_cnt_increment(&self->m_client_disconnect_cnt);
+        self->m_client_disconnect_cnt++;
         self->del_user_data(sa_user_data);
     }
 
