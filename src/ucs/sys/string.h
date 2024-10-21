@@ -371,7 +371,7 @@ static inline int ucs_string_is_empty(const char *str)
 ucs_status_t ucs_string_alloc_path_buffer(char **buffer_p, const char *name);
 
 /**
- * Allocate a buffer and format a path string into it.
+ * Allocate a path buffer of size PATH_MAX and format a path string into it.
  *
  * @param buffer_p Pointer to the buffer.
  *                 The buffer is allocated and should be released by the caller.

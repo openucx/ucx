@@ -445,6 +445,7 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     }
 
     /* Report best perf for common PCI bridge or sysfs parsing error */
+    status = ucs_topo_get_distance_default(device1, device2, distance);
 out_free_common_path:
     ucs_free(common_path);
 out_free_path2:

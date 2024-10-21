@@ -269,7 +269,6 @@ static ucs_status_t uct_posix_file_open(const char *dir, uint64_t mmid,
     ret = open(file_path, open_flags | O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
     status = uct_posix_open_check_result("open", file_path, open_flags, ret,
                                          fd_p);
-
     ucs_free(file_path);
 out:
     return status;
@@ -288,9 +287,8 @@ static ucs_status_t uct_posix_procfs_open(int pid, int peer_fd, int* fd_p)
         goto out;
     }
 
-    ret = open(file_path, O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
+    ret    = open(file_path, O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
     status = uct_posix_open_check_result("open", file_path, 0, ret, fd_p);
-
     ucs_free(file_path);
 out:
     return status;
