@@ -1,5 +1,9 @@
 #!/bin/bash -eE
 
+realdir=$(realpath $(dirname $0))
+source ${realdir}/../az-helpers.sh
+trap "log_info_on_exit" EXIT
+
 log_info() {
   proc_name=$(ps -p "$2" -o comm --no-headers)
   logger -p user.info -t zombie_killer "$1: PID $2, P_NAME $proc_name"
