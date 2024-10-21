@@ -20,6 +20,18 @@
 #include <pthread.h>
 #include <nvml.h>
 
+
+typedef struct {
+    uint64_t     system_uuid;
+#if HAVE_NVML_FABRIC_INFO
+    struct {
+        uint32_t clique_id;
+        uint8_t  cluster_uuid[NVML_GPU_FABRIC_UUID_LEN];
+    } mnnvl_addr;
+#endif
+} UCS_S_PACKED uct_cuda_ipc_device_addr_t;
+
+
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 
     {"", "", NULL,
@@ -63,7 +75,22 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t)(uct_iface_t*);
 ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
                                                    uct_device_addr_t *addr)
 {
-    *(uint64_t*)addr = ucs_get_system_id();
+    uct_cuda_ipc_device_addr_t *dev_addr = (uct_cuda_ipc_device_addr_t*)addr;
+#if HAVE_NVML_FABRIC_INFO
+    uct_cuda_ipc_iface_t *iface          = ucs_derived_of(tl_iface,
+                                                          uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_md_t *md                = ucs_derived_of(iface->super.super.md,
+                                                           uct_cuda_ipc_md_t);
+
+    if (md->enable_mnnvl) {
+        memcpy(dev_addr->mnnvl_addr.cluster_uuid, &md->fabric_info.clusterUuid,
+               sizeof(dev_addr->mnnvl_addr.cluster_uuid));
+        dev_addr->mnnvl_addr.clique_id = md->fabric_info.cliqueId;
+    }
+#endif
+
+    dev_addr->system_uuid = ucs_get_system_id();
+
     return UCS_OK;
 }
 
@@ -74,56 +101,69 @@ static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static int uct_cuda_ipc_iface_is_mnnvl_supported(uct_cuda_ipc_md_t *md)
+static int
+uct_cuda_ipc_iface_mnnvl_reachable(uct_cuda_ipc_md_t *md,
+                                   const uct_cuda_ipc_device_addr_t *dev_addr,
+                                   size_t dev_addr_len,
+                                   const uct_iface_is_reachable_params_t *params)
 {
-#if HAVE_CUDA_FABRIC
-    CUdevice cu_device;
-    int coherent;
-    ucs_status_t status;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
-    if (status != UCS_OK) {
+#if HAVE_NVML_FABRIC_INFO
+    if (memcmp(&dev_addr->mnnvl_addr.cluster_uuid,
+                &md->fabric_info.clusterUuid,
+               sizeof(dev_addr->mnnvl_addr.cluster_uuid))) {
+        uct_iface_fill_info_str_buf(params, "cluster uuid doesn't match");
         return 0;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuDeviceGetAttribute(&coherent,
-                                 CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES,
-                                 cu_device));
-    if (status != UCS_OK) {
+    if (dev_addr->mnnvl_addr.clique_id != md->fabric_info.cliqueId){
+        uct_iface_fill_info_str_buf(params, "clique id doesn't match");
         return 0;
     }
 
-    return coherent && (md->enable_mnnvl != UCS_NO);
-#else
-    return 0;
+    return 1;
 #endif
+
+    return 0;
 }
 
 static int
 uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
-    uct_base_iface_t *base_iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-    uct_cuda_ipc_md_t *md        = ucs_derived_of(base_iface->md, uct_cuda_ipc_md_t);
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
+                                                 uct_cuda_ipc_md_t);
+    const uct_cuda_ipc_device_addr_t *dev_addr;
+    size_t dev_addr_len;
+    int same_uuid;
 
     if (!uct_iface_is_reachable_params_addrs_valid(params)) {
         return 0;
     }
 
-    if (getpid() == *(pid_t*)params->iface_addr) {
+    dev_addr_len = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
+                                   device_addr_length, DEVICE_ADDR_LENGTH,
+                                   sizeof(uint64_t));
+    dev_addr        = (const uct_cuda_ipc_device_addr_t *)UCS_PARAM_VALUE(
+                        UCT_IFACE_IS_REACHABLE_FIELD, params, device_addr,
+                        DEVICE_ADDR, NULL);
+    same_uuid       = ucs_get_system_id() == dev_addr->system_uuid;
+
+    if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid) {
         uct_iface_fill_info_str_buf(params, "same process");
         return 0;
     }
 
-    /* Either multi-node NVLINK should be supported or iface has to be on the
-     * same node for cuda-ipc to be reachable */
-    if ((ucs_get_system_id() != *((const uint64_t*)params->device_addr)) &&
-        !uct_cuda_ipc_iface_is_mnnvl_supported(md)) {
+    if (md->enable_mnnvl && (dev_addr_len != sizeof(uint64_t))) {
+        if (!uct_cuda_ipc_iface_mnnvl_reachable(md, dev_addr, dev_addr_len,
+                                                params)) {
+            return 0;
+        }
+    } else if (!same_uuid) {
         uct_iface_fill_info_str_buf(params,
                                     "different system id %"PRIx64" vs %"PRIx64"",
-                                    ucs_get_system_id(),
-                                    *((const uint64_t*)params->device_addr));
+                                    ucs_get_system_id(), dev_addr->system_uuid);
+
         return 0;
     }
 
@@ -245,7 +285,9 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     uct_base_iface_query(&iface->super.super, iface_attr);
 
     iface_attr->iface_addr_len          = sizeof(pid_t);
-    iface_attr->device_addr_len         = sizeof(uint64_t);
+    iface_attr->device_addr_len         = (md->enable_mnnvl) ?
+                                          sizeof(uct_cuda_ipc_device_addr_t) :
+                                          sizeof(uint64_t);
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
@@ -253,7 +295,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_PENDING          |
                                           UCT_IFACE_FLAG_GET_ZCOPY        |
                                           UCT_IFACE_FLAG_PUT_ZCOPY;
-    if (uct_cuda_ipc_iface_is_mnnvl_supported(md)) {
+    if (md->enable_mnnvl) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_INTER_NODE;
     }
 
@@ -614,7 +656,7 @@ uct_cuda_ipc_query_devices(
     uct_device_type_t dev_type = UCT_DEVICE_TYPE_SHM;
     uct_cuda_ipc_md_t *md      = ucs_derived_of(uct_md, uct_cuda_ipc_md_t);
 
-    if (uct_cuda_ipc_iface_is_mnnvl_supported(md)) {
+    if (md->enable_mnnvl) {
         dev_type = UCT_DEVICE_TYPE_NET;
     }
 
