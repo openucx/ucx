@@ -550,6 +550,82 @@ static void ucp_worker_flush_ep_flushed_cb(ucp_request_t *req)
     ucp_request_put(req);
 }
 
+static void ucp_worker_print_eps_order(ucs_list_link_t *all_eps_head, const char *msg)
+{
+    ucs_list_link_t *node;
+    int index = 0;
+
+    ucs_info("%s", msg);
+
+    node = all_eps_head->next;
+    while (node != all_eps_head) {
+        ucp_ep_ext_t *ep_ext = ucs_container_of(node, ucp_ep_ext_t, ep_list);
+        ucs_info("EP #%d: %p", index++, ep_ext->ep);
+        node = node->next;
+    }
+}
+
+static void ucp_worker_flush_mix_all_eps_order(ucs_list_link_t *all_eps_head,
+                                               unsigned int num_all_eps)
+{
+    ucs_list_link_t **node_array;
+    ucs_list_link_t *node, *temp, *current, *next, *prev;
+    int i, j;
+
+    if (num_all_eps <= 1) {
+        // ucs_info("Number of endpoints is too small for shuffling: %u", num_all_eps);
+        return;
+    }
+
+    ucp_worker_print_eps_order(all_eps_head, "Before shuffling");
+
+    /* Allocate memory for the array */
+    node_array = ucs_malloc(num_all_eps * sizeof(*node_array), "node_array");
+    if (node_array == NULL) {
+        ucs_error("Failed to allocate memory for node array");
+        return;
+    }
+
+    /* Copy the list to an array */
+    node = all_eps_head->next;
+    for (i = 0; i < num_all_eps && node != all_eps_head; i++) {
+        node_array[i] = node;
+        node = node->next;
+    }
+
+    /* Fisher-Yates shuffle algorithm */
+    for (i = num_all_eps - 1; i > 0; i--) {
+        j = ucs_rand() % (i + 1);
+        temp = node_array[i];
+        node_array[i] = node_array[j];
+        node_array[j] = temp;
+    }
+
+    /* Rebuild the linked list using the shuffled array */
+    for (i = 0; i < num_all_eps; i++) {
+        current = node_array[i];
+        next = (i < num_all_eps - 1) ? node_array[i + 1] : all_eps_head;
+        prev = (i > 0) ? node_array[i - 1] : all_eps_head;
+
+        current->prev = prev;
+        current->next = next;
+
+        if (prev != all_eps_head) {
+            prev->next = current;
+        }
+        if (next != all_eps_head) {
+            next->prev = current;
+        }
+    }
+
+    all_eps_head->next = node_array[0];
+    all_eps_head->prev = node_array[num_all_eps - 1];
+
+    ucs_free(node_array);
+
+    ucp_worker_print_eps_order(all_eps_head, "After shuffling");
+}
+
 static unsigned ucp_worker_flush_progress(void *arg)
 {
     ucp_request_t *req        = arg;
@@ -558,6 +634,10 @@ static unsigned ucp_worker_flush_progress(void *arg)
     void *ep_flush_request;
     ucs_status_t status;
     ucp_ep_h ep;
+
+    if (ucs_list_is_only(&worker->all_eps, worker->all_eps.next)) {
+        // ucs_info("Number of endpoints is too small for shuffling: only one endpoint present.");
+    }
 
     if (worker->flush_ops_count == 0) {
         /* all scheduled progress operations on worker were completed */
@@ -632,6 +712,8 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
                                          when finished going over all endpoints */
     req->flush_worker.uct_flags  = uct_flags;
     req->flush_worker.prog_id    = UCS_CALLBACKQ_ID_NULL;
+
+    ucp_worker_flush_mix_all_eps_order(&worker->all_eps, worker->num_all_eps);
 
     ucp_worker_flush_req_set_next_ep(req, 0, worker->all_eps.next);
     ucp_request_set_send_callback_param(param, req, flush_worker);
