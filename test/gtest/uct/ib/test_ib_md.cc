@@ -327,7 +327,7 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
                    MAP_PRIVATE | MAP_ANONYMOUS |
                            ((ptr != nullptr) ? MAP_FIXED : 0),
                    -1, 0);
-        return ptr != MAP_FAILED ? ptr : nullptr;
+        return (ptr != MAP_FAILED) ? ptr : nullptr;
     };
 
     /* Find an available VMA */

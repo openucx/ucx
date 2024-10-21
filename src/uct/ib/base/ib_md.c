@@ -219,7 +219,6 @@ typedef struct {
     void                          *address;
     size_t                        length;
     size_t                        first_mr_size;
-    int                           mr_idx;
     const uct_md_mem_reg_params_t *params;
     uint64_t                      access_flags;
     struct ibv_mr                 **mrs;
@@ -285,6 +284,7 @@ uct_ib_md_print_mem_reg_err_msg(const char *title, void *address, size_t length,
 
 void *uct_ib_md_mem_handle_thread_func(void *arg)
 {
+    int mr_idx                      = 0;
     uct_ib_md_mem_reg_thread_t *ctx = arg;
     size_t chunk_size               = ctx->md->config.mt_reg_chunk;
     ucs_time_t UCS_V_UNUSED t0      = ucs_get_time();
@@ -295,37 +295,43 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
     while (ctx->length > 0) {
         if (ctx->params != NULL) {
             status = uct_ib_reg_mr(ctx->md, ctx->address, length, ctx->params,
-                                   ctx->access_flags, NULL,
-                                   &ctx->mrs[ctx->mr_idx]);
+                                   ctx->access_flags, NULL, &ctx->mrs[mr_idx]);
             if (status != UCS_OK) {
                 goto err_dereg;
             }
 
         } else {
-            status = uct_ib_dereg_mr(ctx->mrs[ctx->mr_idx]);
+            status = uct_ib_dereg_mr(ctx->mrs[mr_idx]);
             if (status != UCS_OK) {
-                ucs_warn("failed to deregister mr_idx=%d", ctx->mr_idx);
+                ucs_warn("failed to deregister mr_idx=%d", mr_idx);
             }
         }
         ctx->address = UCS_PTR_BYTE_OFFSET(ctx->address, length);
         ctx->length -= length;
         length       = ucs_min(ctx->length, chunk_size);
-        ctx->mr_idx++;
+        mr_idx++;
     }
 
     ucs_trace("%s %p..%p (first_mr_size %zu) took %f usec\n",
               (ctx->params != NULL) ? "reg_mr" : "dereg_mr",
               start, ctx->address, ctx->first_mr_size,
               ucs_time_to_usec(ucs_get_time() - t0));
-    return UCS_STATUS_PTR(UCS_OK);
+    return (void*)(intptr_t)mr_idx;
 
 err_dereg:
-    while (ctx->mr_idx-- > 0) {
-        (void)uct_ib_dereg_mr(ctx->mrs[ctx->mr_idx]);
+    while (mr_idx-- > 0) {
+        (void)uct_ib_dereg_mr(ctx->mrs[mr_idx]);
     }
 
+    ucs_assertv(UCS_STATUS_IS_ERR(status),
+                "Cannot return in-progress memory thread handling");
     return UCS_STATUS_PTR(status);
 }
+
+typedef struct {
+    uct_ib_md_mem_reg_thread_t ctx;
+    int                        mr_count;
+} uct_ib_md_mem_reg_context_t;
 
 ucs_status_t
 uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
@@ -336,7 +342,8 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     size_t chunk_size = md->config.mt_reg_chunk;
     int thread_num_mrs, thread_num, thread_idx, mr_idx, cpu_id;
     ucs_sys_cpuset_t parent_set, thread_set;
-    uct_ib_md_mem_reg_thread_t *ctxs, *ctx;
+    uct_ib_md_mem_reg_context_t *context;
+    uct_ib_md_mem_reg_thread_t *ctx;
     char UCS_V_UNUSED affinity_str[64];
     pthread_attr_t attr;
     ucs_status_t status;
@@ -361,8 +368,8 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
               ucs_make_affinity_str(&parent_set, affinity_str,
                                     sizeof(affinity_str)));
 
-    ctxs = ucs_calloc(thread_num, sizeof(*ctxs), "ib mr ctxs");
-    if (ctxs == NULL) {
+    context = ucs_calloc(thread_num, sizeof(*context), "ib mr context");
+    if (context == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -377,13 +384,12 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
          * get proportional amount */
         thread_num_mrs    = ucs_div_round_up(mr_num - mr_idx,
                                              thread_num - thread_idx);
-        ctx               = &ctxs[thread_idx];
+        ctx               = &context[thread_idx].ctx;
         ctx->md           = md;
         ctx->address      = UCS_PTR_BYTE_OFFSET(address, offset);
         ctx->params       = params;
         ctx->access_flags = access_flags;
         ctx->mrs          = &mrs[mr_idx];
-        ctx->mr_idx       = 0;
 
         /* First MR size can be different to align further MRs */
         padding            = ucs_padding((uintptr_t)ctx->address, chunk_size);
@@ -422,22 +428,26 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     }
 
     for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
-        ctx = &ctxs[thread_idx];
+        ctx = &context[thread_idx].ctx;
         pthread_join(ctx->thread, &thread_status);
+
         if (UCS_PTR_IS_ERR(thread_status)) {
             status = UCS_PTR_STATUS(thread_status);
+            context[thread_idx].mr_count = -1;
+        } else {
+            context[thread_idx].mr_count = (int)(intptr_t)thread_status;
         }
     }
 
     if ((status != UCS_OK) && (params != NULL)) {
         for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
-            for (mr_idx = 0; mr_idx < ctxs[thread_idx].mr_idx; mr_idx++) {
-                (void)uct_ib_dereg_mr(ctxs[thread_idx].mrs[mr_idx]);
+            for (mr_idx = 0; mr_idx < context[thread_idx].mr_count; mr_idx++) {
+                (void)uct_ib_dereg_mr(context[thread_idx].ctx.mrs[mr_idx]);
             }
         }
     }
 
-    ucs_free(ctxs);
+    ucs_free(context);
     pthread_attr_destroy(&attr);
 
     return status;
