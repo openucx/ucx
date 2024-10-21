@@ -363,10 +363,26 @@ static inline int ucs_string_is_empty(const char *str)
  * Allocates a path buffer of size PATH_MAX.
  *
  * @param buffer_p Pointer to the buffer.
+ *                 The buffer is allocated and should be released by the caller.
  * @param name     Name of the buffer for logging.
- * @return         UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ *
+ * @return UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
  */
 ucs_status_t ucs_string_alloc_path_buffer(char **buffer_p, const char *name);
+
+/**
+ * Allocate a path buffer of size PATH_MAX and format a path string into it.
+ *
+ * @param buffer_p Pointer to the buffer.
+ *                 The buffer is allocated and should be released by the caller.
+ * @param name     Name of the buffer for logging.
+ * @param fmt      Format string for the path.
+ * @param ...      Arguments for the format string.
+ *
+ * @return UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ */
+ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
+                                             const char *fmt, ...);
 
 END_C_DECLS
 

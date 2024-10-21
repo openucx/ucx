@@ -64,9 +64,10 @@ UCS_TEST_F(test_string, common_prefix_len) {
 }
 
 UCS_TEST_F(test_string, path) {
-    char path[PATH_MAX];
-    ucs_path_get_common_parent("/sys/dev/one", "/sys/dev/two", path);
-    EXPECT_STREQ("/sys/dev", path);
+    std::string path(PATH_MAX, '\0');
+
+    ucs_path_get_common_parent("/sys/dev/one", "/sys/dev/two", &path[0]);
+    EXPECT_STREQ("/sys/dev", path.c_str());
 
     EXPECT_EQ(4, ucs_path_calc_distance("/root/foo/bar", "/root/charlie/fox"));
     EXPECT_EQ(2, ucs_path_calc_distance("/a/b/c/d", "/a/b/c/e"));
