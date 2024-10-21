@@ -17,7 +17,9 @@
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/async/async.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/ucs_netlink.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
@@ -1031,6 +1033,23 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
                     my_addr.sys_ns, addr_ns->sys_ns);
         return 0;
     }
+    return 1;
+}
+
+int uct_iface_is_reachable_by_routing(
+        const uct_iface_is_reachable_params_t *params, const char *iface,
+        struct sockaddr_storage *sa_remote)
+{
+    char ip_str[128];
+
+    if (!ucs_netlink_rule_exists(iface, sa_remote)) {
+        uct_iface_fill_info_str_buf(
+                params, "remote address %s is not routable",
+                ucs_sockaddr_str((struct sockaddr*)&sa_remote, ip_str, 128));
+
+        return 0;
+    }
+
     return 1;
 }
 
