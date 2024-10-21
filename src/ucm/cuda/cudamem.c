@@ -121,6 +121,8 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocManaged, cudaError_t, -1, void**,
                                   size_t, unsigned int)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocPitch, cudaError_t, -1, void**,
                                   size_t*, size_t, size_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaGetSymbolAddress, cudaError_t, -1, void**,
+                                  const void*)
 
 static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length)
 {
@@ -225,8 +227,24 @@ static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
 #if CUDA_VERSION >= 11020
     UCM_CUDA_FUNC_ENTRY(cuMemFreeAsync),
 #endif
+    /**
+     * cudaGetSymbolAddress is in ucm_cuda_driver_funcs list because
+     * hook for cuModuleGetGlobal doesn't intercept cudaGetSymbolAddress call.
+     * */
+    UCM_CUDA_FUNC_ENTRY(cudaGetSymbolAddress),
     {{NULL}, NULL}
 };
+
+static size_t ucm_cuda_get_symbol_size(const void *symbol)
+{
+    size_t size;
+
+    if (cudaGetSymbolSize(&size, symbol) != cudaSuccess) {
+        return 1;
+    }
+
+    return size;
+}
 
 /* Runtime API replacements */
 UCM_CUDA_ALLOC_FUNC(cudaMalloc, cudaError_t, cudaSuccess, arg0, void*, *,
@@ -243,6 +261,9 @@ UCM_CUDA_ALLOC_FUNC(cudaMallocFromPoolAsync, cudaError_t, cudaSuccess, arg0,
                     void*, *, "size=%zu pool=%p stream=%p", size_t,
                     cudaMemPool_t, cudaStream_t)
 #endif
+UCM_CUDA_ALLOC_FUNC(cudaGetSymbolAddress, cudaError_t, cudaSuccess,
+                    ucm_cuda_get_symbol_size(arg0), void*, *, "symbol=%p",
+                    const void*)
 UCM_CUDA_FREE_FUNC(cudaFree, UCS_MEMORY_TYPE_CUDA, cudaError_t, arg0, 0,
                    "devPtr=%p", void*)
 UCM_CUDA_FREE_FUNC(cudaFreeHost, UCS_MEMORY_TYPE_HOST, cudaError_t, arg0, 0,
