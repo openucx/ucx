@@ -1938,12 +1938,12 @@ private:
 
     ucs_memory_type_t tx_memtype() const override
     {
-        return variant_value_to_mem_type(2);
+        return variant_index_to_mem_type(2);
     }
 
     ucs_memory_type_t rx_memtype() const override
     {
-        return variant_value_to_mem_type(3);
+        return variant_index_to_mem_type(3);
     }
 
     bool tx_memtype_async() const override
@@ -1956,7 +1956,7 @@ private:
         return get_variant_value(3) == MEMORY_TYPE_CUDA_ASYNC;
     }
 
-    ucs_memory_type_t variant_value_to_mem_type(unsigned index) const
+    ucs_memory_type_t variant_index_to_mem_type(unsigned index) const
     {
         auto variant_value = get_variant_value(index);
         switch (variant_value) {
@@ -1969,7 +1969,7 @@ private:
         case MEMORY_TYPE_CUDA_ASYNC:
             return UCS_MEMORY_TYPE_CUDA;
         default:
-            UCS_TEST_ABORT("invalid memory type");
+            UCS_TEST_ABORT("invalid memory type: " << variant_value);
             return UCS_MEMORY_TYPE_HOST;
         }
     }
