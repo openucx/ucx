@@ -41,18 +41,20 @@ void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr)
 
 int ucs_vfs_sock_mkdir(const char *sock_path, ucs_log_level_t log_level)
 {
+    char *dirname = NULL;
     char *sock_path_dir;
     int ret;
     ucs_status_t status;
 
-    status = ucs_string_alloc_path_buffer(&sock_path_dir, "sock_path_dir");
+    status = ucs_string_alloc_path_buffer_and_get_dirname(&sock_path_dir,
+                                                          "sock_path_dir",
+                                                          sock_path, dirname);
     if (status != UCS_OK) {
         ret = -ENOMEM;
         goto out;
     }
 
-    ucs_strncpy_safe(sock_path_dir, sock_path, PATH_MAX);
-    ret = mkdir(dirname(sock_path_dir), S_IRWXU);
+    ret = mkdir(dirname, S_IRWXU);
     if ((ret < 0) && (errno != EEXIST)) {
         ucs_log(log_level, "failed to create directory '%s': %m",
                 sock_path_dir);

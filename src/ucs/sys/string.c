@@ -484,3 +484,20 @@ ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
     *buffer_p = temp_buffer;
     return UCS_OK;
 }
+
+ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
+                                                          const char *name,
+                                                          const char *path,
+                                                          char *dir)
+{
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(buffer_p, name);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_strncpy_safe(*buffer_p, path, PATH_MAX);
+    dir = dirname(*buffer_p);
+    return UCS_OK;
+}

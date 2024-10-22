@@ -242,11 +242,11 @@ out_unlock:
 static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
 {
 #ifdef HAVE_INOTIFY
+    char *watch_dirname = NULL;
     char *dir_buf;
     char event_buf[sizeof(struct inotify_event) + NAME_MAX];
     const struct inotify_event *event;
     char watch_filename[NAME_MAX];
-    const char *watch_dirname;
     ucs_status_t status;
     ssize_t nread;
     size_t offset;
@@ -286,16 +286,16 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
         goto out_unlock;
     }
 
-    status = ucs_string_alloc_path_buffer(&dir_buf, "dir_buf");
+    status = ucs_string_alloc_path_buffer_and_get_dirname(&dir_buf, "dir_buf",
+                                                          path, watch_dirname);
     if (status != UCS_OK) {
         goto out_unlock;
     }
 
-    /* copy path components to 'dir_buf' and 'watch_filename' */
-    ucs_strncpy_safe(dir_buf, path, PATH_MAX);
+    /* copy path components to 'watch_filename' */
     ucs_strncpy_safe(watch_filename, ucs_basename(path),
                      sizeof(watch_filename));
-    watch_dirname = dirname(dir_buf);
+
 
     /* Watch for new files in 'watch_dirname' and monitor if this watch gets
      * deleted explicitly or implicitly */
