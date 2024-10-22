@@ -392,14 +392,14 @@ ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
  *                The buffer is allocated and should be released by the caller.
  * @param name     Name of the buffer for logging.
  * @param path     Path to get the directory name from.
- * @param dir      Buffer to hold the directory name.
+ * @param dir_p    Pointer to the directory name.
  *
  * @return UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
  */
 ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
                                                           const char *name,
                                                           const char *path,
-                                                          char *dir);
+                                                          char **dir_p);
 
 END_C_DECLS
 

@@ -470,7 +470,7 @@ ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
 {
     va_list ap;
     ucs_status_t status;
-    char *temp_buffer;
+    char *temp_buffer = NULL;
 
     status = ucs_string_alloc_path_buffer(&temp_buffer, name);
     if (status != UCS_OK) {
@@ -488,7 +488,7 @@ ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
 ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
                                                           const char *name,
                                                           const char *path,
-                                                          char *dir)
+                                                          char **dir_p)
 {
     ucs_status_t status;
 
@@ -498,6 +498,6 @@ ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
     }
 
     ucs_strncpy_safe(*buffer_p, path, PATH_MAX);
-    dir = dirname(*buffer_p);
+    *dir_p = dirname(*buffer_p);
     return UCS_OK;
 }

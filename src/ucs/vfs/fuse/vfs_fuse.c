@@ -242,8 +242,7 @@ out_unlock:
 static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
 {
 #ifdef HAVE_INOTIFY
-    char *watch_dirname = NULL;
-    char *dir_buf;
+    char *dir_buf, *watch_dirname;
     char event_buf[sizeof(struct inotify_event) + NAME_MAX];
     const struct inotify_event *event;
     char watch_filename[NAME_MAX];
@@ -287,7 +286,7 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
     }
 
     status = ucs_string_alloc_path_buffer_and_get_dirname(&dir_buf, "dir_buf",
-                                                          path, watch_dirname);
+                                                          path, &watch_dirname);
     if (status != UCS_OK) {
         goto out_unlock;
     }

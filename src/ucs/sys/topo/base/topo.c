@@ -392,20 +392,18 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     /* If one of the devices is unknown, we assume near topology */
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
-        status = ucs_topo_get_distance_default(device1, device2, distance);
-        goto out;
+        goto out_default_distance;
     }
 
     status = ucs_string_alloc_path_buffer(&path1, "path1");
     if (status != UCS_OK) {
-        goto out;
+        goto out_default_distance;
     }
 
     status = ucs_topo_sys_dev_to_sysfs_path(device1, path1, PATH_MAX);
     if (status != UCS_OK) {
         ucs_debug("failed to get sysfs path for %s",
                   ucs_topo_sys_device_get_name(device1));
-        status = ucs_topo_get_distance_default(device1, device2, distance);
         goto out_free_path1;
     }
 
@@ -418,7 +416,6 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     if (status != UCS_OK) {
         ucs_debug("failed to get sysfs path for %s",
                   ucs_topo_sys_device_get_name(device2));
-        status = ucs_topo_get_distance_default(device1, device2, distance);
         goto out_free_path2;
     }
 
@@ -431,28 +428,31 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     if (ucs_topo_is_pci_root(common_path)) {
         ucs_topo_set_distance(&ucs_global_opts.dist.phb,
                               ucs_topo_pci_root_bw(path1, path2), distance);
-        goto out_free_common_path;
+        goto out;
     } else if (ucs_topo_is_sys_root(common_path)) {
         if (ucs_topo_is_same_numa_node(device1, device2)) {
             ucs_topo_set_distance(&ucs_global_opts.dist.node, 17000 * UCS_MBYTE,
                                   distance);
-            goto out_free_common_path;
+            goto out;
         }
 
         ucs_topo_set_distance(&ucs_global_opts.dist.sys, 220 * UCS_MBYTE,
                               distance);
-        goto out_free_common_path;
+        goto out;
     }
 
     /* Report best perf for common PCI bridge or sysfs parsing error */
-    status = ucs_topo_get_distance_default(device1, device2, distance);
-out_free_common_path:
     ucs_free(common_path);
 out_free_path2:
     ucs_free(path2);
 out_free_path1:
     ucs_free(path1);
+out_default_distance:
+    return ucs_topo_get_distance_default(device1, device2, distance);
 out:
+    ucs_free(common_path);
+    ucs_free(path2);
+    ucs_free(path1);
     return status;
 }
 

@@ -1761,8 +1761,7 @@ static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
 
 void ucs_config_parse_config_files()
 {
-    char* dirname = NULL;
-    char *path;
+    char *path, *dirname;
     const char *path_p;
     ucs_status_t status;
 
@@ -1774,12 +1773,13 @@ void ucs_config_parse_config_files()
 
     if (path_p != NULL) {
         status = ucs_string_alloc_path_buffer_and_get_dirname(&path, "path",
-                                                              path_p, dirname);
+                                                              path_p, &dirname);
         if (status != UCS_OK) {
             return;
         }
         ucs_config_parse_config_file(dirname,
                                      "../etc/ucx/" UCX_CONFIG_FILE_NAME, 1);
+        ucs_free(path);
     }
 
     /* User home dir */
@@ -1796,8 +1796,6 @@ void ucs_config_parse_config_files()
 
     /* Current working dir */
     ucs_config_parse_config_file(".", UCX_CONFIG_FILE_NAME, 1);
-
-    ucs_free(path);
 }
 
 ucs_status_t

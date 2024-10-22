@@ -41,14 +41,13 @@ void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr)
 
 int ucs_vfs_sock_mkdir(const char *sock_path, ucs_log_level_t log_level)
 {
-    char *dirname = NULL;
-    char *sock_path_dir;
+    char *sock_path_dir, *dirname;
     int ret;
     ucs_status_t status;
 
     status = ucs_string_alloc_path_buffer_and_get_dirname(&sock_path_dir,
                                                           "sock_path_dir",
-                                                          sock_path, dirname);
+                                                          sock_path, &dirname);
     if (status != UCS_OK) {
         ret = -ENOMEM;
         goto out;
