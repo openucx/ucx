@@ -1,7 +1,7 @@
 #!/bin/bash
 set -exE -o pipefail
 
-IMAGE="rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0"
+IMAGE_TAG="rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0"
 
 if [ -z "$BUILD_SOURCESDIRECTORY" ]; then
     echo "Not running in Azure"
@@ -28,7 +28,7 @@ build_ucx_in_docker() {
         -e BUILD_SOURCESDIRECTORY="$BUILD_SOURCESDIRECTORY" \
         -v "$PWD":"$PWD" -w "$PWD" \
         -v /hpc/local:/hpc/local \
-        $IMAGE \
+        $IMAGE_TAG \
         bash -c "source ./buildlib/tools/test_mad.sh && build_ucx"
 }
 
@@ -46,7 +46,7 @@ docker_run_srv() {
         -v "$PWD":"$PWD" -w "$PWD" \
         -v /hpc/local:/hpc/local \
         --ulimit memlock=-1:-1 --device=/dev/infiniband/ \
-        $IMAGE \
+        $IMAGE_TAG \
         bash -c "${PWD}/install/bin/ucx_perftest -K ${HCA} > \
             ${PWD}/ucx_perf_srv_${test_name}_${BUILD_BUILDID}.log 2>&1"
 }
