@@ -675,6 +675,35 @@ void UcxContext::destroy_worker()
         wait_completion(_iomsg_recv_request, "iomsg receive");
     }
 
+    // Non-blocking flush on the worker
+    void *flush_request = ucp_worker_flush_nb(_worker, 0, NULL);
+
+    if (flush_request == NULL) {
+        // Flush completed immediately
+        UCX_LOG << "Worker flushed successfully (immediate).";
+    }
+    else if (UCS_PTR_IS_ERR(flush_request)) {
+        // Handle flush error
+        ucs_status_t flush_status = UCS_PTR_STATUS(flush_request);
+        UCX_LOG << "Failed to flush UCX worker: " << ucs_status_string(flush_status);
+    }
+    else {
+        // Drive progress until the worker flush completes
+        ucs_status_t status;
+        do {
+            ucp_worker_progress(_worker);
+            status = ucp_request_check_status(flush_request);
+        } while (status == UCS_INPROGRESS);
+
+        // Release the flush request after completion
+        ucp_request_release(flush_request);
+
+        if (status != UCS_OK) {
+            UCX_LOG << "Worker flush failed: " << ucs_status_string(status);
+        }
+    }
+
+
     ucp_worker_destroy(_worker);
     if (_epoll_fd >= 0) {
         close(_epoll_fd);

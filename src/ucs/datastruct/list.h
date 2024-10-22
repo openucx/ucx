@@ -266,7 +266,7 @@ static inline void ucs_list_print_links(ucs_list_link_t *head, unsigned int num_
 
     node = head;
     for (i = 0; i < num_nodes; i++) {
-        printf("Node #%u: %p prev=%p next=%p", i, (void *)node, (void *)node->prev, (void *)node->next);
+        printf("@@@@@ Node #%u: %p prev=%p next=%p @@@@@\n", i, (void *)node, (void *)node->prev, (void *)node->next);
         node = node->next;
     }
 }
@@ -310,6 +310,7 @@ static inline void ucs_list_mix_order(ucs_list_link_t *head,
 
         nodes_array[i]->next = (i < num_nodes - 1)? nodes_array[i + 1] : NULL;
         nodes_array[i]->prev = (i > 0)? nodes_array[i - 1] : NULL;
+        printf("Shuffled node #%d: %p prev=%p next=%p\n", i, (void *)nodes_array[i], (void *)nodes_array[i]->prev, (void *)nodes_array[i]->next);
     }
 
     nodes_array[0]->prev = nodes_array[num_nodes - 1];
