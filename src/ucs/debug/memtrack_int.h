@@ -36,7 +36,7 @@ typedef struct ucs_memtrack_entry {
     size_t                  peak_size;  /* peak allocated total size */
     unsigned                count;      /* number of currently allocated blocks */
     unsigned                peak_count; /* peak number of allocated blocks */
-    char                    name[0];    /* allocation name */
+    char                    name[];     /* allocation name */
 } ucs_memtrack_entry_t;
 
 
