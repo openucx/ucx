@@ -323,7 +323,12 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    log_max_transport_domain[0x5];
     uint8_t    reserved_at_328[0x3];
     uint8_t    log_max_pd[0x5];
-    uint8_t    reserved_at_330[0xb];
+    uint8_t    dp_ordering_ooo_all_ud[0x1];
+    uint8_t    dp_ordering_ooo_all_uc[0x1];
+    uint8_t    dp_ordering_ooo_all_xrc[0x1];
+    uint8_t    dp_ordering_ooo_all_dc[0x1];
+    uint8_t    dp_ordering_ooo_all_rc[0x1];
+    uint8_t    reserved_at_335[0x6];
     uint8_t    log_max_xrcd[0x5];
 
     uint8_t    nic_receive_steering_discard[0x1];

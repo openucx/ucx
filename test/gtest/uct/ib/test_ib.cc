@@ -440,26 +440,67 @@ public:
         }
     }
 
+    bool transport_has_ddp()
+    {
+        ucs::handle<uct_md_h> uct_md;
+
+        if (!has_transport("rc_mlx5") && !has_transport("dc_mlx5")) {
+            return false;
+        }
+
+        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
+                               &uct_ib_component,
+                               ibv_get_device_name(m_ibctx->device),
+                               m_md_config);
+
+        uct_ib_mlx5_md_t *ib_md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+        int rc_has_ddp          = has_transport("rc_mlx5") &&
+                                  (ib_md->dp_ordering_cap.rc ==
+                                   UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
+        int dc_has_ddp          = has_transport("dc_mlx5") &&
+                                  (ib_md->dp_ordering_cap.dc ==
+                                   UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
+        return rc_has_ddp || dc_has_ddp;
+    }
+
+    void set_ddp_enable(bool enable)
+    {
+        if (has_transport("rc_mlx5")) {
+            modify_config("RC_MLX5_DDP_ENABLE", enable ? "y" : "n");
+        }
+
+        if (has_transport("dc_mlx5")) {
+            modify_config("DC_MLX5_DDP_ENABLE", enable ? "y" : "n");
+        }
+    }
+
 protected:
     uint16_t m_ooo_sl_mask;
 };
 
 UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config) {
+    bool has_ddp = transport_has_ddp();
+
     // go over all SLs, check UCTs could be initialized on a specific SL
     // and able to send/recv traffic
-    for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl)  {
+    for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl) {
+        bool sl_supports_ar = UCS_BIT_IS_SET(m_ooo_sl_mask, sl);
         if (!has_transport("rc_verbs") && !has_transport("ud_verbs")) {
             // if AR is configured on the given SL, set AR_ENABLE to "y",
             // otherwise - to "n" in order to test that AR_ENABLE parameter
             // works as expected w/o errors and warnings
-            modify_config("IB_AR_ENABLE",
-                          (m_ooo_sl_mask & UCS_BIT(sl)) ? "y" : "n");
+            modify_config("IB_AR_ENABLE", sl_supports_ar ? "y" : "n");
         }
+
         modify_config("IB_SL", ucs::to_string(static_cast<uint16_t>(sl)));
 
-        test_uct_ib::init();
-        send_recv_short();
-        test_uct_ib::cleanup();
+        for (int test_ddp = 0; test_ddp <= (has_ddp && sl_supports_ar);
+             ++test_ddp) {
+            set_ddp_enable(test_ddp);
+            test_uct_ib::init();
+            send_recv_short();
+            test_uct_ib::cleanup();
+        }
     }
 }
 
