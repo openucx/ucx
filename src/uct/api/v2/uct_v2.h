@@ -273,7 +273,8 @@ typedef enum {
     UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR         = UCS_BIT(1), /**< iface_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING        = UCS_BIT(2), /**< info_string field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3), /**< info_string_length field */
-    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4) /**<  scope field */
+    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4), /**< scope field */
+    UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(5),
 } uct_iface_is_reachable_field_mask_t;
 
 
@@ -611,6 +612,13 @@ typedef struct uct_iface_is_reachable_params {
      * Reachability scope.
      */
     uct_iface_reachability_scope_t scope;
+
+    /**
+     * Device address length. If not provided, the transport will assume a
+     * default minimal length according to the address buffer contents.
+     */
+    size_t                        device_addr_length;
+
 } uct_iface_is_reachable_params_t;
 
 
