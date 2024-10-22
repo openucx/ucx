@@ -865,7 +865,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
                 return _status; \
             } \
         } \
-        if (!uct_dc_mlx5_iface_is_policy_shared(_iface)) { \
+        if (!uct_dc_mlx5_is_dci_shared(_iface, _ep->dci)) { \
             uct_rc_iface_check_pending(&(_iface)->super.super, \
                                        &(_ep)->arb_group); \
         } \

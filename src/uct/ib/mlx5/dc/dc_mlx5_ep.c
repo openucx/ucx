@@ -1559,7 +1559,7 @@ uct_dc_mlx5_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *gro
                                                     priv);
     uct_rc_pending_req_t *freq;
 
-    if ((uct_dc_mlx5_is_dci_shared(iface, ep->dci)) &&
+    if ((uct_dc_mlx5_iface_is_policy_shared(iface)) &&
         (uct_dc_mlx5_pending_req_priv(req)->ep != ep)) {
         /* Element belongs to another ep - do not remove it */
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
@@ -1770,6 +1770,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
     }
 
     pool_index = uct_dc_mlx5_ep_pool_index(ep);
+    ucs_assertv(ep->dci == UCT_DC_MLX5_EP_NO_DCI, "ep %p: dci=%d", ep, ep->dci);
     uct_dc_mlx5_iface_progress_pending(iface, pool_index);
     uct_dc_mlx5_iface_check_tx(iface);
 }

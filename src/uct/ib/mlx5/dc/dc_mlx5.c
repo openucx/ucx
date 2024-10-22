@@ -251,7 +251,8 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     /* Error handling is not supported with random dci policy
      * TODO: Fix */
-    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
+    if (uct_dc_mlx5_iface_is_policy_shared(iface) ||
+        uct_dc_mlx5_iface_is_hybrid(iface)) {
         iface_attr->cap.flags &= ~(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    |
                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM);
@@ -294,8 +295,8 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
     txwq      = &dci->txwq;
     hw_ci     = ntohs(cqe->wqe_counter);
 
-    ucs_trace_poll("dc iface %p tx_cqe: dci[%d] txqp %p hw_ci %d", iface,
-                   dci_index, txqp, hw_ci);
+    ucs_trace_poll("dc iface %p tx_cqe: dci[%d] txqp %p hw_ci %d",
+                   iface, dci_index, txqp, hw_ci);
 
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, hw_ci);
