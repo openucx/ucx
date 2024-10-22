@@ -207,7 +207,7 @@ try_load_cuda_env() {
 
 load_cuda_env() {
     try_load_cuda_env
-    [ "${have_cuda}" == "yes" ] || azure_log_error "Cuda device is not available"
+    [ "${have_cuda}" == "yes" ] || azure_log_warning "Cuda device is not available"
 }
 
 check_release_build() {
