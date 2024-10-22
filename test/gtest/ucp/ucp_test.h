@@ -158,6 +158,8 @@ public:
 
         bool is_rndv_put_ppln_supported() const;
 
+        bool is_rndv_supported() const;
+
         bool is_conn_reqs_queue_empty() const;
 
     protected:

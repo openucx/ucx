@@ -939,6 +939,10 @@ protected:
 
         listen_and_communicate(false, SEND_DIRECTION_BIDI);
 
+        if (!has_rndv_lanes(sender().ep())) {
+            UCS_TEST_SKIP_R("Has no RNDV lanes");
+        }
+
         mem_buffer send_buffer(length, UCS_MEMORY_TYPE_HOST);
         send_buffer.pattern_fill(1, length);
         void *sreq = send(sender(), send_buffer.ptr(), length,
@@ -3168,6 +3172,10 @@ protected:
             /* Warmup */
             send_recv(sender(), receiver(), send_recv_type(), false, cb_type(),
                       sender_idx);
+
+            if (!has_rndv_lanes(sender().ep())) {
+                UCS_TEST_SKIP_R("Has no RNDV lanes");
+            }
 
             for (size_t i = 0; i < num_sends; ++i) {
                 void *sreq = send(sender(), send_buf.ptr(), size,
