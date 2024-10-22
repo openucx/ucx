@@ -601,6 +601,19 @@ bool is_rdmacm_netdev(const char *ifa_name)
     return !get_rdmacm_netdev(ifa_name).empty();
 }
 
+bool is_aws()
+{
+    static bool result, initialized = false;
+
+    if (!initialized) {
+        const char *str = getenv("CLOUD_TYPE");
+        result          = str ? !strcmp(str, "aws") : false;
+        initialized     = true;
+    }
+
+    return result;
+}
+
 uint16_t get_port() {
     int sock_fd, ret;
     ucs_status_t status;
