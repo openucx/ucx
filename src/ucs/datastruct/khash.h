@@ -299,6 +299,7 @@ static const double __ac_HASH_UPPER = 0.77;
 			for (j = 0; j != h->n_buckets; ++j) {						\
 				if (__ac_iseither(h->flags, j) == 0) {					\
 					khkey_t key = h->keys[j];							\
+					/* cppcheck-suppress[uninitvar] */					\
 					khval_t val;										\
 					khint_t new_mask;									\
 					new_mask = new_n_buckets - 1; 						\

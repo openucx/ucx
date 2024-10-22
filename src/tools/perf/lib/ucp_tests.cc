@@ -916,7 +916,7 @@ private:
     ucs_status_t UCS_F_ALWAYS_INLINE
     recv_stream_data(ucp_ep_h ep, unsigned length, ucp_datatype_t datatype)
     {
-        void *data;
+        void *data = NULL;
         size_t data_length;
         size_t total = 0;
 

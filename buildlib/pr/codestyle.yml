@@ -90,3 +90,20 @@ jobs:
           pip3 install codespell
           codespell
         displayName: codespell test
+
+  - job: ctags_generation
+    displayName: ctags check
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    container: fedora
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+
+      - bash: |
+          ./buildlib/tools/test_ctags.sh
+        displayName: ctags generation test
