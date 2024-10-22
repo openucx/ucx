@@ -65,12 +65,11 @@ uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     UCS_STATIC_ASSERT(sizeof(uct_dc_mlx5_pending_req_priv) <=
                       UCT_PENDING_REQ_PRIV_LEN);
 
-    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
+    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
         uct_dc_mlx5_pending_req_priv(r)->ep = ep;
-        group = uct_dc_mlx5_ep_rand_arb_group(iface, ep);
-    } else {
-        group = &ep->arb_group;
     }
+
+    group = uct_dc_mlx5_ep_arb_group(iface, ep);
 
     if (push_to_head) {
         uct_pending_req_arb_group_push_head(group, r);
