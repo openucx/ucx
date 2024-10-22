@@ -2217,6 +2217,7 @@ public:
 
     void destroy_servers()
     {
+        flush_worker();
         for (size_t server_index = 0; server_index < _server_info.size();
              ++server_index) {
             server_info_t& server_info = _server_info[server_index];

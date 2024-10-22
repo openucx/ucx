@@ -2332,7 +2332,7 @@ static void ucs_config_parser_print_env_vars(const char *prefix)
 
     if (num_used_vars > 0) {
         ucs_string_buffer_rtrim(&used_vars_strb, " ");
-        ucs_info("%s* env variable%s: %s", prefix,
+        ucs_info("%s* @@@ env variable%s: %s", prefix,
                  (num_used_vars > 1) ? "s" : "",
                  ucs_string_buffer_cstr(&used_vars_strb));
     }

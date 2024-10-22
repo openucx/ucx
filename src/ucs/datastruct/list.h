@@ -259,26 +259,28 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
  * @param head       List head to print
  * @param num_nodes  Number of elements in the list
  */
-static inline void ucs_list_print_links(ucs_list_link_t *head, unsigned int num_nodes)
+static inline void ucs_list_print_links(ucs_list_link_t *head,
+                                        unsigned int num_nodes)
 {
     ucs_list_link_t *node;
     unsigned int i;
 
-    node = head;
+    node = head->next;
     for (i = 0; i < num_nodes; i++) {
-        printf("Node #%u: %p prev=%p next=%p", i, (void *)node, (void *)node->prev, (void *)node->next);
+        printf("@@@@@ Node #%u: %p prev=%p next=%p @@@@@\n", i, (void *)node,
+               (void *)node->prev, (void *)node->next);
         node = node->next;
     }
 }
 
 /**
- * Mix the order of the list elements
+ * Shuffle the order of the list elements
  *
  * @param head       List head to shuffle
  * @param num_nodes  Number of elements in the list
  */
-static inline void ucs_list_mix_order(ucs_list_link_t *head,
-                                      unsigned int num_nodes)
+static inline void ucs_list_shuffle_order(ucs_list_link_t *head,
+                                          unsigned int num_nodes)
 {
     ucs_list_link_t **nodes_array;
     ucs_list_link_t *temp_node;
@@ -289,13 +291,14 @@ static inline void ucs_list_mix_order(ucs_list_link_t *head,
         return;
     }
 
-    nodes_array = (ucs_list_link_t **)ucs_malloc(num_nodes * sizeof(*nodes_array), "nodes_array");
+    nodes_array = (ucs_list_link_t **)ucs_malloc(
+        num_nodes * sizeof(*nodes_array), "nodes_array");
     if (nodes_array == NULL) {
         printf("Failed to allocate memory for nodes array");
         return;
     }
 
-    temp_node = head;
+    temp_node = head->next;
     for (i = 0; i < num_nodes; i++) {
         nodes_array[i] = temp_node;
         temp_node = temp_node->next;
@@ -308,12 +311,18 @@ static inline void ucs_list_mix_order(ucs_list_link_t *head,
         nodes_array[i] = nodes_array[j];
         nodes_array[j] = temp_node;
 
-        nodes_array[i]->next = (i < num_nodes - 1)? nodes_array[i + 1] : NULL;
-        nodes_array[i]->prev = (i > 0)? nodes_array[i - 1] : NULL;
+        if (i < num_nodes - 1) {
+            nodes_array[i]->next = nodes_array[i + 1];
+            nodes_array[i + 1]->prev = nodes_array[i];
+        }
     }
 
-    nodes_array[0]->prev = nodes_array[num_nodes - 1];
-    nodes_array[num_nodes - 1]->next = nodes_array[0];
+    nodes_array[1]->prev = nodes_array[0];
+    nodes_array[0]->next = nodes_array[1];
+    nodes_array[0]->prev = head;
+    nodes_array[num_nodes - 1]->next = head;
+    head->next = nodes_array[0];
+    head->prev = nodes_array[num_nodes - 1];
 
     ucs_free(nodes_array);
 }
