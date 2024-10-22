@@ -30,7 +30,11 @@ public:
         add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_CPU, "cpu" + name);
         add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_DEVICE, "device" + name);
         add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_GUESS, "guess" + name);
-        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_CPU | ODP, "cpu/odp" + name);
+
+        // Do not test device atomics with ODP since SW atomic emulation
+        // disabled with device atomics and there can be configurations
+        // without atomic lanes with ODP support which would lead to failure
+        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_GUESS | ODP, "guess/odp");
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
@@ -136,16 +140,9 @@ protected:
         modify_config("ATOMIC_MODE", atomic_mode_cfg);
 
         if (odp) {
-            // Do not test device atomics with ODP since SW atomic emulation
-            // is disabled with device atomics and there can be configurations
-            // without atomic lanes with ODP support which would lead to failure
-            ASSERT_NE(atomic_mode, UCP_ATOMIC_MODE_DEVICE);
-
             modify_config("REG_NONBLOCK_MEM_TYPES", "host");
-            modify_config("IB_ODP_MEM_TYPES", "host",
-                          SETENV_IF_NOT_EXIST);
+            modify_config("IB_ODP_MEM_TYPES", "host", SETENV_IF_NOT_EXIST);
             modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
-
         }
         test_ucp_memheap::init();
     }
