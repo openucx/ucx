@@ -351,7 +351,7 @@ function log_machine_info() {
         echo -e "${COLORS[GREEN]}Running in container:${COLORS[NC]} Yes"
         echo -e "${COLORS[GREEN]}Agent Machine Name:${COLORS[NC]} " \
                 "$AGENT_MACHINENAME"
-        echo -e "${COLORS[GREEN]}Container Image:${COLORS[NC]} TODO"
+        echo -e "${COLORS[GREEN]}Container Image:${COLORS[NC]} ${IMAGE_TAG}"
         log_docker_variables
     else
         echo -e "${COLORS[GREEN]}Running in container:${COLORS[NC]} No"
