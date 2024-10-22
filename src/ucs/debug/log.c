@@ -145,15 +145,20 @@ static void ucs_log_get_file_name(char *log_file_name, size_t max, int idx)
 
 static void ucs_log_file_rotate()
 {
-    char old_log_file_name[PATH_MAX];
-    char new_log_file_name[PATH_MAX];
+    char *old_log_file_name, *new_log_file_name;
     int idx, ret;
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(&old_log_file_name,
+                                          "old_log_file_name");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     if (ucs_log_file_last_idx == ucs_global_opts.log_file_rotate) {
         /* remove the last file and log rotation from the
          * `log_file_rotate - 1` file */
-        ucs_log_get_file_name(old_log_file_name,
-                              sizeof(old_log_file_name),
+        ucs_log_get_file_name(old_log_file_name, PATH_MAX,
                               ucs_log_file_last_idx);
         unlink(old_log_file_name);
     } else {
@@ -162,11 +167,15 @@ static void ucs_log_file_rotate()
 
     ucs_assert(ucs_log_file_last_idx <= ucs_global_opts.log_file_rotate);
 
+    status = ucs_string_alloc_path_buffer(&new_log_file_name,
+                                          "new_log_file_name");
+    if (status != UCS_OK) {
+        goto out_free_old_log_file_name;
+    }
+
     for (idx = ucs_log_file_last_idx - 1; idx >= 0; --idx) {
-        ucs_log_get_file_name(old_log_file_name,
-                              sizeof(old_log_file_name), idx);
-        ucs_log_get_file_name(new_log_file_name,
-                              sizeof(new_log_file_name), idx + 1);
+        ucs_log_get_file_name(old_log_file_name, PATH_MAX, idx);
+        ucs_log_get_file_name(new_log_file_name, PATH_MAX, idx + 1);
 
         if (access(old_log_file_name, W_OK) != 0) {
             ucs_fatal("unable to write to %s", old_log_file_name);
@@ -188,6 +197,12 @@ static void ucs_log_file_rotate()
             ucs_fatal("unable to write to %s", new_log_file_name);
         }
     }
+
+    ucs_free(new_log_file_name);
+out_free_old_log_file_name:
+    ucs_free(old_log_file_name);
+out:
+    return;
 }
 
 static void ucs_log_handle_file_max_size(int log_entry_len)
