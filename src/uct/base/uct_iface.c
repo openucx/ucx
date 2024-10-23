@@ -17,7 +17,9 @@
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/async/async.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/ucs_netlink.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>

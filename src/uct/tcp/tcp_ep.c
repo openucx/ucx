@@ -677,7 +677,7 @@ static ucs_status_t uct_tcp_ep_create_socket_and_connect(uct_tcp_ep_t *ep)
     struct sockaddr *saddr = (struct sockaddr*)ep->peer_addr;
     ucs_status_t status;
 
-    status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, &ep->fd);
+    status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, 0, &ep->fd);
     if (status != UCS_OK) {
         goto err;
     }

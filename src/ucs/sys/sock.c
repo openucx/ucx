@@ -80,7 +80,7 @@ ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
 
     ucs_strncpy_zero(if_req->ifr_name, if_name, sizeof(if_req->ifr_name));
 
-    status = ucs_socket_create(AF_INET, SOCK_STREAM, &fd);
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, 0, &fd);
     if (status != UCS_OK) {
         goto out;
     }
@@ -195,9 +195,9 @@ unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
     return (unsigned)ad_num_ports;
 }
 
-ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)
+ucs_status_t ucs_socket_create(int domain, int type, int protocol, int *fd_p)
 {
-    int fd = socket(domain, type, 0);
+    int fd = socket(domain, type, protocol);
     if (fd < 0) {
         ucs_socket_print_error_info("socket create failed", errno);
         return UCS_ERR_IO_ERROR;
@@ -451,7 +451,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
 
     /* Create the server socket for accepting incoming connections */
     fd     = -1; /* Suppress compiler warning */
-    status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, &fd);
+    status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, 0, &fd);
     if (status != UCS_OK) {
         goto err;
     }
