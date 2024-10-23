@@ -1208,6 +1208,12 @@ bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
     return false;
 }
 
+bool ucp_test_base::entity::is_rndv_supported() const
+{
+    const auto config = ucp_ep_config(ep());
+    return config->key.rma_bw_lanes[0] != UCP_NULL_LANE;
+}
+
 bool ucp_test_base::entity::is_conn_reqs_queue_empty() const
 {
     return m_conn_reqs.empty();
