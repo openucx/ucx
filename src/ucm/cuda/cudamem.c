@@ -87,6 +87,8 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAllocPitch_v2, CUresult, -1,
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemMap, CUresult, -1, CUdeviceptr, size_t,
                                   size_t, CUmemGenericAllocationHandle,
                                   unsigned long long)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuModuleGetGlobal,  CUresult, -1,
+                                  CUdeviceptr*, size_t*, CUmodule, const char*)
 #if CUDA_VERSION >= 11020
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAllocAsync, CUresult, -1, CUdeviceptr*,
                                   size_t, CUstream)
@@ -186,6 +188,9 @@ UCM_CUDA_ALLOC_FUNC(cuMemAllocPitch_v2, CUresult, CUDA_SUCCESS,
 UCM_CUDA_ALLOC_FUNC(cuMemMap, CUresult, CUDA_SUCCESS, arg0, CUdeviceptr, ,
                     "size=%zu offset=%zu handle=0x%llx flags=0x%llx", size_t,
                     size_t, CUmemGenericAllocationHandle, unsigned long long)
+UCM_CUDA_ALLOC_FUNC(cuModuleGetGlobal, CUresult, CUDA_SUCCESS, *arg0,
+                    CUdeviceptr, *, "bytes=%p hmod=%p name=%s", size_t*,
+                    CUmodule, const char*)
 #if CUDA_VERSION >= 11020
 UCM_CUDA_ALLOC_FUNC(cuMemAllocAsync, CUresult, CUDA_SUCCESS, arg0, CUdeviceptr,
                     *, "size=%zu stream=%p", size_t, CUstream)
@@ -215,6 +220,7 @@ static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
     UCM_CUDA_FUNC_ENTRY(cuMemAllocPitch),
     UCM_CUDA_FUNC_ENTRY(cuMemAllocPitch_v2),
     UCM_CUDA_FUNC_ENTRY(cuMemMap),
+    UCM_CUDA_FUNC_ENTRY(cuModuleGetGlobal),
 #if CUDA_VERSION >= 11020
     UCM_CUDA_FUNC_ENTRY(cuMemAllocAsync),
     UCM_CUDA_FUNC_ENTRY(cuMemAllocFromPoolAsync),
@@ -227,11 +233,6 @@ static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
 #if CUDA_VERSION >= 11020
     UCM_CUDA_FUNC_ENTRY(cuMemFreeAsync),
 #endif
-    /**
-     * cudaGetSymbolAddress is in ucm_cuda_driver_funcs list because
-     * hook for cuModuleGetGlobal doesn't intercept cudaGetSymbolAddress call.
-     * */
-    UCM_CUDA_FUNC_ENTRY(cudaGetSymbolAddress),
     {{NULL}, NULL}
 };
 
@@ -286,6 +287,7 @@ static ucm_cuda_func_t ucm_cuda_runtime_funcs[] = {
 #endif
     UCM_CUDA_FUNC_ENTRY(cudaMallocManaged),
     UCM_CUDA_FUNC_ENTRY(cudaMallocPitch),
+    UCM_CUDA_FUNC_ENTRY(cudaGetSymbolAddress),
     {{NULL}, NULL}
 };
 
