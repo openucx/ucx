@@ -3265,7 +3265,7 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 {
     size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
                                     ucs::test_time_multiplier());
-    do_tag_rndv_killed_sender_test(1, 130, num_sends);
+    do_tag_rndv_killed_sender_test(1, 1024, num_sends);
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
@@ -3274,7 +3274,7 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 {
     size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
                                     ucs::test_time_multiplier());
-    do_tag_rndv_killed_sender_test(4, 130, num_sends);
+    do_tag_rndv_killed_sender_test(4, 1024, num_sends);
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err_sender)
