@@ -163,8 +163,11 @@ ucp_perf_daemon_send_cb(void *request, ucs_status_t status, void *user_data)
 {
     ucp_perf_daemon_context_t *ctx = user_data;
 
-    ucp_perf_daemon_send_am_eager_reply(ctx->host_ep,
-                                        UCP_PERF_DAEMON_AM_ID_SEND_CMPL);
+    if (ucs_likely(status == UCS_OK)) {
+        ucp_perf_daemon_send_am_eager_reply(ctx->host_ep,
+                                            UCP_PERF_DAEMON_AM_ID_SEND_CMPL);
+    }
+
     ucp_request_free(request);
 }
 
@@ -195,8 +198,11 @@ static void ucp_perf_daemon_recv_cb(void *request, ucs_status_t status,
 {
     ucp_perf_daemon_context_t *ctx = user_data;
 
-    ucp_perf_daemon_send_am_eager_reply(ctx->host_ep,
-                                        UCP_PERF_DAEMON_AM_ID_RECV_CMPL);
+    if (ucs_likely(status == UCS_OK)) {
+        ucp_perf_daemon_send_am_eager_reply(ctx->host_ep,
+                                            UCP_PERF_DAEMON_AM_ID_RECV_CMPL);
+    }
+
     ucp_request_free(request);
 }
 
