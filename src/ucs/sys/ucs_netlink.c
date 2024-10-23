@@ -140,8 +140,8 @@ struct ucs_netlink_route_info_t {
 };
 
 
-static ucs_status_t ucs_rtnetlink_get_route_info(int *if_idx, void **dst_in_addr,
-                                                 struct rtattr *rta, int len)
+static ucs_status_t ucs_rtnetlink_get_route_info(struct rtattr *rta, int len,
+                                                 int *if_idx, void **dst_in_addr)
 {
     *if_idx      = -1;
     *dst_in_addr = NULL;
