@@ -740,10 +740,10 @@ static size_t ucs_x86_nt_all_buffer_transfer(void *dst, const void *src, size_t 
     __m256i y0, y1, y2, y3, y4, y5, y6, y7;
 
     /* copy 64 bytes unconditionally */
-    y6 = _mm256_loadu_si256(src);
-    y7 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, 32));
-    _mm256_storeu_si256(dst, y6);
-    _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, 32), y7);
+    y0 = _mm256_loadu_si256(src);
+    y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, 32));
+    _mm256_storeu_si256(dst, y0);
+    _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, 32), y1);
 
     offset = 64 - ((uintptr_t)dst & 0x1f);
     len   -= offset;
@@ -751,22 +751,22 @@ static size_t ucs_x86_nt_all_buffer_transfer(void *dst, const void *src, size_t 
     if (ucs_likely((size_t)UCS_PTR_BYTE_OFFSET(src, offset) & 0x1f)) {
         /* src address is not aligned to 32 byte */
         while (len >= 256) {
-            y0 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset));
-            y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
-            y2 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 64));
-            y3 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 96));
-            y4 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 128));
-            y5 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 160));
-            y6 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 192));
-            y7 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 224));
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y0);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y1);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 64), y2);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 96), y3);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 128), y4);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 160), y5);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 192), y6);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 224), y7);
+            y4 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset));
+            y5 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
+            y6 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 64));
+            y7 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 96));
+            y0 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 128));
+            y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 160));
+            y2 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 192));
+            y3 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 224));
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y4);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y5);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 64), y6);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 96), y7);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 128), y0);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 160), y1);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 192), y2);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 224), y3);
 
             if ((len > 1024) && (((offset >> 8) & 3) == 0)) {
                 ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (8 * 64)));
@@ -785,22 +785,22 @@ static size_t ucs_x86_nt_all_buffer_transfer(void *dst, const void *src, size_t 
     } else {
         /* src address aligned to 32 byte */
         while (len >= 256) {
-            y0 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset));
-            y1 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
-            y2 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 64));
-            y3 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 96));
-            y4 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 128));
-            y5 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 160));
-            y6 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 192));
-            y7 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 224));
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y0);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y1);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 64), y2);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 96), y3);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 128), y4);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 160), y5);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 192), y6);
-            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 224), y7);
+            y4 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset));
+            y5 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
+            y6 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 64));
+            y7 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 96));
+            y0 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 128));
+            y1 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 160));
+            y2 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 192));
+            y3 = _mm256_load_si256(UCS_PTR_BYTE_OFFSET(src, offset + 224));
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y4);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y5);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 64), y6);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 96), y7);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 128), y0);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 160), y1);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 192), y2);
+            _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 224), y3);
 
             if ((len > 1024) && (((offset >> 8) & 3) == 0)) {
                 ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(src, offset + (8 * 64)));
@@ -819,10 +819,10 @@ static size_t ucs_x86_nt_all_buffer_transfer(void *dst, const void *src, size_t 
     }
 
     while (len >= 64) {
-        y2 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset));
-        y3 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
-        _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y2);
-        _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y3);
+        y4 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset));
+        y5 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, offset + 32));
+        _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset), y4);
+        _mm256_stream_si256(UCS_PTR_BYTE_OFFSET(dst, offset + 32), y5);
         offset += 64;
         len    -= 64;
     }
