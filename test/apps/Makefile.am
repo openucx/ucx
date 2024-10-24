@@ -97,6 +97,16 @@ test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
                                   $(CUDART_STATIC_LIBS) $(CUDA_LIBS)
 endif
 
+if HAVE_NVCC
+noinst_PROGRAMS                     += test_cuda_get_symbol_address
+test_cuda_get_symbol_address_SOURCES = test_cuda_get_symbol_address.cu
+test_cuda_hook_static_CPPFLAGS       = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+test_cuda_get_symbol_address_LDFLAGS = $(CUDA_LDFLAGS)
+test_cuda_get_symbol_address_LDADD   = $(top_builddir)/src/ucp/libucp.la \
+                                       $(top_builddir)/src/ucm/libucm.la \
+                                       $(CUDART_LIBS)
+endif
+
 endif
 
 if HAVE_TCMALLOC
@@ -107,3 +117,5 @@ test_tcmalloc_CFLAGS   = $(BASE_CFLAGS)
 test_tcmalloc_LDADD    = -ldl $(TCMALLOC_LIB) \
                           $(top_builddir)/src/ucp/libucp.la
 endif
+
+.cu.o : ; $(NVCC) -c -o $@ $<
