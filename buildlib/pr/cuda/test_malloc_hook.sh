@@ -70,6 +70,9 @@ test_malloc_hook() {
 		UCX_MEM_LOG_LEVEL=diag \
 			./test/gtest/gtest --gtest_filter='cuda_hooks.*'
 
+		# Test hooks for device-side variables
+		./test/apps/test_cuda_get_symbol_address
+
 		unset UCX_MEM_CUDA_HOOK_MODE
 	done
 }
