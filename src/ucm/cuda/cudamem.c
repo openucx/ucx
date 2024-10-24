@@ -225,8 +225,8 @@ CUresult ucm_cuModuleGetGlobal_v2(CUdeviceptr *dptr, size_t *bytes,
     ucm_event_enter();
     ret = ucm_orig_cuModuleGetGlobal_v2(dptr, size_ptr, hmod, name);
     if (ret == CUDA_SUCCESS) {
-        ucm_diag("%s(bytes=%p, hmod=%p, name=%s) returned %p", __func__,
-                  bytes, hmod, name, (void*)(*dptr));
+        ucm_trace("%s(bytes=%p, hmod=%p, name=%s) returned %p", __func__, bytes,
+                  hmod, name, (void*)(*dptr));
         ucm_cuda_dispatch_mem_alloc(*dptr, *size_ptr);
     }
 
