@@ -87,7 +87,7 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAllocPitch_v2, CUresult, -1,
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemMap, CUresult, -1, CUdeviceptr, size_t,
                                   size_t, CUmemGenericAllocationHandle,
                                   unsigned long long)
-UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuModuleGetGlobal,  CUresult, -1,
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuModuleGetGlobal_v2, CUresult, -1,
                                   CUdeviceptr*, size_t*, CUmodule, const char*)
 #if CUDA_VERSION >= 11020
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAllocAsync, CUresult, -1, CUdeviceptr*,
@@ -188,9 +188,6 @@ UCM_CUDA_ALLOC_FUNC(cuMemAllocPitch_v2, CUresult, CUDA_SUCCESS,
 UCM_CUDA_ALLOC_FUNC(cuMemMap, CUresult, CUDA_SUCCESS, arg0, CUdeviceptr, ,
                     "size=%zu offset=%zu handle=0x%llx flags=0x%llx", size_t,
                     size_t, CUmemGenericAllocationHandle, unsigned long long)
-UCM_CUDA_ALLOC_FUNC(cuModuleGetGlobal, CUresult, CUDA_SUCCESS, *arg0,
-                    CUdeviceptr, *, "bytes=%p hmod=%p name=%s", size_t*,
-                    CUmodule, const char*)
 #if CUDA_VERSION >= 11020
 UCM_CUDA_ALLOC_FUNC(cuMemAllocAsync, CUresult, CUDA_SUCCESS, arg0, CUdeviceptr,
                     *, "size=%zu stream=%p", size_t, CUstream)
@@ -213,6 +210,30 @@ UCM_CUDA_FREE_FUNC(cuMemFreeAsync, UCS_MEMORY_TYPE_CUDA, CUresult, arg0, 0,
                    "ptr=0x%llx, stream=%p", CUdeviceptr, CUstream)
 #endif
 
+CUresult ucm_cuModuleGetGlobal_v2(CUdeviceptr *dptr, size_t *bytes,
+                                  CUmodule hmod, const char *name)
+{
+    CUresult ret;
+    size_t size;
+    size_t *size_ptr;
+
+    if (dptr == NULL) {
+        return ucm_orig_cuModuleGetGlobal_v2(dptr, bytes, hmod, name);
+    }
+
+    size_ptr = (bytes == NULL) ? &size : bytes;
+    ucm_event_enter();
+    ret = ucm_orig_cuModuleGetGlobal_v2(dptr, size_ptr, hmod, name);
+    if (ret == CUDA_SUCCESS) {
+        ucm_diag("%s(bytes=%p, hmod=%p, name=%s) returned %p", __func__,
+                  bytes, hmod, name, (void*)(*dptr));
+        ucm_cuda_dispatch_mem_alloc(*dptr, *size_ptr);
+    }
+
+    ucm_event_leave();
+    return ret;
+}
+
 static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
     UCM_CUDA_FUNC_ENTRY(cuMemAlloc),
     UCM_CUDA_FUNC_ENTRY(cuMemAlloc_v2),
@@ -220,7 +241,7 @@ static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
     UCM_CUDA_FUNC_ENTRY(cuMemAllocPitch),
     UCM_CUDA_FUNC_ENTRY(cuMemAllocPitch_v2),
     UCM_CUDA_FUNC_ENTRY(cuMemMap),
-    UCM_CUDA_FUNC_ENTRY(cuModuleGetGlobal),
+    UCM_CUDA_FUNC_ENTRY(cuModuleGetGlobal_v2),
 #if CUDA_VERSION >= 11020
     UCM_CUDA_FUNC_ENTRY(cuMemAllocAsync),
     UCM_CUDA_FUNC_ENTRY(cuMemAllocFromPoolAsync),

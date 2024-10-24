@@ -23,8 +23,8 @@ CUresult ucm_cuMemAllocPitch_v2(CUdeviceptr *dptr, size_t *pPitch,
 CUresult ucm_cuMemMap(CUdeviceptr ptr, size_t size, size_t offset,
                       CUmemGenericAllocationHandle handle,
                       unsigned long long flags);
-CUresult ucm_cuModuleGetGlobal(CUdeviceptr* dptr, size_t* bytes, CUmodule hmod,
-                               const char* name);
+CUresult ucm_cuModuleGetGlobal_v2(CUdeviceptr *dptr, size_t *bytes,
+                                  CUmodule hmod, const char *name);
 #if CUDA_VERSION >= 11020
 CUresult ucm_cuMemAllocAsync(CUdeviceptr *dptr, size_t size, CUstream hStream);
 CUresult ucm_cuMemAllocFromPoolAsync(CUdeviceptr *dptr, size_t size,
