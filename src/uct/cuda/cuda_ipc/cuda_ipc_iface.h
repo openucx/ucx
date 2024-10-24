@@ -16,7 +16,7 @@
 #include "cuda_ipc_cache.h"
 
 
-#define UCT_CUDA_IPC_MAX_PEERS  16
+#define UCT_CUDA_IPC_MAX_PEERS 128
 
 
 typedef struct uct_cuda_ipc_iface_config_params {
