@@ -37,6 +37,8 @@ typedef struct uct_cuda_ipc_iface {
         int                     enable_cache;        /* enable/disable ipc handle cache */
         ucs_on_off_auto_value_t enable_get_zcopy;    /* enable get_zcopy except for specific platforms */
         double                  bandwidth;
+        double                  latency;
+        double                  overhead;
     } config;
 } uct_cuda_ipc_iface_t;
 
@@ -49,6 +51,8 @@ typedef struct uct_cuda_ipc_iface_config {
     ucs_on_off_auto_value_t enable_get_zcopy;
     unsigned                max_cuda_ipc_events;
     double                  bandwidth;
+    double                  latency;
+    double                  overhead;
 } uct_cuda_ipc_iface_config_t;
 
 

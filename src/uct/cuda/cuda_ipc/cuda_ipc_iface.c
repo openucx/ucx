@@ -52,6 +52,13 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Effective p2p memory bandwidth",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
 
+    {"LAT", "1.8e-6",
+     "Estimated latency",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, latency), UCS_CONFIG_TYPE_TIME},
+
+    {"OVH", "4.0e-6",
+     "Estimated CPU overhead",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, overhead), UCS_CONFIG_TYPE_TIME},
     {NULL}
 };
 
@@ -276,10 +283,11 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
 
-    iface_attr->latency                 = ucs_linear_func_make(1e-6, 0);
+    iface_attr->latency                 = ucs_linear_func_make(
+            iface->config.latency, 0);
     iface_attr->bandwidth.dedicated     = 0;
     iface_attr->bandwidth.shared        = iface->config.bandwidth;
-    iface_attr->overhead                = 7.0e-6;
+    iface_attr->overhead                = iface->config.overhead;
     iface_attr->priority                = 0;
 
     return UCS_OK;
@@ -466,8 +474,7 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
 static ucs_status_t
 uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    static const double latency  = 1.8e-6;
-    static const double overhead = 4.0e-6;
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
 
     perf_attr->bandwidth.dedicated = 0;
 
@@ -487,7 +494,7 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
-        perf_attr->send_pre_overhead = overhead;
+        perf_attr->send_pre_overhead = iface->config.overhead;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
@@ -503,7 +510,7 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         /* In case of async mem copy, the latency is not part of the overhead
            and it's a standalone property */
-        perf_attr->latency = ucs_linear_func_make(latency, 0.0);
+        perf_attr->latency = ucs_linear_func_make(iface->config.latency, 0.0);
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
@@ -560,6 +567,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
     self->config.bandwidth           = UCS_CONFIG_DBL_IS_AUTO(config->bandwidth) ?
                                        uct_cuda_ipc_iface_get_bw() : config->bandwidth;
+    self->config.latency             = config->latency;
+    self->config.overhead            = config->overhead;
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_cuda_ipc_event_desc_t);

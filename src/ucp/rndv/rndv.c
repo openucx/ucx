@@ -1754,6 +1754,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
     ucp_worker_h worker         = arg;
     ucp_rndv_rts_hdr_t *rts_hdr = data;
 
+
+    ucs_info("ucp_rndv_rts_handler");
     if (ucp_rndv_rts_is_am(rts_hdr)) {
         return ucp_am_rndv_process_rts(arg, data, length, tl_flags);
     } else {
