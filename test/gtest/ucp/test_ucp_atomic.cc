@@ -145,6 +145,11 @@ protected:
             modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
         }
         test_ucp_memheap::init();
+
+        if (odp && !(check_amo_odp_supported(sender(), UCS_MEMORY_TYPE_HOST))) {
+            cleanup();
+            UCS_TEST_SKIP_R("No AMO lanes with ODP support");
+        }
     }
 
     static unsigned default_num_iters() {
@@ -158,6 +163,21 @@ protected:
     }
 
 private:
+    bool check_amo_odp_supported(const entity &e, ucs_memory_type_t mem_type)
+    {
+        ucp_ep_config_key_t *key = &ucp_ep_config(e.ep())->key;
+        ucp_lane_index_t lane;
+
+        for (lane = 0; key->amo_lanes[lane] != UCP_NULL_LANE; ++lane) {
+            if (ucp_ep_md_attr(e.ep(), lane)->reg_nonblock_mem_types &
+                UCS_BIT(mem_type)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     static T atomic_op_result(ucp_atomic_op_t op, T x, T y, T z) {
         switch (op) {
         case UCP_ATOMIC_OP_ADD:
@@ -214,6 +234,8 @@ private:
                         uint64_t op_mask, int is_ep_flush) {
         const int atomic_mode                                     =
                 get_variant_value() & ATOMIC_MODE;
+        const int odp                                             =
+                get_variant_value() & ODP;
         const std::vector<std::vector<ucs_memory_type_t> >& pairs =
                 ucs::supported_mem_type_pairs();
 
@@ -222,6 +244,11 @@ private:
             if (!UCP_MEM_IS_HOST(send_mem_type) || !UCP_MEM_IS_HOST(recv_mem_type)) {
                 /* Memory type atomics are fully supported only with new protocols */
                 if (!is_proto_enabled()) {
+                    continue;
+                }
+
+                /* ODP variant affects only host buffer flow */
+                if (odp) {
                     continue;
                 }
 
