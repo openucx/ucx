@@ -310,6 +310,58 @@ UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
     test_smkey_reg_atomic();
 }
 
+UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
+                     has_ksm() &&
+                             check_invalidate_support(UCT_MD_MEM_ACCESS_RMA),
+                     "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
+{
+    size_t size             = UCS_MBYTE;
+    const size_t align_mask = (8 * UCS_KBYTE) - 1;
+    size_t lower_size       = ((size / 3)) & ~align_mask;
+    size_t upper_size       = (size / 2) & ~align_mask;
+    void *start, *mid, *last;
+    uct_mem_h memh;
+
+    auto mmap_anon = [](void *ptr, size_t size) {
+        ptr = mmap(ptr, size, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS |
+                           ((ptr != nullptr) ? MAP_FIXED : 0),
+                   -1, 0);
+        return (ptr != MAP_FAILED) ? ptr : nullptr;
+    };
+
+    /* Find an available VMA */
+    start = mmap_anon(nullptr, size);
+    ASSERT_NE(nullptr, start);
+    mid  = UCS_PTR_BYTE_OFFSET(start, lower_size);
+    last = UCS_PTR_BYTE_OFFSET(start, size - upper_size);
+    munmap(mid, size - upper_size - lower_size);
+
+    /* Trigger MT registration failure */
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    EXPECT_NE(UCS_OK, reg_mem(UCT_MD_MEM_ACCESS_RMA, start, size, &memh));
+
+    /* Fill the hole with the middle VMA */
+    /* coverity[pass_freed_arg] */
+    mid = mmap_anon(mid, size - upper_size - lower_size);
+    EXPECT_NE(nullptr, mid);
+
+    /* Trigger a successful MT registration */
+    EXPECT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_RMA, start, size, &memh));
+    EXPECT_TRUE(((uct_ib_mem_t*)memh)->flags & UCT_IB_MEM_MULTITHREADED);
+
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
+
+    if (mid != nullptr) {
+        /* coverity[incorrect_free] */
+        munmap(mid, size - upper_size - lower_size);
+    }
+    if (start != nullptr) {
+        munmap(start, lower_size);
+        munmap(last, upper_size);
+    }
+}
+
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)
 
 class test_ib_md_non_blocking : public test_md_non_blocking {
