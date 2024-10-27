@@ -1394,11 +1394,17 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     old_wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, old_lane));
     ucs_assert_always(old_wireup_ep != NULL);
 
+    /* Select CM/non-reused lane as new wireup lane */
+    new_wireup_lane = ucp_ep_find_non_reused_lane(ep, key, reuse_lane_map);
+    ucs_assert(new_wireup_lane != UCP_NULL_LANE);
+
     /* Set wireup EP for new configuration's wireup lane */
     if (ucp_ep_has_cm_lane(ep)) {
         /* Use existing EP from CM lane */
         new_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-        ucs_assert(new_wireup_ep != NULL);
+    } else if (ucp_ep_get_lane(ep, new_wireup_lane) != NULL) {
+        /* Use existing EP from selected wireup_ep */
+        new_wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, new_wireup_lane));
     } else {
         /* Create new EP for non-CM flow */
         status = ucp_wireup_ep_create(ep, &uct_ep);
@@ -1408,6 +1414,8 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
 
         new_wireup_ep = ucp_wireup_ep(uct_ep);
     }
+
+    ucs_assert(new_wireup_ep != NULL);
 
     /* Get correct aux_rsc_index either from next_ep or aux_ep */
     aux_rsc_index = ucp_wireup_ep_is_next_ep_active(old_wireup_ep) ?
@@ -1432,9 +1440,6 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     uct_ep_destroy(&old_wireup_ep->super.super);
     ucp_ep_set_lane(ep, old_lane, NULL);
 
-    /* Select CM/non-reused lane as new wireup lane */
-    new_wireup_lane = ucp_ep_find_non_reused_lane(ep, key, reuse_lane_map);
-    ucs_assert(new_wireup_lane != UCP_NULL_LANE);
     new_uct_eps[new_wireup_lane] = &new_wireup_ep->super.super;
     key->wireup_msg_lane         = new_wireup_lane;
     return UCS_OK;
