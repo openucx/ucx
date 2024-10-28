@@ -1396,16 +1396,12 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
 
     /* Select CM/non-reused lane as new wireup lane */
     new_wireup_lane = ucp_ep_find_non_reused_lane(ep, key, reuse_lane_map);
-    ucs_assert(new_wireup_lane != UCP_NULL_LANE);
 
     /* Set wireup EP for new configuration's wireup lane */
     if (ucp_ep_has_cm_lane(ep)) {
         /* Use existing EP from CM lane */
         new_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-    } else if (ucp_ep_get_lane(ep, new_wireup_lane) != NULL) {
-        /* Use existing EP from selected wireup_ep */
-        new_wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, new_wireup_lane));
-    } else {
+    } else if (new_wireup_lane != UCP_NULL_LANE) {
         /* Create new EP for non-CM flow */
         status = ucp_wireup_ep_create(ep, &uct_ep);
         if (status != UCS_OK) {
@@ -1413,6 +1409,11 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
         }
 
         new_wireup_ep = ucp_wireup_ep(uct_ep);
+    } else {
+        /* Use existing EP from selected wireup_ep */
+        new_wireup_lane = ucp_ep_find_wireup_ep_lane(ep);
+        ucs_assert(new_wireup_lane != UCP_NULL_LANE);
+        new_wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, new_wireup_lane));
     }
 
     ucs_assert(new_wireup_ep != NULL);
