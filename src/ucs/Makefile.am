@@ -170,6 +170,7 @@ libucs_la_SOURCES = \
 	datastruct/bitmap.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
+	datastruct/list.c \
 	datastruct/lru.c \
 	datastruct/mpmc.c \
 	datastruct/mpool.c \
