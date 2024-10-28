@@ -83,9 +83,9 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
                                                            uct_cuda_ipc_md_t);
 
     if (md->enable_mnnvl) {
-        memcpy(dev_addr->mnnvl_addr.cluster_uuid, &md->fabric_info.clusterUuid,
-               sizeof(dev_addr->mnnvl_addr.cluster_uuid));
         dev_addr->mnnvl_addr.clique_id = md->fabric_info.cliqueId;
+        memcpy(dev_addr->mnnvl_addr.cluster_uuid, md->fabric_info.clusterUuid,
+               sizeof(dev_addr->mnnvl_addr.cluster_uuid));
     }
 #endif
 
@@ -108,8 +108,7 @@ uct_cuda_ipc_iface_mnnvl_reachable(uct_cuda_ipc_md_t *md,
                                    const uct_iface_is_reachable_params_t *params)
 {
 #if HAVE_NVML_FABRIC_INFO
-    if (memcmp(&dev_addr->mnnvl_addr.cluster_uuid,
-                &md->fabric_info.clusterUuid,
+    if (memcmp(dev_addr->mnnvl_addr.cluster_uuid, md->fabric_info.clusterUuid,
                sizeof(dev_addr->mnnvl_addr.cluster_uuid))) {
         uct_iface_fill_info_str_buf(params, "cluster uuid doesn't match");
         return 0;
@@ -143,11 +142,9 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     dev_addr_len = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
                                    device_addr_length, DEVICE_ADDR_LENGTH,
-                                   sizeof(uint64_t));
-    dev_addr        = (const uct_cuda_ipc_device_addr_t *)UCS_PARAM_VALUE(
-                        UCT_IFACE_IS_REACHABLE_FIELD, params, device_addr,
-                        DEVICE_ADDR, NULL);
-    same_uuid       = ucs_get_system_id() == dev_addr->system_uuid;
+                                   sizeof(dev_addr->system_uuid));
+    dev_addr     = (const uct_cuda_ipc_device_addr_t *)params->device_addr;
+    same_uuid    = (ucs_get_system_id() == dev_addr->system_uuid);
 
     if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid) {
         uct_iface_fill_info_str_buf(params, "same process");
@@ -155,6 +152,8 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (md->enable_mnnvl && (dev_addr_len != sizeof(uint64_t))) {
+        ucs_assertv(dev_addr_len >= sizeof(uct_cuda_ipc_device_addr_t),
+                    "dev_addr_len=%zu", dev_addr_len);
         if (!uct_cuda_ipc_iface_mnnvl_reachable(md, dev_addr, dev_addr_len,
                                                 params)) {
             return 0;
@@ -163,7 +162,6 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         uct_iface_fill_info_str_buf(params,
                                     "different system id %"PRIx64" vs %"PRIx64"",
                                     ucs_get_system_id(), dev_addr->system_uuid);
-
         return 0;
     }
 
@@ -285,7 +283,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     uct_base_iface_query(&iface->super.super, iface_attr);
 
     iface_attr->iface_addr_len          = sizeof(pid_t);
-    iface_attr->device_addr_len         = (md->enable_mnnvl) ?
+    iface_attr->device_addr_len         = md->enable_mnnvl ?
                                           sizeof(uct_cuda_ipc_device_addr_t) :
                                           sizeof(uint64_t);
     iface_attr->ep_addr_len             = 0;
