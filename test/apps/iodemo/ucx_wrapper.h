@@ -142,8 +142,6 @@ public:
 
     bool unmap_buffer(ucp_mem_h memh);
 
-    void flush_worker();
-
 protected:
 
     // Called when new IO message is received

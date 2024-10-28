@@ -265,9 +265,12 @@ static inline void ucs_list_print_links(ucs_list_link_t *head,
     ucs_list_link_t *node;
     unsigned int i;
 
+    printf("List head: %p prev=%p next=%p\n", (void *)head, (void *)head->prev,
+           (void *)head->next);
+
     node = head->next;
     for (i = 0; i < num_nodes; i++) {
-        printf("@@@@@ Node #%u: %p prev=%p next=%p @@@@@\n", i, (void *)node,
+        printf("Node #%u: %p prev=%p next=%p\n", i, (void *)node,
                (void *)node->prev, (void *)node->next);
         node = node->next;
     }

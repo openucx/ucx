@@ -773,11 +773,6 @@ bool UcxContext::unmap_buffer(ucp_mem_h memh)
     return ucp_mem_unmap(_context, memh) == UCS_OK;
 }
 
-void UcxContext::flush_worker()
-{
-    ucp_worker_flush(_worker);
-}
-
 #define UCX_CONN_LOG UcxLog(_log_prefix, true)
 
 unsigned UcxConnection::_num_instances = 0;
