@@ -1350,5 +1350,3 @@ void UcxConnection::invoke_callback(UcxCallback *&callback, ucs_status_t status)
     callback        = NULL;
     (*cb)(status);
 }
-
-

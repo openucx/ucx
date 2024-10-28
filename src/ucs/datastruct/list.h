@@ -9,6 +9,7 @@
 
 #include <ucs/debug/debug.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/type/status.h>
 
 
 BEGIN_C_DECLS
@@ -257,15 +258,17 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
  * @param head       List head to print
  * @param num_nodes  Number of elements in the list
  */
-void ucs_list_print_links(ucs_list_link_t *head, unsigned int num_nodes);
+void ucs_list_print_nodes(const ucs_list_link_t *head, unsigned int num_nodes);
 
 /**
  * Shuffle the order of the list elements
  *
  * @param head       List head to shuffle
  * @param num_nodes  Number of elements in the list
+ *
+ * @return UCS_OK if the list was shuffled successfully, otherwise an error code
  */
-void ucs_list_shuffle_order(ucs_list_link_t *head, unsigned int num_nodes);
+ucs_status_t ucs_list_shuffle(ucs_list_link_t *head, unsigned int num_nodes);
 
 END_C_DECLS
 
