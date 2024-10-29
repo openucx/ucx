@@ -21,9 +21,9 @@ AS_IF([test "x$with_efa" != xno],
        save_CFLAGS="$CFLAGS"
        save_CPPFLAGS="$CPPFLAGS"
 
-       LDFLAGS="$verbs_libs $LDFLAGS"
-       CFLAGS="$verbs_incl $CFLAGS"
-       CPPFLAGS="$verbs_incl $CPPFLAGS"
+       LDFLAGS="$IBVERBS_LDFLAGS $LDFLAGS"
+       CFLAGS="$IBVERBS_CFLAGS $CFLAGS"
+       CPPFLAGS="$IBVERBS_CPPFLAGS $CPPFLAGS"
 
        have_efa=yes
        AC_CHECK_HEADER([infiniband/efadv.h], [], [have_efa=no])
