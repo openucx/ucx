@@ -376,6 +376,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "another thread, or incoming active messages, but consumes more resources.",
    ucs_offsetof(ucp_context_config_t, flush_worker_eps), UCS_CONFIG_TYPE_BOOL},
 
+  {"FLUSH_WORKER_EPS_SHUFFLE", "n",
+   "Enable shuffling endpoints while flushing a worker",
+   ucs_offsetof(ucp_context_config_t, flush_worker_eps_shuffle), UCS_CONFIG_TYPE_BOOL},
+
   {"FENCE_MODE", "auto",
    "Fence mode used in ucp_worker_fence routine.\n"
    " weak   - use weak fence mode.\n"
