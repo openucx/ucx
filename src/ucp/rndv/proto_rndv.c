@@ -1013,7 +1013,7 @@ void ucp_proto_rndv_bulk_request_init_lane_idx(
     req->send.multi_lane_idx = lane_idx - 1;
 }
 
-void ucp_proto_rndv_stub_abort(ucp_request_t *req, ucs_status_t status)
+void ucp_proto_rndv_common_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }
