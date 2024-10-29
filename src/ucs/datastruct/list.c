@@ -45,7 +45,7 @@ ucs_status_t ucs_list_shuffle(ucs_list_link_t *head, unsigned int num_nodes)
     temp_node = head->next;
     for (i = 0; i < num_nodes; i++) {
         node_pointers[i] = temp_node;
-        temp_node      = temp_node->next;
+        temp_node        = temp_node->next;
     }
 
     /* Fisher-Yates shuffle algorithm */
