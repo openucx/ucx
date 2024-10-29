@@ -110,6 +110,7 @@ public:
 
     void run(bool bidirectional = false, bool reuse_lanes = false);
     void skip_non_p2p();
+    bool has_bonding_iface();
 
     bool reuse_lanes() const
     {
@@ -360,6 +361,22 @@ void test_ucp_ep_reconfig::skip_non_p2p()
     }
 }
 
+
+bool test_ucp_ep_reconfig::has_bonding_iface()
+{
+    auto context = sender().ucph();
+    const ucp_tl_resource_desc_t *rsc;
+
+    ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
+        std::string tl_name(rsc->tl_rsc.dev_name);
+
+        if (tl_name.find("bond") != std::string::npos) {
+            return true;
+        }
+    }
+
+    return false;
+}
 /* TODO: Remove skip condition after next PRs are merged. */
 UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, basic,
                      !has_transport("rc_x") || !has_transport("rc_v"))
@@ -400,6 +417,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, reuse_lanes, is_self())
 
     if (has_transport("tcp") || has_transport("dc_x") || has_transport("shm")) {
         UCS_TEST_SKIP_R("non wired-up lanes are not supported yet");
+    }
+
+    if (has_bonding_iface()) {
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
     }
 
     run(false, true);
