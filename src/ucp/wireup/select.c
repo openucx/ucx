@@ -1558,29 +1558,6 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
     return num_lanes;
 }
 
-static unsigned ucp_wireup_get_current_num_lanes(
-        const ucp_wireup_select_params_t *select_params, ucp_lane_type_t type)
-{
-    ucp_ep_h ep                = select_params->ep;
-    unsigned current_num_lanes = 0;
-    ucp_lane_index_t lane;
-
-    /* First initialization (current lanes weren't chosen yet) or
-     * CM is enabled (so we can reconfigure the endpoint).
-     */
-    if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        ucp_ep_has_cm_lane(ep)) {
-        return ucp_wireup_bw_max_lanes(select_params);
-    }
-
-    for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; ++lane) {
-        if (ucp_ep_config(ep)->key.lanes[lane].lane_types & UCS_BIT(type)) {
-            ++current_num_lanes;
-        }
-    }
-    return current_num_lanes;
-}
-
 static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_bw_info_t *bw_info,
@@ -1602,25 +1579,17 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
     ucp_wireup_select_info_t *sinfo;
-    unsigned max_lanes, num_lanes;
+    unsigned num_lanes;
     unsigned local_num_paths, remote_num_paths;
 
     local_dev_bitmap      = bw_info->local_dev_bitmap;
     remote_dev_bitmap     = bw_info->remote_dev_bitmap;
     bw_info->criteria.arg = &dev_count;
 
-    /* Restrict choosing more lanes that were already chosen when CM is disabled
-     * to prevent EP reconfiguration in case of dropping lanes due to low BW.
-     * TODO: Remove when endpoint reconfiguration is supported.
-     */
-    max_lanes = ucp_wireup_get_current_num_lanes(select_params,
-                                                 bw_info->criteria.lane_type);
-    max_lanes = ucs_min(max_lanes, bw_info->max_lanes);
-
     /* lookup for requested number of lanes or limit of MD map
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
-    while (ucs_array_length(&sinfo_array) < max_lanes) {
+    while (ucs_array_length(&sinfo_array) < bw_info->max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
             sinfo  = ucs_array_append(&sinfo_array, break);
             status = ucp_wireup_select_transport(select_ctx, select_params,
@@ -1848,7 +1817,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_init_select_flags(&iface_rma_flags, 0, 0);
     ucp_wireup_init_select_flags(&peer_rma_flags, 0, 0);
 
-    if (ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
+    if ((ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
+        (context->config.ext.max_rndv_lanes == 0)) {
         return UCS_OK;
     }
 

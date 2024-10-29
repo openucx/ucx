@@ -43,6 +43,15 @@ enum {
     UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
+#define UCP_OP_ATTR_INDEX_MASK (UCP_OP_ATTR_FLAG_NO_IMM_CMPL    | \
+                                UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL | \
+                                UCP_OP_ATTR_FLAG_FAST_CMPL      | \
+                                UCP_OP_ATTR_FLAG_MULTI_SEND)
+
+#define UCP_OP_ATTR_INDEX(_op_attr_flag) \
+    (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag), \
+                                             UCP_OP_ATTR_INDEX_MASK)))
+
 
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
@@ -175,7 +184,7 @@ typedef struct ucp_context_config {
     /** RMA zcopy segment size */
     size_t                                 rma_zcopy_max_seg_size;
     /** Enable global VA MR */
-    int                                    gva_enable;
+    ucs_on_off_auto_value_t                gva_enable;
     /** Lock memory when using global VA MR */
     int                                    gva_mlock;
     /** Prefetch memory when using global VA MR */
@@ -190,6 +199,8 @@ typedef struct ucp_context_config {
     double                                 proto_overhead_rkey_ptr;
     /** Registration cache lookup overhead estimation */
     double                                 rcache_overhead;
+    /** UCP extra operation attributes flags */
+    uint64_t                               extra_op_attr_flags;
 } ucp_context_config_t;
 
 

@@ -40,6 +40,8 @@
 
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW         0x100
 #define UCT_RC_MLX5_OPCODE_FLAG_TM          0x200
+#define UCT_RC_MLX5_OPCODE_FLAG_MMO_PUT     0x400
+#define UCT_RC_MLX5_OPCODE_FLAG_MMO_GET     0x800
 #define UCT_RC_MLX5_OPCODE_MASK             0xff
 #define UCT_RC_MLX5_SINGLE_FRAG_MSG(_flags) \
     (((_flags) & UCT_CB_PARAM_FLAG_FIRST) && !((_flags) & UCT_CB_PARAM_FLAG_MORE))

@@ -293,7 +293,10 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
         }
     }
 
-    ucs_debug("could not allocate memory with any of the provided methods");
+    ucs_debug("could not allocate %s: %s memory length=%zu flags=0x%x "
+              "num_methods=%u",
+              alloc_name, ucs_memory_type_names[mem_type], alloc_length, flags,
+              num_methods);
     status = UCS_ERR_NO_MEMORY;
     goto out;
 

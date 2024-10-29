@@ -523,6 +523,7 @@ AC_LANG_POP
 # --diag_suppress 188  - Suppress enumerated type mixed with another type
 # --diag_suppress 381  - Suppress extra ";" ignored
 # --diag_suppress 1215 - Suppress deprecated API warning for PGI18 compiler
+# --diag_suppress 1626 - Suppress routine is both "inline" and "noinline"
 # --diag_suppress 1901 - Use of a const variable in a constant expression is nonstandard in C
 # --diag_suppress 1902 - Use of a const variable in a constant expression is nonstandard in C (same as 1901)
 ADD_COMPILER_FLAGS_IF_SUPPORTED([[--display_error_number],
@@ -534,6 +535,7 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[--display_error_number],
                                  [--diag_suppress 188],
                                  [--diag_suppress 381],
                                  [--diag_suppress 1215],
+                                 [--diag_suppress 1626],
                                  [--diag_suppress 1901],
                                  [--diag_suppress 1902]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])

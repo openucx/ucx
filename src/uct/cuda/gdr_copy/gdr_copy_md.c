@@ -251,22 +251,40 @@ uct_gdr_copy_mem_dereg(uct_md_h uct_md,
     return status;
 }
 
+static int uct_gdr_is_gdr_get_info_v1(int major, int minor)
+{
+    return (major < 2) || ((major == 2) && (minor <= 3));
+}
+
 static ucs_status_t
 uct_gdr_copy_query_md_resources(uct_component_t *component,
                                 uct_md_resource_desc_t **resources_p,
                                 unsigned *num_resources_p)
 {
     gdr_t ctx;
+    int major, minor;
+
+    gdr_runtime_get_version(&major, &minor);
+    if (uct_gdr_is_gdr_get_info_v1(GDR_API_MAJOR_VERSION,
+                                   GDR_API_MINOR_VERSION) !=
+        uct_gdr_is_gdr_get_info_v1(major, minor)) {
+        ucs_warn("could not open gdr copy, built for v%d.%d but loaded v%d.%d",
+                 GDR_API_MAJOR_VERSION, GDR_API_MINOR_VERSION, major, minor);
+        goto err;
+    }
 
     ctx = gdr_open();
     if (ctx == NULL) {
         ucs_debug("could not open gdr copy. disabling gdr copy resource");
-        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+        goto err;
     }
     gdr_close(ctx);
 
     return uct_cuda_base_query_md_resources(component, resources_p,
                                             num_resources_p);
+
+err:
+    return uct_md_query_empty_md_resource(resources_p, num_resources_p);
 }
 
 static void uct_gdr_copy_md_close(uct_md_h uct_md)

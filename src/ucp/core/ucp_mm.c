@@ -544,6 +544,10 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
         memh->md_map |= UCS_BIT(md_index);
     }
 
+    if (context->config.ext.gva_enable == UCS_CONFIG_AUTO) {
+        memh->flags |= UCP_MEMH_FLAG_HAS_AUTO_GVA;
+    }
+
     return UCS_OK;
 }
 
@@ -551,7 +555,7 @@ static ucs_status_t
 ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map, unsigned uct_flags,
                            const char *alloc_name, ucs_log_level_t err_level,
-                           int allow_partial_reg)
+                           int allow_partial_reg, int gva_enable)
 {
     ucs_memory_type_t mem_type          = memh->mem_type;
     ucp_md_index_t dmabuf_prov_md_index = context->dmabuf_mds[mem_type];
@@ -568,9 +572,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_length;
     size_t reg_align;
 
-    status = ucp_memh_register_gva(context, memh, md_map);
-    if ((status != UCS_OK) && !(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
-        return status;
+    if (gva_enable) {
+        status = ucp_memh_register_gva(context, memh, md_map);
+        if ((status != UCS_OK) && !(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
+            return status;
+        }
     }
 
     reg_md_map = ~memh->md_map & md_map;
@@ -682,7 +688,20 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                         UCS_LOG_LEVEL_ERROR;
 
     return ucp_memh_register_internal(context, memh, md_map, uct_flags,
-                                      alloc_name, err_level, 1);
+                                      alloc_name, err_level, 1, 1);
+}
+
+void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map)
+{
+    ucp_context_h context = memh->context;
+    ucs_status_t UCS_V_UNUSED status;
+
+    memh->md_map &= ~context->gva_md_map[memh->mem_type];
+    memh->flags  &= ~UCP_MEMH_FLAG_HAS_AUTO_GVA;
+    status = ucp_memh_register_internal(context, memh, md_map, 0, "disable gva",
+                                        UCS_LOG_LEVEL_DIAG, 1, 0);
+    /* When allow_partial_reg == 1 registration should not fail */
+    ucs_assert_always(status == UCS_OK);
 }
 
 static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
@@ -1693,7 +1712,7 @@ ucp_mem_rcache_mem_reg_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
                                           reg_ctx->uct_flags |
                                                   UCT_MD_MEM_FLAG_HIDE_ERRORS,
                                           reg_ctx->alloc_name,
-                                          UCS_LOG_LEVEL_DEBUG, 0);
+                                          UCS_LOG_LEVEL_DEBUG, 0, 1);
     }
 
     return ucp_memh_register(context, memh, reg_ctx->reg_md_map,
@@ -1876,37 +1895,38 @@ ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
     uct_mem_h uct_memh;
 
     for (tl_mkey_index = 0; tl_mkey_index < num_tl_mkeys; ++tl_mkey_index) {
-        md_index    = tl_mkeys[tl_mkey_index].md_index;
         tl_mkey_buf = tl_mkeys[tl_mkey_index].tl_mkey_buf;
-        md_attr     = &context->tl_mds[md_index].attr;
-        ucs_assert_always(md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY);
+        ucs_for_each_bit(md_index, tl_mkeys[tl_mkey_index].local_md_map) {
+            md_attr = &context->tl_mds[md_index].attr;
+            ucs_assert_always(md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY);
 
-        if (memh->uct[md_index] != NULL) {
-            continue;
-        }
+            if (memh->uct[md_index] != NULL) {
+                continue;
+            }
 
-        attach_params.field_mask = UCT_MD_MEM_ATTACH_FIELD_FLAGS;
-        attach_params.flags      = UCT_MD_MEM_ATTACH_FLAG_HIDE_ERRORS;
+            attach_params.field_mask = UCT_MD_MEM_ATTACH_FIELD_FLAGS;
+            attach_params.flags      = UCT_MD_MEM_ATTACH_FLAG_HIDE_ERRORS;
 
-        status = uct_md_mem_attach(context->tl_mds[md_index].md, tl_mkey_buf,
-                                   &attach_params, &uct_memh);
-        if (ucs_unlikely(status != UCS_OK)) {
-            /* Don't print an error, because two MDs can have similar global
-             * identifiers, but a memory key was exported on another MD */
-            ucs_trace("failed to attach memory on '%s/%s': %s",
-                      md_attr->component_name,
+            status = uct_md_mem_attach(context->tl_mds[md_index].md, tl_mkey_buf,
+                                       &attach_params, &uct_memh);
+            if (ucs_unlikely(status != UCS_OK)) {
+                /* Don't print an error, because two MDs can have similar global
+                 * identifiers, but a memory key was exported on another MD */
+                ucs_trace("failed to attach memory on '%s/%s': %s",
+                          md_attr->component_name,
+                          context->tl_mds[md_index].rsc.md_name,
+                          ucs_status_string(status));
+                continue;
+            }
+
+            memh->uct[md_index] = uct_memh;
+            memh->md_map       |= UCS_BIT(md_index);
+
+            ucs_trace("imported address %p length %zu on md[%d]=%s: uct_memh %p",
+                      ucp_memh_address(memh), ucp_memh_length(memh), md_index,
                       context->tl_mds[md_index].rsc.md_name,
-                      ucs_status_string(status));
-            continue;
+                      memh->uct[md_index]);
         }
-
-        memh->uct[md_index] = uct_memh;
-        memh->md_map       |= UCS_BIT(md_index);
-
-        ucs_trace("imported address %p length %zu on md[%d]=%s: uct_memh %p",
-                  ucp_memh_address(memh), ucp_memh_length(memh), md_index,
-                  context->tl_mds[md_index].rsc.md_name,
-                  memh->uct[md_index]);
     }
 
     if (memh->md_map == 0) {

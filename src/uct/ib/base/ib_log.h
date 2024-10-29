@@ -18,7 +18,8 @@
 enum {
     UCT_IB_OPCODE_FLAG_HAS_RADDR       = UCS_BIT(0),
     UCT_IB_OPCODE_FLAG_HAS_ATOMIC      = UCS_BIT(1),
-    UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC  = UCS_BIT(2)
+    UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC  = UCS_BIT(2),
+    UCT_IB_OPCODE_FLAG_HAS_DMA         = UCS_BIT(3)
 };
 
 
@@ -34,8 +35,8 @@ void uct_ib_log_dump_opcode(uct_ib_opcode_t *op, int signal, int fence, int se,
                             char *buf, size_t max);
 
 void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
-                             struct ibv_sge *sg_list, int num_sge,
-                             uint64_t inline_bitmap,
+                             const char *sg_prefixes, struct ibv_sge *sg_list,
+                             int num_sge, uint64_t inline_bitmap,
                              uct_log_data_dump_func_t data_dump,
                              int data_dump_sge, char *buf, size_t max);
 

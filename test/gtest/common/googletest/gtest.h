@@ -1520,10 +1520,10 @@ inline bool operator!=(faketype, faketype) { return false; }
 
 // The helper function for {ASSERT|EXPECT}_EQ.
 template <typename T1, typename T2>
-AssertionResult CmpHelperEQ(const char* lhs_expression,
-                            const char* rhs_expression,
-                            const T1& lhs,
-                            const T2& rhs) {
+GTEST_NO_INLINE_ AssertionResult CmpHelperEQ(const char* lhs_expression,
+                                             const char* rhs_expression,
+                                             const T1& lhs,
+                                             const T2& rhs) {
   if (lhs == rhs) {
     return AssertionSuccess();
   }
