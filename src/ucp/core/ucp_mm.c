@@ -328,7 +328,8 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
 }
 
 static void ucp_memh_dereg_internal(ucp_context_h context, ucp_mem_h memh,
-                                    ucp_md_map_t md_map, int rkey_only)
+                                    ucp_md_map_t md_map, unsigned inv_uct_flags,
+                                    const char *name)
 {
     uct_completion_t comp            = {
         .count = 1,
@@ -352,46 +353,40 @@ static void ucp_memh_dereg_internal(ucp_context_h context, ucp_mem_h memh,
             continue;
         }
 
+        ucs_trace("de-registering %s[%d]=%p", name, md_index, memh->uct[md_index]);
+        ucs_assert(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG);
+
         params.memh = memh->uct[md_index];
         if (memh->inv_md_map & UCS_BIT(md_index)) {
-            params.flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
-            if (rkey_only) {
-                params.flags |= UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY;
-            }
+            params.flags = inv_uct_flags;
             comp.count++;
         } else {
-            if (rkey_only) {
-                continue;
-            }
             params.flags = 0;
         }
 
-        ucs_trace("de-registering %smemh[%d]=%p", (rkey_only ? "rkey of " : ""),
-                  md_index, memh->uct[md_index]);
-        ucs_assert(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG);
-
         status = uct_md_mem_dereg_v2(context->tl_mds[md_index].md, &params);
         if (status != UCS_OK) {
-            ucs_warn("failed to dereg %sfrom md[%d]=%s: %s",
-                     (rkey_only? "rkey " : ""), md_index,
+            ucs_warn("failed to dereg %s from md[%d]=%s: %s", name, md_index,
                      context->tl_mds[md_index].rsc.md_name,
                      ucs_status_string(status));
-            if (params.flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
+            if (memh->inv_md_map & UCS_BIT(md_index)) {
                 comp.count--;
             }
         }
 
-        if (rkey_only) {
-            memh->inv_md_map &= ~UCS_BIT(md_index);
-        } else {
+        if (!(inv_uct_flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY)) {
             memh->uct[md_index] = NULL;
         }
     }
 
     ucs_assert(comp.count == 1);
-    if (rkey_only) {
-        return;
-    }
+}
+
+static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
+                           ucp_md_map_t md_map)
+{
+    ucp_memh_dereg_internal(context, memh, md_map,
+                            UCT_MD_MEM_DEREG_FLAG_INVALIDATE, "memh");
 
     if ((memh->flags & UCP_MEMH_FLAG_MLOCKED) &&
         (context->gva_md_map[memh->mem_type] & memh->md_map) == 0) {
@@ -400,19 +395,14 @@ static void ucp_memh_dereg_internal(ucp_context_h context, ucp_mem_h memh,
     }
 }
 
-static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
-                           ucp_md_map_t md_map)
-{
-    ucp_memh_dereg_internal(context, memh, md_map, 0);
-}
-
-static void ucp_memh_dereg_rkey(ucp_context_h context, ucp_mem_h memh,
-                                ucp_md_map_t md_map)
+static void ucp_memh_dereg_rkey(ucp_context_h context, ucp_mem_h memh)
 {
     ucs_trace("memh %p: invalidate only rkeys: md_map %" PRIx64 " inv_md_map %"
-              PRIx64, memh, memh->md_map, md_map);
+              PRIx64, memh, memh->md_map, memh->inv_md_map);
 
-    ucp_memh_dereg_internal(context, memh, md_map, 1);
+    ucp_memh_dereg_internal(context, memh, memh->inv_md_map,
+                            UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY,
+                            "rkey of memh");
 }
 
 void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
@@ -1509,11 +1499,10 @@ void ucp_frag_mpool_put(ucp_mem_desc_t *mdesc)
     /* If we reach this point, it means that chunk is marked for invalidation,
      * and all of its inflight operations are completed. Now we can de-register
      * its rkeys and revive the chunk = return it back to mpool. */
-    ucp_memh_dereg_rkey(context, memh, memh->inv_md_map);
-    ucs_assertv(0 == memh->inv_md_map, "inv_md_map=0x%lx", memh->inv_md_map);
-
+    ucp_memh_dereg_rkey(context, memh);
     ucs_rcache_region_completion(region);
-    region->flags &= ~UCS_RCACHE_REGION_FLAG_INVALIDATE;
+    memh->inv_md_map = 0;
+    region->flags   &= ~UCS_RCACHE_REGION_FLAG_INVALIDATE;
     ucs_mpool_add_chunk_to_freelist(mpool, mdesc->chunk);
 }
 
