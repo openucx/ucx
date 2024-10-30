@@ -44,9 +44,6 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         return res; \
     }
 
-#define UCM_OVERRIDE_FUNC(_name, _rettype) \
-    _rettype _name() __attribute__ ((alias (UCS_PP_QUOTE(ucm_override_##_name)))); \
-
 #define UCM_DEFINE_DLSYM_FUNC(_name, _rettype, _fail_val, ...) \
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name, ucm_override_##_name, \
                           _rettype, _fail_val, __VA_ARGS__)
