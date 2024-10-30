@@ -923,14 +923,8 @@ static ucs_status_t uct_ib_devx_dereg_invalidate_params_check(
     unsigned flags;
 
     flags = UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
-    if ((flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY) &&
-        !(flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE)) {
-        ucs_debug("%s: invalid params: rkey_only flag without invalidate flag",
-                  uct_ib_device_name(&md->super.dev));
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (!(flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE)) {
+    if (!(flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) &&
+        !(flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE_RKEY_ONLY)) {
         return UCS_OK;
     }
 
