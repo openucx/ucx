@@ -396,7 +396,7 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
 }
 
 static UCS_F_ALWAYS_INLINE ucp_mem_h
-ucp_request_get_memh(ucp_request_t *req, int extract, int is_fragment)
+ucp_request_get_memh(ucp_request_t *req, int extract)
 {
     ucp_context_h context = req->send.ep->worker->context;
     ucp_mem_h *memh_p;
@@ -404,10 +404,6 @@ ucp_request_get_memh(ucp_request_t *req, int extract, int is_fragment)
 
     /* Get the contig memh from the request basing on the proto version */
     if (context->config.ext.proto_enable) {
-        if (is_fragment) {
-            return req->send.rndv.mdesc->memh;
-        }
-
         ucs_assertv(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG,
                     "dt_class=%s",
                     ucp_datatype_class_names[req->send.state.dt_iter.dt_class]);
@@ -438,7 +434,8 @@ int ucp_request_memh_check_invalidate(ucp_request_t *req, int is_fragment)
         return 0;
     }
 
-    memh = ucp_request_get_memh(req, 0, is_fragment);
+    memh = is_fragment ? req->send.rndv.mdesc->memh :
+                         ucp_request_get_memh(req, 0);
     return (memh != NULL) && (is_fragment || !ucp_memh_is_user_memh(memh));
 }
 
@@ -448,7 +445,8 @@ void ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status,
     ucp_ep_h ep           = req->send.ep;
     ucp_context_h context = ep->worker->context;
     ucp_mem_desc_t *mdesc = req->send.rndv.mdesc;
-    ucp_mem_h memh        = ucp_request_get_memh(req, 1, is_fragment);
+    ucp_mem_h memh        = is_fragment ? req->send.rndv.mdesc->memh :
+                                          ucp_request_get_memh(req, 1);
     ucp_md_map_t invalidate_map;
 
     ucs_assert(status != UCS_OK);
