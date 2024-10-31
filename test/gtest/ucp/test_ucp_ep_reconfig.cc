@@ -207,9 +207,9 @@ void test_ucp_ep_reconfig::entity::store_config()
     m_cfg_index = ep()->cfg_index;
 
     /* Calculate number of reused lanes */
-    auto num_reused_lanes = (ucp_ep_num_lanes(ep()) / 2) / num_paths();
-    auto test             = static_cast<const test_ucp_ep_reconfig*>(m_test);
-    m_num_reused_lanes    = test->reuse_lanes() ? num_reused_lanes : 0;
+    auto num_reused    = (ucp_ep_num_lanes(ep()) / 2) / num_paths();
+    auto test          = static_cast<const test_ucp_ep_reconfig*>(m_test);
+    m_num_reused_lanes = test->reuse_lanes() ? num_reused : 0;
 }
 
 ucp_tl_bitmap_t
