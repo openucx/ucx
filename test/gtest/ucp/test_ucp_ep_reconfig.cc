@@ -17,6 +17,7 @@ class test_ucp_ep_reconfig : public ucp_test {
 protected:
     using address_t = std::pair<void*, ucp_unpacked_address_t>;
     using address_p = std::unique_ptr<address_t, void (*)(address_t*)>;
+    using limits    = std::numeric_limits<unsigned>;
 
     class entity : public ucp_test_base::entity {
     public:
@@ -41,22 +42,23 @@ protected:
             return m_cfg_index != ep()->cfg_index;
         }
 
-        unsigned num_reused() const
+        unsigned num_reused_lanes() const
         {
-            return m_num_reused;
+            return m_num_reused_lanes;
         }
 
     private:
         void store_config();
-        ucp_tl_bitmap_t ep_tl_bitmap(
-                unsigned num_devs = std::numeric_limits<unsigned>::max()) const;
+        ucp_tl_bitmap_t
+        ep_tl_bitmap(unsigned max_num_devs = limits::max()) const;
         address_p get_address(const ucp_tl_bitmap_t &tl_bitmap) const;
         bool is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
         unsigned num_paths() const;
+        ucp_tl_bitmap_t reduced_tl_bitmap() const;
 
-        ucp_worker_cfg_index_t m_cfg_index  = UCP_WORKER_CFG_INDEX_NULL;
-        unsigned               m_num_reused = 0;
+        ucp_worker_cfg_index_t m_cfg_index        = UCP_WORKER_CFG_INDEX_NULL;
+        unsigned               m_num_reused_lanes = 0;
         std::vector<uct_ep_h>  m_uct_eps;
         bool                   m_exclude_ifaces;
     };
@@ -110,7 +112,7 @@ public:
 
     void run(bool bidirectional = false, bool reuse_lanes = false);
     void skip_non_p2p();
-    bool has_bonding_iface();
+    bool has_bond_iface();
 
     bool reuse_lanes() const
     {
@@ -205,13 +207,13 @@ void test_ucp_ep_reconfig::entity::store_config()
     m_cfg_index = ep()->cfg_index;
 
     /* Calculate number of reused lanes */
-    auto res     = (ucp_ep_num_lanes(ep()) / 2) / num_paths();
-    auto test    = static_cast<const test_ucp_ep_reconfig*>(m_test);
-    m_num_reused = test->reuse_lanes() ? res : 0;
+    auto num_reused_lanes = (ucp_ep_num_lanes(ep()) / 2) / num_paths();
+    auto test             = static_cast<const test_ucp_ep_reconfig*>(m_test);
+    m_num_reused_lanes    = test->reuse_lanes() ? num_reused_lanes : 0;
 }
 
 ucp_tl_bitmap_t
-test_ucp_ep_reconfig::entity::ep_tl_bitmap(unsigned num_devs) const
+test_ucp_ep_reconfig::entity::ep_tl_bitmap(unsigned max_num_devs) const
 {
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     unsigned dev_count        = 0;
@@ -221,7 +223,7 @@ test_ucp_ep_reconfig::entity::ep_tl_bitmap(unsigned num_devs) const
             continue;
         }
 
-        if (dev_count++ >= num_devs) {
+        if (dev_count++ >= max_num_devs) {
             break;
         }
 
@@ -231,23 +233,28 @@ test_ucp_ep_reconfig::entity::ep_tl_bitmap(unsigned num_devs) const
     return tl_bitmap;
 }
 
+ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::reduced_tl_bitmap() const
+{
+    if ((ep() == NULL) || !m_exclude_ifaces) {
+        return ucp_tl_bitmap_max;
+    }
+
+    auto reused_bitmap         = ep_tl_bitmap(num_reused_lanes());
+    const auto negative_bitmap = UCS_STATIC_BITMAP_NOT(reused_bitmap);
+
+    return UCS_STATIC_BITMAP_NOT(UCS_STATIC_BITMAP_AND(ep_tl_bitmap(),
+                                                       negative_bitmap));
+}
+
 void test_ucp_ep_reconfig::entity::connect(const ucp_test_base::entity *other,
                                            const ucp_ep_params_t &ep_params,
                                            int ep_idx, int do_set_ep)
 {
-    auto r_other              = static_cast<const entity*>(other);
-    auto worker_addr          = r_other->get_address(ucp_tl_bitmap_max);
-    ucp_tl_bitmap_t tl_bitmap = ucp_tl_bitmap_max;
+    auto r_other                    = static_cast<const entity*>(other);
+    auto worker_addr                = r_other->get_address(ucp_tl_bitmap_max);
+    const ucp_tl_bitmap_t tl_bitmap = r_other->reduced_tl_bitmap();
     unsigned addr_indices[UCP_MAX_LANES];
     ucp_ep_h ucp_ep;
-
-    if ((r_other->ep() != NULL) && m_exclude_ifaces) {
-        auto reused_btmp = r_other->ep_tl_bitmap(r_other->num_reused());
-        auto ngtv_btmp   = UCS_STATIC_BITMAP_NOT(reused_btmp);
-        auto excl_btmp   = UCS_STATIC_BITMAP_AND(r_other->ep_tl_bitmap(),
-                                                 ngtv_btmp);
-        tl_bitmap        = UCS_STATIC_BITMAP_NOT(excl_btmp);
-    }
 
     UCS_ASYNC_BLOCK(&worker()->async);
     ASSERT_UCS_OK(ucp_ep_create_to_worker_addr(worker(), &tl_bitmap,
@@ -350,8 +357,8 @@ void test_ucp_ep_reconfig::run(bool bidirectional, bool reuse_lanes)
 
     EXPECT_NE(r_sender->is_reconfigured(), r_receiver->is_reconfigured());
 
-    r_sender->verify_configuration(*r_receiver, r_sender->num_reused());
-    r_receiver->verify_configuration(*r_sender, r_sender->num_reused());
+    r_sender->verify_configuration(*r_receiver, r_sender->num_reused_lanes());
+    r_receiver->verify_configuration(*r_sender, r_sender->num_reused_lanes());
 }
 
 void test_ucp_ep_reconfig::skip_non_p2p()
@@ -362,7 +369,7 @@ void test_ucp_ep_reconfig::skip_non_p2p()
 }
 
 
-bool test_ucp_ep_reconfig::has_bonding_iface()
+bool test_ucp_ep_reconfig::has_bond_iface()
 {
     auto context = sender().ucph();
     const ucp_tl_resource_desc_t *rsc;
@@ -401,8 +408,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, resolve_remote_id, is_self(),
 {
     if (has_transport("tcp")) {
         UCS_TEST_SKIP_R("asymmetric setup is not supported for this transport "
-                        "due to reachbility bug in TCP (ib0 connects to ib1 "
-                        "and fails)");
+                        "due to a reachability issue - only matching "
+                        "interfaces can connect");
     }
 
     run(true);
@@ -411,15 +418,15 @@ UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, resolve_remote_id, is_self(),
 UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, reuse_lanes, is_self())
 {
     if (has_transport("ud_v") || has_transport("ud_x")) {
-        UCS_TEST_SKIP_R("UD configuration has only a single lane, reuse test "
-                        "is not relevant for this case");
+        UCS_TEST_SKIP_R("the test requires at least 2 lanes, while UD has only "
+                        "1");
     }
 
     if (has_transport("tcp") || has_transport("dc_x") || has_transport("shm")) {
         UCS_TEST_SKIP_R("non wired-up lanes are not supported yet");
     }
 
-    if (has_bonding_iface()) {
+    if (has_bond_iface()) {
         modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
     }
 
