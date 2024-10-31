@@ -99,6 +99,28 @@ static inline void ucs_list_insert_before(ucs_list_link_t *pos,
 }
 
 /**
+ * Insert an item to a list at a specific index.
+ *
+ * @param head        List head.
+ * @param new_link    Item to insert.
+ * @param index       Index at which to insert.
+ */
+static inline void ucs_list_insert_at_index(ucs_list_link_t *head,
+                                            ucs_list_link_t *new_link,
+                                            unsigned index)
+{
+    ucs_list_link_t *pos;
+    unsigned i;
+
+    pos = head;
+    for (i = 0; i < index; ++i) {
+        pos = pos->next;
+    }
+
+    ucs_list_insert_after(pos, new_link);
+}
+
+/**
  * Remove an item from its list.
  *
  * @param link  Item to remove.

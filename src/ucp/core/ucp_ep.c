@@ -361,6 +361,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
 {
     ucs_status_t status;
     ucp_ep_h ep;
+    int new_ep_index;
 
     ep = ucp_ep_allocate(worker, peer_name);
     if (ep == NULL) {
@@ -394,7 +395,13 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_INTERNAL, 0);
         ucs_list_add_tail(&worker->internal_eps, &ep->ext->ep_list);
     } else {
-        ucs_list_add_tail(&worker->all_eps, &ep->ext->ep_list);
+        if (worker->context->config.ext.shuffle_worker_eps) {
+            new_ep_index = ucs_rand() % (worker->num_all_eps + 1);
+            ucs_list_insert_at_index(&worker->all_eps, &ep->ext->ep_list,
+                                    new_ep_index);
+        } else {
+            ucs_list_add_tail(&worker->all_eps, &ep->ext->ep_list);
+        }
         ucs_assert(ep->worker->num_all_eps < UINT_MAX);
         ++ep->worker->num_all_eps;
     }
@@ -3709,8 +3716,8 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
                                     lane_index * attr->transports.entry_size);
 
         /* Each field updated in the following block must have its ending offset
-         * compared to attr->transports.entry_size before the field is 
-         * updated. If the field's ending offset is greater than the 
+         * compared to attr->transports.entry_size before the field is
+         * updated. If the field's ending offset is greater than the
          * attr->transports.entry_size value, the field cannot be updated because
          * that will cause a storage overlay.
          */
