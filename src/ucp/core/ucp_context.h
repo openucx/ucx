@@ -131,7 +131,7 @@ typedef struct ucp_context_config {
     size_t                                 estimated_num_ppn;
     /** Enable flushing endpoints while flushing a worker */
     int                                    flush_worker_eps;
-    /** Enable shuffling endpoints while creating a worker */
+    /** Shuffle worker EPs while creating them */
     int                                    shuffle_worker_eps;
     /** Fence mode */
     ucp_fence_mode_t                       fence_mode;

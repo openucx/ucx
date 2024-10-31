@@ -377,7 +377,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, flush_worker_eps), UCS_CONFIG_TYPE_BOOL},
 
   {"SHUFFLE_WORKER_EPS", "n",
-   "Enable shuffling endpoints while creating a workers",
+   "Shuffle worker EPs while creating them",
    ucs_offsetof(ucp_context_config_t, shuffle_worker_eps), UCS_CONFIG_TYPE_BOOL},
 
   {"FENCE_MODE", "auto",

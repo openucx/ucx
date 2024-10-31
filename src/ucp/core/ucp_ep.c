@@ -361,7 +361,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
 {
     ucs_status_t status;
     ucp_ep_h ep;
-    int new_ep_index;
+    size_t new_ep_index;
 
     ep = ucp_ep_allocate(worker, peer_name);
     if (ep == NULL) {

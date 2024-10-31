@@ -107,10 +107,10 @@ static inline void ucs_list_insert_before(ucs_list_link_t *pos,
  */
 static inline void ucs_list_insert_at_index(ucs_list_link_t *head,
                                             ucs_list_link_t *new_link,
-                                            unsigned index)
+                                            size_t index)
 {
     ucs_list_link_t *pos;
-    unsigned i;
+    size_t i;
 
     pos = head;
     for (i = 0; i < index; ++i) {
