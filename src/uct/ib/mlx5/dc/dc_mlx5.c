@@ -132,7 +132,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),
      UCS_CONFIG_TYPE_UINT},
 
-    {"DCIS_INITIAL_CAPACITY", "inf",
+    {"DCIS_INITIAL_CAPACITY", "1",
      "Initial capacity of DCIs array.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dcis_initial_capacity),
      UCS_CONFIG_TYPE_UINT},
@@ -267,14 +267,27 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
     uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress, flags);
 }
 
+static void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface)
+{
+#if __SANITIZE_ADDRESS__
+    size_t buffer_size = sizeof(uct_dc_dci_t) * ucs_array_capacity(&iface->tx.dcis);
+    size_t num_dcis = ucs_array_length(&iface->tx.dcis);
+    void *old_buffer_p;
+
+    ucs_debug_asan_relocate_array_buffer((void**)&iface->tx.dcis.buffer,
+                                         &old_buffer_p, buffer_size);
+    uct_dc_mlx5_iface_dcis_array_copy(iface->tx.dcis.buffer, old_buffer_p,
+                                      num_dcis);
+    ucs_array_buffer_free(old_buffer_p);
+#endif
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
 {
     uint8_t dci_index;
     struct mlx5_cqe64 *cqe;
     uint16_t hw_ci;
-    uct_dc_dci_t *dci;
-    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super,
                               &iface->super.cq[UCT_IB_DIR_TX], poll_flags,
@@ -288,24 +301,24 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
     ucs_memory_cpu_load_fence();
 
     dci_index = uct_dc_mlx5_iface_dci_find(iface, cqe);
-    dci       = uct_dc_mlx5_iface_dci(iface, dci_index);
-    ucs_assert(uct_dc_mlx5_is_dci_valid(dci));
-    txqp      = &dci->txqp;
-    txwq      = &dci->txwq;
+    ucs_assert(uct_dc_mlx5_is_dci_valid(uct_dc_mlx5_iface_dci(iface, dci_index)));
     hw_ci     = ntohs(cqe->wqe_counter);
 
     ucs_trace_poll("dc iface %p tx_cqe: dci[%d] txqp %p hw_ci %d",
-                   iface, dci_index, txqp, hw_ci);
+                   iface, dci_index, &uct_dc_mlx5_iface_dci(iface, dci_index)->txqp , hw_ci);
 
-    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
-    uct_dc_mlx5_update_tx_res(iface, txwq, txqp, hw_ci);
+    uct_dc_mlx5_asan_relocate_dcis_array(iface);
+
+    UCT_RC_MLX5_TXQP_PROCESS_TX_CQE(&uct_dc_mlx5_iface_dci(iface, dci_index)->txqp, cqe, hw_ci);
+    uct_dc_mlx5_update_tx_res(iface, dci_index, hw_ci);
 
     /**
      * Note: DCI is released after handling completion callbacks,
      *       to avoid OOO sends when this is the only missing resource.
      */
     uct_dc_mlx5_iface_dci_put(iface, dci_index);
-    uct_dc_mlx5_iface_progress_pending(iface, dci->pool_index);
+    uct_dc_mlx5_iface_progress_pending(
+            iface, uct_dc_mlx5_iface_dci(iface, dci_index)->pool_index);
     uct_dc_mlx5_iface_check_tx(iface);
     uct_ib_mlx5_update_db_cq_ci(&iface->super.cq[UCT_IB_DIR_TX]);
 
@@ -877,8 +890,6 @@ ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
                                     iface, size);
                           return UCS_ERR_NO_MEMORY, &old_buffer_p);
     if (old_buffer_p) {
-        /* FIXME: resizing the array can cause use-after-free in certain scenarios */
-        ucs_diag("currently DCI array reallocation is unsafe");
         uct_dc_mlx5_iface_dcis_array_copy(iface->tx.dcis.buffer, old_buffer_p,
                                           old_length);
         ucs_array_buffer_free(old_buffer_p);

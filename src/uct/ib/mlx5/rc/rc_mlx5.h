@@ -25,6 +25,18 @@
                                    UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
 
+#define UCT_RC_MLX5_TXQP_PROCESS_TX_CQE(_txqp, _cqe, _hw_ci) \
+    do { \
+        if ((_cqe)->op_own & MLX5_INLINE_SCATTER_32) { \
+            UCT_RC_TXQP_COMPLETION_INL_RESP(_txqp, _cqe, _hw_ci); \
+        } else if ((_cqe)->op_own & MLX5_INLINE_SCATTER_64) { \
+            UCT_RC_TXQP_COMPLETION_INL_RESP(_txqp, (_cqe - 1), _hw_ci); \
+        } else { \
+            UCT_RC_TXQP_COMPLETION_DESC(_txqp, _hw_ci); \
+        } \
+    } while (0)
+
+
 enum {
     /* EP address includes flush_rkey value */
     UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY = UCS_BIT(0)

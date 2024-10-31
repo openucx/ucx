@@ -194,6 +194,35 @@ enum {
     UCT_RC_CHECK_FC(_iface, _ep, _am_id) \
     uct_rc_iface_check_pending(_iface, &(_ep)->arb_group);
 
+
+#define UCT_RC_TXQP_COMPLETION_DESC(_txqp, _sn) \
+    do { \
+        uct_rc_iface_send_op_t *op; \
+        \
+        ucs_trace_poll("txqp %p complete ops up to sn %d", _txqp, _sn); \
+        ucs_queue_for_each_extract(op, &(_txqp)->outstanding, queue, \
+                                   UCS_CIRCULAR_COMPARE16(op->sn, <=, \
+                                                          (_sn))) { \
+            uct_rc_txqp_completion_op( \
+                    op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1); \
+        } \
+    } while (0)
+
+
+#define UCT_RC_TXQP_COMPLETION_INL_RESP(_txqp, _resp, _sn) \
+    do { \
+        uct_rc_iface_send_op_t *op; \
+        \
+        ucs_trace_poll("txqp %p complete ops up to sn %d", _txqp, _sn); \
+        ucs_queue_for_each_extract(op, &(_txqp)->outstanding, queue, \
+                                   UCS_CIRCULAR_COMPARE16((op)->sn, <=, \
+                                                          (_sn))) { \
+            ucs_assert(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY)); \
+            uct_rc_txqp_completion_op(op, _resp); \
+        } \
+    } while (0)
+
+
 /* this is a common type for all rc and dc transports */
 struct uct_rc_txqp {
     ucs_queue_head_t    outstanding;
@@ -439,31 +468,6 @@ uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp)
     op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
     op->handler(op, resp);
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
-{
-    uct_rc_iface_send_op_t *op;
-
-    ucs_trace_poll("txqp %p complete ops up to sn %d", txqp, sn);
-    ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
-                               UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        uct_rc_txqp_completion_op(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t sn)
-{
-    uct_rc_iface_send_op_t *op;
-
-    ucs_trace_poll("txqp %p complete ops up to sn %d", txqp, sn);
-    ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
-                               UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        ucs_assert(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY));
-        uct_rc_txqp_completion_op(op, resp);
-    }
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t

@@ -1721,7 +1721,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
 
     ucs_assert(!uct_dc_mlx5_iface_is_policy_shared(iface));
 
-    uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
+    uct_dc_mlx5_update_tx_res(iface, dci_index, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
 
     /* Invoke a user's error callback and release TX/FC resources before
