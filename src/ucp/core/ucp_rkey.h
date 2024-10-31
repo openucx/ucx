@@ -123,6 +123,7 @@ typedef struct ucp_rkey {
 
 typedef struct ucp_unpacked_exported_tl_mkey {
     ucp_md_map_t   local_md_map; /* Local MD map of packed TL mkeys */
+    uint8_t        tl_mkey_size; /* Size of the mkey buffer */
     const void     *tl_mkey_buf; /* Packed TL mkey buffer */
 } ucp_unpacked_exported_tl_mkey_t;
 

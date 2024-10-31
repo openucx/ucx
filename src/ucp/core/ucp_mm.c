@@ -1768,13 +1768,15 @@ ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
     ucp_md_index_t md_index;
     unsigned tl_mkey_index;
     const void *tl_mkey_buf;
+    uint8_t tl_mkey_size;
     uct_md_mem_attach_params_t attach_params;
     uct_md_attr_v2_t *md_attr;
     ucs_status_t status;
     uct_mem_h uct_memh;
 
     for (tl_mkey_index = 0; tl_mkey_index < num_tl_mkeys; ++tl_mkey_index) {
-        tl_mkey_buf = tl_mkeys[tl_mkey_index].tl_mkey_buf;
+        tl_mkey_buf  = tl_mkeys[tl_mkey_index].tl_mkey_buf;
+        tl_mkey_size = tl_mkeys[tl_mkey_index].tl_mkey_size;
         ucs_for_each_bit(md_index, tl_mkeys[tl_mkey_index].local_md_map) {
             md_attr = &context->tl_mds[md_index].attr;
             ucs_assert_always(md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY);
@@ -1783,8 +1785,10 @@ ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
                 continue;
             }
 
-            attach_params.field_mask = UCT_MD_MEM_ATTACH_FIELD_FLAGS;
+            attach_params.field_mask = UCT_MD_MEM_ATTACH_FIELD_FLAGS |
+                                       UCT_MD_MEM_ATTACH_FIELD_MKEY_SIZE;
             attach_params.flags      = UCT_MD_MEM_ATTACH_FLAG_HIDE_ERRORS;
+            attach_params.mkey_size  = tl_mkey_size;
 
             status = uct_md_mem_attach(context->tl_mds[md_index].md, tl_mkey_buf,
                                        &attach_params, &uct_memh);

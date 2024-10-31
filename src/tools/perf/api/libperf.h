@@ -118,8 +118,6 @@ enum {
  *      |                 |---------PEER_TX(AM)------->|                 |
  *      |                 |----------(TM msg)--------->|                 |
  *      |<---SEND_CMPL----|                            |---RECV_CMPL---->|
- *      |                 |                            |                 |
- *      |-------FIN------>|                            |<------FIN-------|
  *
  * (AM) used only when AM communication is configured
  * (TM) used only when tag matching communication is configured
@@ -144,11 +142,9 @@ enum {
      * unsolicited in case of AM communication. For tag matching transport it \
      * confirms the completion of RECV_REQ request */ \
     _macro(UCP_PERF_DAEMON_AM_ID_RECV_CMPL, UCP_PERF_AM_ID + 5) \
-    /* Host->DPU daemon finalize message */ \
-    _macro(UCP_PERF_DAEMON_AM_ID_FIN,       UCP_PERF_AM_ID + 6) \
     /* Sender DPU->Receiver DPU, message to establish communication between \
      * DPU peers */ \
-    _macro(UCP_PERF_DAEMON_AM_ID_PEER_INIT, UCP_PERF_AM_ID + 7)
+    _macro(UCP_PERF_DAEMON_AM_ID_PEER_INIT, UCP_PERF_AM_ID + 6)
 
 
 #define UCP_PERF_DAEMON_ENUMIFY(ID, VALUE) ID = VALUE,

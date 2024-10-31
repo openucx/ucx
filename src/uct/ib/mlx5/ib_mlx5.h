@@ -307,13 +307,14 @@ typedef struct {
 typedef struct {
     struct mlx5dv_devx_obj *cross_mr;
     uint32_t               lkey;
+    uint64_t               md_uuid;
 } uct_ib_mlx5_devx_umr_alias_t;
 
 
-#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x"
+#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x uuid %" PRIu64
 #define UCT_IB_MLX5_UMR_ALIAS_ARG(_umr_alias) \
-    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey)
-
+    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey), \
+    (_umr_alias)->md_uuid
 
 /* Hash map of indirect mkey (from the host) to mkey alias (on the DPU) */
 /* Note the hash key here is: gvmi_id << 32 | mkey (both uint32_t) */

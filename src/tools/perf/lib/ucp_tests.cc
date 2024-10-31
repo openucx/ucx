@@ -344,8 +344,10 @@ public:
     {
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)arg;
 
-        ucs_assertv(length == 0ul, "length=%zu", length);
+        ucs_assertv(length == sizeof(ucs_status_t), "length=%zu", length);
         ucs_assert(!(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV));
+        ucs_status_t status = *(ucs_status_t*)data;
+        ucs_assert_always(status == UCS_OK);
 
         test->send_completed();
 
@@ -359,8 +361,10 @@ public:
     {
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)arg;
 
-        ucs_assertv(length == 0ul, "length=%zu", length);
+        ucs_assertv(length == sizeof(ucs_status_t), "length=%zu", length);
         ucs_assert(!(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV));
+        ucs_status_t status = *(ucs_status_t*)data;
+        ucs_assert_always(status == UCS_OK);
 
         test->recv_completed();
 
