@@ -395,50 +395,58 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
     return inv_map;
 }
 
-static UCS_F_ALWAYS_INLINE ucp_mem_h* ucp_request_get_memh(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE ucp_mem_h
+ucp_request_get_memh(ucp_request_t *req, int extract)
 {
     ucp_context_h context = req->send.ep->worker->context;
+    ucp_mem_h *memh_p;
+    ucp_mem_h memh;
 
     /* Get the contig memh from the request basing on the proto version */
     if (context->config.ext.proto_enable) {
         ucs_assertv(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG,
                     "dt_class=%s",
                     ucp_datatype_class_names[req->send.state.dt_iter.dt_class]);
-        return &req->send.state.dt_iter.type.contig.memh;
+        memh_p = &req->send.state.dt_iter.type.contig.memh;
     } else {
         ucs_assertv(UCP_DT_IS_CONTIG(req->send.datatype), "datatype=0x%" PRIx64,
                     req->send.datatype);
-        return &req->send.state.dt.dt.contig.memh;
+        memh_p = &req->send.state.dt.dt.contig.memh;
     }
+
+    memh = *memh_p;
+    if (extract) {
+        *memh_p = NULL;
+    }
+    return memh;
 }
 
 int ucp_request_memh_check_invalidate(ucp_request_t *req)
 {
     ucp_ep_h ep                      = req->send.ep;
     ucp_err_handling_mode_t err_mode = ucp_ep_config(ep)->key.err_mode;
-    ucp_mem_h *memh_p;
+    ucp_mem_h memh;
+
+    ucs_assert(!ucp_request_is_invalidated(req));
 
     if ((err_mode != UCP_ERR_HANDLING_MODE_PEER) ||
         !(req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
         return 0;
     }
 
-    memh_p = ucp_request_get_memh(req);
-    if ((*memh_p == NULL) || ucp_memh_is_user_memh(*memh_p)) {
-        return 0;
-    }
-
-    return 1;
+    memh = ucp_request_get_memh(req, 0);
+    return (memh != NULL) && !ucp_memh_is_user_memh(memh);
 }
 
 void ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
 {
     ucp_ep_h ep           = req->send.ep;
     ucp_context_h context = ep->worker->context;
-    ucp_mem_h *memh_p     = ucp_request_get_memh(req);
+    ucp_mem_h memh        = ucp_request_get_memh(req, 1);
     ucp_md_map_t invalidate_map;
 
     ucs_assert(status != UCS_OK);
+    ucs_assert(!ucp_request_is_invalidated(req));
 
     req->send.invalidate.worker    = ep->worker;
     req->send.invalidate.comp.func = ucp_request_mem_invalidate_completion;
@@ -448,12 +456,10 @@ void ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
 
     invalidate_map = ucp_request_get_invalidation_map(ep);
     ucp_trace_req(req, "mem invalidate buffer md_map 0x%" PRIx64 "/0x%" PRIx64,
-                  invalidate_map, (*memh_p)->md_map);
-    ucp_memh_invalidate(context, *memh_p, &req->send.invalidate.comp,
+                  invalidate_map, memh->md_map);
+    ucp_memh_invalidate(context, memh, &req->send.invalidate.comp,
                         invalidate_map);
-
-    ucp_memh_put(*memh_p);
-    *memh_p = NULL;
+    ucp_memh_put(memh);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,

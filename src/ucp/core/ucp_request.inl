@@ -997,6 +997,12 @@ ucp_request_complete_and_dereg_send(ucp_request_t *sreq, ucs_status_t status)
     ucp_request_complete_send(sreq, status);
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_request_is_invalidated(const ucp_request_t *req)
+{
+    return req->flags & UCP_REQUEST_FLAG_INVALIDATED;
+}
+
 
 #define UCP_SEND_REQUEST_GET_BY_ID(_req_p, _worker, _req_id, _extract, \
                                    _action, _fmt_str, ...) \

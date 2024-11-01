@@ -70,7 +70,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rtr_common_complete(ucp_request_t *req, unsigned dt_mask)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, dt_mask);
-    if (req->send.rndv.rkey != NULL) {
+    if ((req->send.rndv.rkey != NULL) && !ucp_request_is_invalidated(req)) {
         ucp_proto_rndv_rkey_destroy(req);
     }
 

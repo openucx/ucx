@@ -371,7 +371,7 @@ ucp_proto_rndv_recv_complete_status(ucp_request_t *req, ucs_status_t status)
 {
     /* Remote key should already be released for non-invalidated requests */
     ucs_assert((req->send.rndv.rkey == NULL) ||
-               (req->flags & UCP_REQUEST_FLAG_INVALIDATED));
+               ucp_request_is_invalidated(req));
     ucs_assert(!ucp_proto_rndv_request_is_ppln_frag(req));
 
     ucp_proto_rndv_recv_req_complete(ucp_request_get_super(req), status);
