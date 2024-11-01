@@ -538,21 +538,17 @@ void ucp_request_memory_dereg(ucp_datatype_t datatype, ucp_dt_state_t *state,
                               ucp_request_t *req);
 
 /**
- * @brief Detects whether request memh can be invalidated
- *
- * @param [in] req           Request that contains memh
- *
- * @return 1 if invalidation supported, 0 if invalidation isn't required/supported
- */
-int ucp_request_memh_check_invalidate(ucp_request_t *req);
-
-/**
- * @brief Invalidates the request associated memh.
+ * @brief Invalidates the request associated memh if required.
+ * When this function returns 1, the request is invalidated, meaning that the
+ * req->send.invalidate struct is filled with the necessary information, and
+ * other structs of req->send union can't be accessed (e.g. req->send.rndv).
  *
  * @param [in] req           Request that contains memh
  * @param [in] status        Status of the error which caused abortion
+ *
+ * @return 1 if invalidation happened, 0 if invalidation isn't required/supported
  */
-void ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status);
+int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,

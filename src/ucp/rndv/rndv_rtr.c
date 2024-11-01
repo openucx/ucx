@@ -221,12 +221,11 @@ static void ucp_proto_rndv_rtr_abort(ucp_request_t *req, ucs_status_t status)
 
     rreq->status = status;
     ucp_request_set_callback(req, send.cb, ucp_proto_rndv_rtr_abort_super);
+    if (req->send.rndv.rkey != NULL) {
+        ucp_proto_rndv_rkey_destroy(req);
+    }
 
-    if (ucp_request_memh_check_invalidate(req)) {
-        if (req->send.rndv.rkey != NULL) {
-            ucp_proto_rndv_rkey_destroy(req);
-        }
-        ucp_request_memh_invalidate(req, status);
+    if (ucp_request_memh_invalidate(req, status)) {
         ucp_proto_request_zcopy_id_reset(req);
         return;
     }
