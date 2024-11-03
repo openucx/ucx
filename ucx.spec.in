@@ -11,7 +11,7 @@
 %bcond_with    vfs
 %bcond_with    mad
 %bcond_with    ze
-%bcond_with    mlx5
+%bcond_without mlx5
 
 Name: ucx
 Version: @VERSION@
