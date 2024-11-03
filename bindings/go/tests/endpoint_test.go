@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"testing"
 	"time"
-	. "ucx"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"unsafe"
-	. "cuda"
+	. "github.com/openucx/ucx/bindings/go/src/cuda"
 )
 
 type TestEntity struct {
