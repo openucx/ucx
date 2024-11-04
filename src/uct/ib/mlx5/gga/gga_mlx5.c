@@ -900,6 +900,9 @@ static void uct_ib_mlx5_gga_md_close(uct_md_h md)
     } rkey;
     size_t rkey2md_refcount UCS_V_UNUSED;
 
+    ucs_trace("md %p: closing on GGA device %s", md,
+              uct_ib_device_name(&gga_md->super.super.dev));
+
     pthread_mutex_lock(&uct_gga_mlx5_rkeys_locker);
     kh_foreach_key(&gga_md->rkey_cache, rkey.key, {
         md_rkey_handle = uct_gga_mlx5_md_get_rkey(gga_md, rkey.key);
@@ -1011,6 +1014,7 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
     md->super.super.fork_init       = fork_init;
     kh_init_inplace(resolved_rkeys, &md->rkey_cache);
 
+    ucs_trace("md %p: opened on GGA device %s", md, md_name);
     *md_p = &md->super.super.super;
 
 out_free_dev_list:
