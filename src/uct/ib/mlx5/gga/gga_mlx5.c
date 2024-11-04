@@ -16,6 +16,8 @@
 
 #include <ucs/datastruct/khash.h>
 
+#include <pthread.h>
+
 #define UCT_GGA_MLX5_OPAQUE_BUF_LEN 64
 #define UCT_GGA_MAX_MSG_SIZE        (2u * UCS_MBYTE)
 
@@ -105,6 +107,8 @@ ucs_config_field_t uct_gga_mlx5_iface_config_table[] = {
 
   {NULL}
 };
+
+static pthread_mutex_t uct_gga_mlx5_rkeys_locker = PTHREAD_MUTEX_INITIALIZER;
 
 static ucs_status_t
 uct_ib_mlx5_gga_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
@@ -221,6 +225,7 @@ uct_gga_mlx5_rkey_handle_dereg(uct_gga_mlx5_rkey_handle_t *rkey_handle)
         return;
     }
 
+    pthread_mutex_lock(&uct_gga_mlx5_rkeys_locker);
     while (!ucs_list_is_empty(&rkey_handle->mds)) {
         md_link  = ucs_list_extract_head(&rkey_handle->mds,
                                          uct_gga_mlx5_rkey_handle_md_link_t,
@@ -230,6 +235,8 @@ uct_gga_mlx5_rkey_handle_dereg(uct_gga_mlx5_rkey_handle_t *rkey_handle)
         uct_gga_mlx5_md_rkey_handle_release(md, md_rkeyh);
         ucs_free(md_link);
     }
+
+    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_locker);
 
     rkey_handle->md   = NULL;
     rkey_handle->rkey = UCT_INVALID_RKEY;
@@ -341,9 +348,10 @@ uct_gga_mlx5_rkey_resolve_slow(uct_gga_mlx5_md_t *md,
     }
 
     md_link->md = md;
+    pthread_mutex_lock(&uct_gga_mlx5_rkeys_locker);
     ucs_list_add_tail(&rkey_handle->mds, &md_link->list_link);
-
     status = uct_gga_mlx5_md_put_rkey(md, hash_key, md_rkey_handle);
+    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_locker);
     if (status != UCS_OK) {
         goto err_free_link;
     }
@@ -892,6 +900,7 @@ static void uct_ib_mlx5_gga_md_close(uct_md_h md)
     } rkey;
     size_t rkey2md_refcount UCS_V_UNUSED;
 
+    pthread_mutex_lock(&uct_gga_mlx5_rkeys_locker);
     kh_foreach_key(&gga_md->rkey_cache, rkey.key, {
         md_rkey_handle = uct_gga_mlx5_md_get_rkey(gga_md, rkey.key);
         uct_gga_mlx5_md_rkey_handle_release(gga_md, md_rkey_handle);
@@ -912,6 +921,8 @@ static void uct_ib_mlx5_gga_md_close(uct_md_h md)
             }
         }
     });
+
+    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_locker);
 
     kh_destroy_inplace(resolved_rkeys, &gga_md->rkey_cache);
     uct_ib_mlx5_devx_md_close(md);
