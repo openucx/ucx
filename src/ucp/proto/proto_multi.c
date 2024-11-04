@@ -16,9 +16,22 @@
 #include "proto_debug.h"
 #include "proto_multi.inl"
 
+#include <ucs/algorithm/qsort_r.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 
+
+static int
+ucp_proto_multi_compare_tl_perf(const void *elem1, const void *elem2, void *arg)
+{
+    const ucp_lane_index_t *lane1                = elem1;
+    const ucp_lane_index_t *lane2                = elem2;
+    const ucp_proto_common_tl_perf_t *lanes_perf = arg;
+
+    /* If bandwidths are equal, prefer to maintain the original ordering */
+    return ucp_score_prio_cmp(lanes_perf[*lane2].bandwidth, (intptr_t)elem1,
+                              lanes_perf[*lane1].bandwidth, (intptr_t)elem2);
+}
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   const char *perf_name,
@@ -32,7 +45,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_proto_common_tl_perf_t *lane_perf, perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     double max_bandwidth, max_frag_ratio, min_bandwidth;
-    ucp_lane_index_t i, lane, num_lanes;
+    ucp_lane_index_t i, lane, num_lanes, first_lane;
     ucp_proto_multi_lane_priv_t *lpriv;
     ucp_proto_perf_node_t *perf_node;
     size_t max_frag, min_length, min_end_offset;
@@ -84,6 +97,17 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 
         /* Calculate maximal bandwidth of all lanes, to skip slow lanes */
         max_bandwidth = ucs_max(max_bandwidth, lane_perf->bandwidth);
+    }
+
+    /* Sort lanes by bandwidth */
+    if (num_lanes > 1) {
+        /* When the first lane is different from the middle one, then we should
+         * preserve the ordering with eager protocols for TAG and AM APIs */
+        first_lane = (params->first.lane_type == params->middle.lane_type) ? 0:
+                                                                             1;
+        ucs_qsort_r(lanes + first_lane, num_lanes - first_lane,
+                    sizeof(ucp_lane_index_t), ucp_proto_multi_compare_tl_perf,
+                    lanes_perf);
     }
 
     /* Select the lanes to use, and calculate their aggregate performance */
