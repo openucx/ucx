@@ -2531,10 +2531,11 @@ protected:
             rx_am_msg_arg arg(receiver(), &rhdr[0], &rb[0], rmemh);
             set_am_data_handler(receiver(), 0, rx_am_msg_cb, &arg);
 
-            ucp_request_param_t param = {};
+            ucp_request_param_t param;
+            param.op_attr_mask = 0;
             if (smemh != NULL) {
-                param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
-                param.memh         = smemh;
+                param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+                param.memh          = smemh;
             }
 
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;

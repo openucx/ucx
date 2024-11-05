@@ -244,7 +244,8 @@ public:
     }
 
     void test_flush_put_zcopy(flush_func_t flush) {
-        const size_t length  = 10 * UCS_MBYTE;
+        const size_t length = ucs_min(10 * UCS_MBYTE,
+                                      sender().iface_attr().cap.put.max_zcopy);
         mapped_buffer sendbuf(length, SEED1, sender());
         mapped_buffer recvbuf(length, SEED2, receiver());
 

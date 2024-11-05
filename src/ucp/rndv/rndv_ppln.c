@@ -84,7 +84,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     sel_param.op_id_flags = ucp_proto_select_op_id(select_param) |
                             UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
     sel_param.op_attr     = ucp_proto_select_op_attr_pack(
-            UCP_OP_ATTR_FLAG_MULTI_SEND);
+        UCP_OP_ATTR_FLAG_MULTI_SEND, UCP_PROTO_SELECT_OP_ATTR_MASK);
 
     proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
                                         init_params->rkey_cfg_index,

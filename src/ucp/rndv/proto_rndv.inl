@@ -154,15 +154,16 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 {
     ucs_assert(req->send.rndv.rkey != NULL);
     ucp_rkey_destroy(req->send.rndv.rkey);
-#if UCS_ENABLE_ASSERT
     req->send.rndv.rkey = NULL;
-#endif
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_recv_complete_with_ats(ucp_request_t *req, uint8_t ats_stage)
 {
-    ucp_proto_rndv_rkey_destroy(req);
+    if (req->send.rndv.rkey != NULL) {
+        ucp_proto_rndv_rkey_destroy(req);
+    }
+
     ucp_proto_request_set_stage(req, ats_stage);
     ucp_request_send(req);
 }

@@ -1390,6 +1390,27 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
     return UCS_OK;
 }
 
+static int
+ucs_config_prefix_name_match(const char *prefix, size_t prefix_len,
+                             const char *name, const char *pattern)
+{
+    const char *match_name;
+    char *full_name;
+    size_t full_name_len;
+
+    if (prefix_len == 0) {
+        match_name = name;
+    } else {
+        full_name_len = prefix_len + strlen(name) + 1;
+        full_name     = ucs_alloca(full_name_len);
+
+        ucs_snprintf_safe(full_name, full_name_len, "%s%s", prefix, name);
+        match_name = full_name;
+    }
+
+    return !fnmatch(pattern, match_name, 0);
+}
+
 /**
  * table_prefix == NULL  -> unused
  */
@@ -1420,8 +1441,8 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
             /* Check with sub-table prefix */
             if (recurse) {
                 status = ucs_config_parser_set_value_internal(var, sub_fields,
-                                                             name, value,
-                                                             field->name, 1);
+                                                              name, value,
+                                                              field->name, 1);
                 if (status == UCS_OK) {
                     ++count;
                 } else if (status != UCS_ERR_NO_ELEM) {
@@ -1432,17 +1453,16 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
             /* Possible override with my prefix */
             if (table_prefix != NULL) {
                 status = ucs_config_parser_set_value_internal(var, sub_fields,
-                                                             name, value,
-                                                             table_prefix, 0);
+                                                              name, value,
+                                                              table_prefix, 0);
                 if (status == UCS_OK) {
                     ++count;
                 } else if (status != UCS_ERR_NO_ELEM) {
                     return status;
                 }
             }
-        } else if (((table_prefix == NULL) || !strncmp(name, table_prefix, prefix_len)) &&
-                   !strcmp(name + prefix_len, field->name))
-        {
+        } else if (ucs_config_prefix_name_match(table_prefix, prefix_len,
+                                                field->name, name)) {
             if (ucs_config_is_deprecated_field(field)) {
                 return UCS_ERR_NO_ELEM;
             }
@@ -1614,15 +1634,21 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
         .section_info = {.name = "",
                          .skip = 0}
     };
-    char file_path[MAXPATHLEN];
+    char *file_path;
     int parse_result;
     FILE* file;
+    ucs_status_t status;
 
-    ucs_snprintf_safe(file_path, MAXPATHLEN, "%s/%s", dir_path, file_name);
+    status = ucs_string_alloc_formatted_path(&file_path, "file_path", "%s/%s",
+                                             dir_path, file_name);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     file = fopen(file_path, "r");
     if (file == NULL) {
         ucs_debug("failed to open config file %s: %m", file_path);
-        return;
+        goto out_free_file_path;
     }
 
     parse_result = ini_parse_file(file, ucs_config_parse_config_file_line,
@@ -1633,6 +1659,11 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
 
     ucs_debug("parsed config file %s", file_path);
     fclose(file);
+
+out_free_file_path:
+    ucs_free(file_path);
+out:
+    return;
 }
 
 static ucs_status_t
@@ -1750,18 +1781,26 @@ static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
 
 void ucs_config_parse_config_files()
 {
-    const char *path_p;
-    char path[PATH_MAX];
+    char *path;
+    const char *path_p, *dirname;
+    ucs_status_t status;
 
     /* System-wide configuration file */
     ucs_config_parse_config_file(UCX_CONFIG_DIR, UCX_CONFIG_FILE_NAME, 1);
 
     /* Library dir */
     path_p = ucs_sys_get_lib_path();
+
     if (path_p != NULL) {
-        ucs_strncpy_safe(path, path_p, PATH_MAX);
-        ucs_config_parse_config_file(dirname(path),
+        status = ucs_string_alloc_path_buffer_and_get_dirname(&path, "path",
+                                                              path_p, &dirname);
+        if (status != UCS_OK) {
+            return;
+        }
+
+        ucs_config_parse_config_file(dirname,
                                      "../etc/ucx/" UCX_CONFIG_FILE_NAME, 1);
+        ucs_free(path);
     }
 
     /* User home dir */

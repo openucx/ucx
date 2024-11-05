@@ -42,6 +42,7 @@ jobs:
         az_module_load dev/go-latest
         load_cuda_env
         ./autogen.sh
+        setup_go_env
         mkdir build
         cd build
         ../contrib/configure-devel --prefix=$(Agent.TempDirectory)/ucx-$(Build.BuildId) \

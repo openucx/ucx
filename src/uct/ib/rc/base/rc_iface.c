@@ -190,7 +190,8 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_GET_ZCOPY       |
                                   UCT_IFACE_FLAG_PENDING         |
                                   UCT_IFACE_FLAG_CONNECT_TO_EP   |
-                                  UCT_IFACE_FLAG_CB_SYNC;
+                                  UCT_IFACE_FLAG_CB_SYNC         |
+                                  UCT_IFACE_FLAG_INTER_NODE;
     iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                   UCT_IFACE_FLAG_EVENT_RECV      |
                                   UCT_IFACE_FLAG_EVENT_FD;
@@ -624,16 +625,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
         goto err;
     }
 
-    if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
-        self->config.max_get_zcopy = max_ib_msg_size;
-    } else if (config->tx.max_get_zcopy <= max_ib_msg_size) {
-        self->config.max_get_zcopy = config->tx.max_get_zcopy;
-    } else {
-        ucs_warn("rc_iface on %s:%d: reduced max_get_zcopy to %u",
-                 uct_ib_device_name(dev), self->super.config.port_num,
-                 max_ib_msg_size);
-        self->config.max_get_zcopy = max_ib_msg_size;
-    }
+    uct_rc_iface_adjust_max_get_zcopy(self, config, max_ib_msg_size,
+                                      uct_ib_device_name(dev), "rc");
 
     if ((config->tx.max_get_bytes == UCS_MEMUNITS_INF) ||
         (config->tx.max_get_bytes == UCS_MEMUNITS_AUTO)) {
@@ -1052,6 +1045,24 @@ void uct_rc_iface_vfs_refresh(uct_iface_h iface)
     /* Add objects for EPs */
     ucs_list_for_each(ep, &rc_iface->ep_list, list) {
         rc_iface_ops->ep_vfs_populate(ep);
+    }
+}
+
+void
+uct_rc_iface_adjust_max_get_zcopy(uct_rc_iface_t *iface,
+                                  const uct_rc_iface_common_config_t *config,
+                                  size_t max_tl_get_zcopy, const char *tl_name,
+                                  const char *dev_name)
+{
+    if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
+        iface->config.max_get_zcopy = max_tl_get_zcopy;
+    } else if (config->tx.max_get_zcopy <= max_tl_get_zcopy) {
+        iface->config.max_get_zcopy = config->tx.max_get_zcopy;
+    } else {
+        ucs_warn("%s_iface on %s:%d: reduced max_get_zcopy to %zu",
+                 tl_name, dev_name, iface->super.config.port_num,
+                 max_tl_get_zcopy);
+        iface->config.max_get_zcopy = max_tl_get_zcopy;
     }
 }
 

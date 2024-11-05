@@ -14,6 +14,7 @@
 #include <ucs/profile/profile.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/time/time.h>
+#include <ucs/type/serialize.h>
 
 /* max log value to store in uint8_t */
 #define UCT_IB_MLX5_MD_MAX_DCI_CHANNELS 8
@@ -136,7 +137,8 @@ static void uct_ib_mlx5_devx_ksm_list_log(uct_ib_mlx5_md_t *md, void *address,
 }
 
 static void uct_ib_mlx5_devx_klm_entry_set(void **klm_p, size_t klm_idx,
-                                           void *address, struct ibv_mr *mr)
+                                           void *address, size_t byte_count,
+                                           struct ibv_mr *mr)
 {
     void *klm = *klm_p;
 
@@ -144,6 +146,8 @@ static void uct_ib_mlx5_devx_klm_entry_set(void **klm_p, size_t klm_idx,
               mr->addr, mr->length, mr->lkey);
     UCT_IB_MLX5DV_SET64(klm, klm, address, (uintptr_t)address);
     UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->lkey);
+    UCT_IB_MLX5DV_SET(klm, klm, byte_count, byte_count);
+
     *klm_p = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
 }
 
@@ -178,13 +182,13 @@ uct_ib_mlx5_devx_reg_ksm_data_mt(uct_ib_mlx5_md_t *md, void *address,
     klm = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
     ucs_carray_for_each(mr, ksm_data->mrs, ksm_data->mr_num) {
         uct_ib_mlx5_devx_klm_entry_set(&klm, mr - ksm_data->mrs, mr_address,
-                                       *mr);
+                                       chunk_size, *mr);
         mr_address = UCS_PTR_BYTE_OFFSET(mr_address, chunk_size);
     }
 
     if ((void*)iova != address) {
         /* Add offset to workaround CREATE_MKEY range check issue */
-        uct_ib_mlx5_devx_klm_entry_set(&klm, list_size, mr_address,
+        uct_ib_mlx5_devx_klm_entry_set(&klm, list_size, mr_address, chunk_size,
                                        ksm_data->mrs[ksm_data->mr_num - 1]);
         ++list_size;
     }
@@ -223,7 +227,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_addr(
     for (i = 0; i < list_size; i++) {
         uct_ib_mlx5_devx_klm_entry_set(
                 &klm, i,
-                UCS_PTR_BYTE_OFFSET(address, i * UCT_IB_MD_MAX_MR_SIZE), mr);
+                UCS_PTR_BYTE_OFFSET(address, i * UCT_IB_MD_MAX_MR_SIZE),
+                UCT_IB_MD_MAX_MR_SIZE, mr);
     }
     ucs_log_indent(-1);
 
@@ -775,7 +780,7 @@ uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md, size_t length,
 static int
 uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
 {
-    if (memh->mrs[UCT_IB_MR_DEFAULT].super.ib->length == SIZE_MAX) {
+    if (memh->super.flags & UCT_IB_MEM_FLAG_GVA) {
         return md->flags & UCT_IB_MLX5_MD_FLAG_GVA_RO;
     }
 
@@ -783,7 +788,7 @@ uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, uct_mem_h *memh_p)
+uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
 {
     uct_ib_mlx5_md_t *md           = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     uct_md_mem_reg_params_t params = {};
@@ -792,7 +797,8 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, uct_mem_h *memh_p)
     ucs_status_t status;
     int relaxed_order;
 
-    status = uct_ib_mlx5_devx_memh_alloc(md, SIZE_MAX, UCT_MD_MEM_FLAG_NONBLOCK,
+    status = uct_ib_mlx5_devx_memh_alloc(md, SIZE_MAX,
+                                         UCT_MD_MEM_FLAG_NONBLOCK | flags,
                                          sizeof(memh->mrs[0]), &memh);
     if (status != UCS_OK) {
         goto err;
@@ -841,7 +847,7 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
     uint32_t dummy_mkey;
 
     if (flags & UCT_MD_MEM_GVA) {
-        return uct_ib_mlx5_devx_mem_reg_gva(uct_md, memh_p);
+        return uct_ib_mlx5_devx_mem_reg_gva(uct_md, flags, memh_p);
     }
 
     status = uct_ib_mlx5_devx_memh_alloc(md, length, flags,
@@ -1429,9 +1435,21 @@ uct_ib_mlx5_devx_umr_mkey_hash_find(uct_ib_mlx5_md_t *md,
     }
 
     *umr_alias = kh_val(md->umr.mkey_hash, khiter);
-    ucs_trace("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " for index 0x%x in hash",
-              uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
-              uct_ib_mlx5_mkey_index(packed_mkey->lkey));
+
+    /* Check if alias is from the same MD as packed_mkey */
+    if (packed_mkey->md_uuid != umr_alias->md_uuid) {
+        ucs_debug("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " in hash, but uuid %"
+                  PRIu64 " doesn't match, removing stale alias",
+                  uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
+                  packed_mkey->md_uuid);
+        /* Remove stale entry from hash, and destroy */
+        kh_del(umr_mkey_map, md->umr.mkey_hash, khiter);
+        uct_ib_mlx5_devx_umr_mkey_alias_destroy(md, umr_alias);
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    ucs_trace("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " in hash",
+              uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias));
     return UCS_OK;
 }
 
@@ -1461,9 +1479,8 @@ uct_ib_mlx5_devx_umr_mkey_hash_put(uct_ib_mlx5_md_t *md,
     }
 
     kh_val(md->umr.mkey_hash, khiter) = *umr_alias;
-    ucs_trace("%s: added " UCT_IB_MLX5_UMR_ALIAS_FMT " for index 0x%x to hash",
-              uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
-              uct_ib_mlx5_mkey_index(packed_mkey->lkey));
+    ucs_trace("%s: added " UCT_IB_MLX5_UMR_ALIAS_FMT " to hash",
+              uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias));
     return UCS_OK;
 }
 
@@ -2415,6 +2432,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
     md->super.name       = UCT_IB_MD_NAME(mlx5);
     md->super.vhca_id    = vhca_id;
+    md->super.uuid       = ucs_generate_uuid((uintptr_t)md);
 
     if ((md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI) &&
         (md_config->xgvmi_umr_enable == UCS_YES)) {
@@ -2920,6 +2938,25 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE uct_ib_md_packed_mkey_t
+uct_ib_mlx5_devx_get_packed_mkey(const void *mkey_buffer, size_t mkey_size)
+{
+    const void *p = mkey_buffer;
+    uct_ib_md_packed_mkey_t packed_mkey;
+
+    packed_mkey.lkey    = *ucs_serialize_next(&p, uint32_t);
+    packed_mkey.vhca_id = *ucs_serialize_next(&p, uint16_t);
+    packed_mkey.md_uuid = 0;
+
+    /* Backward compatibility: extract MD UUID from mkey buffer only if it's
+     * present there */
+    if (mkey_size > ucs_offsetof(uct_ib_md_packed_mkey_t, md_uuid)) {
+        packed_mkey.md_uuid = *ucs_serialize_next(&p, uint64_t);
+    }
+
+    return packed_mkey;
+}
+
 ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
                                          const void *mkey_buffer,
                                          uct_md_mem_attach_params_t *params,
@@ -2930,7 +2967,9 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     const uint64_t flags = UCT_MD_MEM_ATTACH_FIELD_VALUE(params, flags,
                                                          FIELD_FLAGS, 0);
-    const uct_ib_md_packed_mkey_t *packed_mkey = mkey_buffer;
+    size_t mkey_size     = UCT_MD_MEM_ATTACH_FIELD_VALUE(params, mkey_size,
+                                                         FIELD_MKEY_SIZE, 0);
+    uct_ib_md_packed_mkey_t packed_mkey;
     uct_ib_mlx5_devx_umr_alias_t umr_alias     = {};
     uct_ib_mlx5_devx_mem_t *memh;
     void *hdr, *alias_ctx;
@@ -2943,11 +2982,12 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
         goto err;
     }
 
-    hdr       = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, hdr);
-    alias_ctx = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, alias_ctx);
+    hdr         = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, hdr);
+    alias_ctx   = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, alias_ctx);
+    packed_mkey = uct_ib_mlx5_devx_get_packed_mkey(mkey_buffer, mkey_size);
 
     /* Try to find alias in the UMR hash map */
-    status = uct_ib_mlx5_devx_umr_mkey_hash_find(md, packed_mkey, &umr_alias);
+    status = uct_ib_mlx5_devx_umr_mkey_hash_find(md, &packed_mkey, &umr_alias);
     if (UCS_OK == status) {
         memh->super.lkey = umr_alias.lkey;
         goto out;
@@ -2961,15 +3001,16 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr, hdr, alias_object, 1);
 
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, vhca_id_to_be_accessed,
-                      packed_mkey->vhca_id);
+                      packed_mkey.vhca_id);
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, object_id_to_be_accessed,
-                      uct_ib_mlx5_mkey_index(packed_mkey->lkey));
+                      uct_ib_mlx5_mkey_index(packed_mkey.lkey));
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, metadata_1,
                       uct_ib_mlx5_devx_md_get_pdn(md));
     access_key = UCT_IB_MLX5DV_ADDR_OF(alias_context, alias_ctx, access_key);
     ucs_strncpy_zero(access_key, uct_ib_mkey_token,
                      UCT_IB_MLX5DV_FLD_SZ_BYTES(alias_context, access_key));
 
+    umr_alias.md_uuid  = packed_mkey.md_uuid;
     umr_alias.cross_mr = uct_ib_mlx5_devx_obj_create(md->super.dev.ibv_context,
                                                      in, sizeof(in), out,
                                                      sizeof(out), "MKEY_ALIAS",
@@ -2992,10 +3033,10 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
                        md->mkey_tag;
 
     /* If received mkey is UMR key, store alias in the UMR hash map */
-    if (uct_ib_mlx5_devx_mkey_is_umr(packed_mkey->lkey)) {
+    if (uct_ib_mlx5_devx_mkey_is_umr(packed_mkey.lkey)) {
         umr_alias.lkey = memh->super.lkey;
 
-        status = uct_ib_mlx5_devx_umr_mkey_hash_put(md, packed_mkey, &umr_alias);
+        status = uct_ib_mlx5_devx_umr_mkey_hash_put(md, &packed_mkey, &umr_alias);
         if (UCS_OK != status) {
             goto err_cross_mr_destroy;
         }

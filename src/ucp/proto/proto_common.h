@@ -9,6 +9,7 @@
 
 #include "proto.h"
 #include "proto_select.h"
+#include <ucp/dt/dt.h>
 
 #include <uct/api/v2/uct_v2.h>
 
@@ -122,12 +123,12 @@ typedef struct {
     /* Map of unsuitable lanes */
     ucp_lane_map_t          exclude_map;
 
-    /* Memory type of the buffer used for data transfer on the transport level.
+    /* Memory info of the buffer used for data transfer on the transport level.
      * If UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY flag is set, it is expected to
-     * be the user buffer memory type. Alternatively, it refers to the type of
+     * be the user buffer memory info. Alternatively, it refers to the type of
      * memory used for bounce buffers (either in the UCP or UCT layer) where
      * data needs to be copied as part of the protocol. */
-    ucs_memory_type_t       reg_mem_type;
+    ucp_memory_info_t       reg_mem_info;
 } ucp_proto_common_init_params_t;
 
 
@@ -192,6 +193,10 @@ typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
 
 ucp_proto_common_init_params_t
 ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params);
+
+
+ucp_memory_info_t ucp_proto_common_select_param_mem_info(
+                                  const ucp_proto_select_param_t *select_param);
 
 
 /**

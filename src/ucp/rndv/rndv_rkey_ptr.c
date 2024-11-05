@@ -93,7 +93,7 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .super.exclude_map   = 0,
-        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
     };
@@ -102,7 +102,9 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
-        !ucp_proto_common_init_check_err_handling(&params.super)) {
+        !ucp_proto_common_init_check_err_handling(&params.super) ||
+        (ucp_proto_select_op_flags(params.super.super.select_param) &
+         UCP_PROTO_SELECT_OP_FLAG_RESUME)) {
         return;
     }
 
@@ -215,6 +217,22 @@ ucp_proto_rndv_rkey_ptr_fetch_progress(uct_pending_req_t *uct_req)
     return UCS_OK;
 }
 
+static ucs_status_t ucp_proto_rndv_rkey_ptr_reset(ucp_request_t *request)
+{
+    switch (request->send.proto_stage) {
+    case UCP_PROTO_RNDV_RKEY_PTR_STAGE_COPY:
+        ucs_queue_remove(&request->send.ep->worker->rkey_ptr_reqs,
+                         &request->send.rndv.rkey_ptr.queue_elem);
+        break;
+    case UCP_PROTO_RNDV_RKEY_PTR_STAGE_ACK:
+        break;
+    default:
+        ucp_proto_fatal_invalid_stage(request, "reset");
+    }
+
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_rkey_ptr_proto = {
     .name     = "rndv/rkey_ptr",
     .desc     = "copy from mapped remote memory",
@@ -226,7 +244,7 @@ ucp_proto_t ucp_rndv_rkey_ptr_proto = {
          [UCP_PROTO_RNDV_RKEY_PTR_STAGE_ACK]  = ucp_proto_rndv_ats_progress
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_rkey_ptr_reset
 };
 
 static void
@@ -254,7 +272,7 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
         .super.exclude_map   = (rkey_ptr_lane == UCP_NULL_LANE) ?
                                0 : UCS_BIT(rkey_ptr_lane),
-        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_LAST,
         .tl_cap_flags        = 0
     };

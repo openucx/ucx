@@ -99,10 +99,6 @@ typedef struct {
        a 3% better time) */
     double                         perf_bias;
 
-    /* Memory type of the transfer. Used as rkey memory information when
-       selecting the remote protocol. */
-    ucp_memory_info_t              mem_info;
-
     /* Name of the control message, e.g "RTS" */
     const char                     *ctrl_msg_name;
 

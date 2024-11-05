@@ -14,9 +14,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	. "ucx"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"unsafe"
-	. "cuda"
+	. "github.com/openucx/ucx/bindings/go/src/cuda"
 	"runtime"
 )
 

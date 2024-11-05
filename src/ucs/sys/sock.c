@@ -170,15 +170,23 @@ int ucs_netif_is_active(const char *if_name, sa_family_t af)
 
 unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
 {
+    char *lowest_path_buf;
     ucs_status_t status;
     long ad_num_ports;
     const char *bond_path;
-    char lowest_path_buf[PATH_MAX];
+    unsigned ret;
+
+    status = ucs_string_alloc_path_buffer(&lowest_path_buf, "lowest_path_buf");
+    if (status != UCS_OK) {
+        ret = 1;
+        goto out;
+    }
 
     status = ucs_netif_get_lowest_device_path(bond_name, lowest_path_buf,
                                               PATH_MAX);
     if (status != UCS_OK) {
-        return 1;
+        ret = 1;
+        goto out_free_lowest_path_buf;
     }
 
     bond_path = ucs_dirname(lowest_path_buf, 1);
@@ -189,10 +197,16 @@ unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
         ucs_trace("failed to read from %s/%s: %m, "
                   "assuming 802.3ad bonding is disabled",
                   bond_path, UCS_BOND_NUM_PORTS_FILE);
-        return 1;
+        ret = 1;
+        goto out_free_lowest_path_buf;
     }
 
-    return (unsigned)ad_num_ports;
+    ret = (unsigned)ad_num_ports;
+
+out_free_lowest_path_buf:
+    ucs_free(lowest_path_buf);
+out:
+    return ret;
 }
 
 ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)

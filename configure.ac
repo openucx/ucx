@@ -10,7 +10,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 18) # Minor version. Increased for each release.
+define([ucx_ver_minor], 19) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -185,8 +185,9 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_STATS], [false])
      AM_CONDITIONAL([HAVE_TUNING], [false])
      AM_CONDITIONAL([HAVE_IB], [false])
-     AM_CONDITIONAL([HAVE_MLX5_DV], [false])
      AM_CONDITIONAL([HAVE_MLX5_HW_UD], [false])
+     AM_CONDITIONAL([HAVE_MLX5_DV], [false])
+     AM_CONDITIONAL([HAVE_MLX5_MMO], [false])
      AM_CONDITIONAL([HAVE_DEVX], [false])
      AM_CONDITIONAL([HAVE_TL_RC], [false])
      AM_CONDITIONAL([HAVE_TL_DC], [false])
