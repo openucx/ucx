@@ -37,6 +37,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_stream_set_hdr(ucp_request_t *req, ucp_stream_am_hdr_t *hdr)
 {
     hdr->ep_id = ucp_send_request_get_ep_remote_id(req);
+    hdr->ch_id = req->send.stream.id;
 }
 
 static size_t ucp_stream_bcopy_pack(void *dest, void *arg)

@@ -719,6 +719,7 @@ typedef enum {
     UCP_OP_ATTR_FIELD_MEMORY_TYPE   = UCS_BIT(6),  /**< memory type field */
     UCP_OP_ATTR_FIELD_RECV_INFO     = UCS_BIT(7),  /**< recv_info field */
     UCP_OP_ATTR_FIELD_MEMH          = UCS_BIT(8),  /**< memory handle field */
+    UCP_OP_ATTR_FIELD_ID            = UCS_BIT(9),  /**< id field */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< Deny immediate completion,
                                                         i.e NULL cannot be returned.
@@ -1591,10 +1592,12 @@ typedef struct ucp_stream_poll_ep {
      */
     unsigned    flags;
 
+    uint64_t    ch_id;
+
     /**
      * Reserved for future use.
      */
-    uint8_t     reserved[16];
+    uint8_t     reserved[8];
 } ucp_stream_poll_ep_t;
 
 
@@ -1800,6 +1803,11 @@ typedef struct {
      * which means the memory type will be detected internally.
      */
     ucs_memory_type_t memory_type;
+
+    /**
+     * ID
+     */
+    uint64_t      id;
 
     /**
      * Pointer to the information where received data details are stored

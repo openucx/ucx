@@ -362,6 +362,10 @@ struct ucp_request {
                 } tag_offload;
 
                 struct {
+                    uint64_t id;
+                } stream;
+
+                struct {
                     /* Remote request ID received from a peer */
                     ucs_ptr_map_key_t remote_req_id;
                 } get_reply;
@@ -443,6 +447,7 @@ struct ucp_request {
                     ucp_stream_recv_nbx_callback_t cb;     /* Completion callback */
                     size_t                         elem_size;
                     size_t                         length; /* Completion info to fill */
+                    uint64_t id;
                 } stream;
 
                  struct {

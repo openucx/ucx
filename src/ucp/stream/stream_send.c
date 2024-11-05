@@ -170,6 +170,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
             }
         }
 
+        req->send.stream.id = UCP_REQUEST_PARAM_FIELD(param, ID, id, 1);
+
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,
                                         UCP_OP_ID_STREAM_SEND, buffer, count,

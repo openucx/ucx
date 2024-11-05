@@ -14,6 +14,7 @@
 
 typedef struct {
     uint64_t                 ep_id;
+    uint64_t                 ch_id;
 } UCS_S_PACKED ucp_stream_am_hdr_t;
 
 
@@ -37,9 +38,15 @@ static UCS_F_ALWAYS_INLINE int ucp_stream_ep_is_queued(ucp_ep_ext_t *ep_ext)
     return ep_ext->stream.ready_list.next != NULL;
 }
 
-static UCS_F_ALWAYS_INLINE int ucp_stream_ep_has_data(ucp_ep_ext_t *ep_ext)
+static UCS_F_ALWAYS_INLINE int ucp_stream_ep_has_data(ucp_ep_ext_t *ep_ext,
+                                                      uint64_t id)
 {
-    return ep_ext->ep->flags & UCP_EP_FLAG_STREAM_HAS_DATA;
+    return !!(ep_ext->stream.ready_mask & UCS_BIT(id));
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_stream_ep_has_any_data(ucp_ep_ext_t *ep_ext)
+{
+    return ep_ext->stream.ready_mask != 0;
 }
 
 static UCS_F_ALWAYS_INLINE
