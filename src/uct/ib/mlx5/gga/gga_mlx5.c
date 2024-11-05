@@ -1004,8 +1004,7 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
 
     status = uct_ib_mlx5_devx_md_init(&md->super, ib_device, md_config);
     if (status != UCS_OK) {
-        uct_ib_mlx5_devx_md_free(&md->super);
-        return status;
+        goto err_free_md;
     }
 
     md->super.super.super.component = &uct_gga_component;
@@ -1021,4 +1020,8 @@ out_free_dev_list:
     ibv_free_device_list(ib_device_list);
 out:
     return status;
+
+err_free_md:
+    uct_ib_mlx5_devx_md_free(&md->super);
+    goto out_free_dev_list;
 }

@@ -2198,7 +2198,7 @@ ucs_status_t uct_ib_mlx5_devx_md_init(uct_ib_mlx5_md_t *md,
 
     status = uct_ib_mlx5_devx_check_uar(md);
     if (status != UCS_OK) {
-        goto err_free_md;
+        goto err_free_buffer;
     }
 
     dev          = &md->super.dev;
@@ -2467,8 +2467,6 @@ err_lock_destroy:
     uct_ib_md_close_common(&md->super);
 err_lru_cleanup:
     uct_ib_mlx5_devx_mr_lru_cleanup(md);
-err_free_md:
-    uct_ib_mlx5_devx_md_free(md);
 err_free_buffer:
     ucs_free(buf);
 err:
