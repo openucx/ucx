@@ -191,11 +191,6 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "is zero or negative",
    ucs_offsetof(ucp_context_config_t, rndv_thresh_fallback), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"RNDV_PERF_DIFF", "1",
-   "The percentage allowed for performance difference between rendezvous and "
-   "the eager_zcopy protocol",
-   ucs_offsetof(ucp_context_config_t, rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
-
   {"MULTI_LANE_MAX_RATIO", "4",
    "Maximal allowed ratio between slowest and fastest lane in a multi-lane\n"
    "protocol. Lanes slower than the specified ratio will not be used.",

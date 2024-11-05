@@ -66,9 +66,6 @@ typedef struct ucp_context_config {
     /** Threshold for switching UCP to rendezvous protocol in case the calculated
      *  threshold is zero or negative */
     size_t                                 rndv_thresh_fallback;
-    /** The percentage allowed for performance difference between rendezvous
-     *  and the eager_zcopy protocol */
-    double                                 rndv_perf_diff;
     /** Maximal allowed ratio between slowest and fastest lane in a multi-lane
      *  protocol. Lanes slower than the specified ratio will not be used */
     double                                 multi_lane_max_ratio;

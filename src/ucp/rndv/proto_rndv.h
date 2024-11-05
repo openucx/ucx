@@ -95,10 +95,6 @@ typedef struct {
     /* Performance data to unpack the received data */
     ucp_proto_perf_t               *unpack_perf;
 
-    /* Reduce estimated time by this value (for example, 0.03 means to report
-       a 3% better time) */
-    double                         perf_bias;
-
     /* Name of the control message, e.g "RTS" */
     const char                     *ctrl_msg_name;
 

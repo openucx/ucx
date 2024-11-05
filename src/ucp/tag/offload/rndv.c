@@ -185,7 +185,6 @@ ucp_tag_rndv_offload_sw_proto_probe(const ucp_proto_init_params_t *init_params)
                                                      init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
         .lane                = init_params->ep_config_key->tag_lane,
-        .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
         .md_map              = 0
     };

@@ -180,7 +180,6 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
                                                      init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
-        .perf_bias           = 0.0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
         .md_map              = 0
     };
@@ -392,7 +391,6 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
-        .perf_bias           = 0.0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
     };
     ucs_memory_type_t frag_mem_type;

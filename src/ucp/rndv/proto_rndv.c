@@ -545,7 +545,6 @@ void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
                                                      init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
-        .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
         .md_map              = 0
     };

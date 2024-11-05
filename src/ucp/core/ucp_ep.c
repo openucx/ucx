@@ -2106,7 +2106,7 @@ ucp_ep_config_calc_rndv_thresh(ucp_worker_t *worker,
                                int recv_reg_cost, size_t *thresh_p)
 {
     ucp_context_h context = worker->context;
-    double diff_percent   = 1.0 - context->config.ext.rndv_perf_diff / 100.0;
+    double diff_percent   = 0.99;
     ucp_ep_thresh_params_t eager_zcopy;
     ucp_ep_thresh_params_t rndv;
     double numerator, denominator;
