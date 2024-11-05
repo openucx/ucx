@@ -175,17 +175,26 @@ static void ucs_module_init(const char *module_path, void *dl)
 
     const char *module_init_name =
                     UCS_PP_MAKE_STRING(UCS_MODULE_CONSTRUCTOR_NAME);
-    char *fullpath, buffer[PATH_MAX];
+    char *fullpath, *buffer;
     init_func_t init_func;
     ucs_status_t status;
 
+    status = ucs_string_alloc_path_buffer(&buffer, "buffer");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     fullpath = realpath(module_path, buffer);
+    if (fullpath == NULL) {
+        goto out_free_buffer;
+    }
+
     ucs_module_trace("loaded %s [%p]", fullpath, dl);
 
     init_func = (init_func_t)ucs_module_dlsym_shallow(module_path, dl,
                                                       module_init_name);
     if (init_func == NULL) {
-        return;
+        goto out_free_buffer;
     }
 
     ucs_module_trace("calling '%s' in '%s': [%p]", module_init_name, fullpath,
@@ -196,6 +205,11 @@ static void ucs_module_init(const char *module_path, void *dl)
                          ucs_status_string(status));
         dlclose(dl);
     }
+
+out_free_buffer:
+    ucs_free(buffer);
+out:
+    return;
 }
 
 
@@ -217,16 +231,17 @@ static int ucs_module_is_enabled(const char *module_name)
 static void ucs_module_load_one(const char *framework, const char *module_name,
                                 unsigned flags)
 {
-    char module_path[PATH_MAX] = {0};
+    char *module_path;
     const char *error;
     unsigned i;
     void *dl;
     int mode;
+    ucs_status_t status;
 
     if (!ucs_module_is_enabled(module_name)) {
         ucs_module_trace("module '%s' is disabled by configuration",
                          module_name);
-        return;
+        goto out;
     }
 
     mode = RTLD_LAZY;
@@ -241,8 +256,13 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
 
     ucs_module_trace("loading module '%s' with mode 0x%x", module_name, mode);
 
+    status = ucs_string_alloc_path_buffer(&module_path, "module_path");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     for (i = 0; i < ucs_module_loader_state.srchpath_cnt; ++i) {
-        snprintf(module_path, sizeof(module_path) - 1, "%s/lib%s_%s%s",
+        snprintf(module_path, PATH_MAX, "%s/lib%s_%s%s",
                  ucs_module_loader_state.srch_path[i], framework, module_name,
                  ucs_module_loader_state.module_ext);
 
@@ -251,7 +271,7 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
         dl = dlopen(module_path, mode);
         if (dl != NULL) {
             ucs_module_init(module_path, dl);
-            break;
+            goto out_free_module_path;
         } else {
             /* If a module fails to load, silently give up */
             error = dlerror();
@@ -260,6 +280,10 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
         }
     }
 
+out_free_module_path:
+    ucs_free(module_path);
+out:
+    return;
     /* coverity[leaked_storage] : a loaded module is never unloaded */
 }
 #endif /* UCX_SHARED_LIB */

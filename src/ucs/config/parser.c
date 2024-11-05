@@ -1634,15 +1634,21 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
         .section_info = {.name = "",
                          .skip = 0}
     };
-    char file_path[MAXPATHLEN];
+    char *file_path;
     int parse_result;
     FILE* file;
+    ucs_status_t status;
 
-    ucs_snprintf_safe(file_path, MAXPATHLEN, "%s/%s", dir_path, file_name);
+    status = ucs_string_alloc_formatted_path(&file_path, "file_path", "%s/%s",
+                                             dir_path, file_name);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     file = fopen(file_path, "r");
     if (file == NULL) {
         ucs_debug("failed to open config file %s: %m", file_path);
-        return;
+        goto out_free_file_path;
     }
 
     parse_result = ini_parse_file(file, ucs_config_parse_config_file_line,
@@ -1653,6 +1659,11 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
 
     ucs_debug("parsed config file %s", file_path);
     fclose(file);
+
+out_free_file_path:
+    ucs_free(file_path);
+out:
+    return;
 }
 
 static ucs_status_t
@@ -1770,18 +1781,26 @@ static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
 
 void ucs_config_parse_config_files()
 {
-    const char *path_p;
-    char path[PATH_MAX];
+    char *path;
+    const char *path_p, *dirname;
+    ucs_status_t status;
 
     /* System-wide configuration file */
     ucs_config_parse_config_file(UCX_CONFIG_DIR, UCX_CONFIG_FILE_NAME, 1);
 
     /* Library dir */
     path_p = ucs_sys_get_lib_path();
+
     if (path_p != NULL) {
-        ucs_strncpy_safe(path, path_p, PATH_MAX);
-        ucs_config_parse_config_file(dirname(path),
+        status = ucs_string_alloc_path_buffer_and_get_dirname(&path, "path",
+                                                              path_p, &dirname);
+        if (status != UCS_OK) {
+            return;
+        }
+
+        ucs_config_parse_config_file(dirname,
                                      "../etc/ucx/" UCX_CONFIG_FILE_NAME, 1);
+        ucs_free(path);
     }
 
     /* User home dir */

@@ -1336,7 +1336,8 @@ void ucs_debug_asan_validate_address(const char *ptr_name, void *address,
 {
 #ifdef __SANITIZE_ADDRESS__
     if (__asan_region_is_poisoned(address, size)) {
-        ucs_fatal("%s at: %p is poisoned", ptr_name, address);
+        ucs_fatal("%s: address=%p size=%zu is poisoned", ptr_name, address,
+                  size);
     }
 #endif
 }

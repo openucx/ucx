@@ -245,7 +245,9 @@ typedef enum {
  */
 typedef enum {
     /** Enables @ref uct_md_mem_attach_params_t.flags field */
-    UCT_MD_MEM_ATTACH_FIELD_FLAGS = UCS_BIT(0)
+    UCT_MD_MEM_ATTACH_FIELD_FLAGS     = UCS_BIT(0),
+    /** Enables @ref uct_md_mem_attach_params_t.mkey_size field */
+    UCT_MD_MEM_ATTACH_FIELD_MKEY_SIZE = UCS_BIT(1)
 } uct_md_mem_attach_field_mask_t;
 
 
@@ -544,6 +546,11 @@ typedef struct uct_md_mem_attach_params {
      * @ref uct_md_mem_attach_flags_t.
      */
     uint64_t                     flags;
+
+    /**
+     * Size of the memory key.
+     */
+    size_t                       mkey_size;
 } uct_md_mem_attach_params_t;
 
 

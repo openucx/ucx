@@ -79,7 +79,10 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      "           Multiple endpoints may share the same DCI.\n"
      "\n"
      "hw_dcs     A single DCI that operates as a HW DCS queue. The channels are assigned\n"
-     "           in a round-robin fashion.",
+     "           in a round-robin fashion.\n"
+     "\n"
+     "dcs_hybrid Same as \"dcs_quota\" but when there are no DCIs available,\n" 
+     "           a dedicated HW DCI is used in the same manner as in \"hw_dcs\" policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 

@@ -344,8 +344,10 @@ public:
     {
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)arg;
 
-        ucs_assertv(length == 0ul, "length=%zu", length);
+        ucs_assertv(length == sizeof(ucs_status_t), "length=%zu", length);
         ucs_assert(!(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV));
+        ucs_status_t status = *(ucs_status_t*)data;
+        ucs_assert_always(status == UCS_OK);
 
         test->send_completed();
 
@@ -359,8 +361,10 @@ public:
     {
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)arg;
 
-        ucs_assertv(length == 0ul, "length=%zu", length);
+        ucs_assertv(length == sizeof(ucs_status_t), "length=%zu", length);
         ucs_assert(!(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV));
+        ucs_status_t status = *(ucs_status_t*)data;
+        ucs_assert_always(status == UCS_OK);
 
         test->recv_completed();
 
@@ -1037,35 +1041,71 @@ private:
 #define TEST_CASE_ALL_AM(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, 0, 0)
 
-ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
+static ucs_status_t ucp_perf_dispatch_osd(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_OSD, perf,
-        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM),
-        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_GET,   UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_ADD,   UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_FADD,  UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_SWAP,  UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI)
-        );
+                   (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG),
+                   (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM),
+                   (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI),
+                   (UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI),
+                   (UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI),
+                   (UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI),
+                   (UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI),
+                   (UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI)
+                   );
+    return UCS_ERR_INVALID_PARAM;
+}
 
+static ucs_status_t ucp_perf_dispatch_tag(ucx_perf_context_t *perf)
+{
     UCS_PP_FOREACH(TEST_CASE_ALL_TAG, perf,
-        (UCX_PERF_CMD_TAG,      UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_TAG,      UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI)
-        );
+                   (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG),
+                   (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI),
+                   (UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_PINGPONG),
+                   (UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI)
+                   );
+    return UCS_ERR_INVALID_PARAM;
+}
 
+static ucs_status_t ucp_perf_dispatch_stream(ucx_perf_context_t *perf)
+{
     UCS_PP_FOREACH(TEST_CASE_ALL_STREAM, perf,
-        (UCX_PERF_CMD_STREAM,   UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_STREAM,   UCX_PERF_TEST_TYPE_PINGPONG)
-        );
+                   (UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI),
+                   (UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG)
+                   );
+    return UCS_ERR_INVALID_PARAM;
+}
 
+static ucs_status_t ucp_perf_dispatch_am(ucx_perf_context_t *perf)
+{
     UCS_PP_FOREACH(TEST_CASE_ALL_AM, perf,
-        (UCX_PERF_CMD_AM,       UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_AM,       UCX_PERF_TEST_TYPE_STREAM_UNI)
-        );
+                   (UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG),
+                   (UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI)
+                   );
+    return UCS_ERR_INVALID_PARAM;
+}
+
+typedef ucs_status_t (*ucp_dispatch_func_t)(ucx_perf_context_t *perf);
+
+static ucp_dispatch_func_t dispatchers[] = {
+    ucp_perf_dispatch_osd,
+    ucp_perf_dispatch_tag,
+    ucp_perf_dispatch_stream,
+    ucp_perf_dispatch_am
+};
+
+ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
+{
+    const size_t num_dispatchers = ucs_static_array_size(dispatchers);
+    ucs_status_t status;
+    ucp_dispatch_func_t *dispatcher;
+
+    ucs_carray_for_each(dispatcher, dispatchers, num_dispatchers) {
+        status = (*dispatcher)(perf);
+        if (status != UCS_ERR_INVALID_PARAM) {
+            return status;
+        }
+    }
 
     ucs_error("Invalid test case: %d/%d/0x%x",
               perf->params.command, perf->params.test_type,

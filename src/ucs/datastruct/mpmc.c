@@ -59,7 +59,7 @@ ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint64_t *value_p)
     ucs_status_t status = UCS_ERR_NO_PROGRESS;
     ucs_mpmc_elem_t *elem;
 
-    if (ucs_queue_is_empty(&mpmc->queue)) {
+    if (ucs_mpmc_queue_is_empty(mpmc)) {
         return status;
     }
 

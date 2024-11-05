@@ -946,7 +946,7 @@ ucp_proto_select_write_info(ucp_worker_h worker,
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);
     const ucp_proto_init_elem_t *selected_proto, *proto;
-    char dir_path[PATH_MAX], file_name[NAME_MAX];
+    char file_name[NAME_MAX];
     char range_start_str[64], range_end_str[64];
     const ucp_proto_flat_perf_range_t *range;
     ucp_proto_perf_node_t *select_node;
@@ -954,6 +954,8 @@ ucp_proto_select_write_info(ucp_worker_h worker,
     size_t selected_child;
     unsigned proto_idx;
     unsigned selected_flags;
+    ucs_status_t status;
+    char *dir_path;
     int ret;
 
     ucp_proto_select_param_dump(worker, selected_config->ep_cfg_index,
@@ -963,15 +965,20 @@ ucp_proto_select_write_info(ucp_worker_h worker,
                                 &sel_param_strb);
     if (!ucp_proto_debug_is_info_enabled(
                 worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
-        return;
+        goto out;
+    }
+
+    status = ucs_string_alloc_path_buffer(&dir_path, "dir_path");
+    if (status != UCS_OK) {
+        goto out;
     }
 
     ucs_fill_filename_template(worker->context->config.ext.proto_info_dir,
-                               dir_path, sizeof(dir_path));
+                               dir_path, PATH_MAX);
     ret = mkdir(dir_path, S_IRWXU | S_IRGRP | S_IXGRP);
     if ((ret != 0) && (errno != EEXIST)) {
         ucs_debug("failed to create directory %s: %m", dir_path);
-        return;
+        goto out_free_dir_path;
     }
 
     ucs_string_buffer_translate(&ep_cfg_strb, ucp_proto_debug_fix_filename);
@@ -980,7 +987,7 @@ ucp_proto_select_write_info(ucp_worker_h worker,
     selected_proto = &ucs_array_elem(&proto_init->protocols, selected_idx);
     selected_flags = ucp_proto_id_field(selected_proto->proto_id, flags);
     if (selected_flags & UCP_PROTO_FLAG_INVALID) {
-        return;
+        goto out_free_dir_path;
     }
 
     ucs_memunits_to_str(range_start, range_start_str, sizeof(range_start_str));
@@ -1014,6 +1021,11 @@ ucp_proto_select_write_info(ucp_worker_h worker,
     ucp_proto_perf_node_graph_dump(&proto_attr, file_name, select_node);
 
     ucp_proto_perf_node_deref(&select_node);
+
+out_free_dir_path:
+    ucs_free(dir_path);
+out:
+    return;
 }
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,

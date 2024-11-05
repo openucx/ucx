@@ -1,6 +1,7 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (c) Google, LLC, 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -66,6 +67,9 @@
 #define UCT_IB_MLX5_ATOMIC_MODE_EXT      3
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA  UCS_BIT(28) /* GRH/IP in the receive buffer */
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE   UCS_BIT(29) /* GRH/IP in the CQE */
+/* Bits 24-26 of flags_rqpn indicate the packet type */
+#define UCT_IB_MLX5_RQPN_ROCE_FLAG_IPV6  UCS_BIT(24)
+#define UCT_IB_MLX5_RQPN_ROCE_FLAG_IPV4  UCS_BIT(25)
 #define UCT_IB_MLX5_CQE_FORMAT_MASK      0xc
 #define UCT_IB_MLX5_MINICQE_ARR_MAX_SIZE 7
 #define UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK  0x0000FFFF  /* Byte count mask for multi-packet RQs */
@@ -256,7 +260,7 @@ typedef struct uct_ib_mlx5_dma_opaque_mr {
 } uct_ib_mlx5_dma_opaque_mr_t;
 
 
-#if HAVE_DEVX
+#if HAVE_MLX5_MMO
 /**
  * full WQE format:
  * struct mlx5_wqe_ctrl_seg;
@@ -269,8 +273,10 @@ typedef struct uct_ib_mlx5_dma_seg {
     uint32_t be_opaque_lkey;
     uint64_t be_opaque_vaddr;
 } UCS_S_PACKED uct_ib_mlx5_dma_seg_t;
+#endif
 
 
+#if HAVE_DEVX
 typedef struct {
     struct mlx5dv_devx_obj *dvmr;
     int                    mr_num;
@@ -301,13 +307,14 @@ typedef struct {
 typedef struct {
     struct mlx5dv_devx_obj *cross_mr;
     uint32_t               lkey;
+    uint64_t               md_uuid;
 } uct_ib_mlx5_devx_umr_alias_t;
 
 
-#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x"
+#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x uuid %" PRIu64
 #define UCT_IB_MLX5_UMR_ALIAS_ARG(_umr_alias) \
-    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey)
-
+    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey), \
+    (_umr_alias)->md_uuid
 
 /* Hash map of indirect mkey (from the host) to mkey alias (on the DPU) */
 /* Note the hash key here is: gvmi_id << 32 | mkey (both uint32_t) */

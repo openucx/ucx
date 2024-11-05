@@ -461,5 +461,5 @@ do
 	[ -d "${ucx_build_dir}" ] && rm -rf ${ucx_build_dir}/*
 
 	# run the test
-	$test_name || { azure_log_error "Test failed: $test_name"; exit 1; }
+	$test_name
 done

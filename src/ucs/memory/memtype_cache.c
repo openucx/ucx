@@ -429,5 +429,6 @@ void ucs_memtype_cache_cleanup()
 
     if (ucs_memtype_cache_global_instance) {
         UCS_CLASS_DELETE(ucs_memtype_cache_t, ucs_memtype_cache_global_instance);
+        ucs_memtype_cache_global_instance = NULL;
     }
 }

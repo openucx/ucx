@@ -207,7 +207,13 @@ try_load_cuda_env() {
 
 load_cuda_env() {
     try_load_cuda_env
-    [ "${have_cuda}" == "yes" ] || azure_log_error "Cuda device is not available"
+    if [ "${have_cuda}" != "yes" ] ; then
+        if [ "${ucx_gpu}" = "yes" ] ; then
+            azure_log_error "CUDA load failed on GPU node $(hostname -s)"
+            exit 1
+        fi
+        azure_log_warning "Cuda device is not available"
+    fi
 }
 
 check_release_build() {
@@ -290,4 +296,8 @@ git_clone_with_retry() {
 
     echo "Failed to clone UCX after $max_attempts attempts"
     return 1
+}
+
+setup_go_env() {
+    go env -w GO111MODULE=auto
 }
