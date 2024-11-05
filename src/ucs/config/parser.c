@@ -406,6 +406,35 @@ static void __print_table_values(char * const *table, char *buf, size_t max)
     *buf = '[';
 }
 
+static void __print_sparse_table_values(const char * const *table, size_t num_of_args, char *buf, size_t max)
+{
+    char *ptr = buf, *end = buf + max - 1;
+    size_t i;
+
+    if (ptr < end) {
+        *ptr++ = '[';
+    }
+
+    /* Ingores NULL entries */
+    for (i = 0; i < num_of_args && ptr < end; ++i) {
+        if (table[i] == NULL) {
+            continue;
+        }
+
+        if (ptr > buf + 1 && ptr < end) {
+            *ptr++ = '|';
+        }
+
+        ptr += snprintf(ptr, end - ptr, "%s", table[i]);
+    }
+
+    if (ptr < end) {
+        *ptr++ = ']';
+    }
+
+    *ptr = '\0';
+}
+
 void ucs_config_help_enum(char *buf, size_t max, const void *arg)
 {
     __print_table_values(arg, buf, max);
@@ -473,6 +502,57 @@ void ucs_config_help_bitmap(char *buf, size_t max, const void *arg)
 {
     snprintf(buf, max, "comma-separated list of: ");
     __print_table_values(arg, buf + strlen(buf), max - strlen(buf));
+}
+
+int ucs_config_sscanf_flags(const char *buf, void *dest, const void *arg)
+{
+    char *str = ucs_strdup(buf, "config_sscanf_flags_str");
+    ucs_config_flags_args_t *args = (ucs_config_flags_args_t*)arg;
+    char *p, *saveptr;
+    int ret, i;
+
+    if (str == NULL) {
+        return 0;
+    }
+
+    ret = 1;
+    *((uint64_t*)dest) = 0;
+    p = strtok_r(str, ",", &saveptr);
+    while (p != NULL) {
+        i = ucs_string_find_in_sparse_list(p, (const char**)args->args,
+                                           args->num_of_args);
+        if (i < 0) {
+            ret = 0;
+            break;
+        }
+
+        ucs_assertv(i < (sizeof(uint64_t) * 8), "bit %d overflows for '%s'", i,
+                    p);
+        *((uint64_t*)dest) |= UCS_BIT(i);
+        p = strtok_r(NULL, ",", &saveptr);
+    }
+
+    ucs_free(str);
+    return ret;
+}
+
+int ucs_config_sprintf_flags(char *buf, size_t max, const void *src, const void *arg)
+{
+    ucs_config_flags_args_t *args = (ucs_config_flags_args_t*)arg;
+    ucs_flags_str(buf, max, *((uint64_t*)src), (const char**)args->args);
+    return 1;
+}
+
+void ucs_config_help_flags(char *buf, size_t max, const void *arg)
+{
+    ucs_config_flags_args_t *args = (ucs_config_flags_args_t*)arg;
+    int written = snprintf(buf, max, "comma-separated list of: ");
+
+    if (written < 0 || written >= max) {
+        return;
+    }
+
+    __print_sparse_table_values(args->args, args->num_of_args, buf + written, max - written);
 }
 
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg)
