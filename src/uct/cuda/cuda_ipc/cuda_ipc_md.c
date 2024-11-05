@@ -407,6 +407,27 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     return UCS_OK;
 }
 
+#if HAVE_NVML_FABRIC_INFO
+static const char* uct_cuda_ipc_cluster_uuid_str(const uint8_t *cluster_uuid,
+                                                 char *buf, size_t max)
+{
+    char *p    = buf;
+    char *endp = buf + max;
+    int i;
+
+    for (i = 0; i < NVML_GPU_FABRIC_UUID_LEN; ++i) {
+        if ((i != 0) && ((i % 4) == 0)) {
+            snprintf(p, endp - p, ":");
+            p += strlen(p);
+        }
+        snprintf(p, endp -p, "%02x", cluster_uuid[i]);
+        p += strlen(p);
+    }
+
+    return buf;
+}
+#endif
+
 static int
 uct_cuda_ipc_md_init_fabric_info(uct_cuda_ipc_md_t *md,
                                  ucs_ternary_auto_value_t mnnvl_enable)
@@ -415,6 +436,7 @@ uct_cuda_ipc_md_init_fabric_info(uct_cuda_ipc_md_t *md,
 #if HAVE_NVML_FABRIC_INFO
     nvmlDevice_t device;
     ucs_status_t status;
+    char buf[64];
 
     if (!uct_cuda_base_is_coherent() || (mnnvl_enable == UCS_NO)) {
         goto out;
@@ -437,12 +459,11 @@ uct_cuda_ipc_md_init_fabric_info(uct_cuda_ipc_md_t *md,
         goto out_sd;
     }
 
-    ucs_debug("fabric_info: healthmask=%u state=%u status=%u clique=%u"
-              " uuid=0x%lx.%lx",
+    ucs_debug("fabric_info: healthmask=%u state=%u status=%u clique=%u uuid=%s",
               md->fabric_info.healthMask, md->fabric_info.state,
               md->fabric_info.status, md->fabric_info.cliqueId,
-              ((uint64_t*)(uintptr_t)md->fabric_info.clusterUuid)[0],
-              ((uint64_t*)(uintptr_t)md->fabric_info.clusterUuid)[1]);
+              uct_cuda_ipc_cluster_uuid_str(md->fabric_info.clusterUuid, buf,
+                                            sizeof(buf)));
 
     if ((md->fabric_info.state != NVML_GPU_FABRIC_STATE_COMPLETED) ||
         (md->fabric_info.status != NVML_SUCCESS)) {
