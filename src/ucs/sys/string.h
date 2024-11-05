@@ -324,6 +324,17 @@ const char* ucs_mask_str(uint64_t mask, ucs_string_buffer_t *strb);
 ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
                                 int case_sensitive);
 
+/**
+ * Find a string in an array of strings with NULL entries.
+ *
+ * @param str          String to search for.
+ * @param string_list  Array of strings.
+ * @param num_of_args  Number of strings in the array.
+ *
+ * @return Index of the string in the array, or -1 if not found.
+ */
+ssize_t ucs_string_find_in_sparse_list(const char *str, const char **string_list,
+                                       size_t num_of_args);
 
 /**
  * Split a string to tokens. The given string is modified in-place.

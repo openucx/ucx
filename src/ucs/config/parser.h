@@ -132,6 +132,11 @@ typedef struct ucs_config_bw_spec {
 } ucs_config_bw_spec_t;
 
 
+typedef struct ucs_config_flags_args {
+    const char              **args;
+    size_t                  num_of_args;
+} ucs_config_flags_args_t;
+
 #define UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY \
     { \
         .name        = "", \
@@ -231,6 +236,10 @@ void ucs_config_help_uint_enum(char *buf, size_t max, const void *arg);
 int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_bitmap(char *buf, size_t max, const void *src, const void *arg);
 void ucs_config_help_bitmap(char *buf, size_t max, const void *arg);
+
+int ucs_config_sscanf_flags(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_flags(char *buf, size_t max, const void *src, const void *arg);
+void ucs_config_help_flags(char *buf, size_t max, const void *arg);
 
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_bitmask(char *buf, size_t max, const void *src, const void *arg);
@@ -382,6 +391,11 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_BITMAP(t)  {ucs_config_sscanf_bitmap,    ucs_config_sprintf_bitmap, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
                                     ucs_config_help_bitmap,      ucs_config_doc_nop, \
+                                    t}
+
+#define UCS_CONFIG_TYPE_FLAGS(t)   {ucs_config_sscanf_flags, ucs_config_sprintf_bitmap, \
+                                    ucs_config_clone_uint,   ucs_config_release_nop, \
+                                    ucs_config_help_flags,   ucs_config_doc_nop, \
                                     t}
 
 #define UCS_CONFIG_TYPE_BITMASK    {ucs_config_sscanf_bitmask,   ucs_config_sprintf_bitmask, \
