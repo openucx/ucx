@@ -384,15 +384,15 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface, int is_async)
         return 0;
     }
 
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_TX_COMPLETION, ret);
+
     for (i = 0; i < ret; i++) {
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
             ucs_fatal("Send completion (wr_id=0x%0X with error: %s ",
                       (unsigned)wc[i].wr_id, ibv_wc_status_str(wc[i].status));
             continue;
         }
-
-        UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
-                                 UCT_IB_IFACE_STAT_TX_COMPLETION, 1);
 
         if (uct_ib_iface_device(&iface->super.super)->ordered_send_comp) {
             num_completed      = wc[i].wr_id + 1;

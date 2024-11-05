@@ -1276,7 +1276,9 @@ public:
     {
         const ucp_ep_config_t *config = ucp_ep_config(e->ep());
         ucp_lane_index_t lane_index   = config->key.rma_lanes[0];
-        return ucp_ep_get_tl_rsc(e->ep(), lane_index)->tl_name;
+        return (lane_index != UCP_NULL_LANE) ?
+                       ucp_ep_get_tl_rsc(e->ep(), lane_index)->tl_name :
+                       NULL;
     }
 
     void verify_symmetric_tl_selection(const std::string &num_eps1,
@@ -1286,11 +1288,6 @@ public:
         modify_config("NUM_EPS", num_eps1);
         entity *e1 = create_entity();
 
-        if (!has_resource(*e1, "dc_mlx5") && !has_resource(*e1, "rc_mlx5") &&
-            !has_resource(*e1, "rc_verbs")) {
-            UCS_TEST_SKIP_R("RMA transports are not present");
-        }
-
         /* Second context initialized with num_eps below threshold */
         modify_config("NUM_EPS", num_eps2);
         entity *e2 = create_entity();
@@ -1298,8 +1295,17 @@ public:
         e1->connect(e2, get_ep_params());
         e2->connect(e1, get_ep_params());
 
+        auto tl1 = rma_transport(e1);
+        auto tl2 = rma_transport(e2);
+
+        ASSERT_EQ(!tl1, !tl2);
+        if (tl1 == NULL) {
+            ASSERT_TRUE(ucs::is_aws());
+            UCS_TEST_SKIP_R("RMA transports are not present");
+        }
+
         /* Verify that selection is the same for both eps */
-        ASSERT_STREQ(rma_transport(e1), rma_transport(e2));
+        ASSERT_STREQ(tl1, tl2);
     }
 };
 
