@@ -9,7 +9,7 @@ module_LTLIBRARIES        = libuct_ib_efa.la
 libuct_ib_efa_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)
 libuct_ib_efa_la_CFLAGS   = $(BASE_CFLAGS)
 libuct_ib_efa_la_LDFLAGS  = $(LIB_EFA) $(IBVERBS_LDFLAGS) \
-							-version-info $(SOVERSION)
+                            -version-info $(SOVERSION)
 
 libuct_ib_efa_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                             $(top_builddir)/src/uct/libuct.la \
