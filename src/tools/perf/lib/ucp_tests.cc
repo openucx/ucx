@@ -31,6 +31,12 @@ public:
     static const psn_t LAST_ITER_SN = 1;
     static const psn_t UNKNOWN_SN   = std::numeric_limits<psn_t>::max();
 
+    typedef struct {
+        ucp_perf_test_runner *test;
+        uint64_t id;
+        size_t off;
+    } stream_ctx_t;
+
     ucp_perf_test_runner(ucx_perf_context_t &perf) :
         m_perf(perf),
         m_recvs_outstanding(0),
@@ -42,8 +48,14 @@ public:
     {
         memset(&m_am_rx_params, 0, sizeof(m_am_rx_params));
         memset(&m_send_params, 0, sizeof(m_send_params));
-        memset(&m_send_get_info_params, 0, sizeof(m_send_get_info_params));
+        memset(&m_stream_params, 0, sizeof(m_stream_params));
         memset(&m_recv_params, 0, sizeof(m_recv_params));
+        for (int i = 0; i < m_max_outstanding; i++) {
+            m_stream_ctx[i].test = this;
+            m_stream_ctx[i].id = i;
+            m_stream_ctx[i].off = 0;
+        }
+        m_stream_mask = UCS_MASK(m_max_outstanding);
 
         ucs_assert_always(m_max_outstanding > 0);
 
@@ -180,9 +192,13 @@ public:
             fill_common_params(m_am_rx_params, m_perf.ucp.recv_memh);
         }
 
-        fill_send_params(m_send_params, *send_buffer, *send_dt, send_cb, 0);
-        fill_send_params(m_send_get_info_params, *send_buffer, *send_dt,
+        fill_send_params(m_send_params[0], *send_buffer, *send_dt, send_cb, 0);
+        fill_send_params(m_stream_params[0], *send_buffer, *send_dt, stream_cb,
+                         UCP_OP_ATTR_FIELD_ID);
+        fill_send_params(m_send_params[1], *send_buffer, *send_dt,
                          send_get_info_cb, UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
+        fill_send_params(m_stream_params[1], *send_buffer, *send_dt,
+                         stream_get_info_cb, UCP_OP_ATTR_FIELD_ID | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
 
         m_recv_params.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
                                      UCP_OP_ATTR_FIELD_CALLBACK |
@@ -287,18 +303,46 @@ public:
         return UCS_INPROGRESS;
     }
 
-    static void send_cb(void *request, ucs_status_t status, void *user_data)
+    static void send_cb_common(void *request, ucs_status_t status, void *user_data, int free)
     {
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)user_data;
         test->send_completed();
-        ucp_request_free(request);
+        if (free) {
+            ucp_request_free(request);
+        }
+    }
+
+    static void
+    send_cb(void *request, ucs_status_t status, void *user_data)
+    {
+        send_cb_common(request, status, user_data, 1);
     }
 
     static void
     send_get_info_cb(void *request, ucs_status_t status, void *user_data)
     {
-        ucp_perf_test_runner *test = (ucp_perf_test_runner*)user_data;
-        test->send_completed();
+        send_cb_common(request, status, user_data, 0);
+    }
+
+    static void stream_cb_common(void *request, ucs_status_t status, void *user_data, int free)
+    {
+        stream_ctx_t *ctx = (stream_ctx_t*)user_data;
+        ctx->test->stream_send_completed(ctx->id);
+        if (free) {
+            ucp_request_free(request);
+        }
+    }
+
+    static void
+    stream_cb(void *request, ucs_status_t status, void *user_data)
+    {
+        stream_cb_common(request, status, user_data, 1);
+    }
+
+    static void
+    stream_get_info_cb(void *request, ucs_status_t status, void *user_data)
+    {
+        stream_cb_common(request, status, user_data, 0);
     }
 
     static void tag_recv_cb(void *request, ucs_status_t status,
@@ -384,6 +428,12 @@ public:
     void UCS_F_ALWAYS_INLINE send_completed()
     {
         --m_sends_outstanding;
+    }
+
+     void UCS_F_ALWAYS_INLINE stream_send_completed(uint64_t id)
+    {
+        --m_sends_outstanding;
+        m_stream_mask |= UCS_BIT(id);
     }
 
     void UCS_F_ALWAYS_INLINE recv_completed()
@@ -494,12 +544,20 @@ public:
         return UCS_PTR_STATUS(req);
     }
 
+    ucp_request_param_t *get_send_param(bool get_info)
+    {
+        if (CMD == UCX_PERF_CMD_STREAM) {
+            return &m_stream_params[get_info];
+        } else {
+            return &m_send_params[get_info];
+        }
+    }
+
     ucs_status_t UCS_F_ALWAYS_INLINE
     send(ucp_ep_h ep, void *buffer, unsigned length, ucp_datatype_t datatype,
          psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info = false)
     {
-        ucp_request_param_t *param = get_info ? &m_send_get_info_params :
-                                                &m_send_params;
+        ucp_request_param_t *param = get_send_param(get_info);
         uint64_t value             = 0;
         void *request;
         ucs_status_t status;
@@ -520,6 +578,10 @@ public:
             request = ucp_tag_send_sync_nbx(ep, buffer, length, TAG, param);
             break;
         case UCX_PERF_CMD_STREAM:
+            ucs_assert(m_stream_mask != 0);
+            param->id = ucs_ffs64(m_stream_mask);
+            param->user_data = &m_stream_ctx[param->id];
+            m_stream_mask &= ~UCS_BIT(param->id);
             request = ucp_stream_send_nbx(ep, buffer, length, param);
             break;
         case UCX_PERF_CMD_AM:
@@ -635,7 +697,9 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_STREAM:
-            if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) {
+            if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV_POLL) {
+                return recv_stream_poll(worker, buffer, length, datatype);
+            } else if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) {
                 return recv_stream_data(ep, length, datatype);
             } else {
                 return recv_stream(ep, buffer, length, datatype);
@@ -692,7 +756,7 @@ public:
         switch (CMD) {
         case UCX_PERF_CMD_PUT:
             status_p = ucp_put_nbx(ep, buffer, size, remote_addr, rkey,
-                                   &m_send_params);
+                                   &m_send_params[0]);
             break;
         case UCX_PERF_CMD_ADD:
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, &atomic_value, 1,
@@ -833,6 +897,7 @@ public:
         ucp_ep_h ep;
         void *send_buffer, *recv_buffer;
         ucp_datatype_t send_datatype, recv_datatype;
+        ucs_status_t status;
         uint64_t remote_addr;
         ucp_rkey_h rkey;
         size_t length, send_length, recv_length;
@@ -873,7 +938,11 @@ public:
             wait_recv_window(m_max_outstanding);
         } else if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
+                status = recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
+                if (status != UCS_OK) {
+                    printf("%s:%d %d %d\n", __func__, __LINE__, status, sn);
+                    break;
+                }
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
@@ -918,6 +987,75 @@ public:
 
 private:
     ucs_status_t UCS_F_ALWAYS_INLINE
+    recv_stream_poll(ucp_worker_h worker, void *buf, unsigned length, ucp_datatype_t datatype)
+    {
+        ucp_stream_poll_ep_t poll_eps[64] = {};
+        ucp_request_param_t param = {};
+        void    *rreq[64];
+        size_t   rlength;
+        ucs_status_t status;
+        uint64_t id;
+        int num, i, done;
+
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FIELD_ID;
+        param.datatype     = datatype;
+
+        do {
+            num = ucp_stream_worker_poll(worker, poll_eps, 64, 0);
+                    progress_responder();
+        } while (num == 0);
+        if (num < 0) {
+            return ucs_status_t(num);
+        }
+
+        for (i = 0; i < num; i++) {
+            id = param.id = poll_eps[i].ch_id;
+            rreq[i] = ucp_stream_recv_nbx(poll_eps[i].ep,
+                    (char *)buf + m_stream_ctx[id].off,
+                    length - m_stream_ctx[id].off,
+                    &rlength, &param);
+            if (ucs_likely(rreq[i] == NULL)) {
+                m_stream_ctx[id].off += rlength;
+                if (m_stream_ctx[id].off == length) {
+                    m_stream_ctx[id].off = 0;
+                }
+            } else if (UCS_PTR_IS_ERR(rreq[i])) {
+                return UCS_PTR_STATUS(rreq[i]);
+            }
+        }
+
+        do {
+            done = 1;
+            for (i = 0; i < num; i++) {
+                if (ucs_likely(!rreq[i])) {
+                    continue;
+                }
+
+                status = ucp_stream_recv_request_test(rreq[i], &rlength);
+                if (ucs_likely(status == UCS_OK)) {
+                    id = poll_eps[i].ch_id;
+                    ucp_request_release(rreq[i]);
+                    rreq[i] = NULL;
+                    m_stream_ctx[id].off += rlength;
+                    if (m_stream_ctx[id].off == length) {
+                        m_stream_ctx[id].off = 0;
+                    }
+                } else if (status == UCS_INPROGRESS) {
+                    done = 0;
+                } else if (UCS_PTR_IS_ERR(rreq[i])) {
+                    return UCS_PTR_STATUS(rreq[i]);
+                }
+
+                if (!done) {
+                    progress_responder();
+                }
+            }
+        } while (!done);
+
+        return UCS_OK;
+    }
+
+    ucs_status_t UCS_F_ALWAYS_INLINE
     recv_stream_data(ucp_ep_h ep, unsigned length, ucp_datatype_t datatype)
     {
         void *data;
@@ -939,16 +1077,18 @@ private:
     ucs_status_t UCS_F_ALWAYS_INLINE
     recv_stream(ucp_ep_h ep, void *buf, unsigned length, ucp_datatype_t datatype)
     {
+        ucp_request_param_t param = {};
         ssize_t  total = 0;
         void    *rreq;
         size_t   rlength;
         ssize_t  rlength_s;
 
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype     = datatype;
+
         do {
-            rreq = ucp_stream_recv_nb(ep, (char *)buf + total, length - total,
-                                      datatype,
-                                      (ucp_stream_recv_callback_t)ucs_empty_function,
-                                      &rlength, 0);
+            rreq = ucp_stream_recv_nbx(ep, (char *)buf + total, length - total,
+                                       &rlength, &param);
             if (ucs_likely(rreq == NULL)) {
                 total += rlength;
             } else if (UCS_PTR_IS_PTR(rreq)) {
@@ -994,10 +1134,13 @@ private:
     void                *m_am_rx_buffer;
     size_t              m_am_rx_length;
     ucp_request_param_t m_am_rx_params;
-    ucp_request_param_t m_send_params;
-    ucp_request_param_t m_send_get_info_params;
+    ucp_request_param_t m_send_params[2];
+    ucp_request_param_t m_stream_params[2];
     ucp_request_param_t m_recv_params;
     ucp_atomic_op_t     m_atomic_op;
+
+    stream_ctx_t        m_stream_ctx[64];
+    uint64_t            m_stream_mask;
 };
 
 
@@ -1013,10 +1156,13 @@ private:
 #define TEST_CASE_ALL_STREAM(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
               0, \
-              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) \
+              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA|UCX_PERF_TEST_FLAG_STREAM_RECV_POLL) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
               UCX_PERF_TEST_FLAG_STREAM_RECV_DATA, \
-              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA)
+              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA|UCX_PERF_TEST_FLAG_STREAM_RECV_POLL) \
+    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
+              UCX_PERF_TEST_FLAG_STREAM_RECV_POLL, \
+              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA|UCX_PERF_TEST_FLAG_STREAM_RECV_POLL)
 
 #define TEST_CASE_ALL_TAG(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
