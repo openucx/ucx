@@ -148,6 +148,11 @@ const char *ucp_extra_op_attr_flags_names[] = {
     NULL
 };
 
+const ucs_config_flags_args_t ucp_extra_op_attr_flags_args = {
+    .args        = ucp_extra_op_attr_flags_names,
+    .num_of_args = ucs_static_array_size(ucp_extra_op_attr_flags_names)
+};
+
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
 
@@ -544,7 +549,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "in addition to what is set explicitly by the user. \n"
    "Possible values are: no_imm_cmpl, fast_cmpl, force_imm_cmpl, multi_send.",
    ucs_offsetof(ucp_context_config_t, extra_op_attr_flags),
-   UCS_CONFIG_TYPE_BITMAP(ucp_extra_op_attr_flags_names)},
+   UCS_CONFIG_TYPE_FLAGS((const void *)&ucp_extra_op_attr_flags_args)},
 
   {NULL}
 };
