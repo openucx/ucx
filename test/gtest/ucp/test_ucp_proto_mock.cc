@@ -394,10 +394,9 @@ UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr, "NET_DEVICES=mlx5_0:1")
 
     check_ep_config(sender(), {
         {"0",          "200",    "short",                "rc_mlx5/mlx5_0:1"},
-        {"201",        "404",    "copy-in",              "rc_mlx5/mlx5_0:1"},
-        {"405",        "8246",   "zero-copy",            "rc_mlx5/mlx5_0:1"},
-        {"8247",       "452179", "multi-frag zero-copy", "rc_mlx5/mlx5_0:1"},
-        {"452180",     "inf",    "rendezvous zero-copy read from remote",
+        {"201",        "8246",   "copy-in",              "rc_mlx5/mlx5_0:1"},
+        {"8247",       "377094", "multi-frag copy-in", "rc_mlx5/mlx5_0:1"},
+        {"377095",     "inf",    "rendezvous zero-copy read from remote",
                                                          "rc_mlx5/mlx5_0:1"},
     }, key);
 }
