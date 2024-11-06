@@ -1,6 +1,6 @@
 parameters:
   arch:
-  container:  
+  container:
   demands: []
   target:
 
@@ -14,7 +14,7 @@ jobs:
         SUFFIX: "-${{ parameters.arch }}"
 
     # we need to use lowest version for compatibility
-    container: ${{ parameters.container }}    
+    container: ${{ parameters.container }}
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
@@ -38,6 +38,7 @@ jobs:
           set -eEx
           make -s -j`nproc`
           source buildlib/az-helpers.sh
+          trap "log_info_on_exit" EXIT
           az_init_modules
           az_module_load dev/mvn
           # use the lowest supported Java version for compatibility:
@@ -74,6 +75,7 @@ jobs:
       - bash: |
           set -exE
           source buildlib/az-helpers.sh
+          trap "log_info_on_exit" EXIT
           az_init_modules
           az_module_load dev/mvn
           # use the lowest supported Java version for compatibility:

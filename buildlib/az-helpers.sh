@@ -314,6 +314,7 @@ git_clone_with_retry() {
 
 setup_go_env() {
     go env -w GO111MODULE=auto
+}
 
 declare -A COLORS=(
     [RED]='\033[0;31m'
@@ -348,13 +349,11 @@ function log_machine_info() {
     echo -e "\n${COLORS[CYAN]}Machine Information${COLORS[NC]}"
     echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
     if [ -f /.dockerenv ]; then
-        echo -e "${COLORS[GREEN]}Running in container:${COLORS[NC]} Yes"
         echo -e "${COLORS[GREEN]}Agent Machine Name:${COLORS[NC]} " \
                 "$AGENT_MACHINENAME"
         echo -e "${COLORS[GREEN]}Container Image:${COLORS[NC]} ${IMAGE_TAG}"
         log_docker_variables
     else
-        echo -e "${COLORS[GREEN]}Running in container:${COLORS[NC]} No"
         echo -e "${COLORS[GREEN]}Host Machine:${COLORS[NC]} $(uname -n)"
     fi
     echo -e "${COLORS[GREEN]}OS:${COLORS[NC]} $(uname -s) ($(uname -o))"
@@ -464,7 +463,6 @@ function log_cpu_affinity() {
 function log_cpu_utilization() {
     echo -e "\n${COLORS[CYAN]}CPU Utilization${COLORS[NC]}"
     echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
-    echo "##[group]    CPU Utilization Info"
     if command -v vmstat &> /dev/null; then
         echo "##[group]    mpstat Output"
         vmstat
@@ -472,8 +470,6 @@ function log_cpu_utilization() {
     else
         echo -e "${COLORS[RED]}    mpstat command not found.${COLORS[NC]}"
     fi
-
-    echo "##[endgroup]"
 }
 
 function log_gpu_info() {

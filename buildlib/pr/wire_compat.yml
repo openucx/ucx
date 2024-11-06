@@ -75,6 +75,7 @@ jobs:
       - bash: |
           set -eEx
           source buildlib/az-helpers.sh
+          trap "log_info_on_exit" EXIT
           ucx_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)
           depth=1
           git_clone_with_retry "$(ucx_tag)" "${ucx_dir}" "${depth}"
