@@ -445,9 +445,19 @@ protected:
 };
 
 UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config) {
+    const char *max_avail_sl_str = getenv("GTEST_MAX_IB_SL");
+    uint8_t sl, max_avail_sl;
+
+    if (max_avail_sl_str == NULL) {
+        max_avail_sl = UCT_IB_SL_NUM;
+    } else {
+        max_avail_sl = std::min(strtoul(max_avail_sl_str, NULL, 0),
+                                static_cast<unsigned long>(UCT_IB_SL_NUM));
+    }
+
     // go over all SLs, check UCTs could be initialized on a specific SL
     // and able to send/recv traffic
-    for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl)  {
+    for (sl = 0; sl < max_avail_sl; ++sl) {
         if (!has_transport("rc_verbs") && !has_transport("ud_verbs")) {
             // if AR is configured on the given SL, set AR_ENABLE to "y",
             // otherwise - to "n" in order to test that AR_ENABLE parameter
