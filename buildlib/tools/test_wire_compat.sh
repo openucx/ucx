@@ -34,3 +34,4 @@ server_pid=$!
 sleep 5
 LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${exe_cmd} ${common_opt} ${client_opt} 127.0.0.1
 if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
+

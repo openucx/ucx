@@ -1,6 +1,10 @@
 #!/bin/bash
 set -exE -o pipefail
 
+realdir=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+source ${realdir}/../az-helpers.sh
+trap "log_info_on_exit" EXIT
+
 IMAGE_TAG="rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0"
 
 if [ -z "$BUILD_SOURCESDIRECTORY" ]; then
