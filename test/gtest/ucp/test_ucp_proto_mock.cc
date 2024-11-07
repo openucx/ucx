@@ -259,7 +259,6 @@ public:
 
     void connect()
     {
-        ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
         for (int i = 0; i < 10; ++i) {
             progress();
@@ -375,7 +374,7 @@ protected:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr, "NET_DEVICES=mlx5_0:1")
+UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr, "NET_DEVICES=mlx5_0:1,lo")
 {
     setup_mock("ib").set_mock_iface_attr("rc_mlx5/mlx5_0:1",
         [](uct_iface_attr_t &iface_attr) {
@@ -385,6 +384,11 @@ UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr, "NET_DEVICES=mlx5_0:1")
             iface_attr.latency.c        = 0.000006;
             iface_attr.latency.m        = 0.000000001;
         });
+
+    ucp_test::init();
+    if (!has_resource(sender(), "rc_mlx5", "mlx5_0:1")) {
+        UCS_TEST_SKIP_R("no mlx5_0:1 device");
+    }
 
     connect();
 
@@ -401,4 +405,4 @@ UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr, "NET_DEVICES=mlx5_0:1")
     }, key);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock, rcx, "rc_x,tcp")
