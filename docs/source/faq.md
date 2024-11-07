@@ -369,6 +369,35 @@ for the appropriate `-arch` option to pass to nvcc.
 
 <br/>
 
+### Multi-node NVLINK support for NVIDIA GPUs
+
+#### Does UCX support use of NVLINK across nodes?
+
+Yes. This feature is not enabled by default and users need to set
+UCX_CUDA_IPC_ENABLE_MNNVL=y. In addition, the following criteria have to be met:
+1. The buffers are from CUDA VMM API allocations or stream-ordered allocations.
+2. The allocations have CU_MEM_HANDLE_TYPE_FABRIC requested on them.
+3. IMEX Daemons have been initialized on all relevant nodes.
+4. CUDA version >= 12.3 and driver version >= 545.23.06.
+5. UCX >= v1.18 is used.
+
+For legacy allocation methods such as cudaMalloc/Managed, and for
+VMM/stream-ordered allocations with FABRIC handles requested on them, UCP will
+try to use NVLINK between nodes through pipeline protocols if possible.
+
+Refer [CUDA VMM API](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__VA.html#group__CUDA__VA),
+[CUDA stream-ordered allocation API](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MALLOC__ASYNC.html#group__CUDA__MALLOC__ASYNC),
+[Fabric Handles](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TYPES.html#group__CUDA__TYPES_1g450a23153d86fce0afe30e25d63caef9).
+
+#### I'm not seeing NVLINK bandwidth being saturated for some src/dst memory types, why?
+
+There are some memory type combinations (particularly involving
+cudaMallocManaged memory, and host memory source buffers) where end-to-end
+bandwidth is ub-optimal. These stem from existing driver issues or owing to
+deficiencies in ipeline protocols. These will be addressed in future releases.
+
+<br/>
+
 ### Performance considerations
 
 #### Does UCX support zero-copy for GPU memory over RDMA?
