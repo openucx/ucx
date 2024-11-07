@@ -332,7 +332,7 @@ ucs_get_rlimit(int resource, rlim_t *rlimit_value, const char *name)
 
 int ucs_sys_max_open_files()
 {
-    rlim_t value;
+    rlim_t value = 0;
 
     if (ucs_get_rlimit(RLIMIT_NOFILE, &value, "max opened file") != UCS_OK) {
         return -1;
@@ -1592,8 +1592,8 @@ err:
 
 ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value)
 {
+    rlim_t value = 0;
     ucs_status_t status;
-    rlim_t value;
 
     /* Privileged users have no lock limit */
     if (ucs_sys_get_mlock_cap()) {
