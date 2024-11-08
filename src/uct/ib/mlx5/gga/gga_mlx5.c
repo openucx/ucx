@@ -318,10 +318,12 @@ uct_gga_mlx5_rkey_resolve_slow(uct_gga_mlx5_md_t *md,
     }
 
     atach_params.field_mask = 0;
+    pthread_mutex_lock(&uct_gga_mlx5_rkeys_locker);
     status = uct_ib_mlx5_devx_mem_attach(uct_md,
                                          &rkey_handle->packed_mkey,
                                          &atach_params,
                                          (uct_mem_h*)&md_rkey_handle->memh);
+    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_locker);
     if (status != UCS_OK) {
         goto err_free_handle;
     }
