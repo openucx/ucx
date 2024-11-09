@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"strconv"
 	"strings"
+	"unsafe"
 
 	uhttp "github.com/openucx/ucx/bindings/go/src/ucx/http"
 )
@@ -50,6 +51,36 @@ func dataHandler2(w http.ResponseWriter, r *http.Request) {
 	size, _ := strconv.ParseInt(strings.TrimPrefix(r.URL.Path, "/data/"), 10, 64)
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	w.Write(globalData[:size])
+}
+
+func PrintHexComparison(slice1, slice2 []byte) {
+	maxLen := len(slice1)
+	if len(slice2) > maxLen {
+		maxLen = len(slice2)
+	}
+
+	for i := 0; i < maxLen; i += 8 {
+		fmt.Printf("0x%04X   ", i)
+		hexStr1 := ""
+		for j := i; j < i+8; j++ {
+			if j < len(slice1) {
+				hexStr1 += fmt.Sprintf("%02X ", slice1[j])
+			} else {
+				hexStr1 += "   "
+			}
+		}
+		fmt.Printf("%-20s", hexStr1)
+
+		hexStr2 := ""
+		for j := i; j < i+8; j++ {
+			if j < len(slice2) {
+				hexStr2 += fmt.Sprintf("%02X ", slice2[j])
+			} else {
+				hexStr2 += "   "
+			}
+		}
+		fmt.Printf("| %-20s\n", hexStr2)
+	}
 }
 
 func main() {
@@ -110,6 +141,11 @@ func main() {
 	} else if doLoop {
 		obj := make([]byte, object_size)
 		rand.Read(obj)
+		obj32 := *(*[]uint32)(unsafe.Pointer(&obj))
+		obj32 = obj32[:len(obj)/4]
+		for i := 0; i < len(obj32); i++ {
+			obj32[i] = uint32(i)
+		}
 		fileobj := bytes.NewReader(obj)
 
 		t, _ := uhttp.NewTransport(addr)
@@ -134,8 +170,10 @@ func main() {
 			log.Fatalf("FATAL: Error uploading: %v", err)
 		}
 		read := new(bytes.Buffer)
-		size, err := io.Copy(read, getResp.Body)
-		fmt.Printf("Result %d %t\n", size, bytes.Equal(obj, read.Bytes()))
+		_, err = io.Copy(read, getResp.Body)
+		if !bytes.Equal(obj, read.Bytes()) {
+			PrintHexComparison(obj, read.Bytes())
+		}
 	} else if doGet {
 		t, _ := uhttp.NewTransport(addr)
 		defer t.Close()
