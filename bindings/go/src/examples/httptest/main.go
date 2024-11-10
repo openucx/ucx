@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
 	"log"
+	"math"
 	"net/http"
-	"time"
 	"math/rand"
 	"bytes"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 	"unsafe"
 
 	uhttp "github.com/openucx/ucx/bindings/go/src/ucx/http"
@@ -83,14 +86,40 @@ func PrintHexComparison(slice1, slice2 []byte) {
 	}
 }
 
+func nextSize(v uint64, step uint64) uint64 {
+	pow2 := uint64(1);                                                               
+	for pow2 <= v { pow2 *= 2 }
+	v = uint64(float64(v) * math.Pow(2, 1.0/float64(step))) + 1;
+	if v > pow2 { v = pow2 }
+	return v
+}
+
+func sizes(input string) (uint64, uint64, uint64) {
+	values := strings.Split(input, ":")
+	min, _ := strconv.ParseUint(values[0], 10, 64)
+	if len(values) == 1 {
+		return min, min, 1
+	}
+	max, _ := strconv.ParseUint(values[1], 10, 64)
+	if len(values) == 2 {
+		return min, max, 1
+	}
+	step, _ := strconv.ParseUint(values[2], 10, 64)
+	return min, max, step
+}
+
 func main() {
 	var (
 		serverMode bool
 		doPut bool
 		doGet bool
 		doLoop bool
+		doPerf bool
 		addr string
 		object_size uint64 = 1<<30
+		ucxMode bool
+		window int
+		messageSizes string
 	)
 
 	flag := flag.NewFlagSet("myflag", flag.ExitOnError)
@@ -98,13 +127,17 @@ func main() {
 	flag.BoolVar(&doPut, "p", false, "PUT");
 	flag.BoolVar(&doGet, "g", false, "GET");
 	flag.BoolVar(&doLoop, "l", false, "PUT-GET");
+	flag.IntVar(&window, "w", 1, "window");
+	flag.BoolVar(&doPerf, "P", false, "perf");
+	flag.StringVar(&messageSizes, "m", "1073741824", "messages sizes");
 	flag.StringVar(&addr, "a", "2.1.3.34:13337", "Address");
-	flag.Uint64Var(&object_size, "m", 1<<30, "message size");
+	flag.BoolVar(&ucxMode, "U", false, "use UCX");
 
 	if err := flag.Parse(os.Args[1:]); err != nil {
 		os.Exit(1)
 	}
 
+	_, object_size, _ = sizes(messageSizes)
 	if serverMode {
 		obj := make([]byte, object_size)
 		rand.Read(obj)
@@ -114,12 +147,20 @@ func main() {
 		http.HandleFunc("/data", dataHandler)
 		http.HandleFunc("/data/", dataHandler2)
 
-		serve, err := uhttp.StartServer(addr, http.DefaultServeMux)
-		if err != nil {
-			log.Fatalf("FATAL: StartServer: %v", err)
+		if ucxMode {
+			serve, err := uhttp.StartServer(addr, http.DefaultServeMux)
+			if err != nil {
+				log.Fatalf("FATAL: StartServer: %v", err)
+			}
+			fmt.Printf("Serve UCX on %s\n", addr)
+			serve()
+		} else {
+			fmt.Printf("Serve HTTP on %s\n", addr)
+			err := http.ListenAndServe(addr, nil)
+			if err != nil {
+				log.Fatalf("FATAL: StartServer: %v", err)
+			}
 		}
-		fmt.Printf("Serve on %s\n", addr)
-		serve()
 	} else if doPut {
 		obj := make([]byte, object_size)
 		rand.Read(obj)
@@ -175,25 +216,91 @@ func main() {
 			PrintHexComparison(obj, read.Bytes())
 		}
 	} else if doGet {
-		t, _ := uhttp.NewTransport(addr)
-		defer t.Close()
+		var t http.RoundTripper
+		if ucxMode {
+			t, _ = uhttp.NewTransport(addr)
+		}
 		client := &http.Client{Transport: t}
-		resp, _ := client.Get("/")
+		resp, err := client.Get(fmt.Sprintf("http://%s/", addr))
+		fmt.Printf("%v %v\n", resp, err)
 		defer resp.Body.Close()
 		body, _ := ioutil.ReadAll(resp.Body)
 		fmt.Printf("%s\n", body)
 
 		for i := 0; i < 30 ; i++ {
-			getReq, _ := http.NewRequest("GET", fmt.Sprintf("/data/%d", 1<<i), nil)
+			url := fmt.Sprintf("http://%s/data/%d", addr, 1 << i)
+			getReq, _ := http.NewRequest("GET", url, nil)
 			getResp, err := client.Do(getReq)
 			defer getResp.Body.Close()
 			if err != nil {
 				log.Fatalf("FATAL: Error uploading: %v", err)
 			}
 			read := new(bytes.Buffer)
-			size, err := io.Copy(read, getResp.Body)
-			fmt.Printf("Result %d\n", size)
+			io.Copy(read, getResp.Body)
+			fmt.Printf("%s\n", url)
 		}
+	} else if doPerf {
+		var t http.RoundTripper
+		if ucxMode {
+			t, _ = uhttp.NewTransport(addr)
+		}
+		client := &http.Client{Transport: t}
+
+		min, max, step := sizes(messageSizes)
+		for size := min; size <= max; size = nextSize(size, step) {
+			start := time.Now()
+			url := fmt.Sprintf("http://%s/data/%d", addr, size)
+			var total int64
+			var wg sync.WaitGroup
+			wg.Add(window)
+			done := make(chan struct{})
+			go func() {
+				last := atomic.LoadInt64(&total)
+				ticker := time.NewTicker(time.Second)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-ticker.C:
+						curr := atomic.LoadInt64(&total)
+						fmt.Printf("%20s %20f\n", "", float64(curr-last)*1e-6)
+						last = curr
+					case <-done:
+						return
+					}
+				}
+			}()
+
+			for t := 0; t < window; t++ {
+				go func() {
+					content := make([]byte, size)
+					for i := 0; i < 1000 ; i++ {
+						getReq, _ := http.NewRequest("GET", url, nil)
+						getResp, err := client.Do(getReq)
+						if err != nil {
+							log.Fatalf("FATAL: Error downloading: %v", err)
+						}
+						defer getResp.Body.Close()
+						done := make(chan int64)
+						go func() {
+							size, _ := io.ReadFull(getResp.Body, content)
+							done <- int64(size)
+						}()
+						select {
+						case size := <-done:
+							atomic.AddInt64(&total, size)
+						case <-time.After(time.Second):
+							log.Fatalf("timeout in read %d %s\n", i, uhttp.Dump(getResp.Body))
+						}
+					}
+					wg.Done()
+				}()
+			}
+			wg.Wait()
+			close(done)
+			fmt.Printf("%20d %20f\n", size, float64(total)/float64(time.Since(start).Seconds())*1e-6)
+		}
+
 	} else {
 		t, _ := uhttp.NewTransport(addr)
 		defer t.Close()
