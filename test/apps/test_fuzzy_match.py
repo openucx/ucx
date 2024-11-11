@@ -6,9 +6,9 @@
 # See file LICENSE for terms.
 
 import os
-import commands
 import re
 import argparse
+import subprocess
 import sys
 import logging
 
@@ -54,7 +54,7 @@ class TestRunner:
         cmd = self.ucx_info + ' -u m -w'
         logging.info('running cmd: %s' % cmd)
 
-        status, output = commands.getstatusoutput(cmd)
+        status, output = subprocess.getstatusoutput(cmd)
         if status != 0:
             raise Exception('Received unexpected exit code from ucx_info: ' + str(status))
 
@@ -81,7 +81,7 @@ class TestRunner:
         return {m.group(1) : [x.strip() for x in m.group(2).split(',')] if m.group(2) else [] for m in matches}
 
 def has_ib():
-    status, output = commands.getstatusoutput('ibv_devinfo')
+    status, output = subprocess.getstatusoutput('ibv_devinfo')
     if status != 0:
         return False
 
