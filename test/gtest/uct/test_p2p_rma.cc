@@ -189,8 +189,7 @@ protected:
 };
 
 UCS_TEST_SKIP_COND_P(uct_rma_common_receiver, reuse_rkey,
-                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY|
-                                 UCT_IFACE_FLAG_GET_ZCOPY))
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
 {
     const size_t size      = 4 * UCS_KBYTE;
     const uint64_t seed    = 0;

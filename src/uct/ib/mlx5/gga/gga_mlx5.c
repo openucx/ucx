@@ -108,7 +108,7 @@ ucs_config_field_t uct_gga_mlx5_iface_config_table[] = {
   {NULL}
 };
 
-static pthread_mutex_t uct_gga_mlx5_rkeys_locker = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t uct_gga_mlx5_rkeys_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static ucs_status_t
 uct_ib_mlx5_gga_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
@@ -161,7 +161,8 @@ uct_gga_mlx5_md_put_rkey(uct_gga_mlx5_md_t *md,
 
     iter = kh_put(resolved_rkeys, &md->rkey_cache, key, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
-        ucs_error("md %p: failed to add rkey to hash", md);
+        ucs_error("md %p: failed to add rkey handle %p to hash with key %"
+                  PRIx64, md, rkey_handle, key);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -225,7 +226,7 @@ uct_gga_mlx5_rkey_handle_dereg(uct_gga_mlx5_rkey_handle_t *rkey_handle)
         return;
     }
 
-    pthread_mutex_lock(&uct_gga_mlx5_rkeys_locker);
+    pthread_mutex_lock(&uct_gga_mlx5_rkeys_lock);
     while (!ucs_list_is_empty(&rkey_handle->mds)) {
         md_link  = ucs_list_extract_head(&rkey_handle->mds,
                                          uct_gga_mlx5_rkey_handle_md_link_t,
@@ -236,7 +237,7 @@ uct_gga_mlx5_rkey_handle_dereg(uct_gga_mlx5_rkey_handle_t *rkey_handle)
         ucs_free(md_link);
     }
 
-    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_locker);
+    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_lock);
 
     rkey_handle->md   = NULL;
     rkey_handle->rkey = UCT_INVALID_RKEY;
@@ -305,7 +306,7 @@ uct_gga_mlx5_rkey_resolve_slow(uct_gga_mlx5_md_t *md,
     uct_gga_mlx5_rkey_hash_key_t hash_key = (uintptr_t)rkey_handle;
     uct_gga_mlx5_md_rkey_handle_t* md_rkey_handle;
     uct_gga_mlx5_rkey_handle_md_link_t *md_link;
-    uct_md_mem_attach_params_t atach_params;
+    uct_md_mem_attach_params_t attach_params;
     uct_md_mkey_pack_params_t repack_params;
     uint64_t repack_mkey;
     ucs_status_t status;
@@ -317,13 +318,12 @@ uct_gga_mlx5_rkey_resolve_slow(uct_gga_mlx5_md_t *md,
         goto err_out;
     }
 
-    atach_params.field_mask = 0;
-    pthread_mutex_lock(&uct_gga_mlx5_rkeys_locker);
-    status = uct_ib_mlx5_devx_mem_attach(uct_md,
-                                         &rkey_handle->packed_mkey,
-                                         &atach_params,
+    attach_params.field_mask = 0;
+    pthread_mutex_lock(&uct_gga_mlx5_rkeys_lock);
+    status = uct_ib_mlx5_devx_mem_attach(uct_md, &rkey_handle->packed_mkey,
+                                         &attach_params,
                                          (uct_mem_h*)&md_rkey_handle->memh);
-    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_locker);
+    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_lock);
     if (status != UCS_OK) {
         goto err_free_handle;
     }
@@ -350,10 +350,10 @@ uct_gga_mlx5_rkey_resolve_slow(uct_gga_mlx5_md_t *md,
     }
 
     md_link->md = md;
-    pthread_mutex_lock(&uct_gga_mlx5_rkeys_locker);
+    pthread_mutex_lock(&uct_gga_mlx5_rkeys_lock);
     ucs_list_add_tail(&rkey_handle->mds, &md_link->list_link);
     status = uct_gga_mlx5_md_put_rkey(md, hash_key, md_rkey_handle);
-    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_locker);
+    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_lock);
     if (status != UCS_OK) {
         goto err_free_link;
     }
@@ -384,7 +384,10 @@ uct_gga_mlx5_rkey_resolve(uct_gga_mlx5_md_t *md,
         uct_gga_mlx5_rkey_trace(md, rkey_handle, "cached");
         return UCS_OK;
     } else if (rkey_handle->rkey != UCT_INVALID_RKEY) {
+        pthread_mutex_lock(&uct_gga_mlx5_rkeys_lock);
         md_rkey_handle = uct_gga_mlx5_md_get_rkey(md, hash_key);
+        pthread_mutex_unlock(&uct_gga_mlx5_rkeys_lock);
+
         if (ucs_likely(md_rkey_handle != NULL)) {
             uct_gga_mlx5_rkey_cache_update(rkey_handle, md, md_rkey_handle);
             uct_gga_mlx5_rkey_trace(md, rkey_handle, "hashed");
@@ -905,7 +908,7 @@ static void uct_ib_mlx5_gga_md_close(uct_md_h md)
     ucs_trace("md %p: closing on GGA device %s", md,
               uct_ib_device_name(&gga_md->super.super.dev));
 
-    pthread_mutex_lock(&uct_gga_mlx5_rkeys_locker);
+    pthread_mutex_lock(&uct_gga_mlx5_rkeys_lock);
     kh_foreach_key(&gga_md->rkey_cache, rkey.key, {
         md_rkey_handle = uct_gga_mlx5_md_get_rkey(gga_md, rkey.key);
         uct_gga_mlx5_md_rkey_handle_release(gga_md, md_rkey_handle);
@@ -927,7 +930,7 @@ static void uct_ib_mlx5_gga_md_close(uct_md_h md)
         }
     });
 
-    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_locker);
+    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_lock);
 
     kh_destroy_inplace(resolved_rkeys, &gga_md->rkey_cache);
     uct_ib_mlx5_devx_md_close(md);
