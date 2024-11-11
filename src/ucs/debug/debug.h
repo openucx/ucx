@@ -29,9 +29,6 @@ void ucs_debug_asan_validate_address(const char *ptr_name, void *address,
 #define UCS_ASAN_ADDRESS_IS_VALID(_ptr, _size)
 #endif
 
-void ucs_debug_asan_relocate_array_buffer(void **arr, void **old_arr_p,
-                                          size_t size);
-
 END_C_DECLS
 
 #endif

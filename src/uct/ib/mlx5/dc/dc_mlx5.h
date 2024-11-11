@@ -61,6 +61,13 @@ struct ibv_ravh {
         (_self)->flags |= UCT_DC_MLX5_IFACE_FLAG_##_flag_name##_FULL_HANDSHAKE; \
     }
 
+#ifdef __SANITIZE_ADDRESS__
+#define UCT_DC_MLX5_ASAN_RELOCATE_DCIS_BUFFER(_iface) \
+    uct_dc_mlx5_asan_relocate_dcis_array(_iface)
+#else
+#define UCT_DC_MLX5_ASAN_RELOCATE_DCIS_BUFFER(_iface)
+#endif
+
 
 typedef struct uct_dc_mlx5_ep     uct_dc_mlx5_ep_t;
 typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
@@ -360,6 +367,11 @@ struct uct_dc_mlx5_iface {
     uint16_t                         flags;
 
     uct_ud_mlx5_iface_common_t       ud_common;
+
+#ifdef __SANITIZE_ADDRESS__
+    void *                           old_dcis_buffer;
+    size_t                           old_dcis_buffer_size;
+#endif
 };
 
 
@@ -420,6 +432,8 @@ uct_dc_mlx5_dci_pool_get_or_create(uct_dc_mlx5_iface_t *iface,
 
 uint32_t
 uct_dc_mlx5_dci_config_hash(const uct_dc_mlx5_dci_config_t *dci_config);
+
+void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface);
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_dc_mlx5_is_dci_valid(const uct_dc_dci_t *dci)
 {

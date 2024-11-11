@@ -23,6 +23,9 @@
 #include <ucs/async/async.h>
 #include <ucs/debug/log.h>
 #include <string.h>
+#ifdef __SANITIZE_ADDRESS__
+#  include <sanitizer/asan_interface.h>
+#endif
 
 
 #define UCT_DC_MLX5_MAX_TX_CQ_LEN (16 * UCS_MBYTE)
@@ -267,18 +270,32 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
     uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress, flags);
 }
 
-static void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface)
+static void uct_dc_mlx5_cleanup_asan_old_dcis_buffer(uct_dc_mlx5_iface_t *iface)
 {
-#if __SANITIZE_ADDRESS__
-    size_t buffer_size = sizeof(uct_dc_dci_t) * ucs_array_capacity(&iface->tx.dcis);
-    size_t num_dcis = ucs_array_length(&iface->tx.dcis);
-    void *old_buffer_p;
+#ifdef __SANITIZE_ADDRESS__
+    if (iface->old_dcis_buffer != NULL) {
+        ASAN_UNPOISON_MEMORY_REGION(iface->old_dcis_buffer, buffer_size);
+        ucs_free(iface->old_dcis_buffer);
+    }
+#endif
+}
 
-    ucs_debug_asan_relocate_array_buffer((void**)&iface->tx.dcis.buffer,
-                                         &old_buffer_p, buffer_size);
-    uct_dc_mlx5_iface_dcis_array_copy(iface->tx.dcis.buffer, old_buffer_p,
+void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface)
+{
+#ifdef __SANITIZE_ADDRESS__
+    size_t buffer_size = sizeof(uct_dc_dci_t) *
+                         ucs_array_capacity(&iface->tx.dcis);
+    size_t num_dcis    = ucs_array_length(&iface->tx.dcis);
+    void *old_buffer_p = iface->tx.dcis.buffer;
+    void *new_buffer = ucs_malloc(buffer_size, "ASAN relocated dcis buffer");
+    uct_dc_mlx5_iface_dcis_array_copy(new_buffer, old_buffer_p,
                                       num_dcis);
-    ucs_array_buffer_free(old_buffer_p);
+    iface->tx.dcis.buffer = new_buffer;
+
+    ASAN_POISON_MEMORY_REGION(old_buffer_p, buffer_size);
+    uct_dc_mlx5_cleanup_asan_old_dcis_buffer(iface);
+    iface->old_dcis_buffer      = old_buffer_p;
+    iface->old_dcis_buffer_size = buffer_size;
 #endif
 }
 
@@ -307,7 +324,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
     ucs_trace_poll("dc iface %p tx_cqe: dci[%d] txqp %p hw_ci %d",
                    iface, dci_index, &uct_dc_mlx5_iface_dci(iface, dci_index)->txqp , hw_ci);
 
-    uct_dc_mlx5_asan_relocate_dcis_array(iface);
+    UCT_DC_MLX5_ASAN_RELOCATE_DCIS_BUFFER(iface);
 
     UCT_RC_MLX5_TXQP_PROCESS_TX_CQE(&uct_dc_mlx5_iface_dci(iface, dci_index)->txqp, cqe, hw_ci);
     uct_dc_mlx5_update_tx_res(iface, dci_index, hw_ci);
@@ -1752,6 +1769,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     uct_rc_mlx5_iface_common_prepost_recvs(&self->super);
 
+#ifdef __SANITIZE_ADDRESS__
+    self->asan_old_dcis_buffer = NULL; 
+#endif
+
     ucs_debug("created dc iface %p", self);
 
     return UCS_OK;
@@ -1787,6 +1808,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     ucs_callbackq_remove_oneshot(&worker->progress_q, self,
                                  uct_dc_mlx5_ep_dci_release_remove_filter,
                                  self);
+    uct_dc_mlx5_cleanup_asan_old_dcis_buffer(self);
     uct_dc_mlx5_iface_dcis_destroy(self);
 }
 

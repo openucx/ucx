@@ -1341,21 +1341,3 @@ void ucs_debug_asan_validate_address(const char *ptr_name, void *address,
     }
 #endif
 }
-
-/**
- * Relocate an array buffer to a new location, for ASAN debugging,
- * old_arr_p has to be freed by the caller.
- */
-void ucs_debug_asan_relocate_array_buffer(void **arr, void **old_arr_p,
-                                          size_t size)
-{
-#ifdef __SANITIZE_ADDRESS__
-    void *old_arr = *arr;
-    void *new_arr;
-
-    new_arr = ucs_malloc(size, "asan_relocate_array_buffer");
-    memcpy(new_arr, *arr, size);
-    *arr = new_arr;
-    *old_arr_p = old_arr;
-#endif
-}
