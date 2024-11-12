@@ -20,6 +20,30 @@ import (
 	"runtime"
 )
 
+type ProgressMode int
+
+const (
+	Callback ProgressMode = iota
+	Broadcast
+)
+
+func (pm ProgressMode) String() string {
+	switch pm {
+	case Callback: return "callback"
+	case Broadcast: return "broadcast"
+	default: return ""
+	}
+}
+
+func (pm *ProgressMode) Set (value string) error {
+	switch strings.ToLower(value) {
+	case "callback", "cb": *pm = Callback
+	case "broadcast", "bc": *pm = Broadcast
+	default: return fmt.Errorf("unknown progress mode %s", value)
+	}
+	return nil
+}
+
 type PerfTestParams struct {
 	messageSize   uint64
 	memType       UcsMemoryType
@@ -30,6 +54,7 @@ type PerfTestParams struct {
 	ip            string
 	printInterval uint
 	warmUpIter    uint
+	progressMode  ProgressMode
 }
 
 type PerfTest struct {
@@ -278,15 +303,26 @@ func clientThreadDoIter(t uint) {
 	tryCudaSetDevice()
 
 	requestParams := (&UcpRequestParams{}).SetMemType(perfTestParams.memType)
+	if perfTestParams.progressMode == Callback {
+		requestParams.SetCallback(func(request *UcpRequest, status UcsStatus){
+			perfTest.wake[t] <- struct{}{}
+		})
+	}
 
 	header := unsafe.Pointer(&t)
 	request, err := perfTest.ep.SendAmNonBlocking(0, header, uint64(unsafe.Sizeof(t)), getAddressOffsetForThread(t), perfTestParams.messageSize, 0, requestParams)
 	if err != nil {
 		panic(err)
 	}
-	for request.GetStatus() == UCS_INPROGRESS {
+
+	if perfTestParams.progressMode == Callback {
 		<-perfTest.wake[t]
+	} else {
+		for request.GetStatus() == UCS_INPROGRESS {
+			<-perfTest.wake[t]
+		}
 	}
+
 	if request.GetStatus() != UCS_OK {
 		errorString := fmt.Sprintf("Request completion error: %v", request.GetStatus().String())
 		panic(errorString)
@@ -300,10 +336,12 @@ func clientThreadDoIter(t uint) {
 func clientProgress() {
 	for atomic.LoadInt32(&perfTest.numCompletedRequests) < int32(perfTestParams.numIterations) {
 		progressWorker()
-		for _, ch := range perfTest.wake {
-			select {
-			case ch <- struct{}{}:
-			default:
+		if perfTestParams.progressMode == Broadcast {
+			for _, ch := range perfTest.wake {
+				select {
+				case ch <- struct{}{}:
+				default:
+				}
 			}
 		}
 	}
@@ -363,18 +401,11 @@ func main() {
 	flag.UintVar(&perfTestParams.warmUpIter, "warmup", 100, "warmup iterations")
 	flag.StringVar(&perfTestParams.ip, "i", "", "server address to connect")
 
+	perfTestParams.progressMode = Broadcast
+	flag.Var(&perfTestParams.progressMode, "progress", "progress mode")
+
 	perfTestParams.memType = UCS_MEMORY_TYPE_HOST
-	flag.CommandLine.Func("m", "memory type: host(default), cuda", func(p string) error {
-		mtypeStr := strings.ToLower(p)
-		if mtypeStr == "host" {
-			perfTestParams.memType = UCS_MEMORY_TYPE_HOST
-		} else if mtypeStr == "cuda" {
-			perfTestParams.memType = UCS_MEMORY_TYPE_CUDA
-		} else {
-			return errors.New("memory type can be host or cuda")
-		}
-		return nil
-	})
+	flag.Var(&perfTestParams.memType, "m", "memory type: host(default), cuda")
 
 	flag.Parse()
 
