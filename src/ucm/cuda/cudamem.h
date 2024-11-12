@@ -45,7 +45,7 @@ cudaError_t ucm_cudaMallocManaged(void **devPtr, size_t size, unsigned int flags
 cudaError_t ucm_cudaMallocPitch(void **devPtr, size_t *pitch,
                                 size_t width, size_t height);
 cudaError_t ucm_cudaGetSymbolAddress(void **devPtr, const void *symbol);
-#if CUDA_VERSION >= 11020
+#if CUDART_VERSION >= 11020
 cudaError_t ucm_cudaMallocAsync(void **devPtr, size_t size,
                                 cudaStream_t hStream);
 cudaError_t ucm_cudaMallocFromPoolAsync(void **devPtr, size_t size,
