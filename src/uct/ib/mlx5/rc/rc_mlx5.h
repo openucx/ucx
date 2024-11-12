@@ -30,7 +30,7 @@
         if ((_cqe)->op_own & MLX5_INLINE_SCATTER_32) { \
             UCT_RC_TXQP_COMPLETION_INL_RESP(_txqp, _cqe, _hw_ci); \
         } else if ((_cqe)->op_own & MLX5_INLINE_SCATTER_64) { \
-            UCT_RC_TXQP_COMPLETION_INL_RESP(_txqp, (_cqe - 1), _hw_ci); \
+            UCT_RC_TXQP_COMPLETION_INL_RESP(_txqp, ((_cqe)-1), _hw_ci); \
         } else { \
             UCT_RC_TXQP_COMPLETION_DESC(_txqp, _hw_ci); \
         } \
