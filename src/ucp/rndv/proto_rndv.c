@@ -405,6 +405,8 @@ static void ucp_proto_rndv_ctrl_variant_probe(
                                  ucs_max(cfg_thresh, remote_proto->cfg_thresh);
     }
 
+    ucp_proto_perf_apply_bias(perf, params->perf_bias);
+
     /* Remote variants priorities are used to respect RNDV_SCHEME setting
      * so they should contain value greater than CTRL message `cfg_thresh`.
      * Equality is allowed for RTR remote variants.

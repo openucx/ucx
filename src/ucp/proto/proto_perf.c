@@ -430,6 +430,27 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
     return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
 }
 
+void ucp_proto_perf_apply_bias(ucp_proto_perf_t *perf, double bias) {
+    ucs_linear_func_t bias_func = ucs_linear_func_make(0.0, 1.0 - bias);
+    ucp_proto_perf_node_t *bias_node;
+    ucp_proto_perf_factor_id_t fid;
+    ucp_proto_perf_segment_t *seg;
+
+    if (bias == 0) {
+        return;
+    }
+
+    ucp_proto_perf_segment_foreach(seg, perf) {
+        for (fid = 0; fid < UCP_PROTO_PERF_FACTOR_LAST; ++fid) {
+            seg->perf_factors[fid] = ucs_linear_func_compose(
+                    bias_func, seg->perf_factors[fid]);
+            ucp_proto_perf_node_update_factors(seg->node, seg->perf_factors);
+        }
+        bias_node = ucp_proto_perf_node_new_data("bias", "%.2f %%", bias);
+        ucp_proto_perf_node_own_child(seg->node, &bias_node);
+    }
+}
+
 /* TODO:
  * Reconsider correctness of PPLN perf estimation logic since in case of async
  * operations it seems wrong to choose the longest factor without paying
