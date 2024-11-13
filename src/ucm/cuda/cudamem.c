@@ -107,13 +107,13 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemFreeAsync, CUresult, -1, CUdeviceptr,
 
 /* Runtime API */
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaFree, cudaError_t, -1, void*)
-#if CUDA_VERSION >= 11020
+#if CUDART_VERSION >= 11020
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaFreeAsync, cudaError_t, -1, void*,
                                   cudaStream_t)
 #endif
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaFreeHost, cudaError_t, -1, void*)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMalloc, cudaError_t, -1, void**, size_t)
-#if CUDA_VERSION >= 11020
+#if CUDART_VERSION >= 11020
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocAsync, cudaError_t, -1, void**,
                                   size_t, cudaStream_t)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocFromPoolAsync, cudaError_t, -1,
@@ -276,7 +276,7 @@ UCM_CUDA_ALLOC_FUNC(cudaMallocManaged, cudaError_t, cudaSuccess, arg0, void*, *,
 UCM_CUDA_ALLOC_FUNC(cudaMallocPitch, cudaError_t, cudaSuccess,
                     ((size_t)arg1) * (arg2), void*, *,
                     "pitch=%p width=%zu height=%zu", size_t*, size_t, size_t)
-#if CUDA_VERSION >= 11020
+#if CUDART_VERSION >= 11020
 UCM_CUDA_ALLOC_FUNC(cudaMallocAsync, cudaError_t, cudaSuccess, arg0, void*, *,
                     "size=%zu stream=%p", size_t, cudaStream_t)
 UCM_CUDA_ALLOC_FUNC(cudaMallocFromPoolAsync, cudaError_t, cudaSuccess, arg0,
@@ -290,19 +290,19 @@ UCM_CUDA_FREE_FUNC(cudaFree, UCS_MEMORY_TYPE_CUDA, cudaError_t, arg0, 0,
                    "devPtr=%p", void*)
 UCM_CUDA_FREE_FUNC(cudaFreeHost, UCS_MEMORY_TYPE_HOST, cudaError_t, arg0, 0,
                    "ptr=%p", void*)
-#if CUDA_VERSION >= 11020
+#if CUDART_VERSION >= 11020
 UCM_CUDA_FREE_FUNC(cudaFreeAsync, UCS_MEMORY_TYPE_CUDA, cudaError_t, arg0, 0,
                    "devPtr=%p, stream=%p", void*, cudaStream_t)
 #endif
 
 static ucm_cuda_func_t ucm_cuda_runtime_funcs[] = {
     UCM_CUDA_FUNC_ENTRY(cudaFree),
-#if CUDA_VERSION >= 11020
+#if CUDART_VERSION >= 11020
     UCM_CUDA_FUNC_ENTRY(cudaFreeAsync),
 #endif
     UCM_CUDA_FUNC_ENTRY(cudaFreeHost),
     UCM_CUDA_FUNC_ENTRY(cudaMalloc),
-#if CUDA_VERSION >= 11020
+#if CUDART_VERSION >= 11020
     UCM_CUDA_FUNC_ENTRY(cudaMallocAsync),
     UCM_CUDA_FUNC_ENTRY(cudaMallocFromPoolAsync),
 #endif
