@@ -18,7 +18,7 @@ AS_IF([test "x$with_go" != xno],
       [
             AC_CHECK_PROG(GOBIN, go, yes)
             AS_IF([test "x${GOBIN}" = "xyes"],
-                  [AS_VERSION_COMPARE([1.16], [`go version | awk '{print substr($3, 3, length($3)-2)}'`],
+                  [AS_VERSION_COMPARE([1.16], [$(go version | awk '{print substr($3, 3, length($3)-2)}')],
                                       [go_happy="yes"], [go_happy="yes"], [go_happy=no])],
                   [go_happy=no])
             AS_IF([test "x$go_happy" = xno],

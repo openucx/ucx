@@ -37,6 +37,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_stream_set_hdr(ucp_request_t *req, ucp_stream_am_hdr_t *hdr)
 {
     hdr->ep_id = ucp_send_request_get_ep_remote_id(req);
+    hdr->ch_id = req->send.stream.id;
 }
 
 static size_t ucp_stream_bcopy_pack(void *dest, void *arg)
@@ -93,7 +94,7 @@ ucp_stream_multi_bcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
-        .max_lanes           = 1,
+        .max_lanes           = context->config.ext.max_eager_lanes,
         .initial_reg_md_map  = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
@@ -168,13 +169,13 @@ ucp_stream_multi_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
-        .max_lanes           = 1,
+        .max_lanes           = context->config.ext.max_eager_lanes,
         .initial_reg_md_map  = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY,
-        .middle.lane_type    = UCP_LANE_TYPE_AM
+        .middle.lane_type    = UCP_LANE_TYPE_AM_BW
     };
 
     ucp_stream_multi_common_probe(&params);

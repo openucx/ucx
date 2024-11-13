@@ -1675,7 +1675,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     /* Check if we need active message BW lanes */
     if (!(ucp_ep_get_context_features(ep) &
-          (UCP_FEATURE_TAG | UCP_FEATURE_AM)) ||
+          (UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_STREAM)) ||
         (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE |
                           UCP_EP_INIT_CREATE_AM_LANE_ONLY)) ||
         /* TODO: Check MAX_RNDV_LANES here for rndv/am case */

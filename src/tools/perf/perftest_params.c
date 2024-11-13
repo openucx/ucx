@@ -485,9 +485,11 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
             params->super.flags |= UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
             return UCS_OK;
         } else if (!strcmp(opt_arg, "recv")) {
-            params->super.flags &= ~UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
             return UCS_OK;
-        }
+        } else if (!strcmp(opt_arg, "poll")) {
+            params->super.flags |= UCX_PERF_TEST_FLAG_STREAM_RECV_POLL;
+            return UCS_OK;
+	}
         return UCS_ERR_INVALID_PARAM;
     case 'R':
         params->super.percentile_rank = atof(opt_arg);

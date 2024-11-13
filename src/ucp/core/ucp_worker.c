@@ -3047,6 +3047,7 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
 {
     ssize_t count = 0;
     ucp_ep_ext_t *ep_ext;
+    uint64_t id;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_STREAM,
                                     return UCS_ERR_INVALID_PARAM);
@@ -3055,9 +3056,12 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
 
     while ((count < max_eps) && !ucs_list_is_empty(&worker->stream_ready_eps)) {
         ep_ext                    = ucp_stream_worker_dequeue_ep_head(worker);
-        poll_eps[count].ep        = ep_ext->ep;
-        poll_eps[count].user_data = ep_ext->user_data;
-        ++count;
+        ucs_for_each_bit(id, ep_ext->stream.ready_mask) {
+            poll_eps[count].ep        = ep_ext->ep;
+            poll_eps[count].user_data = ep_ext->user_data;
+            poll_eps[count].ch_id     = id;
+            ++count;
+        }
     }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);

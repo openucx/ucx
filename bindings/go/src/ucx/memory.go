@@ -9,6 +9,11 @@ package ucx
 import "C"
 import "unsafe"
 
+import (
+	"errors"
+	"strings"
+)
+
 // Memory handle is an opaque object representing a memory region allocated
 // through UCP library, which is optimized for remote memory access
 // operations (zero-copy operations). The memory could be registered
@@ -65,5 +70,14 @@ func (m *UcpMemory) Close() error {
 		return newUcxError(status)
 	}
 
+	return nil
+}
+
+func (mt *UcsMemoryType) Set (value string) error {
+	switch strings.ToLower(value) {
+	case "host": *mt = UCS_MEMORY_TYPE_HOST
+	case "cuda": *mt = UCS_MEMORY_TYPE_CUDA
+	default: return errors.New("memory type can be host or cuda")
+	}
 	return nil
 }

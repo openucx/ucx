@@ -89,3 +89,29 @@ func (e *UcpEp) SendAmNonBlocking(id uint, header unsafe.Pointer, headerSize uin
 	request := C.ucp_am_send_nbx(e.ep, C.uint(id), header, C.size_t(headerSize), data, C.size_t(dataSize), &requestParams)
 	return NewRequest(request, cbId, nil)
 }
+
+func (e *UcpEp) SendStreamNonBlocking(id int, data unsafe.Pointer, dataSize uint64, params *UcpRequestParams) (*UcpRequest, error) {
+	var requestParams C.ucp_request_param_t
+
+	cbId := setSendParams(params, &requestParams)
+
+	requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_ID
+	requestParams.id = C.uint64_t(id)
+
+	request := C.ucp_stream_send_nbx(e.ep, data, C.size_t(dataSize), &requestParams)
+	return NewRequest(request, cbId, nil)
+}
+
+func (e *UcpEp) RecvStreamNonBlocking(id int, data unsafe.Pointer, dataSize uint64, params *UcpRequestParams) (*UcpRequest, error) {
+	var requestParams C.ucp_request_param_t
+	var length C.size_t
+
+	cbId := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeAmRecvData))
+
+	requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_ID
+	requestParams.id = C.uint64_t(id)
+
+	request := C.ucp_stream_recv_nbx(e.ep, data, C.size_t(dataSize), &length, &requestParams)
+	return NewRequest(request, cbId, length)
+}
+
