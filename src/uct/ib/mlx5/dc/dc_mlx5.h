@@ -369,7 +369,7 @@ struct uct_dc_mlx5_iface {
     uct_ud_mlx5_iface_common_t       ud_common;
 
 #ifdef __SANITIZE_ADDRESS__
-    void *                           old_dcis_buffer;
+    uct_dc_dci_t *                   old_dcis_buffer;
     size_t                           old_dcis_buffer_size;
 #endif
 };
