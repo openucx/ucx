@@ -103,20 +103,24 @@ public:
         if (sender().ucph()->num_tls <= 2) {
             UCS_TEST_SKIP_R("test requires at least 2 ifaces to work");
         }
+
+        check_reused_lanes_reconfigurable();
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "reuse");
     }
 
-    void run(bool bidirectional = false, bool reuse_lanes = false);
+    void run(bool bidirectional = false);
     void skip_non_p2p();
     bool has_bond_iface();
+    void check_reused_lanes_reconfigurable();
 
     bool reuse_lanes() const
     {
-        return m_reuse_lanes;
+        return get_variant_value();
     }
 
     void send_message(const ucp_test_base::entity &e1,
@@ -174,8 +178,6 @@ public:
             }
         }
     }
-
-    bool m_reuse_lanes;
 };
 
 unsigned test_ucp_ep_reconfig::entity::num_paths() const
@@ -346,9 +348,8 @@ test_ucp_ep_reconfig::entity::get_address(const ucp_tl_bitmap_t &tl_bitmap) cons
     return address;
 }
 
-void test_ucp_ep_reconfig::run(bool bidirectional, bool reuse_lanes)
+void test_ucp_ep_reconfig::run(bool bidirectional)
 {
-    m_reuse_lanes = reuse_lanes;
     create_entities_and_connect();
     send_recv(bidirectional);
 
@@ -368,7 +369,6 @@ void test_ucp_ep_reconfig::skip_non_p2p()
     }
 }
 
-
 bool test_ucp_ep_reconfig::has_bond_iface()
 {
     auto context = sender().ucph();
@@ -384,9 +384,29 @@ bool test_ucp_ep_reconfig::has_bond_iface()
 
     return false;
 }
+
+void test_ucp_ep_reconfig::check_reused_lanes_reconfigurable()
+{
+    if (!reuse_lanes()) {
+        return;
+    }
+
+    if (has_transport("ud_v") || has_transport("ud_x")) {
+        UCS_TEST_SKIP_R("the test requires at least 2 lanes, while UD has only "
+                        "1");
+    }
+
+    if (has_transport("tcp") || has_transport("dc_x") || has_transport("shm")) {
+        UCS_TEST_SKIP_R("non wired-up lanes are not supported yet");
+    }
+
+    if (has_bond_iface()) {
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
+    }
+}
+
 /* TODO: Remove skip condition after next PRs are merged. */
-UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, basic,
-                     !has_transport("rc_x") || !has_transport("rc_v"))
+UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, basic, !has_transport("rc"))
 {
     run();
 }
@@ -413,24 +433,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, resolve_remote_id, is_self(),
     }
 
     run(true);
-}
-
-UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, reuse_lanes, is_self())
-{
-    if (has_transport("ud_v") || has_transport("ud_x")) {
-        UCS_TEST_SKIP_R("the test requires at least 2 lanes, while UD has only "
-                        "1");
-    }
-
-    if (has_transport("tcp") || has_transport("dc_x") || has_transport("shm")) {
-        UCS_TEST_SKIP_R("non wired-up lanes are not supported yet");
-    }
-
-    if (has_bond_iface()) {
-        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
-    }
-
-    run(false, true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_ep_reconfig);

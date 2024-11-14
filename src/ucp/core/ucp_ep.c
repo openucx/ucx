@@ -1851,39 +1851,25 @@ ucp_lane_index_t ucp_ep_find_wireup_ep_lane(ucp_ep_h ep)
     return UCP_NULL_LANE;
 }
 
-static ucp_lane_index_t
-ucp_ep_get_reused_lane_source(ucp_ep_h ep, ucp_lane_index_t new_lane,
-                              const ucp_lane_index_t *reuse_lane_map)
-{
-    ucp_lane_index_t lane;
-
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
-        if (reuse_lane_map[lane] == new_lane) {
-            return lane;
-        }
-    }
-
-    return UCP_NULL_LANE;
-}
-
 ucp_lane_index_t
 ucp_ep_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
                             const ucp_lane_index_t *reuse_lane_map)
 {
+    ucp_lane_map_t lane_bitmap = {0};
     ucp_lane_index_t lane;
 
     if (ucp_ep_has_cm_lane(ep)) {
         return key->cm_lane;
     }
 
-    for (lane = 0; lane < key->num_lanes; lane++) {
-        if (ucp_ep_get_reused_lane_source(ep, lane, reuse_lane_map) ==
-            UCP_NULL_LANE) {
-            return lane;
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
+        if (reuse_lane_map[lane] != UCP_NULL_LANE) {
+            lane_bitmap |= UCS_BIT(reuse_lane_map[lane]);
         }
     }
 
-    return UCP_NULL_LANE;
+    lane = ucs_ffs64_safe(~lane_bitmap);
+    return (lane < key->num_lanes) ? lane : UCP_NULL_LANE;
 }
 
 static int ucp_ep_lane_is_dst_index_match(ucp_rsc_index_t dst_index1,
