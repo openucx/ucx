@@ -1,0 +1,39 @@
+name: Auto-Assign Reviewers
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  auto-assign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+      - name: Run git blame analysis
+        run: |
+          # Calculate the diff between the base branch and the current commit
+          git diff origin/${{ github.event.pull_request.base.ref }} --name-only | while read file; do
+            echo "Analyzing $file"
+            git blame -e $file || echo "Error analyzing $file"
+          done > reviewers.txt
+
+      - name: Print reviewers list
+        run: cat reviewers.txt
+
+      - name: Create pull request for changes
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: ${{ github.event.pull_request.base.ref }}
+          branch: create-pull-request/patch
+          commit-message: "[create-pull-request] Automated change"
+          title: Changes by create-pull-request action
+          body: |
+            Automated changes by [create-pull-request](https://github.com/peter-evans/create-pull-request) GitHub action
