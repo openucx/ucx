@@ -333,7 +333,8 @@ ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
  *
  * @return Index of the string in the array, or -1 if not found.
  */
-ssize_t ucs_string_find_in_sparse_list(const char *str, const char **string_list,
+ssize_t ucs_string_find_in_sparse_list(const char *str,
+                                       const char **string_list,
                                        size_t num_of_args);
 
 /**

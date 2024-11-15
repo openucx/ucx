@@ -406,7 +406,9 @@ static void __print_table_values(char * const *table, char *buf, size_t max)
     *buf = '[';
 }
 
-static void __print_sparse_table_values(const char * const *table, size_t num_of_args, char *buf, size_t max)
+static void __print_sparse_table_values(const char * const *table,
+                                        size_t num_of_args, char *buf,
+                                        size_t max)
 {
     char *ptr = buf, *end = buf + max - 1;
     size_t i;
@@ -506,7 +508,7 @@ void ucs_config_help_bitmap(char *buf, size_t max, const void *arg)
 
 int ucs_config_sscanf_flags(const char *buf, void *dest, const void *arg)
 {
-    char *str = ucs_strdup(buf, "config_sscanf_flags_str");
+    char *str                     = ucs_strdup(buf, "config_sscanf_flags_str");
     ucs_config_flags_args_t *args = (ucs_config_flags_args_t*)arg;
     char *p, *saveptr;
     int ret, i;
@@ -536,7 +538,8 @@ int ucs_config_sscanf_flags(const char *buf, void *dest, const void *arg)
     return ret;
 }
 
-int ucs_config_sprintf_flags(char *buf, size_t max, const void *src, const void *arg)
+int ucs_config_sprintf_flags(char *buf, size_t max, const void *src,
+                             const void *arg)
 {
     ucs_config_flags_args_t *args = (ucs_config_flags_args_t*)arg;
     ucs_flags_str(buf, max, *((uint64_t*)src), (const char**)args->args);
@@ -546,13 +549,14 @@ int ucs_config_sprintf_flags(char *buf, size_t max, const void *src, const void 
 void ucs_config_help_flags(char *buf, size_t max, const void *arg)
 {
     ucs_config_flags_args_t *args = (ucs_config_flags_args_t*)arg;
-    int written = snprintf(buf, max, "comma-separated list of: ");
+    int written                   = snprintf(buf, max, "comma-separated list of: ");
 
     if (written < 0 || written >= max) {
         return;
     }
 
-    __print_sparse_table_values(args->args, args->num_of_args, buf + written, max - written);
+    __print_sparse_table_values(args->args, args->num_of_args, buf + written,
+                                max - written);
 }
 
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg)
