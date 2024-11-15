@@ -141,11 +141,8 @@ const char *ucp_object_versions[] = {
 };
 
 const char *ucp_extra_op_attr_flags_names[] = {
-    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_NO_IMM_CMPL)]    = "no_imm_cmpl",
     [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FAST_CMPL)]      = "fast_cmpl",
-    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)] = "force_imm_cmpl",
-    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_MULTI_SEND)]     = "multi_send",
-    NULL
+    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_MULTI_SEND)]     = "multi_send"
 };
 
 const ucs_config_flags_args_t ucp_extra_op_attr_flags_args = {
