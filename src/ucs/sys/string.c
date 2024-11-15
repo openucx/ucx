@@ -423,7 +423,8 @@ ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
     return -1;
 }
 
-ssize_t ucs_string_find_in_sparse_list(const char *str, const char **string_list,
+ssize_t ucs_string_find_in_sparse_list(const char *str,
+                                       const char **string_list,
                                        size_t num_of_args)
 {
     size_t i;
