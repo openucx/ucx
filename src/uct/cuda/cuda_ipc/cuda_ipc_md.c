@@ -409,11 +409,12 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
 }
 
 static int
-uct_cuda_ipc_md_init_fabric_info(uct_cuda_ipc_md_t *md,
-                                 ucs_ternary_auto_value_t mnnvl_enable)
+uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
+                                  ucs_ternary_auto_value_t mnnvl_enable)
 {
     int mnnvl_supported = 0;
 #if HAVE_NVML_FABRIC_INFO
+    nvmlGpuFabricInfoV_t fabric_info;
     nvmlDevice_t device;
     ucs_status_t status;
     char buf[64];
@@ -432,22 +433,22 @@ uct_cuda_ipc_md_init_fabric_info(uct_cuda_ipc_md_t *md,
         goto out_sd;
     }
 
-    md->fabric_info.version = nvmlGpuFabricInfo_v2;
-    status                  = UCT_NVML_FUNC_LOG_ERR(
-                         nvmlDeviceGetGpuFabricInfoV(device, &md->fabric_info));
+    fabric_info.version = nvmlGpuFabricInfo_v2;
+    status              = UCT_NVML_FUNC_LOG_ERR(
+                             nvmlDeviceGetGpuFabricInfoV(device, &fabric_info));
     if (status != UCS_OK) {
         goto out_sd;
     }
 
     ucs_debug("fabric_info: healthmask=%u state=%u status=%u clique=%u uuid=%s",
-              md->fabric_info.healthMask, md->fabric_info.state,
-              md->fabric_info.status, md->fabric_info.cliqueId,
+              fabric_info.healthMask, fabric_info.state, fabric_info.status,
+              fabric_info.cliqueId,
               ucs_str_dump_hex(
-                  md->fabric_info.clusterUuid, NVML_GPU_FABRIC_UUID_LEN, buf,
+                  fabric_info.clusterUuid, NVML_GPU_FABRIC_UUID_LEN, buf,
                   sizeof(buf), SIZE_MAX));
 
-    if ((md->fabric_info.state != NVML_GPU_FABRIC_STATE_COMPLETED) ||
-        (md->fabric_info.status != NVML_SUCCESS)) {
+    if ((fabric_info.state != NVML_GPU_FABRIC_STATE_COMPLETED) ||
+        (fabric_info.status != NVML_SUCCESS)) {
         goto out_sd;
     }
 
@@ -493,7 +494,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops       = &md_ops;
     md->super.component = &uct_cuda_ipc_component.super;
-    md->enable_mnnvl    = uct_cuda_ipc_md_init_fabric_info(
+    md->enable_mnnvl    = uct_cuda_ipc_md_check_fabric_info(
                                                   md, ipc_config->enable_mnnvl);
     *md_p               = &md->super;
 

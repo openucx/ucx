@@ -43,9 +43,6 @@ typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
 typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;   /**< Domain info */
     int                      enable_mnnvl; /**< Multi-node NVLINK support status */
-#if HAVE_NVML_FABRIC_INFO
-    nvmlGpuFabricInfoV_t     fabric_info; /**< GPU fabric information */
-#endif
 } uct_cuda_ipc_md_t;
 
 
