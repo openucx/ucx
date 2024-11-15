@@ -135,7 +135,7 @@ static UCS_F_ALWAYS_INLINE void ucp_proto_select_param_init_common(
      * supported */
     select_param->op_id_flags   = op_id | op_flags;
     select_param->op_attr       = ucp_proto_select_op_attr_pack(
-        op_attr_mask, UCP_PROTO_SELECT_OP_ATTR_MASK);
+        op_attr_mask);
     select_param->dt_class      = dt_class;
     select_param->mem_type      = mem_info->type;
     select_param->sys_dev       = mem_info->sys_dev;
