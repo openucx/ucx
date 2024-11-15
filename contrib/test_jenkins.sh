@@ -195,6 +195,7 @@ run_client_server_app() {
 	if [ $error_emulation -eq 1 ]
 	then
 		set +Ee
+		trap '' ERR
 	fi
 
 	taskset -c $affinity_client ${test_exe} ${test_args} ${server_addr_arg} ${server_port_arg} &
@@ -205,6 +206,7 @@ run_client_server_app() {
 	if [ $error_emulation -eq 1 ]
 	then
 		set -eE
+		trap 'azure_log_error "Error at line ${BASH_LINENO[0]}"; exit -1' ERR
 	fi
 
 	if [ $kill_server -eq 1 ]
