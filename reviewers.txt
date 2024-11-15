@@ -1,0 +1,41 @@
+Analyzing .github/workflows/auto-assign-reviewers.yml
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200  1) name: Auto-Assign Reviewers
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200  2) 
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200  3) on:
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200  4)   pull_request:
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200  5)     types: [opened, synchronize]
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200  6) 
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200  7) jobs:
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200  8)   auto-assign:
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200  9)     runs-on: ubuntu-latest
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 10)     steps:
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 11)       - name: Checkout code
+9068df235e (<mshalev@nvidia.com> 2024-11-15 12:34:02 +0200 12)         uses: actions/checkout@v4
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 13)         with:
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 14)           fetch-depth: 0
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 15) 
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 16)       - name: Fetch base branch
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 17)         run: |
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 18)           git fetch origin ${{ github.event.pull_request.base.ref }}
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 19) 
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 20)       - name: Run git blame analysis
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 21)         run: |
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 22)           # Calculate the diff between the base branch and the current commit
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 23)           git diff origin/${{ github.event.pull_request.base.ref }} --name-only | while read file; do
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 24)             echo "Analyzing $file"
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 25)             git blame -e $file || echo "Error analyzing $file"
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 26)           done > reviewers.txt
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 27) 
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 28)       - name: Print reviewers list
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 29)         run: cat reviewers.txt
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 30) 
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 31)       - name: Create pull request for changes
+9068df235e (<mshalev@nvidia.com> 2024-11-15 12:34:02 +0200 32)         uses: peter-evans/create-pull-request@v7
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 33)         with:
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 34)           token: ${{ secrets.GITHUB_TOKEN }}
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 35)           base: ${{ github.event.pull_request.base.ref }}
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 36)           branch: create-pull-request/patch
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 37)           commit-message: "[create-pull-request] Automated change"
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 38)           title: Changes by create-pull-request action
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 39)           body: |
+02bd5e3672 (<mshalev@nvidia.com> 2024-11-15 11:56:52 +0200 40)             Automated changes by [create-pull-request](https://github.com/peter-evans/create-pull-request) GitHub action
