@@ -26,6 +26,7 @@
 source $(dirname $0)/../buildlib/az-helpers.sh
 source $(dirname $0)/../buildlib/tools/common.sh
 
+set -o pipefail
 trap 'azure_log_error "Error at line ${BASH_LINENO[0]}"; exit -1' ERR
 
 WORKSPACE=${WORKSPACE:=$PWD}
