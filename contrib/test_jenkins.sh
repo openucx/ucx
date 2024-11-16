@@ -917,33 +917,43 @@ run_gtest_watchdog_test() {
 
 	start_time=`date +%s`
 
-	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
-		WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
-		GTEST_FILTER=test_watchdog.watchdog_timeout \
-		make -C ./test/gtest test 2>&1 | tee watchdog_timeout_test &
+	# Run the test in the background
+	(
+		env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
+			WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
+			GTEST_FILTER=test_watchdog.watchdog_timeout \
+			make -C ./test/gtest test 2>&1 | tee watchdog_timeout_test &
+	) &
 	pid=$!
 	wait $pid
+	exit_code=$?
 
 	end_time=`date +%s`
 
-	res="$(grep -x "$expected_err_str" watchdog_timeout_test)" || true
-
-	rm -f watchdog_timeout_test
-
-	if [ "$res" != "$expected_err_str" ]
+	if [ $exit_code -eq 0 ]
 	then
-		echo "didn't find [$expected_err_str] string in the test output"
+		echo "Watchdog timeout test didn't fail as expected"
+		rm -f watchdog_timeout_test
 		exit 1
 	fi
 
-	runtime=$(($end_time-$start_time))
+	if ! grep -Fxq "$expected_err_str" watchdog_timeout_test; then
+		echo "ERROR: Didn't find the expected error string [$expected_err_str] in the test output"
+		rm -f watchdog_timeout_test
+		exit 1
+	fi
 
+	rm -f watchdog_timeout_test
+
+	runtime=$(($end_time-$start_time))
 	if [ $runtime -gt $expected_runtime ]
 	then
 		echo "Watchdog timeout test takes $runtime seconds that" \
 			"is greater than expected $expected_runtime seconds"
 		exit 1
 	fi
+
+	echo "Watchdog timeout test passed (runtime: $runtime seconds)"
 }
 
 run_malloc_hook_gtest() {
