@@ -826,8 +826,22 @@ test_memtrack() {
 	UCX_MEMTRACK_DEST=stdout GTEST_FILTER=test_memtrack.sanity make -C ./test/gtest test
 
 	echo "==== Running memtrack limit test ===="
-	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
-	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=412MB ./test/apps/test_memtrack_limit |& grep -C 100 'reached'
+    UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
+
+    echo "==== Testing failure scenario ===="
+    set +e
+    trap '' ERR
+    UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=412MB ./test/apps/test_memtrack_limit |& grep -C 100 'reached'
+    status=$?
+    trap 'azure_log_error "Error at line ${BASH_LINENO[0]}"; exit -1' ERR
+    set -e
+
+    if [ $status -ne 0 ]; then
+        echo "ERROR: Failure test did not behave as expected"
+        exit 1
+    else
+        echo "Failure test behaved as expected"
+    fi
 }
 
 test_unused_env_var() {
