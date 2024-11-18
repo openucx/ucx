@@ -244,9 +244,14 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
 static const char *
 uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
 {
+    const char *sysfs_path = NULL;
     ucs_status_t status;
-    const char *sysfs_path;
-    char lowest_path_buf[PATH_MAX];
+    char *lowest_path_buf;
+
+    status = ucs_string_alloc_path_buffer(&lowest_path_buf, "lowest_path_buf");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     /* Deep search to find the lowest device sysfs path:
      * 1) For regular device, use regular sysfs form.
@@ -255,11 +260,15 @@ uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
     status = ucs_netif_get_lowest_device_path(dev_name, lowest_path_buf,
                                               PATH_MAX);
     if (status != UCS_OK) {
-        return NULL;
+        goto out_free_lowest_path_buf;
     }
 
     /* 'path_buffer' size is PATH_MAX */
     sysfs_path = ucs_topo_resolve_sysfs_path(lowest_path_buf, path_buffer);
+
+out_free_lowest_path_buf:
+    ucs_free(lowest_path_buf);
+out:
     return sysfs_path;
 }
 
@@ -272,14 +281,19 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     ucs_status_t status;
     int is_default;
     double pci_bw, network_bw, calculated_bw;
-    char path_buffer[PATH_MAX];
+    char *path_buffer;
     const char *sysfs_path;
 
     uct_base_iface_query(&iface->super, attr);
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.c, &network_bw);
     if (status != UCS_OK) {
-        return status;
+        goto out;
+    }
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        goto out;
     }
 
     sysfs_path             = uct_tcp_iface_get_sysfs_path(iface->if_name, path_buffer);
@@ -292,14 +306,15 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_tcp_iface_addr_t);
     attr->device_addr_len  = uct_tcp_iface_get_device_address_length(iface);
-    attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                             UCT_IFACE_FLAG_CONNECT_TO_EP    |
-                             UCT_IFACE_FLAG_AM_SHORT         |
-                             UCT_IFACE_FLAG_AM_BCOPY         |
-                             UCT_IFACE_FLAG_PENDING          |
-                             UCT_IFACE_FLAG_CB_SYNC          |
-                             UCT_IFACE_FLAG_EP_CHECK         |
-                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+    attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
+                             UCT_IFACE_FLAG_CONNECT_TO_EP          |
+                             UCT_IFACE_FLAG_AM_SHORT               |
+                             UCT_IFACE_FLAG_AM_BCOPY               |
+                             UCT_IFACE_FLAG_PENDING                |
+                             UCT_IFACE_FLAG_CB_SYNC                |
+                             UCT_IFACE_FLAG_EP_CHECK               |
+                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                             UCT_IFACE_FLAG_INTER_NODE;
     attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                              UCT_IFACE_FLAG_EVENT_RECV      |
                              UCT_IFACE_FLAG_EVENT_FD;
@@ -339,7 +354,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     if (iface->config.prefer_default) {
         status = uct_tcp_netif_is_default(iface->if_name, &is_default);
         if (status != UCS_OK) {
-             return status;
+            goto out_free_path_buffer;
         }
 
         attr->priority    = is_default ? 0 : 1;
@@ -347,7 +362,10 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
         attr->priority    = 0;
     }
 
-    return UCS_OK;
+out_free_path_buffer:
+    ucs_free(path_buffer);
+out:
+    return status;
 }
 
 static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
@@ -882,13 +900,25 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_iface_t, uct_iface_t, uct_md_h,
 
 static int uct_tcp_is_bridge(const char *if_name)
 {
-    char path[PATH_MAX];
+    char *path;
+    int ret;
     struct stat st;
+    ucs_status_t status;
 
-    ucs_snprintf_safe(path, PATH_MAX, UCT_TCP_IFACE_NETDEV_DIR "/%s/bridge",
-                      if_name);
+    status = ucs_string_alloc_formatted_path(&path, "path",
+                                             UCT_TCP_IFACE_NETDEV_DIR
+                                             "/%s/bridge",
+                                             if_name);
+    if (status != UCS_OK) {
+        ret = 0;
+        goto out;
+    }
 
-    return (stat(path, &st) == 0) && S_ISDIR(st.st_mode);
+    ret = (stat(path, &st) == 0) && S_ISDIR(st.st_mode);
+
+    ucs_free(path);
+out:
+    return ret;
 }
 
 ucs_status_t uct_tcp_query_devices(uct_md_h md,
@@ -903,7 +933,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     int is_active, i, n;
     ucs_status_t status;
     const char *sysfs_path;
-    char path_buffer[PATH_MAX];
+    char *path_buffer;
     ucs_sys_device_t sys_dev;
 
     n = scandir(UCT_TCP_IFACE_NETDEV_DIR, &entries, NULL, alphasort);
@@ -915,6 +945,12 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
 
     devices     = NULL;
     num_devices = 0;
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     ucs_carray_for_each(entry, entries, n) {
         /* According to the sysfs(5) manual page, all of entries
          * has to be a symbolic link representing one of the real
@@ -977,6 +1013,7 @@ out_release:
     }
 
     free(entries);
+    ucs_free(path_buffer);
 out:
     return status;
 }

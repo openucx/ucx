@@ -171,6 +171,7 @@ static void ucp_proto_amo_probe(const ucp_proto_init_params_t *init_params,
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_AMO,
         .tl_cap_flags        = 0
     };

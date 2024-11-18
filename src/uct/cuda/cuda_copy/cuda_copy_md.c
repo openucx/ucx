@@ -214,7 +214,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
 
 static ucs_status_t
 uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
-                               uct_cuda_copy_alloc_handle_t *alloc_handle)
+                               uct_cuda_copy_alloc_handle_t *alloc_handle,
+                               unsigned flags)
 {
 #if HAVE_CUDA_FABRIC
     CUmemAllocationProp prop    = {};
@@ -223,6 +224,13 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
                                   UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DEBUG;
     ucs_status_t status;
     CUdevice cu_device;
+
+    if (!(flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) &&
+        (md->config.enable_fabric == UCS_YES)) {
+        log_level = UCS_LOG_LEVEL_ERROR;
+    } else {
+        log_level = UCS_LOG_LEVEL_DEBUG;
+    }
 
     status = UCT_CUDADRV_FUNC(cuCtxGetDevice(&cu_device), log_level);
     if (status != UCS_OK) {
@@ -304,21 +312,27 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
     ucs_status_t status;
     uct_cuda_copy_alloc_handle_t *alloc_handle;
+    ucs_log_level_t log_level;
 
     if ((mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) &&
         (mem_type != UCS_MEMORY_TYPE_CUDA)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
+    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                UCS_LOG_LEVEL_ERROR;
+
     if (!uct_cuda_base_is_context_active()) {
-        ucs_error("attempt to allocate cuda memory without active context");
+        ucs_log(log_level,
+                "attempt to allocate cuda memory without active context");
         return UCS_ERR_NO_DEVICE;
     }
 
     alloc_handle = ucs_malloc(sizeof(*alloc_handle),
                               "uct_cuda_copy_alloc_handle_t");
     if (NULL == alloc_handle) {
-        ucs_error("failed to allocate memory for uct_cuda_copy_alloc_handle_t");
+        ucs_log(log_level,
+                "failed to allocate memory for uct_cuda_copy_alloc_handle_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -327,7 +341,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
 
     if (mem_type == UCS_MEMORY_TYPE_CUDA) {
         if (md->config.enable_fabric != UCS_NO) {
-            status = uct_cuda_copy_mem_alloc_fabric(md, alloc_handle);
+            status = uct_cuda_copy_mem_alloc_fabric(md, alloc_handle, flags);
             if (status == UCS_OK) {
                 goto allocated;
             } else {
@@ -338,22 +352,24 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
         }
 
         if (md->config.enable_fabric != UCS_YES) {
-            status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuMemAlloc(&alloc_handle->ptr, alloc_handle->length));
+            status = UCT_CUDADRV_FUNC(cuMemAlloc(&alloc_handle->ptr,
+                                                 alloc_handle->length),
+                                      log_level);
             if (status == UCS_OK) {
                 goto allocated;
             }
         }
 
-        ucs_error("unable to allocate cuda memory of length %ld bytes",
-                  alloc_handle->length);
+        ucs_log(log_level, "unable to allocate cuda memory of length %ld bytes",
+                alloc_handle->length);
         status = UCS_ERR_NO_MEMORY;
     } else if (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
+        status = UCT_CUDADRV_FUNC(
                 cuMemAllocManaged(&alloc_handle->ptr, alloc_handle->length,
-                                  CU_MEM_ATTACH_GLOBAL));
+                                  CU_MEM_ATTACH_GLOBAL), log_level);
     } else {
-        ucs_error("allocation mem_types supported: cuda, cuda-managed");
+        ucs_log(log_level,
+                "allocation mem_types supported: cuda, cuda-managed");
         status = UCS_ERR_INVALID_PARAM;
     }
 

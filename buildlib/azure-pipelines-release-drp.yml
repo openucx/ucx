@@ -6,6 +6,14 @@ pr:
   - master
   - v*.*.x
 
+schedules:
+- cron: '0 0 * * 6'
+  displayName: Saturday night test
+  always: true
+  branches:
+    include:
+    - master
+
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local
   REPO_MIRROR: harbor-pdc.nvidia.com
@@ -73,6 +81,8 @@ stages:
               check_release_build $(Build.Reason) $(Build.SourceVersion) "AZP/DRP-RELEASE: "
             name: Result
             displayName: Check build condition
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(AZURE_DEVOPS_EXT_PAT)
 
   - stage: GitHubDraft
     condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')

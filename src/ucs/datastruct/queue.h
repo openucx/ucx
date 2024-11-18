@@ -58,12 +58,20 @@ ucs_queue_is_tail(ucs_queue_head_t *queue, ucs_queue_elem_t *elem)
 }
 
 /**
+ * @return Whether the queue is empty without assumption on pointer validity
+ */
+static inline int ucs_queue_is_empty_no_deref(const ucs_queue_head_t *queue)
+{
+    return queue->ptail == &queue->head;
+}
+
+/**
  * @return Whether the queue is empty.
  */
 static inline int ucs_queue_is_empty(const ucs_queue_head_t *queue)
 {
     UCS_QUEUE_CHECK_HEAD_IS_VALID(queue);
-    return queue->ptail == &queue->head;
+    return ucs_queue_is_empty_no_deref(queue);
 }
 
 /**

@@ -64,8 +64,15 @@ static void set_log_level()
 }
 
 int main(int argc, char **argv) {
-    // coverity[fun_call_w_exception]: uncaught exceptions cause nonzero exit anyway, so don't warn.
-    ::testing::InitGoogleTest(&argc, argv);
+    try {
+        ::testing::InitGoogleTest(&argc, argv);
+    } catch (const std::exception& e) {
+        UCS_TEST_MESSAGE << "Failed to initialize gtest: " << e.what();
+        return -1;
+    } catch (...) {
+        UCS_TEST_MESSAGE << "Unknown exception during gtest initialization";
+        return -1;
+    }
 
     parse_test_opts(argc, argv);
 

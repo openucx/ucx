@@ -9,9 +9,9 @@ import (
 	"flag"
 	"fmt"
 	"testing"
-	. "ucx"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"unsafe"
-	. "cuda"
+	. "github.com/openucx/ucx/bindings/go/src/cuda"
 )
 
 var maxSize = flag.Uint64("s", 10_000_000, "Max size of memory to mmap. Default: 10M")

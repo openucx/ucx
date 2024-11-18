@@ -93,7 +93,7 @@ void ucs_mpmc_queue_remove_if(ucs_mpmc_queue_t *mpmc,
  */
 static inline int ucs_mpmc_queue_is_empty(ucs_mpmc_queue_t *mpmc)
 {
-    return ucs_queue_is_empty(&mpmc->queue);
+    return ucs_queue_is_empty_no_deref(&mpmc->queue);
 }
 
 #endif

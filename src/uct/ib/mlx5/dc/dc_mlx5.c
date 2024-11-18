@@ -29,11 +29,12 @@
 
 
 const char *uct_dc_tx_policy_names[] = {
-    [UCT_DC_TX_POLICY_DCS]       = "dcs",
-    [UCT_DC_TX_POLICY_DCS_QUOTA] = "dcs_quota",
-    [UCT_DC_TX_POLICY_RAND]      = "rand",
-    [UCT_DC_TX_POLICY_HW_DCS]    = "hw_dcs",
-    [UCT_DC_TX_POLICY_LAST]      = NULL
+    [UCT_DC_TX_POLICY_DCS]        = "dcs",
+    [UCT_DC_TX_POLICY_DCS_QUOTA]  = "dcs_quota",
+    [UCT_DC_TX_POLICY_DCS_HYBRID] = "dcs_hybrid",
+    [UCT_DC_TX_POLICY_RAND]       = "rand",
+    [UCT_DC_TX_POLICY_HW_DCS]     = "hw_dcs",
+    [UCT_DC_TX_POLICY_LAST]       = NULL
 };
 
 static const char *uct_dct_affinity_policy_names[] = {
@@ -78,7 +79,10 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      "           Multiple endpoints may share the same DCI.\n"
      "\n"
      "hw_dcs     A single DCI that operates as a HW DCS queue. The channels are assigned\n"
-     "           in a round-robin fashion.",
+     "           in a round-robin fashion.\n"
+     "\n"
+     "dcs_hybrid Same as \"dcs_quota\" but when there are no DCIs available,\n" 
+     "           a dedicated HW DCI is used in the same manner as in \"hw_dcs\" policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
@@ -250,7 +254,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     /* Error handling is not supported with random dci policy
      * TODO: Fix */
-    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
+    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
         iface_attr->cap.flags &= ~(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    |
                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM);
@@ -269,7 +273,7 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
 {
-    uint8_t dci_index;
+    uct_dci_index_t dci_index;
     struct mlx5_cqe64 *cqe;
     uint16_t hw_ci;
     uct_dc_dci_t *dci;
@@ -366,7 +370,8 @@ static void uct_ib_mlx5dv_dci_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
 }
 
 ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
-                                          uint8_t dci_index, int connect)
+                                          uct_dci_index_t dci_index,
+                                          int connect, uint8_t num_dci_channels)
 {
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
     uct_ib_mlx5_qp_attr_t attr = {};
@@ -391,7 +396,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
                                            UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE;
         attr.rdma_wr_disabled            = (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
                                            (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
-        attr.log_num_dci_stream_channels = ucs_ilog2(iface->tx.num_dci_channels);
+        attr.log_num_dci_stream_channels = ucs_ilog2(num_dci_channels);
         status = uct_ib_mlx5_devx_create_qp(ib_iface,
                                             &iface->super.cq[UCT_IB_DIR_TX],
                                             &iface->super.cq[UCT_IB_DIR_RX],
@@ -459,7 +464,7 @@ init_qp:
         }
     }
 
-    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
+    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
         ucs_arbiter_group_init(&dci->arb_group);
     } else {
         dci->ep = NULL;
@@ -765,7 +770,7 @@ uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
     uct_rc_txqp_cleanup(&iface->super.super, &dci->txqp);
     uct_ib_mlx5_destroy_qp(md, &dci->txwq.super);
 
-    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
+    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
         ucs_arbiter_group_cleanup(&dci->arb_group);
     }
     uct_ib_mlx5_qp_mmio_cleanup(&dci->txwq.super, dci->txwq.reg);
@@ -775,9 +780,10 @@ uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
 
 static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface)
 {
-    uint8_t num_dcis = ucs_array_length(&iface->tx.dcis);
+    uct_dci_index_t num_dcis = ucs_array_length(&iface->tx.dcis);
     uct_dc_dci_t *dci;
-    uint8_t pool_index, dci_index;
+    uint8_t pool_index;
+    uct_dci_index_t dci_index;
 
     for (dci_index = 0; dci_index < num_dcis; dci_index++) {
         dci = uct_dc_mlx5_iface_dci(iface, dci_index);
@@ -886,8 +892,8 @@ ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
 }
 
 static ucs_status_t
-uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
-                              const uct_dc_mlx5_iface_config_t *config)
+uct_dc_mlx5_iface_init_dcis_array(uct_dc_mlx5_iface_t *iface,
+                                  const uct_dc_mlx5_iface_config_t *config)
 {
     ucs_status_t status;
     uct_dc_dci_t *dci;
@@ -901,7 +907,7 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
 
     ucs_array_length(&iface->tx.dcis) = 0;
 
-    status = uct_dc_mlx5_iface_create_dci(iface, 0, 0);
+    status = uct_dc_mlx5_iface_create_dci(iface, 0, 0, 1);
     if (status != UCS_OK) {
         return status;
     }
@@ -1178,7 +1184,7 @@ static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
         goto out;
     }
 
-    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
+    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
         txqp = &fc_dci->txqp;
         ucs_queue_for_each_safe(op, iter, &txqp->outstanding, queue) {
             if (op->handler == uct_dc_mlx5_ep_fc_pure_grant_send_completion) {
@@ -1349,13 +1355,13 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 
 static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
                                            struct mlx5_cqe64 *cqe,
-                                           uint8_t dci_index,
+                                           uct_dci_index_t dci_index,
                                            ucs_status_t status)
 {
     uct_dc_mlx5_ep_t *ep;
     ucs_log_level_t  level;
 
-    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
+    if (uct_dc_mlx5_is_dci_shared(iface, dci_index)) {
         ep    = NULL;
         level = UCS_LOG_LEVEL_FATAL; /* error handling is not supported with rand dci */
     } else {
@@ -1378,7 +1384,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
     struct mlx5_cqe64 *cqe     = arg;
-    uint8_t dci_index          = uct_dc_mlx5_iface_dci_find(iface, cqe);
+    uct_dci_index_t dci_index  = uct_dc_mlx5_iface_dci_find(iface, cqe);
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, dci_index, txqp, txwq);
@@ -1593,6 +1599,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.dcis_initial_capacity =
             ucs_min(config->dcis_initial_capacity,
                     self->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
+    self->tx.hybrid_hw_dci = uct_dc_mlx5_iface_is_hybrid(self) ?
+                                     UCT_DC_MLX5_HW_DCI_INDEX :
+                                     -1;
 
     init_attr.qp_type       = UCT_IB_QPT_DCI;
     init_attr.flags         = UCT_IB_TX_OPS_PER_PATH;
@@ -1654,16 +1663,17 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     kh_init_inplace(uct_dc_mlx5_config_hash, &self->dc_config_hash);
 
     self->tx.rand_seed = config->rand_seed ? config->rand_seed : time(NULL);
-    self->tx.pend_cb   = uct_dc_mlx5_iface_is_dci_shared(self) ?
-                         uct_dc_mlx5_iface_dci_do_rand_pending_tx :
-                         uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
+    self->tx.pend_cb   = uct_dc_mlx5_iface_is_policy_shared(self) ?
+                                   uct_dc_mlx5_iface_dci_do_rand_pending_tx :
+                                   uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
 
     if (config->num_dci_channels == 0) {
         ucs_error("num_dci_channels must be larger than 0");
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (uct_dc_mlx5_iface_is_hw_dcs(self)) {
+    if (uct_dc_mlx5_iface_is_hw_dcs(self) ||
+        uct_dc_mlx5_iface_is_hybrid(self)) {
         /* Calculate num_dci_channels: select minimum from requested by runtime
          * and supported by HCA, must be power of two */
         num_dci_channels          = ucs_roundup_pow2(config->num_dci_channels);
@@ -1704,7 +1714,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     }
 
     /* create DC initiators */
-    status = uct_dc_mlx5_iface_dcis_create(self, config);
+    status = uct_dc_mlx5_iface_init_dcis_array(self, config);
     if (status != UCS_OK) {
         goto err_destroy_dct;
     }
@@ -1803,7 +1813,8 @@ UCT_TL_DEFINE_ENTRY(&uct_ib_component, dc_mlx5, uct_dc_mlx5_query_tl_devices,
                     uct_dc_mlx5_iface_t, "DC_MLX5_",
                     uct_dc_mlx5_iface_config_table, uct_dc_mlx5_iface_config_t);
 
-void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
+                                 uct_dci_index_t dci_index)
 {
     uct_dc_dci_t *dci        = uct_dc_mlx5_iface_dci(iface, dci_index);
     uct_ib_mlx5_txwq_t *txwq = &dci->txwq;

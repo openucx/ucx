@@ -57,6 +57,26 @@
     }
 
 /**
+ * Use stack or heap allocation depending on size. Free function @ref
+ * ucs_free_on_stack must always be called.
+ */
+#define ucs_alloc_on_stack(_size, _name) \
+    ({ \
+        size_t _sz = (_size); \
+        (_sz <= UCS_ALLOCA_MAX_SIZE) ? alloca(_sz) : ucs_malloc(_sz, _name); \
+    })
+
+/**
+ * Release function to be paired with @ref ucs_alloc_on_stack.
+ */
+#define ucs_free_on_stack(_ptr, _size) \
+    ({ \
+        if ((_size) > UCS_ALLOCA_MAX_SIZE) { \
+            ucs_free(_ptr); \
+        } \
+    })
+
+/**
  * alloca which makes sure the size is small enough.
  */
 #define ucs_alloca(_size) \

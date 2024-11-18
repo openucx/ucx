@@ -13,6 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>    /* for testing EP RNDV configuration */
 #include <ucp/core/ucp_request.h> /* for debug */
 #include <ucp/core/ucp_worker.h>  /* for testing memory consumption */
+#include <ucp/rndv/proto_rndv.h>
 }
 
 #include <unordered_map>
@@ -647,7 +648,8 @@ public:
 protected:
     enum class rndv_mode {
         rndv_get,
-        rndv_put
+        rndv_put,
+        put_ppln
     };
 
     void init()
@@ -666,33 +668,15 @@ protected:
         set_am_handler(receiver());
     }
 
-    template<typename Func>
-    void for_each_protos_progress(Func func)
+    static void setup_progress_mock(ucs::mock &mock)
     {
         for (int proto_id = 0; proto_id < ucp_protocols_count(); ++proto_id) {
             auto proto = const_cast<ucp_proto_t*>(ucp_protocols[proto_id]);
             int stage = UCP_PROTO_STAGE_START;
             for (; stage < UCP_PROTO_STAGE_LAST; ++stage) {
-                func(proto, stage);
+                mock.setup(&proto->progress[stage], progress_wrapper);
             }
         }
-    }
-
-    void protos_replace_progress()
-    {
-        auto replace_progress = [&](ucp_proto_t* proto, int stage) {
-            m_progress_storage[proto][stage] = proto->progress[stage];
-            proto->progress[stage]           = &progress_wrapper;
-        };
-        for_each_protos_progress(replace_progress);
-    }
-
-    void protos_restore_progress()
-    {
-        auto restore_progress = [&](ucp_proto_t* proto, int stage) {
-            proto->progress[stage] = m_progress_storage[proto][stage];
-        };
-        for_each_protos_progress(restore_progress);
     }
 
     ucs_status_t static
@@ -703,7 +687,7 @@ protected:
         return UCS_ERR_CONNECTION_RESET;
     }
 
-    void replace_rndv_ops(ucp_ep_h ep)
+    static void mock_rndv_ops(ucp_ep_h ep, ucs::mock &mock)
     {
         for (auto lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
             if (lane == ucp_ep_get_cm_lane(ep)) {
@@ -711,18 +695,8 @@ protected:
             }
 
             auto iface  = ucp_ep_get_lane(ep, lane)->iface;
-            auto result = m_sender_uct_ops.emplace(iface, iface->ops);
-            if (result.second) {
-                iface->ops.ep_put_zcopy = return_err_connection_reset;
-                iface->ops.ep_get_zcopy = return_err_connection_reset;
-            }
-        }
-    }
-
-    void restore_rndv_ops()
-    {
-        for (auto &elem : m_sender_uct_ops) {
-            elem.first->ops = elem.second;
+            mock.setup(&iface->ops.ep_put_zcopy, return_err_connection_reset);
+            mock.setup(&iface->ops.ep_get_zcopy, return_err_connection_reset);
         }
     }
 
@@ -748,24 +722,21 @@ protected:
         auto *req   = ucs_container_of(uct_req, ucp_request_t, send.uct);
         auto stage  = req->send.proto_stage;
         auto *proto = req->send.proto_config->proto;
+        ucs::mock mock;
 
         if (proto->name == self->m_proto_name) {
             if (self->m_replace_ops) {
-                self->replace_rndv_ops(req->send.ep);
+                mock_rndv_ops(req->send.ep, mock);
             }
 
-            if (stage == UCP_PROTO_STAGE_START) {
+            if (stage == self->m_proto_xfer_stage) {
                 self->close_peer();
             }
         }
 
-        ucs_status_t status = self->m_progress_storage[proto][stage](uct_req);
-
-        if ((proto->name == self->m_proto_name) && self->m_replace_ops) {
-            self->restore_rndv_ops();
-        }
-
-        return status;
+        /* Call original proto progress */
+        return self->m_progress_mock.orig_func(&proto->progress[stage],
+                                               uct_req);
     }
 
     virtual void cleanup()
@@ -781,12 +752,19 @@ protected:
 
         switch (mode) {
         case rndv_mode::rndv_get:
-            m_proto_name    = "rndv/get/zcopy";
-            m_peer_to_close = &self->sender();
+            m_proto_name       = "rndv/get/zcopy";
+            m_proto_xfer_stage = UCP_PROTO_RNDV_GET_STAGE_FETCH;
+            m_peer_to_close    = &self->sender();
             break;
         case rndv_mode::rndv_put:
-            m_proto_name    = "rndv/put/zcopy";
-            m_peer_to_close = &self->receiver();
+            m_proto_name       = "rndv/put/zcopy";
+            m_proto_xfer_stage = UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND;
+            m_peer_to_close    = &self->receiver();
+            break;
+        case rndv_mode::put_ppln:
+            m_proto_name       = "rndv/put/mtype";
+            m_proto_xfer_stage = UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND;
+            m_peer_to_close    = &self->receiver();
             break;
         default:
             EXPECT_TRUE(false) << "Wrong RNDV mode";
@@ -807,33 +785,28 @@ protected:
         smoke_test(true);
 
         /* Replace progress functions for all protocols and do another
-         * send-receive loop to fail the certain proto progress call.
-         */
-        protos_replace_progress();
+         * send-receive loop to fail the certain proto progress call. */
+        setup_progress_mock(m_progress_mock);
 
         {
-            scoped_log_handler slh(wrap_errors_logger);
+            scoped_log_handler err_wrapper(wrap_errors_logger);
+            scoped_log_handler warn_wrapper(wrap_warns_logger);
             auto result = smoke_test(true);
             ASSERT_TRUE(UCS_STATUS_IS_ERR(result.first));
             ASSERT_TRUE(UCS_STATUS_IS_ERR(result.second));
         }
 
-        protos_restore_progress();
+        m_progress_mock.cleanup();
 
         /* Check that certain progress was called and failed. */
         ASSERT_TRUE(m_is_peer_closed);
     }
 
-    using progress_array =
-            std::array<uct_pending_callback_t, UCP_PROTO_STAGE_LAST>;
-    using progress_hash_map =
-            std::unordered_map<const ucp_proto_t*, progress_array>;
-    using ops_map = std::map<uct_iface_h, uct_iface_ops_t>;
-
-    progress_hash_map m_progress_storage{};
-    ops_map           m_sender_uct_ops{};
+    ucs::mock         m_progress_mock;
     bool              m_is_peer_closed{false};
     std::string       m_proto_name{};
+    /* Protocol stage during which data transfer happens */
+    uint8_t           m_proto_xfer_stage{};
     entity            *m_peer_to_close{nullptr};
     /* Even if we close peer EP with the force flag, the next proto progress call
        probably would return UCS_OK. This option enables emulation of certain
@@ -901,6 +874,9 @@ public:
         // Avoid 2-stage ppln being selected, as the intent is to test 3-stage
         // ppln protocol
         modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
+        /* FIXME: Advertise error handling support for RNDV PPLN protocol.
+         * Remove this once invalidation workflow is implemented. */
+        modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
         test_ucp_peer_failure_rndv_abort::init();
         if (!sender().is_rndv_put_ppln_supported()) {
             cleanup();
@@ -911,9 +887,13 @@ public:
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
 {
-    // Sender is supposed to use put_zcopy, because put_mtype is not supported
-    // with error handling yet
-    rndv_progress_failure_test(rndv_mode::rndv_put, true);
+    rndv_progress_failure_test(rndv_mode::put_ppln, true);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
+           "RNDV_FRAG_SIZE=host:8K")
+{
+    rndv_progress_failure_test(rndv_mode::put_ppln, true);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);

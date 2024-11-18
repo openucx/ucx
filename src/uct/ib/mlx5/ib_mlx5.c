@@ -55,6 +55,7 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
 
     {"AR_ENABLE", "auto",
      "Enable Adaptive Routing (out of order) feature on SL that supports it.\n"
+     "On RoCE devices, this is done by modifying the QP directly.\n"
      "SLs are selected as follows:\n"
      "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
      "+                                         + UCX_IB_AR_ENABLE=yes  + UCX_IB_AR_ENABLE=no   + UCX_IB_AR_ENABLE=try  + UCX_IB_AR_ENABLE=auto +\n"
@@ -607,8 +608,8 @@ ucs_status_t uct_ib_mlx5_devx_check_uar(uct_ib_mlx5_md_t *md)
                                             UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
                                             &uar.uar);
         if (status == UCS_ERR_UNSUPPORTED) {
-            ucs_error("%s: both WC and NC_DEDICATED UAR allocation types "
-                      " are not supported", uct_ib_device_name(&md->super.dev));
+            ucs_diag("%s: both WC and NC_DEDICATED UAR allocation types "
+                     "are not supported", uct_ib_device_name(&md->super.dev));
             return status;
         } else if (status != UCS_OK) {
             return status;

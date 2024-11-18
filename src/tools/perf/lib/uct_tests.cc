@@ -232,7 +232,7 @@ public:
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
-    send(uct_ep_h ep, psn_t sn, psn_t prev_sn, void *buffer, unsigned length,
+    send(uct_ep_h ep, psn_t sn, psn_t prev_sn, void *buffer, size_t length,
          uint64_t remote_addr, uct_rkey_t rkey, uct_completion_t *comp)
     {
         uint64_t am_short_hdr;
@@ -351,7 +351,7 @@ public:
     }
 
     void UCS_F_ALWAYS_INLINE
-    send_b(uct_ep_h ep, psn_t sn, psn_t prev_sn, void *buffer, unsigned length,
+    send_b(uct_ep_h ep, psn_t sn, psn_t prev_sn, void *buffer, size_t length,
            uint64_t remote_addr, uct_rkey_t rkey, uct_completion_t *comp)
     {
         ucs_status_t status;
@@ -486,7 +486,7 @@ public:
                              volatile psn_t *recv_sn,
                              ucs_memory_type_t recv_mem_type,
                              const ucx_perf_allocator_t *recv_allocator,
-                             unsigned length, unsigned peer_index)
+                             size_t length, unsigned peer_index)
     {
         unsigned long remote_addr;
         psn_t sn, send_sn;
@@ -571,7 +571,7 @@ public:
                              volatile psn_t *recv_sn,
                              ucs_memory_type_t recv_mem_type,
                              const ucx_perf_allocator_t *recv_allocator,
-                             unsigned length, unsigned peer_index)
+                             size_t length, unsigned peer_index)
     {
         unsigned long remote_addr;
         psn_t sn, send_sn;
@@ -644,7 +644,7 @@ public:
         ucs_memory_type_t recv_mem_type;
         volatile psn_t *recv_sn;
         unsigned my_index;
-        unsigned length;
+        size_t length;
         unsigned group_size;
         unsigned peer_index;
 
@@ -783,21 +783,46 @@ private:
    TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_BCOPY) \
    TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_ZCOPY)
 
+#define DEFINE_DISPATCH_FUNC(_case, _cmd, _type) \
+    static ucs_status_t uct_perf_dispatch_##_case(ucx_perf_context_t *perf) { \
+        TEST_CASE_ALL_DATA(perf, (_cmd, _type)); \
+        return UCS_ERR_INVALID_PARAM; \
+    }
+
+#define DISPATCH_FUNC_ENTRY(_case, _cmd, _type) uct_perf_dispatch_##_case,
+
+#define ITERATE_TEST_CASES(_macro) \
+    _macro(pingpong_am,     UCX_PERF_CMD_AM,    UCX_PERF_TEST_TYPE_PINGPONG)   \
+    _macro(pingpong_put,    UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_PINGPONG)   \
+    _macro(pingpong_add,    UCX_PERF_CMD_ADD,   UCX_PERF_TEST_TYPE_PINGPONG)   \
+    _macro(stream_uni_am,   UCX_PERF_CMD_AM,    UCX_PERF_TEST_TYPE_STREAM_UNI) \
+    _macro(stream_uni_put,  UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_STREAM_UNI) \
+    _macro(stream_uni_get,  UCX_PERF_CMD_GET,   UCX_PERF_TEST_TYPE_STREAM_UNI) \
+    _macro(stream_uni_add,  UCX_PERF_CMD_ADD,   UCX_PERF_TEST_TYPE_STREAM_UNI) \
+    _macro(stream_uni_fadd, UCX_PERF_CMD_FADD,  UCX_PERF_TEST_TYPE_STREAM_UNI) \
+    _macro(stream_uni_swap, UCX_PERF_CMD_SWAP,  UCX_PERF_TEST_TYPE_STREAM_UNI) \
+    _macro(stream_uni_cswap,UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI)
+
+ITERATE_TEST_CASES(DEFINE_DISPATCH_FUNC)
+
 ucs_status_t uct_perf_test_dispatch(ucx_perf_context_t *perf)
 {
-    UCS_PP_FOREACH(TEST_CASE_ALL_DATA, perf,
-        (UCX_PERF_CMD_AM,  UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_AM,  UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI)
-        );
+    using uct_dispatch_func_t                      = ucs_status_t
+        (*)(ucx_perf_context_t *perf);
+    static const uct_dispatch_func_t dispatchers[] = {
+        ITERATE_TEST_CASES(DISPATCH_FUNC_ENTRY)
+    };
+    ucs_status_t status;
 
-    ucs_error("Invalid test case");
+    for (const auto &dispatcher : dispatchers) {
+        status = dispatcher(perf);
+        if (status != UCS_ERR_INVALID_PARAM) {
+            return status;
+        }
+    }
+
+    ucs_error("Invalid test case: %d/%d/0x%x",
+              perf->params.command, perf->params.test_type,
+              perf->params.flags);
     return UCS_ERR_INVALID_PARAM;
 }
