@@ -134,7 +134,7 @@ typedef struct ucs_config_bw_spec {
 
 typedef struct ucs_config_flags_args {
     const char              **args;
-    size_t                  num_of_args;
+    size_t                  args_size;
 } ucs_config_flags_args_t;
 
 #define UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY \
@@ -393,7 +393,7 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
                                     ucs_config_help_bitmap,      ucs_config_doc_nop, \
                                     t}
 
-#define UCS_CONFIG_TYPE_FLAGS(t)   {ucs_config_sscanf_flags, ucs_config_sprintf_bitmap, \
+#define UCS_CONFIG_TYPE_FLAGS(t)   {ucs_config_sscanf_flags, ucs_config_sprintf_flags, \
                                     ucs_config_clone_uint,   ucs_config_release_nop, \
                                     ucs_config_help_flags,   ucs_config_doc_nop, \
                                     t}
