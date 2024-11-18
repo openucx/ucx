@@ -2,38 +2,43 @@ use crate::context::Context;
 use crate::ep;
 use crate::ep::Ep;
 use crate::ffi::*;
+use crate::status_ptr_to_result;
 use crate::status_to_result;
+use crate::Request;
+use crate::RequestParam;
+use crate::RequestParamBuilder;
 use bitflags::bitflags;
 use std::ffi::CString;
 use std::ptr::NonNull;
 
-pub struct Worker<'a> {
+#[derive(Debug, Clone)]
+pub struct Worker {
     pub(crate) handle: ucp_worker_h,
-    #[allow(dead_code)]
-    parent: &'a Context,
 }
 
-impl Drop for Worker<'_> {
+impl Drop for Worker {
     fn drop(&mut self) {
+        let params = RequestParamBuilder::new().build();
+        let request = self.flush(&params).unwrap();
+        if request.is_some() {
+            let request = request.unwrap();
+            while !request.check_finished().unwrap() {
+                self.progress();
+            }
+        }
         unsafe { ucp_worker_destroy(self.handle) };
     }
 }
 
-impl Worker<'_> {
-    pub(crate) fn new<'a>(
-        context: &'a Context,
-        params: &'a Params,
-    ) -> Result<Worker<'a>, ucs_status_t> {
+impl Worker {
+    pub(crate) fn new(context: &Context, params: &Params) -> Result<Worker, ucs_status_t> {
         let mut worker: ucp_worker_h = std::ptr::null_mut();
 
         let result = status_to_result(unsafe {
             ucp_worker_create(context.handle, &params.handle, &mut worker)
         });
         match result {
-            Ok(()) => Ok(Worker {
-                handle: worker,
-                parent: context,
-            }),
+            Ok(()) => Ok(Worker { handle: worker }),
             Err(ucs_status_t) => Err(ucs_status_t),
         }
     }
@@ -64,6 +69,14 @@ impl Worker<'_> {
     pub fn create_ep(&self, ep_params: &ep::Params) -> Result<Ep, ucs_status_t> {
         return Ep::new(&ep_params, &self);
     }
+
+    pub fn cancel_request(&self, request: &mut Request) {
+        unsafe { ucp_request_cancel(self.handle, request.handle.as_mut()) };
+    }
+
+    pub fn flush(&self, params: &RequestParam) -> Result<Option<Request>, ucs_status_t> {
+        status_ptr_to_result(unsafe { ucp_worker_flush_nbx(self.handle, &params.handle) })
+    }
 }
 
 pub struct RemoteWorkerAddress {
@@ -86,12 +99,15 @@ impl RemoteWorkerAddress {
 pub struct WorkerAddress<'a> {
     pub(crate) handle: *const ucp_address_t,
     size: usize,
-    parent: &'a Worker<'a>,
+    parent: &'a Worker,
 }
 
 impl WorkerAddress<'_> {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        unsafe { std::slice::from_raw_parts(self.handle as *const u8, self.size) }.to_vec()
+    pub fn to_slice(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.handle as *const u8, self.size) }
+    }
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.to_slice().to_vec()
     }
 }
 
@@ -106,7 +122,7 @@ impl Drop for WorkerAddress<'_> {
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct UcpWorkerFlags: u64 {
-        const Flags = ucp_worker_flags_t::UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK as u64;
+        const IgnoreRequestLeak = ucp_worker_flags_t::UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK as u64;
     }
 }
 

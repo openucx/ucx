@@ -6,6 +6,8 @@ use crate::ffi::*;
 pub mod am;
 pub mod context;
 pub mod ep;
+pub mod memh;
+pub mod tag;
 pub mod worker;
 
 use std::ffi::CString;
@@ -35,7 +37,7 @@ impl Request {
 
     // check an outstanding request. Returns an error if the request had an error, returns false if the request is not completed, returns true if the request is completed
     #[inline]
-    pub fn check_status(&self) -> Result<bool, ucs_status_t> {
+    pub fn check_finished(&self) -> Result<bool, ucs_status_t> {
         let status = unsafe { ucp_request_check_status(self.handle.as_ptr()) };
         if status as usize >= ucs_status_t::UCS_ERR_LAST as usize {
             return Err(unsafe { std::mem::transmute(status as i8) });
@@ -88,6 +90,7 @@ pub struct RequestParamBuilder {
 }
 
 impl RequestParamBuilder {
+    #[inline]
     pub fn new() -> RequestParamBuilder {
         let uninit_params = std::mem::MaybeUninit::<ucp_request_param_t>::uninit();
         RequestParamBuilder {
@@ -96,6 +99,7 @@ impl RequestParamBuilder {
         }
     }
 
+    #[inline]
     pub fn force_imm_cmpl(&mut self) -> &mut RequestParamBuilder {
         if self.field_mask & ucp_op_attr_t::UCP_OP_ATTR_FLAG_NO_IMM_CMPL as u32 != 0 {
             panic!("Requesting UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL while UCP_OP_ATTR_FLAG_NO_IMM_CMPL is also set");
@@ -104,6 +108,7 @@ impl RequestParamBuilder {
         self
     }
 
+    #[inline]
     pub fn no_imm_cmpl(&mut self) -> &mut RequestParamBuilder {
         if self.field_mask & ucp_op_attr_t::UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL as u32 != 0 {
             panic!("Requesting UCP_OP_ATTR_FLAG_NO_IMM_CMPL while UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL is also set");
@@ -112,6 +117,7 @@ impl RequestParamBuilder {
         self
     }
 
+    #[inline]
     pub fn build(&mut self) -> RequestParam {
         let params = unsafe { &mut *self.uninit_handle.as_mut_ptr() };
         params.op_attr_mask = self.field_mask;
@@ -131,6 +137,8 @@ mod tests {
     use crate::context::Context;
     use crate::ep;
     use crate::worker;
+    use crate::worker::RemoteWorkerAddress;
+    use std::rc::Rc;
 
     const TEST_AM_ID: u32 = 5;
 
@@ -152,13 +160,19 @@ mod tests {
         ucs_status_t::UCS_OK
     }
 
-    #[test]
-    fn it_works() {
-        let mut message = vec![0];
+    pub struct CommsContext {
+        pub ep: ep::Ep,
+        pub worker: worker::Worker,
+        pub context: context::Context,
+    }
+
+    pub fn setup_default() -> Rc<CommsContext> {
         let features = context::Flags::Am
             | context::Flags::Rma
             | context::Flags::Amo32
-            | context::Flags::Amo64;
+            | context::Flags::Amo64
+            | context::Flags::Tag;
+
         let params = context::ParamsBuilder::new()
             .features(features)
             .mt_workers_shared(1)
@@ -170,39 +184,64 @@ mod tests {
             .estimated_num_eps(4)
             .estimated_num_ppn(2)
             .build();
-        let context = Context::new(&context::Config::default(), &params).unwrap();
 
         let worker_features = worker::ParamsBuilder::new()
             .thread_mode(ucs_thread_mode_t::UCS_THREAD_MODE_MULTI)
             .build();
+
+        let context = Context::new(&context::Config::default(), &params).unwrap();
+
         let worker = context.worker_create(&worker_features).unwrap();
+        let packed_addr = worker.pack_address().unwrap();
+        let addr = RemoteWorkerAddress::new(packed_addr.to_vec());
+
+        let ep_param = ep::ParamsBuilder::new().address(&addr).build();
+        let ep = worker.create_ep(&ep_param).unwrap();
+        // If we don't drop this than the compiler complains about how the
+        // worker is borrowed in the packed_addr.
+        drop(packed_addr);
+
+        let mut progressed = worker.progress();
+        while progressed {
+            progressed = worker.progress();
+        }
+        Rc::new(CommsContext {
+            context: context,
+            worker: worker,
+            ep: ep,
+        })
+    }
+
+    #[test]
+    fn setup() {
+        let _ = setup_default();
+    }
+
+    #[test]
+    fn am() {
+        let comms = setup_default();
+        let send_buffer = vec![32];
+        let mut recv_buffer = vec![0];
 
         let am_params = am::HandlerParamsBuilder::new()
             .id(TEST_AM_ID)
             .cb(am_cb)
-            .arg(message.as_mut_ptr() as *mut std::os::raw::c_void)
+            .arg(recv_buffer.as_mut_ptr() as *mut std::os::raw::c_void)
             .build();
-        worker.am_register(&am_params).unwrap();
+        comms.worker.am_register(&am_params).unwrap();
 
-        let addr = worker.pack_address().unwrap();
-        let ep_param = ep::ParamsBuilder::new().local_address(&addr).build();
-        let ep = worker.create_ep(&ep_param).unwrap();
+        let am_flags = RequestParamBuilder::new().no_imm_cmpl().build();
 
-        let tag = vec![32];
-        let am_flags = RequestParamBuilder::new()
-            //.force_imm_cmpl() // uncomment this line to see the the compile time error checker in action
-            .no_imm_cmpl()
-            .build();
-
-        let req = ep
-            .am_send(TEST_AM_ID, tag.as_slice(), b"", &am_flags)
+        let req = comms
+            .ep
+            .am_send(TEST_AM_ID, send_buffer.as_slice(), b"", &am_flags)
             .unwrap();
         if req.is_some() {
             let req = req.unwrap();
-            while !req.check_status().unwrap() {
-                worker.progress();
+            while !req.check_finished().unwrap() {
+                comms.worker.progress();
             }
         }
-        assert_eq!(message[0], tag[0]);
+        assert_eq!(send_buffer[0], recv_buffer[0]);
     }
 }

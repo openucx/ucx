@@ -8,27 +8,24 @@ use bitflags::bitflags;
 use std::ffi::CString;
 use std::ptr::NonNull;
 
-pub struct Ep<'a> {
+#[derive(Debug, Clone)]
+pub struct Ep {
     pub(crate) handle: ucp_ep_h,
-    worker: &'a Worker<'a>,
 }
 
-impl Ep<'_> {
-    pub fn new<'a>(ep_params: &Params, worker: &'a Worker<'a>) -> Result<Ep<'a>, ucs_status_t> {
+impl Ep {
+    pub fn new(ep_params: &Params, worker: &Worker) -> Result<Ep, ucs_status_t> {
         let mut ep: ucp_ep_h = std::ptr::null_mut();
         let result =
             status_to_result(unsafe { ucp_ep_create(worker.handle, &ep_params.handle, &mut ep) });
         match result {
-            Ok(()) => Ok(Ep {
-                handle: ep,
-                worker: worker,
-            }),
+            Ok(()) => Ok(Ep { handle: ep }),
             Err(ucs_status_t) => Err(ucs_status_t),
         }
     }
 }
 
-impl Drop for Ep<'_> {
+impl Drop for Ep {
     fn drop(&mut self) {
         let param: ucp_request_param_t = unsafe { std::mem::zeroed() };
         let result =
@@ -83,6 +80,14 @@ impl ParamsBuilder {
         self.field_mask |= ucp_ep_params_field::UCP_EP_PARAM_FIELD_REMOTE_ADDRESS as u64;
         let params = unsafe { &mut *self.uninit_handle.as_mut_ptr() };
         params.address = worker_address.handle;
+        self
+    }
+
+    pub fn address(&mut self, worker_address: &RemoteWorkerAddress) -> &mut ParamsBuilder {
+        self.field_mask |= ucp_ep_params_field::UCP_EP_PARAM_FIELD_REMOTE_ADDRESS as u64;
+        let params = unsafe { &mut *self.uninit_handle.as_mut_ptr() };
+        let (address, _) = worker_address.get_handle();
+        params.address = address;
         self
     }
 

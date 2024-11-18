@@ -16,14 +16,14 @@ type AmRecvCb = unsafe extern "C" fn(
     param: *const ucp_am_recv_param_t,
 ) -> ucs_status_t;
 
-impl Worker<'_> {
+impl Worker {
     #[inline]
     pub fn am_register(&self, am_param: &HandlerParams) -> Result<(), ucs_status_t> {
         status_to_result(unsafe { ucp_worker_set_am_recv_handler(self.handle, &am_param.handle) })
     }
 }
 
-impl Ep<'_> {
+impl Ep {
     #[inline]
     pub fn am_send(
         &self,

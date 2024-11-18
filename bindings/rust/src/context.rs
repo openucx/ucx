@@ -22,6 +22,7 @@ bitflags! {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Config {
     handle: *mut ucp_config_t,
 }
@@ -182,14 +183,12 @@ impl Context {
         }
     }
 
-    pub fn worker_create<'a>(
-        &'a self,
-        params: &'a worker::Params,
-    ) -> Result<Worker<'a>, ucs_status_t> {
+    pub fn worker_create<'a>(&'a self, params: &'a worker::Params) -> Result<Worker, ucs_status_t> {
         Worker::new(self, params)
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Context {
     pub(crate) handle: ucp_context_h,
 }
