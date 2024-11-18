@@ -429,8 +429,8 @@ ssize_t ucs_string_find_in_sparse_list(const char *str,
 {
     size_t i;
 
-    /* Ingores NULL entries */
-    for (i = 0; i < num_of_args; ++i) {
+    /* Ignores NULL entries */
+    for (i = 0; i < str_array_size; ++i) {
         if (string_list[i] == NULL) {
             continue;
         }

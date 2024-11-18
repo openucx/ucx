@@ -417,8 +417,8 @@ static void __print_sparse_table_values(const char * const *table,
         *ptr++ = '[';
     }
 
-    /* Ingores NULL entries */
-    for (i = 0; i < num_of_args && ptr < end; ++i) {
+    /* Ignores NULL entries */
+    for (i = 0; (i < args_size) && (ptr < end); ++i) {
         if (table[i] == NULL) {
             continue;
         }
