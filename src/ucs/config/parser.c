@@ -407,7 +407,7 @@ static void __print_table_values(char * const *table, char *buf, size_t max)
 }
 
 static void __print_sparse_table_values(const char * const *table,
-                                        size_t num_of_args, char *buf,
+                                        size_t args_size, char *buf,
                                         size_t max)
 {
     char *ptr = buf, *end = buf + max - 1;
@@ -423,7 +423,7 @@ static void __print_sparse_table_values(const char * const *table,
             continue;
         }
 
-        if (ptr > buf + 1 && ptr < end) {
+        if ((ptr > (buf + 1)) && (ptr < end)) {
             *ptr++ = '|';
         }
 
@@ -522,7 +522,7 @@ int ucs_config_sscanf_flags(const char *buf, void *dest, const void *arg)
     p = strtok_r(str, ",", &saveptr);
     while (p != NULL) {
         i = ucs_string_find_in_sparse_list(p, (const char**)args->args,
-                                           args->num_of_args);
+                                           args->args_size);
         if (i < 0) {
             ret = 0;
             break;
@@ -551,11 +551,11 @@ void ucs_config_help_flags(char *buf, size_t max, const void *arg)
     ucs_config_flags_args_t *args = (ucs_config_flags_args_t*)arg;
     int written                   = snprintf(buf, max, "comma-separated list of: ");
 
-    if (written < 0 || written >= max) {
+    if ((written < 0) || (written >= max)) {
         return;
     }
 
-    __print_sparse_table_values(args->args, args->num_of_args, buf + written,
+    __print_sparse_table_values(args->args, args->args_size, buf + written,
                                 max - written);
 }
 
