@@ -11,8 +11,8 @@ import os
 import re
 import itertools
 import contextlib
-from distutils.version import LooseVersion
 from optparse import OptionParser
+from pkg_resources import parse_version
 
 
 #expected AM transport selections per given number of eps
@@ -276,7 +276,7 @@ for dev in sorted(dev_list):
         override = 1
     else:
         fw_ver = open(f"/sys/class/infiniband/{dev}/fw_ver").read()
-        if LooseVersion(fw_ver) >= LooseVersion("16.23.0"):
+        if parse_version(fw_ver) >= parse_version("16.23.0"):
             dev_tl_map = am_tls[dev_name+"_roce_dc"]
         else:
             dev_tl_map = am_tls[dev_name+"_roce_no_dc"]
