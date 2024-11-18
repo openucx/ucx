@@ -62,10 +62,10 @@ struct ibv_ravh {
     }
 
 #ifdef __SANITIZE_ADDRESS__
-#define UCT_DC_MLX5_ASAN_RELOCATE_DCIS_BUFFER(_iface) \
+#define UCT_DC_MLX5_ASAN_RELOCATE_DCIS_ARRAY(_iface) \
     uct_dc_mlx5_asan_relocate_dcis_array(_iface)
 #else
-#define UCT_DC_MLX5_ASAN_RELOCATE_DCIS_BUFFER(_iface)
+#define UCT_DC_MLX5_ASAN_RELOCATE_DCIS_ARRAY(_iface)
 #endif
 
 

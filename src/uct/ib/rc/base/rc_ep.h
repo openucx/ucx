@@ -199,10 +199,10 @@ enum {
     do { \
         uct_rc_iface_send_op_t *op; \
         \
-        ucs_trace_poll("txqp %p complete ops up to sn %d", _txqp, _sn); \
         ucs_queue_for_each_extract(op, &(_txqp)->outstanding, queue, \
                                    UCS_CIRCULAR_COMPARE16(op->sn, <=, \
                                                           (_sn))) { \
+            ucs_trace_poll("txqp %p complete ops up to sn %d", _txqp, _sn); \
             uct_rc_txqp_completion_op( \
                     op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1); \
         } \
@@ -213,10 +213,10 @@ enum {
     do { \
         uct_rc_iface_send_op_t *op; \
         \
-        ucs_trace_poll("txqp %p complete ops up to sn %d", _txqp, _sn); \
         ucs_queue_for_each_extract(op, &(_txqp)->outstanding, queue, \
                                    UCS_CIRCULAR_COMPARE16((op)->sn, <=, \
                                                           (_sn))) { \
+            ucs_trace_poll("txqp %p complete ops up to sn %d", _txqp, _sn); \
             ucs_assert(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY)); \
             uct_rc_txqp_completion_op(op, _resp); \
         } \

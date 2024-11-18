@@ -284,18 +284,18 @@ static void uct_dc_mlx5_asan_cleanup_old_dcis_buffer(uct_dc_mlx5_iface_t *iface)
 void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface)
 {
 #ifdef __SANITIZE_ADDRESS__
-    size_t buffer_size         = sizeof(uct_dc_dci_t) *
-                                 ucs_array_capacity(&iface->tx.dcis);
-    size_t num_dcis            = ucs_array_length(&iface->tx.dcis);
-    uct_dc_dci_t *old_buffer_p = ucs_array_begin(&iface->tx.dcis);
-    uct_dc_dci_t *new_buffer   = ucs_malloc(buffer_size,
-                                            "ASAN relocated dcis buffer");
-    uct_dc_mlx5_iface_dcis_array_copy(new_buffer, old_buffer_p, num_dcis);
+    size_t buffer_size       = sizeof(uct_dc_dci_t) *
+                               ucs_array_capacity(&iface->tx.dcis);
+    size_t num_dcis          = ucs_array_length(&iface->tx.dcis);
+    uct_dc_dci_t *old_buffer = ucs_array_begin(&iface->tx.dcis);
+    uct_dc_dci_t *new_buffer = ucs_malloc(buffer_size,
+                                          "ASAN relocated dcis buffer");
+    uct_dc_mlx5_iface_dcis_array_copy(new_buffer, old_buffer, num_dcis);
     ucs_array_begin(&iface->tx.dcis) = new_buffer;
 
-    ASAN_POISON_MEMORY_REGION(old_buffer_p, buffer_size);
+    ASAN_POISON_MEMORY_REGION(old_buffer, buffer_size);
     uct_dc_mlx5_asan_cleanup_old_dcis_buffer(iface);
-    iface->old_dcis_buffer      = old_buffer_p;
+    iface->old_dcis_buffer      = old_buffer;
     iface->old_dcis_buffer_size = buffer_size;
 #endif
 }
@@ -326,7 +326,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
                    dci_index, &uct_dc_mlx5_iface_dci(iface, dci_index)->txqp,
                    hw_ci);
 
-    UCT_DC_MLX5_ASAN_RELOCATE_DCIS_BUFFER(iface);
+    UCT_DC_MLX5_ASAN_RELOCATE_DCIS_ARRAY(iface);
 
     UCT_RC_MLX5_TXQP_PROCESS_TX_CQE(&uct_dc_mlx5_iface_dci(iface, dci_index)->txqp, cqe, hw_ci);
     uct_dc_mlx5_update_tx_res(iface, dci_index, hw_ci);
