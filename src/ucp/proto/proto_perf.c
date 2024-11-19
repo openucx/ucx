@@ -430,13 +430,14 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
     return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
 }
 
-void ucp_proto_perf_apply_bias(ucp_proto_perf_t *perf, double bias) {
+void ucp_proto_perf_apply_bias(ucp_proto_perf_t *perf, double bias)
+{
     ucs_linear_func_t bias_func = ucs_linear_func_make(0.0, 1.0 - bias);
     ucp_proto_perf_node_t *bias_node;
     ucp_proto_perf_factor_id_t fid;
     ucp_proto_perf_segment_t *seg;
 
-    if (bias == 0) {
+    if (fabs(bias) <= UCP_PROTO_PERF_EPSILON) {
         return;
     }
 
