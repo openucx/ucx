@@ -261,6 +261,8 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
     ucp_memory_info_t mem_info;
     uint32_t op_attr_mask;
 
+    /* FAST_CMPL flag shouldn't be considered on remote side since it
+     * affects only one stage protocols (like eager) */
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
                    UCP_OP_ATTR_FLAG_MULTI_SEND;
     /* Construct select parameter for the remote protocol */
@@ -617,6 +619,18 @@ ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
                                     UCS_LINEAR_FUNC_ZERO, perf_p);
 }
 
+static void
+ucp_proto_rndv_report_fast_cmpl(const ucp_proto_multi_init_params_t *params)
+{
+    uint32_t op_attr_mask = ucp_proto_select_op_attr_unpack(
+            params->super.super.select_param->op_attr);
+
+    if ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL)) {
+        ucs_warn("RNDV is initialized with FAST_CMPL which is unexpected. "
+                 "Check whether receive operation was called with that flag.");
+    }
+}
+
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          const char *op_name, const char *ack_name,
@@ -629,6 +643,8 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     ucp_proto_perf_t *bulk_perf, *ack_perf;
     const char *proto_name;
     ucs_status_t status;
+
+    ucp_proto_rndv_report_fast_cmpl(init_params);
 
     status = ucp_proto_multi_init(init_params, op_name, &bulk_perf, mpriv);
     if (status != UCS_OK) {
@@ -925,8 +941,11 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     /* RTR covers the whole send request - use the send request directly */
     ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED);
 
-    select_param = &req->send.proto_config->select_param;
-    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
+    select_param  = &req->send.proto_config->select_param;
+    /* Remove FAST_CMPL since it should be considered only for one stage
+     * protocols (like eager) */
+    op_attr_mask  = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
+                    ~UCP_OP_ATTR_FLAG_FAST_CMPL;
 
     if (rtr->size == req->send.state.dt_iter.length) {
         /* RTR covers the whole send request - use the send request directly */
