@@ -615,7 +615,7 @@ typedef struct uct_iface_is_reachable_params {
 
     /**
      * Device address length. If not provided, the transport will assume a
-     * default minimal length according to the address buffer contents.
+     * default minimum length according to the address buffer contents.
      */
     size_t                        device_addr_length;
 
