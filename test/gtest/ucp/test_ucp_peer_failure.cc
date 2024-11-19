@@ -879,7 +879,6 @@ public:
         modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
         test_ucp_peer_failure_rndv_abort::init();
         if (!sender().is_rndv_put_ppln_supported()) {
-            cleanup();
             UCS_TEST_SKIP_R("RNDV pipeline is not supported");
         }
     }

@@ -75,7 +75,6 @@ public:
         test_uct_ib::init();
 
         if (!check_cqe_zip_caps()) {
-            cleanup();
             UCS_TEST_SKIP_R("unsupported");
         }
 

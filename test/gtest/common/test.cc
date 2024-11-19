@@ -342,7 +342,7 @@ void test_base::TearDownProxy() {
 
     watchdog_signal();
 
-    if (m_initialized) {
+    if (m_initialized || (m_state == SKIPPED)) {
         cleanup();
     }
 

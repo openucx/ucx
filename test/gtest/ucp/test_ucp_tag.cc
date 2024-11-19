@@ -180,7 +180,6 @@ void test_ucp_tag::check_offload_support(bool offload_required)
     bool offload_supported = ucp_ep_config_key_has_tag_lane(
                                &ucp_ep_config(sender().ep())->key);
     if (offload_supported != offload_required) {
-        cleanup();
         std::string reason = offload_supported ? "tag offload" : "no tag offload";
         UCS_TEST_SKIP_R(reason);
     }
