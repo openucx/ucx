@@ -725,6 +725,39 @@ public:
         wait_send_window(m_max_outstanding);
     }
 
+    bool use_ack() const
+    {
+        /* TODO: daemon does not support bi-directional flow */
+        if (m_perf.params.ucp.is_daemon_mode) {
+            return false;
+        }
+
+        return (CMD == UCX_PERF_CMD_TAG) || (CMD == UCX_PERF_CMD_TAG_SYNC) ||
+               (CMD == UCX_PERF_CMD_AM);
+    }
+
+    void send_ack(ucp_ep_h ep, void *buffer, ucp_datatype_t datatype,
+                  uint64_t remote_addr, ucp_rkey_h rkey)
+    {
+        if (!use_ack()) {
+            return;
+        }
+
+        send(ep, buffer, 1, datatype, 0, remote_addr, rkey, false);
+    }
+
+    void recv_ack(ucp_worker_h worker, ucp_ep_h ep, void *buffer,
+                  ucp_datatype_t datatype)
+    {
+        if (!use_ack()) {
+            return;
+        }
+
+        flush();
+        recv(worker, ep, buffer, 1, datatype, 0);
+        wait_recv_window(m_max_outstanding);
+    }
+
     void flush()
     {
         if (m_perf.params.flags & UCX_PERF_TEST_FLAG_FLUSH_EP) {
@@ -880,6 +913,7 @@ public:
 
             wait_last_iter(recv_buffer, send_length);
             wait_recv_window(m_max_outstanding);
+            send_ack(ep, send_buffer, send_datatype, remote_addr, rkey);
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype, sn,
@@ -889,6 +923,7 @@ public:
             }
 
             send_last_iter(ep, send_buffer, send_length, remote_addr, rkey);
+            recv_ack(worker, ep, recv_buffer, recv_datatype);
         }
 
         flush();
