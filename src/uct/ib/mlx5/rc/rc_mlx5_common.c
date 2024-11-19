@@ -64,15 +64,18 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
-  {"SRQ_TOPO", "cyclic,cyclic_emulated",
+  {"SRQ_TOPO", "auto",
    "List of SRQ topology types in order of preference. Supported types are:\n"
    "\n"
    "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
    "\n"
    "cyclic            SRQ is organized as a continuous array of WQEs. Requires DEVX.\n"
+   "                  cannot be used with DDP enabled\n"
    "\n"
    "cyclic_emulated   SRQ is organized as a continuous array of WQEs, but HW\n"
-   "                  treats it as a linked list. Doesn`t require DEVX.",
+   "                  treats it as a linked list. Doesn`t require DEVX."
+   "\n"
+   "auto              The best available SRQ topology will be selected automatically.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
 
@@ -657,6 +660,12 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
 
     iface->config.dp_ordering = ucs_min(iface->config.dp_ordering,
                                         dp_ordering_cap);
+
+    ucs_assertv_always((iface->config.srq_topo !=
+                        UCT_RC_MLX5_SRQ_TOPO_CYCLIC) ||
+                               (iface->config.dp_ordering !=
+                                UCT_IB_MLX5_DP_ORDERING_OOO_ALL),
+                       "SRQ topology cyclic is not supported with DDP");
 
     return UCS_OK;
 

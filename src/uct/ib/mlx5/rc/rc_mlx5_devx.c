@@ -222,7 +222,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 void *wq)
 {
     ucs_status_t status  = UCS_ERR_NO_MEMORY;
-    int len, max, stride, log_num_of_strides, wq_type;
+    int len, max, stride, log_num_of_strides, wq_type, ddp_enabled;
 
     stride = uct_ib_mlx5_srq_stride(iface->tm.mp.num_strides);
     max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len,
@@ -242,6 +242,15 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     }
 
     iface->rx.srq.db = &iface->rx.srq.devx.dbrec->db[MLX5_RCV_DBR];
+
+    if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_AUTO) {
+        ddp_enabled            = (md->dp_ordering_cap.rc ==
+                                  UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+                                 (md->dp_ordering_cap.dc ==
+                                  UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
+        iface->config.srq_topo = ddp_enabled ? UCT_RC_MLX5_SRQ_TOPO_LIST :
+                                               UCT_RC_MLX5_SRQ_TOPO_CYCLIC;
+    }
 
     if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC) {
         wq_type = UCT_RC_MLX5_MP_ENABLED(iface) ?

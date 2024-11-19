@@ -386,13 +386,17 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
             return UCS_OK;
         } else if (!strcasecmp(config->srq_topo.types[i], "cyclic")) {
             /* real cyclic list requires DevX support */
-            if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ)) {
+            if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ) ||
+                (config->ddp_enable == UCS_YES)) {
                 continue;
             }
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC;
             return UCS_OK;
         } else if (!strcasecmp(config->srq_topo.types[i], "cyclic_emulated")) {
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED;
+            return UCS_OK;
+        } else if (!strcasecmp(config->srq_topo.types[i], "auto")) {
+            *topo_p = UCT_RC_MLX5_SRQ_TOPO_AUTO;
             return UCS_OK;
         }
     }
