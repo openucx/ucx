@@ -20,6 +20,7 @@ typedef struct uct_gdr_copy_iface {
         uct_ppn_bandwidth_t   put_bw;
         ucs_linear_func_t     get_latency;
         ucs_linear_func_t     put_latency;
+        double                rcache_ovh;
     } config;
 } uct_gdr_copy_iface_t;
 
@@ -30,6 +31,7 @@ typedef struct uct_gdr_copy_iface_config {
     uct_ppn_bandwidth_t put_bw;
     double              get_latency;
     double              put_latency;
+    double              rcache_overhead;
 } uct_gdr_copy_iface_config_t;
 
 #endif
