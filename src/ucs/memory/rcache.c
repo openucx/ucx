@@ -523,6 +523,8 @@ static void ucs_rcache_region_invalidate_internal(ucs_rcache_t *rcache,
                                    ucs_status_string(status));
         }
         region->flags &= ~UCS_RCACHE_REGION_FLAG_PGTABLE;
+        /* coverity[double_unlock] */
+        /* coverity[double_lock] */
         ucs_rcache_region_put_internal(rcache, region, flags);
     } else {
         ucs_assert(!(flags & UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE));
@@ -869,6 +871,8 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
         old_end   = *end;
 
         ucs_list_for_each_safe(region, tmp, &region_list, tmp_list) {
+            /* coverity[double_unlock] */
+            /* coverity[double_lock] */
             status = ucs_rcache_check_overlap_one(rcache, start, end, alignment,
                                                   prot, arg, region);
             if (status == UCS_OK) {
@@ -946,6 +950,7 @@ retry:
     merged = 0;
 
     /* Check overlap with existing regions */
+    /* coverity[double_unlock] */
     /* coverity[double_lock] */
     status = UCS_PROFILE_CALL(ucs_rcache_check_overlap, rcache, arg, &start,
                               &end, &alignment, &prot, &merged, &region);

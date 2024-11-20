@@ -8,12 +8,7 @@
 #define UCS_DEBUG_H_
 
 #include <ucs/sys/compiler_def.h>
-
-#ifdef __SANITIZE_ADDRESS__
-#include <sanitizer/asan_interface.h>
-#include <ucs/debug/assert.h>
-#endif
-
+#include <stddef.h>
 
 BEGIN_C_DECLS
 
@@ -24,11 +19,12 @@ BEGIN_C_DECLS
  */
 void ucs_debug_disable_signal(int signum);
 
+void ucs_debug_asan_validate_address(const char *ptr_name, void *address,
+                                     size_t size);
 
 #ifdef __SANITIZE_ADDRESS__
 #define UCS_ASAN_ADDRESS_IS_VALID(_ptr, _size) \
-    ucs_assertv(!__asan_region_is_poisoned((void*)(_ptr), _size), "%s: %p", \
-                #_ptr, (void*)(_ptr))
+    ucs_debug_asan_validate_address(#_ptr, (void*)(_ptr), (_size))
 #else
 #define UCS_ASAN_ADDRESS_IS_VALID(_ptr, _size)
 #endif

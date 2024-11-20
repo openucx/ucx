@@ -57,11 +57,13 @@ enum {
     UCT_IB_MEM_IMPORTED              = UCS_BIT(3), /**< The memory handle was
                                                         created by mem_attach */
 #if ENABLE_PARAMS_CHECK
-    UCT_IB_MEM_ACCESS_REMOTE_RMA     = UCS_BIT(4) /**< RMA access was requested
+    UCT_IB_MEM_ACCESS_REMOTE_RMA     = UCS_BIT(4), /**< RMA access was requested
                                                         for the memory region */
 #else
-    UCT_IB_MEM_ACCESS_REMOTE_RMA     = 0
+    UCT_IB_MEM_ACCESS_REMOTE_RMA     = 0,
 #endif
+    UCT_IB_MEM_FLAG_GVA              = UCS_BIT(5), /**< The memory handle is a
+                                                        GVA region */
 };
 
 enum {
@@ -154,6 +156,7 @@ typedef struct uct_ib_md {
      * be initiated.  */
     uint32_t                 flush_rkey;
     uint16_t                 vhca_id;
+    uint64_t                 uuid;
     struct {
         uint32_t             base;
         uint32_t             size;
@@ -161,9 +164,10 @@ typedef struct uct_ib_md {
 } uct_ib_md_t;
 
 
-typedef struct uct_ib_md_packed_mkey {
+typedef struct {
     uint32_t lkey;
     uint16_t vhca_id;
+    uint64_t md_uuid;
 } UCS_S_PACKED uct_ib_md_packed_mkey_t;
 
 
@@ -271,6 +275,7 @@ uct_ib_md_pack_exported_mkey(uct_ib_md_t *md, uint32_t lkey, void *buffer)
 
     mkey->lkey    = lkey;
     mkey->vhca_id = md->vhca_id;
+    mkey->md_uuid = md->uuid;
 
     ucs_trace("packed exported mkey on %s: lkey 0x%x",
               uct_ib_device_name(&md->dev), lkey);
@@ -371,6 +376,11 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
  * Check if IB md device has ECE capability
  */
 void uct_ib_md_ece_check(uct_ib_md_t *md);
+
+/* Check if IB MD supports nonblocking registration */
+void uct_ib_md_check_odp(uct_ib_md_t *md);
+
+int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr);
 
 ucs_status_t
 uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,

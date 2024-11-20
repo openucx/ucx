@@ -72,8 +72,10 @@ jobs:
       - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/$(ucx_current)/bin/ucx_info
       - bash: |
           set -eEx
+          source buildlib/az-helpers.sh
           ucx_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)
-          git clone --depth 1 -b $(ucx_tag) https://github.com/openucx/ucx.git ${ucx_dir}
+          depth=1
+          git_clone_with_retry "$(ucx_tag)" "${ucx_dir}" "${depth}"
           cd ${ucx_dir}
           ./autogen.sh
           ./contrib/configure-release --enable-assertions --prefix=${PWD} --without-java --without-go

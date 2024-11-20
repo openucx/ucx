@@ -10,7 +10,9 @@
 
 #include "vfs_daemon.h"
 
+#include <ucs/sys/string.h>
 #include <ucs/debug/log_def.h>
+#include <ucs/debug/memtrack_int.h>
 #include <sys/wait.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -105,9 +107,18 @@ static int vfs_run_fusermount(char **extra_argv)
     return 0;
 }
 
-static void vfs_get_mountpoint(pid_t pid, char *mountpoint, size_t max_length)
+static char *vfs_get_mountpoint(pid_t pid)
 {
-    snprintf(mountpoint, max_length, "%s/%d", g_opts.mountpoint_dir, pid);
+    ucs_status_t status;
+    char *mountpoint;
+
+    status = ucs_string_alloc_formatted_path(&mountpoint, "mountpoint", "%s/%d",
+                                             g_opts.mountpoint_dir, pid);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    return mountpoint;
 }
 
 static const char *vfs_get_process_name(int pid, char *buf, size_t max_length)
@@ -151,9 +162,9 @@ out:
 
 int vfs_mount(int pid)
 {
-    char mountpoint[PATH_MAX];
     char mountopts[1024];
     char name[NAME_MAX];
+    char *mountpoint;
     int fuse_fd, ret;
 
     /* Add common mount options:
@@ -168,39 +179,55 @@ int vfs_mount(int pid)
             vfs_get_process_name(pid, name, sizeof(name)),
             (strlen(g_opts.mount_opts) > 0) ? "," : "", g_opts.mount_opts);
     if (ret >= sizeof(mountopts)) {
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto out;
     }
 
     /* Create the mount point directory, and ignore "already exists" error */
-    vfs_get_mountpoint(pid, mountpoint, sizeof(mountpoint));
+    mountpoint = vfs_get_mountpoint(pid);
+    if (mountpoint == NULL) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
     ret = mkdir(mountpoint, S_IRWXU);
     if ((ret < 0) && (errno != EEXIST)) {
         ret = -errno;
         vfs_error("failed to create directory '%s': %m", mountpoint);
-        return ret;
+        goto out_free_mountpoint;
     }
 
     /* Mount a new FUSE filesystem in the mount point directory */
     vfs_log("mounting directory '%s' with options '%s'", mountpoint, mountopts);
-    fuse_fd = fuse_open_channel(mountpoint, mountopts);
-    if (fuse_fd < 0) {
+    ret = fuse_open_channel(mountpoint, mountopts);
+    if (ret < 0) {
         vfs_error("fuse_open_channel(%s,opts=%s) failed: %m", mountpoint,
                   mountopts);
-        return fuse_fd;
+        goto out_free_mountpoint;
     }
 
+    fuse_fd = ret;
     vfs_log("mounted directory '%s' with fd %d", mountpoint, fuse_fd);
-    return fuse_fd;
+
+out_free_mountpoint:
+    ucs_free(mountpoint);
+out:
+    return ret;
 }
 
 int vfs_unmount(int pid)
 {
-    char mountpoint[PATH_MAX];
+    char *mountpoint;
     char *argv[5];
     int ret;
 
     /* Unmount FUSE file system */
-    vfs_get_mountpoint(pid, mountpoint, sizeof(mountpoint));
+    mountpoint = vfs_get_mountpoint(pid);
+    if (mountpoint == NULL) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
     argv[0] = "-u";
     argv[1] = "-z";
     argv[2] = "--";
@@ -208,7 +235,7 @@ int vfs_unmount(int pid)
     argv[4] = NULL;
     ret     = vfs_run_fusermount(argv);
     if (ret < 0) {
-        return ret;
+        goto out_free_mountpoint;
     }
 
     /* Remove mount point directory */
@@ -216,10 +243,12 @@ int vfs_unmount(int pid)
     ret = rmdir(mountpoint);
     if (ret < 0) {
         vfs_error("failed to remove directory '%s': %m", mountpoint);
-        return ret;
     }
 
-    return 0;
+out_free_mountpoint:
+    ucs_free(mountpoint);
+out:
+    return ret;
 }
 
 static int vfs_unlink_socket(int silent_notexist)

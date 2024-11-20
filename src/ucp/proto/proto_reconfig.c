@@ -66,7 +66,9 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 
 static void ucp_proto_reconfig_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_caps_t caps;
+    ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    ucp_proto_perf_t *perf;
+    ucs_status_t status;
 
     /* Default reconfiguration protocol is a fallback for any case protocol
      * selection is unsuccessful. The protocol keeps queuing requests until they
@@ -74,14 +76,17 @@ static void ucp_proto_reconfig_probe(const ucp_proto_init_params_t *init_params)
      * Its performance estimation is an "infinity" value, that is worse than any
      * other protocol.
      */
-    caps.min_length           = 0;
-    caps.num_ranges           = 1;
-    caps.ranges[0].max_length = SIZE_MAX;
-    caps.ranges[0].node       = ucp_proto_perf_node_new_data("dummy", "");
-    ucp_proto_perf_set(caps.ranges[0].perf, ucs_linear_func_make(INFINITY, 0));
+    status = ucp_proto_perf_create("reconfig", &perf);
+    if (status != UCS_OK) {
+        return;
+    }
 
-    ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_INF, 0, &caps, NULL,
-                               0);
+    perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL] =
+            ucs_linear_func_make(INFINITY, 0);
+    ucp_proto_perf_add_funcs(perf, 0, SIZE_MAX, perf_factors, NULL, "dummy",
+                             "");
+
+    ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_INF, 0, perf, NULL, 0);
 }
 
 ucp_proto_t ucp_reconfig_proto = {

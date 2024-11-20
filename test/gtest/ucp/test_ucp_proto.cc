@@ -222,8 +222,7 @@ UCS_TEST_P(test_perf_node, basic)
     EXPECT_EQ(nullstr, ucp_proto_perf_node_name(NULL));
     EXPECT_EQ(nullstr, ucp_proto_perf_node_desc(NULL));
 
-    ucp_proto_perf_node_t *n1 = ucp_proto_perf_node_new_compose("n1", "node%d",
-                                                                1);
+    ucp_proto_perf_node_t *n1 = ucp_proto_perf_node_new_data("n1", "node%d", 1);
     ASSERT_NE(nullptr, n1);
     EXPECT_EQ(std::string("n1"), ucp_proto_perf_node_name(n1));
     EXPECT_EQ(std::string("node1"), ucp_proto_perf_node_desc(n1));
@@ -247,15 +246,13 @@ UCS_TEST_P(test_perf_node, basic)
     /* NULL child is ignored */
     ucp_proto_perf_node_add_child(n1, NULL);
     ucp_proto_perf_node_add_child(n2, NULL);
-    ucp_proto_perf_node_add_child(n3, NULL);
 
     ucp_proto_perf_node_t *tmp = NULL;
-    ucp_proto_perf_node_own_child(n3, &tmp);
+    ucp_proto_perf_node_own_child(n1, &tmp);
 
     /* NULL parent is ignored */
     ucp_proto_perf_node_add_child(NULL, n1);
     ucp_proto_perf_node_add_child(NULL, n2);
-    ucp_proto_perf_node_add_child(NULL, n3);
     ucp_proto_perf_node_add_child(NULL, NULL);
 
     /* NULL owner should remove extra ref */
@@ -510,6 +507,11 @@ protected:
         UCS_TEST_MESSAGE << "sum:      " << m_sum_flat_perf.get();
     }
 
+    static perf_ptr_t make_perf_ptr(ucp_proto_perf_t *perf)
+    {
+        return {perf, ucp_proto_perf_destroy};
+    }
+
 private:
     static size_t get_start(ucp_proto_perf_segment_t *seg)
     {
@@ -613,11 +615,6 @@ private:
 
         expect_envelope_flat_perf(start, end, factors);
         expect_sum_flat_perf(start, end, factors);
-    }
-
-    static perf_ptr_t make_perf_ptr(ucp_proto_perf_t *perf)
-    {
-        return {perf, ucp_proto_perf_destroy};
     }
 
     static flat_perf_ptr_t make_flat_perf_ptr(ucp_proto_flat_perf_t *flat_perf)
@@ -896,33 +893,18 @@ UCS_TEST_F(test_proto_perf, envelope_intersect) {
                                          local_tl_range->value, 1e-9));
 }
 
-class test_proto_perf_aggregate : public test_proto_perf {
+class test_proto_perf_random : public test_proto_perf {
 protected:
-    using perf_vec_t = std::vector<perf_ptr_t>;
-
-    // Test aggregation of random collection of perf structures, by sampling
-    // the result at specific points
-    void test_random_funcs(unsigned num_perfs, unsigned num_segments);
+    // Generate a random perf structure
+    static perf_ptr_t generate_random_perf(unsigned max_segments);
 
 private:
     // Generate a random ascending sequence of numbers, ending with SIZE_MAX
     static std::vector<size_t> generate_random_sequence(unsigned length);
-
-    // Generate a random perf structure
-    static perf_ptr_t generate_random_perf(unsigned max_segments);
-
-    // Collect points of sampling based on perf structure segments
-    static std::vector<size_t> get_sample_points(perf_ptr_t perf);
-
-    // Calculate the expected aggregation result at a given point. If the
-    // expected result is undefined, return nullptr.
-    std::unique_ptr<perf_factors_map_t>
-    expected_aggregate_result(const std::vector<perf_ptr_t> &perfs,
-                              size_t point);
 };
 
 std::vector<size_t>
-test_proto_perf_aggregate::generate_random_sequence(unsigned length)
+test_proto_perf_random::generate_random_sequence(unsigned length)
 {
     std::vector<size_t> sequence;
     size_t value = 0;
@@ -935,7 +917,7 @@ test_proto_perf_aggregate::generate_random_sequence(unsigned length)
 }
 
 test_proto_perf::perf_ptr_t
-test_proto_perf_aggregate::generate_random_perf(unsigned max_segments)
+test_proto_perf_random::generate_random_perf(unsigned max_segments)
 {
     perf_ptr_t perf = create();
     size_t start    = 0;
@@ -957,6 +939,73 @@ test_proto_perf_aggregate::generate_random_perf(unsigned max_segments)
     }
     return perf;
 }
+
+class test_proto_perf_remote : public test_proto_perf_random {
+protected:
+    static perf_ptr_t create_remote(perf_ptr_t perf)
+    {
+        ucp_proto_perf_t *remote_perf;
+        ASSERT_UCS_OK(ucp_proto_perf_remote(perf.get(), &remote_perf));
+        return test_proto_perf::make_perf_ptr(remote_perf);
+    }
+};
+
+UCS_TEST_F(test_proto_perf_remote, compare_with_local) {
+    using factor_id_t = ucp_proto_perf_factor_id_t;
+    std::vector<std::pair<factor_id_t, factor_id_t>> convert_map = {
+        {UCP_PROTO_PERF_FACTOR_LOCAL_CPU, UCP_PROTO_PERF_FACTOR_REMOTE_CPU},
+        {UCP_PROTO_PERF_FACTOR_LOCAL_TL, UCP_PROTO_PERF_FACTOR_REMOTE_TL},
+        {UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY,
+         UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY},
+        {UCP_PROTO_PERF_FACTOR_LATENCY, UCP_PROTO_PERF_FACTOR_LATENCY},
+        {UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY,
+         UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY},
+        {UCP_PROTO_PERF_FACTOR_REMOTE_TL, UCP_PROTO_PERF_FACTOR_LOCAL_TL},
+        {UCP_PROTO_PERF_FACTOR_REMOTE_CPU, UCP_PROTO_PERF_FACTOR_LOCAL_CPU},
+    };
+    m_perf                 = generate_random_perf(100);
+    perf_ptr_t remote_perf = create_remote(m_perf);
+
+    std::vector<const ucp_proto_perf_segment_t*> segments, remote_segments;
+    const ucp_proto_perf_segment_t *seg, *rseg;
+    size_t seg_start, seg_end;
+    ucp_proto_perf_segment_foreach_range(seg, seg_start, seg_end, m_perf.get(),
+                                         0, SIZE_MAX) {
+        segments.emplace_back(seg);
+    }
+    ucp_proto_perf_segment_foreach_range(seg, seg_start, seg_end,
+                                         remote_perf.get(), 0, SIZE_MAX) {
+        remote_segments.emplace_back(seg);
+    }
+
+    ASSERT_EQ(segments.size(), remote_segments.size());
+    for (size_t seg_idx = 0; seg_idx < segments.size(); ++seg_idx) {
+        rseg = remote_segments[seg_idx];
+        seg  = segments[seg_idx];
+        for (const auto &convert_pair : convert_map) {
+            auto func  = ucp_proto_perf_segment_func(seg, convert_pair.first);
+            auto rfunc = ucp_proto_perf_segment_func(rseg, convert_pair.second);
+            ASSERT_TRUE(ucs_linear_func_is_equal(func, rfunc, 1e-9));
+        }
+    }
+}
+
+class test_proto_perf_aggregate : public test_proto_perf_random {
+protected:
+    // Test aggregation of random collection of perf structures, by sampling
+    // the result at specific points
+    void test_random_funcs(unsigned num_perfs, unsigned num_segments);
+
+private:
+    // Collect points of sampling based on perf structure segments
+    static std::vector<size_t> get_sample_points(perf_ptr_t perf);
+
+    // Calculate the expected aggregation result at a given point. If the
+    // expected result is undefined, return nullptr.
+    std::unique_ptr<perf_factors_map_t>
+    expected_aggregate_result(const std::vector<perf_ptr_t> &perfs,
+                              size_t point);
+};
 
 std::vector<size_t>
 test_proto_perf_aggregate::get_sample_points(perf_ptr_t perf)
@@ -985,8 +1034,8 @@ test_proto_perf_aggregate::get_sample_points(perf_ptr_t perf)
 }
 
 std::unique_ptr<test_proto_perf::perf_factors_map_t>
-test_proto_perf_aggregate::expected_aggregate_result(const perf_vec_t &perfs,
-                                                     size_t point)
+test_proto_perf_aggregate::expected_aggregate_result(
+        const std::vector<perf_ptr_t> &perfs, size_t point)
 {
     perf_factors_map_t agg;
     for (auto perf : perfs) {

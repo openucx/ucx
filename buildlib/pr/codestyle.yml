@@ -14,21 +14,13 @@ jobs:
 
       - bash: |
           set -eE
+          source ./buildlib/tools/codestyle.sh
+
           BASE_SOURCEVERSION=$(git rev-parse HEAD^)
           range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
-          ok=1
-          for sha1 in `git log $range --format="%h"`
-          do
-              title=`git log -1 --format="%s" $sha1`
-              if echo $title | grep -qP '^Merge |^[0-9A-Z/_\-]*: \w'
-              then
-                  echo "Good commit title: '$title'"
-              else
-                  echo "Bad commit title: '$title'"
-                  ok=0
-              fi
-          done
-          if [ $ok -ne 1 ]
+
+          codestyle_check_commit_title "$range"
+          if [[ $? -ne 0 ]]
           then
               url="https://github.com/openucx/ucx/wiki/Guidance-for-contributors#general-guidelines"
               echo "##vso[task.logissue type=error]Bad commit title(s), see $url for more info."
@@ -85,8 +77,24 @@ jobs:
         retryCountOnTaskFailure: 5
 
       - bash: |
-          python3 -m venv /tmp/codespell_env
-          source /tmp/codespell_env/bin/activate
-          pip3 install codespell
-          codespell
+          set -eE
+          source ./buildlib/tools/codestyle.sh
+          codestyle_check_spell
         displayName: codespell test
+
+  - job: ctags_generation
+    displayName: ctags check
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    container: fedora
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+
+      - bash: |
+          ./buildlib/tools/test_ctags.sh
+        displayName: ctags generation test

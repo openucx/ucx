@@ -65,7 +65,7 @@ uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     UCS_STATIC_ASSERT(sizeof(uct_dc_mlx5_pending_req_priv) <=
                       UCT_PENDING_REQ_PRIV_LEN);
 
-    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
+    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
         uct_dc_mlx5_pending_req_priv(r)->ep = ep;
         group = uct_dc_mlx5_ep_rand_arb_group(iface, ep);
     } else {

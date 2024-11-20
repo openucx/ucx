@@ -551,4 +551,40 @@ uct_rc_ep_enable_flush_remote(uct_rc_ep_t *ep)
     ep->flags |= UCT_RC_EP_FLAG_FLUSH_REMOTE;
 }
 
+static UCS_F_NOINLINE void
+uct_rc_ep_send_op_completed_iov(uct_rc_iface_send_op_t *op)
+{
+#ifndef NVALGRIND
+    struct iovec *iov_entry = op->iov;
+    size_t length           = 0;
+
+    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IOV);
+
+    if (iov_entry == NULL) {
+        return;
+    }
+
+    while (length < op->length) {
+        /* The memory might not be HOST */
+        VALGRIND_MAKE_MEM_DEFINED_IF_ADDRESSABLE(iov_entry->iov_base,
+                                                 iov_entry->iov_len);
+        length += iov_entry->iov_len;
+        ++iov_entry;
+    }
+
+    ucs_free(op->iov);
+    op->iov = NULL;
+#endif
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_iov_get_zcopy(uct_rc_iface_send_op_t *op)
+{
+    if (RUNNING_ON_VALGRIND) {
+        uct_rc_ep_send_op_completed_iov(op);
+    }
+
+    op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_IOV;
+}
+
 #endif

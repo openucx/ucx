@@ -13,6 +13,30 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/config/types.h>
 
+
+#if HAVE_CUDA_FABRIC
+typedef enum uct_cuda_ipc_key_handle {
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR = 0,
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL /* cudaMallocAsync memory */
+} uct_cuda_ipc_key_handle_t;
+
+
+typedef struct uct_cuda_ipc_md_handle {
+    uct_cuda_ipc_key_handle_t handle_type;
+    union {
+        CUipcMemHandle        legacy;        /* Legacy IPC handle */
+        CUmemFabricHandle     fabric_handle; /* VMM/Mallocasync export handle */
+    } handle;
+    CUmemPoolPtrExportData    ptr;
+    CUmemoryPool              pool;
+} uct_cuda_ipc_md_handle_t;
+#else
+typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
+#endif
+
+
 /**
  * @brief cuda ipc MD descriptor
  */
@@ -21,6 +45,13 @@ typedef struct uct_cuda_ipc_md {
     ucs_ternary_auto_value_t enable_mnnvl;
 } uct_cuda_ipc_md_t;
 
+
+typedef struct uct_cuda_ipc_uuid_hash_key {
+    int     type;
+    CUuuid  uuid;
+} uct_cuda_ipc_uuid_hash_key_t;
+
+
 typedef struct {
     /* GPU Device number */
     int     dev_num;
@@ -28,21 +59,30 @@ typedef struct {
     uint8_t accessible[0];
 } uct_cuda_ipc_dev_cache_t;
 
-static UCS_F_ALWAYS_INLINE int uct_cuda_ipc_uuid_equals(CUuuid a, CUuuid b)
+
+static UCS_F_ALWAYS_INLINE int
+uct_cuda_ipc_uuid_equals(uct_cuda_ipc_uuid_hash_key_t key1,
+                         uct_cuda_ipc_uuid_hash_key_t key2)
 {
-    int64_t *a64 = (int64_t *)a.bytes;
-    int64_t *b64 = (int64_t *)b.bytes;
-    return (a64[0] == b64[0]) && (a64[1] == b64[1]);
+    int64_t *a64 = (int64_t *)key1.uuid.bytes;
+    int64_t *b64 = (int64_t *)key2.uuid.bytes;
+
+    return (key1.type == key2.type) && (a64[0] == b64[0]) && (a64[1] == b64[1]);
 }
 
-static UCS_F_ALWAYS_INLINE khint32_t uct_cuda_ipc_uuid_hash_func(CUuuid key)
+
+static UCS_F_ALWAYS_INLINE khint32_t
+uct_cuda_ipc_uuid_hash_func(uct_cuda_ipc_uuid_hash_key_t key)
 {
-    int64_t *i64 = (int64_t *)key.bytes;
-    return kh_int64_hash_func(i64[0] ^ i64[1]);
+    int64_t *i64 = (int64_t *)key.uuid.bytes;
+    return kh_int64_hash_func(i64[0] ^ i64[1] ^ key.type);
 }
 
-KHASH_INIT(cuda_ipc_uuid_hash, CUuuid, uct_cuda_ipc_dev_cache_t*, 1,
-           uct_cuda_ipc_uuid_hash_func, uct_cuda_ipc_uuid_equals);
+
+KHASH_INIT(cuda_ipc_uuid_hash, uct_cuda_ipc_uuid_hash_key_t,
+           uct_cuda_ipc_dev_cache_t*, 1, uct_cuda_ipc_uuid_hash_func,
+           uct_cuda_ipc_uuid_equals);
+
 
 /**
  * @brief cuda ipc component extension
@@ -72,29 +112,6 @@ typedef struct {
     int             dev_num; /* GPU Device number */
     ucs_list_link_t list;
 } uct_cuda_ipc_memh_t;
-
-
-#if HAVE_CUDA_FABRIC
-typedef enum uct_cuda_ipc_key_handle {
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR = 0,
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL /* cudaMallocAsync memory */
-} uct_cuda_ipc_key_handle_t;
-
-
-typedef struct uct_cuda_ipc_md_handle {
-    uct_cuda_ipc_key_handle_t handle_type;
-    union {
-        CUipcMemHandle        legacy;        /* Legacy IPC handle */
-        CUmemFabricHandle     fabric_handle; /* VMM/Mallocasync export handle */
-    } handle;
-    CUmemPoolPtrExportData    ptr;
-    CUmemoryPool              pool;
-} uct_cuda_ipc_md_handle_t;
-#else
-typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
-#endif
 
 
 /**

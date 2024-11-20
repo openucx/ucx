@@ -87,6 +87,33 @@ protected:
 };
 
 
+class test_md_non_blocking : public test_md {
+protected:
+    void init() override
+    {
+        /* ODPv1 IB feature can work only for certain DEVX configuration */
+        modify_config("IB_MLX5_DEVX_OBJECTS", "dct,dcsrq", IGNORE_IF_NOT_EXIST);
+        test_md::init();
+    }
+
+    void test_nb_reg_advise()
+    {
+        for (auto size : {UCS_KBYTE, UCS_MBYTE}) {
+            test_reg_advise(size, size, 0, true);
+            test_reg_advise(size, size / 2, 0, true);
+            test_reg_advise(size, size / 2, size / 4, true);
+        }
+    }
+
+    void test_nb_reg()
+    {
+        for (auto size : {UCS_KBYTE, UCS_MBYTE}) {
+            test_reg_advise(size, 0, 0, true);
+        }
+    }
+};
+
+
 #define _UCT_MD_INSTANTIATE_TEST_CASE(_test_case, _cmpt_name) \
     INSTANTIATE_TEST_SUITE_P(_cmpt_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_mds(#_cmpt_name)));

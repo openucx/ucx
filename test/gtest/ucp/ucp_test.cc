@@ -1184,8 +1184,11 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
 
 bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
 {
-    const auto config          = ucp_ep_config(ep());
-    ucs_memory_type_t mem_type = ucph()->config.ext.rndv_frag_mem_type;
+    const auto config = ucp_ep_config(ep());
+    ucs_memory_type_t mem_type;
+
+    mem_type = (ucs_memory_type_t)ucs_ffs64(
+                                        ucph()->config.ext.rndv_frag_mem_types);
 
     for (auto i = 0; i < config->key.num_lanes; ++i) {
         const auto lane = config->key.rma_bw_lanes[i];

@@ -19,9 +19,11 @@
 
 
 ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
-                                   ucp_proto_caps_t *caps,
+                                   ucp_proto_perf_t **perf_p,
                                    ucp_proto_single_priv_t *spriv)
 {
+    const char *proto_name = ucp_proto_id_field(params->super.super.proto_id,
+                                                name);
     ucp_proto_perf_node_t *tl_perf_node;
     ucp_proto_common_tl_perf_t tl_perf;
     ucp_lane_index_t num_lanes;
@@ -56,8 +58,8 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
         return status;
     }
 
-    status = ucp_proto_common_init_caps(&params->super, &tl_perf, tl_perf_node,
-                                        reg_md_map, caps);
+    status = ucp_proto_init_perf(&params->super, &tl_perf, tl_perf_node,
+                                 reg_md_map, proto_name, perf_p);
     ucp_proto_perf_node_deref(&tl_perf_node);
 
     return status;
@@ -66,19 +68,21 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
 void ucp_proto_single_probe(const ucp_proto_single_init_params_t *params)
 {
     ucp_proto_single_priv_t spriv;
-    ucp_proto_caps_t caps;
+    ucp_proto_perf_t *perf;
     ucs_status_t status;
 
     if (!ucp_proto_common_init_check_err_handling(&params->super)) {
         return;
     }
 
-    status = ucp_proto_single_init(params, &caps, &spriv);
+    status = ucp_proto_single_init(params, &perf, &spriv);
     if (status != UCS_OK) {
         return;
     }
 
-    ucp_proto_common_add_proto(&params->super, &caps, &spriv, sizeof(spriv));
+    ucp_proto_select_add_proto(&params->super.super, params->super.cfg_thresh,
+                               params->super.cfg_priority, perf, &spriv,
+                               sizeof(spriv));
 }
 
 void ucp_proto_single_query(const ucp_proto_query_params_t *params,

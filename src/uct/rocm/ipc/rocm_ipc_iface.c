@@ -74,14 +74,15 @@ uct_rocm_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
+    if (getpid() == *(pid_t*)params->iface_addr) {
+        uct_iface_fill_info_str_buf(params, "same process");
+        return 0;
+    }
+
     if (ucs_get_system_id() != *((const uint64_t*)params->device_addr)) {
         uct_iface_fill_info_str_buf(params,
                                     "the device addr is from another machine");
         return 0;
-    }
-
-    if (getpid() == *(pid_t*)params->iface_addr) {
-        uct_iface_fill_info_str_buf(params, "same process");
     }
 
     return uct_iface_scope_is_reachable(tl_iface, params);
@@ -192,7 +193,7 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops, 
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops,
                               &uct_rocm_ipc_iface_internal_ops,
                               md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)

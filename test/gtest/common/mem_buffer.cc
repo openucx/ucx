@@ -221,7 +221,7 @@ void mem_buffer::get_bar1_free_size_nvml()
 #endif
 }
 
-void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
+void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
 {
     void *ptr;
 
@@ -238,7 +238,18 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
         return ptr;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
-        CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
+        if (async) {
+#if CUDART_VERSION >= 11020
+            CUDA_CALL(cudaMallocAsync(&ptr, size, 0), ": size=" << size);
+            cudaStreamSynchronize(0);
+#else
+            UCS_TEST_ABORT("asynchronous allocation for " +
+                           std::string(ucs_memory_type_names[mem_type]) +
+                           " memory type is not supported");
+#endif
+        } else {
+            CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
+        }
         return ptr;
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_CALL(cudaMallocManaged(&ptr, size), ": size=" << size);
@@ -258,7 +269,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
     }
 }
 
-void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
+void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
 {
     try {
         switch (mem_type) {
@@ -267,6 +278,19 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
             break;
 #if HAVE_CUDA
         case UCS_MEMORY_TYPE_CUDA:
+            if (async) {
+#if CUDART_VERSION >= 11020
+                cudaStreamSynchronize(0);
+                CUDA_CALL(cudaFreeAsync(ptr, 0), ": ptr=" << ptr);
+#else
+                UCS_TEST_ABORT("asynchronous release for " +
+                               std::string(ucs_memory_type_names[mem_type]) +
+                               " memory type is not supported");
+#endif
+            } else {
+                CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
+            }
+            break;
         case UCS_MEMORY_TYPE_CUDA_MANAGED:
             CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
             break;
@@ -513,6 +537,15 @@ bool mem_buffer::compare(const void *expected, const void *buffer,
 std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
 {
     return ucs_memory_type_names[mem_type];
+}
+
+bool mem_buffer::is_async_supported(ucs_memory_type_t mem_type)
+{
+#if CUDART_VERSION >= 11020
+    return mem_type == UCS_MEMORY_TYPE_CUDA;
+#else
+    return false;
+#endif
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :

@@ -283,4 +283,10 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)
     return ep->flags & UCP_EP_FLAG_INDIRECT_ID;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_config_err_mode_eq(ucp_ep_h ep, ucp_err_handling_mode_t err_mode)
+{
+    return ucp_ep_config(ep)->key.err_mode == err_mode;
+}
+
 #endif

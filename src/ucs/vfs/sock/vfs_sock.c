@@ -12,6 +12,7 @@
 
 #include <ucs/config/global_opts.h>
 #include <ucs/debug/log_def.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/sys/string.h>
 #include <sys/socket.h>
@@ -40,18 +41,29 @@ void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr)
 
 int ucs_vfs_sock_mkdir(const char *sock_path, ucs_log_level_t log_level)
 {
-    char sock_path_dir[PATH_MAX];
+    const char *dirname;
+    char *sock_path_dir;
     int ret;
+    ucs_status_t status;
 
-    ucs_strncpy_safe(sock_path_dir, sock_path, sizeof(sock_path_dir));
-    ret = mkdir(dirname(sock_path_dir), S_IRWXU);
+    status = ucs_string_alloc_path_buffer_and_get_dirname(&sock_path_dir,
+                                                          "sock_path_dir",
+                                                          sock_path, &dirname);
+    if (status != UCS_OK) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    ret = mkdir(dirname, S_IRWXU);
     if ((ret < 0) && (errno != EEXIST)) {
         ucs_log(log_level, "failed to create directory '%s': %m",
                 sock_path_dir);
-        return -errno;
+        ret = -errno;
     }
 
-    return 0;
+    ucs_free(sock_path_dir);
+out:
+    return ret;
 }
 
 int ucs_vfs_sock_setopt_passcred(int sockfd)

@@ -434,6 +434,9 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(52) /**< Hardware tag matching zcopy eager support */
 #define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(53) /**< Hardware tag matching rendezvous zcopy support */
+
+        /* Interface capability */
+#define UCT_IFACE_FLAG_INTER_NODE      UCS_BIT(54) /**< Interface is inter-node capable */
 /**
  * @}
  */
@@ -795,8 +798,8 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_FLAG_LOCK            = UCS_BIT(2),
 
     /**
-     * Hide errors on memory registration. In some cases registration failure
-     * is not an error (e. g. for merged memory regions).
+     * Hide errors on memory registration and allocation. If this flag is set,
+     * no error messages will be printed.
      */
     UCT_MD_MEM_FLAG_HIDE_ERRORS     = UCS_BIT(3),
 

@@ -15,6 +15,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
         [
          cuda_happy=no
          have_cuda_static=no
+         NVCC=""
         ],
         [
          save_CPPFLAGS="$CPPFLAGS"
@@ -27,13 +28,15 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          CUDART_LIBS=""
          CUDART_STATIC_LIBS=""
          NVML_LIBS=""
+         CUDA_BIN_PATH=""
 
          AS_IF([test ! -z "$with_cuda" -a "x$with_cuda" != "xyes" -a "x$with_cuda" != "xguess"],
                [ucx_check_cuda_dir="$with_cuda"
                 AS_IF([test -d "$with_cuda/lib64"], [libsuff="64"], [libsuff=""])
                 ucx_check_cuda_libdir="$with_cuda/lib$libsuff"
                 CUDA_CPPFLAGS="-I$with_cuda/include"
-                CUDA_LDFLAGS="-L$ucx_check_cuda_libdir -L$ucx_check_cuda_libdir/stubs"])
+                CUDA_LDFLAGS="-L$ucx_check_cuda_libdir -L$ucx_check_cuda_libdir/stubs"
+                CUDA_BIN_PATH="$with_cuda/bin"])
 
          CPPFLAGS="$CPPFLAGS $CUDA_CPPFLAGS"
          LDFLAGS="$LDFLAGS $CUDA_LDFLAGS"
@@ -78,6 +81,8 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                         [AC_DEFINE([HAVE_CUDA_FABRIC], 1, [Enable CUDA fabric handle support])],
                         [], [[#include <cuda.h>]])
 
+         AC_PATH_PROGS(NVCC, nvcc, "", $CUDA_BIN_PATH:$PATH)
+
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"
          LIBS="$save_LIBS"
@@ -93,12 +98,12 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                [AS_IF([test "x$with_cuda" != "xguess"],
                       [AC_MSG_ERROR([CUDA support is requested but cuda packages cannot be found])],
                       [AC_MSG_WARN([CUDA not found])])])
-
         ]) # "x$with_cuda" = "xno"
 
         cuda_checked=yes
         AM_CONDITIONAL([HAVE_CUDA], [test "x$cuda_happy" != xno])
         AM_CONDITIONAL([HAVE_CUDA_STATIC], [test "X$have_cuda_static" = "Xyes"])
+        AM_CONDITIONAL([HAVE_NVCC], [test "x$NVCC" != "x"])
 
    ]) # "x$cuda_checked" != "xyes"
 

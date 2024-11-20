@@ -128,11 +128,17 @@ uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_hdr          = 0;
     iface_attr->cap.am.max_iov          = 1;
 
-    /* Report GET latency by default as worst case */
-    iface_attr->latency                 = iface->config.get_latency;
-    iface_attr->bandwidth               = iface->config.get_bw;
-    iface_attr->overhead                = UCT_GDR_COPY_IFACE_OVERHEAD;
-    iface_attr->priority                = 0;
+    /* Report best performance by default */
+    iface_attr->latency.c           = ucs_min(iface->config.get_latency.c,
+                                              iface->config.put_latency.c);
+    iface_attr->latency.m           = ucs_min(iface->config.get_latency.m,
+                                              iface->config.put_latency.m);
+    iface_attr->bandwidth.dedicated = ucs_max(iface->config.get_bw.dedicated,
+                                              iface->config.put_bw.dedicated);
+    iface_attr->bandwidth.shared    = ucs_max(iface->config.get_bw.shared,
+                                              iface->config.put_bw.shared);
+    iface_attr->overhead            = UCT_GDR_COPY_IFACE_OVERHEAD;
+    iface_attr->priority            = 0;
 
     return UCS_OK;
 }
