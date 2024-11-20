@@ -416,7 +416,9 @@ ucp_wireup_connect_local(ucp_ep_h ep,
     ucs_log_indent(1);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (!ucp_ep_is_lane_p2p(ep, lane)) {
+        if (!ucp_ep_is_lane_p2p(ep, lane) ||
+                /* Skip lanes which are already connected */
+                !ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
             continue;
         }
 
@@ -1683,6 +1685,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
 
     if (!ucp_wireup_should_reconfigure(ep, reuse_lane_map,
                                        new_key->num_lanes)) {
+        /* Restore wireup lane and exit */
+        new_key->wireup_msg_lane = old_key->wireup_msg_lane;
         return UCS_OK;
     }
 
