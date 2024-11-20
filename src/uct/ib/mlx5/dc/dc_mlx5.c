@@ -284,12 +284,21 @@ static void uct_dc_mlx5_asan_cleanup_old_dcis_buffer(uct_dc_mlx5_iface_t *iface)
 void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface)
 {
 #ifdef __SANITIZE_ADDRESS__
-    size_t buffer_size       = sizeof(uct_dc_dci_t) *
-                               ucs_array_capacity(&iface->tx.dcis);
-    size_t num_dcis          = ucs_array_length(&iface->tx.dcis);
-    uct_dc_dci_t *old_buffer = ucs_array_begin(&iface->tx.dcis);
-    uct_dc_dci_t *new_buffer = ucs_malloc(buffer_size,
-                                          "ASAN relocated dcis buffer");
+    size_t buffer_size, num_dcis;
+    uct_dc_dci_t *old_buffer, *new_buffer;
+
+    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
+        /*
+         * We can't relocate DCIs array in case of shared policy, as DCIs arbiter
+         * might be scheduled in tx_waitq.
+        */
+        return;
+    }
+
+    buffer_size = sizeof(uct_dc_dci_t) * ucs_array_capacity(&iface->tx.dcis);
+    num_dcis    = ucs_array_length(&iface->tx.dcis);
+    old_buffer  = ucs_array_begin(&iface->tx.dcis);
+    new_buffer  = ucs_malloc(buffer_size, "ASAN relocated dcis buffer");
     uct_dc_mlx5_iface_dcis_array_copy(new_buffer, old_buffer, num_dcis);
     ucs_array_begin(&iface->tx.dcis) = new_buffer;
 
