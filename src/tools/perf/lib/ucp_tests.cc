@@ -754,7 +754,6 @@ public:
             return;
         }
 
-        flush();
         recv(worker, ep, buffer, 1, datatype, 0);
         wait_recv_window(m_max_outstanding);
     }
