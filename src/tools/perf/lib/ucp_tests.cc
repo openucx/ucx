@@ -744,6 +744,7 @@ public:
         }
 
         send(ep, buffer, 1, datatype, 0, remote_addr, rkey, false);
+        wait_send_window(m_max_outstanding);
     }
 
     void recv_ack(ucp_worker_h worker, ucp_ep_h ep, void *buffer,
