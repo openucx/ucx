@@ -104,7 +104,7 @@ public:
             UCS_TEST_SKIP_R("test requires at least 2 ifaces to work");
         }
 
-        check_reused_lanes_reconfigurable();
+        ensure_reused_lanes_reconfigurable();
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -116,7 +116,7 @@ public:
     void run(bool bidirectional = false);
     void skip_non_p2p();
     bool has_bond_iface();
-    void check_reused_lanes_reconfigurable();
+    void ensure_reused_lanes_reconfigurable();
 
     bool reuse_lanes() const
     {
@@ -385,7 +385,7 @@ bool test_ucp_ep_reconfig::has_bond_iface()
     return false;
 }
 
-void test_ucp_ep_reconfig::check_reused_lanes_reconfigurable()
+void test_ucp_ep_reconfig::ensure_reused_lanes_reconfigurable()
 {
     if (!reuse_lanes()) {
         return;
