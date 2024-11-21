@@ -8,9 +8,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
-#include <uct/base/uct_component.h>
 #include <uct/base/uct_iface.h>
-#include <uct/base/uct_md.h>
 #include <ucp/proto/proto_select.inl>
 }
 
@@ -159,12 +157,14 @@ public:
 
     virtual void init() override
     {
-        modify_config("PROTO_ENABLE", "y");
-        modify_config("MAX_RNDV_LANES", "1");
-
         /* Reset topo provider to force reload from config */
         ucs_sys_topo_reset_provider();
         modify_config("TOPO_PRIO", "default");
+        modify_config("PROTO_ENABLE", "y");
+        modify_config("MAX_RNDV_LANES", "1");
+
+        ucp_test::init();
+        connect();
     }
 
     virtual void cleanup() override
@@ -299,20 +299,24 @@ protected:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr)
+class test_ucp_proto_mock_rcx : public test_ucp_proto_mock {
+public:
+    virtual void init() override
+    {
+        set_mock_iface_attr("rc_mlx5",
+            [](uct_iface_attr_t &iface_attr) {
+                iface_attr.dev_num_paths    = 1;
+                iface_attr.cap.am.max_short = 208;
+                iface_attr.bandwidth.shared = 10000000000;
+                iface_attr.latency.c        = 0.000006;
+                iface_attr.latency.m        = 0.000000001;
+            });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, mock_iface_attr)
 {
-    set_mock_iface_attr("rc_mlx5",
-        [](uct_iface_attr_t &iface_attr) {
-            iface_attr.dev_num_paths    = 1;
-            iface_attr.cap.am.max_short = 208;
-            iface_attr.bandwidth.shared = 10000000000;
-            iface_attr.latency.c        = 0.000006;
-            iface_attr.latency.m        = 0.000000001;
-        });
-
-    ucp_test::init();
-    connect();
-
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
@@ -325,4 +329,4 @@ UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr)
     }, key);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
