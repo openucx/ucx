@@ -143,8 +143,8 @@ private:
 mock_iface *mock_iface::singleton = nullptr;
 
 struct proto_select_data {
-    std::string range_start;
-    std::string range_end;
+    size_t      range_start;
+    size_t      range_end;
     std::string desc;
 };
 
@@ -211,62 +211,48 @@ public:
     }
 
 protected:
-    static size_t string_to_memunits(const std::string &str)
+    static bool
+    select_elem_match(ucp_worker_h worker, const ucp_proto_select_elem_t &elem,
+                      const proto_select_data &data, size_t range_start)
     {
-        size_t range;
-        EXPECT_UCS_OK(ucs_str_to_memunits(str.c_str(), &range));
-        return range;
-    }
-
-    static bool select_elem_match(ucp_worker_h worker,
-                                  const ucp_proto_select_elem_t &select_elem,
-                                  const proto_select_data &data,
-                                  size_t range_start)
-    {
-        ucp_proto_query_attr_t proto_attr;
-        if (!ucp_proto_select_elem_query(worker, &select_elem, range_start,
-                                         &proto_attr)) {
+        ucp_proto_query_attr_t attr;
+        if (!ucp_proto_select_elem_query(worker, &elem, range_start, &attr)) {
             return false;
         }
 
-        size_t range_end = string_to_memunits(data.range_end);
-        return (range_end == proto_attr.max_msg_length) &&
-               (data.desc == proto_attr.desc);
+        return (data.range_end == attr.max_msg_length) &&
+               (data.desc == attr.desc);
     }
 
     static void dump_select_elem(ucp_worker_h worker,
-                                 const ucp_proto_select_elem_t &select_elem)
+                                 const ucp_proto_select_elem_t &elem)
     {
         size_t range_end = -1;
         size_t range_start;
         do {
             range_start = range_end + 1;
-            ucp_proto_query_attr_t proto_attr;
-            if (ucp_proto_select_elem_query(worker, &select_elem, range_start,
-                                            &proto_attr)) {
-                UCS_TEST_MESSAGE << range_start <<  "-"
-                                 << proto_attr.max_msg_length
-                                 << " desc: " << proto_attr.desc << ", config: "
-                                 << proto_attr.config;
+            ucp_proto_query_attr_t attr;
+            if (ucp_proto_select_elem_query(worker, &elem, range_start, &attr)) {
+                UCS_TEST_MESSAGE << range_start <<  "-" << attr.max_msg_length
+                                 << " desc: " << attr.desc << ", config: "
+                                 << attr.config;
             }
 
-            range_end = proto_attr.max_msg_length;
+            range_end = attr.max_msg_length;
         } while (range_end != SIZE_MAX);
     }
 
-    static void
-    check_proto_select_elem(ucp_worker_h worker,
-                            const ucp_proto_select_elem_t &select_elem,
-                            const proto_select_data_vec_t &data)
+    static void check_proto_select_elem(ucp_worker_h worker,
+                                        const ucp_proto_select_elem_t &elem,
+                                        const proto_select_data_vec_t &data)
     {
         for (auto &it : data) {
-            size_t start = string_to_memunits(it.range_start);
-            EXPECT_TRUE(select_elem_match(worker, select_elem, it, start));
+            EXPECT_TRUE(select_elem_match(worker, elem, it, it.range_start));
             /* As we cannot get range_start directly, we assert that protocol
              * is different at that range */
-            if (start > 0) {
-                EXPECT_FALSE(
-                        select_elem_match(worker, select_elem, it, start - 1));
+            if (it.range_start > 0) {
+                EXPECT_FALSE(select_elem_match(worker, elem, it,
+                                               it.range_start - 1));
             }
         }
     }
@@ -332,10 +318,10 @@ UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr)
     key.param.op_attr          = 0;
 
     check_ep_config(sender(), {
-        {"0",      "200",    "short"},
-        {"201",    "8246",   "copy-in"},
-        {"8247",   "377094", "multi-frag copy-in"},
-        {"377095", "inf",    "rendezvous zero-copy read from remote"},
+        {0,      200,              "short"},
+        {201,    8246,             "copy-in"},
+        {8247,   377094,           "multi-frag copy-in"},
+        {377095, UCS_MEMUNITS_INF, "rendezvous zero-copy read from remote"},
     }, key);
 }
 
