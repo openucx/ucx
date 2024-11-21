@@ -223,7 +223,7 @@ public:
         modify_config("MAX_RNDV_LANES", "1");
 
         /* Reset topo provider to force reload from config */
-        ucs_sys_topo_provider = NULL;
+        ucs_sys_topo_reset_provider();
         modify_config("TOPO_PRIO", "default");
     }
 
@@ -232,7 +232,7 @@ public:
         mock_component_test::cleanup();
         ucp_test::cleanup();
         /* Reset topo provider to not affect subsequent tests */
-        ucs_sys_topo_provider = NULL;
+        ucs_sys_topo_reset_provider();
     }
 
     static void check_ep_config(entity &e, const proto_select_data_vec_t &data,

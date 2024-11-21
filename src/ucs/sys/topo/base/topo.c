@@ -54,7 +54,7 @@ typedef struct {
 /*
  * Structure needed to define a topology module implementation
  */
-typedef struct ucs_sys_topo_provider {
+typedef struct {
     /* Name of the topology module */
     const char         *name;
 
@@ -95,7 +95,7 @@ static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 
 /* Selected topo provider */
-ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
+static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
 
 
 /* According to NUMA distance definition distances are normalized to 10
@@ -105,6 +105,11 @@ ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
 static inline double ucs_topo_sysfs_numa_distance_to_latency(double distance)
 {
     return distance * 10e-9;
+}
+
+void ucs_sys_topo_reset_provider()
+{
+    ucs_sys_topo_provider = NULL;
 }
 
 static ucs_sys_topo_provider_t *ucs_sys_topo_get_provider()

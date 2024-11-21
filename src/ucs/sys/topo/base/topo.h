@@ -72,8 +72,10 @@ typedef ucs_status_t
 extern ucs_list_link_t ucs_sys_topo_providers_list;
 
 
-/* Selected topo provider */
-extern struct ucs_sys_topo_provider *ucs_sys_topo_provider;
+/**
+ * Reset the internal singleton system topology provider.
+ */
+void ucs_sys_topo_reset_provider(void);
 
 
 /**
