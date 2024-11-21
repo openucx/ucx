@@ -146,7 +146,6 @@ struct proto_select_data {
     std::string range_start;
     std::string range_end;
     std::string desc;
-    std::string config;
 };
 
 using proto_select_data_vec_t = std::vector<proto_select_data>;
@@ -232,8 +231,7 @@ protected:
 
         size_t range_end = string_to_memunits(data.range_end);
         return (range_end == proto_attr.max_msg_length) &&
-               (data.desc == proto_attr.desc) &&
-               (data.config == proto_attr.config);
+               (data.desc == proto_attr.desc);
     }
 
     static void dump_select_elem(ucp_worker_h worker,
@@ -334,11 +332,10 @@ UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr)
     key.param.op_attr          = 0;
 
     check_ep_config(sender(), {
-        {"0",          "200",    "short",                "rc_mlx5/mlx5_0:1"},
-        {"201",        "8246",   "copy-in",              "rc_mlx5/mlx5_0:1"},
-        {"8247",       "377094", "multi-frag copy-in", "rc_mlx5/mlx5_0:1"},
-        {"377095",     "inf",    "rendezvous zero-copy read from remote",
-                                                         "rc_mlx5/mlx5_0:1"},
+        {"0",      "200",    "short"},
+        {"201",    "8246",   "copy-in"},
+        {"8247",   "377094", "multi-frag copy-in"},
+        {"377095", "inf",    "rendezvous zero-copy read from remote"},
     }, key);
 }
 
