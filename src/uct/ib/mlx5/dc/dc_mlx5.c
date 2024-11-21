@@ -284,24 +284,36 @@ static void uct_dc_mlx5_asan_cleanup_old_dcis_buffer(uct_dc_mlx5_iface_t *iface)
 void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface)
 {
 #ifdef __SANITIZE_ADDRESS__
-    size_t buffer_size, num_dcis;
-    uct_dc_dci_t *old_buffer, *new_buffer;
+    size_t buffer_size       = sizeof(uct_dc_dci_t) *
+                               ucs_array_capacity(&iface->tx.dcis);
+    size_t num_dcis          = ucs_array_length(&iface->tx.dcis);
+    uct_dc_dci_t *old_buffer = ucs_array_begin(&iface->tx.dcis);
+    uct_dc_dci_t *new_buffer = ucs_malloc(buffer_size,
+                                          "ASAN relocated dcis buffer");
+    uct_dc_dci_t *old_dci, *new_dci;
+    int i;
+
+    uct_dc_mlx5_iface_dcis_array_copy(new_buffer, old_buffer, num_dcis);
 
     if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
-        /*
-         * We can't relocate DCIs array in case of shared policy, as DCIs arbiter
-         * might be scheduled in tx_waitq.
-        */
-        return;
+        /* DCIs arbiter might be scheduled in tx_waitq. */
+
+        ucs_arbiter_dump(uct_dc_mlx5_iface_tx_waitq(iface), stderr);
+        for (i = 0; i < num_dcis; i++) {
+            old_dci = &old_buffer[i];
+            new_dci = &new_buffer[i];
+            if (uct_dc_mlx5_is_dci_valid(old_dci)) {
+                ucs_arbiter_group_desched(uct_dc_mlx5_iface_tx_waitq(iface),
+                                          &old_dci->arb_group);
+                ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface),
+                                           &new_dci->arb_group);
+            }
+        }
+
+        ucs_arbiter_dump(uct_dc_mlx5_iface_tx_waitq(iface), stderr);
     }
 
-    buffer_size = sizeof(uct_dc_dci_t) * ucs_array_capacity(&iface->tx.dcis);
-    num_dcis    = ucs_array_length(&iface->tx.dcis);
-    old_buffer  = ucs_array_begin(&iface->tx.dcis);
-    new_buffer  = ucs_malloc(buffer_size, "ASAN relocated dcis buffer");
-    uct_dc_mlx5_iface_dcis_array_copy(new_buffer, old_buffer, num_dcis);
     ucs_array_begin(&iface->tx.dcis) = new_buffer;
-
     ASAN_POISON_MEMORY_REGION(old_buffer, buffer_size);
     uct_dc_mlx5_asan_cleanup_old_dcis_buffer(iface);
     iface->old_dcis_buffer      = old_buffer;
