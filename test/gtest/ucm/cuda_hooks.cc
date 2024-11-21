@@ -374,7 +374,7 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocPitch) {
     check_mem_free_events(devPtr, (4 * 8));
 }
 
-#if CUDA_VERSION >= 11020
+#if CUDART_VERSION >= 11020
 UCS_TEST_F(cuda_hooks, test_cudaMallocAsync) {
     cudaError_t ret;
     void *ptr;

@@ -13,7 +13,7 @@
 
 #include "dc_mlx5.h"
 
-#define UCT_DC_MLX5_EP_NO_DCI    ((uint8_t)-1)
+#define UCT_DC_MLX5_EP_NO_DCI    ((uct_dci_index_t)-1)
 #define UCT_DC_MLX5_HW_DCI_INDEX 0
 
 
@@ -66,12 +66,12 @@ typedef struct uct_dc_mlx5_base_av {
 struct uct_dc_mlx5_ep {
     uct_base_ep_t         super;
     ucs_arbiter_group_t   arb_group;
-    uint8_t               dci;
-    uint8_t               atomic_mr_id;
+    uct_dci_index_t       dci;
     uint16_t              flags;
     uint16_t              flush_rkey_hi;
     uct_rc_fc_t           fc;
     uct_dc_mlx5_base_av_t av;
+    uint8_t               atomic_mr_id;
     uint8_t               dci_channel_index;
 };
 
@@ -309,7 +309,7 @@ uct_dc_mlx5_iface_dci_sched_tx(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE uct_dc_mlx5_ep_t *
-uct_dc_mlx5_ep_from_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+uct_dc_mlx5_ep_from_dci(uct_dc_mlx5_iface_t *iface, uct_dci_index_t dci_index)
 {
     /* Can be used with dcs* policies only, with rand policy every dci may
      * be used by many eps */
@@ -330,20 +330,20 @@ uct_dc_mlx5_init_dci_config(uct_dc_mlx5_dci_config_t *dci_config,
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_dc_mlx5_is_hw_dci(const uct_dc_mlx5_iface_t *iface, uint8_t dci)
+uct_dc_mlx5_is_hw_dci(const uct_dc_mlx5_iface_t *iface, uct_dci_index_t dci)
 {
     return dci == iface->tx.hybrid_hw_dci;
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_dc_mlx5_is_dci_shared(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+uct_dc_mlx5_is_dci_shared(uct_dc_mlx5_iface_t *iface, uct_dci_index_t dci)
 {
     return uct_dc_mlx5_iface_dci(iface, dci)->flags & UCT_DC_DCI_FLAG_SHARED;
 }
 
 ucs_status_t static UCS_F_ALWAYS_INLINE
 uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
-                              uint8_t dci_index)
+                              uct_dci_index_t dci_index)
 {
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
     uct_dc_dci_t *dci            = uct_dc_mlx5_iface_dci(iface, dci_index);
@@ -450,7 +450,7 @@ uct_dc_mlx5_iface_dci_can_alloc_or_create(uct_dc_mlx5_iface_t *iface,
                                           uint8_t pool_index)
 {
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
-    uint8_t dci_index;
+    uct_dci_index_t dci_index;
     ucs_status_t status;
 
     ucs_assert(!uct_dc_mlx5_iface_is_policy_shared(iface));
@@ -550,13 +550,15 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t
-uct_dc_mlx5_iface_dci_pool_index(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+uct_dc_mlx5_iface_dci_pool_index(uct_dc_mlx5_iface_t *iface,
+                                 uct_dci_index_t dci_index)
 {
     return uct_dc_mlx5_iface_dci(iface, dci_index)->pool_index;
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface,
+                              uct_dci_index_t dci_index)
 {
     uint8_t pool_index           = uct_dc_mlx5_iface_dci_pool_index(iface,
                                                                     dci_index);
@@ -576,7 +578,7 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 /* Release endpoint's DCI below, if the endpoint does not have outstanding
  * operations */
 static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uct_dci_index_t dci_index)
 {
     uct_dc_mlx5_ep_t *ep;
     ucs_arbiter_t *waitq;
@@ -664,7 +666,8 @@ uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface,
+                                       uct_dci_index_t dci)
 {
     uct_worker_h worker = &iface->super.super.super.super.worker->super;
     uint8_t pool_index = uct_dc_mlx5_iface_dci_pool_index(iface, dci);
@@ -686,7 +689,7 @@ uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_detach(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    uint8_t dci_index = ep->dci;
+    uct_dci_index_t dci_index = ep->dci;
 
     ucs_assert(!uct_dc_mlx5_iface_is_policy_shared(iface));
     ucs_assert(dci_index != UCT_DC_MLX5_EP_NO_DCI);

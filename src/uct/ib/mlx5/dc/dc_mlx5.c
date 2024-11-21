@@ -273,7 +273,7 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
 {
-    uint8_t dci_index;
+    uct_dci_index_t dci_index;
     struct mlx5_cqe64 *cqe;
     uint16_t hw_ci;
     uct_dc_dci_t *dci;
@@ -370,8 +370,8 @@ static void uct_ib_mlx5dv_dci_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
 }
 
 ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
-                                          uint8_t dci_index, int connect,
-                                          uint8_t num_dci_channels)
+                                          uct_dci_index_t dci_index,
+                                          int connect, uint8_t num_dci_channels)
 {
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
     uct_ib_mlx5_qp_attr_t attr = {};
@@ -780,9 +780,10 @@ uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
 
 static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface)
 {
-    uint8_t num_dcis = ucs_array_length(&iface->tx.dcis);
+    uct_dci_index_t num_dcis = ucs_array_length(&iface->tx.dcis);
     uct_dc_dci_t *dci;
-    uint8_t pool_index, dci_index;
+    uint8_t pool_index;
+    uct_dci_index_t dci_index;
 
     for (dci_index = 0; dci_index < num_dcis; dci_index++) {
         dci = uct_dc_mlx5_iface_dci(iface, dci_index);
@@ -1354,7 +1355,7 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 
 static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
                                            struct mlx5_cqe64 *cqe,
-                                           uint8_t dci_index,
+                                           uct_dci_index_t dci_index,
                                            ucs_status_t status)
 {
     uct_dc_mlx5_ep_t *ep;
@@ -1383,7 +1384,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
     struct mlx5_cqe64 *cqe     = arg;
-    uint8_t dci_index          = uct_dc_mlx5_iface_dci_find(iface, cqe);
+    uct_dci_index_t dci_index  = uct_dc_mlx5_iface_dci_find(iface, cqe);
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, dci_index, txqp, txwq);
@@ -1812,7 +1813,8 @@ UCT_TL_DEFINE_ENTRY(&uct_ib_component, dc_mlx5, uct_dc_mlx5_query_tl_devices,
                     uct_dc_mlx5_iface_t, "DC_MLX5_",
                     uct_dc_mlx5_iface_config_table, uct_dc_mlx5_iface_config_t);
 
-void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
+                                 uct_dci_index_t dci_index)
 {
     uct_dc_dci_t *dci        = uct_dc_mlx5_iface_dci(iface, dci_index);
     uct_ib_mlx5_txwq_t *txwq = &dci->txwq;

@@ -594,9 +594,9 @@ protected:
             self->m_client->disconnect(ep);
         }
 
-        self->m_state |= TEST_STATE_CLIENT_DISCONNECTED;
         self->m_client_disconnect_cnt++;
         self->del_user_data(sa_user_data);
+        self->m_state |= TEST_STATE_CLIENT_DISCONNECTED;
     }
 
     void cm_disconnect(entity *ent) {

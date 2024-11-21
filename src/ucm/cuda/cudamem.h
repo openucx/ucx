@@ -23,6 +23,8 @@ CUresult ucm_cuMemAllocPitch_v2(CUdeviceptr *dptr, size_t *pPitch,
 CUresult ucm_cuMemMap(CUdeviceptr ptr, size_t size, size_t offset,
                       CUmemGenericAllocationHandle handle,
                       unsigned long long flags);
+CUresult ucm_cuModuleGetGlobal_v2(CUdeviceptr *dptr, size_t *bytes,
+                                  CUmodule hmod, const char *name);
 #if CUDA_VERSION >= 11020
 CUresult ucm_cuMemAllocAsync(CUdeviceptr *dptr, size_t size, CUstream hStream);
 CUresult ucm_cuMemAllocFromPoolAsync(CUdeviceptr *dptr, size_t size,
@@ -42,7 +44,8 @@ cudaError_t ucm_cudaMalloc(void **devPtr, size_t size);
 cudaError_t ucm_cudaMallocManaged(void **devPtr, size_t size, unsigned int flags);
 cudaError_t ucm_cudaMallocPitch(void **devPtr, size_t *pitch,
                                 size_t width, size_t height);
-#if CUDA_VERSION >= 11020
+cudaError_t ucm_cudaGetSymbolAddress(void **devPtr, const void *symbol);
+#if CUDART_VERSION >= 11020
 cudaError_t ucm_cudaMallocAsync(void **devPtr, size_t size,
                                 cudaStream_t hStream);
 cudaError_t ucm_cudaMallocFromPoolAsync(void **devPtr, size_t size,

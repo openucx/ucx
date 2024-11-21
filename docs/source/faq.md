@@ -90,6 +90,11 @@ UCX does not depend on an external runtime environment.
 
 `ucx_perftest` (UCX based application/benchmark) can be linked with an external runtime environment that can be used for remote `ucx_perftest` launch, but this an optional configuration which is only used for environments that do not provide direct access to compute nodes. By default this option is disabled. 
 
+
+#### I get an error "cannot find package 'github.com/openucx/ucx/bindings/go/src/ucx'" when building Go bindings. How do I fix this?
+This error occurs because Go modules are disabled in your local Go environment. To resolve it, set the GO111MODULE environment variable to auto by running: `go env -w GO111MODULE=auto`. This will permanently enable module-aware mode in the local Go environment, allowing Go to locate the necessary packages.
+
+
 <br/>
 
 
