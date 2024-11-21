@@ -260,9 +260,9 @@ public:
     void connect()
     {
         sender().connect(&receiver(), get_ep_params());
-        for (int i = 0; i < 10; ++i) {
-            progress();
-        }
+        wait_for_cond([this] {
+            return (receiver().worker()->ep_config.length > 0);
+        }, [this] { progress(); });
 
         EXPECT_EQ(1, sender().worker()->ep_config.length);
         EXPECT_EQ(1, sender().worker()->rkey_config_count);
