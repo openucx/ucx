@@ -177,8 +177,8 @@ uct_gga_mlx5_md_get_rkey(const uct_gga_mlx5_md_t *md,
 {
     khint_t iter = kh_get(resolved_rkeys, &md->rkey_cache, key);
 
-    return ucs_unlikely(iter == kh_end(&md->rkey_cache)) ? NULL :
-           kh_val(&md->rkey_cache, iter);
+    return ucs_unlikely(iter == kh_end(&md->rkey_cache)) ?
+           NULL : kh_val(&md->rkey_cache, iter);
 }
 
 static uct_gga_mlx5_md_rkey_handle_t*
@@ -279,10 +279,10 @@ static uct_component_t uct_gga_component = {
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
-static UCS_F_ALWAYS_INLINE
-void uct_gga_mlx5_rkey_trace(uct_gga_mlx5_md_t *md,
-                             uct_gga_mlx5_rkey_handle_t *rkey_handle,
-                             const char *prefix)
+static UCS_F_ALWAYS_INLINE void
+uct_gga_mlx5_rkey_trace(uct_gga_mlx5_md_t *md,
+                        uct_gga_mlx5_rkey_handle_t *rkey_handle,
+                        const char *prefix)
 {
     ucs_trace("md %p: %s resolved rkey_handle %p: rkey %"PRIx64, md, prefix,
               rkey_handle, rkey_handle->rkey);
@@ -302,8 +302,9 @@ static ucs_status_t
 uct_gga_mlx5_rkey_resolve_slow(uct_gga_mlx5_md_t *md,
                                uct_gga_mlx5_rkey_handle_t *rkey_handle)
 {
-    uct_md_h uct_md                       = &md->super.super.super;
-    uct_gga_mlx5_rkey_hash_key_t hash_key = (uintptr_t)rkey_handle;
+    static pthread_mutex_t mem_attach_lock = PTHREAD_MUTEX_INITIALIZER;
+    uct_md_h uct_md                        = &md->super.super.super;
+    uct_gga_mlx5_rkey_hash_key_t hash_key  = (uintptr_t)rkey_handle;
     uct_gga_mlx5_md_rkey_handle_t* md_rkey_handle;
     uct_gga_mlx5_rkey_handle_md_link_t *md_link;
     uct_md_mem_attach_params_t attach_params;
@@ -319,11 +320,11 @@ uct_gga_mlx5_rkey_resolve_slow(uct_gga_mlx5_md_t *md,
     }
 
     attach_params.field_mask = 0;
-    pthread_mutex_lock(&uct_gga_mlx5_rkeys_lock);
+    pthread_mutex_lock(&mem_attach_lock);
     status = uct_ib_mlx5_devx_mem_attach(uct_md, &rkey_handle->packed_mkey,
                                          &attach_params,
                                          (uct_mem_h*)&md_rkey_handle->memh);
-    pthread_mutex_unlock(&uct_gga_mlx5_rkeys_lock);
+    pthread_mutex_unlock(&mem_attach_lock);
     if (status != UCS_OK) {
         goto err_free_handle;
     }
