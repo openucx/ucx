@@ -14,42 +14,37 @@
 ## 1.18.0-rc1 (November 21, 2024)
 ### Feature
 #### UCP
- * Improved log with explicit prompt for address v2 configuration on failure
  * Detected device inter-node capability with a new attribute flag
  * Enabled using CUDA staging buffers for pipeline protocols by default
  * Added endpoint reconfiguration support for non-reused p2p scenarios
  * Enabled non-cacheable memory domains, activated for GDR
- * Improved message upon wireup failure
- * Added new protocol infrastructure to store aggregated factors for all ranges
  * Added user_data parameter to ucp_ep_query
  * Added support for host memory pipeline through CUDA buffers for rendezvous protocol
  * Added global VA infrastructure and memory region in absence of error handling
- * Improved performance nodes naming to be more informative
+ * Made protocol performance node names more informative
  * Enforced always running on the same thread in single thread mode
- * Used registration cache overhead from environment variable
- * Improved protocol selection by aggregating multiple performance segments
+ * Multiple improvements in protocols selection infrastructure
  * Added UCP_MEM_MAP_BLOCK API flag to enforce blocking memory mapping
- * Allowed up-to 64 lanes for systems with many transports or devices
+ * Allowed up-to 64 endpoints for systems with many transports or devices
  * Added rendezvous performance variants
  * Added usage tracker to worker
  * Added support for different variants of rendezvous protocol
  * Multiple protocol selection algorithm improvements
+ * Improved various logging messages
 #### UCT
  * Improved API documentation for memory domain flags
 #### RDMA CORE (IB, ROCE, etc.)
  * Enabled support for a broader range or DC initiator
  * Added DC dcs_hybrid policy
  * Reduced MLX5/DV stack size consumption
- * Improved MLX5 log level when allocations are unsupported, for both WC and NC
  * Added ODP support for verbs and mlx5dv
- * Added environment variable to enable setting DC initiator capacity
+ * Added environment variable to manage DC initiator capacity
  * Enabled DDP support on mlx5dv
  * Added support of cuda-managed memory on IB when ODP is available
  * Enabled use of implicit ODP with relaxed ordering
  * Improved GPUDirect detection support on IB
  * Increased DC initiator default count to 32 for performance optimization
  * Added ConnectX-8 device support to IB
- * Improved logs by suggesting to increase PF_LOG_BAR_SIZE when UAR allocation fails
  * Added support for subnet filter list on RoCE GID
  * Added a reason when a resource's lane is unreachable
  * Added IB MLX5 as a separate UCX modules with RPM
@@ -57,16 +52,16 @@
  * Added setting IB DEVX atomic_mode based on device capabilities
  * Removed DC keepalive
  * Implemented user-mode registration approach for XGVMI
+ * Improved various logging messages
 #### CUDA
+ * Added multi-node NVLINK support
+ * Added CUDA Fabric memory support with detection and allocation
  * Improved GDR latency estimations on AMD Milan systems
  * Improved reliability by detecting runtime/build GDR library version match
  * Added handling missing IPC capability when unpacking keys
  * Added caching for CUDA IPC memory pool import operation
  * Added GDR environment variables to optimize performance on Grace Hopper systems
- * Added CUDA Fabric memory support
- * Added multi-node NVLINK support
  * Improved peer accessible cache for CUDA IPC to be reentrant
- * Added detection and allocation of Fabric VMM memory
 #### UCS
  * Improve non-temporal data transfer implementation
  * Allowed configuration with wildcard prefix and name matching
@@ -80,10 +75,9 @@
  * Improved time units description
  * Added x86 non-temporal buffer transfers to skip cache
 #### UCM
- * Improved log on memory remap failure
  * Added memory hooks to track allocations by CUDA memory mapping functions
 #### Tools
- * Improved performance by increasing window size for put_bw and add get_bw
+ * Improved performance by increasing window size for put_bw and add get_bw in ucx_perftest
  * Added multi-send flag for receive operations in bandwidth benchmarks in ucx_perftest
  * Improved ucx_perftest uni-directional test with added fence
  * Improved ucx_perftest batch helper notes
@@ -92,17 +86,6 @@
 #### Architecture
  * Added CPU Model for MI300A
  * Added Fujitsu ARM specific values to ucx.conf
-#### AZP
- * Improved repository setup when running CI
- * Improved test_fuzzy reporting
- * Updated to CUDA version 12.5.1 for Fabric memory tests
- * Improved active IB HCA detection on CI
- * Added DRP release pipeline
- * Removed io_demo tests for ConnectX-4
- * Added JUCX tests on ARM
- * Improved verification and release processes
- * Added wire-compat testing with v1.17.x
- * Improved reports with added server-side log prints
 #### Build
  * Improved compiler error reporting with added flag
  * Improved coverity script to allow faster turnaround time
@@ -112,7 +95,6 @@
 #### Continuous Integration
  * Improved spell checking on generated files
  * Improved CI by making sure ASAN is actually loaded
- * Added codespell checking job
 #### GO
  * Added multi-send flag and user memh support in request params
 #### Packaging
@@ -196,11 +178,6 @@
  * Fixed out-of-memory test failure by limiting MEMIC allocation
  * Fixed heap-buffer overflow in AMO test
  * Fixed tests by increasing UD EP timeout when running under valgrind
-#### AZP
- * Fixed CUDA-related segfaults by adding host IPC capability to docker
- * Fixed CI failures by using different ports in one wire-compat job
- * Fixed various wire-compat test issue
- * Cleaned up git fetch command usage
 #### Build
  * Fixed using correct ASAN version for running tests
 #### Configuration
