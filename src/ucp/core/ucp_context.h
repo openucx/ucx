@@ -122,6 +122,8 @@ typedef struct ucp_context_config {
     unsigned                               max_rndv_lanes;
     /** RMA multi-lane support */
     unsigned                               max_rma_lanes;
+    /** Limit number of lanes for an endpoint */
+    unsigned                               ep_max_lanes;
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;

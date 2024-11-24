@@ -2933,9 +2933,8 @@ public:
     {
         m_err_count = 0;
 
-        // Set number of Eager/RNDV lanes to be 1 to create only 1 UCT endpoint
-        modify_config("MAX_EAGER_LANES", "1");
-        modify_config("MAX_RNDV_LANES", "1");
+        // Set number of lanes to be 1 to create only 1 UCT endpoint
+        modify_config("EP_MAX_LANES", "1");
 
         modify_config("RNDV_THRESH", "0");
 

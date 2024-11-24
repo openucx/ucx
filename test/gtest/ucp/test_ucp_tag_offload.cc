@@ -474,8 +474,7 @@ public:
         // The test checks that increase of active ifaces is handled
         // correctly. It needs to start with a single active iface, therefore
         // disable multi-rail.
-        modify_config("MAX_EAGER_LANES", "1");
-        modify_config("MAX_RNDV_LANES",  "1");
+        modify_config("EP_MAX_LANES", "1");
 
         test_ucp_tag_offload::init();
 

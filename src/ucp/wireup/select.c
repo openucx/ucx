@@ -362,20 +362,23 @@ ucp_wireup_init_select_info(double score, unsigned addr_index,
     select_info->priority   = priority;
 }
 
-static size_t
+static unsigned
 ucp_wireup_bw_max_lanes(const ucp_wireup_select_params_t *select_params)
 {
     return (select_params->address->dst_version < 18) ? UCP_MAX_LANES_LEGACY :
                                                         UCP_MAX_LANES;
 }
 
-static size_t
+static unsigned
 ucp_wireup_max_lanes(const ucp_wireup_select_params_t *select_params,
                      ucp_lane_type_t lane_type)
 {
-    return ucp_wireup_lane_type_is_fast_path(lane_type) ?
-                   UCP_MAX_FAST_PATH_LANES :
-                   ucp_wireup_bw_max_lanes(select_params);
+    ucp_worker_h worker = select_params->ep->worker;
+
+    return ucs_min(worker->context->config.ext.ep_max_lanes,
+                   ucp_wireup_lane_type_is_fast_path(lane_type) ?
+                           UCP_MAX_FAST_PATH_LANES :
+                           ucp_wireup_bw_max_lanes(select_params));
 }
 
 /**
