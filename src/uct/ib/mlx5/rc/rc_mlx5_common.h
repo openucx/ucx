@@ -411,7 +411,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_srq_topo_t         srq_topo;
         uint8_t                        log_ack_req_freq;
         uint8_t                        dp_ordering;
-        uint8_t                        force_ordering;
+        uint8_t                        dp_ordering_force;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;

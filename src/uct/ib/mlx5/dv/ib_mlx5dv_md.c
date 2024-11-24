@@ -3218,6 +3218,9 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
     if (ctx_dv.ooo_recv_wrs_caps.max_dct > 0) {
         md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     }
+#else
+    md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
 #endif
     return UCS_OK;
 }

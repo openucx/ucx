@@ -70,7 +70,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
    "\n"
    "cyclic            SRQ is organized as a continuous array of WQEs. Requires DEVX.\n"
-   "                  cannot be used with DDP enabled\n"
+   "                  cannot be used with DDP enabled.\n"
    "\n"
    "cyclic_emulated   SRQ is organized as a continuous array of WQEs, but HW\n"
    "                  treats it as a linked list. Doesn`t require DEVX."
@@ -627,11 +627,11 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
      * - Want to force enable or force disable adaptive routing but it is unavailable
      * - Want to force disable adaptive routing but force enabling DDP
      */
-    iface->config.force_ordering = ucs_ternary_auto_value_is_yes_or_no(
-                                           config->super.ar_enable) ||
-                                   (config->ddp_enable == UCS_YES);
+    iface->config.dp_ordering_force = ucs_ternary_auto_value_is_yes_or_no(
+                                              config->super.ar_enable) ||
+                                      (config->ddp_enable == UCS_YES);
 
-    if ((iface->config.force_ordering && !dp_ordering_ooo_force) ||
+    if ((iface->config.dp_ordering_force && !dp_ordering_ooo_force) ||
         ((config->super.ar_enable == UCS_NO) &&
          (config->ddp_enable == UCS_YES))) {
         goto failure;
@@ -1290,9 +1290,9 @@ void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
                                           uct_rc_mlx5_iface_common_t *iface)
 {
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
-                      UCS_BIT_IS_SET(iface->config.dp_ordering, 0));
+                      UCS_BIT_GET(iface->config.dp_ordering, 0));
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1,
-                      UCS_BIT_IS_SET(iface->config.dp_ordering, 1));
+                      UCS_BIT_GET(iface->config.dp_ordering, 1));
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
-                      iface->config.force_ordering);
+                      iface->config.dp_ordering_force);
 }
