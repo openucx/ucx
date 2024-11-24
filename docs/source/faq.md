@@ -272,10 +272,12 @@ Yes.
 
 #### What do I need to do to run UCX with adaptive routing?
 
-When adaptive routing is configured on an Infiniband fabric, it is enabled per SL 
-(IB Service Layer).  
-Setting `UCX_IB_SL=<sl-num>` will make UCX run on the given
-service level and utilize adaptive routing. 
+Setting UCX_IB_AR_ENABLE activates adaptive routing for both InfiniBand and
+RoCE clusters. For InfiniBand, it attempts to select the first Service Level
+(SL) with adaptive routing enabled. In the case of RoCE, adaptive routing is
+enabled if the hardware configuration supports it. If set to `yes` and the
+network does not support it, an error will occur. Conversely, if set to `try`,
+any lack of support will be silently ignored.
 
 <br/>
 

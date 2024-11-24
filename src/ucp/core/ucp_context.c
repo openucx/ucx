@@ -140,6 +140,13 @@ const char *ucp_object_versions[] = {
     [UCP_OBJECT_VERSION_LAST] = NULL
 };
 
+const char *ucp_extra_op_attr_flags_names[] = {
+    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_NO_IMM_CMPL)]    = "no_imm_cmpl",
+    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FAST_CMPL)]      = "fast_cmpl",
+    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)] = "force_imm_cmpl",
+    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_MULTI_SEND)]     = "multi_send",
+    NULL
+};
 
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
@@ -340,11 +347,15 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "and the resulting performance.",
    ucs_offsetof(ucp_context_config_t, estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"RNDV_FRAG_MEM_TYPE", "host",
-   "Memory type of fragments used for RNDV pipeline protocol.\n"
-   "Allowed memory types is one of: host, cuda, rocm, ze-host, ze-device",
-   ucs_offsetof(ucp_context_config_t, rndv_frag_mem_type),
-   UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
+  {"RNDV_FRAG_MEM_TYPE", NULL, "",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_mem_types),
+   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+  {"RNDV_FRAG_MEM_TYPES", "host,cuda",
+   "Memory types of fragments used for RNDV pipeline protocol.\n"
+   "Allowed memory types are: host, cuda, rocm, ze-host, ze-device",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_mem_types),
+   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type",
@@ -353,6 +364,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"RNDV_PIPELINE_SHM_ENABLE", "y",
    "Use two stage pipeline rendezvous protocol for intra-node GPU to GPU transfers",
    ucs_offsetof(ucp_context_config_t, rndv_shm_ppln_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"RNDV_PIPELINE_ERROR_HANDLING", "n",
+   "Allow using error handling protocol in the rendezvous pipeline protocol\n"
+   "even if invalidation workflow isn't supported",
+   ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
@@ -510,9 +526,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
         {NULL}
   )},
 
-  {"GVA_ENABLE", "n",
-   "Enable Global VA infrastructure",
-   ucs_offsetof(ucp_context_config_t, gva_enable), UCS_CONFIG_TYPE_BOOL},
+  {"GVA_ENABLE", "off",
+   "Enable Global VA infrastructure. Setting to 'auto' will try to enable, "
+   "but if error handling enabled will disable",
+   ucs_offsetof(ucp_context_config_t, gva_enable), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
   {"GVA_MLOCK", "y",
    "Lock memory with mlock() when using global VA MR",
@@ -521,6 +538,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"GVA_PREFETCH", "y",
    "Prefetch memory when using global VA MR",
    ucs_offsetof(ucp_context_config_t, gva_prefetch), UCS_CONFIG_TYPE_BOOL},
+
+  {"EXTRA_OP_ATTR_FLAGS", "",
+   "Additional send/receive operation flags that are added for each request"
+   "in addition to what is set explicitly by the user. \n"
+   "Possible values are: no_imm_cmpl, fast_cmpl, force_imm_cmpl, multi_send.",
+   ucs_offsetof(ucp_context_config_t, extra_op_attr_flags),
+   UCS_CONFIG_TYPE_BITMAP(ucp_extra_op_attr_flags_names)},
 
   {NULL}
 };
@@ -1609,7 +1633,7 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
                         context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                     }
 
-                    if (context->config.ext.gva_enable &&
+                    if ((context->config.ext.gva_enable != UCS_CONFIG_OFF) &&
                         (md_attr->gva_mem_types & UCS_BIT(mem_type))) {
                         context->gva_md_map[mem_type] |= UCS_BIT(md_index);
                     }
@@ -1736,6 +1760,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         context->gva_md_map[mem_type]           = 0;
         context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
+        context->alloc_md[mem_type].sys_dev     = UCS_SYS_DEVICE_ID_UNKNOWN;
         context->alloc_md[mem_type].initialized = 0;
     }
 

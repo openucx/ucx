@@ -16,7 +16,7 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.4-cuda11:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: fedora
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:2
       options: $(DOCKER_OPT_ARGS)
     - container: fedora34
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2

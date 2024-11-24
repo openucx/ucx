@@ -40,6 +40,8 @@
 
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW         0x100
 #define UCT_RC_MLX5_OPCODE_FLAG_TM          0x200
+#define UCT_RC_MLX5_OPCODE_FLAG_MMO_PUT     0x400
+#define UCT_RC_MLX5_OPCODE_FLAG_MMO_GET     0x800
 #define UCT_RC_MLX5_OPCODE_MASK             0xff
 #define UCT_RC_MLX5_SINGLE_FRAG_MSG(_flags) \
     (((_flags) & UCT_CB_PARAM_FLAG_FIRST) && !((_flags) & UCT_CB_PARAM_FLAG_MORE))
@@ -473,6 +475,13 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
 
 /* Max value for log_ack_req_freq field in QPC */
 #define UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ 8
+
+
+ucs_status_t
+uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
+                                 uint64_t tl_flag,
+                                 uct_rc_mlx5_iface_common_config_t *config,
+                                 const char *tl_name);
 
 
 #if IBV_HW_TM

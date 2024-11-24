@@ -307,4 +307,10 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_is_promoted(ucp_ep_h ep)
            ucs_usage_tracker_is_promoted(ep->worker->usage_tracker.handle, ep);
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_config_err_mode_eq(ucp_ep_h ep, ucp_err_handling_mode_t err_mode)
+{
+    return ucp_ep_config(ep)->key.err_mode == err_mode;
+}
+
 #endif

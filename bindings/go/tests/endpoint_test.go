@@ -8,9 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-	. "ucx"
+	"time"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"unsafe"
-	. "cuda"
+	. "github.com/openucx/ucx/bindings/go/src/cuda"
 )
 
 type TestEntity struct {
@@ -124,8 +125,11 @@ func TestUcpEpTag(t *testing.T) {
 
 		receiveMem := memoryAllocate(receiver, 4096, memType.recvMemType)
 
-		recvRequest, _ := receiver.worker.RecvTagNonBlocking(receiveMem, 4096, 1, 1, &UcpRequestParams{
-			Cb: func(request *UcpRequest, status UcsStatus, tagInfo *UcpTagRecvInfo) {
+		requestsWaiting := 2
+		requests := make(chan *UcpRequest, requestsWaiting)
+
+		receiver.worker.RecvTagNonBlocking(receiveMem, 4096, 1, 1, (&UcpRequestParams{}).SetCallback(
+			func(request *UcpRequest, status UcsStatus, tagInfo *UcpTagRecvInfo) {
 
 				if status != UCS_OK {
 					t.Fatalf("Request failed with status: %d", status)
@@ -135,21 +139,30 @@ func TestUcpEpTag(t *testing.T) {
 					t.Fatalf("Data length %d != received length %d", len(sendData), tagInfo.Length)
 				}
 
-				request.Close()
-			}})
+				requests <- request
+			}).SetMemType(memType.recvMemType))
 
-		sendRequest, _ := sender.ep.SendTagNonBlocking(1, sendMem, uint64(len(sendData)), &UcpRequestParams{
-			Cb: func(request *UcpRequest, status UcsStatus) {
+		sender.ep.SendTagNonBlocking(1, sendMem, uint64(len(sendData)), (&UcpRequestParams{}).SetCallback(
+			func(request *UcpRequest, status UcsStatus) {
 				if status != UCS_OK {
 					t.Fatalf("Request failed with status: %d", status)
 				}
 
-				request.Close()
-			}})
+				requests <- request
+			}).SetMemType(memType.senderMemType))
 
-		for (sendRequest.GetStatus() == UCS_INPROGRESS) || (recvRequest.GetStatus() == UCS_INPROGRESS) {
-			sender.worker.Progress()
-			receiver.worker.Progress()
+		timeout := time.After(time.Second)
+		for requestsWaiting > 0 {
+			select {
+			case request := <-requests:
+				request.Close()
+				requestsWaiting--
+			case <-timeout:
+				t.Fatalf("Timeout: No requests received")
+			default:
+				sender.worker.Progress()
+				receiver.worker.Progress()
+			}
 		}
 
 		if recvString := string(memoryGet(receiver)[:len(sendData)]); recvString != sendData {

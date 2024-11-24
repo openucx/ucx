@@ -170,6 +170,12 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Enable UMR optimization for XGVMI mkeys export/import.",
      ucs_offsetof(uct_ib_md_config_t, xgvmi_umr_enable), UCS_CONFIG_TYPE_BOOL},
 
+    {"ODP_MEM_TYPES", "host",
+     "Advertise non-blocking registration for these memory types, when ODP is "
+     "enabled.\n",
+     ucs_offsetof(uct_ib_md_config_t, ext.odp.mem_types),
+     UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
     {NULL}
 };
 
@@ -217,6 +223,11 @@ typedef struct {
     uint64_t                      access_flags;
     struct ibv_mr                 **mrs;
 } uct_ib_md_mem_reg_thread_t;
+
+typedef struct {
+    uct_ib_md_mem_reg_thread_t ctx;
+    int                        mr_count;
+} uct_ib_md_mem_reg_context_t;
 
 ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
@@ -276,13 +287,22 @@ uct_ib_md_print_mem_reg_err_msg(const char *title, void *address, size_t length,
     ucs_log(level, "%s", ucs_string_buffer_cstr(&msg));
 }
 
+static void uct_ib_dereg_mrs(struct ibv_mr **mrs, int count)
+{
+    int i;
+
+    for (i = 0; i < count; i++) {
+        (void)uct_ib_dereg_mr(mrs[i]);
+    }
+}
+
 void *uct_ib_md_mem_handle_thread_func(void *arg)
 {
+    int mr_idx                      = 0;
     uct_ib_md_mem_reg_thread_t *ctx = arg;
     size_t chunk_size               = ctx->md->config.mt_reg_chunk;
     ucs_time_t UCS_V_UNUSED t0      = ucs_get_time();
     void UCS_V_UNUSED *start        = ctx->address;
-    int mr_idx                      = 0;
     size_t length                   = ctx->first_mr_size;
     ucs_status_t status;
 
@@ -296,7 +316,7 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
         } else {
             status = uct_ib_dereg_mr(ctx->mrs[mr_idx]);
             if (status != UCS_OK) {
-                goto err;
+                ucs_warn("failed to deregister mr_idx=%d", mr_idx);
             }
         }
         ctx->address = UCS_PTR_BYTE_OFFSET(ctx->address, length);
@@ -309,13 +329,13 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
               (ctx->params != NULL) ? "reg_mr" : "dereg_mr",
               start, ctx->address, ctx->first_mr_size,
               ucs_time_to_usec(ucs_get_time() - t0));
-    return UCS_STATUS_PTR(UCS_OK);
+    return (void*)(intptr_t)mr_idx;
 
 err_dereg:
-    for (; mr_idx >= 0; --mr_idx) {
-        uct_ib_dereg_mr(ctx->mrs[mr_idx]);
-    }
-err:
+    uct_ib_dereg_mrs(ctx->mrs, mr_idx);
+
+    ucs_assertv(UCS_STATUS_IS_ERR(status),
+                "Cannot return in-progress memory thread handling");
     return UCS_STATUS_PTR(status);
 }
 
@@ -328,7 +348,8 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     size_t chunk_size = md->config.mt_reg_chunk;
     int thread_num_mrs, thread_num, thread_idx, mr_idx, cpu_id;
     ucs_sys_cpuset_t parent_set, thread_set;
-    uct_ib_md_mem_reg_thread_t *ctxs, *ctx;
+    uct_ib_md_mem_reg_context_t *context;
+    uct_ib_md_mem_reg_thread_t *ctx;
     char UCS_V_UNUSED affinity_str[64];
     pthread_attr_t attr;
     ucs_status_t status;
@@ -353,8 +374,8 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
               ucs_make_affinity_str(&parent_set, affinity_str,
                                     sizeof(affinity_str)));
 
-    ctxs = ucs_calloc(thread_num, sizeof(*ctxs), "ib mr ctxs");
-    if (ctxs == NULL) {
+    context = ucs_calloc(thread_num, sizeof(*context), "ib mr context");
+    if (context == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -369,7 +390,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
          * get proportional amount */
         thread_num_mrs    = ucs_div_round_up(mr_num - mr_idx,
                                              thread_num - thread_idx);
-        ctx               = &ctxs[thread_idx];
+        ctx               = &context[thread_idx].ctx;
         ctx->md           = md;
         ctx->address      = UCS_PTR_BYTE_OFFSET(address, offset);
         ctx->params       = params;
@@ -383,7 +404,6 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
         ucs_assertv((ctx->address == address) || (padding == 0),
                     "thread_idx=%d address=%p padding=%zu",
                     thread_idx, address, padding);
-
         ctx->length        = (thread_num_mrs - 1) * chunk_size +
                              ctx->first_mr_size;
         ctx->length        = ucs_min(ctx->length, length - offset);
@@ -414,23 +434,26 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     }
 
     for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
-        ctx = &ctxs[thread_idx];
+        ctx = &context[thread_idx].ctx;
         pthread_join(ctx->thread, &thread_status);
+
         if (UCS_PTR_IS_ERR(thread_status)) {
             status = UCS_PTR_STATUS(thread_status);
+            context[thread_idx].mr_count = 0;
+        } else {
+            context[thread_idx].mr_count = (int)(intptr_t)thread_status;
         }
     }
 
-    ucs_free(ctxs);
+    if ((status != UCS_OK) && (params != NULL)) {
+        for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
+            uct_ib_dereg_mrs(context[thread_idx].ctx.mrs,
+                             context[thread_idx].mr_count);
+        }
+    }
+
+    ucs_free(context);
     pthread_attr_destroy(&attr);
-
-    if (status != UCS_OK) {
-        for (mr_idx = 0; mr_idx < mr_num; mr_idx++) {
-            /* coverity[check_return] */
-            uct_ib_dereg_mr(mrs[mr_idx]);
-        }
-    }
-
     return status;
 }
 
@@ -581,7 +604,8 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
     memh->rkey = UCT_IB_INVALID_MKEY;
 
     if ((mem_flags & UCT_MD_MEM_FLAG_NONBLOCK) && (length > 0) &&
-        (md->reg_nonblock_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
+        (md->reg_nonblock_mem_types != 0)) {
+        /* Registration will fail if memory does not actually support it */
         memh->flags |= UCT_IB_MEM_FLAG_ODP;
     }
 
@@ -594,11 +618,15 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
         memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_RMA;
     }
 
+    if (mem_flags & UCT_MD_MEM_GVA) {
+        memh->flags |= UCT_IB_MEM_FLAG_GVA;
+    }
+
     *memh_p = memh;
     return UCS_OK;
 }
 
-uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh)
+uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order)
 {
     uint64_t access_flags = UCT_IB_MEM_ACCESS_FLAGS;
 
@@ -606,7 +634,7 @@ uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh)
         access_flags |= IBV_ACCESS_ON_DEMAND;
     }
 
-    if (md->relaxed_order) {
+    if (relaxed_order) {
         access_flags |= IBV_ACCESS_RELAXED_ORDERING;
     }
 
@@ -633,7 +661,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     }
 
     memh         = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
-    access_flags = uct_ib_memh_access_flags(md, &memh->super);
+    access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order);
 
     status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
                            &mr_default);
@@ -793,14 +821,11 @@ ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
                                        uct_md_resource_desc_t **resources_p,
                                        unsigned *num_resources_p)
 {
-    UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
     int num_resources = 0;
     uct_md_resource_desc_t *resources;
     struct ibv_device **device_list;
     ucs_status_t status;
     int i, num_devices;
-
-    UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 
     /* Get device list from driver */
     device_list = ibv_get_device_list(&num_devices);
@@ -1196,6 +1221,35 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
 #endif
 }
 
+int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
+{
+    if (IBV_ACCESS_ON_DEMAND == 0) {
+        *reason_ptr = "IBV_ACCESS_ON_DEMAND is not supported";
+        return 0;
+    }
+
+    if (!IBV_DEVICE_HAS_ODP(&md->dev)) {
+        *reason_ptr = "device does not support IBV_ACCESS_ON_DEMAND";
+        return 0;
+    }
+
+    return 1;
+}
+
+void uct_ib_md_check_odp(uct_ib_md_t *md)
+{
+    const char *device_name = uct_ib_device_name(&md->dev);
+    const char *reason;
+
+    if (!uct_ib_md_check_odp_common(md, &reason)) {
+        ucs_debug("%s: ODP is disabled because %s", device_name, reason);
+        return;
+    }
+
+    md->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    ucs_debug("%s: ODP is supported, version 1", device_name);
+}
+
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
                                    const uct_ib_md_config_t *md_config)
@@ -1236,8 +1290,10 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         md->check_subnet_filter = 1;
     }
 
+    md->reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                        md->reg_nonblock_mem_types;
+
     /* Check for GPU-direct support */
-    md->reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
         /* Check peer memory driver is loaded, different driver versions use 
          * different paths */
@@ -1454,6 +1510,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 
     uct_ib_md_ece_check(md);
     uct_ib_md_parse_relaxed_order(md, md_config, 0);
+    uct_ib_md_check_odp(md);
 
     *p_md = md;
     return UCS_OK;
@@ -1517,6 +1574,7 @@ uct_component_t uct_ib_component = {
 
 void UCS_F_CTOR uct_ib_init()
 {
+    UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
     ssize_t i;
 
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(verbs).list);
@@ -1525,6 +1583,8 @@ void UCS_F_CTOR uct_ib_init()
     for (i = 0; i < ucs_static_array_size(uct_ib_tls); i++) {
         uct_tl_register(&uct_ib_component, uct_ib_tls[i]);
     }
+
+    UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 }
 
 void UCS_F_DTOR uct_ib_cleanup()

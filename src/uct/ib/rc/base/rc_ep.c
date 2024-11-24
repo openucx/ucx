@@ -236,32 +236,6 @@ void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
 #endif
 }
 
-static UCS_F_NOINLINE void
-uct_rc_ep_send_op_completed_iov(uct_rc_iface_send_op_t *op)
-{
-#ifndef NVALGRIND
-    struct iovec *iov_entry = op->iov;
-    size_t length           = 0;
-
-    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IOV);
-
-    if (iov_entry == NULL) {
-        return;
-    }
-
-    while (length < op->length) {
-        /* The memory might not be HOST */
-        VALGRIND_MAKE_MEM_DEFINED_IF_ADDRESSABLE(iov_entry->iov_base,
-                                                 iov_entry->iov_len);
-        length += iov_entry->iov_len;
-        ++iov_entry;
-    }
-
-    ucs_free(op->iov);
-    op->iov = NULL;
-#endif
-}
-
 static UCS_F_ALWAYS_INLINE void
 uct_rc_op_release_get_bcopy(uct_rc_iface_send_op_t *op)
 {
@@ -273,15 +247,10 @@ uct_rc_op_release_get_bcopy(uct_rc_iface_send_op_t *op)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_op_release_get_zcopy(uct_rc_iface_send_op_t *op)
+uct_rc_op_release_reads_get_zcopy(uct_rc_iface_send_op_t *op)
 {
     op->iface->tx.reads_completed += op->length;
-
-    if (RUNNING_ON_VALGRIND) {
-        uct_rc_ep_send_op_completed_iov(op);
-    }
-
-    op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_IOV;
+    uct_rc_op_release_iov_get_zcopy(op);
 }
 
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
@@ -321,7 +290,7 @@ void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp)
 {
-    uct_rc_op_release_get_zcopy(op);
+    uct_rc_op_release_reads_get_zcopy(op);
     uct_rc_ep_send_op_completion_handler(op, resp);
 }
 
@@ -504,7 +473,7 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                 uct_rc_op_release_get_bcopy(op);
                 uct_rc_iface_update_reads(iface);
             } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
-                uct_rc_op_release_get_zcopy(op);
+                uct_rc_op_release_reads_get_zcopy(op);
                 uct_rc_iface_update_reads(iface);
             }
         }

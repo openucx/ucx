@@ -1827,7 +1827,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_init_select_flags(&iface_rma_flags, 0, 0);
     ucp_wireup_init_select_flags(&peer_rma_flags, 0, 0);
 
-    if (ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
+    if ((ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
+        (context->config.ext.max_rndv_lanes == 0)) {
         return UCS_OK;
     }
 
@@ -2310,8 +2311,8 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
     for (lane = 0; lane < key->num_lanes; ++lane) {
         rsc_index = key->lanes[lane].rsc_index;
         if ((rsc_index != UCP_NULL_RESOURCE) &&
-            (worker->context->tl_rscs[rsc_index].tl_rsc.dev_type ==
-             UCT_DEVICE_TYPE_SHM)) {
+            !(ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags &
+              UCT_IFACE_FLAG_INTER_NODE)) {
             key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
             return UCS_OK;
         }

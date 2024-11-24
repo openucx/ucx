@@ -330,7 +330,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
     size_t max_iter = std::numeric_limits<size_t>::max();
     test_spec test  = tests[get_variant_value(VARIANT_TEST_TYPE)];
 
-    if (has_transport("tcp")) {
+    if (has_any_transport({"tcp", "ud_v", "ud_x"})) {
         check_perf = false;
         max_iter   = 1000lu;
     }

@@ -11,6 +11,7 @@
 
 #include <ucp/api/ucp_def.h>
 #include <ucp/core/ucp_ep.h>
+#include <ucp/dt/dt.h>
 #include <uct/api/uct.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
@@ -35,8 +36,9 @@ enum {
     /*
      * Memory handle was imported and points to some peer's memory buffer.
      */
-    UCP_MEMH_FLAG_IMPORTED = UCS_BIT(0),
-    UCP_MEMH_FLAG_MLOCKED  = UCS_BIT(1),
+    UCP_MEMH_FLAG_IMPORTED     = UCS_BIT(0),
+    UCP_MEMH_FLAG_MLOCKED      = UCS_BIT(1),
+    UCP_MEMH_FLAG_HAS_AUTO_GVA = UCS_BIT(2),
 };
 
 
@@ -112,6 +114,8 @@ typedef struct {
 
 extern ucp_mem_dummy_handle_t ucp_mem_dummy_handle;
 
+extern const ucp_memory_info_t ucp_mem_info_unknown;
+
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
@@ -158,7 +162,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,
-                                      ucp_md_index_t md_index, ucp_mem_h *memh_p,
+                                      ucp_md_index_t md_index, ucp_mem_h memh,
                                       uct_rkey_bundle_t *rkey_bundle);
 
 void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucp_md_index_t md_index,
@@ -184,19 +188,26 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
 
 void ucp_mem_rcache_cleanup(ucp_context_h context);
 
+void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
+
 /**
  * Get memory domain index that is used to allocate certain memory type.
  *
- * @param [in]  context UCP context containing memory domain indexes to use for
- *                      the memory allocation.
- * @param [out] md_idx  Index of the memory domain that is used to allocate host
- *                      memory.
+ * @param [in]  context        UCP context containing memory domain indexes to
+ *                             use for the memory allocation.
+ * @param [in]  alloc_mem_type Memory type to get allocation index and sys
+ *                             device for.
+ * @param [out] md_idx         Index of the memory domain that is used to
+ *                             allocate memory.
+ * @param [out] sys_dev        Device id on which the memory was allocated.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
 ucs_status_t
-ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idxi,
-                          ucs_memory_type_t alloc_mem_type);
+ucp_mm_get_alloc_md_index(ucp_context_h context,
+                          ucs_memory_type_t alloc_mem_type,
+                          ucp_md_index_t *md_idx,
+                          ucs_sys_device_t *sys_dev);
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)

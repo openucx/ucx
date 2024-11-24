@@ -154,9 +154,7 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 {
     ucs_assert(req->send.rndv.rkey != NULL);
     ucp_rkey_destroy(req->send.rndv.rkey);
-#if UCS_ENABLE_ASSERT
     req->send.rndv.rkey = NULL;
-#endif
 }
 
 static UCS_F_ALWAYS_INLINE void
