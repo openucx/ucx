@@ -135,10 +135,10 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),
      UCS_CONFIG_TYPE_UINT},
 
-    {"DCIS_INITIAL_CAPACITY", "1",
+    {"DCIS_INITIAL_CAPACITY", "auto",
      "Initial capacity of DCIs array.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dcis_initial_capacity),
-     UCS_CONFIG_TYPE_UINT},
+     UCS_CONFIG_TYPE_ULUNITS},
 
     {NULL}
 };
@@ -284,34 +284,22 @@ static void uct_dc_mlx5_asan_cleanup_old_dcis_buffer(uct_dc_mlx5_iface_t *iface)
 void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface)
 {
 #ifdef __SANITIZE_ADDRESS__
-    size_t buffer_size       = sizeof(uct_dc_dci_t) *
-                               ucs_array_capacity(&iface->tx.dcis);
-    size_t num_dcis          = ucs_array_length(&iface->tx.dcis);
-    uct_dc_dci_t *old_buffer = ucs_array_begin(&iface->tx.dcis);
-    uct_dc_dci_t *new_buffer = ucs_malloc(buffer_size,
-                                          "ASAN relocated dcis buffer");
-    uct_dc_dci_t *old_dci, *new_dci;
-    int i;
-
-    uct_dc_mlx5_iface_dcis_array_copy(new_buffer, old_buffer, num_dcis);
+    size_t buffer_size, num_dcis;
+    uct_dc_dci_t *old_buffer, *new_buffer;
 
     if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
-        /* DCIs arbiter might be scheduled in tx_waitq. */
-
-        ucs_arbiter_dump(uct_dc_mlx5_iface_tx_waitq(iface), stderr);
-        for (i = 0; i < num_dcis; i++) {
-            old_dci = &old_buffer[i];
-            new_dci = &new_buffer[i];
-            if (uct_dc_mlx5_is_dci_valid(old_dci)) {
-                ucs_arbiter_group_desched(uct_dc_mlx5_iface_tx_waitq(iface),
-                                          &old_dci->arb_group);
-                ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface),
-                                           &new_dci->arb_group);
-            }
-        }
-
-        ucs_arbiter_dump(uct_dc_mlx5_iface_tx_waitq(iface), stderr);
+        /* DCIs arbiter group elements might be scheduled in tx_waitq. 
+           TODO: update tx_waitq to contain the new DCIs arbiter groups. 
+        */
+        return;
     }
+
+    buffer_size = sizeof(uct_dc_dci_t) * ucs_array_capacity(&iface->tx.dcis);
+    num_dcis    = ucs_array_length(&iface->tx.dcis);
+    old_buffer  = ucs_array_begin(&iface->tx.dcis);
+    new_buffer  = ucs_malloc(buffer_size, "ASAN relocated dcis buffer");
+
+    uct_dc_mlx5_iface_dcis_array_copy(new_buffer, old_buffer, num_dcis);
 
     ucs_array_begin(&iface->tx.dcis) = new_buffer;
     ASAN_POISON_MEMORY_REGION(old_buffer, buffer_size);
@@ -1643,9 +1631,20 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     self->tx.policy = config->tx_policy;
     self->tx.ndci   = uct_dc_mlx5_iface_is_hw_dcs(self) ? 1 : config->ndci;
-    self->tx.dcis_initial_capacity =
-            ucs_min(config->dcis_initial_capacity,
-                    self->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
+    if (config->dcis_initial_capacity == UCS_ULUNITS_AUTO) {
+        if (uct_dc_mlx5_iface_is_dci_rand(self)) {
+            /* TODO: remove when splicing arb_group upon dcis array resize */
+            self->tx.dcis_initial_capacity = self->tx.ndci *
+                                             UCT_DC_MLX5_IFACE_MAX_DCI_POOLS;
+        } else {
+            self->tx.dcis_initial_capacity = 1;
+        }
+    } else {
+        self->tx.dcis_initial_capacity =
+                ucs_min(config->dcis_initial_capacity,
+                        self->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
+    }
+
     self->tx.hybrid_hw_dci = uct_dc_mlx5_iface_is_hybrid(self) ?
                                      UCT_DC_MLX5_HW_DCI_INDEX :
                                      -1;
