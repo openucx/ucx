@@ -205,7 +205,11 @@ struct ucp_request {
                             } header UCS_S_PACKED; /* packed to avoid 32-bit
                                                       padding */
                             uint16_t       am_id;
+                            /* API flags from @ref ucp_send_am_flags enum */
                             uint16_t       flags;
+                            /* Internal implementation flags from @ref
+                             * ucp_request_am_internal_flags enum */
+                            uint8_t        internal_flags;
                         } am;
                     };
                 } msg_proto;

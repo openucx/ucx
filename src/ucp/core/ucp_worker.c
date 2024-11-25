@@ -2359,17 +2359,11 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
         /* UCT_IFACE_FLAG_AM_BCOPY is required by UCP AM feature, therefore
          * at least one interface should support it.
          * Make sure that except user header single UCT fragment can fit
-         * first fragment header and footer and at least 1 byte of data. It is
-         * needed to correctly use generic AM based multi-fragment protocols,
-         * which expect some amount of payload to be packed to the first
-         * fragment.
-         * TODO: fix generic AM based multi-fragment protocols, so that this
-         * trick is not needed.
-         */
+         * first fragment header and footer. */
         if (if_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
             max_uct_fragment = ucs_max(if_attr->cap.am.max_bcopy,
-                                       max_ucp_header - 1) -
-                               max_ucp_header - 1;
+                                       max_ucp_header) -
+                               max_ucp_header;
             max_am_header    = ucs_min(max_am_header, max_uct_fragment);
         }
     }
