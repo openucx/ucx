@@ -24,20 +24,17 @@
  * Enforced always running on the same thread in single thread mode
  * Multiple improvements in protocols selection infrastructure
  * Added UCP_MEM_MAP_BLOCK API flag to enforce blocking memory mapping
- * Allowed up-to 64 endpoints for systems with many transports or devices
- * Added rendezvous performance variants
+ * Allowed up-to 64 endpoint lanes for systems with many transports or devices
  * Added usage tracker to worker
- * Added support for different variants of rendezvous protocol
  * Multiple protocol selection algorithm improvements
  * Improved various logging messages
 #### UCT
  * Improved API documentation for memory domain flags
 #### RDMA CORE (IB, ROCE, etc.)
- * Enabled support for a broader range or DC initiator
+ * Added environment variable to manage DC initiator capacity
  * Added DC dcs_hybrid policy
  * Reduced MLX5/DV stack size consumption
  * Added ODP support for verbs and mlx5dv
- * Added environment variable to manage DC initiator capacity
  * Enabled DDP support on mlx5dv
  * Added support of cuda-managed memory on IB when ODP is available
  * Enabled use of implicit ODP with relaxed ordering
@@ -45,12 +42,12 @@
  * Increased DC initiator default count to 32 for performance optimization
  * Added ConnectX-8 device support to IB
  * Added support for subnet filter list on RoCE GID
- * Added a reason when a resource's lane is unreachable
- * Added IB MLX5 as a separate UCX modules with RPM
+ * Added a reason when a resource's lane is unreachable to request query info string
+ * Added IB MLX5 as a separate UCX module with RPM
  * Added initial GGA support
  * Added setting IB DEVX atomic_mode based on device capabilities
  * Removed DC keepalive
- * Implemented user-mode registration approach for XGVMI
+ * Optimized XGVMI flow using user-mode registration cache
  * Improved various logging messages
 #### CUDA
  * Added multi-node NVLINK support
@@ -68,7 +65,7 @@
  * Reduced stack size in topology detection code
  * Improved bitmaps configuration parsing with wider bitfield
  * Added options to set topology distance between devices
- * Improve VFS unix socket watch by using user private folder
+ * Optimized VFS unix socket watch by using user private folder
  * Added general subnet matching support infrastructure
  * Allowed user-based existing data copy when appending to array
  * Improved time units description
@@ -89,8 +86,6 @@
  * Improved compiler error reporting with added flag
  * Improved coverity script to allow faster turnaround time
  * Improved Intel Compiler detection and support
-#### Configuration
- * Implemented Grace config section filtered by CPU model
 #### Continuous Integration
  * Improved spell checking on generated files
  * Improved CI by making sure ASAN is actually loaded
@@ -160,7 +155,7 @@
  * Fixed buffer size potential overflow in ucx_perftest
  * Fixed missing address when packing memory keys on ucx_perftest
  * Fixed memory leak for endpoint report in ucx_info
- * Fixed build without openmp
+ * Fixed build without openmp in ucx_perftest
  * Fixed UCT device override on server side on ucx_perftest
 #### Tests
  * Fixed core dump issue upon exception in gtest initialization
