@@ -28,7 +28,7 @@ AS_IF([test "x$with_efa" != xno],
        have_efa=yes
        AC_CHECK_HEADER([infiniband/efadv.h], [], [have_efa=no])
        AC_CHECK_LIB([efa], [efadv_query_device],
-                    [AC_SUBST(LIB_EFA, [-lefa])],
+                    [AC_SUBST(EFA_LIB, [-lefa])],
                     [have_efa=no])
 
        AC_CHECK_DECL([EFADV_DEVICE_ATTR_CAPS_RDMA_READ],
