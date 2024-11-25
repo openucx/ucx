@@ -608,7 +608,7 @@ bool is_aws()
 
     if (!initialized) {
         const char *str = getenv("CLOUD_TYPE");
-        result          = str ? !strcmp(str, "aws") : false;
+        result          = (str != NULL) && !strcmp(str, "aws");
         initialized     = true;
     }
 
