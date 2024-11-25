@@ -15,8 +15,7 @@ libuct_ib_efa_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                             $(top_builddir)/src/uct/libuct.la \
                             $(top_builddir)/src/uct/ib/libuct_ib.la
 
-libuct_ib_efa_la_SOURCES  = ib_efa.c \
-                            ib_efa_md.c
+libuct_ib_efa_la_SOURCES  = ib_efa_md.c
 
 noinst_HEADERS            = ib_efa.h
 

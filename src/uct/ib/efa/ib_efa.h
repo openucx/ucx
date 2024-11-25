@@ -26,7 +26,7 @@ typedef struct uct_ib_efadv_md {
 
 static inline int uct_ib_efadv_has_rdma_read(const uct_ib_efadv_t *efadv)
 {
-#if HAVE_EFA_RDMA_READ
+#if HAVE_DECL_EFADV_DEVICE_ATTR_CAPS_RDMA_READ
     return !!(efadv->attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ);
 #else
     return 0;

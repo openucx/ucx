@@ -103,3 +103,13 @@ static uct_ib_md_ops_t uct_ib_efa_md_ops = {
 };
 
 UCT_IB_MD_DEFINE_ENTRY(efa, uct_ib_efa_md_ops);
+
+void UCS_F_CTOR uct_efa_init(void)
+{
+    ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(efa).list);
+}
+
+void UCS_F_DTOR uct_efa_cleanup(void)
+{
+    ucs_list_del(&UCT_IB_MD_OPS_NAME(efa).list);
+}
