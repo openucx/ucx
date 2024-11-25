@@ -1507,6 +1507,15 @@ void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
     ib_iface->config.reverse_sl = (uint8_t)ib_config->reverse_sl;
 }
 
+static ucs_status_t uct_ib_iface_destroy_comp_channel(uct_ib_iface_t *iface)
+{
+    if (iface->comp_channel != NULL) {
+        return ibv_destroy_comp_channel(iface->comp_channel);
+    }
+
+    return 0;
+}
+
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                     uct_ib_iface_ops_t *ops, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
@@ -1654,8 +1663,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     /* Address scope and size */
     if (uct_ib_iface_is_roce(self) || config->is_global ||
         uct_ib_grh_required(uct_ib_iface_port_attr(self)) ||
-        uct_ib_address_gid_is_global(&self->gid_info.gid) ||
         (uct_ib_iface_port_attr(self)->lid == 0) ||
+        uct_ib_address_gid_is_global(&self->gid_info.gid) ||
         /* check ADDR_TYPE for backward compatibility */
         (config->addr_type == UCT_IB_ADDRESS_TYPE_SITE_LOCAL) ||
         (config->addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL)) {
@@ -1677,9 +1686,7 @@ err_destroy_send_cq:
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
 err_destroy_comp_channel:
-    if (self->comp_channel != NULL) {
-        ibv_destroy_comp_channel(self->comp_channel);
-    }
+    (void)uct_ib_iface_destroy_comp_channel(self);
 err_cleanup:
     ucs_free(self->path_bits);
 err:
@@ -1695,12 +1702,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 
     UCS_STATS_NODE_FREE(self->stats);
 
-    if (self->comp_channel != NULL) {
-        ret = ibv_destroy_comp_channel(self->comp_channel);
-        if (ret != 0) {
-            ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m",
-                     ret);
-        }
+    ret = uct_ib_iface_destroy_comp_channel(self);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m",
+                 ret);
     }
 
     ucs_free(self->path_bits);
