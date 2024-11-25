@@ -144,7 +144,7 @@ void *mem_type_memset(void *dst, int value, size_t count)
 
 int check_mem_type_support(ucs_memory_type_t mem_type)
 {
-    switch (test_mem_type) {
+    switch (mem_type) {
     case UCS_MEMORY_TYPE_HOST:
         return 1;
     case UCS_MEMORY_TYPE_CUDA:
@@ -155,7 +155,7 @@ int check_mem_type_support(ucs_memory_type_t mem_type)
         return 0;
 #endif
     default:
-        fprintf(stderr, "Unsupported memory type: %d", test_mem_type);
+        fprintf(stderr, "Unsupported memory type: %d", mem_type);
         break;
     }
 

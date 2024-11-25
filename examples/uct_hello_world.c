@@ -287,7 +287,7 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
         if (test_mem_type != UCS_MEMORY_TYPE_CUDA) {
             return UCS_OK;
         } else {
-            fprintf(stderr, "AM short protocol doesn't support CUDA memory");
+            fprintf(stderr, "AM short protocol doesn't support CUDA memory\n");
         }
     }
 

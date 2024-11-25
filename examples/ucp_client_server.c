@@ -99,16 +99,16 @@ static struct {
  */
 static void usage(void);
 
-void buffer_free(ucp_dt_iov_t *iov)
+static void buffer_free(ucp_dt_iov_t *iov, size_t iov_size)
 {
     size_t idx;
 
-    for (idx = 0; idx < iov_cnt; idx++) {
+    for (idx = 0; idx < iov_size; idx++) {
         mem_type_free(iov[idx].buffer);
     }
 }
 
-int buffer_malloc(ucp_dt_iov_t *iov)
+static int buffer_malloc(ucp_dt_iov_t *iov)
 {
     size_t idx;
 
@@ -116,7 +116,7 @@ int buffer_malloc(ucp_dt_iov_t *iov)
         iov[idx].length = test_string_length;
         iov[idx].buffer = mem_type_malloc(iov[idx].length);
         if (iov[idx].buffer == NULL) {
-            buffer_free(iov);
+            buffer_free(iov, idx);
             return -1;
         }
     }
@@ -364,7 +364,7 @@ static int request_finalize(ucp_worker_h ucp_worker, test_req_t *request,
     }
 
 release_iov:
-    buffer_free(iov);
+    buffer_free(iov, iov_cnt);
     return ret;
 }
 
@@ -376,7 +376,7 @@ fill_request_param(ucp_dt_iov_t *iov, int is_client,
     CHKERR_ACTION(buffer_malloc(iov) != 0, "allocate memory", return -1;);
 
     if (is_client && (fill_buffer(iov) != 0)) {
-        buffer_free(iov);
+        buffer_free(iov, iov_cnt);
         return -1;
     }
 
