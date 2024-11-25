@@ -536,7 +536,9 @@ uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
                     cdesc->sn, &ret);
         if (ucs_unlikely((ret == UCS_KH_PUT_FAILED) ||
                          (ret == UCS_KH_PUT_KEY_PRESENT))) {
-            ucs_fatal("Failed to add cdesc to TX outstanding map (err=%d)",
+            ucs_fatal("failed to add cdesc ep=%p sn=%u self_skb=%p "
+                      "resent_skb=%p to tx outstanding map (err=%d)",
+                      cdesc->ep, cdesc->sn, cdesc->self_skb, cdesc->resent_skb,
                       ret);
         }
 
