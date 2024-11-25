@@ -200,7 +200,6 @@
 * Enabled short protocol for non-host memory types on empty messages
 * Improved the accuracy of performance estimation for empty messages by removing non-relevant overheads
 * Added RMA_ZCOPY_MAX_SEG_SIZE configuration parameter to allow modifying segment size for RMA-ZCOPY protocols
-* Added support for separate intra/inter-node rendezvous thresholds
 * Added support for minimal fragment size in rendezvous protocol
 * Added support for resetting request during send operation
 * Added UCX_PROTO_OVERHEAD configuration variable to allow setting protocol overheads
