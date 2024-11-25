@@ -2068,6 +2068,12 @@ unsigned ucp_ep_init_flags(const ucp_worker_h worker,
     return flags;
 }
 
+double ucp_wireup_adjusted_lat_multiplier(const ucs_linear_func_t *latency,
+                                          unsigned ep_init_flags)
+{
+    return (ep_init_flags & UCP_EP_INIT_FLAG_PROMOTED) ? 0 : latency->m;
+}
+
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface)
 {
     return wiface->worker->context->config.ext.proto_enable ?
@@ -2075,7 +2081,8 @@ double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface)
         wiface->attr.latency.c;
 }
 
-double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface)
+double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface,
+                                        unsigned ep_init_flags)
 {
     ucp_context_h context = wiface->worker->context;
     ucs_linear_func_t lat = wiface->attr.latency;
@@ -2083,6 +2090,8 @@ double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface)
     if (context->config.ext.proto_enable) {
         lat.c += wiface->distance.latency;
     }
+
+    lat.m = ucp_wireup_adjusted_lat_multiplier(&lat, ep_init_flags);
     return ucp_tl_iface_latency(context, &lat);
 }
 
