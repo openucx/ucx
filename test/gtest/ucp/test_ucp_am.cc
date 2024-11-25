@@ -1582,11 +1582,8 @@ private:
     }
 };
 
-/* Skip tests for ud_v and ud_x because of unstable reproducible failures during
- * roce on worker CI jobs. The test fails with invalid am_bcopy length. */
-UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
-                     is_proto_enabled() && has_any_transport({"ud_v", "ud_x"}),
-                     "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, short_bcopy_send, "ZCOPY_THRESH=-1",
+           "RNDV_THRESH=-1")
 {
     test_datatypes([&]() {
         test_am(1);
@@ -1595,9 +1592,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
     });
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, zcopy_send,
-                     is_proto_enabled() && has_any_transport({"ud_v", "ud_x"}),
-                     "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, zcopy_send, "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
 {
     skip_no_am_lane_caps(UCT_IFACE_FLAG_AM_ZCOPY, "am_zcopy is not supported");
     test_datatypes([&]() {
