@@ -228,20 +228,18 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
                 uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
             }
         }
+    } else {
+        for (it = kh_begin(&iface->tx.outstanding.map);
+             it != kh_end(&iface->tx.outstanding.map); ++it) {
+            if (!kh_exist(&iface->tx.outstanding.map, it)) {
+                continue;
+            }
 
-        return;
-    }
-
-    for (it = kh_begin(&iface->tx.outstanding.map);
-         it != kh_end(&iface->tx.outstanding.map); ++it) {
-        if (!kh_exist(&iface->tx.outstanding.map, it)) {
-            continue;
-        }
-
-        cdesc = kh_value(&iface->tx.outstanding.map, it);
-        if (cdesc->ep == ep) {
-            kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, it);
-            uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
+            cdesc = kh_value(&iface->tx.outstanding.map, it);
+            if (cdesc->ep == ep) {
+                kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, it);
+                uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
+            }
         }
     }
 
