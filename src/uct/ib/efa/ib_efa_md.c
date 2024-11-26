@@ -61,16 +61,11 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
-    uct_ib_device_configure(&md->super.dev);
-
-    md->super.dev.mr_access_flags = IBV_ACCESS_LOCAL_WRITE;
-    if (uct_ib_efadv_has_rdma_read(&md->dev_attr)) {
-        md->super.dev.mr_access_flags |= IBV_ACCESS_REMOTE_READ;
-    }
-
-    md->super.dev.max_inline_data       = md->dev_attr.inline_buf_size;
-    md->super.dev.ordered_send_comp     = 0;
-    md->super.dev.req_notify_cq_support = 0;
+    uct_ib_device_configure_params(&md->super.dev,
+                                   IBV_ACCESS_LOCAL_WRITE |
+                                   (uct_ib_efadv_has_rdma_read(&md->dev_attr)?
+                                    IBV_ACCESS_REMOTE_READ : 0),
+                                   md->dev_attr.inline_buf_size, 0, 0);
 
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {

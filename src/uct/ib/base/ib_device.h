@@ -466,6 +466,12 @@ ucs_status_t uct_ib_device_get_ah_cached(uct_ib_device_t *dev,
                                          struct ibv_ah_attr *ah_attr,
                                          struct ibv_ah **ah_p);
 
+void uct_ib_device_configure_params(uct_ib_device_t *dev,
+                                    uint64_t mr_access_flags,
+                                    uint32_t max_inline_data,
+                                    int ordered_send_comp,
+                                    int req_notify_cq_support);
+
 void uct_ib_device_configure(uct_ib_device_t *dev);
 
 int uct_ib_get_cqe_size(int cqe_size_min);
