@@ -23,6 +23,16 @@ uct_dc_mlx5_add_flush_remote(uct_dc_mlx5_ep_t *ep)
     ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE;
 }
 
+static UCS_F_ALWAYS_INLINE uint16_t
+uct_dc_mlx5_atomic_offset(uct_dc_mlx5_ep_t *ep)
+{
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_ATOMIC_OFFSET) {
+        return uct_ib_md_atomic_offset(ep->atomic_mr_id);
+    }
+
+    return 0;
+}
+
 static UCS_F_ALWAYS_INLINE size_t
 uct_dc_mlx5_set_dgram_seg(uct_ib_mlx5_txwq_t *txwq,
                           uct_dc_mlx5_iface_t *iface,
@@ -109,7 +119,7 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                               uint64_t compare_mask, uint64_t compare,
                               uint64_t swap_mask, uint64_t swap_add)
 {
-    uint16_t atomic_mr_offset = uct_ib_md_atomic_offset(ep->atomic_mr_id);
+    uint16_t atomic_mr_offset = uct_dc_mlx5_atomic_offset(ep);
     uint32_t ib_rkey          = uct_ib_resolve_atomic_rkey(rkey,
                                                            atomic_mr_offset,
                                                            &remote_addr);
@@ -465,7 +475,7 @@ uct_dc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uint16_t atomic_mr_offset  = uct_ib_md_atomic_offset(ep->atomic_mr_id);
+    uint16_t atomic_mr_offset  = uct_dc_mlx5_atomic_offset(ep);
     size_t av_size;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
@@ -495,7 +505,7 @@ ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
 #if HAVE_IBV_DM
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uint16_t atomic_mr_offset  = uct_ib_md_atomic_offset(ep->atomic_mr_id);
+    uint16_t atomic_mr_offset  = uct_dc_mlx5_atomic_offset(ep);
     ucs_status_t status;
     size_t av_size;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
@@ -535,7 +545,7 @@ ssize_t uct_dc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uint16_t atomic_mr_offset  = uct_ib_md_atomic_offset(ep->atomic_mr_id);
+    uint16_t atomic_mr_offset  = uct_dc_mlx5_atomic_offset(ep);
     uct_rc_iface_send_desc_t *desc;
     size_t length;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
@@ -559,7 +569,7 @@ ucs_status_t uct_dc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uint16_t atomic_mr_offset  = uct_ib_md_atomic_offset(ep->atomic_mr_id);
+    uint16_t atomic_mr_offset  = uct_dc_mlx5_atomic_offset(ep);
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     UCT_CHECK_IOV_SIZE(iovcnt, UCT_RC_MLX5_RMA_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE),
@@ -1246,6 +1256,10 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
         self->flags        |= UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY;
     } else {
         self->flush_rkey_hi = 0;
+    }
+
+    if (!(if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_NO_ATOMIC_OFFSET)) {
+        self->flags |= UCT_DC_MLX5_EP_FLAG_ATOMIC_OFFSET;
     }
 
     if ((iface->super.super.config.max_rd_atomic == 16) !=
