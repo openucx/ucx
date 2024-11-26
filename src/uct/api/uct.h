@@ -844,6 +844,17 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_GVA                  = UCS_BIT(11),
 
     /**
+     * Register a memory window: a shallow copy of some existing UCT memory
+     * handle, which can be used to access the same memory region. When created,
+     * the memory window inherits the original memh access flags and state, and
+     * takes ownership of the indirect keys of the original memory handle. The
+     * lifetime of the memory window is bound to the original memh, and the
+     * original memh cannot be destroyed until all its memory windows are
+     * destroyed.
+     */
+    UCT_MD_MEM_WINDOW               = UCS_BIT(12),
+
+    /**
      * Enable local and remote access for all operations.
      */
     UCT_MD_MEM_ACCESS_ALL           = (UCT_MD_MEM_ACCESS_REMOTE_PUT |

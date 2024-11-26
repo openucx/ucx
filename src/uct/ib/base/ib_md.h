@@ -73,6 +73,8 @@ enum {
 #endif
     UCT_IB_MEM_FLAG_GVA              = UCS_BIT(5), /**< The memory handle is a
                                                         GVA region */
+    UCT_IB_MEM_FLAG_MEM_WINDOW       = UCS_BIT(6), /**< The memory handle is a
+                                                        memory window */
 };
 
 enum {
@@ -430,5 +432,9 @@ ucs_status_t uct_ib_fork_init(const uct_ib_md_config_t *md_config,
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
                                unsigned mem_flags, size_t memh_base_size,
                                size_t mr_size, uct_ib_mem_t **memh_p);
+
+ucs_status_t uct_ib_memh_clone(uct_ib_md_t *md, const uct_ib_mem_t *src,
+                               size_t memh_base_size, size_t mr_size,
+                               uct_ib_mem_t **memh_p);
 
 #endif
