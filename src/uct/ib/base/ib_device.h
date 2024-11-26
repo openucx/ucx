@@ -241,7 +241,6 @@ typedef struct uct_ib_device {
     uint8_t                     req_notify_cq_support;
     uint8_t                     ordered_send_comp;
     uint64_t                    mr_access_flags;
-    uint16_t                    max_sq_sge;
     uint32_t                    max_inline_data;
 
     /* AH hash */

@@ -68,7 +68,6 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
         md->super.dev.mr_access_flags |= IBV_ACCESS_REMOTE_READ;
     }
 
-    md->super.dev.max_sq_sge            = md->dev_attr.max_sq_sge;
     md->super.dev.max_inline_data       = md->dev_attr.inline_buf_size;
     md->super.dev.ordered_send_comp     = 0;
     md->super.dev.req_notify_cq_support = 0;

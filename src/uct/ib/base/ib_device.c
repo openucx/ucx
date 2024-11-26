@@ -564,7 +564,6 @@ out:
 void uct_ib_device_configure(uct_ib_device_t *dev)
 {
     dev->mr_access_flags       = UCT_IB_MEM_ACCESS_FLAGS;
-    dev->max_sq_sge            = UINT16_MAX;
     dev->max_inline_data       = UINT32_MAX;
     dev->ordered_send_comp     = 1;
     dev->req_notify_cq_support = 1;

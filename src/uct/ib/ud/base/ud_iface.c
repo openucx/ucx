@@ -197,7 +197,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.cap.max_send_wr     = config->super.tx.queue_len;
     qp_init_attr.cap.max_recv_wr     = config->super.rx.queue_len;
     qp_init_attr.cap.max_send_sge    = ucs_min(config->super.tx.min_sge + 1,
-                                               dev->max_sq_sge);
+                                               IBV_DEV_ATTR(dev, max_sge));
     qp_init_attr.cap.max_recv_sge    = 1;
     qp_init_attr.cap.max_inline_data = ucs_min(config->super.tx.min_inline,
                                                dev->max_inline_data);
@@ -205,7 +205,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     ucs_diag("create QP: max_send_sge=%u (config=%u, dev=%u) "
              "max_inline_data=%uB (config=%zuB, dev=%uB) ",
              qp_init_attr.cap.max_send_sge,
-             config->super.tx.min_sge + 1, dev->max_sq_sge,
+             config->super.tx.min_sge + 1, IBV_DEV_ATTR(dev, max_sge),
              qp_init_attr.cap.max_inline_data,
              config->super.tx.min_inline, dev->max_inline_data);
 
@@ -734,7 +734,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
     }
 
     /* Make sure to have the minimum SGE to implement short protocols fully */
-    if (uct_ib_iface_device(&iface->super)->max_sq_sge < 4) {
+    if (IBV_DEV_ATTR(uct_ib_iface_device(&iface->super), max_sge) < 4) {
         iface_attr->cap.am.max_short = 0;
     } else {
         iface_attr->cap.am.max_short = uct_ib_iface_hdr_size(
