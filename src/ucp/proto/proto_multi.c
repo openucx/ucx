@@ -34,7 +34,7 @@ ucp_proto_multi_compare_tl_perf(const void *elem1, const void *elem2, void *arg)
 }
 
 static ucp_lane_map_t
-ucp_proto_multi_filter_slow_lanes(ucp_lane_index_t *lanes,
+ucp_proto_multi_filter_slow_lanes(const ucp_lane_index_t *lanes,
                                   ucp_proto_common_tl_perf_t *lanes_perf,
                                   ucp_lane_index_t num_lanes,
                                   ucp_lane_index_t max_lanes,
@@ -63,7 +63,7 @@ ucp_proto_multi_filter_slow_lanes(ucp_lane_index_t *lanes,
 }
 
 static ucp_proto_common_tl_perf_t
-ucp_proto_multi_accumulate_perf(ucp_lane_index_t *lanes,
+ucp_proto_multi_accumulate_perf(const ucp_lane_index_t *lanes,
                                 ucp_proto_common_tl_perf_t *lanes_perf,
                                 ucp_lane_map_t lane_map,
                                 double *max_frag_ratio)
@@ -115,13 +115,13 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
                           ucp_proto_common_tl_perf_t *acc_perf,
                           ucp_proto_multi_priv_t *mpriv)
 {
-    ucp_proto_common_tl_perf_t *lane_perf;
-    ucp_proto_multi_lane_priv_t *lpriv;
-    ucp_lane_index_t lane;
     size_t min_length     = 0;
     size_t max_frag       = 0;
     size_t min_end_offset = 0;
     uint32_t weight_sum   = 0;
+    ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_proto_multi_lane_priv_t *lpriv;
+    ucp_lane_index_t lane;
 
     mpriv->reg_md_map    = reg_md_map | params->initial_reg_md_map;
     mpriv->lane_map      = lane_map;
@@ -150,7 +150,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
         /* Make sure fragment is not zero */
         ucs_assert(max_frag > 0);
 
-        lpriv->max_frag    = max_frag;
+        lpriv->max_frag     = max_frag;
         acc_perf->max_frag += max_frag;
 
         /* Calculate lane weight as a fixed-point fraction */
@@ -213,7 +213,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
 
 static ucs_status_t
 ucp_proto_multi_single_lane_perf(const ucp_proto_multi_init_params_t *params,
-                                 ucp_proto_common_tl_perf_t *lane_perf,
+                                 const ucp_proto_common_tl_perf_t *lane_perf,
                                  ucp_proto_perf_node_t *perf_node,
                                  ucp_md_map_t reg_md_map, const char *perf_name,
                                  ucp_proto_perf_t *perf)
