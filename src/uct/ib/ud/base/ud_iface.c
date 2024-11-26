@@ -188,7 +188,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     uct_ud_iface_ops_t *ops = ucs_derived_of(self->super.ops, uct_ud_iface_ops_t);
     uct_ib_qp_attr_t qp_init_attr = {};
     struct ibv_qp_attr qp_attr;
-    static ucs_status_t status;
+    ucs_status_t status;
     int ret;
 
     qp_init_attr.qp_type             = IBV_QPT_UD;
