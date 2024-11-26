@@ -584,19 +584,35 @@ ucs_status_t uct_ib_mem_advise(uct_md_h uct_md, uct_mem_h memh, void *addr,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
-                               unsigned mem_flags, size_t memh_base_size,
-                               size_t mr_size, uct_ib_mem_t **memh_p)
+static uct_ib_mem_t *
+uct_ib_memh_alloc_internal(uct_ib_md_t *md, size_t memh_base_size,
+                           size_t mr_size, size_t *memh_size_p)
 {
     int num_mrs = md->relaxed_order ?
                           2 /* UCT_IB_MR_DEFAULT and UCT_IB_MR_STRICT_ORDER */ :
                           1 /* UCT_IB_MR_DEFAULT */;
     uct_ib_mem_t *memh;
 
-    memh = ucs_calloc(1, memh_base_size + (mr_size * num_mrs), "ib_memh");
+    *memh_size_p = memh_base_size + (mr_size * num_mrs);
+    memh = ucs_calloc(1, *memh_size_p, "ib_memh");
     if (memh == NULL) {
         ucs_error("%s: failed to allocated memh struct",
                   uct_ib_device_name(&md->dev));
+        return NULL;
+    }
+
+    return memh;
+}
+
+ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
+                               unsigned mem_flags, size_t memh_base_size,
+                               size_t mr_size, uct_ib_mem_t **memh_p)
+{
+    uct_ib_mem_t *memh;
+    size_t memh_size;
+
+    memh = uct_ib_memh_alloc_internal(md, memh_base_size, mr_size, &memh_size);
+    if (memh == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -622,6 +638,23 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
         memh->flags |= UCT_IB_MEM_FLAG_GVA;
     }
 
+    *memh_p = memh;
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_memh_clone(uct_ib_md_t *md, const uct_ib_mem_t *src,
+                               size_t memh_base_size, size_t mr_size,
+                               uct_ib_mem_t **memh_p)
+{
+    uct_ib_mem_t *memh;
+    size_t memh_size;
+
+    memh = uct_ib_memh_alloc_internal(md, memh_base_size, mr_size, &memh_size);
+    if (memh == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    memcpy(memh, src, memh_size);
     *memh_p = memh;
     return UCS_OK;
 }
