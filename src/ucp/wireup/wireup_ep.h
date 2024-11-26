@@ -32,7 +32,10 @@ enum {
     UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID   = UCS_BIT(3),
 
     /* Indicates that aux_ep is CONNECT_TO_EP */
-    UCP_WIREUP_EP_FLAG_AUX_P2P          = UCS_BIT(4)
+    UCP_WIREUP_EP_FLAG_AUX_P2P          = UCS_BIT(4),
+
+    /* Flush outstanding messages */
+    UCP_WIREUP_EP_FLAG_FLUSH_REQUIRED   = UCS_BIT(5)
 };
 
 
@@ -111,9 +114,14 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep,
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 
-uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep);
+uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep,
+                                      ucs_queue_head_t *pending_queue);
 
-int ucp_wireup_ep_is_next_ep_active(ucp_wireup_ep_t *wireup_ep);
+static inline int ucp_wireup_ep_is_next_ep_active(ucp_wireup_ep_t *wireup_ep)
+{
+    ucs_assert(wireup_ep->super.uct_ep != NULL);
+    return wireup_ep->aux_ep == NULL;
+}
 
 void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep);
 

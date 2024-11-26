@@ -159,6 +159,8 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
                                  ucp_proto_select_elem_t *select_elem);
 
 
+int ucp_proto_select_is_rndv_op(const ucp_proto_select_param_t *select_param);
+
 void ucp_proto_select_write_info(
         ucp_worker_h worker,
         const ucp_proto_select_init_protocols_t *proto_init,

@@ -90,14 +90,16 @@ ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
 {
     ucp_ep_flags_t UCS_V_UNUSED exp_ep_flags = UCP_EP_FLAG_ON_MATCH_CTX;
     ucs_conn_match_elem_t *conn_match;
+    ucp_ep_match_conn_sn_t xored_sn;
     ucp_ep_h ep;
 
     if (conn_queue_type == UCS_CONN_MATCH_QUEUE_UNEXP) {
         exp_ep_flags |= UCP_EP_FLAG_REMOTE_ID;
     }
 
+    xored_sn   = conn_sn ^ (dest_uuid == worker->uuid);
     conn_match = ucs_conn_match_get_elem(&worker->conn_match_ctx, &dest_uuid,
-                                         (ucs_conn_sn_t)conn_sn,
+                                         (ucs_conn_sn_t)xored_sn,
                                          conn_queue_type, 1);
     if (conn_match == NULL) {
         return NULL;
