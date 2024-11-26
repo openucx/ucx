@@ -361,8 +361,11 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
 
 void uct_ud_iface_vfs_refresh(uct_iface_h iface);
 
-void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
-                                  int is_async);
+void uct_ud_iface_send_completion_ordered(uct_ud_iface_t *iface, uint16_t sn,
+                                          int is_async);
+
+void uct_ud_iface_send_completion_unordered(uct_ud_iface_t *iface,
+                                            uint16_t sn, int is_async);
 
 unsigned
 uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep);

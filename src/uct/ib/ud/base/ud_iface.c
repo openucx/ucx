@@ -1091,24 +1091,27 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
 
 }
 
-void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
-                                  int is_async)
+void uct_ud_iface_send_completion_ordered(uct_ud_iface_t *iface, uint16_t sn,
+                                          int is_async)
 {
     uct_ud_ctl_desc_t *cdesc;
-    khiter_t it;
+    ucs_queue_for_each_extract(cdesc, &iface->tx.outstanding.queue, queue,
+                               UCS_CIRCULAR_COMPARE16(cdesc->sn, <=, sn)) {
+        uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
+    }
+}
 
-    if (iface->tx.ordered_send_comp) {
-        ucs_queue_for_each_extract(cdesc, &iface->tx.outstanding.queue, queue,
-                                   UCS_CIRCULAR_COMPARE16(cdesc->sn, <=, sn)) {
-            uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
-        }
-    } else {
-        it = kh_get(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, sn);
-        if (ucs_likely(it != kh_end(&iface->tx.outstanding.map))) {
-            cdesc = kh_value(&iface->tx.outstanding.map, it);
-            uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
-            kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, it);
-        }
+void uct_ud_iface_send_completion_unordered(uct_ud_iface_t *iface, uint16_t sn,
+                                            int is_async)
+{
+    khiter_t it = kh_get(uct_ud_iface_ctl_desc_hash,
+                         &iface->tx.outstanding.map, sn);
+    uct_ud_ctl_desc_t *cdesc;
+
+    if (ucs_likely(it != kh_end(&iface->tx.outstanding.map))) {
+        cdesc = kh_value(&iface->tx.outstanding.map, it);
+        uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
+        kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, it);
     }
 }
 
