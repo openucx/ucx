@@ -179,7 +179,7 @@ public:
             EXPECT_TRUE(ah_attr.is_global);
         } else if (iface->gid_info.gid.global.subnet_prefix == gid.global.subnet_prefix) {
             /* in case of subnets are same - ah_attr depend from forced/nonforced GRH */
-            EXPECT_TRUE(!ah_attr.is_global || ucs::is_aws());
+            EXPECT_EQ(ucs::is_aws(), ah_attr.is_global);
         } else if (iface->gid_info.gid.global.subnet_prefix != gid.global.subnet_prefix) {
             /* in case of subnets are different - ah_attr should use GRH */
             EXPECT_TRUE(ah_attr.is_global);

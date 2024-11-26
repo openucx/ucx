@@ -196,23 +196,18 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.sq_sig_all          = 0;
     qp_init_attr.cap.max_send_wr     = config->super.tx.queue_len;
     qp_init_attr.cap.max_recv_wr     = config->super.rx.queue_len;
-    qp_init_attr.cap.max_send_sge    = config->super.tx.min_sge + 1;
+    qp_init_attr.cap.max_send_sge    = ucs_min(config->super.tx.min_sge + 1,
+                                               dev->max_sq_sge);
     qp_init_attr.cap.max_recv_sge    = 1;
-    qp_init_attr.cap.max_inline_data = config->super.tx.min_inline;
+    qp_init_attr.cap.max_inline_data = ucs_min(config->super.tx.min_inline,
+                                               dev->max_inline_data);
 
-    if (qp_init_attr.cap.max_inline_data > dev->max_inline_data) {
-        ucs_diag("create QP: TX inline: using device cap %uB (configured %uB)",
-                 dev->max_inline_data, qp_init_attr.cap.max_inline_data);
-
-        qp_init_attr.cap.max_inline_data = dev->max_inline_data;
-    }
-
-    if (qp_init_attr.cap.max_send_sge > dev->max_sq_sge) {
-        ucs_diag("create QP: max_sq_sge: using device cap %d (configured %u)",
-                 dev->max_sq_sge, qp_init_attr.cap.max_send_sge);
-
-        qp_init_attr.cap.max_send_sge = dev->max_sq_sge;
-    }
+    ucs_diag("create QP: max_send_sge=%u (config=%u, dev=%u) "
+             "max_inline_data=%uB (config=%zuB, dev=%uB) ",
+             qp_init_attr.cap.max_send_sge,
+             config->super.tx.min_sge + 1, dev->max_sq_sge,
+             qp_init_attr.cap.max_inline_data,
+             config->super.tx.min_inline, dev->max_inline_data);
 
     status = ops->create_qp(&self->super, &qp_init_attr, &self->qp);
     if (status != UCS_OK) {
@@ -515,7 +510,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
         self->async.tick = ucs_time_from_sec(config->event_timer_tick);
     }
 
-    if (uct_ib_iface_device(&self->super)->req_notify_cq_support) {
+    if (self->super.comp_channel != NULL) {
         uct_iface_set_async_event_params(params, &self->async.event_cb,
                                          &self->async.event_arg);
     } else {
@@ -732,7 +727,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
                                          UCT_IFACE_FLAG_CB_ASYNC         |
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
                                          UCT_IFACE_FLAG_INTER_NODE;
-    if (uct_ib_iface_device(&iface->super)->req_notify_cq_support) {
+    if (iface->super.comp_channel != NULL) {
         iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                       UCT_IFACE_FLAG_EVENT_RECV |
                                       UCT_IFACE_FLAG_EVENT_ASYNC_CB;
