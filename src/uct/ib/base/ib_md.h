@@ -73,6 +73,8 @@ enum {
 #endif
     UCT_IB_MEM_FLAG_GVA              = UCS_BIT(5), /**< The memory handle is a
                                                         GVA region */
+    UCT_IB_MEM_FLAG_MEM_WINDOW       = UCS_BIT(6), /**< The memory handle is a
+                                                        memory window */
 };
 
 enum {
@@ -434,5 +436,9 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
 void uct_ib_check_gpudirect_driver(uct_ib_md_t *md,
                                    const char *file,
                                    ucs_memory_type_t mem_type);
+
+ucs_status_t uct_ib_memh_clone(uct_ib_md_t *md, const uct_ib_mem_t *src,
+                               size_t memh_base_size, size_t mr_size,
+                               uct_ib_mem_t **memh_p);
 
 #endif

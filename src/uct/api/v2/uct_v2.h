@@ -225,7 +225,8 @@ typedef struct {
 typedef enum {
     UCT_MD_MEM_REG_FIELD_FLAGS         = UCS_BIT(0),
     UCT_MD_MEM_REG_FIELD_DMABUF_FD     = UCS_BIT(1),
-    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2)
+    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2),
+    UCT_MD_MEM_REG_FIELD_MEMH          = UCS_BIT(3)
 } uct_md_mem_reg_field_mask_t;
 
 
@@ -490,6 +491,13 @@ typedef struct uct_md_mem_reg_params {
      * dmabuf region, then this field must be omitted or set to 0.
      */
     size_t                       dmabuf_offset;
+
+    /**
+     * Represents a pointer to the existing memory handle.
+     * Used to create a memory window is (with flag @ref UCT_MD_MEM_WINDOW)
+     * based on this original memh.
+     */
+    uct_mem_h                    memh;
 } uct_md_mem_reg_params_t;
 
 
