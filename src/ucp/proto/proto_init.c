@@ -460,11 +460,10 @@ ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
                                  const ucp_proto_common_tl_perf_t *tl_perf,
                                  ucp_proto_perf_node_t *const tl_perf_node,
                                  ucp_md_map_t reg_md_map, const char *perf_name,
-                                 ucp_proto_perf_t **perf_p)
+                                 ucp_proto_perf_t *perf)
 {
     const ucp_proto_perf_segment_t *frag_seg;
     size_t range_start, range_end;
-    ucp_proto_perf_t *perf;
     ucs_status_t status;
 
     range_start = ucs_max(params->min_length, tl_perf->min_length);
@@ -482,15 +481,10 @@ ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_perf_create(perf_name, &perf);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     status = ucp_proto_init_add_tl_perf(params, tl_perf, tl_perf_node,
                                         range_start, range_end, perf);
     if (status != UCS_OK) {
-        goto err_cleanup_perf;
+        return status;
     }
 
     if (range_end > 0) {
@@ -498,7 +492,7 @@ ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
         status = ucp_proto_init_add_buffer_perf(params, ucs_max(1, range_start),
                                                 range_end, reg_md_map, perf);
         if (status != UCS_OK) {
-            goto err_cleanup_perf;
+            return status;
         }
 
         /* Add range that represents sending many fragments */
@@ -506,17 +500,12 @@ ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
             !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
             frag_seg = ucp_proto_perf_add_ppln(perf, perf, params->max_length);
             if (frag_seg == NULL) {
-                goto err_cleanup_perf;
+                return status;
             }
         }
     }
 
-    *perf_p = perf;
     return UCS_OK;
-
-err_cleanup_perf:
-    ucp_proto_perf_destroy(perf);
-    return status;
 }
 
 int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,

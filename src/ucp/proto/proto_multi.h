@@ -120,6 +120,9 @@ typedef struct {
      * by this protocol */
     ptrdiff_t                      opt_align_offs;
 
+    /* Threshold starting from which multi-lane fragmentation begins */
+    size_t                         multi_lane_thresh;
+
     struct {
         /* Required iface capabilities */
         uint64_t        tl_cap_flags;

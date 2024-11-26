@@ -211,6 +211,27 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     ucs_assert(mpriv->num_lanes == ucs_popcount(lane_map));
 }
 
+static ucs_status_t
+ucp_proto_multi_single_lane_perf(const ucp_proto_multi_init_params_t *params,
+                                 ucp_proto_common_tl_perf_t *lane_perf,
+                                 ucp_proto_perf_node_t *perf_node,
+                                 ucp_md_map_t reg_md_map, const char *perf_name,
+                                 ucp_proto_perf_t *perf)
+{
+    ucp_proto_common_init_params_t single_lane_params = params->super;
+
+    ucs_assertv((params->multi_lane_thresh != SIZE_MAX) &&
+                (params->multi_lane_thresh >= single_lane_params.min_length) &&
+                (params->multi_lane_thresh <= single_lane_params.max_length),
+                "multi_lane_thresh=%zu min_length=%zu max_length=%zu",
+                params->multi_lane_thresh, single_lane_params.min_length,
+                single_lane_params.max_length);
+
+    single_lane_params.max_length = params->multi_lane_thresh;
+    return ucp_proto_init_perf(&single_lane_params, lane_perf, perf_node,
+                               reg_md_map, perf_name, perf);
+}
+
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   const char *perf_name,
                                   ucp_proto_perf_t **perf_p,
@@ -305,13 +326,33 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                               max_frag_ratio, min_rndv_chunk_size,
                               min_bandwidth, &perf, mpriv);
 
+    status = ucp_proto_perf_create(perf_name, perf_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     /* After this block, 'perf_node' and 'lane_perf_nodes[]' have extra ref */
     if (mpriv->num_lanes == 1) {
         perf_node = lanes_perf_nodes[ucs_ffs64(lane_map)];
         ucp_proto_perf_node_ref(perf_node);
     } else {
-        perf_node = ucp_proto_perf_node_new_data("multi", "%u lanes",
-                                                 mpriv->num_lanes);
+        /* Report 1 lane perf until `multi_lane_thresh` */
+        lane   = ucs_ffs64(lane_map);
+        status = ucp_proto_multi_single_lane_perf(params, &lanes_perf[lane],
+                                                  lanes_perf_nodes[lane],
+                                                  reg_md_map, perf_name,
+                                                  *perf_p);
+        if (status != UCS_OK) {
+            goto err_cleanup_perf;
+        }
+
+        /* Prepare multi-lane perf to be initialized */
+        ucs_assertv(params->multi_lane_thresh >= perf.min_length,
+                    "multi_lane_thresh=%zu min_length=%zu",
+                    params->multi_lane_thresh, perf.min_length);
+        perf.min_length = params->multi_lane_thresh + 1;
+        perf_node       = ucp_proto_perf_node_new_data("multi", "%u lanes",
+                                                       mpriv->num_lanes);
         ucs_for_each_bit(lane, lane_map) {
             ucs_assert(lane < UCP_MAX_LANES);
             ucp_proto_perf_node_add_child(perf_node, lanes_perf_nodes[lane]);
@@ -319,14 +360,19 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     status = ucp_proto_init_perf(&params->super, &perf, perf_node, reg_md_map,
-                                 perf_name, perf_p);
-
+                                 perf_name, *perf_p);
     /* Deref unused nodes */
     for (i = 0; i < num_lanes; ++i) {
         ucp_proto_perf_node_deref(&lanes_perf_nodes[lanes[i]]);
     }
     ucp_proto_perf_node_deref(&perf_node);
+    if (status != UCS_OK) {
+        goto err_cleanup_perf;
+    }
 
+    return UCS_OK;
+err_cleanup_perf:
+    ucp_proto_perf_destroy(*perf_p);
     return status;
 }
 
