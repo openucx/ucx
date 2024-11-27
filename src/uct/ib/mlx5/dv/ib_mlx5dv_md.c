@@ -886,10 +886,13 @@ uct_ib_mlx5_devx_mem_window_reg(uct_md_h uct_md,
     uct_ib_mlx5_devx_mem_t *memh;
     ucs_status_t status;
 
-    if (base == NULL) {
+    if (ENABLE_PARAMS_CHECK && (base == NULL)) {
         ucs_error("base memory handle is not provided for memory window");
         return UCS_ERR_INVALID_PARAM;
     }
+
+    ucs_assertv(!(base->super.flags & UCT_IB_MEM_FLAG_MEM_WINDOW),
+                "memh=%p is already a memory window", base);
 
     status = uct_ib_mlx5_devx_memh_clone(md, base, &memh);
     if (status != UCS_OK) {

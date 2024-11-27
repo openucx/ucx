@@ -494,7 +494,13 @@ static ucs_status_t
 uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
+    unsigned flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
     uct_cuda_ipc_memh_t *memh;
+
+    if (ENABLE_PARAMS_CHECK && (flags & UCT_MD_MEM_WINDOW)) {
+        ucs_error("CUDA IPC does not support memory windows");
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     memh = ucs_malloc(sizeof(*memh), "uct_cuda_ipc_memh_t");
     if (NULL == memh) {
