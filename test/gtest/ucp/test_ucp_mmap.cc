@@ -1025,6 +1025,16 @@ UCS_TEST_P(test_ucp_mmap, gva, "GVA_ENABLE=y")
     }
 }
 
+UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
+{
+    ucp_worker_h worker = sender().worker();
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        ucp_mem_desc_t *mdesc = ucp_rndv_mpool_get(worker, mem_type,
+                                                   UCS_SYS_DEVICE_ID_UNKNOWN);
+        EXPECT_EQ(mdesc->memh, mdesc->memh->parent);
+        ucs_mpool_put(mdesc);
+    }
+}
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap)
 
