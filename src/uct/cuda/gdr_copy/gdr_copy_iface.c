@@ -46,6 +46,10 @@ static ucs_config_field_t uct_gdr_copy_iface_config_table[] = {
          ucs_offsetof(uct_gdr_copy_iface_config_t, put_latency)},
         {NULL})},
 
+    {"RCACHE_OVERHEAD", "250ns",
+     "gdr_copy regions rcache lookup estimated overhead",
+     ucs_offsetof(uct_gdr_copy_iface_config_t, rcache_overhead), UCS_CONFIG_TYPE_TIME},
+
     {NULL}
 };
 
@@ -137,7 +141,7 @@ uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                                               iface->config.put_bw.dedicated);
     iface_attr->bandwidth.shared    = ucs_max(iface->config.get_bw.shared,
                                               iface->config.put_bw.shared);
-    iface_attr->overhead            = UCT_GDR_COPY_IFACE_OVERHEAD;
+    iface_attr->overhead            = 0;
     iface_attr->priority            = 0;
 
     return UCS_OK;
@@ -158,7 +162,8 @@ uct_gdr_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
-        perf_attr->send_pre_overhead = UCT_GDR_COPY_IFACE_OVERHEAD;
+        perf_attr->send_pre_overhead = UCT_GDR_COPY_IFACE_OVERHEAD +
+                                       iface->config.rcache_ovh;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
@@ -240,6 +245,7 @@ static UCS_CLASS_INIT_FUNC(uct_gdr_copy_iface_t, uct_md_h md, uct_worker_h worke
     self->config.put_bw      = gdr_config->put_bw;
     self->config.get_latency = ucs_linear_func_make(gdr_config->get_latency, 0);
     self->config.put_latency = ucs_linear_func_make(gdr_config->put_latency, 0);
+    self->config.rcache_ovh  = gdr_config->rcache_overhead;
 
     return UCS_OK;
 }
