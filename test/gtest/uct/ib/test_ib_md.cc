@@ -42,6 +42,17 @@ protected:
     void test_mkey_pack_mt_internal(unsigned access_mask, bool invalidate);
     void test_smkey_reg_atomic(void);
 
+    uct_mem_h reg_mem_window(uct_mem_h base) const {
+        uct_mem_h memh;
+        uct_md_mem_reg_params_t params;
+        params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS |
+                            UCT_MD_MEM_REG_FIELD_MEMH;
+        params.flags      = UCT_MD_MEM_WINDOW;
+        params.memh       = base;
+        ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), NULL, SIZE_MAX, &params, &memh));
+        return memh;
+    }
+
 private:
 #ifdef HAVE_MLX5_DV
     uint32_t m_mlx5_flags = 0;
@@ -280,12 +291,7 @@ void test_ib_md::test_mkey_pack_mt_internal(unsigned access_mask,
     uct_ib_mem_t *ib_memh = (uct_ib_mem_t*)memh;
     EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_MULTITHREADED);
 
-    std::vector<uint8_t> rkey(md_attr().rkey_packed_size);
-    uct_md_mkey_pack_params_t pack_params;
-    pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
-    pack_params.flags      = pack_flags;
-    ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, buffer, size,
-                                      &pack_params, rkey.data()));
+    mkey_pack(memh, pack_flags, buffer, size);
 
     uct_md_mem_dereg_params_t params;
     params.field_mask  = UCT_MD_MEM_DEREG_FIELD_MEMH |
@@ -384,6 +390,41 @@ UCS_TEST_P(test_ib_md, mt_fail, "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
         munmap(start, lower_size);
         munmap(last, upper_size);
     }
+}
+
+UCS_TEST_SKIP_COND_P(test_ib_md, mem_window,
+                     !check_invalidate_support(UCT_MD_MEM_ACCESS_RMA))
+{
+    unsigned flags = UCT_MD_FLAG_INVALIDATE_RMA | UCT_MD_FLAG_INVALIDATE_AMO;
+    std::vector<uint8_t> buffer(1024);
+    uct_mem_h base;
+    EXPECT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_RMA, buffer.data(), buffer.size(),
+                          &base));
+
+    /* Test case 1: creating MW from memh before mkey_pack */
+    uct_mem_h mw1 = reg_mem_window(base);
+
+    /* Test case 2: creating MW from memh after mkey_pack */
+    std::vector<uint8_t> base_rkey1 = mkey_pack(base, flags);
+    uct_mem_h mw2 = reg_mem_window(base);
+    std::vector<uint8_t> mw2_rkey1 = mkey_pack(mw2, flags);
+    EXPECT_EQ(base_rkey1, mw2_rkey1);
+
+    /* Test case 3: subsequent mkey_pack calls return the same result */
+    std::vector<uint8_t> mw2_rkey2 = mkey_pack(mw2, flags);
+    EXPECT_EQ(mw2_rkey1, mw2_rkey2);
+
+    /* Test case 4: base memh can still be used to pack mkeys */
+    std::vector<uint8_t> base_rkey2 = mkey_pack(base, flags);
+    EXPECT_NE(base_rkey1, base_rkey2);
+
+    /* Test case 5: multiple MWs do not share the same rkeys */
+    std::vector<uint8_t> mw1_rkey1 = mkey_pack(mw1, flags);
+    EXPECT_NE(mw1_rkey1, mw2_rkey1);
+
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), mw1));
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), mw2));
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), base));
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)
