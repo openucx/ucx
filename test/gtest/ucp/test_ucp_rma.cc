@@ -408,11 +408,11 @@ private:
 };
 
 /* TODO temp workaround. Pending RM 4170682 fix */
-UCS_TEST_P(test_ucp_rma_reg, put_blocking, "IB_PCI_RELAXED_ORDERING?=n") {
+UCS_TEST_P(test_ucp_rma_reg, put_blocking, "IB_ATOMIC_OFFSET?=n") {
     test_reg(static_cast<send_func_t>(&test_ucp_rma::put_b));
 }
 
-UCS_TEST_P(test_ucp_rma_reg, put_nonblocking, "IB_PCI_RELAXED_ORDERING?=n") {
+UCS_TEST_P(test_ucp_rma_reg, put_nonblocking, "IB_ATOMIC_OFFSET?=n") {
     test_reg(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
 }
 
