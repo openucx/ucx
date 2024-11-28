@@ -1893,10 +1893,9 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                           config_lane2->dst_md_index);
 }
 
-static ucp_lane_index_t
-ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
-                              ucp_lane_index_t lane1,
-                              const ucp_ep_config_key_t *key2)
+ucp_lane_index_t ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
+                                               ucp_lane_index_t lane1,
+                                               const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane_idx;
 
@@ -1970,9 +1969,9 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
     }
 }
 
-static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
-                                       const ucp_ep_config_key_t *key2,
-                                       ucp_lane_index_t lane)
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane)
 {
     const ucp_ep_config_key_lane_t *config_lane1 = &key1->lanes[lane];
     const ucp_ep_config_key_lane_t *config_lane2 = &key2->lanes[lane];
