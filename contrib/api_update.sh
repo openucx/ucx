@@ -10,17 +10,29 @@ branch="${1?Specify remote version to use like "upstream/v1.18.x"}"
 remote="${branch%%/*}"
 version="$(echo "${branch##*/}" | sed -e 's@\(v[0-9]\+\.[0-9]\+\).*@\1@')"
 
-if ! git rev-parse --verify --quiet "$branch" >/dev/null; then
+if ! git diff-index --quiet HEAD
+then
+    echo "Current tree is not clean"
+    exit 1
+fi
+
+if ! git rev-parse --verify --quiet "$branch" >/dev/null
+then
     echo "Branch \"$branch\" does not exist"
     exit 1
 fi
 
 echo "Proceed with clean checkout of $branch (${version})?"
-read -r
+read -r -p "press <enter>"
 
 set -x
 
-sudo yum -y install doxygen doxygen-latex
+if grep -qi "debian\|ubuntu" /etc/os-release 2>/dev/null
+then
+    sudo apt-get -y install doxygen doxygen-latex
+else
+    sudo yum -y install doxygen doxygen-latex
+fi
 
 git checkout "$branch"
 git clean -xdf
