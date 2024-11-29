@@ -612,8 +612,9 @@ static void usage()
 /**
  * Parse the command line arguments.
  */
-static int parse_cmd(int argc, char *const argv[], char **server_addr,
-                     char **listen_addr, send_recv_type_t *send_recv_type)
+static parse_cmd_status_t parse_cmd(int argc, char *const argv[],
+                                    char **server_addr, char **listen_addr,
+                                    send_recv_type_t *send_recv_type)
 {
     int c = 0;
     int port;
@@ -643,7 +644,7 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
             port = atoi(optarg);
             if ((port < 0) || (port > UINT16_MAX)) {
                 fprintf(stderr, "Wrong server port number %d\n", port);
-                return -1;
+                return PARSE_CMD_STATUS_ERROR;
             }
             server_port = port;
             break;
@@ -657,30 +658,32 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
             test_string_length = atol(optarg);
             if (test_string_length < 0) {
                 fprintf(stderr, "Wrong string size %ld\n", test_string_length);
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 'v':
             iov_cnt = atol(optarg);
             if (iov_cnt <= 0) {
                 fprintf(stderr, "Wrong iov count %ld\n", iov_cnt);
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 'm':
             test_mem_type = parse_mem_type(optarg);
             if (test_mem_type == UCS_MEMORY_TYPE_LAST) {
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 'h':
+            usage();
+            return PARSE_CMD_STATUS_PRINT_HELP;
         default:
             usage();
-            return -1;
+            return PARSE_CMD_STATUS_ERROR;
         }
     }
 
-    return 0;
+    return PARSE_CMD_STATUS_OK;
 }
 
 static char* sockaddr_get_ip_str(const struct sockaddr_storage *sock_addr,
@@ -1107,14 +1110,20 @@ int main(int argc, char **argv)
     send_recv_type_t send_recv_type = CLIENT_SERVER_SEND_RECV_DEFAULT;
     char *server_addr = NULL;
     char *listen_addr = NULL;
+    parse_cmd_status_t parse_cmd_status;
     int ret;
 
     /* UCP objects */
     ucp_context_h ucp_context;
     ucp_worker_h  ucp_worker;
 
-    ret = parse_cmd(argc, argv, &server_addr, &listen_addr, &send_recv_type);
-    if (ret != 0) {
+    parse_cmd_status = parse_cmd(argc, argv, &server_addr, &listen_addr,
+                                 &send_recv_type);
+    if (parse_cmd_status == PARSE_CMD_STATUS_PRINT_HELP) {
+        ret = 0;
+        goto err;
+    } else if (parse_cmd_status == PARSE_CMD_STATUS_ERROR) {
+        ret = -1;
         goto err;
     }
 

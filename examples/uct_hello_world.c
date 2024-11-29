@@ -63,8 +63,6 @@ typedef struct {
 
 static void* desc_holder = NULL;
 
-int print_err_usage(void);
-
 static char *func_am_t_str(func_am_t func_am_type)
 {
     switch (func_am_type) {
@@ -419,14 +417,16 @@ close_md:
     goto release_component_list;
 }
 
-int print_err_usage()
+static void print_usage()
 {
-    const char func_template[] = "  -%c      Select \"%s\" function to send the message%s\n";
+    const char func_template[] =
+            "  -%c      Select \"%s\" function to send the message%s\n";
 
     fprintf(stderr, "Usage: uct_hello_world [parameters]\n");
     fprintf(stderr, "UCT hello world client/server example utility\n");
     fprintf(stderr, "\nParameters are:\n");
-    fprintf(stderr, func_template, 'i', func_am_t_str(FUNC_AM_SHORT), " (default)");
+    fprintf(stderr, func_template, 'i', func_am_t_str(FUNC_AM_SHORT),
+            " (default)");
     fprintf(stderr, func_template, 'b', func_am_t_str(FUNC_AM_BCOPY), "");
     fprintf(stderr, func_template, 'z', func_am_t_str(FUNC_AM_ZCOPY), "");
     fprintf(stderr, "  -d        Select device name\n");
@@ -438,11 +438,10 @@ int print_err_usage()
     fprintf(stderr, "\nExample:\n");
     fprintf(stderr, "  Server: uct_hello_world -d eth0 -t tcp\n");
     fprintf(stderr, "  Client: uct_hello_world -d eth0 -t tcp -n localhost\n");
-
-    return UCS_ERR_UNSUPPORTED;
 }
 
-int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
+static parse_cmd_status_t
+parse_cmd(int argc, char *const argv[], cmd_args_t *args)
 {
     int c = 0, idx = 0;
 
@@ -483,25 +482,28 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
             if (args->server_port <= 0) {
                 fprintf(stderr, "Wrong server port number %d\n",
                         args->server_port);
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 's':
             args->test_strlen = atol(optarg);
             if (args->test_strlen < 0) {
                 fprintf(stderr, "Wrong string size %ld\n", args->test_strlen);
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 'm':
             test_mem_type = parse_mem_type(optarg);
             if (test_mem_type == UCS_MEMORY_TYPE_LAST) {
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 'h':
+            print_usage();
+            return PARSE_CMD_STATUS_PRINT_HELP;
         default:
-            return print_err_usage();
+            print_usage();
+            return PARSE_CMD_STATUS_ERROR;
         }
     }
     fprintf(stdout, "INFO: UCT_HELLO_WORLD AM function = %s server = %s port = %d\n",
@@ -514,15 +516,17 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
 
     if (args->dev_name == NULL) {
         fprintf(stderr, "WARNING: device is not set\n");
-        return print_err_usage();
+        print_usage();
+        return PARSE_CMD_STATUS_ERROR;
     }
 
     if (args->tl_name == NULL) {
         fprintf(stderr, "WARNING: transport layer is not set\n");
-        return print_err_usage();
+        print_usage();
+        return PARSE_CMD_STATUS_ERROR;
     }
 
-    return UCS_OK;
+    return PARSE_CMD_STATUS_OK;
 }
 
 /* The caller is responsible to free *rbuf */
@@ -591,9 +595,14 @@ int main(int argc, char **argv)
     iface_info_t        if_info;
     uct_ep_params_t     ep_params;
     int                 res;
+    parse_cmd_status_t  parse_cmd_status;
 
     /* Parse the command line */
-    if (parse_cmd(argc, argv, &cmd_args)) {
+    parse_cmd_status = parse_cmd(argc, argv, &cmd_args);
+    if (parse_cmd_status == PARSE_CMD_STATUS_PRINT_HELP) {
+        status = UCS_OK;
+        goto out;
+    } else if (parse_cmd_status == PARSE_CMD_STATUS_ERROR) {
         status = UCS_ERR_INVALID_PARAM;
         goto out;
     }

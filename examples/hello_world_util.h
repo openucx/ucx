@@ -57,6 +57,13 @@ static ucs_memory_type_t test_mem_type = UCS_MEMORY_TYPE_HOST;
     } while(0)
 
 
+typedef enum {
+    PARSE_CMD_STATUS_OK,
+    PARSE_CMD_STATUS_ERROR,
+    PARSE_CMD_STATUS_PRINT_HELP
+} parse_cmd_status_t;
+
+
 void print_common_help(void);
 
 void *mem_type_malloc(size_t length)
