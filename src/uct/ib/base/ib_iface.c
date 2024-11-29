@@ -1704,8 +1704,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 
     ret = uct_ib_iface_destroy_comp_channel(self);
     if (ret != 0) {
-        ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m",
-                 ret);
+        ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
 
     ucs_free(self->path_bits);

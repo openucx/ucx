@@ -63,8 +63,10 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
 
     uct_ib_device_configure_params(&md->super.dev,
                                    IBV_ACCESS_LOCAL_WRITE |
-                                   (uct_ib_efadv_has_rdma_read(&md->dev_attr)?
-                                    IBV_ACCESS_REMOTE_READ : 0),
+                                           (uct_ib_efadv_has_rdma_read(
+                                                    &md->dev_attr) ?
+                                                    IBV_ACCESS_REMOTE_READ :
+                                                    0),
                                    md->dev_attr.inline_buf_size, 0, 0);
 
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);

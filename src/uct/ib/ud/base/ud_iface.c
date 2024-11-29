@@ -204,9 +204,8 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
 
     ucs_diag("create QP: max_send_sge=%u (config=%u, dev=%u) "
              "max_inline_data=%uB (config=%zuB, dev=%uB) ",
-             qp_init_attr.cap.max_send_sge,
-             config->super.tx.min_sge + 1, IBV_DEV_ATTR(dev, max_sge),
-             qp_init_attr.cap.max_inline_data,
+             qp_init_attr.cap.max_send_sge, config->super.tx.min_sge + 1,
+             IBV_DEV_ATTR(dev, max_sge), qp_init_attr.cap.max_inline_data,
              config->super.tx.min_inline, dev->max_inline_data);
 
     status = ops->create_qp(&self->super, &qp_init_attr, &self->qp);
@@ -1104,8 +1103,8 @@ void uct_ud_iface_send_completion_ordered(uct_ud_iface_t *iface, uint16_t sn,
 void uct_ud_iface_send_completion_unordered(uct_ud_iface_t *iface, uint16_t sn,
                                             int is_async)
 {
-    khiter_t it = kh_get(uct_ud_iface_ctl_desc_hash,
-                         &iface->tx.outstanding.map, sn);
+    khiter_t it = kh_get(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map,
+                         sn);
     uct_ud_ctl_desc_t *cdesc;
 
     if (ucs_likely(it != kh_end(&iface->tx.outstanding.map))) {

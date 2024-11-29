@@ -237,7 +237,8 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
 
             cdesc = kh_value(&iface->tx.outstanding.map, it);
             if (cdesc->ep == ep) {
-                kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, it);
+                kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map,
+                       it);
                 uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
             }
         }
