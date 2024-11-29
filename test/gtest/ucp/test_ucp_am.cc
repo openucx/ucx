@@ -1632,14 +1632,18 @@ public:
                                  void *data, size_t length,
                                  const ucp_am_recv_param_t *rx_param)
     {
-        EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
-        EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
-
         ucs_status_t status = test_ucp_am_nbx::am_data_handler(header,
                                                                header_length,
                                                                data, length,
                                                                rx_param);
         EXPECT_FALSE(UCS_STATUS_IS_ERR(status));
+
+        if (!m_check_recv_rndv_flags) {
+            return status;
+        }
+
+        EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
+        EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
 
         return UCS_INPROGRESS;
     }
@@ -1737,8 +1741,16 @@ public:
         return cfg->rndv_frag_size[mem_type];
     }
 
+    void check_rma_support()
+    {
+        if (!sender().is_rndv_supported()) {
+            UCS_TEST_SKIP_R("RNDV is not supported");
+        }
+    }
+
 protected:
     static constexpr unsigned RNDV_THRESH = 128;
+    bool m_check_recv_rndv_flags          = true;
     ucs_status_t m_status;
     bool m_am_recv_cb_invoked;
 };
@@ -1750,11 +1762,13 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_get, "RNDV_SCHEME=get_zcopy")
 {
+    check_rma_support();
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_put, "RNDV_SCHEME=put_zcopy")
 {
+    check_rma_support();
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
@@ -2139,6 +2153,8 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_host_frag,
            "RNDV_FRAG_MEM_TYPE=host")
 {
     // Host memory should not be pipelined thru host staging buffers
+    m_check_recv_rndv_flags = false;
+
     test_ppln_send(UCS_MEMORY_TYPE_HOST, 2, 0);
 }
 
