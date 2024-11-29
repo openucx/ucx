@@ -160,6 +160,16 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
 
 
 /**
+ * Apply a bias change to the given perf structure.
+ *
+ * @param [in] perf         Performance data structure to update.
+ * @param [in] bias         Bias to apply. A bias equal to 0.1 indicates a 10%
+ *                          performance improvement.
+ */
+void ucp_proto_perf_apply_bias(ucp_proto_perf_t *perf, double bias);
+
+
+/**
  * Expand given perf by estimation that all messages on interval
  * [end of @a frag_seg + 1, @a max_length] would be sent in a pipeline async
  * manner using data provided by @a frag_seg as a performance for sending one

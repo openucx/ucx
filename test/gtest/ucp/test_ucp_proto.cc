@@ -717,6 +717,44 @@ UCS_TEST_F(test_proto_perf, intersect_first)
     expect_empty_range(5000, SIZE_MAX);
 }
 
+UCS_TEST_F(test_proto_perf, apply_zero_bias) {
+    m_perf = create();
+    add_func(0, SIZE_MAX, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    add_func(0, SIZE_MAX, UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func);
+
+    /* Apply zero bias */
+    ucp_proto_perf_apply_bias(m_perf.get(), 0);
+
+    make_flat_perf();
+    print_perf();
+
+    expect_perf(0, SIZE_MAX,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func},
+                 {UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func}});
+}
+
+UCS_TEST_F(test_proto_perf, apply_bias) {
+    m_perf = create();
+    add_func(0, SIZE_MAX, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    add_func(0, SIZE_MAX, UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func);
+
+    /* Apply 10% bias */
+    double bias = 0.1;
+    ucp_proto_perf_apply_bias(m_perf.get(), bias);
+
+    make_flat_perf();
+    print_perf();
+
+    /* Calculate expected */
+    auto bias_func          = ucs_linear_func_make(0, 1 - bias);
+    auto exp_local_tl_func  = ucs_linear_func_compose(bias_func, local_tl_func);
+    auto exp_remote_tl_func = ucs_linear_func_compose(bias_func, remote_tl_func);
+
+    expect_perf(0, SIZE_MAX,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, exp_local_tl_func},
+                 {UCP_PROTO_PERF_FACTOR_REMOTE_TL, exp_remote_tl_func}});
+}
+
 UCS_TEST_F(test_proto_perf, intersect_last)
 {
     /*
