@@ -2,6 +2,7 @@
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -191,6 +192,7 @@ const char *ucs_cpu_model_name()
         [UCS_CPU_MODEL_AMD_ROME]           = "Rome",
         [UCS_CPU_MODEL_AMD_MILAN]          = "Milan",
         [UCS_CPU_MODEL_AMD_GENOA]          = "Genoa",
+        [UCS_CPU_MODEL_AMD_TURIN]          = "Turin",
         [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG] = "Zhangjiang",
         [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
         [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui",
