@@ -446,6 +446,7 @@ public:
             return UCP_OBJECT_VERSION_V2;
         }
 
+        /* For nodes with more than 31 MD to pack in address */
         const char *str = getenv("UCX_ADDRESS_VERSION");
         if ((str != NULL) && !strcmp("v2", str)) {
             return UCP_OBJECT_VERSION_V2;

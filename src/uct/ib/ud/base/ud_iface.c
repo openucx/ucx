@@ -1103,14 +1103,14 @@ void uct_ud_iface_send_completion_ordered(uct_ud_iface_t *iface, uint16_t sn,
 void uct_ud_iface_send_completion_unordered(uct_ud_iface_t *iface, uint16_t sn,
                                             int is_async)
 {
-    khiter_t it = kh_get(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map,
-                         sn);
+    khiter_t khiter = kh_get(uct_ud_iface_ctl_desc_hash,
+                             &iface->tx.outstanding.map, sn);
     uct_ud_ctl_desc_t *cdesc;
 
-    if (ucs_likely(it != kh_end(&iface->tx.outstanding.map))) {
-        cdesc = kh_value(&iface->tx.outstanding.map, it);
+    if (ucs_likely(khiter != kh_end(&iface->tx.outstanding.map))) {
+        cdesc = kh_value(&iface->tx.outstanding.map, khiter);
         uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
-        kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, it);
+        kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, khiter);
     }
 }
 

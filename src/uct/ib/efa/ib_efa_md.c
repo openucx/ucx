@@ -25,11 +25,6 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
     ucs_status_t status;
     int ret;
 
-    if (md_config->devx == UCS_YES) {
-        ucs_error("DEVX requested but not supported");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     ctx = ibv_open_device(ibv_device);
     if (ctx == NULL) {
         ucs_diag("ibv_open_device(%s) failed: %m",
@@ -54,7 +49,6 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
 
     md->super.super.ops = &uct_ib_efa_md_ops.super;
     md->super.name      = UCT_IB_MD_NAME(efa);
-    md->dev_attr        = attr;
 
     status = uct_ib_device_query(&md->super.dev, ibv_device);
     if (status != UCS_OK) {
@@ -63,11 +57,10 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
 
     uct_ib_device_configure_params(&md->super.dev,
                                    IBV_ACCESS_LOCAL_WRITE |
-                                           (uct_ib_efadv_has_rdma_read(
-                                                    &md->dev_attr) ?
+                                           (uct_ib_efadv_has_rdma_read(&attr) ?
                                                     IBV_ACCESS_REMOTE_READ :
                                                     0),
-                                   md->dev_attr.inline_buf_size, 0, 0);
+                                   attr.inline_buf_size, 0, 0);
 
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {

@@ -15,7 +15,6 @@
 
 typedef struct uct_ib_efadv_md {
     uct_ib_md_t    super;
-    struct efadv_device_attr dev_attr; /* cached EFA device attributes */
 } uct_ib_efadv_md_t;
 
 
