@@ -1298,14 +1298,11 @@ public:
         auto tl1 = rma_transport(e1);
         auto tl2 = rma_transport(e2);
 
-        ASSERT_EQ(!tl1, !tl2);
-        if (tl1 == NULL) {
-            ASSERT_TRUE(ucs::is_aws());
-            UCS_TEST_SKIP_R("RMA transports are not present");
-        }
-
         /* Verify that selection is the same for both eps */
-        ASSERT_STREQ(tl1, tl2);
+        ASSERT_EQ(!tl1, !tl2);
+        if (tl1 != NULL) {
+            ASSERT_STREQ(tl1, tl2);
+        }
     }
 };
 
