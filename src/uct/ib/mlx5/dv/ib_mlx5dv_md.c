@@ -704,10 +704,11 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
                         uint32_t *lkey_p, uint32_t *rkey_p)
 {
     uint64_t access_flags = uct_ib_memh_access_flags(&memh->super,
-                                                     md->super.relaxed_order) &
+                                                     md->super.relaxed_order, 1, params) &
                             access_mask;
     unsigned flags        = UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
                                                        FIELD_FLAGS, 0);
+    int attempt_cnt       = 0;
     ucs_status_t status;
     uint32_t mkey;
 
@@ -731,8 +732,16 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
         /* Fallback if multi-thread registration is unsupported */
     }
 
-    status = uct_ib_reg_mr(&md->super, address, length, params, access_flags,
-                           NULL, &memh->mrs[mr_type].super.ib);
+    do {
+        status = uct_ib_reg_mr(&md->super, address, length, params, access_flags,
+                               NULL, &memh->mrs[mr_type].super.ib,
+                               attempt_cnt == 0);
+        attempt_cnt++;
+        access_flags = uct_ib_memh_access_flags(&memh->super,
+                                                md->super.relaxed_order,
+                                                attempt_cnt == 0, params);
+    } while ((status != UCS_OK) && (attempt_cnt <= 1));
+
     if (status != UCS_OK) {
         return status;
     }
@@ -805,9 +814,9 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
     }
 
     relaxed_order = md->flags & UCT_IB_MLX5_MD_FLAG_GVA_RO;
-    access_flags  = uct_ib_memh_access_flags(&memh->super, relaxed_order);
+    access_flags  = uct_ib_memh_access_flags(&memh->super, relaxed_order, 1, &params);
     status = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params, access_flags,
-                           NULL, &memh->mrs[UCT_IB_MR_DEFAULT].super.ib);
+                           NULL, &memh->mrs[UCT_IB_MR_DEFAULT].super.ib, 1);
     if (status != UCS_OK) {
         goto err_reg;
     }
@@ -816,7 +825,7 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
         status = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params,
                                access_flags & ~IBV_ACCESS_RELAXED_ORDERING,
                                NULL,
-                               &memh->mrs[UCT_IB_MR_STRICT_ORDER].super.ib);
+                               &memh->mrs[UCT_IB_MR_STRICT_ORDER].super.ib, 1);
         if (status != UCS_OK) {
             goto err_dereg_default;
         }
@@ -1826,7 +1835,7 @@ static void uct_ib_mlx5_devx_init_flush_mr(uct_ib_mlx5_md_t *md)
 
     status = uct_ib_reg_mr(&md->super, md->zero_buf,
                            UCT_IB_MD_FLUSH_REMOTE_LENGTH, &params,
-                           UCT_IB_MEM_ACCESS_FLAGS, NULL, &md->flush_mr);
+                           UCT_IB_MEM_ACCESS_FLAGS, NULL, &md->flush_mr, 1);
     if (status != UCS_OK) {
         goto err;
     }
@@ -2027,7 +2036,7 @@ uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
     reg_params.field_mask = 0;
     status = uct_ib_reg_mr(md, address, dm_attr.length, &reg_params,
                            UCT_IB_MEM_ACCESS_FLAGS, dm,
-                           &memh->mrs[UCT_IB_MR_DEFAULT].super.ib);
+                           &memh->mrs[UCT_IB_MR_DEFAULT].super.ib, 1);
     if (status != UCS_OK) {
         goto err_munmap_address;
     }

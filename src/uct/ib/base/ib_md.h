@@ -365,7 +365,7 @@ void uct_ib_md_close(uct_md_h tl_md);
 ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
-                           struct ibv_mr **mr_p);
+                           struct ibv_mr **mr_p, int first_attempt);
 
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 
@@ -388,7 +388,9 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             uint64_t access_flags, size_t mr_num,
                             struct ibv_mr **mrs);
 
-uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order);
+uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
+                                  int first_attempt,
+                                  const uct_md_mem_reg_params_t *params);
 
 ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,

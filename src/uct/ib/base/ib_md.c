@@ -309,7 +309,7 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
     while (ctx->length > 0) {
         if (ctx->params != NULL) {
             status = uct_ib_reg_mr(ctx->md, ctx->address, length, ctx->params,
-                                   ctx->access_flags, NULL, &ctx->mrs[mr_idx]);
+                                   ctx->access_flags, NULL, &ctx->mrs[mr_idx], 1);
             if (status != UCS_OK) {
                 goto err_dereg;
             }
@@ -460,7 +460,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
 ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
-                           struct ibv_mr **mr_p)
+                           struct ibv_mr **mr_p, int first_attempt)
 {
     ucs_time_t UCS_V_UNUSED start_time = ucs_get_time();
     unsigned long retry                = 0;
@@ -507,7 +507,8 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
     if (mr == NULL) {
         uct_ib_md_print_mem_reg_err_msg(title, address, length, access_flags,
                                         errno,
-                                        flags & UCT_MD_MEM_FLAG_HIDE_ERRORS);
+                                        (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ||
+                                        first_attempt);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -626,9 +627,42 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
     return UCS_OK;
 }
 
-uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order)
+uint64_t uct_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
 {
-    uint64_t access_flags = UCT_IB_MEM_ACCESS_FLAGS;
+    uint64_t ibv_flags = 0;
+
+    if (uct_flags & UCT_MD_MEM_ACCESS_LOCAL_WRITE) {
+        ibv_flags |= IBV_ACCESS_LOCAL_WRITE;
+    }
+
+    if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_GET) {
+        ibv_flags |= IBV_ACCESS_REMOTE_READ;
+    }
+
+    if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_PUT) {
+        ibv_flags |= IBV_ACCESS_REMOTE_WRITE;
+    }
+
+    if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_ATOMIC) {
+        ibv_flags |= IBV_ACCESS_REMOTE_ATOMIC;
+    }
+
+    return ibv_flags;
+}
+
+uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
+                                  int first_attempt,
+                                  const uct_md_mem_reg_params_t *params)
+{
+    uint64_t access_flags;
+    uint64_t uct_flags;
+
+    if (first_attempt) {
+        access_flags = UCT_IB_MEM_ACCESS_FLAGS;
+    } else {
+        uct_flags    = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+        access_flags = uct_flags_to_ibv_mem_access_flags(uct_flags);
+    }
 
     if (memh->flags & UCT_IB_MEM_FLAG_ODP) {
         access_flags |= IBV_ACCESS_ON_DEMAND;
@@ -646,6 +680,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   uct_mem_h *memh_p)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    int attempt_cnt = 0;
     struct ibv_mr *mr_default;
     uct_ib_verbs_mem_t *memh;
     uct_ib_mem_t *ib_memh;
@@ -660,11 +695,17 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
         goto err;
     }
 
-    memh         = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
-    access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order);
+    memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
 
-    status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
-                           &mr_default);
+    do {
+        access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order,
+                                                attempt_cnt == 0, params);
+
+        status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
+                               &mr_default, attempt_cnt == 0);
+        attempt_cnt++;
+    } while ((status != UCS_OK) && (attempt_cnt <= 1));
+    
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -676,7 +717,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     if (md->relaxed_order) {
         status = uct_ib_reg_mr(md, address, length, params,
                                access_flags & ~IBV_ACCESS_RELAXED_ORDERING,
-                               NULL, &memh->mrs[UCT_IB_MR_STRICT_ORDER].ib);
+                               NULL, &memh->mrs[UCT_IB_MR_STRICT_ORDER].ib, 1);
         if (status != UCS_OK) {
             goto err_dereg_default;
         }
