@@ -389,8 +389,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             struct ibv_mr **mrs);
 
 uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
-                                  int first_attempt,
-                                  const uct_md_mem_reg_params_t *params);
+                                  int first_attempt, uint64_t uct_flags);
 
 ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,

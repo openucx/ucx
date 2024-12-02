@@ -651,16 +651,13 @@ uint64_t uct_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
 }
 
 uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
-                                  int first_attempt,
-                                  const uct_md_mem_reg_params_t *params)
+                                  int first_attempt, uint64_t uct_flags)
 {
     uint64_t access_flags;
-    uint64_t uct_flags;
 
     if (first_attempt) {
         access_flags = UCT_IB_MEM_ACCESS_FLAGS;
     } else {
-        uct_flags    = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
         access_flags = uct_flags_to_ibv_mem_access_flags(uct_flags);
     }
 
@@ -679,17 +676,17 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,
                                   uct_mem_h *memh_p)
 {
-    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
-    int attempt_cnt = 0;
+    uct_ib_md_t *md    = ucs_derived_of(uct_md, uct_ib_md_t);
+    uint64_t uct_flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
+                                                    FIELD_FLAGS, 0);
+    int attempt_cnt    = 0;
     struct ibv_mr *mr_default;
     uct_ib_verbs_mem_t *memh;
     uct_ib_mem_t *ib_memh;
     uint64_t access_flags;
     ucs_status_t status;
 
-    status = uct_ib_memh_alloc(md, length,
-                               UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
-                                                          FIELD_FLAGS, 0),
+    status = uct_ib_memh_alloc(md, length, uct_flags,
                                sizeof(*memh), sizeof(memh->mrs[0]), &ib_memh);
     if (status != UCS_OK) {
         goto err;
@@ -699,13 +696,13 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
     do {
         access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order,
-                                                attempt_cnt == 0, params);
+                                                attempt_cnt == 0, uct_flags);
 
         status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
                                &mr_default, attempt_cnt == 0);
         attempt_cnt++;
-    } while ((status != UCS_OK) && (attempt_cnt <= 1));
-    
+    } while ((status != UCS_OK) && (attempt_cnt < 2));
+
     if (status != UCS_OK) {
         goto err_free;
     }
