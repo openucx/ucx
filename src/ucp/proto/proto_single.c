@@ -58,10 +58,21 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
         return status;
     }
 
-    status = ucp_proto_init_perf(&params->super, &tl_perf, tl_perf_node,
-                                 reg_md_map, proto_name, perf_p);
-    ucp_proto_perf_node_deref(&tl_perf_node);
+    status = ucp_proto_perf_create(proto_name, perf_p);
+    if (status != UCS_OK) {
+        return status;
+    }
 
+    status = ucp_proto_init_perf(&params->super, &tl_perf, tl_perf_node,
+                                 reg_md_map, proto_name, *perf_p);
+    ucp_proto_perf_node_deref(&tl_perf_node);
+    if (status != UCS_OK) {
+        goto err_cleanup_perf;
+    }
+
+    return UCS_OK;
+err_cleanup_perf:
+    ucp_proto_perf_destroy(*perf_p);
     return status;
 }
 
