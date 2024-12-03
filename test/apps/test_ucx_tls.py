@@ -175,6 +175,7 @@ def test_ucx_tls_positive(tls):
     if tls == 'all':
         return
     if not found_tl:
+        print(f"Error: No transport layer found for UCX_TLS={tls}")
         sys.exit(1)
     tls = tls.split(',')
     if found_tl in tls or f"\\{found_tl}" in tls:
@@ -287,6 +288,7 @@ for dev in sorted(dev_list):
         print(f"{dev}:{port} eps: {n_eps} expected am tl: {dev_tl_map[n_eps]} selected: {tl}")
 
         if dev_tl_map[n_eps] != tl:
+            print(f"TL mismatch 1. Expected: {dev_tl_map[n_eps]}, Got: {tl}")
             sys.exit(1)
 
         if override:
@@ -295,6 +297,7 @@ for dev in sorted(dev_list):
                   {dev_tl_override_map[n_eps]} selected: {tl}")
 
             if dev_tl_override_map[n_eps] != tl:
+                print(f"TL mismatch 2. Expected: Expected: {dev_tl_override_map[n_eps]}, Got: {tl}")
                 sys.exit(1)
 
         if n_eps >= (rc_max_num_eps * 2):
