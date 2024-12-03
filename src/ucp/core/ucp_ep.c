@@ -1855,7 +1855,7 @@ ucp_lane_index_t
 ucp_ep_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
                             const ucp_lane_index_t *reuse_lane_map)
 {
-    ucp_lane_map_t lane_bitmap = {0};
+    ucp_lane_map_t lane_bitmap = 0;
     ucp_lane_index_t lane;
 
     if (ucp_ep_has_cm_lane(ep)) {

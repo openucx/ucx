@@ -241,11 +241,10 @@ ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::reduced_tl_bitmap() const
         return ucp_tl_bitmap_max;
     }
 
-    auto reused_bitmap         = ep_tl_bitmap(num_reused_lanes());
-    const auto negative_bitmap = UCS_STATIC_BITMAP_NOT(reused_bitmap);
-
-    return UCS_STATIC_BITMAP_NOT(UCS_STATIC_BITMAP_AND(ep_tl_bitmap(),
-                                                       negative_bitmap));
+    /* Use only resources not already in use, or part of reuse bitmap */
+    auto reused_bitmap = ep_tl_bitmap(num_reused_lanes());
+    return UCS_STATIC_BITMAP_OR(UCS_STATIC_BITMAP_NOT(ep_tl_bitmap()),
+                                reused_bitmap);
 }
 
 void test_ucp_ep_reconfig::entity::connect(const ucp_test_base::entity *other,
@@ -319,10 +318,10 @@ void test_ucp_ep_reconfig::entity::verify_configuration(
     }
 
     if (is_reconfigured()) {
-        EXPECT_GE(reused, num_reused);
-        EXPECT_LE(reused, num_reused * num_paths());
+        EXPECT_LE(num_reused, reused);
+        EXPECT_GE(num_reused * num_paths(), reused);
     } else {
-        EXPECT_EQ(reused, num_lanes);
+        EXPECT_EQ(num_lanes, reused);
     }
 }
 
@@ -389,11 +388,6 @@ void test_ucp_ep_reconfig::ensure_reused_lanes_reconfigurable()
 {
     if (!reuse_lanes()) {
         return;
-    }
-
-    if (has_transport("ud_v") || has_transport("ud_x")) {
-        UCS_TEST_SKIP_R("the test requires at least 2 lanes, while UD has only "
-                        "1");
     }
 
     if (has_transport("tcp") || has_transport("dc_x") || has_transport("shm")) {
