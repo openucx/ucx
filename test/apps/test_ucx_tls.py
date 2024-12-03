@@ -178,7 +178,7 @@ def test_ucx_tls_positive(tls):
         print(f"Error: No transport layer found for UCX_TLS={tls}")
         sys.exit(1)
     tls = tls.split(',')
-    if found_tl in tls or f"\\{found_tl}" in tls:
+    if found_tl in tls or "\\" + found_tl in tls:
         return
     for tl in tls:
         if tl in tl_aliases and found_tl in tl_aliases[tl]:
