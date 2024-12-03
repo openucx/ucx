@@ -118,7 +118,7 @@ def exec_cmd(cmd):
 
     status, output = subprocess.getstatusoutput(cmd)
     if options.verbose:
-        print(f"return code {status}")
+        print("return code " + str(status))
         print(output)
 
     return status, output
@@ -130,7 +130,7 @@ def find_am_transport(dev, neps=1, override=0, tls="ib"):
     with _override_env("UCX_TLS", tls), \
          _override_env("UCX_NET_DEVICES", dev):
 
-        status, output = exec_cmd(f"{ucx_info}{ucx_info_args}{neps} | grep am")
+        status, output = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep am")
 
     match = re.search(r'\d+:(\S+)/\S+', output)
     if match:
@@ -147,23 +147,23 @@ def test_fallback_from_rc(dev, neps) :
     os.putenv("UCX_TLS", "ib")
     os.putenv("UCX_NET_DEVICES", dev)
 
-    status, output = exec_cmd(f"{ucx_info}{ucx_info_args}{neps} | grep rc")
+    status,output = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep rc")
 
     os.unsetenv("UCX_TLS")
     os.unsetenv("UCX_NET_DEVICES")
 
     if output != "":
-        print(f"RC transport must not be used when estimated number of EPs = {neps}")
+        print("RC transport must not be used when estimated number of EPs = " + str(neps))
         sys.exit(1)
 
     os.putenv("UCX_TLS", "rc,ud,tcp")
 
-    status, output_rc = exec_cmd(f"{ucx_info}{ucx_info_args}{neps} | grep rc")
+    status,output_rc = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep rc")
 
-    status, output_tcp = exec_cmd(f"{ucx_info}{ucx_info_args}{neps} | grep tcp")
+    status,output_tcp = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep tcp")
 
     if output_rc != "" or output_tcp != "":
-        print(f"RC/TCP transports must not be used when estimated number of EPs = {neps}")
+        print("RC/TCP transports must not be used when estimated number of EPs = " + str(neps))
         sys.exit(1)
 
     os.unsetenv("UCX_TLS")
@@ -171,13 +171,14 @@ def test_fallback_from_rc(dev, neps) :
 def test_ucx_tls_positive(tls):
     # Use TLS list in "allow" mode and verify that the found tl is in the list
     found_tl = find_am_transport(None, tls=tls)
-    print(f"Using UCX_TLS={tls}, found TL: {found_tl}")
+    print("Using UCX_TLS=" + tls + ", found TL: " + str(found_tl))
     if tls == 'all':
         return
     if not found_tl:
+        print("Error: No transport layer found for UCX_TLS=" + tls)
         sys.exit(1)
     tls = tls.split(',')
-    if found_tl in tls or f"\\{found_tl}" in tls:
+    if found_tl in tls or "\\" + found_tl in tls:
         return
     for tl in tls:
         if tl in tl_aliases and found_tl in tl_aliases[tl]:
@@ -188,7 +189,7 @@ def test_ucx_tls_positive(tls):
 def test_ucx_tls_negative(tls):
     # Use TLS list in "negate" mode and verify that the found tl is not in the list
     found_tl = find_am_transport(None, tls="^"+tls)
-    print(f"Using UCX_TLS={tls}, found TL: {found_tl}")
+    print("Using UCX_TLS=^" + tls + ", found TL: " + str(found_tl))
     tls = tls.split(',')
     if not found_tl or found_tl in tls:
         print("No available TL found")
@@ -237,7 +238,7 @@ else:
     bin_prefix = options.prefix + "/bin"
 
 if not (os.path.isdir(bin_prefix)):
-    print(f"directory \"{bin_prefix}\" does not exist")
+    print("directory \"" + bin_prefix + "\" does not exist")
     parser.print_help()
     exit(1)
 
@@ -260,11 +261,11 @@ for dev in sorted(dev_list):
     if dev_attrs.find("PORT_ACTIVE") == -1:
         continue
 
-    if not os.path.exists(f"/sys/class/infiniband/{dev}/ports/{port}/gids/0"):
+    if not os.path.exists("/sys/class/infiniband/%s/ports/%s/gids/0" % (dev, port)):
         print("Skipping dummy device: ", dev)
         continue
 
-    driver_name = os.path.basename(os.readlink(f"/sys/class/infiniband/{dev}/device/driver"))
+    driver_name = os.path.basename(os.readlink("/sys/class/infiniband/%s/device/driver" % dev))
     dev_name    = driver_name.split("_")[0] # should be mlx4 or mlx5
     if not dev_name in ['mlx4', 'mlx5']:
         print("Skipping unknown device: ", dev_name)
@@ -275,7 +276,7 @@ for dev in sorted(dev_list):
         dev_tl_override_map = am_tls[dev_name + "_override"]
         override = 1
     else:
-        fw_ver = open(f"/sys/class/infiniband/{dev}/fw_ver").read()
+        fw_ver = open("/sys/class/infiniband/%s/fw_ver" % dev).read()
         if parse_version(fw_ver) >= parse_version("16.23.0"):
             dev_tl_map = am_tls[dev_name+"_roce_dc"]
         else:
@@ -284,24 +285,24 @@ for dev in sorted(dev_list):
 
     for n_eps in sorted(dev_tl_map):
         tl = find_am_transport(dev + ':' + port, n_eps)
-        print(f"{dev}:{port} eps: {n_eps} expected am tl: {dev_tl_map[n_eps]} selected: {tl}")
+        print(dev+':' + port + "               eps: ", n_eps, " expected am tl: " + \
+              dev_tl_map[n_eps] + " selected: " + str(tl))
 
         if dev_tl_map[n_eps] != tl:
             sys.exit(1)
 
         if override:
-            tl = find_am_transport(f"{dev}:{port}", n_eps, 1)
-            print(f"{dev}:{port} UCX_NUM_EPS=2 eps: {n_eps} expected am tl: \
-                  {dev_tl_override_map[n_eps]} selected: {tl}")
+            tl = find_am_transport(dev + ':' + port, n_eps, 1)
+            print(dev+':' + port + " UCX_NUM_EPS=2 eps: ", n_eps, " expected am tl: " + \
+                  dev_tl_override_map[n_eps] + " selected: " + str(tl))
 
             if dev_tl_override_map[n_eps] != tl:
                 sys.exit(1)
 
         if n_eps >= (rc_max_num_eps * 2):
-            test_fallback_from_rc(f"{dev}:{port}", n_eps)
+            test_fallback_from_rc(dev + ':' + port, n_eps)
 
 # Test UCX_TLS configuration (TL choice according to "allow" and "negate" lists)
 test_tls_allow_list(ucx_info)
 
 sys.exit(0)
-
