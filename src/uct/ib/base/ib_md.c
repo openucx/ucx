@@ -104,10 +104,6 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Use indirect atomic\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_indirect_atomic), UCS_CONFIG_TYPE_BOOL},
 
-    {"ATOMIC_OFFSET", "y",
-     "Use atomic offset\n",
-     ucs_offsetof(uct_ib_md_config_t, ext.enable_atomic_offset), UCS_CONFIG_TYPE_BOOL},
-
     {"GID_INDEX", "auto",
      "Port GID index to use.",
      ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_ULUNITS},

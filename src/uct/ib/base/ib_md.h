@@ -81,7 +81,6 @@ typedef struct uct_ib_md_ext_config {
     int                      prefer_nearest_device; /**< Give priority for near
                                                          device */
     int                      enable_indirect_atomic; /** Enable indirect atomic */
-    int                      enable_atomic_offset;
 
     struct {
         int                  prefetch;     /**< Auto-prefetch non-blocking memory
@@ -334,7 +333,7 @@ uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 {
-    if (md->config.enable_atomic_offset) {
+    if (md->config.enable_indirect_atomic) {
         return md->flush_rkey >> 8;
     }
     return 0;
