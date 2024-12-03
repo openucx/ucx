@@ -214,8 +214,7 @@ def test_tls_allow_list(ucx_info):
 
     # Add some IB variant (both strict and alias), if available
     for tls_variant in available_tls:
-        if tls_variant.startswith("rc_") or tls_variant.startswith("dc_") or \
-           tls_variant.startswith("ud_"):
+        if tls_variant.startswith("dc_") or tls_variant.startswith("ud_"):
             tls_variants += ["ib", "\\" + tls_variant]
             break
 
