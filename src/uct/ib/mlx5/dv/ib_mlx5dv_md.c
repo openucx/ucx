@@ -707,9 +707,9 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
                                                        FIELD_FLAGS, 0);
     uint64_t access_flags = uct_ib_memh_access_flags(&memh->super,
                                                      md->super.relaxed_order,
-                                                     1, flags) &
+                                                     0, flags) &
                             access_mask;
-    int attempt_cnt       = 0;
+    int attempt_count     = 0;
     ucs_status_t status;
     uint32_t mkey;
 
@@ -736,12 +736,12 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
     do {
         status = uct_ib_reg_mr(&md->super, address, length, params, access_flags,
                                NULL, &memh->mrs[mr_type].super.ib,
-                               attempt_cnt == 0);
-        attempt_cnt++;
+                               attempt_count == 0);
+        attempt_count++;
         access_flags = uct_ib_memh_access_flags(&memh->super,
                                                 md->super.relaxed_order,
-                                                attempt_cnt == 0, flags);
-    } while ((status != UCS_OK) && (attempt_cnt < 2));
+                                                1, flags);
+    } while ((status != UCS_OK) && (attempt_count < 2));
 
     if (status != UCS_OK) {
         return status;
@@ -823,7 +823,7 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
         status       = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params,
                                      access_flags, NULL,
                                      &memh->mrs[UCT_IB_MR_DEFAULT].super.ib,
-                                     attempt_cnt == 0);
+                                     attempt_cnt > 0);
         attempt_cnt++;
     } while ((status != UCS_OK) && (attempt_cnt < 2));
 

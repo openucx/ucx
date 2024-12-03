@@ -460,7 +460,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
 ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
-                           struct ibv_mr **mr_p, int first_attempt)
+                           struct ibv_mr **mr_p, int hide_errors)
 {
     ucs_time_t UCS_V_UNUSED start_time = ucs_get_time();
     unsigned long retry                = 0;
@@ -508,7 +508,7 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
         uct_ib_md_print_mem_reg_err_msg(title, address, length, access_flags,
                                         errno,
                                         (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ||
-                                        first_attempt);
+                                        hide_errors);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -627,7 +627,7 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
     return UCS_OK;
 }
 
-uint64_t uct_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
+uint64_t uct_ib_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
 {
     uint64_t ibv_flags = 0;
 
@@ -651,14 +651,14 @@ uint64_t uct_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
 }
 
 uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
-                                  int first_attempt, uint64_t uct_flags)
+                                  int use_uct_flags, uint64_t uct_flags)
 {
     uint64_t access_flags;
 
-    if (first_attempt) {
-        access_flags = UCT_IB_MEM_ACCESS_FLAGS;
+    if (use_uct_flags) {
+        access_flags = uct_ib_flags_to_ibv_mem_access_flags(uct_flags);
     } else {
-        access_flags = uct_flags_to_ibv_mem_access_flags(uct_flags);
+        access_flags = UCT_IB_MEM_ACCESS_FLAGS;
     }
 
     if (memh->flags & UCT_IB_MEM_FLAG_ODP) {
@@ -696,10 +696,10 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
     do {
         access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order,
-                                                attempt_cnt == 0, uct_flags);
+                                                attempt_cnt > 0, uct_flags);
 
-        status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
-                               &mr_default, attempt_cnt == 0);
+        status       = uct_ib_reg_mr(md, address, length, params, access_flags,
+                                     NULL, &mr_default, attempt_cnt == 0);
         attempt_cnt++;
     } while ((status != UCS_OK) && (attempt_cnt < 2));
 
