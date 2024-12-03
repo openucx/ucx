@@ -653,13 +653,9 @@ uint64_t uct_ib_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
 uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
                                   int use_uct_flags, uint64_t uct_flags)
 {
-    uint64_t access_flags;
-
-    if (use_uct_flags) {
-        access_flags = uct_ib_flags_to_ibv_mem_access_flags(uct_flags);
-    } else {
-        access_flags = UCT_IB_MEM_ACCESS_FLAGS;
-    }
+    uint64_t access_flags = use_uct_flags ?
+                            uct_ib_flags_to_ibv_mem_access_flags(uct_flags) :
+                            UCT_IB_MEM_ACCESS_FLAGS;
 
     if (memh->flags & UCT_IB_MEM_FLAG_ODP) {
         access_flags |= IBV_ACCESS_ON_DEMAND;
@@ -679,7 +675,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     uct_ib_md_t *md    = ucs_derived_of(uct_md, uct_ib_md_t);
     uint64_t uct_flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
                                                     FIELD_FLAGS, 0);
-    int attempt_cnt    = 0;
+    int attempt_count  = 0;
     struct ibv_mr *mr_default;
     uct_ib_verbs_mem_t *memh;
     uct_ib_mem_t *ib_memh;
@@ -696,12 +692,12 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
     do {
         access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order,
-                                                attempt_cnt > 0, uct_flags);
+                                                attempt_count > 0, uct_flags);
 
         status       = uct_ib_reg_mr(md, address, length, params, access_flags,
-                                     NULL, &mr_default, attempt_cnt == 0);
-        attempt_cnt++;
-    } while ((status != UCS_OK) && (attempt_cnt < 2));
+                                     NULL, &mr_default, attempt_count == 0);
+        attempt_count++;
+    } while ((status != UCS_OK) && (attempt_count < 2));
 
     if (status != UCS_OK) {
         goto err_free;

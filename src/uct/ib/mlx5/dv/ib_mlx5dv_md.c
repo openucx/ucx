@@ -740,7 +740,7 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
         attempt_count++;
         access_flags = uct_ib_memh_access_flags(&memh->super,
                                                 md->super.relaxed_order,
-                                                1, flags);
+                                                attempt_count > 0, flags);
     } while ((status != UCS_OK) && (attempt_count < 2));
 
     if (status != UCS_OK) {
@@ -802,7 +802,7 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
 {
     uct_ib_mlx5_md_t *md           = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     uct_md_mem_reg_params_t params = {};
-    int attempt_cnt                = 0;
+    int attempt_count              = 0;
     uct_ib_mlx5_devx_mem_t *memh;
     uint64_t access_flags;
     ucs_status_t status;
@@ -819,13 +819,13 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
 
     do {
         access_flags = uct_ib_memh_access_flags(&memh->super, relaxed_order,
-                                                attempt_cnt == 0, flags);
+                                                attempt_count > 0, flags);
         status       = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params,
                                      access_flags, NULL,
                                      &memh->mrs[UCT_IB_MR_DEFAULT].super.ib,
-                                     attempt_cnt > 0);
-        attempt_cnt++;
-    } while ((status != UCS_OK) && (attempt_cnt < 2));
+                                     attempt_count == 0);
+        attempt_count++;
+    } while ((status != UCS_OK) && (attempt_count < 2));
 
     if (status != UCS_OK) {
         goto err_reg;
