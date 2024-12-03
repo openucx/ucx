@@ -121,14 +121,15 @@ public:
             .op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL
         };
 
-        void *sreq = ucp_tag_send_nbx(e1.ep(), sbuf->ptr(), msg_size, 0, &param);
+        void *sreq = ucp_tag_send_nbx(e1.ep(), sbuf->ptr(), msg_size, 0,
+                                      &param);
         void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(), sbuf->ptr(), msg_size,
                                                 0, &param);
         reqs.insert(reqs.end(), {sreq, sreq_sync});
 
         for (unsigned iter = 0; iter < 2; iter++) {
-            void *rreq = ucp_tag_recv_nbx(e2.worker(), rbuf->ptr(), msg_size, 0,
-                                          0, &param);
+            void *rreq = ucp_tag_recv_nbx(e2.worker(), rbuf->ptr(), msg_size,
+                                          0, 0, &param);
             reqs.push_back(rreq);
         }
     }
