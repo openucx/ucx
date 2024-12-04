@@ -101,37 +101,6 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                            num_resources_p);
 }
 
-int uct_cuda_base_is_coherent()
-{
-#if HAVE_CUDA_FABRIC
-    static int coherent = -1;
-    CUdevice cu_device;
-    ucs_status_t status;
-
-    if (coherent != -1) {
-        goto out;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
-    if (status != UCS_OK) {
-        coherent = 0;
-        goto out;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuDeviceGetAttribute(&coherent,
-               CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES,
-               cu_device));
-    if (status != UCS_OK) {
-        coherent = 0;
-    }
-out:
-    return coherent;
-#else
-    return 0;
-#endif
-}
-
 UCS_STATIC_INIT
 {
     /* coverity[check_return] */
