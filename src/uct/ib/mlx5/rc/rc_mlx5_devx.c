@@ -248,8 +248,9 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                   UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
                                  (md->dp_ordering_cap.dc ==
                                   UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
-        iface->config.srq_topo = ddp_enabled ? UCT_RC_MLX5_SRQ_TOPO_LIST :
-                                               UCT_RC_MLX5_SRQ_TOPO_CYCLIC;
+        iface->config.srq_topo = ddp_enabled ?
+                                         UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED :
+                                         UCT_RC_MLX5_SRQ_TOPO_CYCLIC;
     }
 
     if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC) {
