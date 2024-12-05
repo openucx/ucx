@@ -122,9 +122,8 @@ endif
 .cu.o : ; $(NVCC) -c -o $@ $<
 
 test_cuda_get_symbol_address.o: test_cuda_get_symbol_address.cu
-	$(NVCC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
-	$(test_cuda_get_symbol_address_CPPFLAGS) -MT $@ -MD -MF \
-	$(DEPDIR)/test_cuda_get_symbol_address.Tpo -c -o $@ \
-	`test -f '$<' || echo '$(srcdir)/'`$<
-	$(AM_V_at)$(am__mv) $(DEPDIR)/test_cuda_get_symbol_address.Tpo \
-	$(DEPDIR)/test_cuda_get_symbol_address.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(NVCC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_cuda_get_symbol_address_CPPFLAGS) $(CPPFLAGS) $(CFLAGS) -MT $@ -MD -MF $(DEPDIR)/test_cuda_get_symbol_address.Tpo -c -o $@  `test -f 'test_cuda_get_symbol_address.cu' || echo '$(srcdir)/'`test_cuda_get_symbol_address.cu
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_cuda_get_symbol_address.Tpo $(DEPDIR)/test_cuda_get_symbol_address.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test_cuda_get_symbol_address.cu' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(NVCC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_cuda_get_symbol_address_CPPFLAGS) $(CPPFLAGS) -Xcompiler "-fPIC" -c -o $@ `test -f 'test_cuda_get_symbol_address.cu' || echo '$(srcdir)/'`test_cuda_get_symbol_address.cu
