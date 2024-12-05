@@ -101,21 +101,6 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
                                        ucs_arch_memcpy_hint_t hint,
                                        size_t total_len)
 {
-#if ENABLE_BUILTIN_MEMCPY
-    if (ucs_unlikely((len > ucs_global_opts.arch.builtin_memcpy_min) &&
-                     (len < ucs_global_opts.arch.builtin_memcpy_max))) {
-        asm volatile ("rep movsb"
-                      : "=D" (dst),
-                      "=S" (src),
-                      "=c" (len)
-                      : "0" (dst),
-                      "1" (src),
-                      "2" (len)
-                      : "memory");
-        return dst;
-    }
-#endif
-
 #ifdef __AVX__
     if (ucs_unlikely(total_len >= ucs_global_opts.arch.nt_buffer_transfer_min)) {
         ucs_x86_nt_buffer_transfer(dst, src, len, hint, total_len);

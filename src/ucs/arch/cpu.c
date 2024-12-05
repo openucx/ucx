@@ -41,48 +41,6 @@ struct { /* sysfs entries for system cache sizes */
     [UCS_CPU_CACHE_L3]  = {.level = 3, .type = "Unified"}
 };
 
-const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
-    [UCS_CPU_VENDOR_UNKNOWN] = {
-        .min = UCS_MEMUNITS_INF,
-        .max = UCS_MEMUNITS_INF
-    },
-    [UCS_CPU_VENDOR_INTEL] = {
-        .min = 1 * UCS_KBYTE,
-        .max = 8 * UCS_MBYTE
-    },
-    /* TODO: investigate why `rep movsb` is slow for shared buffers
-     * on some AMD configurations */
-    [UCS_CPU_VENDOR_AMD] = {
-        .min = UCS_MEMUNITS_INF,
-        .max = UCS_MEMUNITS_INF
-    },
-    [UCS_CPU_VENDOR_GENERIC_ARM] = {
-        .min = UCS_MEMUNITS_INF,
-        .max = UCS_MEMUNITS_INF
-    },
-    [UCS_CPU_VENDOR_GENERIC_PPC] = {
-        .min = UCS_MEMUNITS_INF,
-        .max = UCS_MEMUNITS_INF
-    },
-    [UCS_CPU_VENDOR_FUJITSU_ARM] = {
-        .min = UCS_MEMUNITS_INF,
-        .max = UCS_MEMUNITS_INF
-    },
-    [UCS_CPU_VENDOR_ZHAOXIN] = {
-        .min = UCS_MEMUNITS_INF,
-        .max = UCS_MEMUNITS_INF
-    },
-    [UCS_CPU_VENDOR_GENERIC_RV64G] = {
-        .min = UCS_MEMUNITS_INF,
-        .max = UCS_MEMUNITS_INF
-    },
-    [UCS_CPU_VENDOR_NVIDIA] = {
-        .min = UCS_MEMUNITS_INF,
-        .max = UCS_MEMUNITS_INF
-    }
-};
-
-
 static void ucs_sysfs_get_cache_size()
 {
     char type_str[32];  /* Data/Instruction/Unified */
