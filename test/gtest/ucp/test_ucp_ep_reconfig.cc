@@ -35,30 +35,30 @@ protected:
                      int do_set_ep = 1) override;
 
         void
-        verify_configuration(const entity &other, unsigned num_reused) const;
+        verify_configuration(const entity &other, unsigned reused_rscs) const;
 
         bool is_reconfigured() const
         {
             return m_cfg_index != ep()->cfg_index;
         }
 
-        unsigned num_reused_lanes() const
+        unsigned num_reused_rscs() const
         {
-            return m_num_reused_lanes;
+            return m_num_reused_rscs;
         }
 
     private:
         void store_config();
         ucp_tl_bitmap_t
-        ep_tl_bitmap(unsigned max_num_devs = limits::max()) const;
+        ep_tl_bitmap(unsigned max_num_rscs = limits::max()) const;
         address_p get_address(const ucp_tl_bitmap_t &tl_bitmap) const;
         bool is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
         unsigned num_paths() const;
         ucp_tl_bitmap_t reduced_tl_bitmap() const;
 
-        ucp_worker_cfg_index_t m_cfg_index        = UCP_WORKER_CFG_INDEX_NULL;
-        unsigned               m_num_reused_lanes = 0;
+        ucp_worker_cfg_index_t m_cfg_index       = UCP_WORKER_CFG_INDEX_NULL;
+        unsigned               m_num_reused_rscs = 0;
         std::vector<uct_ep_h>  m_uct_eps;
         bool                   m_exclude_ifaces;
     };
@@ -115,7 +115,6 @@ public:
 
     void run(bool bidirectional = false);
     void skip_non_p2p();
-    bool has_bond_iface();
     void ensure_reused_lanes_reconfigurable();
 
     bool reuse_lanes() const
@@ -182,12 +181,15 @@ public:
 
 unsigned test_ucp_ep_reconfig::entity::num_paths() const
 {
+    /* num_paths is by default relevant only for rma_bw lanes */
     auto lane = ucp_ep_config(ep())->key.rma_bw_lanes[0];
 
     if (lane == UCP_NULL_LANE) {
         return 1;
     }
 
+    /* Select the first rma_bw lane and query the matching resource for
+     * num_paths */
     auto rsc_idx = ucp_ep_get_rsc_index(ep(), lane);
     auto attr    = ucp_worker_iface_get_attr(worker(), rsc_idx);
     return attr->dev_num_paths;
@@ -208,28 +210,32 @@ void test_ucp_ep_reconfig::entity::store_config()
 
     m_cfg_index = ep()->cfg_index;
 
-    /* Calculate number of reused lanes */
-    auto num_reused    = (ucp_ep_num_lanes(ep()) / 2) / num_paths();
-    auto test          = static_cast<const test_ucp_ep_reconfig*>(m_test);
-    m_num_reused_lanes = test->reuse_lanes() ? num_reused : 0;
+    /* Calculate number of reused resources by:
+     * 1) Taking half of total lanes to be reused.
+     * 2) Dividing num_lanes by num_paths to get number of resources. */
+    auto num_reused   = (ucp_ep_num_lanes(ep()) / 2) / num_paths();
+    auto test         = static_cast<const test_ucp_ep_reconfig*>(m_test);
+    m_num_reused_rscs = test->reuse_lanes() ? num_reused : 0;
 }
 
 ucp_tl_bitmap_t
-test_ucp_ep_reconfig::entity::ep_tl_bitmap(unsigned max_num_devs) const
+test_ucp_ep_reconfig::entity::ep_tl_bitmap(unsigned max_num_rscs) const
 {
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    unsigned dev_count        = 0;
+    unsigned rsc_count        = 0;
 
     for (auto lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
-        if (ucp_ep_get_path_index(ep(), lane) > 0) {
+        auto rsc_index = ucp_ep_get_rsc_index(ep(), lane);
+
+        if (UCS_STATIC_BITMAP_GET(tl_bitmap, rsc_index)) {
             continue;
         }
 
-        if (dev_count++ >= max_num_devs) {
+        if (rsc_count++ >= max_num_rscs) {
             break;
         }
 
-        UCS_STATIC_BITMAP_SET(&tl_bitmap, ucp_ep_get_rsc_index(ep(), lane));
+        UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_index);
     }
 
     return tl_bitmap;
@@ -242,7 +248,7 @@ ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::reduced_tl_bitmap() const
     }
 
     /* Use only resources not already in use, or part of reuse bitmap */
-    auto reused_bitmap = ep_tl_bitmap(num_reused_lanes());
+    auto reused_bitmap = ep_tl_bitmap(num_reused_rscs());
     return UCS_STATIC_BITMAP_OR(UCS_STATIC_BITMAP_NOT(ep_tl_bitmap()),
                                 reused_bitmap);
 }
@@ -302,9 +308,9 @@ bool test_ucp_ep_reconfig::entity::is_lane_connected(ucp_ep_h ep,
 }
 
 void test_ucp_ep_reconfig::entity::verify_configuration(
-        const entity &other, unsigned num_reused) const
+        const entity &other, unsigned reused_rscs) const
 {
-    unsigned reused                  = 0;
+    unsigned reused_lanes            = 0;
     const ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep());
 
     for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
@@ -312,16 +318,17 @@ void test_ucp_ep_reconfig::entity::verify_configuration(
         EXPECT_TRUE(is_lane_connected(ep(), lane, other));
 
         /* Verify correct number of reused lanes */
-        auto uct_ep = ucp_ep_get_lane(ep(), lane);
-        auto it     = std::find(m_uct_eps.begin(), m_uct_eps.end(), uct_ep);
-        reused     += (it != m_uct_eps.end());
+        auto uct_ep   = ucp_ep_get_lane(ep(), lane);
+        auto it       = std::find(m_uct_eps.begin(), m_uct_eps.end(), uct_ep);
+        reused_lanes += (it != m_uct_eps.end());
     }
 
     if (is_reconfigured()) {
-        EXPECT_LE(num_reused, reused);
-        EXPECT_GE(num_reused * num_paths(), reused);
+        EXPECT_LE(reused_rscs, reused_lanes);
+        /* Convert resources to lanes by multiplying with num_paths */
+        EXPECT_GE(reused_rscs * num_paths(), reused_lanes);
     } else {
-        EXPECT_EQ(num_lanes, reused);
+        EXPECT_EQ(num_lanes, reused_lanes);
     }
 }
 
@@ -357,8 +364,8 @@ void test_ucp_ep_reconfig::run(bool bidirectional)
 
     EXPECT_NE(r_sender->is_reconfigured(), r_receiver->is_reconfigured());
 
-    r_sender->verify_configuration(*r_receiver, r_sender->num_reused_lanes());
-    r_receiver->verify_configuration(*r_sender, r_sender->num_reused_lanes());
+    r_sender->verify_configuration(*r_receiver, r_sender->num_reused_rscs());
+    r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
 }
 
 void test_ucp_ep_reconfig::skip_non_p2p()
@@ -366,22 +373,6 @@ void test_ucp_ep_reconfig::skip_non_p2p()
     if (!has_p2p_transport()) {
         UCS_TEST_SKIP_R("No p2p TLs available, config will be non-wireup");
     }
-}
-
-bool test_ucp_ep_reconfig::has_bond_iface()
-{
-    auto context = sender().ucph();
-    const ucp_tl_resource_desc_t *rsc;
-
-    ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
-        std::string tl_name(rsc->tl_rsc.dev_name);
-
-        if (tl_name.find("bond") != std::string::npos) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 void test_ucp_ep_reconfig::ensure_reused_lanes_reconfigurable()
@@ -392,10 +383,6 @@ void test_ucp_ep_reconfig::ensure_reused_lanes_reconfigurable()
 
     if (has_transport("tcp") || has_transport("dc_x") || has_transport("shm")) {
         UCS_TEST_SKIP_R("non wired-up lanes are not supported yet");
-    }
-
-    if (has_bond_iface()) {
-        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
     }
 }
 
