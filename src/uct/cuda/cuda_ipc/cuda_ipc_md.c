@@ -423,27 +423,22 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
         goto out;
     }
 
-    mnnvl_supported = 0;
-
-    if (mnnvl_enable == UCS_NO) {
-        goto out;
-    }
-
-    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
-    if (status != UCS_OK) {
+    if ((mnnvl_enable == UCS_NO) ||
+        (UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG) != UCS_OK)) {
+        mnnvl_supported = 0;
         goto out;
     }
 
     status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(0, &device));
     if (status != UCS_OK) {
-        goto out_sd;
+        goto out_not_supported;
     }
 
     fabric_info.version = nvmlGpuFabricInfo_v2;
     status              = UCT_NVML_FUNC_LOG_ERR(
                              nvmlDeviceGetGpuFabricInfoV(device, &fabric_info));
     if (status != UCS_OK) {
-        goto out_sd;
+        goto out_not_supported;
     }
 
     ucs_debug("fabric_info: healthmask=%u state=%u status=%u clique=%u uuid=%s",
@@ -453,13 +448,14 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
                   fabric_info.clusterUuid, NVML_GPU_FABRIC_UUID_LEN, buf,
                   sizeof(buf), SIZE_MAX));
 
-    if ((fabric_info.state != NVML_GPU_FABRIC_STATE_COMPLETED) ||
-        (fabric_info.status != NVML_SUCCESS)) {
+    if ((fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
+        (fabric_info.status == NVML_SUCCESS)) {
+        mnnvl_supported = 1;
         goto out_sd;
     }
 
-    mnnvl_supported = 1;
-
+out_not_supported:
+    mnnvl_supported = 0;
 out_sd:
     UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 out:
