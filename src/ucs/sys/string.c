@@ -423,6 +423,26 @@ ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
     return -1;
 }
 
+ssize_t ucs_string_find_in_sparse_list(const char *str,
+                                       const char **string_list,
+                                       size_t str_array_size)
+{
+    size_t i;
+
+    /* Ignores NULL entries */
+    for (i = 0; i < str_array_size; ++i) {
+        if (string_list[i] == NULL) {
+            continue;
+        }
+        if (strcmp(string_list[i], str) == 0) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+
 char* ucs_string_split(char *str, const char *delim, int count, ...)
 {
     char *p = str;
