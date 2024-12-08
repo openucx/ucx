@@ -131,6 +131,8 @@ noinst_HEADERS = \
 	sys/iovec.h \
 	sys/iovec.inl \
 	sys/ptr_arith.h \
+	sys/ucs_netlink.h \
+	sys/ucs_rtnetlink.h \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \
@@ -205,6 +207,8 @@ libucs_la_SOURCES = \
 	sys/sock.c \
 	sys/topo/base/topo.c \
 	sys/stubs.c \
+	sys/ucs_netlink.c \
+	sys/ucs_rtnetlink.c \
 	sys/uid.c \
 	time/time.c \
 	time/timer_wheel.c \

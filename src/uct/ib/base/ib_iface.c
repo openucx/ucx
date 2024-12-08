@@ -23,6 +23,7 @@
 #include <ucs/type/serialize.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
+#include <ucs/sys/ucs_rtnetlink.h>
 #include <ucs/sys/sock.h>
 #include <string.h>
 #include <stdlib.h>
@@ -40,6 +41,13 @@ const char *uct_ib_mtu_values[] = {
     [UCT_IB_MTU_2048]       = "2048",
     [UCT_IB_MTU_4096]       = "4096",
     [UCT_IB_MTU_LAST]       = NULL
+};
+
+const char *uct_ib_reachability_modes[] = {
+    [UCT_IB_REACHABILITY_MODE_ROUTE]        = "route",
+    [UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET] = "local_subnet",
+    [UCT_IB_REACHABILITY_MODE_ALL]          = "all",
+    [UCT_IB_REACHABILITY_MODE_LAST]         = NULL
 };
 
 enum {
@@ -180,6 +188,13 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "address and a netmask in the form x.x.x.x/y.\n"
    "It must not be used together with UCX_IB_GID_INDEX.",
    ucs_offsetof(uct_ib_iface_config_t, rocev2_subnet_filter), UCS_CONFIG_TYPE_ALLOW_LIST},
+
+  {"ROCE_REACHABILITY_MODE", "route",
+   "The mode used for performing the reachability check\n"
+   " - route        - all routable addresses are assumed as reachable\n"
+   " - local_subnet - only addresses within the interface's subnet are assumed as reachable.\n"
+   " - all          - all addresses are assumed as reachable, without any check",
+   ucs_offsetof(uct_ib_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_modes)},
 
   {"ROCE_PATH_FACTOR", "1",
    "Multiplier for RoCE LAG UDP source port calculation. The UDP source port\n"
@@ -645,25 +660,27 @@ static int
 uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                                const uct_ib_address_t *remote_ib_addr,
                                unsigned prefix_bits,
+                               uct_ib_iface_t *iface,
                                const uct_iface_is_reachable_params_t *params)
 {
     sa_family_t local_ib_addr_af         = local_gid_info->roce_info.addr_family;
     uct_ib_roce_version_t local_roce_ver = local_gid_info->roce_info.ver;
     uint8_t remote_ib_addr_flags         = remote_ib_addr->flags;
+    uct_ib_device_t *dev                 = uct_ib_iface_device(iface);
+    uint8_t port_num                     = iface->config.port_num;
     struct sockaddr_storage sa_local, sa_remote;
     uct_ib_roce_version_t remote_roce_ver;
     sa_family_t remote_ib_addr_af;
     char local_str[128], remote_str[128];
     int matched;
+    char ndev_name[IFNAMSIZ];
+    ucs_status_t status;
 
-    /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases) */
+    /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases)
+       or for reachability mode 'all' (no reachibility check is needed) */
     if ((uct_ib_address_flags_get_roce_version(remote_ib_addr_flags)) ==
-         UCT_IB_DEVICE_ROCE_ANY) {
-        return 1;
-    }
-
-    /* check for zero-sized netmask */
-    if (prefix_bits == 0) {
+         UCT_IB_DEVICE_ROCE_ANY ||
+         iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ALL) {
         return 1;
     }
 
@@ -695,7 +712,7 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                                             &local_gid_info->gid,
                                             &sa_local) != UCS_OK)) {
         uct_iface_fill_info_str_buf(
-               params, "Couldn't convert local RoCE address to socket address");
+               params, "couldn't convert local RoCE address to socket address");
         return 0;
     }
 
@@ -703,8 +720,34 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                                            remote_ib_addr + 1,
                                            &sa_remote) != UCS_OK) {
         uct_iface_fill_info_str_buf(
-               params, "Couldn't convert remote RoCE address to socket address");
+               params, "couldn't convert remote RoCE address to socket address");
         return 0;
+    }
+
+    status = uct_ib_device_get_roce_ndev_name(dev, port_num,
+                                              local_gid_info->gid_index,
+                                              ndev_name, sizeof(ndev_name));
+    if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(
+               params, "couldn't get network interface name");
+        return 0;
+    }
+
+    if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ROUTE) {
+        if (ucs_netlink_rule_exists(ndev_name, (struct sockaddr *)&sa_remote)) {
+            return 1;
+        }
+
+        uct_iface_fill_info_str_buf(
+               params, "remote address %s is not routable",
+               ucs_sockaddr_str((struct sockaddr *)&sa_remote, remote_str, 128));
+
+        return 0;
+    }
+
+    /* A 0-bit netmask implies any address is reachable */
+    if (prefix_bits == 0) {
+        return 1;
     }
 
     matched = ucs_sockaddr_is_same_subnet((struct sockaddr*)&sa_local,
@@ -829,6 +872,7 @@ static int uct_ib_iface_dev_addr_is_reachable(
          * and address families have to be the same */
         return uct_ib_iface_roce_is_reachable(&iface->gid_info, ib_addr,
                                               iface->addr_prefix_bits,
+                                              iface,
                                               is_reachable_params);
     } else {
         /* local and remote have different link layers and therefore are unreachable */
@@ -1322,10 +1366,17 @@ uct_ib_iface_init_roce_addr_prefix(uct_ib_iface_t *iface,
     ucs_assert(uct_ib_iface_is_roce(iface));
 
     if ((gid_info->roce_info.ver != UCT_IB_DEVICE_ROCE_V2) ||
-        !config->rocev2_local_subnet) {
+        (!config->rocev2_local_subnet &&
+        (config->reachability_mode != UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET))) {
         iface->addr_prefix_bits = 0;
         return UCS_OK;
     }
+
+    /* Override the original value of reachability_mode if
+       rocev2_local_subnet is enabled to maintain backward compatibility */
+    iface->config.reachability_mode = config->rocev2_local_subnet ?
+                                      UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET :
+                                      config->reachability_mode;
 
     status = ucs_sockaddr_inet_addr_size(gid_info->roce_info.addr_family,
                                          &addr_size);
