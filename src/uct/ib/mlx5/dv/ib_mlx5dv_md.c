@@ -1895,12 +1895,20 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
                                                void *cap_2,
                                                uct_ib_device_t *dev)
 {
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_rc)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC;
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_rc)) {
+        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+    } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_rc)) {
+        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+    } else {
+        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_dc)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC;
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_dc)) {
+        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+    } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_dc)) {
+        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+    } else {
+        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if ((cap_2 != NULL) &&
@@ -1911,8 +1919,7 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
     ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
               uct_ib_device_name(dev),
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
-              !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC),
-              !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC));
+              md->dp_ordering_cap.rc, md->dp_ordering_cap.dc);
 }
 
 static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
@@ -3189,7 +3196,8 @@ out:
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops;
 
-static void uct_ib_mlx5dv_query_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
+static ucs_status_t 
+uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
 {
 #ifdef HAVE_OOO_RECV_WRS
     struct mlx5dv_context ctx_dv = {
@@ -3200,13 +3208,21 @@ static void uct_ib_mlx5dv_query_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *m
     ret = mlx5dv_query_device(ctx, &ctx_dv);
     if (ret != 0) {
         ucs_error("mlx5dv_query_device: Failed to query device capabilities, ret=%d\n", ret);
-        return;
+        return UCS_ERR_NO_RESOURCE;
     }
 
     if (ctx_dv.ooo_recv_wrs_caps.max_rc > 0) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_DDP;
+        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     }
+
+    if (ctx_dv.ooo_recv_wrs_caps.max_dct > 0) {
+        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+    }
+#else
+    md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
 #endif
+    return UCS_OK;
 }
 
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
@@ -3244,7 +3260,10 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
-    uct_ib_mlx5dv_query_ddp(ctx, md);
+    status = uct_ib_mlx5dv_check_ddp(ctx, md);
+    if (status != UCS_OK) {
+        goto err_md_free;
+    }
 
     if (IBV_DEVICE_ATOMIC_HCA(dev)) {
         dev->atomic_arg_sizes = sizeof(uint64_t);
