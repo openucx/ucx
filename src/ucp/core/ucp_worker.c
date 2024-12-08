@@ -1699,10 +1699,11 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
         UCS_STATIC_BITMAP_SET(&supp_tls, rsc_index);
         priority                    = iface_attr->priority;
-        dummy_ae.iface_attr.lat_ovh = ucp_wireup_iface_lat_distance_v2(wiface);
+        dummy_ae.iface_attr.lat_ovh = ucp_wireup_iface_lat_distance_v2(wiface,
+                                                                       0);
 
         score = ucp_wireup_amo_score_func(wiface, md_attr, &dummy_addr,
-                                          &dummy_ae, NULL);
+                                          &dummy_ae, 0, NULL);
 
         ucs_trace(UCT_TL_RESOURCE_DESC_FMT " atomic score %.2f priority %d",
                   UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc), score, priority);
