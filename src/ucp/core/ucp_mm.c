@@ -1166,6 +1166,16 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
     return UCS_OK;
 }
 
+static void ucp_mtype_pack_dereg(ucp_context_h context, ucp_md_index_t md_index,
+                                 const ucp_mtype_pack_context_t *pack_context)
+{
+    if (pack_context->ucp_memh == NULL) {
+        uct_md_mem_dereg(context->tl_mds[md_index].md, pack_context->uct_memh);
+    } else {
+        ucp_memh_put_rcache(context, pack_context->ucp_memh);
+    }
+}
+
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,
                                       ucp_md_index_t md_index,
@@ -1188,30 +1198,28 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
 
     tl_md  = &context->tl_mds[md_index];
     cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
-    if (((context->cache_md_map[mem_type] & UCS_BIT(md_index)) == 0) ||
-        (context->rcache == NULL)) {
+    if (!(context->cache_md_map[mem_type] & UCS_BIT(md_index))) {
         status = uct_md_mem_reg(context->tl_mds[md_index].md, remote_addr,
                                 length, UCT_MD_MEM_ACCESS_ALL,
-                                &pack_context->uct);
+                                &pack_context->uct_memh);
         if (status != UCS_OK) {
             return status;
         }
 
-        pack_context->parent = NULL;
+        pack_context->ucp_memh = NULL;
     } else {
         status = ucp_memh_get(context, remote_addr, length, mem_type,
                               UCS_BIT(md_index), UCT_MD_MEM_ACCESS_ALL,
-                              "mem_type", &pack_context->parent);
-
+                              "mem_type", &pack_context->ucp_memh);
         if (status != UCS_OK) {
             return status;
         }
 
-        pack_context->uct = pack_context->parent->uct[md_index];
+        pack_context->uct_memh = pack_context->ucp_memh->uct[md_index];
     }
 
     rkey_buffer = ucs_alloca(md_attr->rkey_packed_size);
-    status      = uct_md_mkey_pack_v2(tl_md->md, pack_context->uct,
+    status      = uct_md_mkey_pack_v2(tl_md->md, pack_context->uct_memh,
                                       remote_addr, length, &params,
                                       rkey_buffer);
     if (status != UCS_OK) {
@@ -1229,17 +1237,13 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     return UCS_OK;
 
 out_dereg_mem:
-    if (pack_context->parent == NULL) {
-        uct_md_mem_dereg(context->tl_mds[md_index].md, pack_context->uct);
-    } else {
-        ucp_memh_put_rcache(context, pack_context->parent);
-    }
+    ucp_mtype_pack_dereg(context, md_index, pack_context);
 out:
     return status;
 }
 
 void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucp_md_index_t md_index,
-                                ucp_mtype_pack_context_t *pack_context)
+                                const ucp_mtype_pack_context_t *pack_context)
 {
     ucp_context_h context = worker->context;
     ucp_rsc_index_t cmpt_index;
@@ -1248,11 +1252,7 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucp_md_index_t md_index,
         cmpt_index = context->tl_mds[md_index].cmpt_index;
         uct_rkey_release(context->tl_cmpts[cmpt_index].cmpt,
                          &pack_context->rkey_bundle);
-        if (pack_context->parent == NULL) {
-            uct_md_mem_dereg(context->tl_mds[md_index].md, pack_context->uct);
-        } else {
-            ucp_memh_put_rcache(context, pack_context->parent);
-        }
+        ucp_mtype_pack_dereg(context, md_index, pack_context);
     }
 }
 
