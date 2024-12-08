@@ -117,10 +117,13 @@ typedef struct {
 } ucp_mem_dummy_handle_t;
 
 
+/**
+ * Memory type pack/unpack registration context
+ */
 typedef struct {
-    uct_mem_h uct;
-    ucp_mem_h parent;
-    uct_rkey_bundle_t rkey_bundle;
+    ucp_mem_h         ucp_memh;    /* memh from rcache if MD id cacheable */
+    uct_mem_h         uct_memh;    /* memh for specific MD */
+    uct_rkey_bundle_t rkey_bundle; /* rkey bundle from memh */
 } ucp_mtype_pack_context_t;
 
 
@@ -178,7 +181,7 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       ucp_mtype_pack_context_t *pack_context);
 
 void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucp_md_index_t md_index,
-                                ucp_mtype_pack_context_t *pack_context);
+                                const ucp_mtype_pack_context_t *pack_context);
 
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                size_t length, ucs_memory_type_t mem_type,
