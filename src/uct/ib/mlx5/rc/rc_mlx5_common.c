@@ -64,7 +64,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
-  {"SRQ_TOPO", "auto",
+  {"SRQ_TOPO", "cyclic,cyclic_emulated",
    "List of SRQ topology types in order of preference. Supported types are:\n"
    "\n"
    "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
@@ -73,9 +73,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "                  cannot be used with DDP enabled.\n"
    "\n"
    "cyclic_emulated   SRQ is organized as a continuous array of WQEs, but HW\n"
-   "                  treats it as a linked list. Doesn`t require DEVX."
-   "\n"
-   "auto              The best available SRQ topology will be selected automatically.",
+   "                  treats it as a linked list. Doesn`t require DEVX.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
 
@@ -86,7 +84,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    UCS_CONFIG_TYPE_UINT},
 
   {"DDP_ENABLE", "try",
-   "Enable direct data placement when AR is enabled.\n",
+   "Enable direct data placement\n",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, ddp_enable), 
    UCS_CONFIG_TYPE_TERNARY},
 
@@ -609,8 +607,6 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
                                  const char *tl_name)
 {
     uct_ib_mlx5_md_t *md      = uct_ib_mlx5_iface_md(&iface->super.super);
-    int dp_ordering_ooo_force = !!(md->flags &
-                                   UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE);
     uct_ib_mlx5_dp_ordering_t min_forced_ordering;
 
     /*
@@ -619,30 +615,30 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
      *
      * HCA cap/cap_2 booleans:
      * - if dp_ordering_ooo is set, QPC/DCTC can enable AR.
-     * - if dp_ordering_ooo_force is set, QPC/DCTC can request mlxreg
+     * - if UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE is set, QPC/DCTC can request mlxreg
      *   configuration override, useful to force disable.
-     * 
+     */
+    iface->config.dp_ordering_force =
+            ucs_ternary_auto_value_is_yes_or_no(config->super.ar_enable) ||
+            ucs_ternary_auto_value_is_yes_or_no(config->ddp_enable);
+
+    /*
      * Fail at the following cases:
      * - Want to force configuration but can't force it
      * - Want to force enable or force disable adaptive routing but it is unavailable
      * - Want to force disable adaptive routing but force enabling DDP
-     */
-    iface->config.dp_ordering_force = ucs_ternary_auto_value_is_yes_or_no(
-                                              config->super.ar_enable) ||
-                                      (config->ddp_enable == UCS_YES);
-
-    if ((iface->config.dp_ordering_force && !dp_ordering_ooo_force) ||
-        ((config->super.ar_enable == UCS_NO) &&
-         (config->ddp_enable == UCS_YES))) {
+    */
+    if (iface->config.dp_ordering_force &&
+        !(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE)) {
         goto failure;
     }
-
-    min_forced_ordering       = UCT_IB_MLX5_DP_ORDERING_IBTA;
 
     if (config->ddp_enable == UCS_YES) {
         min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     } else if (config->super.ar_enable == UCS_YES) {
         min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+    } else {
+        min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if (min_forced_ordering > dp_ordering_cap) {
@@ -661,11 +657,10 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
     iface->config.dp_ordering = ucs_min(iface->config.dp_ordering,
                                         dp_ordering_cap);
 
-    ucs_assertv_always((iface->config.srq_topo !=
-                        UCT_RC_MLX5_SRQ_TOPO_CYCLIC) ||
-                               (iface->config.dp_ordering !=
-                                UCT_IB_MLX5_DP_ORDERING_OOO_ALL),
-                       "SRQ topology cyclic is not supported with DDP");
+    if ((iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC) &&
+        (iface->config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_OOO_ALL)) {
+        ucs_error("SRQ topology cyclic is not supported with DDP");
+    }
 
     return UCS_OK;
 

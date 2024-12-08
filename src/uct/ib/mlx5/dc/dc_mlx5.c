@@ -1613,6 +1613,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
+    if (md->dp_ordering_cap.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
+        init_attr.flags |= UCT_IB_DDP_SUPPORTED;
+    }
+
     status = uct_dc_mlx5_calc_sq_length(md, tx_queue_len, &sq_length);
     if (status != UCS_OK) {
         return status;

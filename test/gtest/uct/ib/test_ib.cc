@@ -440,7 +440,7 @@ public:
         }
     }
 
-    bool transport_has_ddp()
+    bool transport_has_ddp() const
     {
         ucs::handle<uct_md_h> uct_md;
 
@@ -462,15 +462,34 @@ public:
                                    UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
         return rc_has_ddp || dc_has_ddp;
     }
+    
+    void test_check_ib_sl_config() {
+        const char *max_avail_sl_str = getenv("GTEST_MAX_IB_SL");
+        uint8_t sl, max_avail_sl;
 
-    void set_ddp_enable(bool enable)
-    {
-        if (has_transport("rc_mlx5")) {
-            modify_config("RC_MLX5_DDP_ENABLE", enable ? "y" : "n");
+        if (max_avail_sl_str == NULL) {
+            max_avail_sl = UCT_IB_SL_NUM;
+        } else {
+            max_avail_sl = std::min(strtoul(max_avail_sl_str, NULL, 0),
+                                    static_cast<unsigned long>(UCT_IB_SL_NUM));
         }
 
-        if (has_transport("dc_mlx5")) {
-            modify_config("DC_MLX5_DDP_ENABLE", enable ? "y" : "n");
+        // go over all SLs, check UCTs could be initialized on a specific SL
+        // and able to send/recv traffic
+        for (sl = 0; sl < max_avail_sl; ++sl) {
+            bool sl_supports_ar = UCS_BIT_GET(m_ooo_sl_mask, sl);
+            if (!has_transport("rc_verbs") && !has_transport("ud_verbs")) {
+                // if AR is configured on the given SL, set AR_ENABLE to "y",
+                // otherwise - to "n" in order to test that AR_ENABLE parameter
+                // works as expected w/o errors and warnings
+                modify_config("IB_AR_ENABLE", sl_supports_ar ? "y" : "n");
+            }
+
+            modify_config("IB_SL", ucs::to_string(static_cast<uint16_t>(sl)));
+
+            test_uct_ib::init();
+            send_recv_short();
+            test_uct_ib::cleanup();
         }
     }
 
@@ -478,39 +497,23 @@ protected:
     uint16_t m_ooo_sl_mask;
 };
 
-UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config) {
-    bool has_ddp                 = transport_has_ddp();
-    const char *max_avail_sl_str = getenv("GTEST_MAX_IB_SL");
-    uint8_t sl, max_avail_sl;
+UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config_without_ddp)
+{
+    modify_config("RC_MLX5_DDP_ENABLE", "no");
+    test_check_ib_sl_config();
+}
 
-    if (max_avail_sl_str == NULL) {
-        max_avail_sl = UCT_IB_SL_NUM;
-    } else {
-        max_avail_sl = std::min(strtoul(max_avail_sl_str, NULL, 0),
-                                static_cast<unsigned long>(UCT_IB_SL_NUM));
+UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config_with_ddp)
+{
+    if (!transport_has_ddp()) {
+        UCS_TEST_SKIP_R("DDP is not supported");
     }
 
-    // go over all SLs, check UCTs could be initialized on a specific SL
-    // and able to send/recv traffic
-    for (sl = 0; sl < max_avail_sl; ++sl) {
-        bool sl_supports_ar = UCS_BIT_GET(m_ooo_sl_mask, sl);
-        if (!has_transport("rc_verbs") && !has_transport("ud_verbs")) {
-            // if AR is configured on the given SL, set AR_ENABLE to "y",
-            // otherwise - to "n" in order to test that AR_ENABLE parameter
-            // works as expected w/o errors and warnings
-            modify_config("IB_AR_ENABLE", sl_supports_ar ? "y" : "n");
-        }
-
-        modify_config("IB_SL", ucs::to_string(static_cast<uint16_t>(sl)));
-
-        for (int test_ddp = 0; test_ddp <= (has_ddp && sl_supports_ar);
-             ++test_ddp) {
-            set_ddp_enable(test_ddp);
-            test_uct_ib::init();
-            send_recv_short();
-            test_uct_ib::cleanup();
-        }
+    if (has_transport("rc_mlx5")) {
+        modify_config("RC_MLX5_DDP_ENABLE", "try");
     }
+
+    test_check_ib_sl_config();
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_sl);
