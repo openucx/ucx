@@ -374,8 +374,7 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 static ucs_status_t
 uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
                                  uct_rc_mlx5_iface_common_config_t *config,
-                                 uct_rc_mlx5_srq_topo_t *topo_p,
-                                 uint8_t has_ddp)
+                                 uct_rc_mlx5_srq_topo_t *topo_p, int has_ddp)
 
 {
     int i;
@@ -417,10 +416,10 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
 #endif
     ucs_status_t status;
 
-    status = uct_rc_mlx5_iface_parse_srq_topo(md, mlx5_config,
-                                              &iface->config.srq_topo,
-                                              !!(init_attr->flags &
-                                                 UCT_IB_DDP_SUPPORTED));
+    status = uct_rc_mlx5_iface_parse_srq_topo(
+            md, mlx5_config, &iface->config.srq_topo,
+            (init_attr->flags & UCT_IB_DDP_SUPPORTED) &&
+                    (mlx5_config->ddp_enable != UCS_NO));
     if (status != UCS_OK) {
         return status;
     }

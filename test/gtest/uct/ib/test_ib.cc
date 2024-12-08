@@ -497,20 +497,19 @@ protected:
     uint16_t m_ooo_sl_mask;
 };
 
-UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config_without_ddp)
+
+UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config_without_ddp,
+           "RC_MLX5_DDP_ENABLE?=n", "DC_MLX5_DDP_ENABLE?=n")
 {
-    modify_config("RC_MLX5_DDP_ENABLE", "no");
     test_check_ib_sl_config();
 }
 
-UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config_with_ddp)
+UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config_with_ddp,
+           "RC_MLX5_DDP_ENABLE?=try", "DC_MLX5_DDP_ENABLE?=try")
+
 {
     if (!transport_has_ddp()) {
-        UCS_TEST_SKIP_R("DDP is not supported");
-    }
-
-    if (has_transport("rc_mlx5")) {
-        modify_config("RC_MLX5_DDP_ENABLE", "try");
+        UCS_TEST_SKIP_R("DDP is not supported by the transport");
     }
 
     test_check_ib_sl_config();

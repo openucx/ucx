@@ -64,7 +64,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
-  {"SRQ_TOPO", "cyclic,cyclic_emulated",
+  {"SRQ_TOPO", "cyclic,cyclic_emulated,list",
    "List of SRQ topology types in order of preference. Supported types are:\n"
    "\n"
    "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
@@ -660,6 +660,7 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
     if ((iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC) &&
         (iface->config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_OOO_ALL)) {
         ucs_error("SRQ topology cyclic is not supported with DDP");
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
