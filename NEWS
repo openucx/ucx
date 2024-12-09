@@ -11,7 +11,7 @@
 ### Features:
 ### Bugfixes:
 
-## 1.18.0-rc1 (November 21, 2024)
+## 1.18.0-rc2 (December 9, 2024)
 ### Feature
 #### UCP
  * Enabled using CUDA staging buffers for pipeline protocols by default
