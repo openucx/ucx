@@ -64,12 +64,13 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
-  {"SRQ_TOPO", "cyclic,cyclic_emulated",
+  {"SRQ_TOPO", "cyclic,cyclic_emulated,list",
    "List of SRQ topology types in order of preference. Supported types are:\n"
    "\n"
    "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
    "\n"
    "cyclic            SRQ is organized as a continuous array of WQEs. Requires DEVX.\n"
+   "                  cannot be used with DDP enabled.\n"
    "\n"
    "cyclic_emulated   SRQ is organized as a continuous array of WQEs, but HW\n"
    "                  treats it as a linked list. Doesn`t require DEVX.",
@@ -81,6 +82,11 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
     UCS_PP_MAKE_STRING(UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ) ".",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, log_ack_req_freq),
    UCS_CONFIG_TYPE_UINT},
+
+  {"DDP_ENABLE", "try",
+   "Enable direct data placement\n",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, ddp_enable), 
+   UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };
@@ -596,21 +602,12 @@ void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
 
 ucs_status_t
 uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
-                                 uint64_t tl_flag,
+                                 uct_ib_mlx5_dp_ordering_t dp_ordering_cap,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name)
 {
-    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
-    int dp_ordering_ooo, dp_ordering_ooo_force;
-
-    if (!uct_ib_iface_is_roce(&iface->super.super)) {
-        iface->super.super.config.dp_ordering_ooo = UCS_AUTO;
-        return UCS_OK;
-    }
-
-    dp_ordering_ooo       = !!(md->flags & tl_flag);
-    dp_ordering_ooo_force = !!(md->flags &
-                               UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE);
+    uct_ib_mlx5_md_t *md      = uct_ib_mlx5_iface_md(&iface->super.super);
+    uct_ib_mlx5_dp_ordering_t min_forced_ordering;
 
     /*
      * HCA has an mlxreg admin configuration to force enable adaptive routing
@@ -618,42 +615,54 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
      *
      * HCA cap/cap_2 booleans:
      * - if dp_ordering_ooo is set, QPC/DCTC can enable AR.
-     * - if dp_ordering_ooo_force is set, QPC/DCTC can request mlxreg
+     * - if UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE is set, QPC/DCTC can request mlxreg
      *   configuration override, useful to force disable.
-     *
-     * QP modify behavior with returned values:
-     * - UCS_AUTO: Do not affect existing system behavior.
-     * - UCS_NO  : Force AR disabling on the QP if supported. QP modify will
-     *   return error on failure.
-     * - UCS_TRY : Set AR to enable, ignored if any failure.
-     * - UCS_YES : Force AR enabling on the QP if supported. QP modify will
-     *   return error on failure.
      */
+    iface->config.dp_ordering_force =
+            ucs_ternary_auto_value_is_yes_or_no(config->super.ar_enable) ||
+            ucs_ternary_auto_value_is_yes_or_no(config->ddp_enable);
 
-    if ((config->super.ar_enable == UCS_TRY) && dp_ordering_ooo) {
-        iface->super.super.config.dp_ordering_ooo = UCS_TRY;
-    } else if (config->super.ar_enable == UCS_NO) {
-        if (!dp_ordering_ooo_force) {
-            goto failure;
-        }
-
-        iface->super.super.config.dp_ordering_ooo = UCS_NO;
-    } else if (config->super.ar_enable == UCS_YES) {
-        if (!dp_ordering_ooo_force || !dp_ordering_ooo) {
-            goto failure;
-        }
-
-        iface->super.super.config.dp_ordering_ooo = UCS_YES;
-    } else {
-        iface->super.super.config.dp_ordering_ooo = UCS_AUTO;
+    /*
+     * Fail at the following cases:
+     * - Want to force configuration but can't force it
+     * - Want to force enable or force disable adaptive routing but it is unavailable
+     * - Want to force disable adaptive routing but force enabling DDP
+    */
+    if (iface->config.dp_ordering_force &&
+        !(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE)) {
+        goto failure;
     }
+
+    if (config->ddp_enable == UCS_YES) {
+        min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+    } else if (config->super.ar_enable == UCS_YES) {
+        min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+    } else {
+        min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    }
+
+    if (min_forced_ordering > dp_ordering_cap) {
+        goto failure;
+    }
+
+    if (config->super.ar_enable == UCS_NO) {
+        iface->config.dp_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        return UCS_OK;
+    }
+
+    iface->config.dp_ordering = config->ddp_enable ?
+                                        UCT_IB_MLX5_DP_ORDERING_OOO_ALL :
+                                        UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+
+    iface->config.dp_ordering = ucs_min(iface->config.dp_ordering,
+                                        dp_ordering_cap);
 
     return UCS_OK;
 
 failure:
-    ucs_error("%s: cannot set ar_enable=%d for RoCE on %s",
+    ucs_error("%s: cannot set ar_enable=%d, ddp_enable=%d, capability=%d on %s",
               uct_ib_device_name(&md->super.dev), config->super.ar_enable,
-              tl_name);
+              config->ddp_enable, dp_ordering_cap, tl_name);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -1055,9 +1064,6 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
                                         struct mlx5dv_qp_init_attr *dv_attr,
                                         unsigned scat2cqe_dir_mask)
 {
-    uct_ib_mlx5_md_t UCS_V_UNUSED *md = uct_ib_mlx5_iface_md(
-            &iface->super.super);
-
 #if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
     if ((scat2cqe_dir_mask & UCS_BIT(UCT_IB_DIR_RX)) &&
         (iface->super.super.config.max_inl_cqe[UCT_IB_DIR_RX] == 0)) {
@@ -1088,7 +1094,7 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
     }
 
 #ifdef HAVE_OOO_RECV_WRS
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_DDP) {
+    if (iface->config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
         dv_attr->create_flags |= MLX5DV_QP_CREATE_OOO_DP;
         dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
     }
@@ -1268,4 +1274,15 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
     uct_ib_mlx5_update_db_cq_ci(mlx5_cq);
 
     return nfreed;
+}
+
+void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
+                                          uct_rc_mlx5_iface_common_t *iface)
+{
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
+                      UCS_BIT_GET(iface->config.dp_ordering, 0));
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1,
+                      UCS_BIT_GET(iface->config.dp_ordering, 1));
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
+                      iface->config.dp_ordering_force);
 }
