@@ -35,12 +35,11 @@
  * Added DC dcs_hybrid policy
  * Reduced MLX5/DV stack size consumption
  * Added ODP support for verbs and mlx5dv
- * Enabled DDP support on mlx5dv
  * Added support of cuda-managed memory on IB when ODP is available
  * Enabled use of implicit ODP with relaxed ordering
  * Improved GPUDirect detection support on IB
  * Increased DC initiator default count to 32 for performance optimization
- * Added ConnectX-8 device support to IB
+ * Added ConnectX-8 device support to IB with DDP
  * Added support for subnet filter list on RoCE GID
  * Added a reason when a resource's lane is unreachable to request query info string
  * Added IB MLX5 as a separate UCX module with RPM
