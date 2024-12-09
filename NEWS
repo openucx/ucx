@@ -85,9 +85,6 @@
  * Improved compiler error reporting with added flag
  * Improved coverity script to allow faster turnaround time
  * Improved Intel Compiler detection and support
-#### Continuous Integration
- * Improved spell checking on generated files
- * Improved CI by making sure ASAN is actually loaded
 #### GO
  * Added multi-send flag and user memh support in request params
 #### Packaging
@@ -163,10 +160,6 @@
  * Used POSIX bourne syntax to check equality
  * Fixed build failure by using proper flags in compiler.m4
  * Fixed perftest MAD support default guessing
-#### Continuous Integration
- * Ignored failure to kill the server in client/server test
- * Fixed docker to run as the current user
- * Fixed gdrcopy check by allowing the dev access from Docker
 #### GO
  * Added serialized thread mode to avoid subtle races between threads
  * Fixed make distcheck
