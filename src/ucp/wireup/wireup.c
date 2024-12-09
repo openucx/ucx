@@ -1394,8 +1394,8 @@ ucp_wireup_find_reused_wireup_ep_lane(ucp_ep_h ep,
 }
 
 static ucp_lane_index_t
-ucp_ep_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
-                            const ucp_lane_index_t *reuse_lane_map)
+ucp_wireup_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
+                                const ucp_lane_index_t *reuse_lane_map)
 {
     ucp_lane_map_t lane_bitmap = 0;
     ucp_lane_index_t lane;
@@ -1447,7 +1447,8 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
         }
 
         new_wireup_ep   = ucp_wireup_ep(uct_ep);
-        new_wireup_lane = ucp_ep_find_non_reused_lane(ep, key, reuse_lane_map);
+        new_wireup_lane = ucp_wireup_find_non_reused_lane(ep, key,
+                                                          reuse_lane_map);
         ucs_assert(new_wireup_lane != UCP_NULL_LANE);
     }
 
