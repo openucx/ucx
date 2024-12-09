@@ -678,7 +678,8 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                               &init_attr);
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(
-            &self->super, UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC,
+            &self->super,
+            ucs_min(md->dp_ordering_cap.rc, UCT_IB_MLX5_DP_ORDERING_OOO_RW),
             &config->rc_mlx5_common, "gga");
     if (status != UCS_OK) {
         return status;
