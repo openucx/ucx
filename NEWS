@@ -26,10 +26,7 @@
  * Added UCP_MEM_MAP_BLOCK API flag to enforce blocking memory mapping
  * Allowed up-to 64 endpoint lanes for systems with many transports or devices
  * Added usage tracker to worker
- * Multiple protocol selection algorithm improvements
  * Improved various logging messages
-#### UCT
- * Improved API documentation for memory domain flags
 #### RDMA CORE (IB, ROCE, etc.)
  * Added environment variable to manage DC initiator capacity
  * Added DC dcs_hybrid policy
@@ -39,7 +36,7 @@
  * Enabled use of implicit ODP with relaxed ordering
  * Improved GPUDirect detection support on IB
  * Increased DC initiator default count to 32 for performance optimization
- * Added ConnectX-8 device support to IB with DDP
+ * Added ConnectX-8 device support with DDP
  * Added support for subnet filter list on RoCE GID
  * Added a reason when a resource's lane is unreachable to request query info string
  * Added IB MLX5 as a separate UCX module with RPM
@@ -68,7 +65,6 @@
  * Added general subnet matching support infrastructure
  * Allowed user-based existing data copy when appending to array
  * Improved time units description
- * Added x86 non-temporal buffer transfers to skip cache
 #### UCM
  * Added memory hooks to track allocations by CUDA memory mapping functions
 #### Tools
