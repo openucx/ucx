@@ -89,7 +89,8 @@ static const char *addr_msg_str = "UCX address message";
 static const char *data_msg_str = "UCX data message";
 static int print_config         = 0;
 
-static ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name);
+static parse_cmd_status_t
+parse_cmd(int argc, char *const argv[], char **server_name);
 
 static void set_msg_data_len(struct msg *msg, uint64_t data_len)
 {
@@ -548,13 +549,20 @@ int main(int argc, char **argv)
     int oob_sock              = -1;
     int ret                   = -1;
 
+    parse_cmd_status_t parse_cmd_status;
+
     memset(&ucp_params, 0, sizeof(ucp_params));
     memset(&worker_attr, 0, sizeof(worker_attr));
     memset(&worker_params, 0, sizeof(worker_params));
 
     /* Parse the command line */
-    status = parse_cmd(argc, argv, &client_target_name);
-    CHKERR_JUMP(status != UCS_OK, "parse_cmd\n", err);
+    parse_cmd_status = parse_cmd(argc, argv, &client_target_name);
+    if (parse_cmd_status == PARSE_CMD_STATUS_PRINT_HELP) {
+        return 0;
+    }
+
+    CHKERR_JUMP(parse_cmd_status == PARSE_CMD_STATUS_ERROR,
+                "parse command line\n", err);
 
     /* UCP initialization */
     status = ucp_config_read(NULL, NULL, &config);
@@ -682,7 +690,8 @@ static void print_usage()
     fprintf(stderr, "\n");
 }
 
-ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
+static parse_cmd_status_t
+parse_cmd(int argc, char *const argv[], char **server_name)
 {
     int c = 0, idx = 0;
 
@@ -710,7 +719,7 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
                 err_handling_opt.failure_mode = FAILURE_MODE_KEEPALIVE;
             } else {
                 print_usage();
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 'n':
@@ -723,29 +732,31 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
             server_port = atoi(optarg);
             if (server_port <= 0) {
                 fprintf(stderr, "Wrong server port number %d\n", server_port);
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 's':
             test_string_length = atol(optarg);
             if (test_string_length < 0) {
                 fprintf(stderr, "Wrong string size %ld\n", test_string_length);
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 'm':
             test_mem_type = parse_mem_type(optarg);
             if (test_mem_type == UCS_MEMORY_TYPE_LAST) {
-                return UCS_ERR_UNSUPPORTED;
+                return PARSE_CMD_STATUS_ERROR;
             }
             break;
         case 'c':
             print_config = 1;
             break;
         case 'h':
+            print_usage();
+            return PARSE_CMD_STATUS_PRINT_HELP;
         default:
             print_usage();
-            return UCS_ERR_UNSUPPORTED;
+            return PARSE_CMD_STATUS_ERROR;
         }
     }
     fprintf(stderr, "INFO: UCP_HELLO_WORLD mode = %d server = %s port = %d, pid = %d\n",
@@ -754,5 +765,6 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
     for (idx = optind; idx < argc; idx++) {
         fprintf(stderr, "WARNING: Non-option argument %s\n", argv[idx]);
     }
-    return UCS_OK;
+
+    return PARSE_CMD_STATUS_OK;
 }

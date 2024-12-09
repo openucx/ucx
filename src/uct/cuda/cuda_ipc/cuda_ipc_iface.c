@@ -28,30 +28,37 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 
     {"MAX_POLL", "16",
      "Max number of event completions to pick during cuda events polling",
-      ucs_offsetof(uct_cuda_ipc_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_poll), UCS_CONFIG_TYPE_UINT},
 
     {"MAX_STREAMS", "16",
      "Max number of CUDA streams to make concurrent progress on",
-      ucs_offsetof(uct_cuda_ipc_iface_config_t, max_streams), UCS_CONFIG_TYPE_UINT},
+      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_streams), UCS_CONFIG_TYPE_UINT},
 
     {"CACHE", "y",
      "Enable remote endpoint IPC memhandle mapping cache",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_cache),
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_cache),
      UCS_CONFIG_TYPE_BOOL},
 
     {"ENABLE_GET_ZCOPY", "auto",
      "Enable get operations except for platforms known to have slower performance",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_get_zcopy),
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_get_zcopy),
      UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {"MAX_EVENTS", "inf",
      "Max number of cuda events. -1 is infinite",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, max_cuda_ipc_events), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_cuda_ipc_events), UCS_CONFIG_TYPE_UINT},
 
     {"BW", "auto",
      "Effective p2p memory bandwidth",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.bandwidth), UCS_CONFIG_TYPE_BW},
 
+    {"LAT", "1.8us",
+     "Estimated latency",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.latency), UCS_CONFIG_TYPE_TIME},
+
+    {"OVERHEAD", "4.0us",
+     "Estimated CPU overhead for transferring GPU memory",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.overhead), UCS_CONFIG_TYPE_TIME},
     {NULL}
 };
 
@@ -276,6 +283,8 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
 
+    /* Latency and overhead don't depend on config values for
+     * the sake of wire compatibility */
     iface_attr->latency                 = ucs_linear_func_make(1e-6, 0);
     iface_attr->bandwidth.dedicated     = 0;
     iface_attr->bandwidth.shared        = iface->config.bandwidth;
@@ -466,8 +475,7 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
 static ucs_status_t
 uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    static const double latency  = 1.8e-6;
-    static const double overhead = 4.0e-6;
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
 
     perf_attr->bandwidth.dedicated = 0;
 
@@ -487,7 +495,7 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
-        perf_attr->send_pre_overhead = overhead;
+        perf_attr->send_pre_overhead = iface->config.overhead;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
@@ -503,7 +511,7 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         /* In case of async mem copy, the latency is not part of the overhead
            and it's a standalone property */
-        perf_attr->latency = ucs_linear_func_make(latency, 0.0);
+        perf_attr->latency = ucs_linear_func_make(iface->config.latency, 0.0);
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
@@ -553,13 +561,10 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return status;
     }
 
-    self->config.max_poll            = config->max_poll;
-    self->config.max_streams         = config->max_streams;
-    self->config.enable_cache        = config->enable_cache;
-    self->config.enable_get_zcopy    = config->enable_get_zcopy;
-    self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
-    self->config.bandwidth           = UCS_CONFIG_DBL_IS_AUTO(config->bandwidth) ?
-                                       uct_cuda_ipc_iface_get_bw() : config->bandwidth;
+    self->config = config->params;
+    if (UCS_CONFIG_DBL_IS_AUTO(config->params.bandwidth)) {
+        self->config.bandwidth = uct_cuda_ipc_iface_get_bw() ;
+    }
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_cuda_ipc_event_desc_t);

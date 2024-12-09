@@ -20,15 +20,14 @@
 static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_rndv_cfg_thresh(ucp_context_h context, uint64_t rndv_modes)
 {
+    ucp_rndv_mode_t mode = context->config.ext.rndv_mode;
     ucs_assert(!(rndv_modes & UCS_BIT(UCP_RNDV_MODE_AUTO)));
 
-    if (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
-        return UCS_MEMUNITS_AUTO; /* automatic threshold */
-    } else if (rndv_modes & UCS_BIT(context->config.ext.rndv_mode)) {
-        return 0; /* enabled by default */
-    } else {
-        return UCS_MEMUNITS_INF; /* used only as last resort */
+    if ((mode == UCP_RNDV_MODE_AUTO) || (rndv_modes & UCS_BIT(mode))) {
+        return UCS_MEMUNITS_AUTO;
     }
+
+    return UCS_MEMUNITS_INF; /* used only as last resort */
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

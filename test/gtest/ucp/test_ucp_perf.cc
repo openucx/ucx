@@ -16,8 +16,6 @@ extern "C" {
 }
 
 #define MB   pow(1024.0, -2)
-#define UCT_PERF_TEST_MULTIPLIER  5
-#define UCT_ARM_PERF_TEST_MULTIPLIER  15
 
 class test_ucp_perf : public ucp_test, public test_perf {
 public:
@@ -326,12 +324,10 @@ const size_t test_ucp_perf::tests_num = ucs_static_array_size(test_ucp_perf::tes
 
 UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
 {
-    bool check_perf = true;
     size_t max_iter = std::numeric_limits<size_t>::max();
     test_spec test  = tests[get_variant_value(VARIANT_TEST_TYPE)];
 
-    if (has_any_transport({"tcp", "ud_v", "ud_x"})) {
-        check_perf = false;
+    if (has_transport("tcp")) {
         max_iter   = 1000lu;
     }
 
@@ -351,19 +347,11 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv atomic_mode("UCX_ATOMIC_MODE", atomic_mode_str);
 
-    if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
-        test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
-        test.min /= UCT_ARM_PERF_TEST_MULTIPLIER;
-    } else {
-        test.max *= UCT_PERF_TEST_MULTIPLIER;
-        test.min /= UCT_PERF_TEST_MULTIPLIER;
-    }
-    test.iters = ucs_min(test.iters, max_iter);
-
+    test.iters         = ucs_min(test.iters, max_iter);
     test.send_mem_type = UCS_MEMORY_TYPE_HOST;
     test.recv_mem_type = UCS_MEMORY_TYPE_HOST;
 
-    run_test(test, 0, check_perf, "", "");
+    run_test(test, 0, false, "", "");
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_perf)

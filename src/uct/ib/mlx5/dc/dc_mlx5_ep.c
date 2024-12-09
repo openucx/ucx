@@ -1401,7 +1401,12 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     }
 
     ucs_assert_always(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-    uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
+
+    if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
+        ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface),
+                                   &ep->arb_group);
+    }
+
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
@@ -1460,7 +1465,11 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
         dci_pool = &iface->tx.dci_pool[pool_index];
         while (dci_pool->release_stack_top >= 0) {
             dci = ucs_array_elem(&dci_pool->stack, dci_pool->release_stack_top--);
-            ucs_assert(dci < iface->tx.ndci * iface->tx.num_dci_pools);
+            ucs_assertv((dci - uct_dc_mlx5_iface_is_hybrid(iface)) <
+                                (iface->tx.ndci * iface->tx.num_dci_pools),
+                        "dci=%d is_hybrid=%s, ndci=%d, num_dci_pools=%d", dci,
+                        uct_dc_mlx5_iface_is_hybrid(iface) ? "yes" : "no",
+                        iface->tx.ndci, iface->tx.num_dci_pools);
             uct_dc_mlx5_iface_dci_release(iface, dci);
         }
 
@@ -1474,6 +1483,21 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
     ucs_assert(iface->tx.dci_pool_release_bitmap == 0);
     uct_dc_mlx5_iface_check_tx(iface);
     return 1;
+}
+
+static ucs_arbiter_cb_result_t
+uct_dc_mlx5_iface_shared_dci_pending_resched(ucs_arbiter_cb_result_t res,
+                                             uct_dc_mlx5_iface_t *iface,
+                                             uct_dc_mlx5_ep_t *ep)
+{
+    if ((res == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) &&
+        uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
+        /* We can't desched group with a shared dci if non FC resources are
+         * missing, since it's never scheduled again. */
+        res = UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+    }
+
+    return res;
 }
 
 /**
@@ -1494,6 +1518,11 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
     ucs_arbiter_cb_result_t res;
 
     res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
+
+    if (uct_dc_mlx5_is_hw_dci(iface, ep->dci)) {
+        return uct_dc_mlx5_iface_shared_dci_pending_resched(res, iface, ep);
+    }
+
     if ((res != UCS_ARBITER_CB_RESULT_REMOVE_ELEM) || !is_only) {
         return res;
     }
@@ -1522,14 +1551,7 @@ uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
     ucs_arbiter_cb_result_t res;
 
     res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
-    if ((res == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) &&
-        uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
-        /* We can't desched group with rand policy if non FC resources are
-         * missing, since it's never scheduled again. */
-        res = UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
-    }
-
-    return res;
+    return uct_dc_mlx5_iface_shared_dci_pending_resched(res, iface, ep);
 }
 
 static ucs_arbiter_cb_result_t

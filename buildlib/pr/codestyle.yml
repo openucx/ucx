@@ -63,6 +63,31 @@ jobs:
           fi
         condition: eq(variables['Build.Reason'], 'PullRequest')
 
+  - job: author
+    displayName: AUTHORS file update check
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    container: fedora
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+
+      - bash: |
+          set -eEx
+
+          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+          range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
+
+          echo "Looking for missing AUTHORS on commit range ${range}"
+          ./contrib/authors_update.sh "$range"
+          git diff --exit-code
+        displayName: AUTHORS file check
+
+
   - job: codespell
     displayName: codespell check
     pool:

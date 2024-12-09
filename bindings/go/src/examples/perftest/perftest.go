@@ -368,17 +368,7 @@ func main() {
 	flag.StringVar(&perfTestParams.ip, "i", "", "server address to connect")
 
 	perfTestParams.memType = UCS_MEMORY_TYPE_HOST
-	flag.CommandLine.Func("m", "memory type: host(default), cuda", func(p string) error {
-		mtypeStr := strings.ToLower(p)
-		if mtypeStr == "host" {
-			perfTestParams.memType = UCS_MEMORY_TYPE_HOST
-		} else if mtypeStr == "cuda" {
-			perfTestParams.memType = UCS_MEMORY_TYPE_CUDA
-		} else {
-			return errors.New("memory type can be host or cuda")
-		}
-		return nil
-	})
+	flag.Var(&perfTestParams.memType, "m", "memory type: host(default), cuda")
 
 	flag.Parse()
 

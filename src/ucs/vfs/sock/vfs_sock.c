@@ -55,10 +55,15 @@ int ucs_vfs_sock_mkdir(const char *sock_path, ucs_log_level_t log_level)
     }
 
     ret = mkdir(dirname, S_IRWXU);
-    if ((ret < 0) && (errno != EEXIST)) {
-        ucs_log(log_level, "failed to create directory '%s': %m",
-                sock_path_dir);
-        ret = -errno;
+    if (ret < 0) {
+        if (errno == EEXIST) {
+            /* Directory already exists */
+            ret = 0;
+        } else {
+            ucs_log(log_level, "failed to create directory '%s': %m",
+                    sock_path_dir);
+            ret = -errno;
+        }
     }
 
     ucs_free(sock_path_dir);
