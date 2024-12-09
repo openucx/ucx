@@ -412,8 +412,10 @@ static int
 uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
                                   ucs_ternary_auto_value_t mnnvl_enable)
 {
+#if !HAVE_NVML_FABRIC_INFO
+    static int mnnvl_supported = 0;
+#else
     static int mnnvl_supported = -1;
-#if HAVE_NVML_FABRIC_INFO
     nvmlGpuFabricInfoV_t fabric_info;
     nvmlDevice_t device;
     ucs_status_t status;
@@ -459,8 +461,6 @@ out_not_supported:
 out_sd:
     UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 out:
-#else
-    mnnvl_supported = 0;
 #endif
     if ((mnnvl_enable == UCS_YES) && !mnnvl_supported) {
         ucs_error("multi-node NVLINK support is requested but not supported");
