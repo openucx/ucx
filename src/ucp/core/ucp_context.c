@@ -2279,9 +2279,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
                               ucp_context_h *context_p)
 {
     ucp_config_t *dfl_config = NULL;
+    ucs_memory_type_t mem_type;
     ucp_context_t *context;
     ucs_status_t status;
-    ssize_t mem_type;
 
     ucp_version_check(api_major_version, api_minor_version);
 
