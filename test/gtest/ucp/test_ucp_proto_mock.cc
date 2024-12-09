@@ -15,19 +15,18 @@ extern "C" {
 class mock_iface {
 public:
     /* Can't use std::function due to coverity errors */
-    using perf_attr_func_t  = void (*)(uct_perf_attr_t&);
     using iface_attr_func_t = void (*)(uct_iface_attr&);
 
     mock_iface()
     {
-        ucs_assert(singleton == nullptr);
-        singleton = this;
+        ucs_assert(m_self == nullptr);
+        m_self = this;
     }
 
     ~mock_iface()
     {
         cleanup();
-        singleton = nullptr;
+        m_self = nullptr;
     }
 
     void cleanup()
@@ -35,15 +34,7 @@ public:
         m_mock.cleanup();
     }
 
-    void
-    set_mock_perf_attr(const std::string &tl_name, perf_attr_func_t cb)
-    {
-        mock_tl(tl_name);
-        m_perf_attrs_funcs[tl_name] = cb;
-    }
-
-    void
-    set_mock_iface_attr(const std::string &tl_name, iface_attr_func_t cb)
+    void set_mock_iface_attr(const std::string &tl_name, iface_attr_func_t cb)
     {
         mock_tl(tl_name);
         m_iface_attrs_funcs[tl_name] = cb;
@@ -70,58 +61,33 @@ private:
                     const uct_iface_params_t *params,
                     const uct_iface_config_t *config, uct_iface_h *iface_p)
     {
-        mock_iface *self = singleton;
-        uct_tl_t *tl     = self->m_tls[params->mode.device.tl_name];
+        uct_tl_t *tl = m_self->m_tls[params->mode.device.tl_name];
         ucs_status_t status;
 
-        status = self->m_mock.orig_func(&tl->iface_open, md, worker, params,
-                                        config, iface_p);
+        status = m_self->m_mock.orig_func(&tl->iface_open, md, worker, params,
+                                          config, iface_p);
         if (status != UCS_OK) {
             return status;
         }
 
-        uct_base_iface_t *base    = ucs_derived_of(*iface_p, uct_base_iface_t);
-        self->m_iface_names[base] = params->mode.device.tl_name;
-
-        self->m_mock.setup(&base->internal_ops->iface_estimate_perf,
-                           iface_estimate_perf_mock);
-        self->m_mock.setup(&(*iface_p)->ops.iface_query, iface_query_mock);
-        return status;
-    }
-
-    static ucs_status_t
-    iface_estimate_perf_mock(uct_iface_h iface, uct_perf_attr_t *perf_attr)
-    {
-        mock_iface *self       = singleton;
-        uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
-        ucs_status_t status    = self->m_mock.orig_func(
-                                    &base->internal_ops->iface_estimate_perf,
-                                    iface, perf_attr);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        auto it = self->m_perf_attrs_funcs.find(self->m_iface_names[base]);
-        if (it != self->m_perf_attrs_funcs.end()) {
-            (it->second)(*perf_attr);
-        }
-
+        uct_base_iface_t *base      = ucs_derived_of(*iface_p, uct_base_iface_t);
+        m_self->m_iface_names[base] = params->mode.device.tl_name;
+        m_self->m_mock.setup(&(*iface_p)->ops.iface_query, iface_query_mock);
         return status;
     }
 
     static ucs_status_t
     iface_query_mock(uct_iface_h iface, uct_iface_attr_t *iface_attr)
     {
-        mock_iface *self    = singleton;
-        ucs_status_t status = self->m_mock.orig_func(
+        ucs_status_t status = m_self->m_mock.orig_func(
                                     &iface->ops.iface_query, iface, iface_attr);
         if (status != UCS_OK) {
             return status;
         }
 
         uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
-        auto it = self->m_iface_attrs_funcs.find(self->m_iface_names[base]);
-        if (it != self->m_iface_attrs_funcs.end()) {
+        auto it = m_self->m_iface_attrs_funcs.find(m_self->m_iface_names[base]);
+        if (it != m_self->m_iface_attrs_funcs.end()) {
             (it->second)(*iface_attr);
         }
 
@@ -129,16 +95,15 @@ private:
     }
 
     /* We have to use singleton to mock C functions */
-    static mock_iface *singleton;
+    static mock_iface *m_self;
 
     ucs::mock                                           m_mock;
     std::unordered_map<std::string, uct_tl_t *>         m_tls;
     std::unordered_map<uct_base_iface_t *, std::string> m_iface_names;
     std::unordered_map<std::string, iface_attr_func_t>  m_iface_attrs_funcs;
-    std::unordered_map<std::string, perf_attr_func_t>   m_perf_attrs_funcs;
 };
 
-mock_iface *mock_iface::singleton = nullptr;
+mock_iface *mock_iface::m_self = nullptr;
 
 struct proto_select_data {
     size_t      range_start;
@@ -159,8 +124,18 @@ public:
     {
         /* Reset topo provider to force reload from config */
         ucs_sys_topo_reset_provider();
+
+        /*
+         * By default TOPO_PRIO="sysfs,default"
+         * We keep only default config to always have the same topo distances
+         * when test is being executed on different machines.
+         */
         modify_config("TOPO_PRIO", "default");
+
+        /* This test is for dynamic protocol selection available only in v2 */
         modify_config("PROTO_ENABLE", "y");
+
+        /* Currently only 1 RNDV lane is supported */
         modify_config("MAX_RNDV_LANES", "1");
 
         ucp_test::init();
@@ -190,9 +165,16 @@ public:
         check_proto_select(e.worker(), config->proto_select, data, key);
     }
 
+    /*
+     * Helper function that returns a key that matches any protocol selection.
+     * It is used to first create the default key matching any protocol, and
+     * then the fine-grained setting can be applied to match specific use case.
+     */
     static ucp_proto_select_key_t any_key()
     {
         ucp_proto_select_key_t key;
+        /* We set all key params to UINT8_MAX, meaning default value, was not
+         * explicitly configured with a fine-grained setting */
         key.u64 = UINT64_MAX;
         return key;
     }
@@ -285,6 +267,11 @@ protected:
     static bool
     key_match(ucp_proto_select_key_t req, ucp_proto_select_key_t actual)
     {
+        /*
+         * For each field of the protocol selection key check whether it has a
+         * default value (UINT8_MAX - meaning a wildcard), or the fine-grained
+         * setting matches was provided and matches the actual value.
+         */
 #define CMP_FIELD(FIELD) \
         if ((UINT8_MAX != req.param.FIELD) && \
             (req.param.FIELD != actual.param.FIELD)) { \
