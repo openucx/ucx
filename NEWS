@@ -157,21 +157,6 @@
  * Fixed memory leak for endpoint report in ucx_info
  * Fixed build without openmp in ucx_perftest
  * Fixed UCT device override on server side on ucx_perftest
-#### Tests
- * Fixed core dump issue upon exception in gtest initialization
- * Removed warning during configure file generation
- * Fixed wire compatibility test failures
- * Fixed test_callbackq.test_callbackq failures
- * Fixed TCP device name detection in pci_bw test
- * Fixed false positive coverity storage leak warning
- * Fixed wrong library used by loader
- * Fixed test by waiting Wait for flush to complete between puts
- * Fixed transfer timeouts for BF
- * Disabled RMA tests with protov1
- * Skipped gdr_copy performance check in test_uct_loopback
- * Fixed out-of-memory test failure by limiting MEMIC allocation
- * Fixed heap-buffer overflow in AMO test
- * Fixed tests by increasing UD EP timeout when running under valgrind
 #### Build
  * Fixed using correct ASAN version for running tests
 #### Configuration
