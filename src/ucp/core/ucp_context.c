@@ -2279,6 +2279,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
                               ucp_context_h *context_p)
 {
     ucp_config_t *dfl_config = NULL;
+    ucs_memory_type_t mem_type;
     ucp_context_t *context;
     ucs_status_t status;
 
@@ -2334,6 +2335,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         }
     } else {
         context->rcache = NULL;
+        ucs_memory_type_for_each(mem_type) {
+            context->cache_md_map[mem_type] = 0;
+        }
     }
 
     if (dfl_config != NULL) {
