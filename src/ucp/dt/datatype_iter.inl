@@ -261,7 +261,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
     ucs_status_t status;
 
     /* Iterator may work with cacheable MDs only */
-    ucs_assertv(ucs_test_all_flags(context->cache_md_map[mem_type], md_map),
+    ucs_assertv((context->rcache == NULL) ||
+                ucs_test_all_flags(context->cache_md_map[mem_type], md_map),
                 "iterator mem_type=%s cache_md_map=0x%" PRIx64
                 " md_map=0x%" PRIx64,
                 ucs_memory_type_names[mem_type],
