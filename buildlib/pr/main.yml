@@ -18,9 +18,6 @@ resources:
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:2
       options: $(DOCKER_OPT_ARGS)
-    - container: fedora34
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -65,9 +62,6 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: sles15sp2
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles12sp5
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: centos7_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-centos7
@@ -232,9 +226,6 @@ stages:
               CONTAINER: rhel82
             rhel90:
               CONTAINER: rhel90
-            fedora34:
-              CONTAINER: fedora34
-              long_test: yes
             centos7:
               CONTAINER: centos7_ib
             ubuntu2004_rocm:
