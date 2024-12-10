@@ -118,3 +118,7 @@ go.work
 go.work.sum
 bindings/go/pkg/
 bindings/go/go.sum
+*~
+\#*
+bindings/rust/target
+bindings/rust/Cargo.lock
