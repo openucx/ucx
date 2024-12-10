@@ -40,6 +40,13 @@ public:
         m_iface_attrs_funcs[tl_name] = cb;
     }
 
+    void skip_on_error()
+    {
+        if (!m_error.empty()) {
+            UCS_TEST_SKIP_R(m_error);
+        }
+    }
+
 private:
     void mock_tl(const std::string &tl_name)
     {
@@ -85,10 +92,23 @@ private:
             return status;
         }
 
-        uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
-        auto it = m_self->m_iface_attrs_funcs.find(m_self->m_iface_names[base]);
-        if (it != m_self->m_iface_attrs_funcs.end()) {
-            (it->second)(*iface_attr);
+        uct_base_iface_t *base  = ucs_derived_of(iface, uct_base_iface_t);
+        std::string &iface_name = m_self->m_iface_names[base];
+        auto it                 = m_self->m_iface_attrs_funcs.find(iface_name);
+        unsigned max_dev_path   = iface_attr->dev_num_paths;
+        (it->second)(*iface_attr);
+
+        /*
+         * It's hard to mock more paths than are actually supported by the
+         * hardware, so in this case we want to skip the test. Returning an
+         * error or skipping the test directly from this point is problematic,
+         * therefore we remember the error and check it in skip_on_error() later
+         */
+        if (iface_attr->dev_num_paths > max_dev_path) {
+            m_self->m_error = iface_name + ": requests to mock " +
+                              ucs::to_string(iface_attr->dev_num_paths) +
+                              " paths, which exceeds max paths supported: " +
+                              std::to_string(max_dev_path);
         }
 
         return status;
@@ -101,6 +121,7 @@ private:
     std::unordered_map<std::string, uct_tl_t *>         m_tls;
     std::unordered_map<uct_base_iface_t *, std::string> m_iface_names;
     std::unordered_map<std::string, iface_attr_func_t>  m_iface_attrs_funcs;
+    std::string                                         m_error;
 };
 
 mock_iface *mock_iface::m_self = nullptr;
@@ -122,6 +143,11 @@ public:
 
     virtual void init() override
     {
+        /* This test is for dynamic protocol selection available only in v2 */
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("Proto v2 is disabled");
+        }
+
         /* Reset topo provider to force reload from config */
         ucs_sys_topo_reset_provider();
 
@@ -132,13 +158,11 @@ public:
          */
         modify_config("TOPO_PRIO", "default");
 
-        /* This test is for dynamic protocol selection available only in v2 */
-        modify_config("PROTO_ENABLE", "y");
-
         /* Currently only 1 RNDV lane is supported */
         modify_config("MAX_RNDV_LANES", "1");
 
         ucp_test::init();
+        skip_on_error();
         connect();
     }
 
