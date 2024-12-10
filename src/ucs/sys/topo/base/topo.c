@@ -94,6 +94,9 @@ static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 /* Global list of topology detectors */
 UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 
+/* Selected topo provider */
+static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
+
 
 /* According to NUMA distance definition distances are normalized to 10
  * and the relative distance correlates with the latency.
@@ -104,27 +107,31 @@ static inline double ucs_topo_sysfs_numa_distance_to_latency(double distance)
     return distance * 10e-9;
 }
 
+void ucs_sys_topo_reset_provider()
+{
+    ucs_sys_topo_provider = NULL;
+}
+
 static ucs_sys_topo_provider_t *ucs_sys_topo_get_provider()
 {
-    static ucs_sys_topo_provider_t *provider = NULL;
     ucs_sys_topo_provider_t *list_provider;
     unsigned i;
 
-    if (provider != NULL) {
-        return provider;
+    if (ucs_sys_topo_provider != NULL) {
+        return ucs_sys_topo_provider;
     }
 
     for (i = 0; i < ucs_global_opts.topo_prio.count; ++i) {
         ucs_list_for_each(list_provider, &ucs_sys_topo_providers_list, list) {
             if (!strcmp(ucs_global_opts.topo_prio.names[i],
                         list_provider->name)) {
-                provider = list_provider;
-                return provider;
+                ucs_sys_topo_provider = list_provider;
+                return ucs_sys_topo_provider;
             }
         }
     }
 
-    return provider;
+    return ucs_sys_topo_provider;
 }
 
 static ucs_status_t
