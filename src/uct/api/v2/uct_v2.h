@@ -215,7 +215,8 @@ typedef struct {
 typedef enum {
     UCT_MD_MEM_REG_FIELD_FLAGS         = UCS_BIT(0),
     UCT_MD_MEM_REG_FIELD_DMABUF_FD     = UCS_BIT(1),
-    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2)
+    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2),
+    UCT_MD_MEM_REG_FIELD_MEMH          = UCS_BIT(3)
 } uct_md_mem_reg_field_mask_t;
 
 
@@ -480,6 +481,18 @@ typedef struct uct_md_mem_reg_params {
      * dmabuf region, then this field must be omitted or set to 0.
      */
     size_t                       dmabuf_offset;
+
+    /**
+     * Represents a pointer to the existing memory handle.
+     * Used to register a derived memory handle: a shallow copy of existing UCT
+     * memory handle, which can be used to access the same memory region. When
+     * created, the derived memh inherits the original memh access flags and
+     * state. The lifetime of the derived memh is bound to the original memh,
+     * and the original memh cannot be destroyed until all its derived handles
+     * are destroyed. The derived memh cannot be used to register another
+     * derived memh.
+     */
+    uct_mem_h                    memh;
 } uct_md_mem_reg_params_t;
 
 
