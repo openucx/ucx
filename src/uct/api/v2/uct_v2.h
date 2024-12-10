@@ -275,7 +275,9 @@ typedef enum {
     UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR         = UCS_BIT(1), /**< iface_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING        = UCS_BIT(2), /**< info_string field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3), /**< info_string_length field */
-    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4) /**<  scope field */
+    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4), /**< scope field */
+    UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(5), /**< device_addr_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH  = UCS_BIT(6)  /**< iface_addr_length field */
 } uct_iface_is_reachable_field_mask_t;
 
 
@@ -618,6 +620,18 @@ typedef struct uct_iface_is_reachable_params {
      * Reachability scope.
      */
     uct_iface_reachability_scope_t scope;
+
+    /**
+     * Device address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                        device_addr_length;
+
+    /**
+     * Iface address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                        iface_addr_length;
 } uct_iface_is_reachable_params_t;
 
 
@@ -1065,8 +1079,6 @@ int uct_iface_is_reachable_v2(uct_iface_h iface,
  *
  * @param [in] ep           Endpoint to connect.
  * @param [in] device_addr  Remote device address.
- * @param [in] iface_addr   Remote interface address or NULL if such address is
- *                          not available.
  * @param [in] ep_addr      Remote endpoint address.
  * @param [in] params       Parameters as defined in @ref
  *                          uct_ep_connect_to_ep_params_t.

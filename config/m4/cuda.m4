@@ -69,6 +69,13 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                                     [AC_MSG_ERROR([libnvidia-ml not found. Install appropriate nvidia-driver package])])
                               cuda_happy="no"])])
 
+         # Check for nvmlDeviceGetGpuFabricInfoV
+         AC_CHECK_DECLS([nvmlDeviceGetGpuFabricInfoV],
+                        [AC_DEFINE([HAVE_NVML_FABRIC_INFO], 1, [Enable NVML GPU fabric info support])],
+                        [AC_MSG_NOTICE([nvmlDeviceGetGpuFabricInfoV function not found in libnvidia-ml. MNNVL support will be disabled.])],
+                        [[#include <nvml.h>]])
+
+
          # Check for cuda static library
          have_cuda_static="no"
          AS_IF([test "x$cuda_happy" = "xyes"],
