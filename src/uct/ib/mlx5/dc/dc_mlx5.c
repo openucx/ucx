@@ -1610,6 +1610,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
+    if (md->dp_ordering_cap.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
+        init_attr.flags |= UCT_IB_DDP_SUPPORTED;
+    }
+
     status = uct_dc_mlx5_calc_sq_length(md, tx_queue_len, &sq_length);
     if (status != UCS_OK) {
         return status;
@@ -1623,9 +1627,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                               tl_md, worker, params, &config->super,
                               &config->rc_mlx5_common, &init_attr);
 
-    status = uct_rc_mlx5_dp_ordering_ooo_init(
-            &self->super, UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC,
-            &config->rc_mlx5_common, "dc");
+    status = uct_rc_mlx5_dp_ordering_ooo_init(&self->super,
+                                              md->dp_ordering_cap.dc,
+                                              &config->rc_mlx5_common, "dc");
     if (status != UCS_OK) {
         return status;
     }
