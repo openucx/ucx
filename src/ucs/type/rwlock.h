@@ -7,11 +7,14 @@
 #ifndef UCS_RWLOCK_H
 #define UCS_RWLOCK_H
 
+#include <ucs/arch/atomic.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/debug/assert.h>
+#include <ucs/sys/compiler_def.h>
 #include <errno.h>
 
 /**
- * The ucs_rwlock_t type.
+ * The ucs_rw_spinlock_t type.
  *
  * Readers increment the counter by UCS_RWLOCK_READ (4)
  * Writers set the UCS_RWLOCK_WRITE bit when lock is held
@@ -27,94 +30,108 @@
  * WAIT: writer pending --/
  */
 
-#define UCS_RWLOCK_WAIT  0x1 /* Writer is waiting */
-#define UCS_RWLOCK_WRITE 0x2 /* Writer has the lock */
+#define UCS_RWLOCK_WAIT  UCS_BIT(0) /* Writer is waiting */
+#define UCS_RWLOCK_WRITE UCS_BIT(1) /* Writer has the lock */
 #define UCS_RWLOCK_MASK  (UCS_RWLOCK_WAIT | UCS_RWLOCK_WRITE)
-#define UCS_RWLOCK_READ  0x4 /* Reader increment */
+#define UCS_RWLOCK_READ  UCS_BIT(2) /* Reader increment */
 
 #define UCS_RWLOCK_STATIC_INITIALIZER {0}
 
 
 /**
- * Read-write lock.
+ * Reader-writer spin lock.
  */
 typedef struct {
-    volatile int l;
-} ucs_rwlock_t;
+    int state;
+} ucs_rw_spinlock_t;
 
 
-static inline void ucs_rwlock_read_lock(ucs_rwlock_t *lock)
+static UCS_F_ALWAYS_INLINE void
+ucs_rw_spinlock_read_lock(ucs_rw_spinlock_t *lock)
 {
     int x;
 
-    while (1) {
-        while (lock->l & UCS_RWLOCK_MASK) {
+    for (;;) {
+        while (ucs_atomic_get(&lock->state, 0) & UCS_RWLOCK_MASK) {
             ucs_cpu_relax();
         }
 
-        x = __atomic_fetch_add(&lock->l, UCS_RWLOCK_READ, __ATOMIC_ACQUIRE);
+        x = ucs_atomic_fadd(&lock->state, UCS_RWLOCK_READ,
+                            UCS_ATOMIC_FENCE_LOCK);
         if (!(x & UCS_RWLOCK_MASK)) {
             return;
         }
 
-        __atomic_fetch_sub(&lock->l, UCS_RWLOCK_READ, __ATOMIC_RELAXED);
+        ucs_atomic_sub(&lock->state, UCS_RWLOCK_READ, 0);
     }
 }
 
 
-static inline void ucs_rwlock_read_unlock(ucs_rwlock_t *lock)
+static UCS_F_ALWAYS_INLINE void
+ucs_rw_spinlock_read_unlock(ucs_rw_spinlock_t *lock)
 {
-    __atomic_fetch_sub(&lock->l, UCS_RWLOCK_READ, __ATOMIC_RELAXED);
+    ucs_assert(lock->state >= UCS_RWLOCK_READ);
+    ucs_atomic_sub(&lock->state, UCS_RWLOCK_READ, UCS_ATOMIC_FENCE_UNLOCK);
 }
 
 
-static inline void ucs_rwlock_write_lock(ucs_rwlock_t *lock)
+static UCS_F_ALWAYS_INLINE void
+ucs_rw_spinlock_write_lock(ucs_rw_spinlock_t *lock)
 {
     int x;
 
-    while (1) {
-        x = lock->l;
+    for (;;) {
+        x = ucs_atomic_get(&lock->state, 0);
         if ((x < UCS_RWLOCK_WRITE) &&
-            (__atomic_compare_exchange_n(&lock->l, &x, UCS_RWLOCK_WRITE, 0,
-                                         __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))) {
+            ucs_atomic_cswap(&lock->state, x, UCS_RWLOCK_WRITE,
+                             UCS_ATOMIC_FENCE_LOCK)) {
             return;
         }
 
         if (!(x & UCS_RWLOCK_WAIT)) {
-            __atomic_fetch_or(&lock->l, UCS_RWLOCK_WAIT, __ATOMIC_RELAXED);
+            ucs_atomic_or(&lock->state, UCS_RWLOCK_WAIT, 0);
         }
 
-        while (lock->l > UCS_RWLOCK_WAIT) {
+        while (ucs_atomic_get(&lock->state, 0) > UCS_RWLOCK_WAIT) {
             ucs_cpu_relax();
         }
     }
 }
 
 
-static inline int ucs_rwlock_write_trylock(ucs_rwlock_t *lock)
+static UCS_F_ALWAYS_INLINE int
+ucs_rw_spinlock_write_trylock(ucs_rw_spinlock_t *lock)
 {
     int x;
 
-    x = lock->l;
+    x = ucs_atomic_get(&lock->state, 0);
     if ((x < UCS_RWLOCK_WRITE) &&
-        (__atomic_compare_exchange_n(&lock->l, &x, x + UCS_RWLOCK_WRITE, 1,
-                                     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))) {
-        return 0;
+        ucs_atomic_cswap(&lock->state, x, x + UCS_RWLOCK_WRITE,
+                         UCS_ATOMIC_FENCE_LOCK | UCS_ATOMIC_WEAK)) {
+        return 1;
     }
 
-    return -EBUSY;
+    return 0;
 }
 
 
-static inline void ucs_rwlock_write_unlock(ucs_rwlock_t *lock)
+static UCS_F_ALWAYS_INLINE void
+ucs_rw_spinlock_write_unlock(ucs_rw_spinlock_t *lock)
 {
-    __atomic_fetch_sub(&lock->l, UCS_RWLOCK_WRITE, __ATOMIC_RELAXED);
+    ucs_assert(lock->state >= UCS_RWLOCK_WRITE);
+    ucs_atomic_sub(&lock->state, UCS_RWLOCK_WRITE, UCS_ATOMIC_FENCE_UNLOCK);
 }
 
 
-static inline void ucs_rwlock_init(ucs_rwlock_t *lock)
+static UCS_F_ALWAYS_INLINE void ucs_rw_spinlock_init(ucs_rw_spinlock_t *lock)
 {
-    lock->l = 0;
+    lock->state = 0;
+}
+
+
+static UCS_F_ALWAYS_INLINE void ucs_rw_spinlock_cleanup(ucs_rw_spinlock_t *lock)
+{
+    ucs_assert(lock->state == 0);
 }
 
 #endif

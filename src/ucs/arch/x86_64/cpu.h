@@ -135,13 +135,12 @@ ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
     ucs_x86_memcpy_sse_movntdqa(dst, src, len);
 }
 
-#ifdef __SSE2__
 static UCS_F_ALWAYS_INLINE void ucs_cpu_relax()
 {
+#ifdef __SSE2__
     _mm_pause();
-}
-#define UCS_HAS_CPU_RELAX
 #endif
+}
 
 END_C_DECLS
 

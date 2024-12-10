@@ -8,6 +8,7 @@
 #ifndef UCS_ARCH_ATOMIC_H
 #define UCS_ARCH_ATOMIC_H
 
+#include <ucs/sys/compiler_def.h>
 #include <stdint.h>
 
 #if defined(__x86_64__)
@@ -137,5 +138,60 @@ UCS_DEFINE_ATOMIC_BOOL_CSWAP(8,  b);
 UCS_DEFINE_ATOMIC_BOOL_CSWAP(16, w);
 UCS_DEFINE_ATOMIC_BOOL_CSWAP(32, l);
 UCS_DEFINE_ATOMIC_BOOL_CSWAP(64, q);
+
+
+#define UCS_ATOMIC_WEAK         UCS_BIT(0)
+#define UCS_ATOMIC_FENCE_LOCK   UCS_BIT(1)
+#define UCS_ATOMIC_FENCE_UNLOCK UCS_BIT(2)
+
+
+static UCS_F_ALWAYS_INLINE int ucs_atomic_memorder(unsigned flags)
+{
+    if (flags & UCS_ATOMIC_FENCE_LOCK) {
+        return __ATOMIC_ACQUIRE;
+    }
+
+    if (flags & UCS_ATOMIC_FENCE_UNLOCK) {
+        return __ATOMIC_RELEASE;
+    }
+
+    return __ATOMIC_RELAXED;
+}
+
+
+static UCS_F_ALWAYS_INLINE int ucs_atomic_get(int *ptr, unsigned flags)
+{
+    return __atomic_load_n(ptr, ucs_atomic_memorder(flags));
+}
+
+
+static UCS_F_ALWAYS_INLINE int
+ucs_atomic_fadd(int *ptr, int val, unsigned flags)
+{
+    return __atomic_fetch_add(ptr, val, ucs_atomic_memorder(flags));
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+ucs_atomic_sub(int *ptr, int val, unsigned flags)
+{
+    __atomic_fetch_sub(ptr, val, ucs_atomic_memorder(flags));
+}
+
+
+static UCS_F_ALWAYS_INLINE void ucs_atomic_or(int *ptr, int val, unsigned flags)
+{
+    __atomic_fetch_or(ptr, val, ucs_atomic_memorder(flags));
+}
+
+
+static UCS_F_ALWAYS_INLINE int
+ucs_atomic_cswap(int *ptr, int old_val, int new_val, unsigned flags)
+{
+    return __atomic_compare_exchange_n(ptr, &old_val, new_val,
+                                       flags & UCS_ATOMIC_WEAK,
+                                       ucs_atomic_memorder(flags),
+                                       __ATOMIC_RELAXED);
+}
 
 #endif
