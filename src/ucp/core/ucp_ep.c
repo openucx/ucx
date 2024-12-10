@@ -1838,6 +1838,40 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
     return UCP_NULL_LANE;
 }
 
+ucp_lane_index_t ucp_ep_find_wireup_ep_lane(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
+        if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
+            return lane;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
+ucp_lane_index_t
+ucp_ep_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
+                            const ucp_lane_index_t *reuse_lane_map)
+{
+    ucp_lane_map_t lane_bitmap = {0};
+    ucp_lane_index_t lane;
+
+    if (ucp_ep_has_cm_lane(ep)) {
+        return key->cm_lane;
+    }
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
+        if (reuse_lane_map[lane] != UCP_NULL_LANE) {
+            lane_bitmap |= UCS_BIT(reuse_lane_map[lane]);
+        }
+    }
+
+    lane = ucs_ffs64_safe(~lane_bitmap);
+    return (lane < key->num_lanes) ? lane : UCP_NULL_LANE;
+}
+
 static int ucp_ep_lane_is_dst_index_match(ucp_rsc_index_t dst_index1,
                                           ucp_rsc_index_t dst_index2)
 {
@@ -1859,10 +1893,9 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                           config_lane2->dst_md_index);
 }
 
-static ucp_lane_index_t
-ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
-                              ucp_lane_index_t lane1,
-                              const ucp_ep_config_key_t *key2)
+ucp_lane_index_t ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
+                                               ucp_lane_index_t lane1,
+                                               const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane_idx;
 
@@ -1936,9 +1969,9 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
     }
 }
 
-static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
-                                       const ucp_ep_config_key_t *key2,
-                                       ucp_lane_index_t lane)
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane)
 {
     const ucp_ep_config_key_lane_t *config_lane1 = &key1->lanes[lane];
     const ucp_ep_config_key_lane_t *config_lane2 = &key2->lanes[lane];

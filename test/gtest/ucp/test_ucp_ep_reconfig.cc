@@ -17,6 +17,7 @@ class test_ucp_ep_reconfig : public ucp_test {
 protected:
     using address_t = std::pair<void*, ucp_unpacked_address_t>;
     using address_p = std::unique_ptr<address_t, void (*)(address_t*)>;
+    using limits    = std::numeric_limits<unsigned>;
 
     class entity : public ucp_test_base::entity {
     public:
@@ -33,34 +34,40 @@ protected:
                      const ucp_ep_params_t &ep_params, int ep_idx = 0,
                      int do_set_ep = 1) override;
 
-        void verify_configuration(const entity &other) const;
+        void
+        verify_configuration(const entity &other, unsigned num_reused) const;
 
         bool is_reconfigured() const
         {
             return m_cfg_index != ep()->cfg_index;
         }
 
+        unsigned num_reused_lanes() const
+        {
+            return m_num_reused_lanes;
+        }
+
     private:
         void store_config();
-        ucp_tl_bitmap_t ep_tl_bitmap() const;
+        ucp_tl_bitmap_t
+        ep_tl_bitmap(unsigned max_num_devs = limits::max()) const;
         address_p get_address(const ucp_tl_bitmap_t &tl_bitmap) const;
         bool is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
+        unsigned num_paths() const;
+        unsigned num_shm_lanes() const;
+        ucp_tl_bitmap_t reduced_tl_bitmap() const;
+        ucp_tl_bitmap_t initial_tl_bitmap() const;
 
-        ucp_worker_cfg_index_t m_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+        ucp_worker_cfg_index_t m_cfg_index        = UCP_WORKER_CFG_INDEX_NULL;
+        unsigned               m_num_reused_lanes = 0;
         std::vector<uct_ep_h>  m_uct_eps;
         bool                   m_exclude_ifaces;
     };
 
-    bool is_single_transport()
+    bool is_single_transport() const
     {
         return GetParam().transports.size() == 1;
-    }
-
-    bool has_p2p_transport()
-    {
-        return has_resource(sender(), "rc_verbs") ||
-               has_resource(sender(), "rc_mlx5");
     }
 
     void create_entity(bool push_front, bool exclude_ifaces)
@@ -92,15 +99,30 @@ public:
         if (sender().ucph()->num_tls <= 2) {
             UCS_TEST_SKIP_R("test requires at least 2 ifaces to work");
         }
+
+        if (has_transport("tcp")) {
+            UCS_TEST_SKIP_R("TODO: fix lane matching functionality in case "
+                            "there's matching remote MDs and different "
+                            "sys_devs");
+        }
+
+        ensure_reused_lanes_reconfigurable();
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "reuse");
     }
 
     void run(bool bidirectional = false);
-    void skip_non_p2p();
+    bool has_bond_iface();
+    void ensure_reused_lanes_reconfigurable();
+
+    bool reuse_lanes() const
+    {
+        return get_variant_value();
+    }
 
     void send_message(const ucp_test_base::entity &e1,
                       const ucp_test_base::entity &e2, const mem_buffer &sbuf,
@@ -159,6 +181,19 @@ public:
     }
 };
 
+unsigned test_ucp_ep_reconfig::entity::num_paths() const
+{
+    auto lane = ucp_ep_config(ep())->key.rma_bw_lanes[0];
+
+    if (lane == UCP_NULL_LANE) {
+        return 1;
+    }
+
+    auto rsc_idx = ucp_ep_get_rsc_index(ep(), lane);
+    auto attr    = ucp_worker_iface_get_attr(worker(), rsc_idx);
+    return attr->dev_num_paths;
+}
+
 void test_ucp_ep_reconfig::entity::store_config()
 {
     for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
@@ -173,35 +208,104 @@ void test_ucp_ep_reconfig::entity::store_config()
     }
 
     m_cfg_index = ep()->cfg_index;
+
+    /* Calculate number of reused lanes */
+    auto test = static_cast<const test_ucp_ep_reconfig*>(m_test);
+
+    if (test->reuse_lanes()) {
+        m_num_reused_lanes = (ucp_ep_num_lanes(ep()) / 2) / num_paths();
+    } else if (!m_exclude_ifaces) {
+        /* In case of asymmetric config, SHM lanes are reused */
+        m_num_reused_lanes = num_shm_lanes();
+    } else {
+        m_num_reused_lanes = 0;
+    }
 }
 
-ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::ep_tl_bitmap() const
+unsigned test_ucp_ep_reconfig::entity::num_shm_lanes() const
 {
-    if (ep() == NULL) {
-        return UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    unsigned num_shm = 0;
+
+    for (auto lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
+        auto rsc_idx = ucp_ep_get_rsc_index(ep(), lane);
+        num_shm     += (ucph()->tl_rscs[rsc_idx].tl_rsc.dev_type ==
+                        UCT_DEVICE_TYPE_SHM);
     }
 
+    return num_shm;
+}
+
+ucp_tl_bitmap_t
+test_ucp_ep_reconfig::entity::ep_tl_bitmap(unsigned max_num_devs) const
+{
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
+    unsigned dev_count        = 0;
+
+    for (auto lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
+        if (ucp_ep_get_path_index(ep(), lane) > 0) {
+            continue;
+        }
+
+        if (dev_count++ >= max_num_devs) {
+            break;
+        }
+
         UCS_STATIC_BITMAP_SET(&tl_bitmap, ucp_ep_get_rsc_index(ep(), lane));
     }
 
     return tl_bitmap;
 }
 
+ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::initial_tl_bitmap() const
+{
+    auto test = static_cast<const test_ucp_ep_reconfig*>(m_test);
+
+    if (!test->is_single_transport()) {
+        return ucp_tl_bitmap_max;
+    }
+
+    /* For single transport, half of the resources should be reserved for
+     * receiver side to use */
+    ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    size_t num_tls            = 0;
+    ucp_rsc_index_t rsc_idx;
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_idx, &ucph()->tl_bitmap) {
+        if (++num_tls > (ucph()->num_tls / 2)) {
+            UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
+        }
+    }
+
+    return tl_bitmap;
+}
+
+ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::reduced_tl_bitmap() const
+{
+    if (!m_exclude_ifaces) {
+        return ucp_tl_bitmap_max;
+    }
+
+    if (ep() == NULL) {
+        /* Handle first entity's bitmap */
+        return initial_tl_bitmap();
+    }
+
+    auto reused_bitmap         = ep_tl_bitmap(num_reused_lanes());
+    const auto negative_bitmap = UCS_STATIC_BITMAP_NOT(reused_bitmap);
+
+    return UCS_STATIC_BITMAP_NOT(UCS_STATIC_BITMAP_AND(ep_tl_bitmap(),
+                                                       negative_bitmap));
+}
+
 void test_ucp_ep_reconfig::entity::connect(const ucp_test_base::entity *other,
                                            const ucp_ep_params_t &ep_params,
                                            int ep_idx, int do_set_ep)
 {
-    auto r_other     = static_cast<const entity*>(other);
-    auto worker_addr = r_other->get_address(ucp_tl_bitmap_max);
-    ucp_tl_bitmap_t tl_bitmap;
+    auto r_other                    = static_cast<const entity*>(other);
+    auto worker_addr                = r_other->get_address(ucp_tl_bitmap_max);
+    const ucp_tl_bitmap_t tl_bitmap = r_other->reduced_tl_bitmap();
     unsigned addr_indices[UCP_MAX_LANES];
     ucp_ep_h ucp_ep;
-
-    tl_bitmap = m_exclude_ifaces ?
-                        UCS_STATIC_BITMAP_NOT(r_other->ep_tl_bitmap()) :
-                        ucp_tl_bitmap_max;
 
     UCS_ASYNC_BLOCK(&worker()->async);
     ASSERT_UCS_OK(ucp_ep_create_to_worker_addr(worker(), &tl_bitmap,
@@ -248,7 +352,7 @@ bool test_ucp_ep_reconfig::entity::is_lane_connected(ucp_ep_h ep,
 }
 
 void test_ucp_ep_reconfig::entity::verify_configuration(
-        const entity &other) const
+        const entity &other, unsigned num_reused) const
 {
     unsigned reused                  = 0;
     const ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep());
@@ -257,13 +361,18 @@ void test_ucp_ep_reconfig::entity::verify_configuration(
         /* Verify local and remote lanes are identical */
         EXPECT_TRUE(is_lane_connected(ep(), lane, other));
 
-        /* Verify correct number of reused lanes is configured */
+        /* Verify correct number of reused lanes */
         auto uct_ep = ucp_ep_get_lane(ep(), lane);
         auto it     = std::find(m_uct_eps.begin(), m_uct_eps.end(), uct_ep);
         reused     += (it != m_uct_eps.end());
     }
 
-    EXPECT_EQ(reused, is_reconfigured() ? 0 : num_lanes);
+    if (is_reconfigured()) {
+        EXPECT_GE(reused, num_reused);
+        EXPECT_LE(reused, num_reused * num_paths());
+    } else {
+        EXPECT_EQ(reused, num_lanes);
+    }
 }
 
 test_ucp_ep_reconfig::address_p
@@ -297,49 +406,64 @@ void test_ucp_ep_reconfig::run(bool bidirectional)
     auto r_receiver = static_cast<const entity*>(&receiver());
 
     EXPECT_NE(r_sender->is_reconfigured(), r_receiver->is_reconfigured());
-    r_sender->verify_configuration(*r_receiver);
-    r_receiver->verify_configuration(*r_sender);
+
+    r_sender->verify_configuration(*r_receiver, r_sender->num_reused_lanes());
+    r_receiver->verify_configuration(*r_sender, r_sender->num_reused_lanes());
 }
 
-void test_ucp_ep_reconfig::skip_non_p2p()
+bool test_ucp_ep_reconfig::has_bond_iface()
 {
-    if (!has_p2p_transport()) {
-        UCS_TEST_SKIP_R("No p2p TLs available, config will be non-wireup");
+    auto context = sender().ucph();
+    const ucp_tl_resource_desc_t *rsc;
+
+    ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
+        std::string tl_name(rsc->tl_rsc.dev_name);
+
+        if (tl_name.find("bond") != std::string::npos) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void test_ucp_ep_reconfig::ensure_reused_lanes_reconfigurable()
+{
+    if (!reuse_lanes()) {
+        return;
+    }
+
+    if (has_bond_iface()) {
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
     }
 }
 
-/* TODO: Remove skip condition after next PRs are merged. */
-UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, basic,
-                     !has_transport("rc_x") || !has_transport("rc_v"))
+UCS_TEST_P(test_ucp_ep_reconfig, basic)
 {
+    if (has_transport("shm")) {
+        UCS_TEST_SKIP_R("TODO: add support for reconfiguration of separate "
+                        "wireup and AM lanes");
+    }
+
     run();
 }
 
 UCS_TEST_P(test_ucp_ep_reconfig, request_reset, "PROTO_REQUEST_RESET=y")
 {
-    if (is_single_transport()) {
-        /* One side will consume all ifaces and the other side will have no ifaces left to use */
-        UCS_TEST_SKIP_R("exclude_iface requires at least 2 transports to work "
-                        "(for example DC + SHM)");
-    }
-
-    skip_non_p2p();
     run();
 }
 
-/* SHM causes lane reuse, disable for now. */
-UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, resolve_remote_id,
-                     has_transport("shm") || is_self(), "MAX_RNDV_LANES=0")
+UCS_TEST_P(test_ucp_ep_reconfig, resolve_remote_id)
 {
-    if (has_transport("tcp")) {
-        UCS_TEST_SKIP_R("lanes are reused (not supported yet)");
+    if (has_transport("dc_x")) {
+        /* Avoid creating odd number of lanes due to AM lane separation */
+        modify_config("MAX_RNDV_LANES", "0");
     }
 
     run(true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_ep_reconfig);
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_reconfig, rc_x_v, "rc");
 
 class test_reconfig_asymmetric : public test_ucp_ep_reconfig {
 protected:
@@ -355,23 +479,17 @@ protected:
     }
 };
 
-/* Will be relevant when reuse + non-wireup is supported */
-UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, basic, has_transport("shm"))
+UCS_TEST_P(test_reconfig_asymmetric, basic)
 {
     run();
 }
 
-/* Will be relevant when reuse + non-wireup is supported */
-UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, request_reset,
-                     has_transport("shm"), "PROTO_REQUEST_RESET=y")
+UCS_TEST_P(test_reconfig_asymmetric, request_reset, "PROTO_REQUEST_RESET=y")
 {
-    skip_non_p2p();
     run();
 }
 
-/* SHM causes lane reuse, disable for now. */
-UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, resolve_remote_id,
-                     has_transport("shm") || is_self(), "MAX_RNDV_LANES=0")
+UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
 {
     run(true);
 }
