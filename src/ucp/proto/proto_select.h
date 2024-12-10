@@ -44,8 +44,9 @@
 
 
 /* Pack operation attributes from uint32_t to a uint8_t */
-#define ucp_proto_select_op_attr_pack(_op_attr, _mask) \
-    (((_op_attr) & (_mask)) / UCP_PROTO_SELECT_OP_ATTR_BASE)
+#define ucp_proto_select_op_attr_pack(_op_attr) \
+    (((_op_attr) & (UCP_PROTO_SELECT_OP_ATTR_MASK)) / \
+    UCP_PROTO_SELECT_OP_ATTR_BASE)
 
 
 typedef struct {
