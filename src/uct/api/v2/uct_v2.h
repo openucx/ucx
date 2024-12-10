@@ -494,8 +494,13 @@ typedef struct uct_md_mem_reg_params {
 
     /**
      * Represents a pointer to the existing memory handle.
-     * Used to create a memory window is (with flag @ref UCT_MD_MEM_WINDOW)
-     * based on this original memh.
+     * Used to register a derived memory handle: a shallow copy of existing UCT
+     * memory handle, which can be used to access the same memory region. When
+     * created, the derived memh inherits the original memh access flags and
+     * state. The lifetime of the derived memh is bound to the original memh,
+     * and the original memh cannot be destroyed until all its derived handles
+     * are destroyed. The derived memh cannot be used to register another
+     * derived memh.
      */
     uct_mem_h                    memh;
 } uct_md_mem_reg_params_t;

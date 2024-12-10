@@ -414,11 +414,11 @@ static ucs_status_t
 uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
-    unsigned flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    uct_mem_h base = UCT_MD_MEM_REG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL);
     uct_cuda_ipc_memh_t *memh;
 
-    if (ENABLE_PARAMS_CHECK && (flags & UCT_MD_MEM_WINDOW)) {
-        ucs_error("CUDA IPC does not support memory windows");
+    if (ENABLE_PARAMS_CHECK && (base != NULL)) {
+        ucs_error("CUDA IPC does not support derived memory handles");
         return UCS_ERR_UNSUPPORTED;
     }
 

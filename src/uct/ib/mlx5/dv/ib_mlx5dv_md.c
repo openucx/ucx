@@ -876,23 +876,15 @@ err:
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_mem_window_reg(uct_md_h uct_md,
-                                const uct_md_mem_reg_params_t *params,
-                                uct_mem_h *memh_p)
+uct_ib_mlx5_devx_derived_mem_reg(uct_md_h uct_md, uct_ib_mlx5_devx_mem_t *base,
+                                 uct_mem_h *memh_p)
 {
-    uct_ib_mlx5_md_t *md         = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
-    uct_ib_mlx5_devx_mem_t *base =
-                    UCT_MD_MEM_REG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     uct_ib_mlx5_devx_mem_t *memh;
     ucs_status_t status;
 
-    if (ENABLE_PARAMS_CHECK && (base == NULL)) {
-        ucs_error("base memory handle is not provided for memory window");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    ucs_assertv(!(base->super.flags & UCT_IB_MEM_FLAG_MEM_WINDOW),
-                "memh=%p is already a memory window", base);
+    ucs_assertv(!(base->super.flags & UCT_IB_MEM_FLAG_DERIVED),
+                "memh=%p is already a derived memh", base);
 
     status = uct_ib_mlx5_devx_memh_clone(md, base, &memh);
     if (status != UCS_OK) {
@@ -901,12 +893,11 @@ uct_ib_mlx5_devx_mem_window_reg(uct_md_h uct_md,
         return status;
     }
 
-    /* Move indirect keys ownership from base to memory window */
-    memh->super.flags  |= UCT_IB_MEM_FLAG_MEM_WINDOW;
-    base->atomic_dvmr   = NULL;
-    base->atomic_rkey   = UCT_IB_INVALID_MKEY;
-    base->indirect_dvmr = NULL;
-    base->indirect_rkey = UCT_IB_INVALID_MKEY;
+    memh->super.flags  |= UCT_IB_MEM_FLAG_DERIVED;
+    memh->atomic_dvmr   = NULL;
+    memh->atomic_rkey   = UCT_IB_INVALID_MKEY;
+    memh->indirect_dvmr = NULL;
+    memh->indirect_rkey = UCT_IB_INVALID_MKEY;
 
     *memh_p = memh;
     return UCS_OK;
@@ -919,6 +910,7 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     unsigned flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    uct_mem_h base = UCT_MD_MEM_REG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL);
     uct_ib_mlx5_devx_mem_t *memh;
     ucs_status_t status;
     uint32_t dummy_mkey;
@@ -927,8 +919,8 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
         return uct_ib_mlx5_devx_mem_reg_gva(uct_md, flags, memh_p);
     }
 
-    if (flags & UCT_MD_MEM_WINDOW) {
-        return uct_ib_mlx5_devx_mem_window_reg(uct_md, params, memh_p);
+    if (base != NULL) {
+        return uct_ib_mlx5_devx_derived_mem_reg(uct_md, base, memh_p);
     }
 
     status = uct_ib_mlx5_devx_memh_alloc(md, length, flags,
@@ -1586,8 +1578,8 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
         return status;
     }
 
-    /* Memory window owns only indirect keys, but not the other state */
-    if (memh->super.flags & UCT_IB_MEM_FLAG_MEM_WINDOW) {
+    /* Derived memh owns only indirect keys, but not the other state */
+    if (memh->super.flags & UCT_IB_MEM_FLAG_DERIVED) {
         goto out;
     }
 
