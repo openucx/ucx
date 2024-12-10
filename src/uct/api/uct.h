@@ -977,7 +977,13 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15),
 
     /** Enables @ref uct_ep_params::local_sockaddr */
-    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16)
+    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16),
+
+    /** Enables @ref uct_ep_params::dev_addr_length */
+    UCT_EP_PARAM_FIELD_DEV_ADDR_LENGTH            = UCS_BIT(17),
+
+    /** Enables @ref uct_ep_params::iface_addr_length */
+    UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH          = UCS_BIT(18)
 };
 
 
@@ -1427,7 +1433,19 @@ struct uct_ep_params {
      * @note The interface in this routine requires the
      * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
      */
-    const ucs_sock_addr_t             *local_sockaddr;
+    const ucs_sock_addr_t               *local_sockaddr;
+
+    /**
+     * Device address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                              dev_addr_length;
+
+    /**
+     * Iface address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                              iface_addr_length;
 };
 
 
@@ -2339,7 +2357,7 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  *    remote endpoint, @ref uct_ep_connect_to_ep will need to be called. Use of
  *    this mode requires @ref uct_ep_params_t::iface has the
  *    @ref UCT_IFACE_FLAG_CONNECT_TO_EP capability flag. It may be obtained by
- *    @ref uct_iface_query .
+ *    @ref uct_iface_query.
  * -# Connect to a remote interface: If @ref uct_ep_params_t::dev_addr and
  *    @ref uct_ep_params_t::iface_addr are set, this will establish an endpoint
  *    that is connected to a remote interface. This requires that
