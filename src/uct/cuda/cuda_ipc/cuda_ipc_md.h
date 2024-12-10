@@ -42,7 +42,7 @@ typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
  */
 typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;   /**< Domain info */
-    ucs_ternary_auto_value_t enable_mnnvl;
+    int                      enable_mnnvl; /**< Multi-node NVLINK support status */
 } uct_cuda_ipc_md_t;
 
 
