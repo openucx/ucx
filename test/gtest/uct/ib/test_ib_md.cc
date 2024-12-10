@@ -42,12 +42,10 @@ protected:
     void test_mkey_pack_mt_internal(unsigned access_mask, bool invalidate);
     void test_smkey_reg_atomic(void);
 
-    uct_mem_h reg_mem_window(uct_mem_h base) const {
+    uct_mem_h reg_derived_mem(uct_mem_h base) const {
         uct_mem_h memh;
         uct_md_mem_reg_params_t params;
-        params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS |
-                            UCT_MD_MEM_REG_FIELD_MEMH;
-        params.flags      = UCT_MD_MEM_WINDOW;
+        params.field_mask = UCT_MD_MEM_REG_FIELD_MEMH;
         params.memh       = base;
         ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), NULL, SIZE_MAX, &params, &memh));
         return memh;
@@ -392,7 +390,7 @@ UCS_TEST_P(test_ib_md, mt_fail, "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_ib_md, mem_window,
+UCS_TEST_SKIP_COND_P(test_ib_md, derived_mem,
                      !check_invalidate_support(UCT_MD_MEM_ACCESS_RMA))
 {
     unsigned flags = UCT_MD_FLAG_INVALIDATE_RMA | UCT_MD_FLAG_INVALIDATE_AMO;
@@ -401,29 +399,31 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mem_window,
     EXPECT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_RMA, buffer.data(), buffer.size(),
                           &base));
 
-    /* Test case 1: creating MW from memh before mkey_pack */
-    uct_mem_h mw1 = reg_mem_window(base);
+    /* Test case 1: creating derived memh from memh before mkey_pack */
+    uct_mem_h der1 = reg_derived_mem(base);
 
-    /* Test case 2: creating MW from memh after mkey_pack */
-    std::vector<uint8_t> base_rkey1 = mkey_pack(base, flags);
-    uct_mem_h mw2 = reg_mem_window(base);
-    std::vector<uint8_t> mw2_rkey1 = mkey_pack(mw2, flags);
-    EXPECT_EQ(base_rkey1, mw2_rkey1);
+    /* Test case 2: creating derived memh from memh after mkey_pack */
+    std::vector<uint8_t> base_rkey1  = mkey_pack(base, flags);
+    uct_mem_h der2                   = reg_derived_mem(base);
+    std::vector<uint8_t> der2_rkey1  = mkey_pack(der2, flags);
+    EXPECT_NE(base_rkey1, der2_rkey1);
 
     /* Test case 3: subsequent mkey_pack calls return the same result */
-    std::vector<uint8_t> mw2_rkey2 = mkey_pack(mw2, flags);
-    EXPECT_EQ(mw2_rkey1, mw2_rkey2);
+    std::vector<uint8_t> der2_rkey2 = mkey_pack(der2, flags);
+    EXPECT_EQ(der2_rkey1, der2_rkey2);
 
-    /* Test case 4: base memh can still be used to pack mkeys */
+    /* Test case 4: multiple derived memhs do not share the same rkeys */
+    std::vector<uint8_t> der1_rkey1 = mkey_pack(der1, flags);
+    EXPECT_NE(der1_rkey1, der2_rkey1);
+
+    /* Invalidation = destroying derived memh */
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), der1));
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), der2));
+
+    /* Test case 5: base memh can still be used to pack mkeys */
     std::vector<uint8_t> base_rkey2 = mkey_pack(base, flags);
-    EXPECT_NE(base_rkey1, base_rkey2);
+    EXPECT_EQ(base_rkey1, base_rkey2);
 
-    /* Test case 5: multiple MWs do not share the same rkeys */
-    std::vector<uint8_t> mw1_rkey1 = mkey_pack(mw1, flags);
-    EXPECT_NE(mw1_rkey1, mw2_rkey1);
-
-    EXPECT_UCS_OK(uct_md_mem_dereg(md(), mw1));
-    EXPECT_UCS_OK(uct_md_mem_dereg(md(), mw2));
     EXPECT_UCS_OK(uct_md_mem_dereg(md(), base));
 }
 

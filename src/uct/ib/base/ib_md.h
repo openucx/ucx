@@ -73,8 +73,8 @@ enum {
 #endif
     UCT_IB_MEM_FLAG_GVA              = UCS_BIT(5), /**< The memory handle is a
                                                         GVA region */
-    UCT_IB_MEM_FLAG_MEM_WINDOW       = UCS_BIT(6), /**< The memory handle is a
-                                                        memory window */
+    UCT_IB_MEM_FLAG_DERIVED          = UCS_BIT(6), /**< The memory handle is a
+                                                        derived memh */
 };
 
 enum {
