@@ -619,7 +619,13 @@ unsigned ucp_test::mt_num_threads()
 #if _OPENMP && ENABLE_MT
     /* Assume each thread can create two workers (sender and receiver entity),
        and each worker can open up to 64 files */
-    return std::min(omp_get_max_threads(), ucs_sys_max_open_files() / (64 * 2));
+    unsigned num = std::min(omp_get_max_threads(),
+                            ucs_sys_max_open_files() / (64 * 2));
+    if (ucs::is_aws()) {
+        num = std::min(num, 64u);
+    }
+
+    return num;
 #else
     return 1;
 #endif
