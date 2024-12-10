@@ -25,6 +25,7 @@
 
 source $(dirname $0)/../buildlib/az-helpers.sh
 source $(dirname $0)/../buildlib/tools/common.sh
+trap "log_info_on_exit" EXIT
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
@@ -663,7 +664,7 @@ test_malloc_hooks_mpi() {
 run_mpi_tests() {
 	prev_LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 	mpi_module=hpcx-ga-gcc
-	if module_load ${mpi_module}
+	if az_module_load ${mpi_module}
 	then
 		if mpirun --version
 		then
@@ -702,7 +703,7 @@ run_mpi_tests() {
 			echo "==== Not running MPI tests ===="
 		fi
 
-		module unload ${mpi_module}
+		az_module_unload unload ${mpi_module}
 	else
 		echo "==== Not running MPI tests ===="
 	fi
@@ -1040,7 +1041,7 @@ run_gtest_armclang() {
 		return 0
 	fi
 
-	if module_load arm-compiler/arm-hpc-compiler
+	if az_module_load arm-compiler/arm-hpc-compiler
 	then
 		if armclang -v
 		then
@@ -1064,7 +1065,7 @@ run_gtest_armclang() {
 			log_warning "armclang compiler is unusable"
 		fi
 
-		module unload arm-compiler/arm-hpc-compiler
+		az_module_unload unload arm-compiler/arm-hpc-compiler
 	else
 		echo "==== Not running with armclang compiler ===="
 	fi
@@ -1224,13 +1225,13 @@ run_valgrind_check() {
 	# Load newer valgrind if native is older than 3.10
 	if ! (echo "valgrind-3.10.0"; valgrind --version) | sort -CV; then
 		echo "load new valgrind"
-		module load tools/valgrind-3.12.0
+		az_module_load load tools/valgrind-3.12.0
 	fi
 
 	echo "==== Run valgrind tests ===="
 	build devel --enable-gtest
 	run_gtest_make "default" test_valgrind
-	module unload tools/valgrind-3.12.0
+	az_module_unload unload tools/valgrind-3.12.0
 }
 
 prepare
