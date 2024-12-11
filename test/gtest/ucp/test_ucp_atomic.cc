@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_types.h> /* for atomic mode */
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_mm.h>
 }
 
@@ -17,7 +18,8 @@ class test_ucp_atomic : public test_ucp_memheap {
 public:
     /* Test variants */
     enum {
-        ATOMIC_MODE = UCS_MASK(2)
+        ATOMIC_MODE = UCS_MASK(2),
+        ODP         = UCS_BIT(2)
     };
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants,
@@ -28,6 +30,12 @@ public:
         add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_CPU, "cpu" + name);
         add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_DEVICE, "device" + name);
         add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_GUESS, "guess" + name);
+
+        /* Do not force using device atomics when testing ODP, since some
+         * configurations do not support it. Allow a fallback to SW emulation
+         * in this case.
+         */
+        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_GUESS | ODP, "guess/odp");
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
@@ -124,17 +132,28 @@ protected:
 
     virtual void init() {
         int atomic_mode = get_variant_value() & ATOMIC_MODE;
+        int odp         = get_variant_value() & ODP;
         const char *atomic_mode_cfg =
                         (atomic_mode == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
                         (atomic_mode == UCP_ATOMIC_MODE_DEVICE) ? "device" :
                         (atomic_mode == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
                         "";
         modify_config("ATOMIC_MODE", atomic_mode_cfg);
+
+        if (odp) {
+            modify_config("REG_NONBLOCK_MEM_TYPES", "host");
+            modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
+        }
         test_ucp_memheap::init();
+
+        if (odp && !(check_amo_odp_supported(sender(), UCS_MEMORY_TYPE_HOST))) {
+            cleanup();
+            UCS_TEST_SKIP_R("No AMO lanes with ODP support");
+        }
     }
 
     static unsigned default_num_iters() {
-        return ucs_max(100 / ucs::test_time_multiplier(), 1);
+        return ucs_max(32000 / ucs::test_time_multiplier(), 1);
     }
 
     void test(send_func_t send_func, uint64_t op_mask,
@@ -144,6 +163,21 @@ protected:
     }
 
 private:
+    bool check_amo_odp_supported(const entity &e, ucs_memory_type_t mem_type)
+    {
+        const ucp_ep_config_key_t *key = &ucp_ep_config(e.ep())->key;
+        ucp_lane_index_t lane;
+
+        for (lane = 0; key->amo_lanes[lane] != UCP_NULL_LANE; ++lane) {
+            if (ucp_ep_md_attr(e.ep(), lane)->reg_nonblock_mem_types &
+                UCS_BIT(mem_type)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     static T atomic_op_result(ucp_atomic_op_t op, T x, T y, T z) {
         switch (op) {
         case UCP_ATOMIC_OP_ADD:
@@ -208,6 +242,11 @@ private:
             if (!UCP_MEM_IS_HOST(send_mem_type) || !UCP_MEM_IS_HOST(recv_mem_type)) {
                 /* Memory type atomics are fully supported only with new protocols */
                 if (!is_proto_enabled()) {
+                    continue;
+                }
+
+                /* ODP is currently tested only for host memory */
+                if (get_variant_value() & ODP) {
                     continue;
                 }
 

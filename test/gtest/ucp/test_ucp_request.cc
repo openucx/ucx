@@ -389,6 +389,7 @@ public:
         std::vector<void*> reqs;
         send_requests(1, reqs, op, sync);
         wait_reqs(op, reqs);
+        flush_workers();
 
         /* Send all messages */
         send_requests(reqs_count, reqs, op, sync);

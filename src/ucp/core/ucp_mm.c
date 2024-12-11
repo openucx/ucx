@@ -677,7 +677,6 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
                           uint8_t memh_flags, unsigned uct_flags,
                           uct_alloc_method_t method, ucs_memory_type_t mem_type)
 {
-
     memh->md_map         = 0;
     memh->inv_md_map     = 0;
     memh->uct_flags      = UCP_MM_UCT_ACCESS_FLAGS(uct_flags);
@@ -758,16 +757,16 @@ static ucp_md_index_t ucp_mem_get_md_index(ucp_context_h context,
     return UCP_NULL_RESOURCE;
 }
 
-static ucs_status_t ucp_memh_create_from_mem(ucp_context_h context,
-                                             const uct_allocated_memory_t *mem,
-                                             unsigned uct_flags,
-                                             ucp_mem_h *memh_p)
+static ucs_status_t
+ucp_memh_create_from_mem(ucp_context_h context,
+                         const uct_allocated_memory_t *mem, uint8_t memh_flags,
+                         unsigned uct_flags, ucp_mem_h *memh_p)
 {
     ucs_status_t status;
     ucp_mem_h memh;
 
     status = ucp_memh_create(context, mem->address, mem->length, mem->mem_type,
-                             mem->method, 0, uct_flags, &memh);
+                             mem->method, memh_flags, uct_flags, &memh);
     if (status != UCS_OK) {
         return status;
     }
@@ -817,7 +816,8 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
 
     cache_md_map = context->cache_md_map[mem_type] & reg_md_map;
 
-    if ((context->rcache == NULL) || (cache_md_map == 0)) {
+    if ((context->rcache == NULL) || (cache_md_map == 0) ||
+        (memh->flags & UCP_MEMH_FLAG_NO_RCACHE)) {
         status = ucp_memh_register(context, memh, reg_md_map, uct_flags,
                                    alloc_name);
         if (status != UCS_OK) {
@@ -994,8 +994,8 @@ err_free_memh:
 
 static ucs_status_t
 ucp_memh_alloc(ucp_context_h context, void *address, size_t length,
-               ucs_memory_type_t mem_type, unsigned uct_flags,
-               const char *alloc_name, ucp_mem_h *memh_p)
+               ucs_memory_type_t mem_type, uint8_t memh_flags,
+               unsigned uct_flags, const char *alloc_name, ucp_mem_h *memh_p)
 {
     uct_allocated_memory_t mem;
     ucs_status_t status;
@@ -1007,7 +1007,8 @@ ucp_memh_alloc(ucp_context_h context, void *address, size_t length,
         goto out;
     }
 
-    status = ucp_memh_create_from_mem(context, &mem, uct_flags, &memh);
+    status = ucp_memh_create_from_mem(context, &mem, memh_flags, uct_flags,
+                                      &memh);
     if (status != UCS_OK) {
         goto err_dealloc;
     }
@@ -1137,8 +1138,8 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     if (memh_flags & UCP_MEMH_FLAG_IMPORTED) {
         status = ucp_memh_import(context, exported_memh_buffer, &memh);
     } else if (flags & UCP_MEM_MAP_ALLOCATE) {
-        status = ucp_memh_alloc(context, address, length, mem_type, uct_flags,
-                                alloc_name, &memh);
+        status = ucp_memh_alloc(context, address, length, mem_type, 0,
+                                uct_flags, alloc_name, &memh);
     } else {
         status = ucp_memh_create(context, address, length, mem_type,
                                  UCT_ALLOC_METHOD_LAST, 0, uct_flags, &memh);
@@ -1348,8 +1349,8 @@ ucp_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **ch
     ucp_mem_h memh;
     ucs_status_t status;
 
-    status = ucp_memh_alloc(worker->context, NULL,
-                            *size_p + sizeof(*chunk_hdr), UCS_MEMORY_TYPE_HOST,
+    status = ucp_memh_alloc(worker->context, NULL, *size_p + sizeof(*chunk_hdr),
+                            UCS_MEMORY_TYPE_HOST, UCP_MEMH_FLAG_NO_RCACHE,
                             UCT_MD_MEM_ACCESS_RMA, ucs_mpool_name(mp), &memh);
     if (status != UCS_OK) {
         goto out;
@@ -1401,6 +1402,7 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 
     /* payload; need to get default flags from ucp_mem_map_params2uct_flags() */
     status = ucp_memh_alloc(context, NULL, frag_size * num_elems, mem_type,
+                            UCP_MEMH_FLAG_NO_RCACHE,
                             UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK,
                             ucs_mpool_name(mp), &chunk_hdr->memh);
     if (status != UCS_OK) {

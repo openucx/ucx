@@ -594,6 +594,8 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
     remaining = (uintptr_t)req->send.buffer % align;
 
     if ((offset == 0) && (remaining > 0) && (req->send.length > ucp_mtu)) {
+        ucs_assertv(ucp_mtu > remaining, "ucp_mtu %lu, remaining %lu",
+                    ucp_mtu, remaining);
         length = ucp_mtu - remaining;
     } else {
         lanes_count = ucs_popcount(req->send.rndv.zcopy.lanes_map_all);

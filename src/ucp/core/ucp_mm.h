@@ -39,6 +39,11 @@ enum {
     UCP_MEMH_FLAG_IMPORTED     = UCS_BIT(0),
     UCP_MEMH_FLAG_MLOCKED      = UCS_BIT(1),
     UCP_MEMH_FLAG_HAS_AUTO_GVA = UCS_BIT(2),
+
+    /**
+     * Avoid using registration cache for the particular memory region.
+     */
+    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3)
 };
 
 

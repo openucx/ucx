@@ -3,6 +3,7 @@
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -35,6 +36,7 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_AMD_ROME,
     UCS_CPU_MODEL_AMD_MILAN,
     UCS_CPU_MODEL_AMD_GENOA,
+    UCS_CPU_MODEL_AMD_TURIN,
     UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG,
     UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU,
     UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI,
@@ -162,7 +164,8 @@ static inline int ucs_cpu_prefer_relaxed_order()
             ((cpu_model == UCS_CPU_MODEL_AMD_NAPLES) ||
              (cpu_model == UCS_CPU_MODEL_AMD_ROME) ||
              (cpu_model == UCS_CPU_MODEL_AMD_MILAN) ||
-             (cpu_model == UCS_CPU_MODEL_AMD_GENOA)));
+             (cpu_model == UCS_CPU_MODEL_AMD_GENOA) ||
+             (cpu_model == UCS_CPU_MODEL_AMD_TURIN)));
 }
 
 

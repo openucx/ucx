@@ -485,6 +485,13 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
                 break;
             }
             break;
+        /* AMD Zen5 */
+        case 0x1a:
+            if ((model <= 0x2f) || (model >= 0x40 && model <= 0x4f) ||
+                (model >= 0x60 && model <= 0x7f)) {
+                cpu_model = UCS_CPU_MODEL_AMD_TURIN;
+            }
+            break;
         }
     }
 

@@ -83,10 +83,10 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
 {
     size_t size                        = uct_iov_get_length(iov);
     uct_rocm_copy_iface_t *iface       = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
-    uct_rocm_copy_key_t *rocm_copy_key = (uct_rocm_copy_key_t *) rkey;
     ucs_status_t ret                   = UCS_INPROGRESS;
     void *remote_addr_mod = NULL, *iov_buffer_mod = NULL;
     bool remote_addr_is_host = 0, iov_buffer_is_host = 0;
+    uct_rocm_copy_key_t *rocm_copy_key;
     hsa_status_t status;
     void *src_addr, *dst_addr, *dev_address;
     hsa_agent_t agent, tmp_agent;
@@ -123,10 +123,9 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         remote_addr_mod     = dev_address;
     } else {
         remote_addr_is_host = 1;
-        remote_addr_mod     = uct_rocm_copy_get_mapped_host_ptr(iface,
-                                                                (void*)remote_addr,
-                                                                size,
-                                                                rocm_copy_key);
+        rocm_copy_key       = (rkey == UCT_INVALID_RKEY) ? NULL : (uct_rocm_copy_key_t *) rkey;
+        remote_addr_mod     = uct_rocm_copy_get_mapped_host_ptr(
+                iface, (void*)remote_addr, size, rocm_copy_key);
         if (remote_addr_mod == NULL) {
             ucs_error("failed to map host pointer %p to device address",
                       (void*)remote_addr);
