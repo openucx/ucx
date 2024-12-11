@@ -23,7 +23,6 @@ typedef enum {
     COLOR_BLACK,
     COLOR_YELLOW,
     COLOR_WHITE,
-    COLOR_LAST
 } color_t;
 
 typedef enum {
@@ -42,12 +41,16 @@ const char *color_names[] = {
     /* [COLOR_LAST]   = */ NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(color_names);
+
 const char *material_names[] = {
     /* [MATERIAL_LEATHER]   = */ "leather",
     /* [MATERIAL_ALCANTARA] = */ "alcantara",
     /* [MATERIAL_TEXTILE]   = */ "textile",
     /* [MATERIAL_LAST]      = */ NULL
 };
+
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(material_names);
 
 typedef struct {
     color_t         color;
@@ -791,8 +794,9 @@ UCS_TEST_F(test_config, test_allow_list_negative)
 {
     ucs_config_allow_list_t field;
 
-    EXPECT_EQ(ucs_config_sscanf_allow_list("all,all", &field,
-                                           &ucs_config_array_string), 0);
+    EXPECT_EQ(ucs_config_sscanf_allow_list(&ucs_config_array_string.parser,
+                                           "all,all", &field),
+              0);
 }
 
 UCS_TEST_F(test_config, test_key_value_generic_value) {

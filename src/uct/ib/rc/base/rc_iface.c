@@ -27,6 +27,8 @@ static const char *uct_rc_fence_mode_values[] = {
     [UCT_RC_FENCE_MODE_LAST]   = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_rc_fence_mode_values);
+
 ucs_config_field_t uct_rc_iface_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "RX_INLINE=64;TX_INLINE_RESP=64;RX_QUEUE_LEN=4095;SEG_SIZE=8256", NULL,
    ucs_offsetof(uct_rc_iface_common_config_t, super),

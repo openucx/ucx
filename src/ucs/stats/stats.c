@@ -35,6 +35,8 @@ const char *ucs_stats_formats_names[] = {
     [UCS_STATS_LAST]        = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_stats_formats_names);
+
 #ifdef ENABLE_STATS
 
 enum {
@@ -765,7 +767,7 @@ static void ucs_stats_set_trigger()
         ucs_stats_context.flags |= UCS_STATS_FLAG_ON_EXIT;
     } else if (!strncmp(ucs_global_opts.stats_trigger, "timer:", 6)) {
         p = ucs_global_opts.stats_trigger + 6;
-        if (!ucs_config_sscanf_time(p, &ucs_stats_context.interval, NULL)) {
+        if (!ucs_config_sscanf_time(NULL, p, &ucs_stats_context.interval)) {
             ucs_error("Invalid statistics interval time format: %s", p);
             return;
         }
@@ -775,7 +777,7 @@ static void ucs_stats_set_trigger()
                            NULL, "stats");
    } else if (!strncmp(ucs_global_opts.stats_trigger, "signal:", 7)) {
         p = ucs_global_opts.stats_trigger + 7;
-        if (!ucs_config_sscanf_signo(p, &ucs_stats_context.signo, NULL)) {
+        if (!ucs_config_sscanf_signo(NULL, p, &ucs_stats_context.signo)) {
             ucs_error("Invalid statistics signal specification: %s", p);
             return;
         }

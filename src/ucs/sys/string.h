@@ -313,29 +313,16 @@ const char* ucs_mask_str(uint64_t mask, ucs_string_buffer_t *strb);
 
 
 /**
- * Find a string in a NULL-terminated array of strings.
+ * Find a string in an array of strings.
  *
- * @param str          String to search for.
- * @param string_list  NULL-terminated array of strings.
- * @param case_sensitive Whether to perform case sensitive search.
- *
- * @return Index of the string in the array, or -1 if not found.
- */
-ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
-                                int case_sensitive);
-
-/**
- * Find a string in an array of strings with NULL entries.
- *
- * @param str          String to search for.
- * @param string_list  Array of strings.
+ * @param str             String to search for.
+ * @param string_list     Array of strings.
  * @param str_array_size  Number of strings in the array.
  *
  * @return Index of the string in the array, or -1 if not found.
  */
-ssize_t ucs_string_find_in_sparse_list(const char *str,
-                                       const char **string_list,
-                                       size_t str_array_size);
+ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
+                                size_t str_array_size);
 
 /**
  * Split a string to tokens. The given string is modified in-place.

@@ -37,11 +37,15 @@ const char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_LAST]       = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_dc_tx_policy_names);
+
 static const char *uct_dct_affinity_policy_names[] = {
     [UCT_DC_MLX5_DCT_AFFINITY_DEFAULT] = "default",
     [UCT_DC_MLX5_DCT_AFFINITY_RANDOM]  = "random",
     [UCT_DC_MLX5_DCT_AFFINITY_LAST]    = NULL
 };
+
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_dct_affinity_policy_names);
 
 /* DC specific parameters, expecting DC_ prefix */
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
@@ -81,7 +85,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      "hw_dcs     A single DCI that operates as a HW DCS queue. The channels are assigned\n"
      "           in a round-robin fashion.\n"
      "\n"
-     "dcs_hybrid Same as \"dcs_quota\" but when there are no DCIs available,\n" 
+     "dcs_hybrid Same as \"dcs_quota\" but when there are no DCIs available,\n"
      "           a dedicated HW DCI is used in the same manner as in \"hw_dcs\" policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},

@@ -80,6 +80,8 @@ const char *ucs_profile_mode_names[] = {
     [UCS_PROFILE_MODE_LAST]  = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_profile_mode_names);
+
 /**
  *  Default ucs profile context is initialized in ucs_init() and used by
  *  UCS_PROFILE_ macros
@@ -274,7 +276,7 @@ static void ucs_profile_calc_blocks(ucs_profile_header_t *header,
 
     if (ctx->profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
         ucs_list_for_each(thread_ctx, &ctx->thread_list, list) {
-            header->threads.size += 
+            header->threads.size +=
                     ucs_profile_calc_num_records(ctx, thread_ctx) *
                     sizeof(ucs_profile_record_t);
         }

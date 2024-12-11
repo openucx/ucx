@@ -14,6 +14,7 @@
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
+#include <ucs/config/parser.h>
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/callbackq_compat.h>
 #include <ucs/datastruct/linear_func.h>
@@ -1838,6 +1839,8 @@ enum {
 
 
 extern const char *uct_alloc_method_names[];
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(uct_alloc_method_names);
+
 extern const char *uct_device_type_names[];
 
 

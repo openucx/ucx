@@ -38,6 +38,8 @@ const char *uct_alloc_method_names[] = {
     [UCT_ALLOC_METHOD_LAST] = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_alloc_method_names);
+
 
 static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 {

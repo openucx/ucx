@@ -36,6 +36,8 @@ static const char *uct_cuda_pref_loc[] = {
     [UCT_CUDA_PREF_LOC_LAST] = NULL,
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_cuda_pref_loc);
+
 static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
     {"", "", NULL,
         ucs_offsetof(uct_cuda_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
