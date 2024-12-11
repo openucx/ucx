@@ -414,7 +414,9 @@ static ucs_status_t
 uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
-    uct_mem_h base = UCT_MD_MEM_REG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL);
+    uct_mem_h base = (params != NULL) ?
+                        UCT_MD_MEM_REG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL) :
+                        NULL;
     uct_cuda_ipc_memh_t *memh;
 
     if (ENABLE_PARAMS_CHECK && (base != NULL)) {
