@@ -409,23 +409,7 @@ out:
 }
 
 ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
-                                int case_sensitive)
-{
-    size_t i;
-
-    for (i = 0; string_list[i] != NULL; ++i) {
-        if ((case_sensitive && (strcmp(string_list[i], str) == 0)) ||
-            (!case_sensitive && (strcasecmp(string_list[i], str) == 0))) {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
-ssize_t ucs_string_find_in_sparse_list(const char *str,
-                                       const char **string_list,
-                                       size_t str_array_size)
+                                size_t str_array_size)
 {
     size_t i;
 
@@ -434,14 +418,13 @@ ssize_t ucs_string_find_in_sparse_list(const char *str,
         if (string_list[i] == NULL) {
             continue;
         }
-        if (strcmp(string_list[i], str) == 0) {
+        if (strcasecmp(string_list[i], str) == 0) {
             return i;
         }
     }
 
     return -1;
 }
-
 
 char* ucs_string_split(char *str, const char *delim, int count, ...)
 {

@@ -1081,9 +1081,9 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     if (subnet_strs->mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
-        res = ucs_config_sprintf_allow_list(subnet_list_str, max_str_len,
-                                            subnet_strs,
-                                            &ucs_config_array_string);
+        res = ucs_config_sprintf_allow_list(&ucs_config_array_string.parser,
+                                            subnet_list_str, max_str_len,
+                                            subnet_strs);
         ucs_error("failed to find a gid which matches/unmatches the following "
                   "subnet list: %s", res ? subnet_list_str : "<none>");
         return UCS_ERR_INVALID_PARAM;

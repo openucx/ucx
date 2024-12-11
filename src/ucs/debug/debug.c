@@ -179,6 +179,8 @@ const char *ucs_signal_names[] = {
 #endif
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_signal_names);
+
 #if HAVE_SIGACTION_SA_RESTORER
 static void    *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
 #endif

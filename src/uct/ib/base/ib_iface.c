@@ -42,6 +42,8 @@ const char *uct_ib_mtu_values[] = {
     [UCT_IB_MTU_LAST]       = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_mtu_values);
+
 enum {
     UCT_IB_ADDRESS_TYPE_LINK_LOCAL,
     UCT_IB_ADDRESS_TYPE_SITE_LOCAL,
@@ -60,6 +62,8 @@ static const char *uct_ib_iface_addr_types[] = {
    [UCT_IB_IFACE_ADDRESS_TYPE_AUTO] = "auto",
    [UCT_IB_IFACE_ADDRESS_TYPE_LAST] = NULL
 };
+
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_iface_addr_types);
 
 ucs_config_field_t uct_ib_iface_config_table[] = {
   {"", "ALLOC=thp,mmap,heap", NULL,

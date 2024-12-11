@@ -8,6 +8,7 @@
 #define UCS_PROFILE_DEFS_H_
 
 #include <ucs/config/global_opts.h>
+#include <ucs/config/parser.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/time/time_def.h>
 #include <limits.h>
@@ -137,6 +138,8 @@ typedef short ucs_profile_loc_id_t;
 
 
 extern const char *ucs_profile_mode_names[];
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_profile_mode_names);
+
 extern ucs_profile_context_t *ucs_profile_default_ctx;
 
 
@@ -191,12 +194,12 @@ void ucs_profile_record(ucs_profile_context_t *ctx, ucs_profile_type_t type,
 
 
 /**
- * Calculates number of threads in the profiled execution 
+ * Calculates number of threads in the profiled execution
  * given total number of profiling records, num of location and threads
- * 
+ *
  * @param   total_num_records   accumulated num of records from all threads
- * @param   header              profiling header struct 
- * 
+ * @param   header              profiling header struct
+ *
  * @return  number of threads in the profiled code
  */
 unsigned ucs_profile_calc_num_threads(size_t total_num_records,

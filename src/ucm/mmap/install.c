@@ -104,6 +104,8 @@ const char *ucm_mmap_hook_modes[] = {
     [UCM_MMAP_HOOK_LAST]   = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_mmap_hook_modes);
+
 static const char *ucm_mmap_event_name[] = {
     /* Native events */
     UCM_MMAP_EVENT_NAME_ENTRY(MMAP),

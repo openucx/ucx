@@ -75,6 +75,8 @@ const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_PRINT]        = "PRINT"
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_log_level_names);
+
 static unsigned ucs_log_handlers_count       = 0;
 static int ucs_log_initialized               = 0;
 static int __thread ucs_log_current_indent   = 0;

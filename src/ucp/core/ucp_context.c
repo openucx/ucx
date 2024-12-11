@@ -90,12 +90,16 @@ static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_atomic_modes);
+
 static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_WEAK]   = "weak",
     [UCP_FENCE_MODE_STRONG] = "strong",
     [UCP_FENCE_MODE_AUTO]   = "auto",
     [UCP_FENCE_MODE_LAST]   = NULL
 };
+
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_fence_modes);
 
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
@@ -107,6 +111,8 @@ static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_RKEY_PTR]     = "rkey_ptr",
     [UCP_RNDV_MODE_LAST]         = NULL,
 };
+
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_rndv_modes);
 
 static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_HOST]         = 512 * UCS_KBYTE,
@@ -140,15 +146,14 @@ const char *ucp_object_versions[] = {
     [UCP_OBJECT_VERSION_LAST] = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_object_versions);
+
 const char *ucp_extra_op_attr_flags_names[] = {
     [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FAST_CMPL)]      = "fast_cmpl",
     [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_MULTI_SEND)]     = "multi_send"
 };
 
-const ucs_config_flags_args_t ucp_extra_op_attr_flags_args = {
-    .args        = ucp_extra_op_attr_flags_names,
-    .args_size   = ucs_static_array_size(ucp_extra_op_attr_flags_names)
-};
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_extra_op_attr_flags_names);
 
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
@@ -546,7 +551,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "in addition to what is set explicitly by the user. \n"
    "Possible values are: fast_cmpl, multi_send.",
    ucs_offsetof(ucp_context_config_t, extra_op_attr_flags),
-   UCS_CONFIG_TYPE_FLAGS((const void *)&ucp_extra_op_attr_flags_args)},
+   UCS_CONFIG_TYPE_BITMAP(ucp_extra_op_attr_flags_names)},
 
   {NULL}
 };
@@ -1969,6 +1974,8 @@ static ucs_status_t
 ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
                           const size_t *default_sizes, size_t *sizes)
 {
+    const ucs_config_allowed_values_t *type_names =
+        UCS_CONFIG_GET_ALLOWED_VALUES(ucs_memory_type_names);
     const char *mem_type_name, *size_str;
     char config_str[128];
     ucs_status_t status;
@@ -1982,8 +1989,9 @@ ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
     for (i = 0; i < config->count; ++i) {
         ucs_strncpy_safe(config_str, config->names[i], sizeof(config_str));
         ucs_string_split(config_str, ":", 2, &mem_type_name, &size_str);
-        mem_type = ucs_string_find_in_list(mem_type_name, ucs_memory_type_names,
-                                           0);
+        mem_type = ucs_string_find_in_list(mem_type_name,
+                                           type_names->values,
+                                           type_names->count);
         if (mem_type < 0) {
             ucs_error("invalid memory type specifier: '%s'", mem_type_name);
             return UCS_ERR_INVALID_PARAM;

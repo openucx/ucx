@@ -414,6 +414,7 @@ typedef struct uct_ib_iface_recv_desc {
 extern ucs_config_field_t uct_ib_iface_config_table[];
 extern const char *uct_ib_mtu_values[];
 
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(uct_ib_mtu_values);
 
 /**
  * Create memory pool of receive descriptors.

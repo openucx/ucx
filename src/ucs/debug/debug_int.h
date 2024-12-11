@@ -9,6 +9,7 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
+#include <ucs/config/parser.h>
 #include <ucs/config/types.h>
 #include <ucs/debug/debug.h>
 #include <stdio.h>
@@ -33,6 +34,7 @@ typedef struct backtrace_line *backtrace_line_h;
 
 extern const char *ucs_state_detail_level_names[];
 extern const char *ucs_signal_names[];
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_signal_names);
 
 
 /**

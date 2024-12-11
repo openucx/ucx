@@ -41,6 +41,8 @@ const char *ucm_log_level_names[] = {
     NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_log_level_names);
+
 /* Flags for ucm_log_ltoa */
 #define UCM_LOG_LTOA_FLAG_SIGN   UCS_BIT(0)  /* print sign */
 #define UCM_LOG_LTOA_FLAG_UNSIGN UCS_BIT(1)  /* unsigned number */

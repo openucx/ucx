@@ -15,6 +15,7 @@
 #include "ib_log.h"
 
 #include <ucs/arch/atomic.h>
+#include <ucs/config/parser.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/ptr_arith.h>
@@ -46,6 +47,8 @@ static const char *uct_ib_devx_objs[] = {
     [UCT_IB_DEVX_OBJ_CQ]    = "cq",
     NULL
 };
+
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_devx_objs);
 
 ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
@@ -1314,7 +1317,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     /* Check for GPU-direct support */
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
-        /* Check peer memory driver is loaded, different driver versions use 
+        /* Check peer memory driver is loaded, different driver versions use
          * different paths */
         uct_ib_check_gpudirect_driver(
                 md, "/sys/kernel/mm/memory_peers/nv_mem/version",
@@ -1325,7 +1328,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         uct_ib_check_gpudirect_driver(
                 md, "/sys/module/nv_peer_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
-                
+
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);

@@ -35,6 +35,8 @@ static const char *uct_rc_verbs_flush_mode_names[] = {
     [UCT_RC_VERBS_FLUSH_MODE_LAST]         = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_rc_verbs_flush_mode_names);
+
 static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {"RC_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_VERBS_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, super),

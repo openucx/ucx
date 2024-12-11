@@ -80,6 +80,8 @@ const char *ucs_profile_mode_names[] = {
     [UCS_PROFILE_MODE_LAST]  = NULL
 };
 
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_profile_mode_names);
+
 /**
  *  Default ucs profile context is initialized in ucs_init() and used by
  *  UCS_PROFILE_ macros

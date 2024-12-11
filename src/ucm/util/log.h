@@ -12,6 +12,7 @@
 #endif
 
 #include <ucm/api/ucm.h>
+#include <ucs/config/parser.h>
 #include <ucs/config/types.h>
 
 
@@ -57,6 +58,7 @@
 
 
 extern const char *ucm_log_level_names[];
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucm_log_level_names);
 
 
 void ucm_init_log();
