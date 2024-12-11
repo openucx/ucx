@@ -17,6 +17,7 @@ class test_ucp_ep_reconfig : public ucp_test {
 protected:
     using address_t = std::pair<void*, ucp_unpacked_address_t>;
     using address_p = std::unique_ptr<address_t, void (*)(address_t*)>;
+    using limits    = std::numeric_limits<unsigned>;
 
     class entity : public ucp_test_base::entity {
     public:
@@ -33,21 +34,30 @@ protected:
                      const ucp_ep_params_t &ep_params, int ep_idx = 0,
                      int do_set_ep = 1) override;
 
-        void verify_configuration(const entity &other) const;
+        void
+        verify_configuration(const entity &other, unsigned reused_rscs) const;
 
         bool is_reconfigured() const
         {
             return m_cfg_index != ep()->cfg_index;
         }
 
+        unsigned num_reused_rscs() const
+        {
+            return m_num_reused_rscs;
+        }
+
     private:
         void store_config();
-        ucp_tl_bitmap_t ep_tl_bitmap() const;
+        ucp_tl_bitmap_t
+        ep_tl_bitmap(unsigned max_num_rscs = limits::max()) const;
         address_p get_address(const ucp_tl_bitmap_t &tl_bitmap) const;
         bool is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
+        ucp_tl_bitmap_t reduced_tl_bitmap() const;
 
-        ucp_worker_cfg_index_t m_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+        ucp_worker_cfg_index_t m_cfg_index       = UCP_WORKER_CFG_INDEX_NULL;
+        unsigned               m_num_reused_rscs = 0;
         std::vector<uct_ep_h>  m_uct_eps;
         bool                   m_exclude_ifaces;
     };
@@ -92,15 +102,24 @@ public:
         if (sender().ucph()->num_tls <= 2) {
             UCS_TEST_SKIP_R("test requires at least 2 ifaces to work");
         }
+
+        ensure_reused_lanes_reconfigurable();
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "reuse");
     }
 
     void run(bool bidirectional = false);
     void skip_non_p2p();
+    void ensure_reused_lanes_reconfigurable();
+
+    bool reuse_lanes() const
+    {
+        return get_variant_value();
+    }
 
     void send_message(const ucp_test_base::entity &e1,
                       const ucp_test_base::entity &e2, const mem_buffer &sbuf,
@@ -173,35 +192,58 @@ void test_ucp_ep_reconfig::entity::store_config()
     }
 
     m_cfg_index = ep()->cfg_index;
+
+    /* Calculate number of reused resources by:
+     * 1) Count number of resources used in EP configuration.
+     * 2) Take half of total resources to be reused. */
+    auto num_reused   = UCS_STATIC_BITMAP_POPCOUNT(ep_tl_bitmap()) / 2;
+    auto test         = static_cast<const test_ucp_ep_reconfig*>(m_test);
+    m_num_reused_rscs = test->reuse_lanes() ? num_reused : 0;
 }
 
-ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::ep_tl_bitmap() const
+ucp_tl_bitmap_t
+test_ucp_ep_reconfig::entity::ep_tl_bitmap(unsigned max_num_rscs) const
 {
-    if (ep() == NULL) {
-        return UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    }
-
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
-        UCS_STATIC_BITMAP_SET(&tl_bitmap, ucp_ep_get_rsc_index(ep(), lane));
+    unsigned rsc_count        = 0;
+
+    for (auto lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
+        auto rsc_index = ucp_ep_get_rsc_index(ep(), lane);
+        if (UCS_STATIC_BITMAP_GET(tl_bitmap, rsc_index)) {
+            continue;
+        }
+
+        if (rsc_count++ >= max_num_rscs) {
+            break;
+        }
+
+        UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_index);
     }
 
     return tl_bitmap;
+}
+
+ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::reduced_tl_bitmap() const
+{
+    if ((ep() == NULL) || !m_exclude_ifaces) {
+        return ucp_tl_bitmap_max;
+    }
+
+    /* Use only resources not already in use, or part of reuse bitmap */
+    auto reused_bitmap = ep_tl_bitmap(num_reused_rscs());
+    return UCS_STATIC_BITMAP_OR(UCS_STATIC_BITMAP_NOT(ep_tl_bitmap()),
+                                reused_bitmap);
 }
 
 void test_ucp_ep_reconfig::entity::connect(const ucp_test_base::entity *other,
                                            const ucp_ep_params_t &ep_params,
                                            int ep_idx, int do_set_ep)
 {
-    auto r_other     = static_cast<const entity*>(other);
-    auto worker_addr = r_other->get_address(ucp_tl_bitmap_max);
-    ucp_tl_bitmap_t tl_bitmap;
+    auto r_other                    = static_cast<const entity*>(other);
+    auto worker_addr                = r_other->get_address(ucp_tl_bitmap_max);
+    const ucp_tl_bitmap_t tl_bitmap = r_other->reduced_tl_bitmap();
     unsigned addr_indices[UCP_MAX_LANES];
     ucp_ep_h ucp_ep;
-
-    tl_bitmap = m_exclude_ifaces ?
-                        UCS_STATIC_BITMAP_NOT(r_other->ep_tl_bitmap()) :
-                        ucp_tl_bitmap_max;
 
     UCS_ASYNC_BLOCK(&worker()->async);
     ASSERT_UCS_OK(ucp_ep_create_to_worker_addr(worker(), &tl_bitmap,
@@ -248,22 +290,33 @@ bool test_ucp_ep_reconfig::entity::is_lane_connected(ucp_ep_h ep,
 }
 
 void test_ucp_ep_reconfig::entity::verify_configuration(
-        const entity &other) const
+        const entity &other, unsigned expected_reused_rscs) const
 {
-    unsigned reused                  = 0;
+    unsigned reused_lanes            = 0;
     const ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep());
+    ucp_tl_bitmap_t reused_rscs      = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
 
     for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
         /* Verify local and remote lanes are identical */
         EXPECT_TRUE(is_lane_connected(ep(), lane, other));
 
-        /* Verify correct number of reused lanes is configured */
+        /* Verify correct number of reused lanes */
         auto uct_ep = ucp_ep_get_lane(ep(), lane);
         auto it     = std::find(m_uct_eps.begin(), m_uct_eps.end(), uct_ep);
-        reused     += (it != m_uct_eps.end());
+        if (it == m_uct_eps.end()) {
+            continue;
+        }
+
+        reused_lanes++;
+        UCS_STATIC_BITMAP_SET(&reused_rscs, ucp_ep_get_rsc_index(ep(), lane));
     }
 
-    EXPECT_EQ(reused, is_reconfigured() ? 0 : num_lanes);
+    if (is_reconfigured()) {
+        EXPECT_EQ(expected_reused_rscs,
+                  UCS_STATIC_BITMAP_POPCOUNT(reused_rscs));
+    } else {
+        EXPECT_EQ(num_lanes, reused_lanes);
+    }
 }
 
 test_ucp_ep_reconfig::address_p
@@ -297,8 +350,9 @@ void test_ucp_ep_reconfig::run(bool bidirectional)
     auto r_receiver = static_cast<const entity*>(&receiver());
 
     EXPECT_NE(r_sender->is_reconfigured(), r_receiver->is_reconfigured());
-    r_sender->verify_configuration(*r_receiver);
-    r_receiver->verify_configuration(*r_sender);
+
+    r_sender->verify_configuration(*r_receiver, r_sender->num_reused_rscs());
+    r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
 }
 
 void test_ucp_ep_reconfig::skip_non_p2p()
@@ -308,9 +362,19 @@ void test_ucp_ep_reconfig::skip_non_p2p()
     }
 }
 
+void test_ucp_ep_reconfig::ensure_reused_lanes_reconfigurable()
+{
+    if (!reuse_lanes()) {
+        return;
+    }
+
+    if (has_transport("tcp") || has_transport("dc_x") || has_transport("shm")) {
+        UCS_TEST_SKIP_R("non wired-up lanes are not supported yet");
+    }
+}
+
 /* TODO: Remove skip condition after next PRs are merged. */
-UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, basic,
-                     !has_transport("rc_x") || !has_transport("rc_v"))
+UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, basic, !has_transport("rc"))
 {
     run();
 }
@@ -327,12 +391,13 @@ UCS_TEST_P(test_ucp_ep_reconfig, request_reset, "PROTO_REQUEST_RESET=y")
     run();
 }
 
-/* SHM causes lane reuse, disable for now. */
-UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, resolve_remote_id,
-                     has_transport("shm") || is_self(), "MAX_RNDV_LANES=0")
+UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, resolve_remote_id, is_self(),
+                     "MAX_RNDV_LANES=0")
 {
     if (has_transport("tcp")) {
-        UCS_TEST_SKIP_R("lanes are reused (not supported yet)");
+        UCS_TEST_SKIP_R("asymmetric setup is not supported for this transport "
+                        "due to a reachability issue - only matching "
+                        "interfaces can connect");
     }
 
     run(true);
@@ -369,7 +434,7 @@ UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, request_reset,
     run();
 }
 
-/* SHM causes lane reuse, disable for now. */
+/* SHM + single lane won't trigger reconfig. */
 UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, resolve_remote_id,
                      has_transport("shm") || is_self(), "MAX_RNDV_LANES=0")
 {
