@@ -594,7 +594,7 @@ uct_ib_memh_alloc_internal(uct_ib_md_t *md, size_t memh_base_size,
     uct_ib_mem_t *memh;
 
     *memh_size_p = memh_base_size + (mr_size * num_mrs);
-    memh = ucs_calloc(1, *memh_size_p, "ib_memh");
+    memh         = ucs_calloc(1, *memh_size_p, "ib_memh");
     if (memh == NULL) {
         ucs_error("%s: failed to allocated memh struct",
                   uct_ib_device_name(&md->dev));
