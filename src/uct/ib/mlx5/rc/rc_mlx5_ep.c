@@ -810,9 +810,14 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         return status;
     }
 
-    ep->super.super.atomic_mr_offset = uct_ib_md_atomic_offset(
-            rc_addr->atomic_mr_id);
-    ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
+    if (uct_ib_iface_md(&iface->super.super)->config.enable_indirect_atomic) {
+        ep->super.super.atomic_mr_offset = uct_ib_md_atomic_offset(
+                rc_addr->atomic_mr_id);
+    } else {
+        ep->super.super.atomic_mr_offset = 0;
+    }
+
+    ep->super.super.flags |= UCT_RC_EP_FLAG_CONNECTED;
 
     addr_length = UCS_PARAM_VALUE(UCT_EP_CONNECT_TO_EP_PARAM_FIELD, params,
                                   ep_addr_length, EP_ADDR_LENGTH,

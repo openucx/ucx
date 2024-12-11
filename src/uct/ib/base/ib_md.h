@@ -333,10 +333,7 @@ uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 {
-    if (md->config.enable_indirect_atomic) {
-        return md->flush_rkey >> 8;
-    }
-    return 0;
+    return md->flush_rkey >> 8;
 }
 
 void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
