@@ -1871,3 +1871,100 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, diff_seg_sizes,
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_address_v2)
+
+class test_ucp_wireup_ondemand : public ucp_test {
+    typedef std::set<ucp_lane_index_t> lanes_set_t;
+public:
+    virtual void init() override {
+        ucp_test::init();
+    }
+
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, UCP_FEATURE_TAG | UCP_FEATURE_RMA |
+                                         UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64 |
+                                         UCP_FEATURE_WAKEUP |
+                                         UCP_FEATURE_STREAM | UCP_FEATURE_AM,
+                               DEFAULT_PARAM_VARIANT, "full_tx_feature_set");
+    }
+
+protected:
+    void add_uniq_lane(ucp_lane_index_t lane) {
+        bool is_new_lane = add_lane(lane);
+        EXPECT_TRUE(is_new_lane) << "lane " << lane
+                                 << " is unexpectedly initialized";
+    }
+
+    bool add_lane(ucp_lane_index_t lane) {
+        EXPECT_NE(UCP_NULL_LANE, lane) << "trying to add invalid lane index";
+        m_reused_lanes.insert(lane);
+        return m_used_lanes.insert(lane).second;
+    }
+
+    void check_lane_value(ucp_lane_index_t lane, const std::string& type,
+                          bool is_valid = true) {
+        bool result = ucp_ep_get_lane(sender().ep(), lane);
+        EXPECT_EQ(result, is_valid) << type << " lane check failed";
+    }
+
+    void check_lanes_arr_value(const ucp_lane_index_t lanes[UCP_MAX_LANES],
+                               const std::string& type,
+                               bool is_valid = true) {
+        for (size_t i = 0; i < UCP_MAX_LANES; ++i) {
+            if (m_reused_lanes.find(i) != m_reused_lanes.end()) {
+                continue;
+            }
+
+            if (lanes[i] == UCP_NULL_LANE) {
+                break;
+            }
+
+            check_lane_value(lanes[i], type, is_valid);
+        }
+    }
+
+    lanes_set_t m_used_lanes;
+    lanes_set_t m_reused_lanes;
+};
+
+UCS_TEST_P(test_ucp_wireup_ondemand, by_feature) {
+    sender().connect(&receiver(), get_ep_params());
+
+    // checks before wireup
+    ucp_ep_h ep = sender().ep();
+
+    ucp_ep_config_key_t cfg_key = ucp_ep_config(ep)->key;
+
+    check_lane_value(cfg_key.wireup_msg_lane, "wireup_msg");
+    add_uniq_lane(cfg_key.wireup_msg_lane);
+
+    check_lane_value(cfg_key.am_lane, "am");
+    add_lane(cfg_key.am_lane);
+
+    check_lanes_arr_value(cfg_key.am_bw_lanes, "am_bw", false);
+    check_lanes_arr_value(cfg_key.rma_bw_lanes, "rma_bw", false);
+
+    /* TODO: */ return;
+
+    // complete first step of wireup
+    flush_workers();
+    check_lanes_arr_value(cfg_key.am_bw_lanes, "am_bw", false);
+    check_lanes_arr_value(cfg_key.rma_bw_lanes, "rma_bw", false);
+
+    /* TODO: */ return;
+
+    // do RMA, then all rma_bw lanes must be initialized
+    const size_t msg_size = 100 * UCS_KBYTE;
+    mem_buffer    sbuf(msg_size, UCS_MEMORY_TYPE_HOST, 0);
+    mapped_buffer rbuf(msg_size, receiver());
+
+    ucp_request_param_t params;
+    params.op_attr_mask = 0;
+    void *req = ucp_put_nbx(ep, sbuf.ptr(), sbuf.size(),
+                            (uintptr_t)rbuf.ptr(),
+                            rbuf.rkey(sender()), &params);
+    ASSERT_UCS_OK(request_wait(req));
+    check_lanes_arr_value(cfg_key.rma_bw_lanes, "rma_bw", true);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_ondemand);
