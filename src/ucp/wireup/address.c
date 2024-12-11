@@ -405,7 +405,10 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                 if ((key->lanes[lane].rsc_index == rsc_index) &&
                     ucp_ep_config_connect_p2p(worker, key, rsc_index)) {
                     dev->tl_addrs_size += !ucp_worker_is_unified_mode(worker);
-                    dev->tl_addrs_size += iface_attr->ep_addr_len;
+                    if ((lane == key->am_lane) ||
+                        (lane == key->wireup_msg_lane)) {
+                        dev->tl_addrs_size += iface_attr->ep_addr_len;
+                    }
                     dev->tl_addrs_size += sizeof(uint8_t); /* lane index */
                 }
             }
@@ -1404,7 +1407,6 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
             num_ep_addrs = 0;
             if (pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) {
                 ucs_assert(ep != NULL);
-                ep_addr_len = iface_attr->ep_addr_len;
                 ep_lane_ptr = NULL;
 
                 ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
@@ -1413,22 +1415,32 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                         continue;
                     }
 
+                    if (context->config.ext.on_demand_wireup &&
+                        (ucp_ep_get_lane(ep, lane) == NULL)) {
+                        ep_addr_len = 0;
+                    } else {
+                        ucs_assert(ep != NULL);
+                        ep_addr_len = iface_attr->ep_addr_len;
+                    }
+
                     /* pack ep address length */
                     ptr = ucp_address_pack_tl_length(worker, ptr, UINT8_MAX,
                                                      ep_addr_len, addr_version,
                                                      0);
 
                     /* pack ep address */
-                    status = uct_ep_get_address(ucp_ep_get_lane(ep, lane), ptr);
-                    if (status != UCS_OK) {
-                        ucp_address_error(
-                                pack_flags,
-                                UCT_TL_RESOURCE_DESC_FMT
-                                " failed to get ep address %s",
-                                UCT_TL_RESOURCE_DESC_ARG(
-                                        &context->tl_rscs[rsc_index].tl_rsc),
-                                ucs_status_string(status));
-                        return status;
+                    if (ep_addr_len > 0) {
+                        status = uct_ep_get_address(ucp_ep_get_lane(ep, lane), ptr);
+                        if (status != UCS_OK) {
+                            ucp_address_error(
+                                    pack_flags,
+                                    UCT_TL_RESOURCE_DESC_FMT
+                                    " failed to get ep address %s",
+                                    UCT_TL_RESOURCE_DESC_ARG(
+                                            &context->tl_rscs[rsc_index].tl_rsc),
+                                    ucs_status_string(status));
+                            return status;
+                        }
                     }
 
                     ucp_address_memcheck(context, ptr, ep_addr_len, rsc_index);
@@ -1437,8 +1449,8 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                     /* pack ep lane index, and save the pointer for lane index
                      * of last ep in 'ep_last_ptr' to set UCP_ADDRESS_FLAG_LAST.
                      */
-                    remote_lane  = (lanes2remote == NULL) ? lane :
-                                   lanes2remote[lane];
+                    remote_lane = (lanes2remote == NULL) ? lane :
+                                  lanes2remote[lane];
                     ucs_assertv(remote_lane <= UCP_ADDRESS_IFACE_LEN_MASK,
                                 "remote_lane=%d", remote_lane);
                     ep_lane_ptr  = ptr;

@@ -1767,6 +1767,13 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
             continue;
         }
 
+        if (worker->context->config.ext.on_demand_wireup) {
+            if ((ucp_ep_get_am_lane(ep) != lane) &&
+                (ucp_ep_get_wireup_msg_lane(ep) != lane)) {
+                continue;
+            }
+        }
+
         if (connect_lane_bitmap & UCS_BIT(lane)) {
             status = ucp_wireup_connect_lane(ep, ep_init_flags, lane,
                                              key.lanes[lane].path_index,
