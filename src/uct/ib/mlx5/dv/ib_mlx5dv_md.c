@@ -835,7 +835,7 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
         status = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params,
                                access_flags & ~IBV_ACCESS_RELAXED_ORDERING,
                                NULL,
-                               &memh->mrs[UCT_IB_MR_STRICT_ORDER].super.ib, 1);
+                               &memh->mrs[UCT_IB_MR_STRICT_ORDER].super.ib, 0);
         if (status != UCS_OK) {
             goto err_dereg_default;
         }
@@ -1845,7 +1845,7 @@ static void uct_ib_mlx5_devx_init_flush_mr(uct_ib_mlx5_md_t *md)
 
     status = uct_ib_reg_mr(&md->super, md->zero_buf,
                            UCT_IB_MD_FLUSH_REMOTE_LENGTH, &params,
-                           UCT_IB_MEM_ACCESS_FLAGS, NULL, &md->flush_mr, 1);
+                           UCT_IB_MEM_ACCESS_FLAGS, NULL, &md->flush_mr, 0);
     if (status != UCS_OK) {
         goto err;
     }
@@ -2053,7 +2053,7 @@ uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
     reg_params.field_mask = 0;
     status = uct_ib_reg_mr(md, address, dm_attr.length, &reg_params,
                            UCT_IB_MEM_ACCESS_FLAGS, dm,
-                           &memh->mrs[UCT_IB_MR_DEFAULT].super.ib, 1);
+                           &memh->mrs[UCT_IB_MR_DEFAULT].super.ib, 0);
     if (status != UCS_OK) {
         goto err_munmap_address;
     }

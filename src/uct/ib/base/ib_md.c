@@ -309,7 +309,7 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
     while (ctx->length > 0) {
         if (ctx->params != NULL) {
             status = uct_ib_reg_mr(ctx->md, ctx->address, length, ctx->params,
-                                   ctx->access_flags, NULL, &ctx->mrs[mr_idx], 1);
+                                   ctx->access_flags, NULL, &ctx->mrs[mr_idx], 0);
             if (status != UCS_OK) {
                 goto err_dereg;
             }
@@ -627,7 +627,7 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
     return UCS_OK;
 }
 
-uint64_t uct_ib_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
+static uint64_t uct_ib_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
 {
     uint64_t ibv_flags = 0;
 
@@ -710,7 +710,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     if (md->relaxed_order) {
         status = uct_ib_reg_mr(md, address, length, params,
                                access_flags & ~IBV_ACCESS_RELAXED_ORDERING,
-                               NULL, &memh->mrs[UCT_IB_MR_STRICT_ORDER].ib, 1);
+                               NULL, &memh->mrs[UCT_IB_MR_STRICT_ORDER].ib, 0);
         if (status != UCS_OK) {
             goto err_dereg_default;
         }
