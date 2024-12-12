@@ -982,17 +982,27 @@ uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
                              void *out, size_t outlen,
                              char *msg_arg, int silent)
 {
-    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    ucs_log_level_t level;
+    ucs_status_t status;
     int ret;
     unsigned syndrome;
 
+    memset(out, 0, outlen);
     ret = mlx5dv_devx_general_cmd(context, in, inlen, out, outlen);
     if (ret != 0) {
+        if ((errno == EPERM) || (errno == EPROTONOSUPPORT) ||
+            (errno == EOPNOTSUPP)) {
+            status = UCS_ERR_UNSUPPORTED;
+        } else {
+            status = UCS_ERR_IO_ERROR;
+        }
+
         syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        level    = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
         ucs_log(level,
                 "mlx5dv_devx_general_cmd(%s) failed on %s, syndrome 0x%x: %m",
                 msg_arg, ibv_get_device_name(context->device), syndrome);
-        return UCS_ERR_IO_ERROR;
+        return status;
     }
 
     return UCS_OK;
@@ -1164,6 +1174,15 @@ ucs_status_t
 uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
                            const uct_md_mem_dereg_params_t *params);
 
+int uct_ib_mlx5_devx_check_xgvmi(void *cap_2, const char *dev_name);
+
+ucs_status_t uct_ib_mlx5_devx_query_cap(struct ibv_context *ctx, uint32_t opmod,
+                                        void *out, size_t size, char *msg_arg,
+                                        int silent);
+
+ucs_status_t uct_ib_mlx5_devx_query_cap_2(struct ibv_context *ctx,
+                                          void *out, size_t size);
+
 ucs_status_t
 uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md, const void *mkey_buffer,
                             uct_md_mem_attach_params_t *params,
@@ -1174,6 +1193,8 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                            void *address, size_t length,
                            const uct_md_mkey_pack_params_t *params,
                            void *mkey_buffer);
+
+struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device);
 
 ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                       const uct_ib_md_config_t *md_config,
