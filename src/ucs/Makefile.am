@@ -75,6 +75,7 @@ nobase_dist_libucs_la_HEADERS = \
 	type/param.h \
 	type/init_once.h \
 	type/spinlock.h \
+	type/rwlock.h \
 	type/status.h \
 	type/thread_mode.h \
 	type/cpu_set.h \

@@ -1187,6 +1187,44 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
     return UCS_OK;
 }
 
+static ucs_status_t
+ucp_memh_uct_reg_one(ucp_mem_h memh, ucp_md_index_t md_index)
+{
+    uct_md_mem_reg_params_t reg_params = {
+        .field_mask = UCT_MD_MEM_REG_FIELD_FLAGS,
+        .flags      = UCT_MD_MEM_ACCESS_ALL,
+    };
+    ucp_context_h context              = memh->context;
+    ucs_memory_type_t mem_type         = memh->mem_type;
+    void *address                      = ucp_memh_address(memh);
+    size_t length                      = ucp_memh_length(memh);
+    ucs_status_t status;
+
+    if (((context->cache_md_map[mem_type] & UCS_BIT(md_index)) == 0) ||
+        (context->rcache == NULL)) {
+        status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, address, length,
+                                   &reg_params, &memh->uct[md_index]);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        memh->parent = memh;
+    } else {
+        status = ucp_memh_get(context, address, length, mem_type,
+                              UCS_BIT(md_index), UCT_MD_MEM_ACCESS_ALL,
+                              "mem_type", &memh->parent);
+
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        memh->uct[md_index] = memh->parent->uct[md_index];
+    }
+
+    memh->md_map = UCS_BIT(md_index);
+    return UCS_OK;
+}
+
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,
                                       ucp_md_index_t md_index, ucp_mem_h memh,
@@ -1214,8 +1252,7 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
 
     tl_md  = &context->tl_mds[md_index];
     cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
-    status = ucp_memh_init_uct_reg(context, memh, UCS_BIT(md_index),
-                                   UCT_MD_MEM_ACCESS_ALL, "mem_type");
+    status = ucp_memh_uct_reg_one(memh, md_index);
     if (status != UCS_OK) {
         goto out;
     }
