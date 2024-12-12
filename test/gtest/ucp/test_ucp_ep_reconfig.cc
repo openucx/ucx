@@ -15,9 +15,11 @@ extern "C" {
 
 class test_ucp_ep_reconfig : public ucp_test {
 protected:
-    using address_t = std::pair<void*, ucp_unpacked_address_t>;
-    using address_p = std::unique_ptr<address_t, void (*)(address_t*)>;
-    using limits    = std::numeric_limits<unsigned>;
+    using address_t        = std::pair<void*, ucp_unpacked_address_t>;
+    using address_p        = std::unique_ptr<address_t, void (*)(address_t*)>;
+    using limits           = std::numeric_limits<unsigned>;
+    using mem_buffer_p     = std::unique_ptr<mem_buffer>;
+    using mem_buffer_vec_t = std::vector<mem_buffer_p>;
 
     class entity : public ucp_test_base::entity {
     public:
@@ -62,7 +64,12 @@ protected:
         bool                   m_exclude_ifaces;
     };
 
-    bool is_single_transport()
+    void init_buffers(mem_buffer_vec_t &sbufs, mem_buffer_vec_t &rbufs,
+                      size_t size, bool bidirectional);
+
+    void pattern_check(const mem_buffer_vec_t &rbufs) const;
+
+    bool is_single_transport() const
     {
         return GetParam().transports.size() == 1;
     }
@@ -122,29 +129,29 @@ public:
     }
 
     void send_message(const ucp_test_base::entity &e1,
-                      const ucp_test_base::entity &e2, const mem_buffer &sbuf,
-                      const mem_buffer &rbuf, size_t msg_size,
+                      const ucp_test_base::entity &e2, const mem_buffer *sbuf,
+                      const mem_buffer *rbuf, size_t msg_size,
                       std::vector<void*> &reqs)
     {
         const ucp_request_param_t param = {
             .op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL
         };
 
-        void *sreq = ucp_tag_send_nbx(e1.ep(), sbuf.ptr(), msg_size, 0, &param);
-        void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(), sbuf.ptr(), msg_size,
+        void *sreq = ucp_tag_send_nbx(e1.ep(), sbuf->ptr(), msg_size, 0,
+                                      &param);
+        void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(), sbuf->ptr(), msg_size,
                                                 0, &param);
         reqs.insert(reqs.end(), {sreq, sreq_sync});
 
         for (unsigned iter = 0; iter < 2; iter++) {
-            void *rreq = ucp_tag_recv_nbx(e2.worker(), rbuf.ptr(), msg_size, 0,
-                                          0, &param);
+            void *rreq = ucp_tag_recv_nbx(e2.worker(), rbuf->ptr(), msg_size,
+                                          0, 0, &param);
             reqs.push_back(rreq);
         }
     }
 
     void send_recv(bool bidirectional)
     {
-        static const unsigned num_iterations = 1000;
 /* TODO: remove this when 100MB asan bug is solved */
 #ifdef __SANITIZE_ADDRESS__
         static const size_t msg_sizes[] = {8, 1024, 16384, 65536};
@@ -153,29 +160,29 @@ public:
 #endif
 
         for (auto msg_size : msg_sizes) {
-            for (unsigned i = 0; i < num_iterations; ++i) {
-                mem_buffer sbuf(msg_size, UCS_MEMORY_TYPE_HOST, i);
-                mem_buffer rbuf(msg_size, UCS_MEMORY_TYPE_HOST, ucs::rand());
-                mem_buffer o_sbuf(msg_size, UCS_MEMORY_TYPE_HOST, i);
-                mem_buffer o_rbuf(msg_size, UCS_MEMORY_TYPE_HOST, ucs::rand());
+            std::vector<void*> reqs;
+            mem_buffer_vec_t sbufs, rbufs;
 
-                std::vector<void*> reqs;
-                send_message(sender(), receiver(), sbuf, rbuf, msg_size, reqs);
+            init_buffers(sbufs, rbufs, msg_size, bidirectional);
+
+            for (unsigned i = 0; i < num_iterations; ++i) {
+                send_message(sender(), receiver(), sbufs[i].get(),
+                             rbufs[i].get(), msg_size, reqs);
 
                 if (bidirectional) {
-                    send_message(receiver(), sender(), o_sbuf, o_rbuf, msg_size,
+                    send_message(receiver(), sender(),
+                                 sbufs[i + num_iterations].get(),
+                                 rbufs[i + num_iterations].get(), msg_size,
                                  reqs);
                 }
-
-                requests_wait(reqs);
-                rbuf.pattern_check(i);
-
-                if (bidirectional) {
-                    o_rbuf.pattern_check(i);
-                }
             }
+
+            requests_wait(reqs);
+            pattern_check(rbufs);
         }
     }
+
+    static constexpr unsigned num_iterations = 1000;
 };
 
 void test_ucp_ep_reconfig::entity::store_config()
@@ -339,6 +346,27 @@ test_ucp_ep_reconfig::entity::get_address(const ucp_tl_bitmap_t &tl_bitmap) cons
     ASSERT_UCS_OK(ucp_address_unpack(worker(), address->first, flags,
                                      &address->second));
     return address;
+}
+
+void test_ucp_ep_reconfig::init_buffers(mem_buffer_vec_t &sbufs,
+                                        mem_buffer_vec_t &rbufs, size_t size,
+                                        bool bidirectional)
+{
+    auto num_bufs = bidirectional ? (2 * num_iterations) : num_iterations;
+
+    for (unsigned i = 0; i < num_bufs; ++i) {
+        sbufs.push_back(
+                mem_buffer_p(new mem_buffer(size, UCS_MEMORY_TYPE_HOST, i)));
+        rbufs.push_back(mem_buffer_p(
+                new mem_buffer(size, UCS_MEMORY_TYPE_HOST, ucs::rand())));
+    }
+}
+
+void test_ucp_ep_reconfig::pattern_check(const mem_buffer_vec_t &rbufs) const
+{
+    for (unsigned i = 0; i < rbufs.size(); ++i) {
+        rbufs[i]->pattern_check(i);
+    }
 }
 
 void test_ucp_ep_reconfig::run(bool bidirectional)
