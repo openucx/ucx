@@ -203,10 +203,17 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   " ^cu*  - do not load modules that begin with 'cu'",
   ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
 
+#if HAVE_NVML
+ {"TOPO_PRIO", "nvml,sysfs,default",
+  "Comma-separated list of providers for detecting system topology.\n"
+  "The list order decides the priority of the providers.",
+  ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
+#else
  {"TOPO_PRIO", "sysfs,default",
   "Comma-separated list of providers for detecting system topology.\n"
   "The list order decides the priority of the providers.",
   ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
+#endif
 
  {"DISTANCE_LAT", "phb:300ns,node:300ns,sys:500ns",
   "Estimated latency between system devices", 0,

@@ -29,41 +29,6 @@
 #define UCS_TOPO_DEVICE_NAME_UNKNOWN "<unknown>"
 #define UCS_TOPO_DEVICE_NAME_INVALID "<invalid>"
 
-/*
- * Function pointer used to refer to specific implementations of
- * ucs_topo_get_memory_distance function by topology modules.
- * This function estimates the distance between the device and the system
- * memory used by the current thread according to its CPU affinity.
- * The function must have a fallback behavior.
- */
-typedef void (*ucs_topo_get_memory_distance_func_t)(
-        ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
-
-/*
- * Topology API.
- */
-typedef struct {
-    /* Provider's ucs_topo_get_distance implementation */
-    ucs_topo_get_distance_func_t        get_distance;
-
-    /* Provider's ucs_topo_get_memory_distance implementation */
-    ucs_topo_get_memory_distance_func_t get_memory_distance;
-} ucs_sys_topo_ops_t;
-
-
-/*
- * Structure needed to define a topology module implementation
- */
-typedef struct {
-    /* Name of the topology module */
-    const char         *name;
-
-    /* provider's ops */
-    ucs_sys_topo_ops_t ops;
-
-    ucs_list_link_t    list;
-} ucs_sys_topo_provider_t;
-
 typedef int64_t ucs_bus_id_bit_rep_t;
 
 typedef struct {
@@ -104,23 +69,15 @@ static inline double ucs_topo_sysfs_numa_distance_to_latency(double distance)
     return distance * 10e-9;
 }
 
-static ucs_sys_topo_provider_t *ucs_sys_topo_get_provider()
+static ucs_sys_topo_provider_t *ucs_sys_topo_get_provider(char *name)
 {
-    static ucs_sys_topo_provider_t *provider = NULL;
+    ucs_sys_topo_provider_t *provider = NULL;
     ucs_sys_topo_provider_t *list_provider;
-    unsigned i;
 
-    if (provider != NULL) {
-        return provider;
-    }
-
-    for (i = 0; i < ucs_global_opts.topo_prio.count; ++i) {
-        ucs_list_for_each(list_provider, &ucs_sys_topo_providers_list, list) {
-            if (!strcmp(ucs_global_opts.topo_prio.names[i],
-                        list_provider->name)) {
-                provider = list_provider;
-                return provider;
-            }
+    ucs_list_for_each(list_provider, &ucs_sys_topo_providers_list, list) {
+        if (!strcmp(name, list_provider->name)) {
+            provider = list_provider;
+            return provider;
         }
     }
 
@@ -156,17 +113,30 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
                                    ucs_sys_device_t device2,
                                    ucs_sys_dev_distance_t *distance)
 {
-    const ucs_sys_topo_provider_t *provider = ucs_sys_topo_get_provider();
+    const ucs_sys_topo_provider_t *provider = NULL;
+    unsigned i;
+    ucs_status_t status;
 
-    return provider->ops.get_distance(device1, device2, distance);
+    for (i = 0; i < ucs_global_opts.topo_prio.count; ++i) {
+        provider = ucs_sys_topo_get_provider(ucs_global_opts.topo_prio.names[i]);
+        if (provider != NULL) {
+            status = provider->ops.get_distance(device1, device2, distance);
+            if (status == UCS_OK) {
+                return status;
+            }
+        }
+    }
+
+    return UCS_ERR_NO_ELEM;
 }
 
 void ucs_topo_get_memory_distance(ucs_sys_device_t device,
                                   ucs_sys_dev_distance_t *distance)
 {
-    const ucs_sys_topo_provider_t *provider = ucs_sys_topo_get_provider();
+    const ucs_sys_topo_provider_t *provider = NULL;
 
-    provider->ops.get_memory_distance(device, distance);
+    provider = ucs_sys_topo_get_provider("sysfs");
+    return provider->ops.get_memory_distance(device, distance);
 }
 
 static ucs_bus_id_bit_rep_t
