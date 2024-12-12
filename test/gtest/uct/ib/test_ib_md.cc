@@ -393,13 +393,14 @@ UCS_TEST_P(test_ib_md, mt_fail, "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
 UCS_TEST_SKIP_COND_P(test_ib_md, derived_mem,
                      !check_invalidate_support(UCT_MD_MEM_ACCESS_RMA))
 {
-    unsigned flags = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
-                     (check_caps(UCT_MD_FLAG_INVALIDATE_AMO) ?
-                        UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO : 0);
+    bool is_atomic    = check_caps(UCT_MD_FLAG_INVALIDATE_AMO);
+    unsigned flags    = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
+                        (is_atomic ? UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO : 0);
+    unsigned md_flags = UCT_MD_MEM_ACCESS_RMA |
+                        (is_atomic ? UCT_MD_MEM_ACCESS_REMOTE_ATOMIC : 0);
     std::vector<uint8_t> buffer(1024);
     uct_mem_h base;
-    EXPECT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_RMA, buffer.data(), buffer.size(),
-                          &base));
+    EXPECT_UCS_OK(reg_mem(md_flags, buffer.data(), buffer.size(), &base));
 
     /* Test case 1: creating derived memh from memh before mkey_pack */
     uct_mem_h der1 = reg_derived_mem(base);
