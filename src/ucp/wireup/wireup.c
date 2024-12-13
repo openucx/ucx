@@ -402,6 +402,13 @@ ucp_wireup_connect_local(ucp_ep_h ep,
             continue;
         }
 
+        if (ep->worker->context->config.ext.on_demand_wireup) {
+            if ((ucp_ep_get_am_lane(ep) != lane) &&
+                (ucp_ep_get_wireup_msg_lane(ep) != lane)) {
+                continue;
+            }
+        }
+
         remote_lane = (lanes2remote == NULL) ? lane : lanes2remote[lane];
 
         status = ucp_wireup_find_remote_p2p_addr(ep, remote_lane, remote_address,
@@ -429,10 +436,16 @@ out:
 static int ucp_ep_has_wireup_msg_pending(ucp_ep_h ucp_ep)
 {
     ucp_wireup_ep_t *wireup_ep;
+    uct_ep_h uct_ep;
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-        wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
+        uct_ep = ucp_ep_get_lane(ucp_ep, lane);
+        if (uct_ep == NULL) {
+            continue;
+        }
+
+        wireup_ep = ucp_wireup_ep(uct_ep);
         if ((wireup_ep != NULL) && (wireup_ep->pending_count != 0)) {
             return 1;
         }
@@ -457,6 +470,7 @@ unsigned ucp_wireup_eps_progress(void *arg)
 {
     ucp_ep_h ucp_ep = arg;
     ucp_wireup_ep_t *wireup_ep;
+    uct_ep_h uct_ep;
     ucs_queue_head_t tmp_pending_queue;
     ucp_lane_index_t lane;
 
@@ -484,7 +498,12 @@ unsigned ucp_wireup_eps_progress(void *arg)
      */
     ucp_wireup_eps_pending_extract(ucp_ep, &tmp_pending_queue);
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-        wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
+        uct_ep = ucp_ep_get_lane(ucp_ep, lane);
+        if (uct_ep == NULL) {
+            continue;
+        }
+
+        wireup_ep = ucp_wireup_ep(uct_ep);
         if (wireup_ep == NULL) {
             continue;
         }
@@ -513,9 +532,15 @@ void ucp_wireup_update_flags(ucp_ep_h ucp_ep, uint32_t new_flags)
 {
     ucp_lane_index_t lane;
     ucp_wireup_ep_t *wireup_ep;
+    uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-        wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
+        uct_ep = ucp_ep_get_lane(ucp_ep, lane);
+        if (uct_ep == NULL) {
+            continue;
+        }
+
+        wireup_ep = ucp_wireup_ep(uct_ep);
         if (wireup_ep == NULL) {
             continue;
         }
