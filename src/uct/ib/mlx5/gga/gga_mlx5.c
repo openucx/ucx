@@ -218,6 +218,7 @@ uct_ib_mlx5_gga_query_md_resources(uct_component_t *component,
         resources = NULL;
     }
 
+    uct_config_release(md_config);
     *num_resources_p = num_resources;
     *resources_p     = resources;
     return UCS_OK;
