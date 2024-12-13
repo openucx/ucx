@@ -180,36 +180,32 @@ uct_ib_mlx5_gga_query_md_resources(uct_component_t *component,
 {
     uct_md_config_t *md_config;
     uct_md_resource_desc_t *resources;
-    unsigned num_resources;
+    unsigned num_ib_resources;
     uct_md_h md;
     ucs_status_t status;
-    unsigned i;
+    unsigned i, num_resources;
 
     status = uct_md_config_read(component, NULL, NULL, &md_config);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_ib_query_md_resources(component, &resources, &num_resources);
+    status = uct_ib_query_md_resources(component, &resources, &num_ib_resources);
     if (status != UCS_OK) {
+        uct_config_release(md_config);
         return status;
     }
 
-    i = 0;
-    while (i < num_resources) {
+    for (num_resources = 0, i = 0; i < num_ib_resources; ++i) {
         status = uct_ib_mlx5_gga_md_open(component, resources[i].md_name,
                                          md_config, &md);
         if (status == UCS_OK) {
             md->ops->close(md);
-            ++i;
-        } else {
-            --num_resources;
-            if (i == num_resources) {
-                break;
+            if (num_resources != i) {
+                resources[num_resources] = resources[i];
             }
 
-            memmove(&resources[i], &resources[i + 1],
-                    sizeof(*resources) * (num_resources - i));
+            ++num_resources;
         }
     }
 
@@ -821,7 +817,7 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
     uct_ib_md_t *md;
     uct_ib_mlx5_md_t *mlx5_md;
 
-    ucs_trace("Opening GGA device %s", md_name);
+    ucs_trace("opening GGA device %s", md_name);
 
     if (md_config->devx == UCS_NO) {
         return UCS_ERR_UNSUPPORTED;
@@ -830,7 +826,7 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
     /* Get device list from driver */
     ib_device_list = ibv_get_device_list(&num_devices);
     if (ib_device_list == NULL) {
-        ucs_debug("Failed to get GGA device list, assuming no devices are present");
+        ucs_debug("failed to get GGA device list, assuming no devices are present");
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -852,11 +848,12 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
 
     mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
     if (!ucs_test_all_flags(mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS)) {
-        ucs_debug("Device %s does not match capabilities "
-                  "required for GGA(%"PRIx32"), md_flags %"PRIx32,
+        ucs_debug("device %s does not match capabilities "
+                  "required for GGA(%"PRIx32"), md_flags=%"PRIx32,
                   md_name, UCT_GGA_MLX5_MD_CAPS, mlx5_md->flags);
         status = UCS_ERR_NO_DEVICE;
-        goto err_close_md;
+        uct_ib_mlx5_devx_md_close(&md->super);
+        goto out_free_dev_list;
     }
 
     md->super.component = &uct_gga_component;
@@ -868,8 +865,4 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
 out_free_dev_list:
     ibv_free_device_list(ib_device_list);
     return status;
-
-err_close_md:
-    uct_ib_mlx5_devx_md_close(&md->super);
-    goto out_free_dev_list;
 }
