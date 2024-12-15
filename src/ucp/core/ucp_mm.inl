@@ -169,7 +169,8 @@ ucp_memh_get_or_update(ucp_context_h context, void *address, size_t length,
     }
 
     ucs_assert((*memh_p)->parent == NULL);
-    ucs_assert(ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
+    ucs_assert((context->rcache == NULL) ||
+               ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
 
     status = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
 out:
