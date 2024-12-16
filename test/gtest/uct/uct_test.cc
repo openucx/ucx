@@ -931,11 +931,12 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
 
 void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
                                  uct_allocated_memory_t *mem,
-                                 ucs_memory_type_t mem_type) const
+                                 ucs_memory_type_t mem_type,
+                                 unsigned num_retries) const
 {
-    void *address   = NULL;
-    uct_md_h uct_md = md();
-    ucs_status_t status;
+    void *address       = NULL;
+    uct_md_h uct_md     = md();
+    ucs_status_t status = UCS_OK;
     uct_mem_alloc_params_t params;
 
     params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS     |
@@ -947,22 +948,37 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
     params.mem_type        = mem_type;
     params.address         = address;
 
-    if ((md_attr().flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG)) &&
-        (mem_type == UCS_MEMORY_TYPE_HOST)) {
-        status = uct_iface_mem_alloc(m_iface, length, mem_flags, "uct_test",
-                                     mem);
-        ASSERT_UCS_OK(status);
-    } else {
-        uct_alloc_method_t alloc_methods[] = {UCT_ALLOC_METHOD_MMAP,
-                                              UCT_ALLOC_METHOD_MD};
-        params.field_mask                 |= UCT_MEM_ALLOC_PARAM_FIELD_MDS;
-        params.mds.mds                     = &uct_md;
-        params.mds.count                   = 1;
-        status = uct_mem_alloc(length, alloc_methods,
-                               ucs_static_array_size(alloc_methods), &params,
-                               mem);
-        ASSERT_UCS_OK(status);
+    for (unsigned i = 0; i <= num_retries; ++i) {
+        if ((md_attr().flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG)) &&
+            (mem_type == UCS_MEMORY_TYPE_HOST)) {
+            status = uct_iface_mem_alloc(m_iface, length, mem_flags, "uct_test",
+                                         mem);
+        } else {
+            uct_alloc_method_t alloc_methods[] = {UCT_ALLOC_METHOD_MMAP,
+                                                  UCT_ALLOC_METHOD_MD};
+            params.field_mask                 |= UCT_MEM_ALLOC_PARAM_FIELD_MDS;
+            params.mds.mds                     = &uct_md;
+            params.mds.count                   = 1;
+            status = uct_mem_alloc(length, alloc_methods,
+                                   ucs_static_array_size(alloc_methods),
+                                   &params, mem);
+        }
+
+        if (status != UCS_ERR_NO_MEMORY) {
+            break;
+        }
+
+        if (i < num_retries) {
+            UCS_TEST_MESSAGE << "Retry " << (i + 1) << "/" << num_retries
+                             << ": Allocation failed - "
+                             << ucs_status_string(status);
+            /* Sleep only if there are more retries remaining */
+            usleep(10000);
+        }
     }
+
+    ASSERT_UCS_OK(status);
+
     ucs_assert(mem->mem_type == mem_type);
 }
 
@@ -1414,16 +1430,16 @@ void uct_test::mapped_buffer::reset()
 uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
                                        const entity &entity, size_t offset,
                                        ucs_memory_type_t mem_type,
-                                       unsigned mem_flags) :
-    mapped_buffer(size, entity, offset, mem_type, mem_flags)
+                                       unsigned mem_flags, unsigned num_retries) :
+    mapped_buffer(size, entity, offset, mem_type, mem_flags, num_retries)
 {
     pattern_fill(seed);
 }
 
-uct_test::mapped_buffer::mapped_buffer(size_t size, 
+uct_test::mapped_buffer::mapped_buffer(size_t size,
                                        const entity &entity, size_t offset,
                                        ucs_memory_type_t mem_type,
-                                       unsigned mem_flags) :
+                                       unsigned mem_flags, unsigned num_retries) :
     m_entity(entity)
 {
     if (size == 0)  {
@@ -1433,7 +1449,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size,
 
     size_t alloc_size = size + offset;
     if ((mem_type == UCS_MEMORY_TYPE_HOST) || (mem_type == UCS_MEMORY_TYPE_RDMA)) {
-        m_entity.mem_alloc(alloc_size, mem_flags, &m_mem, mem_type);
+        m_entity.mem_alloc(alloc_size, mem_flags, &m_mem, mem_type, num_retries);
     } else {
         m_mem.method   = UCT_ALLOC_METHOD_LAST;
         m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
