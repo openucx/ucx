@@ -2219,7 +2219,10 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_lru_cleanup;
     }
 
-    uct_ib_device_configure(dev);
+    dev->mr_access_flags       = UCT_IB_MEM_ACCESS_FLAGS;
+    dev->max_inline_data       = UINT32_MAX;
+    dev->ordered_send_comp     = 1;
+    dev->req_notify_cq_support = 1;
 
     cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
@@ -3241,9 +3244,11 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    dev = &md->super.dev;
-
-    uct_ib_device_configure(dev);
+    dev                        = &md->super.dev;
+    dev->mr_access_flags       = UCT_IB_MEM_ACCESS_FLAGS;
+    dev->max_inline_data       = UINT32_MAX;
+    dev->ordered_send_comp     = 1;
+    dev->req_notify_cq_support = 1;
 
     status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {

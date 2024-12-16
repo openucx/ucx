@@ -561,24 +561,6 @@ out:
     return status;
 }
 
-void uct_ib_device_configure_params(uct_ib_device_t *dev,
-                                    uint64_t mr_access_flags,
-                                    uint32_t max_inline_data,
-                                    int ordered_send_comp,
-                                    int req_notify_cq_support)
-{
-    dev->mr_access_flags       = mr_access_flags;
-    dev->max_inline_data       = max_inline_data;
-    dev->ordered_send_comp     = ordered_send_comp;
-    dev->req_notify_cq_support = req_notify_cq_support;
-}
-
-void uct_ib_device_configure(uct_ib_device_t *dev)
-{
-    uct_ib_device_configure_params(dev, UCT_IB_MEM_ACCESS_FLAGS, UINT32_MAX, 1,
-                                   1);
-}
-
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
