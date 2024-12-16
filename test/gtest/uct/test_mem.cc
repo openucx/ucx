@@ -103,7 +103,7 @@ UCS_TEST_P(test_mem, md_alloc) {
         status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name, md_config, &md);
         uct_config_release(md_config);
         if (status == UCS_ERR_UNSUPPORTED) {
-            continue;
+            continue; // TODO: remove when GGA filters out unsupported resources
         }
         ASSERT_UCS_OK(status);
 
@@ -183,7 +183,7 @@ UCS_TEST_P(test_mem, md_fixed) {
         status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name, md_config, &md);
         uct_config_release(md_config);
         if (status == UCS_ERR_UNSUPPORTED) {
-            continue;
+            continue; // TODO: remove when GGA filters out unsupported resources
         }
         ASSERT_UCS_OK(status);
 

@@ -174,7 +174,6 @@ struct uct_ud_iface {
         ucs_mpool_t            mp;
         /* got async events but pending queue was not dispatched */
         uint8_t                async_before_pending;
-        uint8_t                ordered_send_comp;
         int16_t                available;
         unsigned               unsignaled;
         union {

@@ -202,11 +202,11 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.cap.max_inline_data = ucs_min(config->super.tx.min_inline,
                                                dev->max_inline_data);
 
-    ucs_diag("create QP: max_send_sge=%u (config=%u, dev=%u) "
-             "max_inline_data=%uB (config=%zuB, dev=%uB) ",
-             qp_init_attr.cap.max_send_sge, config->super.tx.min_sge + 1,
-             IBV_DEV_ATTR(dev, max_sge), qp_init_attr.cap.max_inline_data,
-             config->super.tx.min_inline, dev->max_inline_data);
+    ucs_debug("create QP: max_send_sge=%u (config=%u, dev=%u) "
+              "max_inline_data=%uB (config=%zuB, dev=%uB) ",
+              qp_init_attr.cap.max_send_sge, config->super.tx.min_sge + 1,
+              IBV_DEV_ATTR(dev, max_sge), qp_init_attr.cap.max_inline_data,
+              config->super.tx.min_inline, dev->max_inline_data);
 
     status = ops->create_qp(&self->super, &qp_init_attr, &self->qp);
     if (status != UCS_OK) {
@@ -332,6 +332,10 @@ uct_ud_iface_set_event_cb(uct_ud_iface_t *iface, ucs_async_event_cb_t event_cb)
     int event_fd;
 
     ucs_assert(iface->async.event_cb != NULL);
+
+    if (!uct_ib_iface_device(&iface->super)->req_notify_cq_support) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     status = uct_ib_iface_event_fd_get(&iface->super.super.super, &event_fd);
     if (status != UCS_OK) {
@@ -459,8 +463,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
 
     self->tx.unsignaled         = 0;
     self->tx.available          = config->super.tx.queue_len;
-    self->tx.ordered_send_comp =
-            uct_ib_iface_device(&self->super)->ordered_send_comp;
     self->tx.timer_sweep_count  = 0;
     self->async.disable         = 0;
 
