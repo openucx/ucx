@@ -10,7 +10,6 @@
 
 #include <ucp/api/ucp.h>
 #include <ucm/api/ucm.h>
-
 #include <cuda_runtime.h>
 
 
