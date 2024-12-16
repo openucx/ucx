@@ -33,6 +33,8 @@
  * is extended by a system namespace information */
 #define UCT_IFACE_LOCAL_ADDR_FLAG_NS UCS_BIT(63)
 
+/* UCT IFACE with AM SHORT must support a minimal number of iov */
+#define UCT_IFACE_AM_SHORT_MIN_IOV 4
 
 enum {
     UCT_EP_STAT_AM,
