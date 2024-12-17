@@ -850,14 +850,15 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
         return status;
     }
 
-    if (self->super.async.event_cb != NULL) {
+    if ((self->super.async.event_cb != NULL) &&
+        uct_ib_iface_device(&self->super.super)->req_notify_cq_support) {
         status = uct_ud_iface_set_event_cb(&self->super,
                                            uct_ud_verbs_iface_async_handler);
-        if (status == UCS_OK) {
-            status = uct_ib_iface_arm_cq(&self->super.super, UCT_IB_DIR_RX, 1);
-        } else if (status == UCS_ERR_UNSUPPORTED) {
-            status = UCS_OK;
+        if (status != UCS_OK) {
+            return status;
         }
+
+        status = uct_ib_iface_arm_cq(&self->super.super, UCT_IB_DIR_RX, 1);
     }
 
     return status;

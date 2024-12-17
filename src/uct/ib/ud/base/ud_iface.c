@@ -333,10 +333,6 @@ uct_ud_iface_set_event_cb(uct_ud_iface_t *iface, ucs_async_event_cb_t event_cb)
 
     ucs_assert(iface->async.event_cb != NULL);
 
-    if (!uct_ib_iface_device(&iface->super)->req_notify_cq_support) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     status = uct_ib_iface_event_fd_get(&iface->super.super.super, &event_fd);
     if (status != UCS_OK) {
         return status;
