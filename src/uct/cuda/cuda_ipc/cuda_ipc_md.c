@@ -284,7 +284,7 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
 
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&this_device));
     if (UCS_OK != status) {
-        return status;
+        return UCS_ERR_UNREACHABLE;
     }
 
     pthread_mutex_lock(&component->lock);
