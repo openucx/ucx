@@ -86,7 +86,7 @@ public:
     static bool is_gpu_supported();
 
     /* set device context if compiled with GPU support */
-    static void set_device_context();
+    static void set_device_context(int device = 0);
 
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
