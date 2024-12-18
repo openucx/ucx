@@ -1504,7 +1504,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     md->super.ops = &uct_ib_verbs_md_ops.super;
 
     dev->mr_access_flags       = UCT_IB_MEM_ACCESS_FLAGS;
-    dev->max_inline_data       = UINT32_MAX;
+    dev->max_inline_data       = 4 * UCS_KBYTE;
     dev->ordered_send_comp     = 1;
     dev->req_notify_cq_support = 1;
 

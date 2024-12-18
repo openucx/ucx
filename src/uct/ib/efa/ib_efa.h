@@ -14,7 +14,7 @@
 
 
 typedef struct uct_ib_efadv_md {
-    uct_ib_md_t    super;
+    uct_ib_md_t super;
 } uct_ib_efadv_md_t;
 
 

@@ -67,6 +67,10 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
     dev->mr_access_flags       = access_flags;
     dev->max_inline_data       = attr.inline_buf_size;
     dev->ordered_send_comp     = 0;
+    /*
+     * FIXME: Always disabling channel completion because of leak (gtest):
+     * - https://github.com/amzn/amzn-drivers/issues/306
+     */
     dev->req_notify_cq_support = 0;
 
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
