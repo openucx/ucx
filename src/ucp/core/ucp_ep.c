@@ -2872,9 +2872,12 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     iface_attr->cap.am.max_short, sizeof(ucp_am_hdr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
-            ucp_ep_config_set_memtype_thresh(&config->am_u.max_eager_short,
+            if (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV) {
+                ucp_ep_config_set_memtype_thresh(
+                                             &config->am_u.max_eager_short,
                                              am_max_eager_short,
                                              context->num_mem_type_detect_mds);
+            }
 
             /* All keys must fit in RNDV packet.
              * TODO remove some MDs if they don't

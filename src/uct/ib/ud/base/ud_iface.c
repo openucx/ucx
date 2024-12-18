@@ -725,12 +725,6 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
                                          UCT_IFACE_FLAG_INTER_NODE;
 
-    /* Make sure to have the minimum SGE to implement short-based protocols fully */
-    if (IBV_DEV_ATTR(uct_ib_iface_device(&iface->super), max_sge) >
-        UCT_IFACE_AM_SHORT_MIN_IOV) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;
-    }
-
     if (iface->super.comp_channel != NULL) {
         iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                       UCT_IFACE_FLAG_EVENT_RECV |
@@ -757,6 +751,10 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
 
     /* UD lacks of scatter to CQE support */
     iface_attr->latency.c             += 30e-9;
+
+    if (iface_attr->cap.am.max_short) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;
+    }
 
     return UCS_OK;
 }
