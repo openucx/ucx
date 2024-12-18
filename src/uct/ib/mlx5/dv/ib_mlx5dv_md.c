@@ -1772,7 +1772,6 @@ struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
     };
     struct ibv_context *ctx;
 
-    dv_attr.flags |= MLX5DV_CONTEXT_FLAGS_DEVX;
     ctx = mlx5dv_open_device(ibv_device, &dv_attr);
     if (ctx == NULL) {
         ucs_debug("mlx5dv_open_device(%s) failed: %m",
@@ -2212,7 +2211,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     status = uct_ib_mlx5_devx_ctx_test_cqec(ctx);
     if (status != UCS_OK) {
-        goto err;
+        goto err_free_context;
     }
 
     md = ucs_derived_of(uct_ib_md_alloc(sizeof(*md), "ib_mlx5_devx_md", ctx),
