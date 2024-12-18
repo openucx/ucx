@@ -1175,8 +1175,6 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                            const uct_md_mkey_pack_params_t *params,
                            void *mkey_buffer);
 
-struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device);
-
 ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                       const uct_ib_md_config_t *md_config,
                                       uct_ib_md_t **p_md);

@@ -23,50 +23,6 @@
     (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE)
 
 
-typedef struct {
-    uint32_t md_flags;
-    uint32_t ib_md_flags;
-    uint32_t dev_flags;
-
-    // caps v1
-    uint32_t log_max_msg;
-    uint8_t  log_max_dci_stream_channels;
-    uint8_t  log_max_qp;
-    uint32_t log_max_ra_req_dc;
-    uint8_t  lag_state;
-    uint8_t  num_lag_ports;
-    uint8_t  ece_enable;
-    uint16_t vhca_id;
-    uint8_t  dp_ordering_cap_rc;
-    uint8_t  dp_ordering_cap_dc;
-    uint32_t pg;
-    uint32_t umr_extended_translation_offset;
-    uint32_t atomic;
-
-    // cap v2
-    uint64_t allowed_object_for_other_vhca_access;
-    uint32_t cross_vhca_object_to_object_supported;
-    uint32_t mkey_by_name_reserve;
-    uint32_t mkey_by_name_reserve_log_size;
-    uint32_t mkey_by_name_reserve_base;
-} uct_ib_mlx5_devx_caps_t;
-
-
-#define UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, hca_cap, name) \
-    do { \
-        caps.name = UCT_IB_MLX5DV_GET(cmd_hca_cap, hca_cap, name); \
-    } while (0)
-
-#define UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP2(caps, hca_cap_2, name) \
-    do { \
-        caps.name = UCT_IB_MLX5DV_GET(cmd_hca_cap_2, hca_cap_2, name); \
-    } while (0)
-
-#define UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP2_64(caps, hca_cap_2, name) \
-    do { \
-        caps.name = UCT_IB_MLX5DV_GET64(cmd_hca_cap_2, hca_cap_2, name); \
-    } while (0)
-
 static uint32_t uct_ib_mlx5_flush_rkey_make()
 {
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
@@ -1659,7 +1615,7 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
 
 static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                                        const uct_ib_md_config_t *md_config,
-                                       const uct_ib_mlx5_devx_caps_t *caps)
+                                       void *cap)
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
@@ -1674,12 +1630,12 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         goto no_odp;
     }
 
-    if (!caps->pg) {
+    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, pg)) {
         reason = "cap.pg is not supported";
         goto no_odp;
     }
 
-    if (!caps->umr_extended_translation_offset) {
+    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_extended_translation_offset)) {
         reason = "cap.umr_extended_translation_offset is not supported";
         goto no_odp;
     }
@@ -1789,7 +1745,7 @@ uct_ib_mlx5_devx_query_port_select(uct_ib_mlx5_md_t *md)
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_query_lag(struct ibv_context *ctx, uint8_t *state)
+uct_ib_mlx5_devx_query_lag(uct_ib_mlx5_md_t *md, uint8_t *state)
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_in)]  = {};
@@ -1798,7 +1754,8 @@ uct_ib_mlx5_devx_query_lag(struct ibv_context *ctx, uint8_t *state)
 
     lag = UCT_IB_MLX5DV_ADDR_OF(query_lag_out, out, lag_context);
     UCT_IB_MLX5DV_SET(query_lag_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_LAG);
-    status = uct_ib_mlx5_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out),
+    status = uct_ib_mlx5_devx_general_cmd(md->super.dev.ibv_context, in,
+                                          sizeof(in), out, sizeof(out),
                                           "QUERY_LAG", 0);
     if (status != UCS_OK) {
         return status;
@@ -1808,12 +1765,13 @@ uct_ib_mlx5_devx_query_lag(struct ibv_context *ctx, uint8_t *state)
     return UCS_OK;
 }
 
-struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
+static struct ibv_context *
+uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
 {
-    struct mlx5dv_context_attr dv_attr = {
-        .flags = MLX5DV_CONTEXT_FLAGS_DEVX
-    };
+    struct mlx5dv_context_attr dv_attr = {};
+    struct mlx5dv_devx_event_channel *event_channel;
     struct ibv_context *ctx;
+    struct ibv_cq *cq;
 
     dv_attr.flags |= MLX5DV_CONTEXT_FLAGS_DEVX;
     ctx = mlx5dv_open_device(ibv_device, &dv_attr);
@@ -1823,19 +1781,11 @@ struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
         return NULL;
     }
 
-    return ctx;
-}
-
-static ucs_status_t uct_ib_mlx5_devx_ctx_test_cqec(struct ibv_context *ctx)
-{
-    struct mlx5dv_devx_event_channel *event_channel;
-    struct ibv_cq *cq;
-
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
         uct_ib_check_memlock_limit_msg(ctx, UCS_LOG_LEVEL_DEBUG,
                                        "ibv_create_cq()");
-        return UCS_ERR_UNSUPPORTED;
+        goto close_ctx;
     }
 
     ibv_destroy_cq(cq);
@@ -1844,12 +1794,17 @@ static ucs_status_t uct_ib_mlx5_devx_ctx_test_cqec(struct ibv_context *ctx)
             ctx, MLX5_IB_UAPI_DEVX_CR_EV_CH_FLAGS_OMIT_DATA);
     if (event_channel == NULL) {
         ucs_diag("mlx5dv_devx_create_event_channel(%s) failed: %m",
-                 ibv_get_device_name(ctx->device));
-        return UCS_ERR_UNSUPPORTED;
+                 ibv_get_device_name(ibv_device));
+        goto close_ctx;
     }
 
     mlx5dv_devx_destroy_event_channel(event_channel);
-    return UCS_OK;
+
+    return ctx;
+
+close_ctx:
+    ibv_close_device(ctx);
+    return NULL;
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops;
@@ -1911,68 +1866,83 @@ uct_ib_mlx5_devx_query_cap_2(struct ibv_context *ctx, void *out, size_t size)
                                         "QUERY_HCA_CAP, CAP2", 1);
 }
 
-static void uct_ib_mlx5_devx_check_xgvmi(uct_ib_mlx5_devx_caps_t *caps,
-                                         const char *dev_name)
+static void uct_ib_mlx5_devx_check_xgvmi(uct_ib_mlx5_md_t *md, void *cap_2,
+                                         uct_ib_device_t *dev)
 {
-    if ((caps->cross_vhca_object_to_object_supported &
+    uint64_t object_for_other_vhca;
+    uint32_t object_to_object;
+
+    object_to_object      = UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2,
+                                              cross_vhca_object_to_object_supported);
+    object_for_other_vhca = UCT_IB_MLX5DV_GET64(
+            cmd_hca_cap_2, cap_2, allowed_object_for_other_vhca_access);
+
+    if ((object_to_object &
          UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY) &&
-        (caps->allowed_object_for_other_vhca_access &
+        (object_for_other_vhca &
          UCT_IB_MLX5_HCA_CAPS_2_ALLOWED_OBJ_FOR_OTHER_VHCA_ACCESS_MKEY)) {
-        caps->md_flags    |= UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
-        caps->ib_md_flags |= UCT_MD_FLAG_EXPORTED_MKEY;
-        ucs_debug("%s: cross gvmi alias mkey is supported", dev_name);
+        md->flags           |= UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
+        md->super.cap_flags |= UCT_MD_FLAG_EXPORTED_MKEY;
+        ucs_debug("%s: cross gvmi alias mkey is supported",
+                  uct_ib_device_name(dev));
     } else {
-        ucs_debug("%s: crossing_vhca_mkey is not supported", dev_name);
+        ucs_debug("%s: crossing_vhca_mkey is not supported",
+                  uct_ib_device_name(dev));
     }
 }
 
-static void uct_ib_mlx5_devx_check_dp_ordering(void *cap, void *cap_2,
-                                               uct_ib_mlx5_devx_caps_t *caps,
-                                               const char* dev_name)
+static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
+                                               void *cap_2,
+                                               uct_ib_device_t *dev)
 {
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_rc)) {
-        caps->dp_ordering_cap_rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_rc)) {
-        caps->dp_ordering_cap_rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     } else {
-        caps->dp_ordering_cap_rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_dc)) {
-        caps->dp_ordering_cap_dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_dc)) {
-        caps->dp_ordering_cap_dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     } else {
-        caps->dp_ordering_cap_dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if ((cap_2 != NULL) &&
         (UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2, dp_ordering_force))) {
-        caps->md_flags |= UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE;
+        md->flags |= UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE;
     }
 
     ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
-              dev_name,
-              !!(caps->md_flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
-              caps->dp_ordering_cap_rc, caps->dp_ordering_cap_dc);
+              uct_ib_device_name(dev),
+              !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
+              md->dp_ordering_cap.rc, md->dp_ordering_cap.dc);
 }
 
-static void
-uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
-                                    const uct_ib_mlx5_devx_caps_t *caps,
-                                    const char *dev_name)
+static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
+                                                void *cap_2,
+                                                uct_ib_device_t *dev)
 {
+    int log_size;
+
     ucs_assertv(md->super.mkey_by_name_reserve.size == 0,
                 "mkey_by_name_reserve.size=%u",
                 md->super.mkey_by_name_reserve.size);
 
-    if (caps->mkey_by_name_reserve == 0) {
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2, mkey_by_name_reserve) == 0) {
         ucs_debug("%s: mkey_by_name_reserve is not supported",
-                  dev_name);
+                  uct_ib_device_name(dev));
         return;
     }
 
-    md->super.mkey_by_name_reserve.base = caps->mkey_by_name_reserve_base;
+    log_size = UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2,
+                                 mkey_by_name_reserve_log_size);
+
+    md->super.mkey_by_name_reserve.base =
+            UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2, mkey_by_name_reserve_base);
 
     /* The direct key and atomic key must have constant offset so that remote
      * keys can eventually compare equal.
@@ -1980,12 +1950,11 @@ uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
      * So first half of the range is used for allocation of smallest mkey,
      * other half will be used to create atomic key explicitly.
      */
-    md->super.mkey_by_name_reserve.size =
-            UCS_BIT(caps->mkey_by_name_reserve_log_size) / 2;
-    md->flags |= UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE;
+    md->super.mkey_by_name_reserve.size = UCS_BIT(log_size) / 2;
+    md->flags           |= UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE;
 
     ucs_debug("%s: mkey_by_name_reserve is supported, base=0x%x size=%u",
-              dev_name, md->super.mkey_by_name_reserve.base,
+              uct_ib_device_name(dev), md->super.mkey_by_name_reserve.base,
               md->super.mkey_by_name_reserve.size);
 }
 
@@ -2184,203 +2153,54 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
-ucs_status_t
-uct_ib_mlx5_devx_ctx_query_caps(struct ibv_context *ctx,
-                                uct_ib_mlx5_devx_caps_t *caps_p)
+ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
+                                      const uct_ib_md_config_t *md_config,
+                                      uct_ib_md_t **p_md)
 {
-    uct_ib_mlx5_devx_caps_t caps = { 0 };
-    size_t out_len               = UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out);
-    size_t in_len                = UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in);
-    size_t total_len             = (2 * out_len) + in_len;
-    char *buf, *out, *in , *cap_2_out;
-    void *cap, *cap_2;
+    size_t out_len      = UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out);
+    size_t in_len       = UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in);
+    size_t total_len    = (2 * out_len) + in_len;
+    char *buf, *out, *in, *cap_2_out;
     ucs_status_t status;
+    void *cap_2;
+    uint8_t lag_state   = 0;
+    uint8_t log_max_qp;
+    uint16_t vhca_id;
+    struct ibv_context *ctx;
+    uct_ib_device_t *dev;
+    uct_ib_mlx5_md_t *md;
+    unsigned max_rd_atomic_dc;
+    void *cap;
     int ret;
     ucs_log_level_t log_level;
+    ucs_mpool_params_t mp_params;
+    int ksm_atomic;
 
     buf = ucs_calloc(1, total_len, "mlx5_devx_buffers");
     if (buf == NULL) {
         ucs_error("failed to allocate memory for HCA capability buffers");
         status = UCS_ERR_NO_MEMORY;
-        goto out;
+        goto err;
     }
 
     out       = buf;
     in        = UCS_PTR_BYTE_OFFSET(out, out_len);
     cap_2_out = UCS_PTR_BYTE_OFFSET(in, in_len);
 
-    cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
-    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
-    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
-                                                   (UCT_IB_MLX5_CAP_GENERAL << 1));
-    ret = mlx5dv_devx_general_cmd(ctx, in, in_len, out, out_len);
-    if (ret != 0) {
-        if ((errno == EPERM) || (errno == EPROTONOSUPPORT) ||
-            (errno == EOPNOTSUPP)) {
-            status    = UCS_ERR_UNSUPPORTED;
-            log_level = UCS_LOG_LEVEL_DEBUG;
-        } else {
-            status    = UCS_ERR_IO_ERROR;
-            log_level = UCS_LOG_LEVEL_ERROR;
-        }
-        ucs_log(log_level,
-                "mlx5dv_devx_general_cmd(QUERY_HCA_CAP) failed,"
-                " syndrome 0x%x: %m",
-                UCT_IB_MLX5DV_GET(query_hca_cap_out, out, syndrome));
-        goto out;
-    }
-
-    status = uct_ib_mlx5_devx_query_lag(ctx, &caps.lag_state);
-    if (status != UCS_OK) {
-        caps.lag_state = 0;
-        status = UCS_OK;
-    }
-
-    UCS_STATIC_ASSERT(UCS_MASK(UCT_IB_MLX5_MD_MAX_DCI_CHANNELS) <= UINT8_MAX);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, cap, log_max_dci_stream_channels);
-    caps.log_max_dci_stream_channels = ucs_min(caps.log_max_dci_stream_channels,
-                                               UCT_IB_MLX5_MD_MAX_DCI_CHANNELS);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, cap, log_max_msg);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, cap, log_max_qp);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, cap, log_max_ra_req_dc);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, cap, num_lag_ports);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, cap, vhca_id);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, cap, pg);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, cap, umr_extended_translation_offset);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP(caps, cap, atomic);
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct) &&
-        (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, lag_dct) ||
-         (caps.lag_state == 0))) {
-         /* Either DCT supports LAG, or LAG is off */
-         caps.dev_flags |= UCT_IB_DEVICE_FLAG_DC;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, rndv_offload_dc)) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_DC_TM;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, compact_address_vector)) {
-        caps.dev_flags |= UCT_IB_DEVICE_FLAG_AV;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ece)) {
-        caps.ece_enable = 1;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, fixed_buffer_size)) {
-        caps.md_flags  |= UCT_IB_MLX5_MD_FLAG_KSM;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ext_stride_num_range)) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_MP_RQ;
-    }
-
-    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_modify_atomic_disabled)) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_rmp) > 0) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_RMP;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ooo_sl_mask)) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, init2_lag_tx_port_affinity)) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_LAG;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_version)) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_CQE_V1;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, enhanced_cqe_compression)) {
-        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_compression_128b)) {
-            caps.md_flags |= UCT_IB_MLX5_MD_FLAG_CQE128_ZIP;
-        }
-
-        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_compression)) {
-            caps.md_flags |= UCT_IB_MLX5_MD_FLAG_CQE64_ZIP;
-        }
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
-                          dci_no_rdma_wr_optimized_performance)) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
-                          ib_striding_wq_cq_first_indication)) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG;
-    }
-
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dma_mmo_qp)) {
-        caps.md_flags |= UCT_IB_MLX5_MD_FLAG_MMO_DMA;
-    }
-
-    status = uct_ib_mlx5_devx_query_cap_2(ctx, cap_2_out, out_len);
-    if (status != UCS_OK) {
-        status = UCS_OK;
-        ucs_debug("TODO better msg: caps_v2 are not supported");
-        goto out;
-    }
-
-    cap_2 = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, cap_2_out, capability);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP2(caps, cap_2,
-                                       cross_vhca_object_to_object_supported);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP2_64(caps, cap_2,
-                                          allowed_object_for_other_vhca_access);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP2(caps, cap_2, mkey_by_name_reserve);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP2(caps, cap_2,
-                                       mkey_by_name_reserve_log_size);
-    UCT_IB_MLX5_DEVX_CAP_FROM_HCA_CAP2(caps, cap_2,
-                                       mkey_by_name_reserve_base);
-    uct_ib_mlx5_devx_check_xgvmi(&caps, ibv_get_device_name(ctx->device));
-    uct_ib_mlx5_devx_check_dp_ordering(cap, cap_2, &caps,
-                                       ibv_get_device_name(ctx->device));
-
-out:
-    ucs_free(buf);
-    if (status == UCS_OK) {
-        *caps_p = caps;
-    }
-
-    return status;
-}
-
-ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
-                                      const uct_ib_md_config_t *md_config,
-                                      uct_ib_md_t **p_md)
-{
-    ucs_status_t status;
-    struct ibv_context *ctx;
-    uct_ib_mlx5_devx_caps_t caps;
-    uct_ib_device_t *dev;
-    uct_ib_mlx5_md_t *md;
-    ucs_mpool_params_t mp_params;
-    int ksm_atomic;
-
     if (!mlx5dv_is_supported(ibv_device)) {
         status = UCS_ERR_UNSUPPORTED;
-        goto err;
+        goto err_free_buffer;
     }
 
     if (md_config->devx == UCS_NO) {
         status = UCS_ERR_UNSUPPORTED;
-        goto err;
+        goto err_free_buffer;
     }
 
     ctx = uct_ib_mlx5_devx_open_device(ibv_device);
     if (ctx == NULL) {
         status = UCS_ERR_UNSUPPORTED;
-        goto err;
-    }
-
-    status = uct_ib_mlx5_devx_ctx_test_cqec(ctx);
-    if (status != UCS_OK) {
-        goto err_free_context;
+        goto err_free_buffer;
     }
 
     md = ucs_derived_of(uct_ib_md_alloc(sizeof(*md), "ib_mlx5_devx_md", ctx),
@@ -2404,65 +2224,155 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_lru_cleanup;
     }
 
-    status = uct_ib_mlx5_devx_ctx_query_caps(ctx, &caps);
-    if (status != UCS_OK) {
+    cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
+                                                   (UCT_IB_MLX5_CAP_GENERAL << 1));
+    ret = mlx5dv_devx_general_cmd(ctx, in, in_len, out, out_len);
+    if (ret != 0) {
+        if ((errno == EPERM) || (errno == EPROTONOSUPPORT) ||
+            (errno == EOPNOTSUPP)) {
+            status    = UCS_ERR_UNSUPPORTED;
+            log_level = UCS_LOG_LEVEL_DEBUG;
+        } else {
+            status    = UCS_ERR_IO_ERROR;
+            log_level = UCS_LOG_LEVEL_ERROR;
+        }
+        ucs_log(log_level,
+                "mlx5dv_devx_general_cmd(QUERY_HCA_CAP) failed,"
+                " syndrome 0x%x: %m",
+                UCT_IB_MLX5DV_GET(query_hca_cap_out, out, syndrome));
         goto err_lru_cleanup;
     }
 
-    md->log_max_dci_stream_channels = caps.log_max_dci_stream_channels;
-    if (caps.log_max_msg != UCT_IB_MLX5_LOG_MAX_MSG_SIZE) {
+    UCS_STATIC_ASSERT(UCS_MASK(UCT_IB_MLX5_MD_MAX_DCI_CHANNELS) <= UINT8_MAX);
+    md->log_max_dci_stream_channels = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                                                        log_max_dci_stream_channels);
+    md->log_max_dci_stream_channels = ucs_min(md->log_max_dci_stream_channels,
+                                              UCT_IB_MLX5_MD_MAX_DCI_CHANNELS);
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_msg) !=
+        UCT_IB_MLX5_LOG_MAX_MSG_SIZE) {
         status = UCS_ERR_UNSUPPORTED;
         ucs_debug("Unexpected QUERY_HCA_CAP.log_max_msg %d\n",
-                  caps.log_max_msg);
+                  UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_msg));
         goto err_lru_cleanup;
     }
 
-    dev->flags |= caps.dev_flags;
-    if (caps.lag_state == 0) {
+    status = uct_ib_mlx5_devx_query_lag(md, &lag_state);
+    if ((status != UCS_OK) || (lag_state == 0)) {
         dev->lag_level = 1;
     } else {
-        dev->lag_level = caps.num_lag_ports;
+        dev->lag_level = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, num_lag_ports);
     }
 
-    md->super.cap_flags |= caps.ib_md_flags;
-    md->flags           |= caps.md_flags;
     md->port_select_mode = uct_ib_mlx5_devx_query_port_select(md);
-    md->super.ece_enable = caps.ece_enable;
-    md->max_rd_atomic_dc = 1 << caps.log_max_ra_req_dc;
-    ucs_assertv(md->max_rd_atomic_dc < UINT8_MAX, "max_rd_atomic_dc=%u",
-                md->max_rd_atomic_dc);
 
-    uct_ib_mlx5_devx_check_mkey_by_name(md, &caps, uct_ib_device_name(dev));
-    uct_ib_mlx5_devx_check_odp(md, md_config, &caps);
+    log_max_qp       = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_qp);
+    max_rd_atomic_dc = 1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                                              log_max_ra_req_dc);
+    ucs_assertv(max_rd_atomic_dc < UINT8_MAX, "max_rd_atomic_dc=%u",
+                max_rd_atomic_dc);
+    md->max_rd_atomic_dc = max_rd_atomic_dc;
 
-    if (caps.atomic) {
-        int ops        = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
-                         UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD;
-        size_t out_len = UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out);
-        size_t in_len  = UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in);
-        char *buf, *out, *in;
-        void *cap;
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct) &&
+         (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, lag_dct) || (lag_state == 0))) {
+         /* Either DCT supports LAG, or LAG is off */
+         dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, rndv_offload_dc)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_DC_TM;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, compact_address_vector)) {
+        dev->flags |= UCT_IB_DEVICE_FLAG_AV;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ece)) {
+        md->super.ece_enable = 1;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, fixed_buffer_size)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ext_stride_num_range)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_MP_RQ;
+    }
+
+    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_modify_atomic_disabled)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_rmp) > 0) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_RMP;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ooo_sl_mask)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, init2_lag_tx_port_affinity)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_LAG;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_version)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_CQE_V1;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, enhanced_cqe_compression)) {
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_compression_128b)) {
+            md->flags |= UCT_IB_MLX5_MD_FLAG_CQE128_ZIP;
+        }
+
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_compression)) {
+            md->flags |= UCT_IB_MLX5_MD_FLAG_CQE64_ZIP;
+        }
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                          dci_no_rdma_wr_optimized_performance)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                          ib_striding_wq_cq_first_indication)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dma_mmo_qp)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_MMO_DMA;
+    }
+
+    vhca_id = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, vhca_id);
+
+    status = uct_ib_mlx5_devx_query_cap_2(ctx, cap_2_out, out_len);
+    if (status == UCS_OK) {
+        cap_2 = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, cap_2_out, capability);
+
+        uct_ib_mlx5_devx_check_xgvmi(md, cap_2, dev);
+        uct_ib_mlx5_devx_check_mkey_by_name(md, cap_2, dev);
+    } else {
+        cap_2 = NULL;
+    }
+
+    uct_ib_mlx5_devx_check_dp_ordering(md, cap, cap_2, dev);
+
+    uct_ib_mlx5_devx_check_odp(md, md_config, cap);
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
+        int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
+                  UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD;
         uint8_t arg_size;
         int cap_ops, mode8b;
 
-        buf = ucs_calloc(1, out_len + in_len, "TODO: give me a name");
-        if (buf == NULL) {
-            status = UCS_ERR_NO_MEMORY;
-            goto err_lru_cleanup;
-        }
-
-        out = buf;
-        in  = UCS_PTR_BYTE_OFFSET(out, out_len);
-        cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
-
-        UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
         UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                                        (UCT_IB_MLX5_CAP_ATOMIC << 1));
-
         status = uct_ib_mlx5_devx_general_cmd(ctx, in, in_len, out, out_len,
                                               "QUERY_HCA_CAP, ATOMIC", 0);
         if (status != UCS_OK) {
-            goto free_buf;
+            goto err_lru_cleanup;
         }
 
         arg_size = UCT_IB_MLX5DV_GET(atomic_caps, cap, atomic_size_qp);
@@ -2494,11 +2404,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
         dev->pci_fadd_arg_sizes  = UCT_IB_MLX5DV_GET(atomic_caps, cap, fetch_add_pci_atomic) << 2;
         dev->pci_cswap_arg_sizes = UCT_IB_MLX5DV_GET(atomic_caps, cap, compare_swap_pci_atomic) << 2;
-        free_buf:
-            ucs_free(buf);
-            if (status != UCS_OK) {
-                goto err_lru_cleanup;
-            }
     }
 
     md->super.super.ops = &uct_ib_mlx5_devx_md_ops.super;
@@ -2527,13 +2432,13 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     ucs_debug("%s: opened DEVX md log_max_qp=%d",
-              uct_ib_device_name(dev), caps.log_max_qp);
+              uct_ib_device_name(dev), log_max_qp);
 
     dev->flags          |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags           |= UCT_IB_MLX5_MD_FLAG_DEVX;
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
     md->super.name       = UCT_IB_MD_NAME(mlx5);
-    md->super.vhca_id    = caps.vhca_id;
+    md->super.vhca_id    = vhca_id;
     md->super.uuid       = ucs_generate_uuid((uintptr_t)md);
 
     if ((md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI) &&
@@ -2567,6 +2472,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     uct_ib_mlx5_devx_init_flush_mr(md);
 
     *p_md = &md->super;
+    ucs_free(buf);
     return UCS_OK;
 
 err_dbrec_mpool_cleanup:
@@ -2580,6 +2486,8 @@ err_free_md:
     uct_ib_md_free(&md->super);
 err_free_context:
     uct_ib_md_device_context_close(ctx);
+err_free_buffer:
+    ucs_free(buf);
 err:
     if ((status == UCS_ERR_UNSUPPORTED) && (md_config->devx == UCS_YES)) {
         ucs_error("DEVX requested but not supported by %s",
