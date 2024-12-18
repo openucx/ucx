@@ -36,6 +36,12 @@
 
 
 /**
+ * Predicate function to filter out not applicable devices
+ */
+typedef int (*uct_ib_device_pred_t)(struct ibv_device *device);
+
+
+/**
  * IB MD statistics counters
  */
 enum {
@@ -406,9 +412,10 @@ ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
                                 const void *rkey_buffer, uct_rkey_t *rkey_p,
                                 void **handle_p);
 
-ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
-                                       uct_md_resource_desc_t **resources_p,
-                                       unsigned *num_resources_p);
+ucs_status_t
+uct_ib_query_md_resources_with_pred(uct_ib_device_pred_t predicate,
+                                    uct_md_resource_desc_t **resources_p,
+                                    unsigned *num_resources_p);
 
 ucs_status_t uct_ib_get_device_by_name(struct ibv_device **ib_device_list,
                                        int num_devices, const char *md_name,
