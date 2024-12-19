@@ -289,7 +289,7 @@ stages:
     - template: wire_compat.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: ucx_new_test -equals yes
     # Temporarily disable wire-compat tests on rain machines
     #- template: wire_compat.yml
     #  parameters:
@@ -321,7 +321,7 @@ stages:
     - template: tests.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: ucx_new_test -equals yes
         test_perf: 1
     - template: tests.yml
       parameters:
@@ -347,7 +347,7 @@ stages:
     - template: namespace_tests.yml
       parameters:
         name: new_namespace
-        demands: ucx_new -equals yes
+        demands: ucx_new_test -equals yes
 
   - stage: io_demo
     dependsOn: [Static_check]
@@ -374,7 +374,7 @@ stages:
       - template: go/go-test.yml
         parameters:
           name: new
-          demands: ucx_new -equals yes
+          demands: ucx_new_test -equals yes
       - template: go/go-test.yml
         parameters:
             name: gpu
@@ -443,7 +443,7 @@ stages:
     - template: tests.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: ucx_new_test -equals yes
         test_perf: 0
         container: ubuntu2204_ib
         asan_check: yes
