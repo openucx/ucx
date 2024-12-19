@@ -36,9 +36,12 @@
 
 
 /**
- * Predicate function to filter out not applicable devices
+ * Callback function to check and filter out not applicable devices.
+ *
+ * @param [in]      device      IB device.
+ * @return 1 for acceptable device, otherwise 0.
  */
-typedef int (*uct_ib_device_pred_t)(struct ibv_device *device);
+typedef int (*uct_ib_check_device_cb_t)(struct ibv_device *device);
 
 
 /**
@@ -413,9 +416,9 @@ ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
                                 void **handle_p);
 
 ucs_status_t
-uct_ib_query_md_resources_with_pred(uct_ib_device_pred_t predicate,
-                                    uct_md_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p);
+uct_ib_base_query_md_resources(uct_md_resource_desc_t **resources_p,
+                               unsigned *num_resources_p,
+                               uct_ib_check_device_cb_t check_device_cb);
 
 ucs_status_t uct_ib_get_device_by_name(struct ibv_device **ib_device_list,
                                        int num_devices, const char *md_name,

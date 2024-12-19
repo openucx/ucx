@@ -449,7 +449,7 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
 
     status = uct_ib_mlx5_devx_general_cmd(md->super.dev.ibv_context, in,
                                           sizeof(in), out, sizeof(out),
-                                          "QUERY_HCA_VPORT_CONTEXT", UCS_NO);
+                                          "QUERY_HCA_VPORT_CONTEXT", 0);
     if (status != UCS_OK) {
         return status;
     }

@@ -6,6 +6,7 @@
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
+#include "config.h"
 #endif
 
 #include <uct/base/uct_iface.h>
@@ -16,6 +17,12 @@
 
 #define UCT_GGA_MLX5_OPAQUE_BUF_LEN 64
 #define UCT_GGA_MAX_MSG_SIZE        (2u * UCS_MBYTE)
+
+#if ENABLE_ASSERT
+#define UCT_GGA_MLX5_MD_CAPS        (UCT_IB_MLX5_MD_FLAG_DEVX | \
+                                     UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI | \
+                                     UCT_IB_MLX5_MD_FLAG_MMO_DMA)
+#endif /* ENABLE_ASSERT */
 
 typedef struct {
     uct_ib_md_packed_mkey_t packed_mkey;
@@ -165,45 +172,36 @@ static ucs_status_t uct_gga_mlx5_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
-static int uct_ib_mlx5_gga_device_predicate(struct ibv_device *device)
+static int uct_ib_mlx5_gga_check_device(struct ibv_device *device)
 {
+    int result = 0;
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)];
     struct ibv_context *ctx;
     ucs_status_t status;
     size_t out_len;
     char *cap;
-    int result;
 
-    result = uct_ib_device_is_accessible(device);
-    if (!result) {
-        goto out;
-    }
-
-    ctx    = uct_ib_mlx5_devx_open_device(device);
-    result = (ctx != NULL);
-    if (!result) {
+    ctx = uct_ib_mlx5_devx_open_device(device);
+    if (ctx == NULL) {
         goto out;
     }
 
     out_len = ucs_static_array_size(out);
-    status = uct_ib_mlx5_devx_query_cap(ctx,
-                                        UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
-                                        (UCT_IB_MLX5_CAP_GENERAL << 1),
-                                        out, out_len, "QUERY_HCA_CAP", UCS_AUTO);
-    result = (status == UCS_OK);
-    if (!result) {
+    status  = uct_ib_mlx5_devx_query_cap(ctx,
+                                         UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
+                                         (UCT_IB_MLX5_CAP_GENERAL << 1),
+                                         out, out_len, "QUERY_HCA_CAP", 0);
+    if (status != UCS_OK) {
         goto out_close_ctx;
     }
 
     cap    = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
-    result = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dma_mmo_qp);
-    if (!result) {
+    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dma_mmo_qp)) {
         goto out_close_ctx;
     }
 
     status = uct_ib_mlx5_devx_query_cap_2(ctx, out, out_len);
-    result = (status == UCS_OK);
-    if (!result) {
+    if (status != UCS_OK) {
         goto out_close_ctx;
     }
 
@@ -220,8 +218,8 @@ uct_ib_mlx5_gga_query_md_resources(uct_component_t *component,
                                    uct_md_resource_desc_t **resources_p,
                                    unsigned *num_resources_p)
 {
-    return uct_ib_query_md_resources_with_pred(uct_ib_mlx5_gga_device_predicate,
-                                               resources_p, num_resources_p);
+    return uct_ib_base_query_md_resources(resources_p, num_resources_p,
+                                          uct_ib_mlx5_gga_check_device);
 }
 
 /* Forward declaration */
@@ -785,6 +783,10 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
     if (strcmp(mlx5_md->super.name, UCT_IB_MD_NAME(gga))) {
         return UCS_ERR_NO_DEVICE;
     }
+
+    ucs_assertv(ucs_test_all_flags(mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS),
+                "md %p: flags=0x%x do not have mandatory capabilities 0x%x",
+                mlx5_md, mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS);
 
     return uct_ib_device_query_ports(&mlx5_md->super.dev,
                                      UCT_IB_DEVICE_FLAG_SRQ |

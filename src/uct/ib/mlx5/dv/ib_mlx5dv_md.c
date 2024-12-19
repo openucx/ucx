@@ -1645,7 +1645,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                                                    (UCT_IB_MLX5_CAP_ODP << 1));
     status = uct_ib_mlx5_devx_general_cmd(md->super.dev.ibv_context, in,
                                           sizeof(in), out, sizeof(out),
-                                          "QUERY_HCA_CAP, ODP", UCS_NO);
+                                          "QUERY_HCA_CAP, ODP", 0);
     if (status != UCS_OK) {
         reason = "failed to query HCA capabilities";
         goto no_odp;
@@ -1730,7 +1730,7 @@ uct_ib_mlx5_devx_query_port_select(uct_ib_mlx5_md_t *md)
     UCT_IB_MLX5DV_SET(query_lag_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_LAG);
     status = uct_ib_mlx5_devx_general_cmd(md->super.dev.ibv_context, in,
                                           sizeof(in), out, sizeof(out),
-                                          "QUERY_LAG", UCS_NO);
+                                          "QUERY_LAG", 0);
     if (status != UCS_OK) {
         return UCT_IB_MLX5_LAG_INVALID_MODE;
     }
@@ -1756,7 +1756,7 @@ uct_ib_mlx5_devx_query_lag(uct_ib_mlx5_md_t *md, uint8_t *state)
     UCT_IB_MLX5DV_SET(query_lag_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_LAG);
     status = uct_ib_mlx5_devx_general_cmd(md->super.dev.ibv_context, in,
                                           sizeof(in), out, sizeof(out),
-                                          "QUERY_LAG", UCS_NO);
+                                          "QUERY_LAG", 0);
     if (status != UCS_OK) {
         return status;
     }
@@ -1782,7 +1782,8 @@ struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
     return ctx;
 }
 
-static ucs_status_t uct_ib_mlx5_devx_ctx_test_cqec(struct ibv_context *ctx)
+static ucs_status_t
+uct_ib_mlx5_devx_check_event_channel(struct ibv_context *ctx)
 {
     struct mlx5dv_devx_event_channel *event_channel;
     struct ibv_cq *cq;
@@ -1854,7 +1855,7 @@ err:
 
 ucs_status_t uct_ib_mlx5_devx_query_cap(struct ibv_context *ctx, uint32_t opmod,
                                         void *out, size_t size, char *msg_arg,
-                                        ucs_ternary_auto_value_t silent)
+                                        int silent)
 {
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)] = {};
 
@@ -1877,7 +1878,7 @@ ucs_status_t uct_ib_mlx5_devx_query_cap_2(struct ibv_context *ctx,
                       UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                               (UCT_IB_MLX5_CAP_2_GENERAL << 1));
     return uct_ib_mlx5_devx_general_cmd(ctx, in, sizeof(in), out, size,
-                                        "QUERY_HCA_CAP, CAP2", UCS_YES);
+                                        "QUERY_HCA_CAP, CAP2", 1);
 }
 
 int uct_ib_mlx5_devx_check_xgvmi(void *cap_2, const char *dev_name)
@@ -2209,7 +2210,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free_buffer;
     }
 
-    status = uct_ib_mlx5_devx_ctx_test_cqec(ctx);
+    status = uct_ib_mlx5_devx_check_event_channel(ctx);
     if (status != UCS_OK) {
         goto err_free_context;
     }
@@ -2664,8 +2665,7 @@ uct_ib_mlx5_devx_allow_xgvmi_access(uct_ib_mlx5_md_t *md,
 
     return uct_ib_mlx5_devx_general_cmd(md->super.dev.ibv_context, in,
                                         sizeof(in), out, sizeof(out),
-                                        "ALLOW_OTHER_VHCA_ACCESS",
-                                        silent ? UCS_YES : UCS_NO);
+                                        "ALLOW_OTHER_VHCA_ACCESS", silent);
 }
 
 static ucs_status_t uct_ib_mlx5_devx_xgvmi_umem_mr(uct_ib_mlx5_md_t *md,

@@ -129,7 +129,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
                       (UCT_IB_MLX5_CAP_GENERAL << 1) |
                       UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR);
     status = uct_ib_mlx5_devx_general_cmd(verbs, in, sizeof(in), out,
-                                          sizeof(out), "QUERY_HCA_CAP", UCS_YES);
+                                          sizeof(out), "QUERY_HCA_CAP", 1);
     if (status != UCS_OK) {
         goto dummy_qp_ctx_init;
     }
@@ -145,7 +145,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
                       (UCT_IB_MLX5_CAP_2_GENERAL << 1) |
                       UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR);
     status = uct_ib_mlx5_devx_general_cmd(verbs, in, sizeof(in), out,
-                                          sizeof(out), "QUERY_HCA_CAP_2", UCS_YES);
+                                          sizeof(out), "QUERY_HCA_CAP_2", 1);
     if (status != UCS_OK) {
         goto dummy_qp_ctx_init;
     }

@@ -980,7 +980,7 @@ static inline ucs_status_t
 uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
                              const void *in, size_t inlen,
                              void *out, size_t outlen,
-                             char *msg_arg, ucs_ternary_auto_value_t silent)
+                             char *msg_arg, int silent)
 {
     ucs_log_level_t level;
     ucs_status_t status;
@@ -993,15 +993,12 @@ uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
         if ((errno == EPERM) || (errno == EPROTONOSUPPORT) ||
             (errno == EOPNOTSUPP)) {
             status = UCS_ERR_UNSUPPORTED;
-            if ((silent == UCS_AUTO) || (silent == UCS_TRY)) {
-                silent = UCS_YES;
-            }
         } else {
             status = UCS_ERR_IO_ERROR;
         }
 
         syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
-        level = (silent == UCS_YES) ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+        level    = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
         ucs_log(level,
                 "mlx5dv_devx_general_cmd(%s) failed on %s, syndrome 0x%x: %m",
                 msg_arg, ibv_get_device_name(context->device), syndrome);
@@ -1181,7 +1178,7 @@ int uct_ib_mlx5_devx_check_xgvmi(void *cap_2, const char *dev_name);
 
 ucs_status_t uct_ib_mlx5_devx_query_cap(struct ibv_context *ctx, uint32_t opmod,
                                         void *out, size_t size, char *msg_arg,
-                                        ucs_ternary_auto_value_t silent);
+                                        int silent);
 
 ucs_status_t uct_ib_mlx5_devx_query_cap_2(struct ibv_context *ctx,
                                           void *out, size_t size);
