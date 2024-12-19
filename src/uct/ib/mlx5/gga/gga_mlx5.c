@@ -16,9 +16,6 @@
 
 #define UCT_GGA_MLX5_OPAQUE_BUF_LEN 64
 #define UCT_GGA_MAX_MSG_SIZE        (2u * UCS_MBYTE)
-#define UCT_GGA_MLX5_MD_CAPS        (UCT_IB_MLX5_MD_FLAG_DEVX | \
-                                     UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI | \
-                                     UCT_IB_MLX5_MD_FLAG_MMO_DMA)
 
 typedef struct {
     uct_ib_md_packed_mkey_t packed_mkey;
@@ -785,8 +782,7 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
 {
     uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
 
-    if (strcmp(mlx5_md->super.name, UCT_IB_MD_NAME(gga)) ||
-        !ucs_test_all_flags(mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS)) {
+    if (strcmp(mlx5_md->super.name, UCT_IB_MD_NAME(gga))) {
         return UCS_ERR_NO_DEVICE;
     }
 

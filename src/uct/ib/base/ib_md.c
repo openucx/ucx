@@ -819,8 +819,8 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
 
 ucs_status_t
 uct_ib_query_md_resources_with_pred(uct_ib_device_pred_t predicate,
-                               uct_md_resource_desc_t **resources_p,
-                               unsigned *num_resources_p)
+                                    uct_md_resource_desc_t **resources_p,
+                                    unsigned *num_resources_p)
 {
     int num_resources = 0;
     uct_md_resource_desc_t *resources;
