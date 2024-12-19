@@ -8,6 +8,7 @@
 realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
+trap "log_info_on_exit" EXIT
 long_test=${long_test:-no}
 
 #

@@ -11,48 +11,76 @@ pr:
 
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local
+  CENTOS7_CUDA_11_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos7-mofed5-cuda11:3
+  CENTOS8_CUDA_11_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos8-mofed5-cuda11:3
+  UBUNTU16_CUDA_11_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu16.04-mofed5-cuda11:3
+  UBUNTU18_CUDA_11_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04-mofed5-cuda11:3
+  UBUNTU20_CUDA_11_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04-mofed5-cuda11:3
+  UBUNTU22_CUDA_11_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda11:3
+  CENTOS7_CUDA_12_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos7-mofed5-cuda12:3
+  UBUNTU18_CUDA_12_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04-mofed5-cuda12:3
+  UBUNTU20_CUDA_12_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04-mofed5-cuda12:3
+  UBUNTU22_CUDA_12_X86_64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda12:3
+  CENTOS8_CUDA_11_AARCH64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/centos8-mofed5-cuda11:3
+  UBUNTU18_CUDA_11_AARCH64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu18.04-mofed5-cuda11:3
+  UBUNTU20_CUDA_11_AARCH64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu20.04-mofed5-cuda11:3
+  UBUNTU22_CUDA_11_AARCH64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu22.04-mofed5-cuda11:3
+  UBUNTU20_CUDA_12_AARCH64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu20.04-mofed5-cuda12:3
+  UBUNTU22_CUDA_12_AARCH64_IMAGE: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu22.04-mofed5-cuda12:3
 
 resources:
   containers:
     # x86_64
     - container: centos7_cuda11_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos7-mofed5-cuda11:3
-      options: $(DOCKER_OPT_VOLUMES)
+      image: $(CENTOS7_CUDA_11_X86_64_IMAGE)
+      options: $(DOCKER_OPT_VOLUMES) --env IMAGE_TAG=$(CENTOS7_CUDA_11_X86_64_IMAGE)
     - container: centos8_cuda11_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos8-mofed5-cuda11:3
-      options: $(DOCKER_OPT_VOLUMES)
+      image: $(CENTOS8_CUDA_11_X86_64_IMAGE)
+      options: $(DOCKER_OPT_VOLUMES) --env IMAGE_TAG=$(CENTOS8_CUDA_11_X86_64_IMAGE)
     - container: ubuntu16_cuda11_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu16.04-mofed5-cuda11:3
+      image: $(UBUNTU16_CUDA_11_X86_64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU16_CUDA_11_X86_64_IMAGE)
     - container: ubuntu18_cuda11_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04-mofed5-cuda11:3
+      image: $(UBUNTU18_CUDA_11_X86_64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU18_CUDA_11_X86_64_IMAGE)
     - container: ubuntu20_cuda11_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04-mofed5-cuda11:3
+      image: $(UBUNTU20_CUDA_11_X86_64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU20_CUDA_11_X86_64_IMAGE)
     - container: ubuntu22_cuda11_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda11:3
+      image: $(UBUNTU22_CUDA_11_X86_64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU22_CUDA_11_X86_64_IMAGE)
     - container: centos7_cuda12_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos7-mofed5-cuda12:3
+      image: $(CENTOS7_CUDA_12_X86_64_IMAGE)
       options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu18_cuda12_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04-mofed5-cuda12:3
+      image: $(UBUNTU18_CUDA_12_X86_64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU18_CUDA_12_X86_64_IMAGE)
     - container: ubuntu20_cuda12_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04-mofed5-cuda12:3
+      image: $(UBUNTU20_CUDA_12_X86_64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU20_CUDA_12_X86_64_IMAGE)
     - container: ubuntu22_cuda12_x86_64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda12:3
+      image: $(UBUNTU22_CUDA_12_X86_64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU22_CUDA_12_X86_64_IMAGE)
 
     # aarch64
     - container: centos8_cuda11_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/centos8-mofed5-cuda11:3
-      options: $(DOCKER_OPT_VOLUMES)
+      image: $(CENTOS8_CUDA_11_AARCH64_IMAGE)
+      options: $(DOCKER_OPT_VOLUMES) --env IMAGE_TAG=$(CENTOS8_CUDA_11_AARCH64_IMAGE)
     - container: ubuntu18_cuda11_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu18.04-mofed5-cuda11:3
+      image: $(UBUNTU18_CUDA_11_AARCH64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU18_CUDA_11_AARCH64_IMAGE)
     - container: ubuntu20_cuda11_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu20.04-mofed5-cuda11:3
+      image: $(UBUNTU20_CUDA_11_AARCH64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU20_CUDA_11_AARCH64_IMAGE)
     - container: ubuntu22_cuda11_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu22.04-mofed5-cuda11:3
+      image: $(UBUNTU22_CUDA_11_AARCH64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU22_CUDA_11_AARCH64_IMAGE)
     - container: ubuntu20_cuda12_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu20.04-mofed5-cuda12:3
+      image: $(UBUNTU20_CUDA_12_AARCH64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU20_CUDA_12_AARCH64_IMAGE)
     - container: ubuntu22_cuda12_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu22.04-mofed5-cuda12:3
+      image: $(UBUNTU22_CUDA_12_AARCH64_IMAGE)
+      options: --env IMAGE_TAG=$(UBUNTU22_CUDA_12_AARCH64_IMAGE)
 
 stages:
   - stage: Prepare

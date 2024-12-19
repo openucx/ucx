@@ -1,6 +1,7 @@
 #!/bin/bash -eExl
 realdir=$(realpath $(dirname $0))
 source ${realdir}/../../az-helpers.sh
+trap "log_info_on_exit" EXIT
 
 #
 # Prepare build environment
