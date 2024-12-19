@@ -6,7 +6,6 @@
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
-#include "config.h"
 #endif
 
 #include <uct/base/uct_iface.h>
@@ -195,7 +194,7 @@ static int uct_ib_mlx5_gga_check_device(struct ibv_device *device)
         goto out_close_ctx;
     }
 
-    cap    = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
+    cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dma_mmo_qp)) {
         goto out_close_ctx;
     }
