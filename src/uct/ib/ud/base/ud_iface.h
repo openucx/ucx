@@ -156,6 +156,7 @@ uct_ud_iface_kh_gid_hash_equal(union ibv_gid a, union ibv_gid b)
 KHASH_IMPL(uct_ud_iface_gid, union ibv_gid, char, 0,
            uct_ud_iface_kh_gid_hash_func, uct_ud_iface_kh_gid_hash_equal)
 
+KHASH_MAP_INIT_INT(uct_ud_iface_ctl_desc_hash, uct_ud_ctl_desc_t*);
 
 struct uct_ud_iface {
     uct_ib_iface_t           super;
@@ -175,7 +176,10 @@ struct uct_ud_iface {
         uint8_t                async_before_pending;
         int16_t                available;
         unsigned               unsignaled;
-        ucs_queue_head_t       outstanding_q;
+        union {
+            ucs_queue_head_t                    queue;
+            khash_t(uct_ud_iface_ctl_desc_hash) map;
+        } outstanding;
         ucs_arbiter_t          pending_q;
         ucs_queue_head_t       async_comp_q;
         ucs_twheel_t           timer;
@@ -356,8 +360,11 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
 
 void uct_ud_iface_vfs_refresh(uct_iface_h iface);
 
-void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
-                                  int is_async);
+void uct_ud_iface_send_completion_ordered(uct_ud_iface_t *iface, uint16_t sn,
+                                          int is_async);
+
+void uct_ud_iface_send_completion_unordered(uct_ud_iface_t *iface, uint16_t sn,
+                                            int is_async);
 
 unsigned
 uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
@@ -521,7 +528,24 @@ uct_ud_iface_send_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_send_skb_t 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
 {
-    ucs_queue_push(&iface->tx.outstanding_q, &cdesc->queue);
+    khiter_t it;
+    int ret;
+
+    if (uct_ib_iface_device(&iface->super)->ordered_send_comp) {
+        ucs_queue_push(&iface->tx.outstanding.queue, &cdesc->queue);
+    } else {
+        it = kh_put(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map,
+                    cdesc->sn, &ret);
+        if (ucs_unlikely((ret == UCS_KH_PUT_FAILED) ||
+                         (ret == UCS_KH_PUT_KEY_PRESENT))) {
+            ucs_fatal("failed to add cdesc ep=%p sn=%u self_skb=%p "
+                      "resent_skb=%p to tx outstanding map (err=%d)",
+                      cdesc->ep, cdesc->sn, cdesc->self_skb, cdesc->resent_skb,
+                      ret);
+        }
+
+        kh_value(&iface->tx.outstanding.map, it) = cdesc;
+    }
 }
 
 
