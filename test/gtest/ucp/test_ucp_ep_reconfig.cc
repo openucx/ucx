@@ -55,6 +55,8 @@ protected:
         bool is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
         ucp_tl_bitmap_t reduced_tl_bitmap() const;
+        ucp_tl_bitmap_t initial_tl_bitmap() const;
+        unsigned num_shm_lanes() const;
 
         ucp_worker_cfg_index_t m_cfg_index       = UCP_WORKER_CFG_INDEX_NULL;
         unsigned               m_num_reused_rscs = 0;
@@ -62,15 +64,9 @@ protected:
         bool                   m_exclude_ifaces;
     };
 
-    bool is_single_transport()
+    bool is_single_transport() const
     {
         return GetParam().transports.size() == 1;
-    }
-
-    bool has_p2p_transport()
-    {
-        return has_resource(sender(), "rc_verbs") ||
-               has_resource(sender(), "rc_mlx5");
     }
 
     void create_entity(bool push_front, bool exclude_ifaces)
@@ -103,7 +99,11 @@ public:
             UCS_TEST_SKIP_R("test requires at least 2 ifaces to work");
         }
 
-        ensure_reused_lanes_reconfigurable();
+        if (has_transport("tcp")) {
+            UCS_TEST_SKIP_R("TODO: fix lane matching functionality in case "
+                            "there's matching remote MDs and different "
+                            "sys_devs");
+        }
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -113,8 +113,6 @@ public:
     }
 
     void run(bool bidirectional = false);
-    void skip_non_p2p();
-    void ensure_reused_lanes_reconfigurable();
 
     bool reuse_lanes() const
     {
@@ -196,9 +194,27 @@ void test_ucp_ep_reconfig::entity::store_config()
     /* Calculate number of reused resources by:
      * 1) Count number of resources used in EP configuration.
      * 2) Take half of total resources to be reused. */
-    auto num_reused   = UCS_STATIC_BITMAP_POPCOUNT(ep_tl_bitmap()) / 2;
-    auto test         = static_cast<const test_ucp_ep_reconfig*>(m_test);
-    m_num_reused_rscs = test->reuse_lanes() ? num_reused : 0;
+    auto num_reused = UCS_STATIC_BITMAP_POPCOUNT(ep_tl_bitmap()) / 2;
+    auto test       = static_cast<const test_ucp_ep_reconfig*>(m_test);
+
+    if (!m_exclude_ifaces) {
+        m_num_reused_rscs = num_shm_lanes();
+    } else {
+        m_num_reused_rscs = test->reuse_lanes() ? num_reused : 0;
+    }
+}
+
+unsigned test_ucp_ep_reconfig::entity::num_shm_lanes() const
+{
+    unsigned num_shm = 0;
+
+    for (auto lane = 0; lane < ucp_ep_num_lanes(ep()); ++lane) {
+        auto rsc_idx = ucp_ep_get_rsc_index(ep(), lane);
+        num_shm     += (ucph()->tl_rscs[rsc_idx].tl_rsc.dev_type ==
+                        UCT_DEVICE_TYPE_SHM);
+    }
+
+    return num_shm;
 }
 
 ucp_tl_bitmap_t
@@ -223,10 +239,38 @@ test_ucp_ep_reconfig::entity::ep_tl_bitmap(unsigned max_num_rscs) const
     return tl_bitmap;
 }
 
+ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::initial_tl_bitmap() const
+{
+    auto test = static_cast<const test_ucp_ep_reconfig*>(m_test);
+
+    if (!test->is_single_transport()) {
+        return ucp_tl_bitmap_max;
+    }
+
+    /* For single transport, half of the resources should be reserved for
+     * receiver side to use */
+    ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    size_t num_tls            = 0;
+    ucp_rsc_index_t rsc_idx;
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_idx, &ucph()->tl_bitmap) {
+        if (++num_tls > (ucph()->num_tls / 2)) {
+            UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
+        }
+    }
+
+    return tl_bitmap;
+}
+
 ucp_tl_bitmap_t test_ucp_ep_reconfig::entity::reduced_tl_bitmap() const
 {
-    if ((ep() == NULL) || !m_exclude_ifaces) {
+    if (!m_exclude_ifaces) {
         return ucp_tl_bitmap_max;
+    }
+
+    if (ep() == NULL) {
+        /* Handle first entity's bitmap */
+        return initial_tl_bitmap();
     }
 
     /* Use only resources not already in use, or part of reuse bitmap */
@@ -355,56 +399,32 @@ void test_ucp_ep_reconfig::run(bool bidirectional)
     r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
 }
 
-void test_ucp_ep_reconfig::skip_non_p2p()
+UCS_TEST_P(test_ucp_ep_reconfig, basic)
 {
-    if (!has_p2p_transport()) {
-        UCS_TEST_SKIP_R("No p2p TLs available, config will be non-wireup");
-    }
-}
-
-void test_ucp_ep_reconfig::ensure_reused_lanes_reconfigurable()
-{
-    if (!reuse_lanes()) {
-        return;
+    if (has_transport("shm")) {
+        UCS_TEST_SKIP_R("TODO: add support for reconfiguration of separate "
+                        "wireup and AM lanes");
     }
 
-    if (has_transport("tcp") || has_transport("dc_x") || has_transport("shm")) {
-        UCS_TEST_SKIP_R("non wired-up lanes are not supported yet");
-    }
-}
-
-/* TODO: Remove skip condition after next PRs are merged. */
-UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, basic, !has_transport("rc"))
-{
     run();
 }
 
 UCS_TEST_P(test_ucp_ep_reconfig, request_reset, "PROTO_REQUEST_RESET=y")
 {
-    if (is_single_transport()) {
-        /* One side will consume all ifaces and the other side will have no ifaces left to use */
-        UCS_TEST_SKIP_R("exclude_iface requires at least 2 transports to work "
-                        "(for example DC + SHM)");
-    }
-
-    skip_non_p2p();
     run();
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, resolve_remote_id, is_self(),
-                     "MAX_RNDV_LANES=0")
+UCS_TEST_P(test_ucp_ep_reconfig, resolve_remote_id)
 {
-    if (has_transport("tcp")) {
-        UCS_TEST_SKIP_R("asymmetric setup is not supported for this transport "
-                        "due to a reachability issue - only matching "
-                        "interfaces can connect");
+    if (has_transport("dc_x")) {
+        /* Avoid creating odd number of lanes due to AM lane separation */
+        modify_config("MAX_RNDV_LANES", "0");
     }
 
     run(true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_ep_reconfig);
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_reconfig, rc_x_v, "rc");
 
 class test_reconfig_asymmetric : public test_ucp_ep_reconfig {
 protected:
@@ -420,23 +440,17 @@ protected:
     }
 };
 
-/* Will be relevant when reuse + non-wireup is supported */
-UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, basic, has_transport("shm"))
+UCS_TEST_P(test_reconfig_asymmetric, basic)
 {
     run();
 }
 
-/* Will be relevant when reuse + non-wireup is supported */
-UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, request_reset,
-                     has_transport("shm"), "PROTO_REQUEST_RESET=y")
+UCS_TEST_P(test_reconfig_asymmetric, request_reset, "PROTO_REQUEST_RESET=y")
 {
-    skip_non_p2p();
     run();
 }
 
-/* SHM + single lane won't trigger reconfig. */
-UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, resolve_remote_id,
-                     has_transport("shm") || is_self(), "MAX_RNDV_LANES=0")
+UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
 {
     run(true);
 }
