@@ -110,7 +110,7 @@ resource_speed::resource_speed(uct_component_h component,
 std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 
     static std::vector<uct_test::md_resource> all_md_resources;
-    static int populated = false;
+    static bool populated = false;
 
     if (!populated) {
         uct_component_h *uct_components;
@@ -151,13 +151,13 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
                                          &component_attr_resouces);
             ASSERT_UCS_OK(status);
 
-            int resources_avail = (str != NULL) ? atoi(str) : INT_MAX;
-            for (unsigned md_index = 0;
-                 md_index < md_rsc.cmpt_attr.md_resource_count; ++md_index) {
-                if (resources_avail-- < 1) {
-                    break;
-                }
+            int md_resource_count = md_rsc.cmpt_attr.md_resource_count;
+            if (str != NULL) {
+                md_resource_count = ucs_min(md_resource_count, atoi(str));
+            }
 
+            for (unsigned md_index = 0;
+                 md_index < md_resource_count; ++md_index) {
                 md_rsc.rsc_desc = md_resources[md_index];
                 all_md_resources.push_back(md_rsc);
             }
