@@ -110,11 +110,15 @@ resource_speed::resource_speed(uct_component_h component,
 std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 
     static std::vector<uct_test::md_resource> all_md_resources;
+    static int populated = false;
 
-    if (all_md_resources.empty()) {
+    if (!populated) {
         uct_component_h *uct_components;
         unsigned num_components;
         ucs_status_t status;
+
+        const char *str = getenv("GTEST_MAX_COMP_RESOURCES");
+        populated       = true;
 
         status = uct_query_components(&uct_components, &num_components);
         ASSERT_UCS_OK(status);
@@ -147,8 +151,13 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
                                          &component_attr_resouces);
             ASSERT_UCS_OK(status);
 
+            int resources_avail = (str != NULL) ? atoi(str) : INT_MAX;
             for (unsigned md_index = 0;
                  md_index < md_rsc.cmpt_attr.md_resource_count; ++md_index) {
+                if (resources_avail-- < 1) {
+                    break;
+                }
+
                 md_rsc.rsc_desc = md_resources[md_index];
                 all_md_resources.push_back(md_rsc);
             }
@@ -384,16 +393,10 @@ void uct_test::set_cm_resources(std::vector<resource>& all_resources)
 
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name)
 {
-    static bool populated = false;
+    static bool tcp_fastest_dev = (getenv("GTEST_UCT_TCP_FASTEST_DEV") != NULL);
     static std::vector<resource> all_resources;
 
-    if (!populated) {
-        bool tcp_fastest_dev = (getenv("GTEST_UCT_TCP_FASTEST_DEV") != NULL);
-        const char *str      = getenv("GTEST_UCT_RSC_NAME");
-        std::string dev_name = (str != NULL) ? str : "";
-
-        populated = true;
-
+    if (all_resources.empty()) {
         ucs_async_context_t *async;
         uct_worker_h worker;
         ucs_status_t status;
@@ -435,11 +438,6 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             resource_speed tcp_fastest_rsc;
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
-                if (!dev_name.empty() &&
-                    (tl_resources[j].dev_name != dev_name)) {
-                    continue;
-                }
-
                 if (tcp_fastest_dev && (std::string("tcp") ==
                                         tl_resources[j].tl_name)) {
                     resource_speed rsc(iter->cmpt, iter->cmpt_attr, worker, md,
