@@ -23,6 +23,9 @@
 #include <ucs/async/async.h>
 #include <ucs/debug/log.h>
 #include <string.h>
+#ifdef __SANITIZE_ADDRESS__
+#  include <sanitizer/asan_interface.h>
+#endif
 
 
 #define UCT_DC_MLX5_MAX_TX_CQ_LEN (16 * UCS_MBYTE)
@@ -135,10 +138,10 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),
      UCS_CONFIG_TYPE_UINT},
 
-    {"DCIS_INITIAL_CAPACITY", "inf",
+    {"DCIS_INITIAL_CAPACITY", "auto",
      "Initial capacity of DCIs array.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dcis_initial_capacity),
-     UCS_CONFIG_TYPE_UINT},
+     UCS_CONFIG_TYPE_ULUNITS},
 
     {NULL}
 };
@@ -271,14 +274,51 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
     uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress, flags);
 }
 
+static void uct_dc_mlx5_asan_cleanup_old_dcis_buffer(uct_dc_mlx5_iface_t *iface)
+{
+#ifdef __SANITIZE_ADDRESS__
+    if (iface->old_dcis_buffer != NULL) {
+        ASAN_UNPOISON_MEMORY_REGION(iface->old_dcis_buffer,
+                                    iface->old_dcis_buffer_size);
+        ucs_free(iface->old_dcis_buffer);
+    }
+#endif
+}
+
+void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface)
+{
+#ifdef __SANITIZE_ADDRESS__
+    size_t buffer_size, num_dcis;
+    uct_dc_dci_t *old_buffer, *new_buffer;
+
+    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
+        /* DCIs arbiter group elements might be scheduled in tx_waitq. 
+           TODO: update tx_waitq to contain the new DCIs arbiter groups. 
+        */
+        return;
+    }
+
+    buffer_size = sizeof(uct_dc_dci_t) * ucs_array_capacity(&iface->tx.dcis);
+    num_dcis    = ucs_array_length(&iface->tx.dcis);
+    old_buffer  = ucs_array_begin(&iface->tx.dcis);
+    new_buffer  = ucs_malloc(buffer_size, "ASAN relocated dcis buffer");
+
+    uct_dc_mlx5_iface_dcis_array_copy(new_buffer, old_buffer, num_dcis);
+
+    ucs_array_begin(&iface->tx.dcis) = new_buffer;
+    ASAN_POISON_MEMORY_REGION(old_buffer, buffer_size);
+    uct_dc_mlx5_asan_cleanup_old_dcis_buffer(iface);
+    iface->old_dcis_buffer      = old_buffer;
+    iface->old_dcis_buffer_size = buffer_size;
+#endif
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
 {
     uct_dci_index_t dci_index;
     struct mlx5_cqe64 *cqe;
     uint16_t hw_ci;
-    uct_dc_dci_t *dci;
-    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super,
                               &iface->super.cq[UCT_IB_DIR_TX], poll_flags,
@@ -292,24 +332,25 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
     ucs_memory_cpu_load_fence();
 
     dci_index = uct_dc_mlx5_iface_dci_find(iface, cqe);
-    dci       = uct_dc_mlx5_iface_dci(iface, dci_index);
-    ucs_assert(uct_dc_mlx5_is_dci_valid(dci));
-    txqp      = &dci->txqp;
-    txwq      = &dci->txwq;
+    ucs_assert(uct_dc_mlx5_is_dci_valid(uct_dc_mlx5_iface_dci(iface, dci_index)));
     hw_ci     = ntohs(cqe->wqe_counter);
 
-    ucs_trace_poll("dc iface %p tx_cqe: dci[%d] txqp %p hw_ci %d",
-                   iface, dci_index, txqp, hw_ci);
+    ucs_trace_poll("dc iface %p tx_cqe: dci[%d] txqp %p hw_ci %d", iface,
+                   dci_index, &uct_dc_mlx5_iface_dci(iface, dci_index)->txqp,
+                   hw_ci);
 
-    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
-    uct_dc_mlx5_update_tx_res(iface, txwq, txqp, hw_ci);
+    UCT_DC_MLX5_ASAN_RELOCATE_DCIS_ARRAY(iface);
+
+    UCT_RC_MLX5_TXQP_PROCESS_TX_CQE(&uct_dc_mlx5_iface_dci(iface, dci_index)->txqp, cqe, hw_ci);
+    uct_dc_mlx5_update_tx_res(iface, dci_index, hw_ci);
 
     /**
      * Note: DCI is released after handling completion callbacks,
      *       to avoid OOO sends when this is the only missing resource.
      */
     uct_dc_mlx5_iface_dci_put(iface, dci_index);
-    uct_dc_mlx5_iface_progress_pending(iface, dci->pool_index);
+    uct_dc_mlx5_iface_progress_pending(
+            iface, uct_dc_mlx5_iface_dci(iface, dci_index)->pool_index);
     uct_dc_mlx5_iface_check_tx(iface);
     uct_ib_mlx5_update_db_cq_ci(&iface->super.cq[UCT_IB_DIR_TX]);
 
@@ -882,8 +923,6 @@ ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
                                     iface, size);
                           return UCS_ERR_NO_MEMORY, &old_buffer_p);
     if (old_buffer_p) {
-        /* FIXME: resizing the array can cause use-after-free in certain scenarios */
-        ucs_diag("currently DCI array reallocation is unsafe");
         uct_dc_mlx5_iface_dcis_array_copy(iface->tx.dcis.buffer, old_buffer_p,
                                           old_length);
         ucs_array_buffer_free(old_buffer_p);
@@ -1597,9 +1636,20 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     self->tx.policy = config->tx_policy;
     self->tx.ndci   = uct_dc_mlx5_iface_is_hw_dcs(self) ? 1 : config->ndci;
-    self->tx.dcis_initial_capacity =
-            ucs_min(config->dcis_initial_capacity,
-                    self->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
+    if (config->dcis_initial_capacity == UCS_ULUNITS_AUTO) {
+        if (uct_dc_mlx5_iface_is_dci_rand(self)) {
+            /* TODO: remove when splicing arb_group upon dcis array resize */
+            self->tx.dcis_initial_capacity = self->tx.ndci *
+                                             UCT_DC_MLX5_IFACE_MAX_DCI_POOLS;
+        } else {
+            self->tx.dcis_initial_capacity = 1;
+        }
+    } else {
+        self->tx.dcis_initial_capacity =
+                ucs_min(config->dcis_initial_capacity,
+                        self->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
+    }
+
     self->tx.hybrid_hw_dci = uct_dc_mlx5_iface_is_hybrid(self) ?
                                      UCT_DC_MLX5_HW_DCI_INDEX :
                                      -1;
@@ -1750,6 +1800,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     uct_rc_mlx5_iface_common_prepost_recvs(&self->super);
 
+#ifdef __SANITIZE_ADDRESS__
+    self->old_dcis_buffer = NULL;
+#endif
+
     ucs_debug("created dc iface %p", self);
 
     return UCS_OK;
@@ -1785,6 +1839,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     ucs_callbackq_remove_oneshot(&worker->progress_q, self,
                                  uct_dc_mlx5_ep_dci_release_remove_filter,
                                  self);
+    uct_dc_mlx5_asan_cleanup_old_dcis_buffer(self);
     uct_dc_mlx5_iface_dcis_destroy(self);
 }
 
