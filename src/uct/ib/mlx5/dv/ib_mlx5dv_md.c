@@ -2240,7 +2240,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     status = uct_ib_mlx5_devx_query_cap(ctx,
                                         UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                         (UCT_IB_MLX5_CAP_GENERAL << 1),
-                                        out, out_len, "QUERY_HCA_CAP", UCS_AUTO);
+                                        out, out_len, "QUERY_HCA_CAP", 0);
     if (status != UCS_OK) {
         goto err_lru_cleanup;
     }
@@ -2374,7 +2374,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                             UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                             (UCT_IB_MLX5_CAP_ATOMIC << 1),
                                             out, out_len,
-                                            "QUERY_HCA_CAP, ATOMIC", UCS_NO);
+                                            "QUERY_HCA_CAP, ATOMIC", 0);
         if (status != UCS_OK) {
             goto err_lru_cleanup;
         }
