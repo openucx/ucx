@@ -124,7 +124,6 @@
  * Fixed CUDA IPC reachability check
  * Fixed crash in MPI_Finalize when CUDA context is destroyed
  * Always require rcache by default for GDR copy
- * Fixed md_close when no rcache
  * Fixed crash GDR copy in UCT MD close when rcache was not enabled
  * Fixed CUDA copy memory domain allocations
  * Fixed multiple tests for gdr_copy transport
