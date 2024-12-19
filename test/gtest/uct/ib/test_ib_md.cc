@@ -310,10 +310,7 @@ UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
     test_smkey_reg_atomic();
 }
 
-UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
-                     has_ksm() &&
-                             check_invalidate_support(UCT_MD_MEM_ACCESS_RMA),
-                     "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
+UCS_TEST_P(test_ib_md, mt_fail, "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
 {
     size_t size             = UCS_MBYTE;
     const size_t align_mask = (8 * UCS_KBYTE) - 1;
@@ -321,6 +318,10 @@ UCS_TEST_SKIP_COND_P(test_ib_md, mt_fail,
     size_t upper_size       = (size / 2) & ~align_mask;
     void *start, *mid, *last;
     uct_mem_h memh;
+
+    if (!has_ksm()) {
+        UCS_TEST_SKIP_R("KSM is required for MT registration");
+    }
 
     auto mmap_anon = [](void *ptr, size_t size) {
         ptr = mmap(ptr, size, PROT_READ | PROT_WRITE,
