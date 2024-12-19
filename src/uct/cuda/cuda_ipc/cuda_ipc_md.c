@@ -415,7 +415,7 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
     static int mnnvl_supported = 0;
 #else
     static int mnnvl_supported = -1;
-    nvmlGpuFabricInfoV_t fabric_info;
+    nvmlGpuFabricInfo_t fabric_info;
     nvmlDevice_t device;
     ucs_status_t status;
     char buf[64];
@@ -435,19 +435,23 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
         goto out_not_supported;
     }
 
-    fabric_info.version = nvmlGpuFabricInfo_v2;
-    status              = UCT_NVML_FUNC_LOG_ERR(
-                             nvmlDeviceGetGpuFabricInfoV(device, &fabric_info));
+    /**
+     * nvmlDeviceGetGpuFabricInfo was deprecated in CUDA 12.4.0. The old API is
+     * used to ensure compatibility of the UCX. Thus, UCX built with CUDA 12.4.0
+     * or newer can be used on a system with older CUDA 12 versions.
+     * TODO: Replace the deprecated API along with the major CUDA release.
+     */
+    status = UCT_NVML_FUNC_LOG_ERR(
+            nvmlDeviceGetGpuFabricInfo(device, &fabric_info));
     if (status != UCS_OK) {
         goto out_not_supported;
     }
 
-    ucs_debug("fabric_info: healthmask=%u state=%u status=%u clique=%u uuid=%s",
-              fabric_info.healthMask, fabric_info.state, fabric_info.status,
-              fabric_info.cliqueId,
-              ucs_str_dump_hex(
-                  fabric_info.clusterUuid, NVML_GPU_FABRIC_UUID_LEN, buf,
-                  sizeof(buf), SIZE_MAX));
+    ucs_debug("fabric_info: state=%u status=%u uuid=%s", fabric_info.state,
+              fabric_info.status,
+              ucs_str_dump_hex(fabric_info.clusterUuid,
+                               NVML_GPU_FABRIC_UUID_LEN, buf, sizeof(buf),
+                               SIZE_MAX));
 
     if ((fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
         (fabric_info.status == NVML_SUCCESS)) {
