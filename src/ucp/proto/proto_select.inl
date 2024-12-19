@@ -81,6 +81,7 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
                         size_t msg_length)
 {
     const ucp_proto_select_elem_t *select_elem;
+    const ucp_proto_threshold_elem_t *thresh;
     ucp_proto_select_key_t key;
     khiter_t khiter;
 
@@ -108,7 +109,11 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
         proto_select->cache.value = select_elem;
     }
 
-    return ucp_proto_select_thresholds_search(select_elem, msg_length);
+    thresh = ucp_proto_select_thresholds_search(select_elem, msg_length);
+#ifdef ENABLE_STATS
+    ++((ucp_proto_threshold_elem_t *)thresh)->proto_config.selected_count;
+#endif
+    return thresh;
 }
 
 /*

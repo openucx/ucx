@@ -476,6 +476,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Enable printing protocols information. The value is interpreted as follows:\n"
    " 'y'          : Print information for all protocols\n"
    " 'n'          : Do not print any protocol information\n"
+   " used         : Print information for used protocols\n"
    " glob_pattern : Print information for operations matching the glob pattern.\n"
    "                For example: '*tag*gpu*', '*put*fast*host*'",
    ucs_offsetof(ucp_context_config_t, proto_info), UCS_CONFIG_TYPE_STRING},
