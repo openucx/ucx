@@ -534,6 +534,8 @@ uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md, const void *address)
 
         return;
     }
+#else
+    (void)ctx_set_flags_func;
 #endif
 
     /* Synchronize for DMA for legacy memory types*/
