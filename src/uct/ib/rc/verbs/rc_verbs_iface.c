@@ -175,7 +175,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ucs_trace_poll("rc_verbs iface %p tx_wc wrid 0x%lx ep %p qpn 0x%x count %d",
                        iface, wc[i].wr_id, ep, wc[i].qp_num, count);
 
-        uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci + count);
+        UCT_RC_TXQP_COMPLETION_DESC(&ep->super.txqp, ep->txcnt.ci + count);
         ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
                                    &ep->super.arb_group);
         uct_rc_verbs_update_tx_res(&iface->super, ep, count);
