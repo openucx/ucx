@@ -257,6 +257,7 @@ static ucs_status_t
 uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    size_t iface_mtu      = uct_ib_mtu_value(iface->super.config.path_mtu);
     ucs_status_t status;
 
     status = uct_ib_iface_query(&iface->super, UCT_IB_RETH_LEN, iface_attr);
@@ -280,11 +281,13 @@ uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.max_zcopy       = UCT_GGA_MAX_MSG_SIZE;
     iface_attr->cap.put.max_iov         = 1;
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.put.align_mtu       = iface_mtu;
 
     iface_attr->cap.get.min_zcopy       = 1;
     iface_attr->cap.get.max_zcopy       = iface->config.max_get_zcopy;
     iface_attr->cap.get.max_iov         = 1;
     iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.get.align_mtu       = iface_mtu;
 
     iface_attr->latency.c += 200e-9;
 
@@ -678,7 +681,8 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                               &init_attr);
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(
-            &self->super, UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC,
+            &self->super,
+            ucs_min(md->dp_ordering_cap.rc, UCT_IB_MLX5_DP_ORDERING_OOO_RW),
             &config->rc_mlx5_common, "gga");
     if (status != UCS_OK) {
         return status;

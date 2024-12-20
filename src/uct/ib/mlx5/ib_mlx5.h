@@ -208,17 +208,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
     /* Device supports implicit ODP with PCI relaxed order */
     UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(18),
-    /* RoCE supports out-of-order RDMA for RC */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC = UCS_BIT(19),
-    /* RoCE supports out-of-order RDMA for DC */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC = UCS_BIT(20),
-    /* RoCE supports forcing ordering configuration */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(21),
-    /* Device supports DDP (OOO data placement)*/
-    UCT_IB_MLX5_MD_FLAG_DDP                   = UCS_BIT(22),
+    /* Device supports forcing ordering configuration */
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(19),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 23,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -393,6 +387,16 @@ KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
 #endif
 
 
+typedef enum {
+    /* IBTA-compliant ordering semantics */
+    UCT_IB_MLX5_DP_ORDERING_IBTA    = 0x0,
+    /* Out-of-order RDMA reads and writes */
+    UCT_IB_MLX5_DP_ORDERING_OOO_RW  = 0x1,
+    /* Out-of-order RDMA read/write/send/recv (DDP) */
+    UCT_IB_MLX5_DP_ORDERING_OOO_ALL = 0x2,
+} uct_ib_mlx5_dp_ordering_t;
+
+
 /**
  * MLX5 IB memory domain.
  */
@@ -438,6 +442,12 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  max_rd_atomic_dc;
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
+    struct {
+        /* Max dp ordering level per transport, 
+           as listed in uct_ib_mlx5_dp_ordering_t */
+        uint8_t              rc;
+        uint8_t              dc;
+    } dp_ordering_cap;
 } uct_ib_mlx5_md_t;
 
 
@@ -992,9 +1002,6 @@ uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p);
-
-void uct_ib_mlx5_devx_set_qpc_dp_ordering(
-        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo);
 
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,

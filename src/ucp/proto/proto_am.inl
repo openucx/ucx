@@ -22,6 +22,14 @@
 #define UCP_STATUS_PENDING_SWITCH (UCS_ERR_LAST - 1)
 
 
+/**
+ * AM specific internal request flags
+ */
+enum ucp_request_am_internal_flags {
+    UCP_REQUEST_AM_FLAG_HEADER_SENT = UCS_BIT(0)
+};
+
+
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -39,6 +47,25 @@ ucp_proto_am_handle_user_header_send_status(ucp_request_t *req,
     }
 
     return send_status;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_am_is_first_fragment(const ucp_request_t *req)
+{
+    if (req->send.msg_proto.am.internal_flags &
+        UCP_REQUEST_AM_FLAG_HEADER_SENT) {
+        return 0;
+    }
+
+    ucs_assertv(req->send.state.dt_iter.offset == 0, "req=%p offset=%zu", req,
+                req->send.state.dt_iter.offset);
+    return 1;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_am_set_middle_fragment(ucp_request_t *req)
+{
+    req->send.msg_proto.am.internal_flags |= UCP_REQUEST_AM_FLAG_HEADER_SENT;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_am_release_user_header(ucp_request_t *req)

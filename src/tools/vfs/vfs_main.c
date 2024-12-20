@@ -191,10 +191,15 @@ int vfs_mount(int pid)
     }
 
     ret = mkdir(mountpoint, S_IRWXU);
-    if ((ret < 0) && (errno != EEXIST)) {
-        ret = -errno;
-        vfs_error("failed to create directory '%s': %m", mountpoint);
-        goto out_free_mountpoint;
+    if (ret < 0) {
+        if (errno == EEXIST) {
+            /* Directory already exists */
+            ret = 0;
+        } else {
+            ret = -errno;
+            vfs_error("failed to create directory '%s': %m", mountpoint);
+            goto out_free_mountpoint;
+        }
     }
 
     /* Mount a new FUSE filesystem in the mount point directory */

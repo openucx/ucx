@@ -39,6 +39,11 @@ enum {
     UCP_MEMH_FLAG_IMPORTED     = UCS_BIT(0),
     UCP_MEMH_FLAG_MLOCKED      = UCS_BIT(1),
     UCP_MEMH_FLAG_HAS_AUTO_GVA = UCS_BIT(2),
+
+    /**
+     * Avoid using registration cache for the particular memory region.
+     */
+    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3)
 };
 
 
@@ -112,6 +117,17 @@ typedef struct {
 } ucp_mem_dummy_handle_t;
 
 
+/**
+ * Memory type pack/unpack registration context
+ */
+typedef struct {
+    ucp_md_index_t    md_index; /* index of MD */
+    ucp_mem_h         ucp_memh; /* memh from rcache if MD is cacheable */
+    uct_mem_h         uct_memh; /* memh for specific MD */
+    uct_rkey_bundle_t rkey_bundle; /* rkey bundle from memh */
+} ucp_mtype_pack_context_t;
+
+
 extern ucp_mem_dummy_handle_t ucp_mem_dummy_handle;
 
 extern const ucp_memory_info_t ucp_mem_info_unknown;
@@ -162,11 +178,11 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,
-                                      ucp_md_index_t md_index, ucp_mem_h memh,
-                                      uct_rkey_bundle_t *rkey_bundle);
+                                      ucp_md_index_t md_index,
+                                      ucp_mtype_pack_context_t *pack_context);
 
-void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucp_md_index_t md_index,
-                                ucp_mem_h memh, uct_rkey_bundle_t *rkey_bundle);
+void ucp_mem_type_unreg_buffers(ucp_worker_h worker,
+                                const ucp_mtype_pack_context_t *pack_context);
 
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                size_t length, ucs_memory_type_t mem_type,

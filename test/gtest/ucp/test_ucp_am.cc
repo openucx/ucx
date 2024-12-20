@@ -366,6 +366,16 @@ protected:
         return UCS_MEMORY_TYPE_HOST;
     }
 
+    virtual bool tx_memtype_async() const
+    {
+        return false;
+    }
+
+    virtual bool rx_memtype_async() const
+    {
+        return false;
+    }
+
     void reset_counters()
     {
         m_send_counter = 0;
@@ -495,8 +505,9 @@ protected:
                            unsigned flags = 0, unsigned data_cb_flags = 0,
                            uint32_t op_attr_mask = 0)
     {
-        mem_buffer sbuf(size, tx_memtype());
-        sbuf.pattern_fill(SEED);
+        auto sbuf = mem_buffer::allocate(size, tx_memtype(),
+                                         tx_memtype_async());
+        mem_buffer::pattern_fill(sbuf, size, SEED, tx_memtype());
         m_hdr.resize(header_size);
         ucs::fill_random(m_hdr);
         reset_counters();
@@ -505,10 +516,10 @@ protected:
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this,
                             data_cb_flags);
 
-        ucp::data_type_desc_t sdt_desc(m_dt, sbuf.ptr(), size);
+        ucp::data_type_desc_t sdt_desc(m_dt, sbuf, size);
 
         if (prereg()) {
-            memh = sender().mem_map(sbuf.ptr(), size);
+            memh = sender().mem_map(sbuf, size);
         }
 
         ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag() | flags,
@@ -522,6 +533,7 @@ protected:
             sender().mem_unmap(memh);
         }
 
+        mem_buffer::release(sbuf, tx_memtype(), tx_memtype_async());
         EXPECT_EQ(m_recv_counter, m_send_counter);
     }
 
@@ -562,7 +574,8 @@ protected:
     {
         ucs_status_t status;
 
-        m_rx_buf = mem_buffer::allocate(length, rx_memtype());
+        m_rx_buf = mem_buffer::allocate(length, rx_memtype(),
+                                        rx_memtype_async());
         mem_buffer::pattern_fill(m_rx_buf, length, 0ul, rx_memtype());
 
         m_rx_dt_desc.make(m_rx_dt, m_rx_buf, length);
@@ -638,7 +651,7 @@ protected:
         if (m_rx_memh != NULL) {
             receiver().mem_unmap(m_rx_memh);
         }
-        mem_buffer::release(m_rx_buf, rx_memtype());
+        mem_buffer::release(m_rx_buf, rx_memtype(), rx_memtype_async());
     }
 
     static ucs_status_t am_data_cb(void *arg, const void *header,
@@ -1358,10 +1371,7 @@ public:
 private:
     static void base_test_generator(variant_vec_t &variants)
     {
-        // 1. Do not instantiate test case if no GPU memtypes supported.
-        // 2. Do not exclude host memory type, because this generator is used by
-        //    test_ucp_am_nbx_rndv_memtype class to generate combinations like
-        //    host<->cuda, cuda-managed<->host, etc.
+        // Do not instantiate test case if no GPU memtypes supported.
         if (!mem_buffer::is_gpu_supported()) {
             return;
         }
@@ -1582,11 +1592,8 @@ private:
     }
 };
 
-/* Skip tests for ud_v and ud_x because of unstable reproducible failures during
- * roce on worker CI jobs. The test fails with invalid am_bcopy length. */
-UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
-                     is_proto_enabled() && has_any_transport({"ud_v", "ud_x"}),
-                     "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, short_bcopy_send, "ZCOPY_THRESH=-1",
+           "RNDV_THRESH=-1")
 {
     test_datatypes([&]() {
         test_am(1);
@@ -1595,9 +1602,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
     });
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, zcopy_send,
-                     is_proto_enabled() && has_any_transport({"ud_v", "ud_x"}),
-                     "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, zcopy_send, "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
 {
     skip_no_am_lane_caps(UCT_IFACE_FLAG_AM_ZCOPY, "am_zcopy is not supported");
     test_datatypes([&]() {
@@ -1627,14 +1632,18 @@ public:
                                  void *data, size_t length,
                                  const ucp_am_recv_param_t *rx_param)
     {
-        EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
-        EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
-
         ucs_status_t status = test_ucp_am_nbx::am_data_handler(header,
                                                                header_length,
                                                                data, length,
                                                                rx_param);
         EXPECT_FALSE(UCS_STATUS_IS_ERR(status));
+
+        if (!m_check_recv_rndv_flags) {
+            return status;
+        }
+
+        EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
+        EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
 
         return UCS_INPROGRESS;
     }
@@ -1732,8 +1741,16 @@ public:
         return cfg->rndv_frag_size[mem_type];
     }
 
+    void check_rma_support()
+    {
+        if (!sender().is_rndv_supported()) {
+            UCS_TEST_SKIP_R("RNDV is not supported");
+        }
+    }
+
 protected:
     static constexpr unsigned RNDV_THRESH = 128;
+    bool m_check_recv_rndv_flags          = true;
     ucs_status_t m_status;
     bool m_am_recv_cb_invoked;
 };
@@ -1745,11 +1762,13 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_get, "RNDV_SCHEME=get_zcopy")
 {
+    check_rma_support();
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_put, "RNDV_SCHEME=put_zcopy")
 {
+    check_rma_support();
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
@@ -1890,10 +1909,7 @@ class test_ucp_am_nbx_rndv_memtype : public test_ucp_am_nbx_rndv {
 public:
     static void get_test_variants(variant_vec_t &variants)
     {
-        // Test will not be instantiated if no GPU memtypes supported, because
-        // of the check for supported memory types in
-        // test_ucp_am_nbx_eager_memtype::get_test_variants
-        return test_ucp_am_nbx_eager_memtype::get_test_variants(variants);
+        add_variant_memtypes(variants, base_test_generator);
     }
 
     void init() override
@@ -1902,6 +1918,29 @@ public:
     }
 
 private:
+    static void base_test_generator(variant_vec_t &variants)
+    {
+        // Do not instantiate test case if no GPU memtypes supported.
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        add_variant_memtypes(variants,
+                             test_ucp_am_nbx_prereg::get_test_variants);
+    }
+
+    static void
+    add_variant_memtypes(variant_vec_t &variants, get_variants_func_t generator)
+    {
+        ucp_test::add_variant_memtypes(variants, generator);
+
+        if (mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA) &&
+            mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+            add_variant_values(variants, generator, MEMORY_TYPE_CUDA_ASYNC,
+                               "cuda-async");
+        }
+    }
+
     unsigned get_send_flag() const override
     {
         return test_ucp_am_nbx_rndv::get_send_flag() | UCP_AM_SEND_FLAG_RNDV;
@@ -1909,13 +1948,43 @@ private:
 
     ucs_memory_type_t tx_memtype() const override
     {
-        return static_cast<ucs_memory_type_t>(get_variant_value(2));
+        return variant_index_to_mem_type(2);
     }
 
     ucs_memory_type_t rx_memtype() const override
     {
-        return static_cast<ucs_memory_type_t>(get_variant_value(3));
+        return variant_index_to_mem_type(3);
     }
+
+    bool tx_memtype_async() const override
+    {
+        return get_variant_value(2) == MEMORY_TYPE_CUDA_ASYNC;
+    }
+
+    bool rx_memtype_async() const override
+    {
+        return get_variant_value(3) == MEMORY_TYPE_CUDA_ASYNC;
+    }
+
+    ucs_memory_type_t variant_index_to_mem_type(unsigned index) const
+    {
+        auto variant_value = get_variant_value(index);
+        switch (variant_value) {
+        case UCS_MEMORY_TYPE_HOST:
+        case UCS_MEMORY_TYPE_CUDA:
+        case UCS_MEMORY_TYPE_CUDA_MANAGED:
+        case UCS_MEMORY_TYPE_ROCM:
+        case UCS_MEMORY_TYPE_ROCM_MANAGED:
+            return static_cast<ucs_memory_type_t>(variant_value);
+        case MEMORY_TYPE_CUDA_ASYNC:
+            return UCS_MEMORY_TYPE_CUDA;
+        default:
+            UCS_TEST_ABORT("invalid memory type: " << variant_value);
+            return UCS_MEMORY_TYPE_HOST;
+        }
+    }
+
+    static const int MEMORY_TYPE_CUDA_ASYNC = UCS_MEMORY_TYPE_LAST + 1;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
@@ -2084,6 +2153,8 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_host_frag,
            "RNDV_FRAG_MEM_TYPE=host")
 {
     // Host memory should not be pipelined thru host staging buffers
+    m_check_recv_rndv_flags = false;
+
     test_ppln_send(UCS_MEMORY_TYPE_HOST, 2, 0);
 }
 
@@ -2093,6 +2164,24 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_buff_cuda_frag,
     const size_t num_frags = 2;
 
     set_mem_type(UCS_MEMORY_TYPE_CUDA);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, empty_rndv_frag_mem_type,
+           "RNDV_FRAG_MEM_TYPE=")
+{
+    m_check_recv_rndv_flags = false;
+
+    set_mem_type(UCS_MEMORY_TYPE_CUDA);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, 2, 0);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_managed_buff,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    set_mem_type(UCS_MEMORY_TYPE_CUDA_MANAGED);
     test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
 }
 

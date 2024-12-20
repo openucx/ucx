@@ -239,7 +239,9 @@ enum {
     /* Indicates that TX cq len in uct_ib_iface_init_attr_t is specified per
      * each IB path. Therefore IB interface constructor would need to multiply
      * TX CQ len by the number of IB paths (when it is properly initialized). */
-    UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2)
+    UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2),
+    /* Whether device and transport supports DDP */
+    UCT_IB_DDP_SUPPORTED             = UCS_BIT(3)
 };
 
 
@@ -345,7 +347,6 @@ struct uct_ib_iface {
         enum ibv_mtu                 path_mtu;
         uint8_t                      counter_set_id;
         uct_ib_iface_send_overhead_t send_overhead;
-        ucs_ternary_auto_value_t     dp_ordering_ooo; /* Activate RW OOO */
     } config;
 
     uct_ib_iface_ops_t        *ops;

@@ -64,6 +64,7 @@ struct ibv_ravh {
 
 typedef struct uct_dc_mlx5_ep     uct_dc_mlx5_ep_t;
 typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
+typedef uint16_t                  uct_dci_index_t;
 
 
 typedef enum {
@@ -191,7 +192,7 @@ typedef struct uct_dc_mlx5_iface_config {
 
 typedef void (*uct_dc_dci_handle_failure_func_t)(uct_dc_mlx5_iface_t *iface,
                                                  struct mlx5_cqe64 *cqe,
-                                                 uint8_t dci_index,
+                                                 uct_dci_index_t dci_index,
                                                  ucs_status_t status);
 
 
@@ -257,7 +258,7 @@ typedef struct uct_dc_mlx5_dci_config {
 
 KHASH_MAP_INIT_INT64(uct_dc_mlx5_config_hash, uint8_t);
 
-UCS_ARRAY_DECLARE_TYPE(uct_dc_mlx5_pool_stack_t, uint8_t, uint8_t);
+UCS_ARRAY_DECLARE_TYPE(uct_dc_mlx5_pool_stack_t, uint8_t, uct_dci_index_t);
 
 /* DCI pool
  * same array is used to store DCI's to allocate and DCI's to release:
@@ -284,7 +285,7 @@ typedef struct {
 } uct_dc_mlx5_dci_pool_t;
 
 
-UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uint16_t, uct_dc_dci_t);
+UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uct_dci_index_t, uct_dc_dci_t);
 
 struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t       super;
@@ -400,10 +401,12 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
                                      uct_ib_mlx5_txwq_t *txwq,
                                      ucs_status_t ep_status);
 
-void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
+                                 uct_dci_index_t dci_index);
 
 ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
-                                          uint8_t dci_index, int connect,
+                                          uct_dci_index_t dci_index,
+                                          int connect,
                                           uint8_t num_dci_channels);
 
 ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
@@ -427,7 +430,7 @@ static UCS_F_ALWAYS_INLINE uint8_t uct_dc_mlx5_is_dci_valid(const uct_dc_dci_t *
 }
 
 static UCS_F_ALWAYS_INLINE uct_dc_dci_t *
-uct_dc_mlx5_iface_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+uct_dc_mlx5_iface_dci(uct_dc_mlx5_iface_t *iface, uct_dci_index_t dci_index)
 {
     return &ucs_array_elem(&iface->tx.dcis, dci_index);
 }
@@ -482,7 +485,7 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
  * linear search is most probably the best way to go
  * because the number of dcis is usually small
  */
-static UCS_F_ALWAYS_INLINE uint8_t
+static UCS_F_ALWAYS_INLINE uct_dci_index_t
 uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, struct mlx5_cqe64 *cqe)
 {
     uint32_t qp_num;
@@ -512,7 +515,7 @@ uct_dc_mlx5_iface_has_tx_resources(uct_dc_mlx5_iface_t *iface)
 
 static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface,
-                                       uint8_t dci_index)
+                                       uct_dci_index_t dci_index)
 {
     return uct_rc_txqp_available(
                    &uct_dc_mlx5_iface_dci(iface, dci_index)->txqp) > 0;
@@ -533,7 +536,8 @@ uct_dc_mlx5_iface_dci_waitq(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci_index)
+uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface,
+                                      uct_dci_index_t dci_index)
 {
     uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(iface, dci_index);
 
