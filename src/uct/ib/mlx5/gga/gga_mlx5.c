@@ -22,10 +22,6 @@
 #define UCT_GGA_MAX_MSG_SIZE        (2u * UCS_MBYTE)
 
 
-typedef struct {
-    uct_ib_mlx5_md_t super;
-} uct_gga_mlx5_md_t;
-
 /**
  * Hashed per MD part of rkey
  */
@@ -36,7 +32,7 @@ typedef struct {
 
 typedef struct {
     /* Cached fields */
-    uct_gga_mlx5_md_t       *md;
+    uct_ib_mlx5_md_t        *md;
     uct_rkey_t              rkey;
 
     uct_ib_md_packed_mkey_t packed_mkey;
@@ -47,7 +43,7 @@ typedef struct {
  */
 typedef struct {
     uct_gga_mlx5_rkey_handle_t *rkey_handle;
-    uct_gga_mlx5_md_t          *md;
+    uct_ib_mlx5_md_t           *md;
 } uct_gga_mlx5_rkey_hash_key_t;
 
 static UCS_F_ALWAYS_INLINE khint32_t
@@ -203,7 +199,7 @@ uct_gga_mlx5_md_get_rkey(const uct_gga_mlx5_rkey_hash_key_t *key)
 }
 
 static void
-uct_gga_mlx5_md_rkey_handle_release(uct_gga_mlx5_md_t *md,
+uct_gga_mlx5_md_rkey_handle_release(uct_ib_mlx5_md_t *md,
                                     uct_gga_mlx5_md_rkey_handle_t *md_rkeyh)
 {
     uct_md_mem_dereg_params_t params = {
@@ -213,7 +209,7 @@ uct_gga_mlx5_md_rkey_handle_release(uct_gga_mlx5_md_t *md,
     ucs_status_t status;
 
     ucs_free(md_rkeyh);
-    status = uct_ib_mlx5_devx_mem_dereg(&md->super.super.super, &params);
+    status = uct_ib_mlx5_devx_mem_dereg(&md->super.super, &params);
     if (status != UCS_OK) {
         ucs_warn("md %p: failed to deregister GGA memh %p with status %s",
                  md, params.memh, ucs_status_string(status));
@@ -282,7 +278,7 @@ static uct_component_t uct_gga_component = {
 };
 
 static UCS_F_ALWAYS_INLINE void
-uct_gga_mlx5_rkey_trace(uct_gga_mlx5_md_t *md,
+uct_gga_mlx5_rkey_trace(uct_ib_mlx5_md_t *md,
                         uct_gga_mlx5_rkey_handle_t *rkey_handle,
                         const char *prefix)
 {
@@ -292,7 +288,7 @@ uct_gga_mlx5_rkey_trace(uct_gga_mlx5_md_t *md,
 
 static void
 uct_gga_mlx5_rkey_cache_update(uct_gga_mlx5_rkey_handle_t *rkey_handle,
-                               uct_gga_mlx5_md_t *md,
+                               uct_ib_mlx5_md_t *md,
                                const uct_gga_mlx5_md_rkey_handle_t *md_rkey_handle)
 {
     rkey_handle->md   = md;
@@ -301,11 +297,11 @@ uct_gga_mlx5_rkey_cache_update(uct_gga_mlx5_rkey_handle_t *rkey_handle,
 }
 
 static ucs_status_t
-uct_gga_mlx5_rkey_resolve_slow(uct_gga_mlx5_md_t *md,
+uct_gga_mlx5_rkey_resolve_slow(uct_ib_mlx5_md_t *md,
                                uct_gga_mlx5_rkey_handle_t *rkey_handle)
 {
     static pthread_mutex_t mem_attach_lock = PTHREAD_MUTEX_INITIALIZER;
-    uct_md_h uct_md                        = &md->super.super.super;
+    uct_md_h uct_md                        = &md->super.super;
     uct_gga_mlx5_rkey_hash_key_t hash_key  = {
         .rkey_handle                       = rkey_handle,
         .md                                = md
@@ -369,7 +365,7 @@ err_out:
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_gga_mlx5_rkey_resolve(uct_gga_mlx5_md_t *md,
+uct_gga_mlx5_rkey_resolve(uct_ib_mlx5_md_t *md,
                           uct_gga_mlx5_rkey_handle_t *rkey_handle)
 {
     uct_gga_mlx5_rkey_hash_key_t hash_key = {
@@ -625,8 +621,8 @@ uct_gga_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_gga_mlx5_ep_t *gga_ep = ucs_derived_of(ep, uct_gga_mlx5_ep_t);
-    uct_gga_mlx5_md_t *md     = ucs_derived_of(iface->super.super.super.md,
-                                               uct_gga_mlx5_md_t);
+    uct_ib_mlx5_md_t *md      = ucs_derived_of(iface->super.super.super.md,
+                                               uct_ib_mlx5_md_t);
     uct_gga_mlx5_rkey_handle_t *rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
     uint8_t fm_ce_se                        = MLX5_WQE_CTRL_CQ_UPDATE;
     uct_rkey_t rkey_copy;
@@ -673,8 +669,8 @@ uct_gga_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_gga_mlx5_ep_t *gga_ep = ucs_derived_of(ep, uct_gga_mlx5_ep_t);
-    uct_gga_mlx5_md_t *md     = ucs_derived_of(iface->super.super.super.md,
-                                               uct_gga_mlx5_md_t);
+    uct_ib_mlx5_md_t *md      = ucs_derived_of(iface->super.super.super.md,
+                                               uct_ib_mlx5_md_t);
     uct_gga_mlx5_rkey_handle_t *rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
     size_t total_length                     = uct_iov_total_length(iov, iovcnt);
     uint8_t fm_ce_se                        = MLX5_WQE_CTRL_CQ_UPDATE;
@@ -897,12 +893,12 @@ UCT_SINGLE_TL_INIT(&uct_gga_component, gga_mlx5, ctor,
 
 static void uct_ib_mlx5_gga_md_close(uct_md_h md)
 {
-    uct_gga_mlx5_md_t *gga_md = ucs_derived_of(md, uct_gga_mlx5_md_t);
+    uct_ib_mlx5_md_t *gga_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
     uct_gga_mlx5_rkey_hash_key_t hash_key;
     uct_gga_mlx5_md_rkey_handle_t* hash_val;
 
     ucs_trace("md %p: closing on GGA device %s", md,
-              uct_ib_device_name(&gga_md->super.super.dev));
+              uct_ib_device_name(&gga_md->super.dev));
 
     pthread_mutex_lock(&uct_gga_mlx5_rkeys_lock);
     kh_foreach(&uct_gga_mlx5_rkey_cache, hash_key, hash_val, {
@@ -954,7 +950,7 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
     struct ibv_device **ib_device_list, *ib_device;
     int num_devices, fork_init;
     ucs_status_t status;
-    uct_gga_mlx5_md_t *md;
+    uct_ib_md_t *md;
 
     ucs_trace("opening GGA device %s", md_name);
 
@@ -981,31 +977,19 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
         goto out_free_dev_list;
     }
 
-    status = uct_ib_mlx5_devx_md_alloc(ib_device, sizeof(*md),
-                                       (uct_ib_mlx5_md_t**)&md);
+    status = uct_ib_mlx5_devx_md_open(ib_device, md_config, &md);
     if (status != UCS_OK) {
-        return status;
+        goto out_free_dev_list;
     }
 
-    status = uct_ib_mlx5_devx_md_init(&md->super, ib_device, md_config);
-    if (status != UCS_OK) {
-        goto err_free_md;
-    }
-
-    md->super.super.super.component = &uct_gga_component;
-    md->super.super.super.ops       = &uct_mlx5_gga_md_ops;
-    md->super.super.name            = UCT_IB_MD_NAME(gga);
-    md->super.super.fork_init       = fork_init;
-
-    ucs_trace("md %p: opened on GGA device %s", md, md_name);
-    *md_p = &md->super.super.super;
+    md->super.component = &uct_gga_component;
+    md->super.ops       = &uct_mlx5_gga_md_ops;
+    md->name            = UCT_IB_MD_NAME(gga);
+    md->fork_init       = fork_init;
+    *md_p               = &md->super;
 
 out_free_dev_list:
     ibv_free_device_list(ib_device_list);
 out:
     return status;
-
-err_free_md:
-    uct_ib_mlx5_devx_md_free(&md->super);
-    goto out_free_dev_list;
 }
