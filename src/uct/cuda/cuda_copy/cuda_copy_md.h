@@ -36,8 +36,6 @@ typedef struct uct_cuda_copy_md {
         ucs_ternary_auto_value_t enable_fabric;
         uct_cuda_pref_loc_t      pref_loc;
         int                      cuda_async_managed;
-        int                      cuda_ctx_set_flags; /* missing cuCtxSetFlags()
-                                                        below CUDA 12.1 */
     } config;
 } uct_cuda_copy_md_t;
 

@@ -29,10 +29,6 @@
 #define UCT_CUDA_DEV_NAME_MAX_LEN 64
 #define UCT_CUDA_MAX_DEVICES      32
 
-#define UCT_CUDA_VERSION_VMM     12030 /* for VMM: cuCtxSetFlags() >= cuda 12.1 */
-#define UCT_CUDA_MAJOR(_version) ((_version) / 1000)
-#define UCT_CUDA_MINOR(_version) (((_version) % 1000) / 10)
-
 
 static const char *uct_cuda_pref_loc[] = {
     [UCT_CUDA_PREF_LOC_CPU]  = "cpu",
@@ -84,6 +80,10 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 
     {NULL}
 };
+
+static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+static CUresult (*ctx_set_flags_func)(unsigned);
 
 static int uct_cuda_copy_md_is_dmabuf_supported()
 {
@@ -483,7 +483,6 @@ static void uct_cuda_copy_md_close(uct_md_h uct_md) {
 
 static size_t uct_cuda_copy_md_get_total_device_mem(CUdevice cuda_device)
 {
-    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
     static size_t total_bytes[UCT_CUDA_MAX_DEVICES];
     char dev_name[UCT_CUDA_DEV_NAME_MAX_LEN];
 
@@ -523,10 +522,11 @@ uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md, const void *address)
 
 #if HAVE_CUDA_FABRIC
     ucs_status_t status;
-    if (md->config.cuda_ctx_set_flags) {
+    if (ctx_set_flags_func != NULL) {
         if (!md->sync_memops_set) {
             /* Synchronize future DMA operations for all memory types */
-            status = UCT_CUDADRV_FUNC_LOG_WARN(cuCtxSetFlags(CU_CTX_SYNC_MEMOPS));
+            status = UCT_CUDADRV_FUNC_LOG_ERR(
+                    ctx_set_flags_func(CU_CTX_SYNC_MEMOPS));
             if (status == UCS_OK) {
                 md->sync_memops_set = 1;
             }
@@ -832,6 +832,35 @@ static uct_md_ops_t md_ops = {
     .detect_memory_type = uct_cuda_copy_md_detect_memory_type
 };
 
+static ucs_status_t uct_cuda_copy_md_check_is_ctx_set_flags_supported(void)
+{
+    static ucs_status_t status = UCS_ERR_INVALID_ADDR;
+
+#if CUDA_VERSION >= 12000
+    CUdriverProcAddressQueryResult sym_status;
+    CUresult cu_err;
+
+    if (status == UCS_ERR_INVALID_ADDR) {
+        pthread_mutex_lock(&lock);
+        cu_err = cuGetProcAddress("cuCtxSetFlags", (void**)&ctx_set_flags_func,
+                                  12010, CU_GET_PROC_ADDRESS_DEFAULT,
+                                  &sym_status);
+
+        if ((cu_err == CUDA_SUCCESS) &&
+            (sym_status == CU_GET_PROC_ADDRESS_SUCCESS)) {
+            status = UCS_OK;
+        } else {
+            ctx_set_flags_func = NULL;
+            status             = UCS_ERR_UNSUPPORTED;
+        }
+
+        pthread_mutex_unlock(&lock);
+    }
+#endif
+
+    return status;
+}
+
 static ucs_status_t
 uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
                       const uct_md_config_t *md_config, uct_md_h *md_p)
@@ -839,7 +868,7 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     uct_cuda_copy_md_config_t *config = ucs_derived_of(md_config,
                                                        uct_cuda_copy_md_config_t);
     uct_cuda_copy_md_t *md;
-    int dmabuf_supported, version;
+    int dmabuf_supported;
     ucs_status_t status;
 
     md = ucs_malloc(sizeof(uct_cuda_copy_md_t), "uct_cuda_copy_md_t");
@@ -849,29 +878,21 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
         goto err;
     }
 
-    md->super.ops                 = &md_ops;
-    md->super.component           = &uct_cuda_copy_component;
-    md->config.alloc_whole_reg    = config->alloc_whole_reg;
-    md->config.max_reg_ratio      = config->max_reg_ratio;
-    md->config.pref_loc           = config->pref_loc;
-    md->config.enable_fabric      = config->enable_fabric;
-    md->config.dmabuf_supported   = 0;
-    md->config.cuda_ctx_set_flags = 1;
-    md->sync_memops_set           = 0;
-    md->granularity               = SIZE_MAX;
+    md->super.ops               = &md_ops;
+    md->super.component         = &uct_cuda_copy_component;
+    md->config.alloc_whole_reg  = config->alloc_whole_reg;
+    md->config.max_reg_ratio    = config->max_reg_ratio;
+    md->config.pref_loc         = config->pref_loc;
+    md->config.enable_fabric    = config->enable_fabric;
+    md->config.dmabuf_supported = 0;
+    md->sync_memops_set         = 0;
+    md->granularity             = SIZE_MAX;
 
-    if ((cuDriverGetVersion(&version) == CUDA_SUCCESS) &&
-        (version < UCT_CUDA_VERSION_VMM)) {
-        if (md->config.enable_fabric != UCS_NO) {
-            ucs_warn("disabled fabric memory allocations as cuda driver "
-                     "library %d.%d < %d.%d",
-                     UCT_CUDA_MAJOR(version), UCT_CUDA_MINOR(version),
-                     UCT_CUDA_MAJOR(UCT_CUDA_VERSION_VMM),
-                     UCT_CUDA_MINOR(UCT_CUDA_VERSION_VMM));
-        }
-
-        md->config.enable_fabric      = UCS_NO;
-        md->config.cuda_ctx_set_flags = 0;
+    status = uct_cuda_copy_md_check_is_ctx_set_flags_supported();
+    if ((status != UCS_OK) && (md->config.enable_fabric != UCS_NO)) {
+        ucs_warn("disabled fabric memory allocations as cuda driver "
+                 "library does not support cuCtxSetFlags()");
+        md->config.enable_fabric = UCS_NO;
     }
 
     if ((config->cuda_async_mem_type != UCS_MEMORY_TYPE_CUDA) &&
