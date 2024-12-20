@@ -292,6 +292,7 @@ public:
     {
         set_mock_iface_attr("rc_mlx5",
             [](uct_iface_attr_t &iface_attr) {
+                iface_attr.cap.flags       |= UCT_IFACE_FLAG_AM_SHORT;
                 iface_attr.cap.am.max_short = 208;
                 iface_attr.bandwidth.shared = 10000000000;
                 iface_attr.latency.c        = 0.000006;
