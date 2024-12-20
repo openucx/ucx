@@ -893,9 +893,12 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     md->granularity             = SIZE_MAX;
 
     status = uct_cuda_copy_md_check_is_ctx_set_flags_supported();
-    if ((status != UCS_OK) && (md->config.enable_fabric != UCS_NO)) {
-        ucs_warn("disabled fabric memory allocations as cuda driver "
-                 "library does not support cuCtxSetFlags()");
+    if (status != UCS_OK) {
+        if (md->config.enable_fabric == UCS_YES) {
+            ucs_warn("disabled fabric memory allocations as cuda driver "
+                     "library does not support cuCtxSetFlags()");
+        }
+
         md->config.enable_fabric = UCS_NO;
     }
 
