@@ -17,6 +17,7 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <stddef.h>
+#include <sched.h>
 
 BEGIN_C_DECLS
 
@@ -175,6 +176,13 @@ static inline int ucs_cpu_prefer_relaxed_order()
 
 const char *ucs_cpu_vendor_name();
 const char *ucs_cpu_model_name();
+
+#ifndef UCS_HAS_CPU_RELAX
+static UCS_F_ALWAYS_INLINE void ucs_cpu_relax()
+{
+    sched_yield();
+}
+#endif
 
 END_C_DECLS
 
