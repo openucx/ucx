@@ -43,14 +43,8 @@ enum {
     UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
-#define UCP_OP_ATTR_INDEX_MASK (UCP_OP_ATTR_FLAG_NO_IMM_CMPL    | \
-                                UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL | \
-                                UCP_OP_ATTR_FLAG_FAST_CMPL      | \
-                                UCP_OP_ATTR_FLAG_MULTI_SEND)
-
 #define UCP_OP_ATTR_INDEX(_op_attr_flag) \
-    (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag), \
-                                             UCP_OP_ATTR_INDEX_MASK)))
+    (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag))))
 
 
 typedef struct ucp_context_config {
