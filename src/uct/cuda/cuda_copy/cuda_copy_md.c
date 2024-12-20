@@ -525,7 +525,7 @@ uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md, const void *address)
     if (ctx_set_flags_func != NULL) {
         if (!md->sync_memops_set) {
             /* Synchronize future DMA operations for all memory types */
-            status = UCT_CUDADRV_FUNC_LOG_ERR(
+            status = UCT_CUDADRV_FUNC_LOG_WARN(
                     ctx_set_flags_func(CU_CTX_SYNC_MEMOPS));
             if (status == UCS_OK) {
                 md->sync_memops_set = 1;
@@ -834,7 +834,7 @@ static uct_md_ops_t md_ops = {
 
 static ucs_status_t uct_cuda_copy_md_check_is_ctx_set_flags_supported(void)
 {
-    static ucs_status_t status = UCS_ERR_INVALID_ADDR;
+    static ucs_status_t status = UCS_ERR_LAST;
 
 #if CUDA_VERSION >= 12000
     CUdriverProcAddressQueryResult sym_status;
@@ -842,16 +842,18 @@ static ucs_status_t uct_cuda_copy_md_check_is_ctx_set_flags_supported(void)
 
     if (status == UCS_ERR_INVALID_ADDR) {
         pthread_mutex_lock(&lock);
-        cu_err = cuGetProcAddress("cuCtxSetFlags", (void**)&ctx_set_flags_func,
-                                  12010, CU_GET_PROC_ADDRESS_DEFAULT,
-                                  &sym_status);
+        if (status == UCS_ERR_INVALID_ADDR) {
+            cu_err = cuGetProcAddress("cuCtxSetFlags",
+                                      (void**)&ctx_set_flags_func, 12010,
+                                      CU_GET_PROC_ADDRESS_DEFAULT, &sym_status);
 
-        if ((cu_err == CUDA_SUCCESS) &&
-            (sym_status == CU_GET_PROC_ADDRESS_SUCCESS)) {
-            status = UCS_OK;
-        } else {
-            ctx_set_flags_func = NULL;
-            status             = UCS_ERR_UNSUPPORTED;
+            if ((cu_err == CUDA_SUCCESS) &&
+                (sym_status == CU_GET_PROC_ADDRESS_SUCCESS)) {
+                status = UCS_OK;
+            } else {
+                ctx_set_flags_func = NULL;
+                status             = UCS_ERR_UNSUPPORTED;
+            }
         }
 
         pthread_mutex_unlock(&lock);
