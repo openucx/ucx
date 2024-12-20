@@ -479,7 +479,7 @@ ucp_am_send_short(ucp_ep_h ep, uint16_t id, uint16_t flags, const void *header,
                   int is_reply)
 {
     size_t iov_cnt = 0ul;
-    uct_iov_t iov[4];
+    uct_iov_t iov[UCP_AM_SEND_SHORT_MIN_IOV];
     uint8_t am_id;
     ucp_am_hdr_t am_hdr;
     ucp_am_reply_ftr_t ftr;
