@@ -16,7 +16,7 @@
 #### UCP
  * Enabled using CUDA staging buffers for pipeline protocols by default
  * Added endpoint reconfiguration support for non-reused p2p scenarios
- * Enabled non-cacheable memory domains, activated for GDR copy
+ * Enabled non-cacheable memory domains, activated for gdr_copy
  * Added user_data parameter to ucp_ep_query
  * Added support for host memory pipeline through CUDA buffers for rendezvous protocol
  * Added global VA infrastructure and memory region in absence of error handling
@@ -96,7 +96,7 @@
  * Fixed missing reg_id on memh creation
  * Fixed repeated invalidations by retaining existing access flags
  * Fixed abort reason propagation for rendezvous RTR mtype
- * Do not check transport availability if it is prevented by UCX_TLS environemnt variable
+ * Do not check transport availability if it is disabled by UCX_TLS environemnt variable
  * Fixed wrong flag being used for checking BCOPY capability
  * Fixed sending too many ATPs for small messages
  * Enforced 16 bits size for Active Messages identifiers
@@ -120,11 +120,11 @@
 #### CUDA
  * Fixed async memory handling using CUDA memory type on Grace
  * Added rcache overhead in performance estimation
- * Fixed GDR copy performance regression by providing maximum estimation between get and put
+ * Fixed gdr_copy performance regression by providing maximum estimation between get and put
  * Fixed CUDA IPC reachability check
  * Fixed crash in MPI_Finalize when CUDA context is destroyed
- * Always require rcache by default for GDR copy
- * Fixed crash GDR copy in UCT MD close when rcache was not enabled
+ * Always require rcache by default for gdr_copy
+ * Fixed crash in gdr_copy cleanup when registration cache is disabled
  * Fixed CUDA copy memory domain allocations
  * Fixed multiple tests for gdr_copy transport
  * Fixed race condition in CUDA IPC peer accessible cache
