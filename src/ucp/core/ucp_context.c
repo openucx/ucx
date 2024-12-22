@@ -141,11 +141,13 @@ const char *ucp_object_versions[] = {
 };
 
 const char *ucp_extra_op_attr_flags_names[] = {
-    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_NO_IMM_CMPL)]    = "no_imm_cmpl",
     [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FAST_CMPL)]      = "fast_cmpl",
-    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)] = "force_imm_cmpl",
-    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_MULTI_SEND)]     = "multi_send",
-    NULL
+    [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_MULTI_SEND)]     = "multi_send"
+};
+
+const ucs_config_flags_args_t ucp_extra_op_attr_flags_args = {
+    .args        = ucp_extra_op_attr_flags_names,
+    .args_size   = ucs_static_array_size(ucp_extra_op_attr_flags_names)
 };
 
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
@@ -542,9 +544,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"EXTRA_OP_ATTR_FLAGS", "",
    "Additional send/receive operation flags that are added for each request"
    "in addition to what is set explicitly by the user. \n"
-   "Possible values are: no_imm_cmpl, fast_cmpl, force_imm_cmpl, multi_send.",
+   "Possible values are: fast_cmpl, multi_send.",
    ucs_offsetof(ucp_context_config_t, extra_op_attr_flags),
-   UCS_CONFIG_TYPE_BITMAP(ucp_extra_op_attr_flags_names)},
+   UCS_CONFIG_TYPE_FLAGS((const void *)&ucp_extra_op_attr_flags_args)},
 
   {NULL}
 };
