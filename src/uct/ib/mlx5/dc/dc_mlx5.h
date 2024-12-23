@@ -61,13 +61,6 @@ struct ibv_ravh {
         (_self)->flags |= UCT_DC_MLX5_IFACE_FLAG_##_flag_name##_FULL_HANDSHAKE; \
     }
 
-#ifdef __SANITIZE_ADDRESS__
-#define UCT_DC_MLX5_ASAN_RELOCATE_DCIS_ARRAY(_iface) \
-    uct_dc_mlx5_asan_relocate_dcis_array(_iface)
-#else
-#define UCT_DC_MLX5_ASAN_RELOCATE_DCIS_ARRAY(_iface)
-#endif
-
 
 typedef struct uct_dc_mlx5_ep     uct_dc_mlx5_ep_t;
 typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
@@ -291,7 +284,7 @@ typedef struct {
 } uct_dc_mlx5_dci_pool_t;
 
 
-UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uint16_t, uct_dc_dci_t);
+UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uint16_t, uct_dc_dci_t*);
 
 struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t       super;
@@ -433,17 +426,15 @@ uct_dc_mlx5_dci_pool_get_or_create(uct_dc_mlx5_iface_t *iface,
 uint32_t
 uct_dc_mlx5_dci_config_hash(const uct_dc_mlx5_dci_config_t *dci_config);
 
-void uct_dc_mlx5_asan_relocate_dcis_array(uct_dc_mlx5_iface_t *iface);
-
 static UCS_F_ALWAYS_INLINE uint8_t uct_dc_mlx5_is_dci_valid(const uct_dc_dci_t *dci)
 {
-    return dci->txwq.super.qp_num != UCT_IB_INVALID_QPN;
+    return dci != NULL;
 }
 
 static UCS_F_ALWAYS_INLINE uct_dc_dci_t *
 uct_dc_mlx5_iface_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 {
-    return &ucs_array_elem(&iface->tx.dcis, dci_index);
+    return ucs_array_elem(&iface->tx.dcis, dci_index);
 }
 
 #if HAVE_DEVX
