@@ -270,17 +270,6 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
     uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress, flags);
 }
 
-static void uct_dc_mlx5_asan_cleanup_old_dcis_buffer(uct_dc_mlx5_iface_t *iface)
-{
-#ifdef __SANITIZE_ADDRESS__
-    if (iface->old_dcis_buffer != NULL) {
-        ASAN_UNPOISON_MEMORY_REGION(iface->old_dcis_buffer,
-                                    iface->old_dcis_buffer_size);
-        ucs_free(iface->old_dcis_buffer);
-    }
-#endif
-}
-
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
 {
@@ -307,7 +296,8 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
                    dci_index, &uct_dc_mlx5_iface_dci(iface, dci_index)->txqp,
                    hw_ci);
 
-    UCT_RC_MLX5_TXQP_PROCESS_TX_CQE(&uct_dc_mlx5_iface_dci(iface, dci_index)->txqp, cqe, hw_ci);
+    uct_rc_mlx5_txqp_process_tx_cqe(
+            &uct_dc_mlx5_iface_dci(iface, dci_index)->txqp, cqe, hw_ci);
     uct_dc_mlx5_update_tx_res(iface, dci_index, hw_ci);
 
     /**
@@ -1798,7 +1788,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     ucs_callbackq_remove_oneshot(&worker->progress_q, self,
                                  uct_dc_mlx5_ep_dci_release_remove_filter,
                                  self);
-    uct_dc_mlx5_asan_cleanup_old_dcis_buffer(self);
     uct_dc_mlx5_iface_dcis_destroy(self);
 }
 
