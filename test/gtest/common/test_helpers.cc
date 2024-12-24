@@ -456,12 +456,13 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
 
 static bool netif_has_sysfs_file(const char *ifa_name, const char *file_name)
 {
-    char path[PATH_MAX];
-    ucs_snprintf_safe(path, sizeof(path), "/sys/class/net/%s/%s", ifa_name,
+    std::string path(PATH_MAX, '\0');
+
+    ucs_snprintf_safe(&path[0], path.size(), "/sys/class/net/%s/%s", ifa_name,
                       file_name);
 
     struct stat st;
-    return stat(path, &st) >= 0;
+    return stat(path.c_str(), &st) >= 0;
 }
 
 bool is_interface_usable(struct ifaddrs *ifa)

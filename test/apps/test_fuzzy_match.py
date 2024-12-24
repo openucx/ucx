@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Copyright (C) 2022 NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
@@ -6,9 +6,9 @@
 # See file LICENSE for terms.
 
 import os
-import commands
 import re
 import argparse
+import subprocess
 import sys
 import logging
 
@@ -16,7 +16,7 @@ import logging
 class Environment(object):
     '''Handles environment variables setup and cleanup'''
     def __init__(self, env_vars):
-        logging.info('Using env vars: %s' % env_vars)
+        logging.info(f'Using env vars: {env_vars}')
         self.env_vars = env_vars;
 
     def __enter__(self):
@@ -46,17 +46,17 @@ class TestRunner:
             matches = self.get_fuzzy_matches()
 
             if matches != test_case:
-                raise Exception('Wrong fuzzy list: got: %s, expected: %s' % (matches, test_case))
+                raise Exception(f'Wrong fuzzy list: got: {matches}, expected: {test_case}')
 
-            logging.info('found all expected matches: %s' % test_case)
+            logging.info(f'found all expected matches: {test_case}')
 
     def exec_ucx_info(self):
-        cmd = self.ucx_info + ' -u m -w'
-        logging.info('running cmd: %s' % cmd)
+        cmd = f'{self.ucx_info} -u m -w'
+        logging.info(f'running cmd: {cmd}')
 
-        status, output = commands.getstatusoutput(cmd)
+        status, output = subprocess.getstatusoutput(cmd)
         if status != 0:
-            raise Exception('Received unexpected exit code from ucx_info: ' + str(status))
+            raise Exception(f'Received unexpected exit code from ucx_info: {status}')
 
         logging.info(output)
         return output
@@ -76,12 +76,12 @@ class TestRunner:
         output_vars = warn_match.group(1).split(';')
         matches = [re.match(r'(\w+)(?: \(maybe: (.*)\?\))?', var.strip()) for var in output_vars]
         if None in matches:
-            raise Exception('Unexpected warning message format: %s' % warn_msg)
+            raise Exception(f'Unexpected warning message format: {warn_msg}')
 
         return {m.group(1) : [x.strip() for x in m.group(2).split(',')] if m.group(2) else [] for m in matches}
 
 def has_ib():
-    status, output = commands.getstatusoutput('ibv_devinfo')
+    status, output = subprocess.getstatusoutput('ibv_devinfo')
     if status != 0:
         return False
 
@@ -110,4 +110,3 @@ if __name__ == '__main__':
     except Exception as e:
         logging.error(str(e))
         sys.exit(1)
-

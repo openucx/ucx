@@ -93,6 +93,15 @@ ucs_status_t ucs_string_set_print_sorted(const ucs_string_set_t *sset,
                                          const char *sep);
 
 
+/*
+ *  Check if ucs_string_set_t is empty
+ */
+static UCS_F_ALWAYS_INLINE int ucs_string_set_is_empty(const ucs_string_set_t *sset)
+{
+    return kh_size(sset) == 0;
+}
+
+
 END_C_DECLS
 
 #endif

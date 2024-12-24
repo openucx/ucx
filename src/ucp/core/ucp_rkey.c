@@ -474,13 +474,12 @@ static ucp_md_map_t ucp_rkey_find_global_id_md_map(ucp_context_h context,
 static void
 ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context, 
                                       const void **start_p,
-                                      const void **tl_mkey_buf_p,
-                                      ucp_md_map_t *md_map_p)
+                                      ucp_unpacked_exported_tl_mkey_t *tl_mkey)
 {
     const void *p = *start_p;
     const void *next_tl_md_p;
     size_t tl_mkey_data_size;
-    size_t tl_mkey_size, global_id_size;
+    uint8_t tl_mkey_size, global_id_size;
     const void *tl_mkey_buf;
     ucp_md_map_t md_map;
 
@@ -505,9 +504,10 @@ ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context,
     next_tl_md_p = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
     ucs_assertv(p <= next_tl_md_p, "p=%p, next_tl_md_p=%p", p, next_tl_md_p);
 
-    *start_p       = next_tl_md_p;
-    *tl_mkey_buf_p = tl_mkey_buf;
-    *md_map_p      = md_map;
+    *start_p              = next_tl_md_p;
+    tl_mkey->tl_mkey_buf  = tl_mkey_buf;
+    tl_mkey->tl_mkey_size = tl_mkey_size;
+    tl_mkey->local_md_map = md_map;
 }
 
 ucs_status_t
@@ -555,8 +555,7 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
         ucs_assertv(unpacked->num_tl_mkeys < UCP_MAX_MDS, "num_tl_mkeys=%u"
                     " UCP_MAX_MDS=%u", unpacked->num_tl_mkeys, UCP_MAX_MDS);
         tl_mkey = &unpacked->tl_mkeys[unpacked->num_tl_mkeys++];
-        ucp_memh_exported_tl_mkey_data_unpack(context, &p, &tl_mkey->tl_mkey_buf,
-                                              &tl_mkey->local_md_map);
+        ucp_memh_exported_tl_mkey_data_unpack(context, &p, tl_mkey);
     }
 
     if (unpacked->num_tl_mkeys == 0) {
@@ -896,6 +895,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
             ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable",
                       rkey_index, remote_md_index, tl_rkey->rkey.rkey);
         } else {
+            rkey->md_map &= UCS_MASK(remote_md_index);
             ucs_error("failed to unpack remote key from remote md[%d]: %s",
                       remote_md_index, ucs_status_string(status));
             goto err_destroy;

@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
-	. "ucx"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 )
 
 func TestUcpWorkerEfd(t *testing.T) {

@@ -86,13 +86,18 @@ public:
     }
 
     uct_ib_mlx5_devx_mem_t *
-    import_memh(const uct_ib_mlx5_devx_mem_t *exported_memh) const {
+    import_memh(const uct_ib_mlx5_devx_mem_t *exported_memh, uint64_t uuid = 0,
+                uint8_t mkey_size = sizeof(uct_ib_md_packed_mkey_t)) const {
         uct_ib_md_packed_mkey_t packed_mkey = {
             .lkey    = exported_memh->exported_lkey,
-            .vhca_id = md()->super.vhca_id
+            .vhca_id = md()->super.vhca_id,
+            .md_uuid = uuid
         };
 
         uct_md_mem_attach_params_t params = {};
+        params.field_mask = UCT_MD_MEM_ATTACH_FIELD_MKEY_SIZE;
+        params.mkey_size  = mkey_size;
+
         uct_ib_mlx5_devx_mem_t *imported_memh;
         ASSERT_UCS_OK(uct_ib_mlx5_devx_mem_attach(m_e->md(), &packed_mkey,
                                                   &params,
@@ -277,6 +282,63 @@ UCS_TEST_P(test_devx_umr_mkey, perf_export_import_mkey_xgvmi)
     UCS_TEST_MESSAGE << buf;
 
     EXPECT_EQ(MEMH_COUNT, ucs_list_length(&md()->umr.mkey_pool));
+}
+
+UCS_TEST_P(test_devx_umr_mkey, import_same_mkey_from_different_md)
+{
+    skip_no_xgvmi();
+
+    /* Export UMR mkey */
+    uct_ib_mlx5_devx_mem_t *exported_memh = create_memh(1024);
+    ASSERT_UCS_OK(uct_ib_mlx5_devx_reg_exported_key(md(), exported_memh));
+    check_memh_export(exported_memh, true);
+
+    /* Import UMR mkey from MD with uuid 1 */
+    uct_ib_mlx5_devx_mem_t *imported_memh = import_memh(exported_memh, 1);
+
+    check_umr_init(true, true);
+    EXPECT_EQ(1, kh_size(md()->umr.mkey_hash));
+    uct_ib_mlx5_devx_umr_alias_t mkey_alias;
+    kh_foreach_value(md()->umr.mkey_hash, mkey_alias, {
+        EXPECT_EQ(1, mkey_alias.md_uuid);
+    });
+
+    /* Import the same UMR key, but from another MD with uuid 2 */
+    uct_ib_mlx5_devx_mem_t *imported_memh2 = import_memh(exported_memh, 2);
+    EXPECT_NE(imported_memh, imported_memh2);
+    EXPECT_EQ(1, kh_size(md()->umr.mkey_hash));
+    /* Check that stale mkey had been replaced by a new one */
+    kh_foreach_value(md()->umr.mkey_hash, mkey_alias, {
+        EXPECT_EQ(2, mkey_alias.md_uuid);
+    });
+
+    destroy_memh(imported_memh);
+    destroy_memh(imported_memh2);
+    destroy_memh(exported_memh);
+}
+
+UCS_TEST_P(test_devx_umr_mkey, import_backward_compatible)
+{
+    skip_no_xgvmi();
+
+    /* Export UMR mkey */
+    uct_ib_mlx5_devx_mem_t *exported_memh = create_memh(1024);
+    ASSERT_UCS_OK(uct_ib_mlx5_devx_reg_exported_key(md(), exported_memh));
+    check_memh_export(exported_memh, true);
+
+    /* Import UMR mkey from previous version without md_uuid field. In this
+     * case md_uuid field will be always 0 */
+    uct_ib_mlx5_devx_mem_t *imported_memh = import_memh(exported_memh, 3, 0);
+
+    check_umr_init(true, true);
+    EXPECT_EQ(1, kh_size(md()->umr.mkey_hash));
+    uct_ib_mlx5_devx_umr_alias_t mkey_alias;
+    kh_foreach_value(md()->umr.mkey_hash, mkey_alias, {
+        EXPECT_EQ(0, mkey_alias.md_uuid);
+    });
+
+    destroy_memh(imported_memh);
+    destroy_memh(exported_memh);
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_devx_umr_mkey);

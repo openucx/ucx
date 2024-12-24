@@ -464,3 +464,42 @@ ucs_status_t ucs_string_alloc_path_buffer(char **buffer_p, const char *name)
     *buffer_p = temp_buffer;
     return UCS_OK;
 }
+
+ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
+                                             const char *fmt, ...)
+{
+    char *temp_buffer = NULL;
+    va_list ap;
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(&temp_buffer, name);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    va_start(ap, fmt);
+    ucs_vsnprintf_safe(temp_buffer, PATH_MAX, fmt, ap);
+    va_end(ap);
+
+    *buffer_p = temp_buffer;
+    return UCS_OK;
+}
+
+ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
+                                                          const char *name,
+                                                          const char *path,
+                                                          const char **dir_p)
+{
+    ucs_status_t status;
+    char *buffer;
+
+    status = ucs_string_alloc_path_buffer(buffer_p, name);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    buffer = *buffer_p;
+    ucs_strncpy_safe(buffer, path, PATH_MAX);
+    *dir_p = dirname(buffer);
+    return UCS_OK;
+}

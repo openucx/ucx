@@ -903,17 +903,18 @@ UCS_TEST_P(test_pci_bw, get_pci_bw)
 {
     ucp_worker_h worker = sender().worker();
     ucp_context_h ctx   = worker->context;
-    char path_buffer[PATH_MAX];
+    std::string path_buffer(PATH_MAX, '\0');
     const ucp_worker_iface_t *wiface;
 
     for (auto i = 0; i < worker->num_ifaces; ++i) {
-        wiface                 = worker->ifaces[i];
-        const auto dev_name    = ctx->tl_rscs[wiface->rsc_index].tl_rsc.dev_name;
-        const auto tcp_device  = get_tcp_device(dev_name);
-        const auto dev_path    = !tcp_device.empty() ? tcp_device :
-                                                          get_ib_device(dev_name);
+        wiface              = worker->ifaces[i];
+        const auto dev_name = ctx->tl_rscs[wiface->rsc_index].tl_rsc.dev_name;
+        const auto tcp_device = get_tcp_device(dev_name);
+        const auto dev_path   = !tcp_device.empty() ? tcp_device :
+                                                        get_ib_device(dev_name);
+
         const char *sysfs_path = ucs_topo_resolve_sysfs_path(dev_path.c_str(),
-                                                             path_buffer);
+                                                             &path_buffer[0]);
         const double pci_bw    = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
         uct_iface_attr_t attr;

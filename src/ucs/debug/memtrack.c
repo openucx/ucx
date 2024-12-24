@@ -443,10 +443,10 @@ void ucs_memtrack_init()
         return;
     }
 
+    ucs_memtrack_vfs_init();
+
     ucs_debug("memtrack enabled");
     ucs_memtrack_context.enabled = 1;
-
-    ucs_memtrack_vfs_init();
 }
 
 void ucs_memtrack_cleanup()
@@ -457,12 +457,11 @@ void ucs_memtrack_cleanup()
         return;
     }
 
-    ucs_vfs_obj_remove(&ucs_memtrack_context);
-
     ucs_memtrack_generate_report();
 
-    /* disable before releasing the stats node */
+    /* disable before releasing the vfs object and the stats node */
     ucs_memtrack_context.enabled = 0;
+    ucs_vfs_obj_remove(&ucs_memtrack_context);
     UCS_STATS_NODE_FREE(ucs_memtrack_context.stats);
 
     /* cleanup entries */

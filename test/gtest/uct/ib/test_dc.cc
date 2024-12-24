@@ -174,12 +174,15 @@ UCS_TEST_P(test_dc, dcs_single) {
     ucs_status_t status;
     uct_dc_mlx5_ep_t *ep;
     uct_dc_mlx5_iface_t *iface;
+    uct_dci_index_t first_sw_dci;
 
     m_e1->connect_to_iface(0, *m_e2);
     ep = dc_ep(m_e1, 0);
     iface = dc_iface(m_e1);
+    first_sw_dci = uct_dc_mlx5_iface_is_hybrid(dc_iface(m_e1)) ?
+                           (UCT_DC_MLX5_HW_DCI_INDEX + 1) :
+                           0;
 
-    ucs_info("1 ep->dci: %d", ep->dci);
     EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
     EXPECT_UCS_OK(status);
@@ -188,15 +191,12 @@ UCS_TEST_P(test_dc, dcs_single) {
     EXPECT_EQ(1, iface->tx.dci_pool[0].stack_top);
     EXPECT_EQ(ep, uct_dc_mlx5_iface_dci(iface, ep->dci)->ep);
 
-    ucs_info("2 ep->dci: %d", ep->dci);
-
     flush();
 
-    ucs_info("3 ep->dci: %d", ep->dci);
     /* after the flush dci must be released */
     EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     EXPECT_EQ(0, iface->tx.dci_pool[0].stack_top);
-    EXPECT_EQ(0, ucs_array_elem(&iface->tx.dci_pool[0].stack, 0));
+    EXPECT_EQ(first_sw_dci, ucs_array_elem(&iface->tx.dci_pool[0].stack, 0));
 }
 
 UCS_TEST_P(test_dc, dcs_multi) {
@@ -223,8 +223,11 @@ UCS_TEST_P(test_dc, dcs_multi) {
     }
 
     /* this should fail because there are no free dci */
+
     status = uct_ep_am_short(m_e1->ep(i), 0, 0, NULL, 0);
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+    if (!uct_dc_mlx5_iface_is_hybrid(iface)) {
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+    }
 
     flush();
 
@@ -310,6 +313,10 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending, "DC_NUM_DCI=1") {
 
     iface = dc_iface(m_e1);
 
+    if (uct_dc_mlx5_iface_is_hybrid(iface)) {
+        UCS_TEST_SKIP_R("hybrid DCI policy does not support pending flush requests while ndci = 1");
+    }
+
     /* shorten test time by reducing dci QP resources */
     set_first_dci_availability(m_e1->ep(1));
 
@@ -354,9 +361,16 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending, "DC_NUM_DCI=1") {
 UCS_TEST_P(test_dc, dcs_ep_purge_pending, "DC_NUM_DCI=1") {
 
     ucs_status_t status;
+    uct_dc_mlx5_iface_t *iface;
     uct_dc_mlx5_ep_t *ep;
 
     m_e1->connect_to_iface(0, *m_e2);
+
+    iface = dc_iface(m_e1);
+    if (uct_dc_mlx5_iface_is_hybrid(iface)) {
+        UCS_TEST_SKIP_R("hybrid DCI policy does not support pending purge "
+                        "requests while ndci = 1");
+    }
 
     ep = dc_ep(m_e1, 0);
     set_first_dci_availability(m_e1->ep(0));
@@ -513,8 +527,8 @@ public:
 
         if (all_resources.empty()) {
             std::vector<uct_dc_tx_policy_t> policies =
-                    {UCT_DC_TX_POLICY_DCS_QUOTA, UCT_DC_TX_POLICY_RAND,
-                     UCT_DC_TX_POLICY_HW_DCS};
+                    {UCT_DC_TX_POLICY_DCS_QUOTA, UCT_DC_TX_POLICY_DCS_HYBRID,
+                     UCT_DC_TX_POLICY_RAND, UCT_DC_TX_POLICY_HW_DCS};
             for (auto policy : policies) {
                 for (const auto &elem : resources) {
                     struct resource rsc = *elem;

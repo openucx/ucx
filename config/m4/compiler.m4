@@ -451,6 +451,23 @@ AS_IF([test "x$enable_gcov" = xyes],
 
 
 #
+# Enable stack usage check
+#
+AC_ARG_ENABLE([stack-usage-check],
+        AS_HELP_STRING([--enable-stack-usage-check], [Enable stack usage check with -Wframe-larger-than=8192]),
+        [],
+        [enable_stack_usage_check=yes])
+
+AS_IF([test "x$enable_stack_usage_check" = xyes],
+      [AS_IF([test "x$enable_asan" = xyes],
+             [AC_MSG_NOTICE([Stack usage check was not added because ASAN is enabled])],
+             [ADD_COMPILER_FLAG_IF_SUPPORTED([stack_usage_check],
+                                             [-Wframe-larger-than=8192],
+                                             [AC_LANG_SOURCE([[int main(int argc, char** argv) { return 0; }]])])])],
+      [AC_MSG_NOTICE([Stack usage check is disabled])])
+
+
+#
 # Check for C++ support
 #
 CHECK_CXX_COMP()

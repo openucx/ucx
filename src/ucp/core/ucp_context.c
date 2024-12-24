@@ -659,7 +659,8 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "mm",    { "posix", "sysv", "xpmem", NULL } }, /* for backward compatibility */
   { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
   { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
-  { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5", NULL } },
+  { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5",
+               "gga_mlx5", NULL } },
   { "ud_v",  { "ud_verbs", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
   { "ud",    { "ud_mlx5", "ud_verbs", NULL } },
@@ -673,6 +674,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
+  { "gga",   { "gga_mlx5", NULL } },
   { NULL }
 };
 
@@ -2332,6 +2334,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         }
     } else {
         context->rcache = NULL;
+        memset(&context->cache_md_map, 0, sizeof(context->cache_md_map));
     }
 
     if (dfl_config != NULL) {

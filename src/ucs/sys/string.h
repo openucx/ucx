@@ -363,10 +363,43 @@ static inline int ucs_string_is_empty(const char *str)
  * Allocates a path buffer of size PATH_MAX.
  *
  * @param buffer_p Pointer to the buffer.
+ *                 The buffer is allocated and should be released by the caller.
  * @param name     Name of the buffer for logging.
- * @return         UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ *
+ * @return UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
  */
 ucs_status_t ucs_string_alloc_path_buffer(char **buffer_p, const char *name);
+
+/**
+ * Allocates a path buffer of size PATH_MAX and format a path string into it.
+ *
+ * @param buffer_p Pointer to the buffer.
+ *                 The buffer is allocated and should be released by the caller.
+ * @param name     Name of the buffer for logging.
+ * @param fmt      Format string for the path.
+ * @param ...      Arguments for the format string.
+ *
+ * @return UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ */
+ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
+                                             const char *fmt, ...);
+
+/**
+ * Allocates a path buffer of size PATH_MAX and gets the directory name of a
+ * given path.
+ *
+ * @param buffer_p Pointer to the buffer.
+ *                The buffer is allocated and should be released by the caller.
+ * @param name     Name of the buffer for logging.
+ * @param path     Path to get the directory name from.
+ * @param dir_p    Pointer to the directory name.
+ *
+ * @return UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ */
+ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
+                                                          const char *name,
+                                                          const char *path,
+                                                          const char **dir_p);
 
 END_C_DECLS
 

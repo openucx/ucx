@@ -899,13 +899,18 @@ protected:
         return get_variant_value() & TEST_MODIFIER_SA_DATA_V1;
     }
 
-    bool has_rndv_lanes(ucp_ep_h ep)
+    bool has_rndv_lanes(const entity &entity)
     {
+        const auto *config   = &entity.worker()->context->config.ext;
+        const auto &ep       = entity.ep();
+        uint64_t iface_flags = (config->rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ?
+                                       UCT_IFACE_FLAG_GET_ZCOPY :
+                                       UCT_IFACE_FLAG_PUT_ZCOPY;
+
         for (ucp_lane_index_t lane_idx = 0;
              lane_idx < ucp_ep_num_lanes(ep); ++lane_idx) {
             if ((lane_idx != ucp_ep_get_cm_lane(ep)) &&
-                (ucp_ep_get_iface_attr(ep, lane_idx)->cap.flags &
-                 (UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_PUT_ZCOPY)) &&
+                (ucp_ep_get_iface_attr(ep, lane_idx)->cap.flags & iface_flags) &&
                 /* RNDV lanes should be selected if transport supports GET/PUT
                  * Zcopy and: */
                 (/* - either memory invalidation can be done on its MD */
@@ -938,6 +943,10 @@ protected:
         constexpr size_t length = 4 * UCS_KBYTE;
 
         listen_and_communicate(false, SEND_DIRECTION_BIDI);
+
+        if (!has_rndv_lanes(sender())) {
+            UCS_TEST_SKIP_R("no RNDV lanes");
+        }
 
         mem_buffer send_buffer(length, UCS_MEMORY_TYPE_HOST);
         send_buffer.pattern_fill(1, length);
@@ -1386,7 +1395,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup, compare_cm_and_wireup_configs,
     cm_ep_cfg_key           = &ucp_ep_config(sender().ep())->key;
     /* Don't check RNDV lanes, because CM prefers p2p connection mode for RNDV
      * lanes and they don't support memory invalidation on MD */
-    should_check_rndv_lanes = !has_rndv_lanes(sender().ep());
+    should_check_rndv_lanes = !has_rndv_lanes(sender());
     EXPECT_NE(UCP_NULL_LANE, ucp_ep_get_cm_lane(sender().ep()));
     disconnect(sender());
     disconnect(receiver());
@@ -1996,8 +2005,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes,
 {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 
-    EXPECT_EQ(has_rndv_lanes(sender().ep()),
-              has_rndv_lanes(receiver().ep()));
+    EXPECT_EQ(has_rndv_lanes(sender()), has_rndv_lanes(receiver()));
 
     concurrent_disconnect();
 }
@@ -3170,6 +3178,10 @@ protected:
             send_recv(sender(), receiver(), send_recv_type(), false, cb_type(),
                       sender_idx);
 
+            if (!has_rndv_lanes(sender())) {
+                UCS_TEST_SKIP_R("no RNDV lanes");
+            }
+
             for (size_t i = 0; i < num_sends; ++i) {
                 void *sreq = send(sender(), send_buf.ptr(), size,
                                   SEND_RECV_TAG, send_cb, NULL, sender_idx);
@@ -3249,7 +3261,7 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 {
     size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
                                     ucs::test_time_multiplier());
-    do_tag_rndv_killed_sender_test(1, 128, num_sends);
+    do_tag_rndv_killed_sender_test(1, 1024, num_sends);
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
@@ -3258,7 +3270,7 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 {
     size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
                                     ucs::test_time_multiplier());
-    do_tag_rndv_killed_sender_test(4, 128, num_sends);
+    do_tag_rndv_killed_sender_test(4, 1024, num_sends);
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err_sender)

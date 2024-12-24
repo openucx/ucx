@@ -504,18 +504,18 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     const char *dev_name               = uct_ib_device_name(dev);
     const char *dev_path               = dev->ibv_context->device->ibdev_path;
     const unsigned sys_device_priority = 20;
-    char path_buffer[PATH_MAX];
-    const char *sysfs_path;
     ucs_status_t status;
+    char *path_buffer;
+    const char *sysfs_path;
     uint8_t i;
     int ret;
 
     status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
     if (status != UCS_OK) {
-        return status;
+        goto out;
     }
 
-    /* Check device type*/
+    /* Check device type */
     switch (ibv_device->node_type) {
     case IBV_NODE_SWITCH:
         dev->first_port = 0;
@@ -540,8 +540,14 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                              &dev->port_attr[i]);
         if (ret != 0) {
             ucs_error("ibv_query_port() returned %d: %m", ret);
-            return UCS_ERR_IO_ERROR;
+            status = UCS_ERR_IO_ERROR;
+            goto out;
         }
+    }
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        goto out;
     }
 
     sysfs_path   = ucs_topo_resolve_sysfs_path(dev_path, path_buffer);
@@ -550,7 +556,9 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     uct_ib_device_set_pci_id(dev, sysfs_path);
     dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
-    return UCS_OK;
+    ucs_free(path_buffer);
+out:
+    return status;
 }
 
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,

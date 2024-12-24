@@ -33,6 +33,7 @@ dist_perftest__DATA = \
 	contrib/ucx_perftest_config/test_types_ucp \
 	contrib/ucx_perftest_config/test_types_ucp_rma \
 	contrib/ucx_perftest_config/test_types_ucp_amo \
+	contrib/ucx_perftest_config/test_types_ucp_daemon \
 	contrib/ucx_perftest_config/transports
 
 SUBDIRS = \
@@ -74,6 +75,7 @@ EXTRA_DIST += contrib/ucx_perftest_config/msg_pow2
 EXTRA_DIST += contrib/ucx_perftest_config/README
 EXTRA_DIST += contrib/ucx_perftest_config/test_types_uct
 EXTRA_DIST += contrib/ucx_perftest_config/test_types_ucp
+EXTRA_DIST += contrib/ucx_perftest_config/test_types_ucp_daemon
 EXTRA_DIST += contrib/ucx_perftest_config/transports
 EXTRA_DIST += debian/changelog
 EXTRA_DIST += debian/compat
