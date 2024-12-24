@@ -186,7 +186,7 @@ typedef struct uct_dc_mlx5_iface_config {
     ucs_time_t                          fc_hard_req_timeout;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
     unsigned                            num_dci_channels;
-    unsigned                            dcis_initial_capacity;
+    unsigned long                       dcis_initial_capacity;
 } uct_dc_mlx5_iface_config_t;
 
 
@@ -285,7 +285,7 @@ typedef struct {
 } uct_dc_mlx5_dci_pool_t;
 
 
-UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uct_dci_index_t, uct_dc_dci_t);
+UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uct_dci_index_t, uct_dc_dci_t*);
 
 struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t       super;
@@ -361,6 +361,11 @@ struct uct_dc_mlx5_iface {
     uint16_t                         flags;
 
     uct_ud_mlx5_iface_common_t       ud_common;
+
+#ifdef __SANITIZE_ADDRESS__
+    uct_dc_dci_t *                   old_dcis_buffer;
+    size_t                           old_dcis_buffer_size;
+#endif
 };
 
 
@@ -426,13 +431,13 @@ uct_dc_mlx5_dci_config_hash(const uct_dc_mlx5_dci_config_t *dci_config);
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_dc_mlx5_is_dci_valid(const uct_dc_dci_t *dci)
 {
-    return dci->txwq.super.qp_num != UCT_IB_INVALID_QPN;
+    return dci != NULL;
 }
 
 static UCS_F_ALWAYS_INLINE uct_dc_dci_t *
 uct_dc_mlx5_iface_dci(uct_dc_mlx5_iface_t *iface, uct_dci_index_t dci_index)
 {
-    return &ucs_array_elem(&iface->tx.dcis, dci_index);
+    return ucs_array_elem(&iface->tx.dcis, dci_index);
 }
 
 #if HAVE_DEVX

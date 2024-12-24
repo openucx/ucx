@@ -346,7 +346,7 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
                               uct_dci_index_t dci_index)
 {
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
-    uct_dc_dci_t *dci            = uct_dc_mlx5_iface_dci(iface, dci_index);
+    uct_dc_dci_t *dci;
     uint8_t num_channels         = 1;
     ucs_status_t status;
 
@@ -365,6 +365,7 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
         return status;
     }
 
+    dci = uct_dc_mlx5_iface_dci(iface, dci_index);
     dci->path_index = pool->config.path_index;
     dci->pool_index = pool_index;
 
