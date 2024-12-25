@@ -1168,7 +1168,7 @@ err:
 static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
 {
     uct_dc_mlx5_ep_t *fc_ep = iface->tx.fc_ep;
-    uct_dc_dci_t *fc_dci    = uct_dc_mlx5_iface_dci(iface, fc_ep->dci);
+    uct_dc_dci_t *fc_dci;
     uct_rc_iface_send_op_t *op;
     ucs_queue_iter_t iter;
     uct_rc_txqp_t *txqp;
@@ -1177,8 +1177,12 @@ static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
     ucs_arbiter_group_cleanup(&fc_ep->arb_group);
     uct_rc_fc_cleanup(&fc_ep->fc);
 
-    if ((fc_ep->dci == UCT_DC_MLX5_EP_NO_DCI) ||
-        !uct_dc_mlx5_is_dci_valid(fc_dci)) {
+    if (fc_ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        goto out;
+    }
+
+    fc_dci = uct_dc_mlx5_iface_dci(iface, fc_ep->dci);
+    if (!uct_dc_mlx5_is_dci_valid(fc_dci)) {
         goto out;
     }
 

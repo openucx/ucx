@@ -1276,7 +1276,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
-    uct_dc_dci_t *dci          = uct_dc_mlx5_iface_dci(iface, self->dci);
+    uct_dc_dci_t *dci;
 
     uct_dc_mlx5_ep_pending_purge(&self->super.super,
                                  uct_rc_ep_pending_purge_warn_cb, self);
@@ -1294,7 +1294,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(iface, self->dci),
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);
-
+    dci = uct_dc_mlx5_iface_dci(iface, self->dci);
     if (!uct_dc_mlx5_is_dci_valid(dci)) {
         return;
     }
