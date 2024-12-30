@@ -964,6 +964,8 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
     }
 
     if (may_fail && (status != UCS_OK)) {
+        UCS_TEST_MESSAGE << "Failed to allocate memory: "
+                         << ucs_status_string(status);
         throw ucs::test_abort_exception();
     } else {
         ASSERT_UCS_OK(status);
