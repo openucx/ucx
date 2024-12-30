@@ -748,7 +748,8 @@ UCS_TEST_F(test_proto_perf, apply_bias) {
     /* Calculate expected */
     auto bias_func          = ucs_linear_func_make(0, 1 - bias);
     auto exp_local_tl_func  = ucs_linear_func_compose(bias_func, local_tl_func);
-    auto exp_remote_tl_func = ucs_linear_func_compose(bias_func, remote_tl_func);
+    auto exp_remote_tl_func = ucs_linear_func_compose(bias_func,
+                                                      remote_tl_func);
 
     expect_perf(0, SIZE_MAX,
                 {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, exp_local_tl_func},
