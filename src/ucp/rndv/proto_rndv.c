@@ -403,6 +403,7 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         cfg_thresh = remote_proto->cfg_thresh;
     }
 
+    ucp_proto_perf_apply_bias(perf, params->perf_bias);
     ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
                                perf, rpriv, priv_size);
 
