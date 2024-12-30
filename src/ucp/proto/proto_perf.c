@@ -445,8 +445,8 @@ void ucp_proto_perf_apply_bias(ucp_proto_perf_t *perf, double bias)
         for (fid = 0; fid < UCP_PROTO_PERF_FACTOR_LAST; ++fid) {
             seg->perf_factors[fid] =
                     ucs_linear_func_compose(bias_func, seg->perf_factors[fid]);
-            ucp_proto_perf_node_update_factors(seg->node, seg->perf_factors);
         }
+        ucp_proto_perf_node_update_factors(seg->node, seg->perf_factors);
         bias_node = ucp_proto_perf_node_new_data("bias", "%.2f %%", bias);
         ucp_proto_perf_node_own_child(seg->node, &bias_node);
     }
