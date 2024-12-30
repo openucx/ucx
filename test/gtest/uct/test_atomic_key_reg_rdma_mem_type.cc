@@ -30,13 +30,35 @@ UCS_TEST_SKIP_COND_P(uct_atomic_key_reg_rdma_mem_type, fadd64,
                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64) ||
                      !check_rdma_memory())
 {
-    mapped_buffer recvbuf(sizeof(uint64_t), receiver(), 0UL,
-                          UCS_MEMORY_TYPE_RDMA);
+    size_t buffer_size   = sizeof(uint64_t);
+    size_t buffer_offset = 0;
+    bool may_fail        = true;
+    int num_retries      = 5;
+    int sleep_usec       = 10000;
+    std::unique_ptr<mapped_buffer> recvbuf;
+
+    for (int i = 0; (i < num_retries) && (nullptr == recvbuf.get()); ++i) {
+        try {
+            scoped_log_handler slh(hide_errors_logger);
+            recvbuf.reset(new mapped_buffer(
+                buffer_size, receiver(), buffer_offset,
+                UCS_MEMORY_TYPE_RDMA, UCT_MD_MEM_ACCESS_ALL, may_fail));
+        } catch (const ucs::test_abort_exception& e) {
+            UCS_TEST_MESSAGE << "Retry " << i + 1 << "/" << num_retries
+                             << ": Buffer allocation failed - " << e.what();
+            usleep(sleep_usec);
+        }
+    }
+
+    if (nullptr == recvbuf.get()) {
+        ADD_FAILURE() << "Failed to allocate buffer";
+    }
+
     uint64_t add = rand64();
 
     run_workers(static_cast<send_func_t>(
                         &uct_amo_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_ADD>),
-                recvbuf, std::vector<uint64_t>(num_senders(), add), false);
+                *recvbuf, std::vector<uint64_t>(num_senders(), add), false);
     wait_for_remote();
 }
 
