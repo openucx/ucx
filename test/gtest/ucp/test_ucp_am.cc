@@ -2167,6 +2167,24 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_buff_cuda_frag,
     test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
 }
 
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, empty_rndv_frag_mem_type,
+           "RNDV_FRAG_MEM_TYPE=")
+{
+    m_check_recv_rndv_flags = false;
+
+    set_mem_type(UCS_MEMORY_TYPE_CUDA);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, 2, 0);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_managed_buff,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    set_mem_type(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
+}
+
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
 
 #endif

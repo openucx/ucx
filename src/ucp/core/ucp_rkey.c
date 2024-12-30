@@ -895,6 +895,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
             ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable",
                       rkey_index, remote_md_index, tl_rkey->rkey.rkey);
         } else {
+            rkey->md_map &= UCS_MASK(remote_md_index);
             ucs_error("failed to unpack remote key from remote md[%d]: %s",
                       remote_md_index, ucs_status_string(status));
             goto err_destroy;

@@ -4,6 +4,8 @@
  * See file LICENSE for terms.
  */
 
+#include <thread>
+
 #include <common/cuda_context.h>
 #include <uct/test_md.h>
 #include <cuda.h>
@@ -97,6 +99,36 @@ protected:
     }
 #endif
 };
+
+UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
+{
+    cuda_context cuda_ctx;
+    ucs_status_t status;
+    uct_cuda_ipc_rkey_t rkey;
+    ucs::handle<uct_md_h> md;
+    int dev_num;
+
+    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
+
+    // CUDA IPC cache is functional
+    rkey          = unpack(md, 1);
+    dev_num       = rkey.dev_num;
+    rkey.dev_num  = ~rkey.dev_num;
+    rkey          = unpack(md, 1);
+    EXPECT_EQ(dev_num, rkey.dev_num);
+
+    // Unpack without a CUDA device context
+    std::thread t([&md, &rkey, &status]() {
+        rkey.dev_num = ~rkey.dev_num;
+        status = md->component->rkey_unpack(md->component, &rkey, NULL, NULL);
+    });
+    t.join();
+
+    EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+    EXPECT_NE(dev_num, rkey.dev_num); // rkey was not updated
+}
 
 UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
 {
