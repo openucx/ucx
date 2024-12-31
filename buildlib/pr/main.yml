@@ -18,23 +18,11 @@ resources:
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:2
       options: $(DOCKER_OPT_ARGS)
-    - container: fedora34
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel76
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel76_mofed47
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel74
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel72
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel82
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
@@ -63,11 +51,11 @@ resources:
     - container: debian109
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian10.9/builder:mofed-5.8-3.0.7.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles15sp2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
+    - container: debian125
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian12.5/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles12sp5
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
+    - container: sles15sp6
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles15sp6/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: centos7_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-centos7
@@ -201,13 +189,6 @@ stages:
             - ucx_docker -equals yes
         strategy:
           matrix:
-            rhel72:
-              CONTAINER: rhel72
-            rhel74:
-              CONTAINER: rhel74
-            rhel76:
-              CONTAINER: rhel76
-              long_test: yes
             rhel76_mofed47:
               CONTAINER: rhel76_mofed47
               long_test: yes
@@ -226,15 +207,14 @@ stages:
               CONTAINER: debian113
             debian109:
               CONTAINER: debian109
-            sles15sp2:
-              CONTAINER: sles15sp2
+            debian125:
+              CONTAINER: debian125
+            sles15sp6:
+              CONTAINER: sles15sp6
             rhel82:
               CONTAINER: rhel82
             rhel90:
               CONTAINER: rhel90
-            fedora34:
-              CONTAINER: fedora34
-              long_test: yes
             centos7:
               CONTAINER: centos7_ib
             ubuntu2004_rocm:
