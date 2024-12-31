@@ -34,15 +34,13 @@ const char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS_HYBRID] = "dcs_hybrid",
     [UCT_DC_TX_POLICY_RAND]       = "rand",
     [UCT_DC_TX_POLICY_HW_DCS]     = "hw_dcs",
-    [UCT_DC_TX_POLICY_LAST]       = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_dc_tx_policy_names);
 
 static const char *uct_dct_affinity_policy_names[] = {
     [UCT_DC_MLX5_DCT_AFFINITY_DEFAULT] = "default",
-    [UCT_DC_MLX5_DCT_AFFINITY_RANDOM]  = "random",
-    [UCT_DC_MLX5_DCT_AFFINITY_LAST]    = NULL
+    [UCT_DC_MLX5_DCT_AFFINITY_RANDOM]  = "random"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_dct_affinity_policy_names);

@@ -28,7 +28,6 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
     [UCT_IB_MLX5_MMIO_MODE_DB]         = "db",
     [UCT_IB_MLX5_MMIO_MODE_DB_LOCK]    = "db_lock",
     [UCT_IB_MLX5_MMIO_MODE_AUTO]       = "auto",
-    [UCT_IB_MLX5_MMIO_MODE_LAST]       = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_mlx5_mmio_modes);
@@ -715,7 +714,7 @@ uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
                           int need_lock, unsigned bf_size,
                           uct_ib_mlx5_mmio_mode_t *mmio_mode)
 {
-    ucs_assert(cfg_mmio_mode < UCT_IB_MLX5_MMIO_MODE_LAST);
+    ucs_assert(cfg_mmio_mode < UCT_IB_MLX5_MMIO_MODE_AUTO);
 
     if (cfg_mmio_mode != UCT_IB_MLX5_MMIO_MODE_AUTO) {
         *mmio_mode = cfg_mmio_mode;

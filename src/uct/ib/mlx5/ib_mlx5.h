@@ -443,7 +443,7 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
     struct {
-        /* Max dp ordering level per transport, 
+        /* Max dp ordering level per transport,
            as listed in uct_ib_mlx5_dp_ordering_t */
         uint8_t              rc;
         uint8_t              dc;
@@ -461,7 +461,6 @@ typedef enum {
                                          used by multiple concurrent threads */
     UCT_IB_MLX5_MMIO_MODE_AUTO,       /* Auto-select according to driver/HW capabilities
                                          and multi-thread support level */
-    UCT_IB_MLX5_MMIO_MODE_LAST
 } uct_ib_mlx5_mmio_mode_t;
 
 

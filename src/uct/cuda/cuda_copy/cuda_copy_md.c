@@ -33,7 +33,6 @@
 static const char *uct_cuda_pref_loc[] = {
     [UCT_CUDA_PREF_LOC_CPU]  = "cpu",
     [UCT_CUDA_PREF_LOC_GPU]  = "gpu",
-    [UCT_CUDA_PREF_LOC_LAST] = NULL,
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_cuda_pref_loc);

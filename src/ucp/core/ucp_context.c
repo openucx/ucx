@@ -87,7 +87,6 @@ static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_CPU]    = "cpu",
     [UCP_ATOMIC_MODE_DEVICE] = "device",
     [UCP_ATOMIC_MODE_GUESS]  = "guess",
-    [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_atomic_modes);
@@ -96,7 +95,6 @@ static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_WEAK]   = "weak",
     [UCP_FENCE_MODE_STRONG] = "strong",
     [UCP_FENCE_MODE_AUTO]   = "auto",
-    [UCP_FENCE_MODE_LAST]   = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_fence_modes);
@@ -109,7 +107,6 @@ static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_PUT_PIPELINE] = "put_ppln",
     [UCP_RNDV_MODE_AM]           = "am",
     [UCP_RNDV_MODE_RKEY_PTR]     = "rkey_ptr",
-    [UCP_RNDV_MODE_LAST]         = NULL,
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_rndv_modes);
@@ -143,7 +140,6 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
 const char *ucp_object_versions[] = {
     [UCP_OBJECT_VERSION_V1]   = "v1",
     [UCP_OBJECT_VERSION_V2]   = "v2",
-    [UCP_OBJECT_VERSION_LAST] = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_object_versions);

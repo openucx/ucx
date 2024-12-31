@@ -8,7 +8,7 @@
 #define UCS_LOG_DEF_H_
 
 #ifndef UCS_MAX_LOG_LEVEL
-#  define UCS_MAX_LOG_LEVEL  UCS_LOG_LEVEL_LAST
+#  define UCS_MAX_LOG_LEVEL  UCS_LOG_LEVEL_PRINT
 #endif
 
 #include <ucs/sys/compiler_def.h>

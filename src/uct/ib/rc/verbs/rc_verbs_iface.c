@@ -32,7 +32,6 @@ static const char *uct_rc_verbs_flush_mode_names[] = {
     [UCT_RC_VERBS_FLUSH_MODE_RDMA_WRITE_0] = "write0",
     [UCT_RC_VERBS_FLUSH_MODE_FLOW_CONTROL] = "fc",
     [UCT_RC_VERBS_FLUSH_MODE_AUTO]         = "auto",
-    [UCT_RC_VERBS_FLUSH_MODE_LAST]         = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_rc_verbs_flush_mode_names);

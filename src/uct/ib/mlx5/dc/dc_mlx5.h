@@ -153,7 +153,6 @@ typedef enum {
     UCT_DC_TX_POLICY_SHARED_FIRST,
     UCT_DC_TX_POLICY_RAND = UCT_DC_TX_POLICY_SHARED_FIRST,
     UCT_DC_TX_POLICY_HW_DCS,
-    UCT_DC_TX_POLICY_LAST
 } uct_dc_tx_policy_t;
 
 
@@ -166,7 +165,6 @@ typedef enum {
 typedef enum {
     UCT_DC_MLX5_DCT_AFFINITY_DEFAULT,
     UCT_DC_MLX5_DCT_AFFINITY_RANDOM,
-    UCT_DC_MLX5_DCT_AFFINITY_LAST
 } uct_dc_mlx5_dct_affinity_t;
 
 
@@ -413,7 +411,7 @@ ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
                                                     uint16_t size);
 
 /**
- * Checks whether dci pool config is present in dc_config_hash and returns 
+ * Checks whether dci pool config is present in dc_config_hash and returns
  * the matching pool index or creates a new one
 */
 ucs_status_t

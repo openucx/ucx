@@ -213,7 +213,6 @@ typedef enum {
     UCP_ATOMIC_MODE_DEVICE,  /* Use device-based atomics */
     UCP_ATOMIC_MODE_GUESS,   /* If all transports support CPU AMOs only (no DEVICE),
                               * the CPU is selected, otherwise DEVICE is selected */
-    UCP_ATOMIC_MODE_LAST
 } ucp_atomic_mode_t;
 
 
@@ -224,7 +223,6 @@ typedef enum {
     UCP_FENCE_MODE_WEAK,   /* Use weak fence mode */
     UCP_FENCE_MODE_STRONG, /* Use strong fence mode */
     UCP_FENCE_MODE_AUTO,   /* Automatically detect fence mode */
-    UCP_FENCE_MODE_LAST
 } ucp_fence_mode_t;
 
 
@@ -239,7 +237,6 @@ typedef enum {
     UCP_RNDV_MODE_PUT_PIPELINE, /* Use pipelined put_zcopy scheme in RNDV protocol */
     UCP_RNDV_MODE_AM, /* Use active-messages based RNDV protocol */
     UCP_RNDV_MODE_RKEY_PTR, /* Use rkey_ptr in RNDV protocol */
-    UCP_RNDV_MODE_LAST
 } ucp_rndv_mode_t;
 
 
@@ -249,7 +246,6 @@ typedef enum {
 typedef enum {
     UCP_OBJECT_VERSION_V1,
     UCP_OBJECT_VERSION_V2,
-    UCP_OBJECT_VERSION_LAST
 } ucp_object_version_t;
 
 

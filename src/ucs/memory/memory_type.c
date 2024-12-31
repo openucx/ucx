@@ -25,7 +25,6 @@ const char *ucs_memory_type_names[] = {
     [UCS_MEMORY_TYPE_ZE_DEVICE]    = "ze-device",
     [UCS_MEMORY_TYPE_ZE_MANAGED]   = "ze-managed",
     [UCS_MEMORY_TYPE_LAST]         = "unknown",
-    [UCS_MEMORY_TYPE_LAST + 1]     = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_memory_type_names);

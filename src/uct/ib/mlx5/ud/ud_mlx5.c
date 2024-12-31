@@ -804,7 +804,7 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
     uct_ud_mlx5_qp_update_caps(&ib_attr->cap);
     attr.super     = *ib_attr;
-    attr.mmio_mode = UCT_IB_MLX5_MMIO_MODE_LAST;
+    attr.mmio_mode = UCT_IB_MLX5_MMIO_MODE_AUTO;
 
     status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, &attr);
     if (status != UCS_OK) {

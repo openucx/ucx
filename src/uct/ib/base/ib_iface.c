@@ -39,7 +39,6 @@ const char *uct_ib_mtu_values[] = {
     [UCT_IB_MTU_1024]       = "1024",
     [UCT_IB_MTU_2048]       = "2048",
     [UCT_IB_MTU_4096]       = "4096",
-    [UCT_IB_MTU_LAST]       = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_mtu_values);
@@ -60,7 +59,6 @@ static const char *uct_ib_iface_addr_types[] = {
    [UCT_IB_ADDRESS_TYPE_GLOBAL]     = "ib_global",
    [UCT_IB_ADDRESS_TYPE_ETH]        = "eth",
    [UCT_IB_IFACE_ADDRESS_TYPE_AUTO] = "auto",
-   [UCT_IB_IFACE_ADDRESS_TYPE_LAST] = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_iface_addr_types);

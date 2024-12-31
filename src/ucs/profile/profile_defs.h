@@ -31,7 +31,6 @@ BEGIN_C_DECLS
 enum {
     UCS_PROFILE_MODE_ACCUM, /**< Accumulate elapsed time per location */
     UCS_PROFILE_MODE_LOG,   /**< Record all events */
-    UCS_PROFILE_MODE_LAST
 };
 
 

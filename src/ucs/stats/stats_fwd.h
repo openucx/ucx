@@ -25,7 +25,6 @@ typedef enum {
     UCS_STATS_FULL,        /* Full statistics report */
     UCS_STATS_FULL_AGG,    /* Full statistics report */
     UCS_STATS_SUMMARY,     /* Summary statistics report */
-    UCS_STATS_LAST
 } ucs_stats_formats_t;
 
 extern const char *ucs_stats_formats_names[];
