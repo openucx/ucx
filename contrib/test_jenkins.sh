@@ -1143,7 +1143,7 @@ set_ucx_common_test_env() {
 	export UCX_TCP_CM_REUSEADDR=y
 
 	# Don't cross-connect RoCE devices
-	export UCX_IB_ROCE_LOCAL_SUBNET=y
+	export UCX_IB_ROCE_REACHABILITY_MODE=local_subnet
 	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 
 	export LSAN_OPTIONS=suppressions=${WORKSPACE}/contrib/lsan.supp

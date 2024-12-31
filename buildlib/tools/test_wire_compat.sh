@@ -11,7 +11,7 @@ common_opt=$3
 port=$((10000 + 1000 * ${AZP_AGENT_ID} + 100 * ${WIRE_COMPAT_STAGE_ID}))
 
 export UCX_CM_REUSEADDR=y UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n
-export UCX_IB_ROCE_LOCAL_SUBNET=y
+export UCX_IB_ROCE_REACHABILITY_MODE=local_subnet
 
 exe_cmd="stdbuf -oL ${exe_name} -p ${port}"
 
