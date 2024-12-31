@@ -44,8 +44,7 @@ static const char *uct_ib_devx_objs[] = {
     [UCT_IB_DEVX_OBJ_DCT]   = "dct",
     [UCT_IB_DEVX_OBJ_DCSRQ] = "dcsrq",
     [UCT_IB_DEVX_OBJ_DCI]   = "dci",
-    [UCT_IB_DEVX_OBJ_CQ]    = "cq",
-    NULL
+    [UCT_IB_DEVX_OBJ_CQ]    = "cq"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_devx_objs);

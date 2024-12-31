@@ -26,7 +26,6 @@ typedef enum {
     UCS_LOG_LEVEL_TRACE_ASYNC,  /* Asynchronous progress engine */
     UCS_LOG_LEVEL_TRACE_FUNC,   /* Function calls */
     UCS_LOG_LEVEL_TRACE_POLL,   /* Polling functions */
-    UCS_LOG_LEVEL_LAST,
     UCS_LOG_LEVEL_PRINT         /* Temporary output */
 } ucs_log_level_t;
 
@@ -39,8 +38,7 @@ typedef enum {
     UCS_ASYNC_MODE_THREAD,     /* Deprecated, keep for backward compatibility */
     UCS_ASYNC_MODE_THREAD_SPINLOCK = UCS_ASYNC_MODE_THREAD,
     UCS_ASYNC_MODE_THREAD_MUTEX,
-    UCS_ASYNC_MODE_POLL,       /* TODO keep only in debug version */
-    UCS_ASYNC_MODE_LAST
+    UCS_ASYNC_MODE_POLL        /* TODO keep only in debug version */
 } ucs_async_mode_t;
 
 
@@ -77,8 +75,7 @@ typedef enum {
     UCS_HANDLE_ERROR_BACKTRACE, /* Print backtrace */
     UCS_HANDLE_ERROR_FREEZE,    /* Freeze and wait for a debugger */
     UCS_HANDLE_ERROR_DEBUG,     /* Attach debugger */
-    UCS_HANDLE_ERROR_NONE,      /* Do not take any action */
-    UCS_HANDLE_ERROR_LAST
+    UCS_HANDLE_ERROR_NONE       /* Do not take any action */
 } ucs_handle_error_t;
 
 

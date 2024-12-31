@@ -99,9 +99,8 @@ const char *ucm_mmap_hook_modes[] = {
     [UCM_MMAP_HOOK_NONE]   = "none",
     [UCM_MMAP_HOOK_RELOC]  = UCM_MMAP_HOOK_RELOC_STR,
 #if UCM_BISTRO_HOOKS
-    [UCM_MMAP_HOOK_BISTRO] = UCM_MMAP_HOOK_BISTRO_STR,
+    [UCM_MMAP_HOOK_BISTRO] = UCM_MMAP_HOOK_BISTRO_STR
 #endif
-    [UCM_MMAP_HOOK_LAST]   = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_mmap_hook_modes);

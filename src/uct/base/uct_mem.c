@@ -35,7 +35,6 @@ const char *uct_alloc_method_names[] = {
     [UCT_ALLOC_METHOD_HEAP] = "heap",
     [UCT_ALLOC_METHOD_MMAP] = "mmap",
     [UCT_ALLOC_METHOD_HUGE] = "huge",
-    [UCT_ALLOC_METHOD_LAST] = NULL
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_alloc_method_names);

@@ -481,8 +481,7 @@ typedef enum {
     UCT_ALLOC_METHOD_HEAP, /**< Allocate from heap using libc allocator */
     UCT_ALLOC_METHOD_MMAP, /**< Allocate from OS using mmap() syscall */
     UCT_ALLOC_METHOD_HUGE, /**< Allocate huge pages */
-    UCT_ALLOC_METHOD_LAST,
-    UCT_ALLOC_METHOD_DEFAULT = UCT_ALLOC_METHOD_LAST /**< Use default method */
+    UCT_ALLOC_METHOD_LAST
 } uct_alloc_method_t;
 
 

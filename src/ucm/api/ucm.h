@@ -65,8 +65,7 @@ typedef enum ucm_event_type {
 typedef enum ucm_mmap_hook_mode {
     UCM_MMAP_HOOK_NONE,
     UCM_MMAP_HOOK_RELOC,
-    UCM_MMAP_HOOK_BISTRO,
-    UCM_MMAP_HOOK_LAST
+    UCM_MMAP_HOOK_BISTRO
 } ucm_mmap_hook_mode_t;
 
 
@@ -76,8 +75,7 @@ typedef enum ucm_mmap_hook_mode {
 typedef enum ucm_module_unload_prevent_mode {
     UCM_UNLOAD_PREVENT_MODE_LAZY,
     UCM_UNLOAD_PREVENT_MODE_NOW,
-    UCM_UNLOAD_PREVENT_MODE_NONE,
-    UCM_UNLOAD_PREVENT_MODE_LAST
+    UCM_UNLOAD_PREVENT_MODE_NONE
 } ucm_module_unload_prevent_mode_t;
 
 

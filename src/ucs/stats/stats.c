@@ -31,8 +31,7 @@
 const char *ucs_stats_formats_names[] = {
     [UCS_STATS_FULL]        = "full",
     [UCS_STATS_FULL_AGG]    = "agg",
-    [UCS_STATS_SUMMARY]     = "summary",
-    [UCS_STATS_LAST]        = NULL
+    [UCS_STATS_SUMMARY]     = "summary"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_stats_formats_names);

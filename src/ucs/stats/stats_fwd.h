@@ -24,8 +24,7 @@ typedef struct ucs_stats_filter_node      ucs_stats_filter_node_t;    /* Stats f
 typedef enum {
     UCS_STATS_FULL,        /* Full statistics report */
     UCS_STATS_FULL_AGG,    /* Full statistics report */
-    UCS_STATS_SUMMARY,     /* Summary statistics report */
-    UCS_STATS_LAST
+    UCS_STATS_SUMMARY      /* Summary statistics report */
 } ucs_stats_formats_t;
 
 extern const char *ucs_stats_formats_names[];

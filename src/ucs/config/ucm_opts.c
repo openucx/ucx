@@ -22,8 +22,7 @@
 static const char *ucm_module_unload_prevent_modes[] = {
     [UCM_UNLOAD_PREVENT_MODE_LAZY] = "lazy",
     [UCM_UNLOAD_PREVENT_MODE_NOW]  = "now",
-    [UCM_UNLOAD_PREVENT_MODE_NONE] = "none",
-    [UCM_UNLOAD_PREVENT_MODE_LAST] = NULL
+    [UCM_UNLOAD_PREVENT_MODE_NONE] = "none"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_module_unload_prevent_modes);

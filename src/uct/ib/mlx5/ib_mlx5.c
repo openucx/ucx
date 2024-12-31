@@ -27,8 +27,7 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
     [UCT_IB_MLX5_MMIO_MODE_BF_POST_MT] = "bf_post_mt",
     [UCT_IB_MLX5_MMIO_MODE_DB]         = "db",
     [UCT_IB_MLX5_MMIO_MODE_DB_LOCK]    = "db_lock",
-    [UCT_IB_MLX5_MMIO_MODE_AUTO]       = "auto",
-    [UCT_IB_MLX5_MMIO_MODE_LAST]       = NULL
+    [UCT_IB_MLX5_MMIO_MODE_AUTO]       = "auto"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_mlx5_mmio_modes);

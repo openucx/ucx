@@ -71,7 +71,6 @@ const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_TRACE_ASYNC]  = "ASYNC",
     [UCS_LOG_LEVEL_TRACE_FUNC]   = "FUNC",
     [UCS_LOG_LEVEL_TRACE_POLL]   = "POLL",
-    [UCS_LOG_LEVEL_LAST]         = NULL,
     [UCS_LOG_LEVEL_PRINT]        = "PRINT"
 };
 

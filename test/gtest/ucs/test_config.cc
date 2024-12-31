@@ -28,8 +28,7 @@ typedef enum {
 typedef enum {
     MATERIAL_LEATHER,
     MATERIAL_ALCANTARA,
-    MATERIAL_TEXTILE,
-    MATERIAL_LAST
+    MATERIAL_TEXTILE
 } material_t;
 
 const char *color_names[] = {
@@ -37,8 +36,7 @@ const char *color_names[] = {
     /* [COLOR_BLUE]   = */ "blue",
     /* [COLOR_BLACK]  = */ "black",
     /* [COLOR_YELLOW] = */ "yellow",
-    /* [COLOR_WHITE]  = */ "white",
-    /* [COLOR_LAST]   = */ NULL
+    /* [COLOR_WHITE]  = */ "white"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(color_names);
@@ -46,8 +44,7 @@ UCS_CONFIG_DEFINE_ALLOWED_VALUES(color_names);
 const char *material_names[] = {
     /* [MATERIAL_LEATHER]   = */ "leather",
     /* [MATERIAL_ALCANTARA] = */ "alcantara",
-    /* [MATERIAL_TEXTILE]   = */ "textile",
-    /* [MATERIAL_LAST]      = */ NULL
+    /* [MATERIAL_TEXTILE]   = */ "textile"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(material_names);

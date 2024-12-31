@@ -23,8 +23,7 @@
 static const char *uct_rc_fence_mode_values[] = {
     [UCT_RC_FENCE_MODE_NONE]   = "none",
     [UCT_RC_FENCE_MODE_WEAK]   = "weak",
-    [UCT_RC_FENCE_MODE_AUTO]   = "auto",
-    [UCT_RC_FENCE_MODE_LAST]   = NULL
+    [UCT_RC_FENCE_MODE_AUTO]   = "auto"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_rc_fence_mode_values);

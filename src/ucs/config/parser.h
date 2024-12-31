@@ -214,7 +214,7 @@ extern ucs_list_link_t ucs_config_global_list;
  *    [UCS_HANDLE_ERROR_BACKTRACE] = "bt",
  *    [UCS_HANDLE_ERROR_FREEZE]    = "freeze",
  *    [UCS_HANDLE_ERROR_DEBUG]     = "debug",
- *    [UCS_HANDLE_ERROR_NONE]      = "none",
+ *    [UCS_HANDLE_ERROR_NONE]      = "none"
  * };
  * UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_handle_error_modes);
  */

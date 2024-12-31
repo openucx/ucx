@@ -65,8 +65,7 @@ static const char *ucs_handle_error_modes[] = {
     [UCS_HANDLE_ERROR_BACKTRACE] = "bt",
     [UCS_HANDLE_ERROR_FREEZE]    = "freeze",
     [UCS_HANDLE_ERROR_DEBUG]     = "debug",
-    [UCS_HANDLE_ERROR_NONE]      = "none",
-    [UCS_HANDLE_ERROR_LAST]      = NULL
+    [UCS_HANDLE_ERROR_NONE]      = "none"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_handle_error_modes);

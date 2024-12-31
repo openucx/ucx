@@ -71,8 +71,7 @@ typedef enum uct_ib_mtu {
     UCT_IB_MTU_512     = 1,
     UCT_IB_MTU_1024    = 2,
     UCT_IB_MTU_2048    = 3,
-    UCT_IB_MTU_4096    = 4,
-    UCT_IB_MTU_LAST
+    UCT_IB_MTU_4096    = 4
 } uct_ib_mtu_t;
 
 

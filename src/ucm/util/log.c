@@ -37,8 +37,7 @@ const char *ucm_log_level_names[] = {
     [UCS_LOG_LEVEL_DIAG]  = "DIAG",
     [UCS_LOG_LEVEL_INFO]  = "INFO",
     [UCS_LOG_LEVEL_DEBUG] = "DEBUG",
-    [UCS_LOG_LEVEL_TRACE] = "TRACE",
-    NULL
+    [UCS_LOG_LEVEL_TRACE] = "TRACE"
 };
 
 UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_log_level_names);

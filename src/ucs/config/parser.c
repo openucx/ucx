@@ -62,8 +62,7 @@ const char *ucs_async_mode_names[] = {
     [UCS_ASYNC_MODE_SIGNAL]          = "signal",
     [UCS_ASYNC_MODE_THREAD_SPINLOCK] = "thread_spinlock",
     [UCS_ASYNC_MODE_THREAD_MUTEX]    = "thread_mutex",
-    [UCS_ASYNC_MODE_POLL]            = "poll",
-    [UCS_ASYNC_MODE_LAST]            = NULL
+    [UCS_ASYNC_MODE_POLL]            = "poll"
 };
 
 UCS_CONFIG_DEFINE_ARRAY(string, sizeof(char*), UCS_CONFIG_TYPE_STRING);
