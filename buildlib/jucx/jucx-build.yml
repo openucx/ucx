@@ -53,8 +53,8 @@ jobs:
           set -eE
           {
             echo -e "<settings><servers><server>"
-            echo -e "<id>ossrh</id><username>\${env.SONATYPE_USERNAME}</username>"
-            echo -e "<password>\${env.SONATYPE_PASSWORD}</password>"
+            echo -e "<id>ossrh</id><username>$(SONATYPE_USERNAME)</username>"
+            echo -e "<password>$(SONATYPE_PASSWORD)</password>"
             echo -e "</server></servers></settings>"
           } > $(temp_cfg)
         displayName: Generate temporary config
