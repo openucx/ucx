@@ -101,8 +101,9 @@ const char *ucm_mmap_hook_modes[] = {
 #if UCM_BISTRO_HOOKS
     [UCM_MMAP_HOOK_BISTRO] = UCM_MMAP_HOOK_BISTRO_STR,
 #endif
-    [UCM_MMAP_HOOK_LAST]   = NULL
 };
+
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_mmap_hook_modes);
 
 static const char *ucm_mmap_event_name[] = {
     /* Native events */

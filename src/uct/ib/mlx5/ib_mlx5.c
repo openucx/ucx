@@ -28,8 +28,9 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
     [UCT_IB_MLX5_MMIO_MODE_DB]         = "db",
     [UCT_IB_MLX5_MMIO_MODE_DB_LOCK]    = "db_lock",
     [UCT_IB_MLX5_MMIO_MODE_AUTO]       = "auto",
-    [UCT_IB_MLX5_MMIO_MODE_LAST]       = NULL
 };
+
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_mlx5_mmio_modes);
 
 ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
 #if HAVE_IBV_DM
@@ -713,7 +714,7 @@ uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
                           int need_lock, unsigned bf_size,
                           uct_ib_mlx5_mmio_mode_t *mmio_mode)
 {
-    ucs_assert(cfg_mmio_mode < UCT_IB_MLX5_MMIO_MODE_LAST);
+    ucs_assert(cfg_mmio_mode < UCT_IB_MLX5_MMIO_MODE_AUTO);
 
     if (cfg_mmio_mode != UCT_IB_MLX5_MMIO_MODE_AUTO) {
         *mmio_mode = cfg_mmio_mode;
@@ -1089,9 +1090,9 @@ out_str_buf_clean:
 
 err:
     ucs_assert(ar_enable != UCS_TRY);
-    ucs_config_sprintf_ulunits(sl_str, sizeof(sl_str), &ib_config->sl, NULL);
-    ucs_config_sprintf_ternary_auto(ar_enable_str, sizeof(ar_enable_str),
-                                    &ar_enable, NULL);
+    ucs_config_sprintf_ulunits(NULL, sl_str, sizeof(sl_str), &ib_config->sl);
+    ucs_config_sprintf_ternary_auto(NULL, ar_enable_str, sizeof(ar_enable_str),
+                                    &ar_enable);
     ucs_error("AR=%s was requested for SL=%s, but %s %s AR on %s:%u,"
               " SLs with AR support = { %s }, SLs without AR support = { %s }",
               ar_enable_str, sl_str,

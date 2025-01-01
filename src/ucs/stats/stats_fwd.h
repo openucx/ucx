@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include <ucs/sys/compiler_def.h>
+#include <ucs/config/parser.h>
 
 BEGIN_C_DECLS
 
@@ -24,10 +25,11 @@ typedef enum {
     UCS_STATS_FULL,        /* Full statistics report */
     UCS_STATS_FULL_AGG,    /* Full statistics report */
     UCS_STATS_SUMMARY,     /* Summary statistics report */
-    UCS_STATS_LAST
 } ucs_stats_formats_t;
 
 extern const char *ucs_stats_formats_names[];
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_stats_formats_names);
+
 ucs_stats_node_t * ucs_stats_get_root(void);
 
 END_C_DECLS

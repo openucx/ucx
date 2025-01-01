@@ -409,13 +409,16 @@ out:
 }
 
 ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
-                                int case_sensitive)
+                                size_t str_array_size)
 {
     size_t i;
 
-    for (i = 0; string_list[i] != NULL; ++i) {
-        if ((case_sensitive && (strcmp(string_list[i], str) == 0)) ||
-            (!case_sensitive && (strcasecmp(string_list[i], str) == 0))) {
+    /* Ignores NULL entries */
+    for (i = 0; i < str_array_size; ++i) {
+        if (string_list[i] == NULL) {
+            continue;
+        }
+        if (strcmp(string_list[i], str) == 0) {
             return i;
         }
     }

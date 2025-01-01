@@ -8,11 +8,12 @@
 #define UCS_LOG_DEF_H_
 
 #ifndef UCS_MAX_LOG_LEVEL
-#  define UCS_MAX_LOG_LEVEL  UCS_LOG_LEVEL_LAST
+#  define UCS_MAX_LOG_LEVEL  UCS_LOG_LEVEL_PRINT
 #endif
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/config/global_opts.h>
+#include <ucs/config/parser.h>
 #include <stdarg.h>
 #include <stdint.h>
 
@@ -110,6 +111,8 @@ typedef ucs_log_func_rc_t (*ucs_log_func_t)(const char *file, unsigned line,
 
 
 extern const char *ucs_log_level_names[];
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_log_level_names);
+
 extern const char *ucs_log_category_names[];
 
 
