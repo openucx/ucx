@@ -130,24 +130,22 @@ public:
 
     void send_message(const ucp_test_base::entity &e1,
                       const ucp_test_base::entity &e2, const mem_buffer *sbuf,
-                      const mem_buffer *rbuf, size_t msg_index,
+                      const mem_buffer *rbuf, size_t msg_size,
                       std::vector<void*> &reqs)
     {
         const ucp_request_param_t param = {
             .op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL
         };
 
-        void *sreq      = ucp_tag_send_nbx(e1.ep(), sbuf->ptr(), sbuf->size(),
-                                           msg_index, &param);
-        void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(), sbuf->ptr(),
-                                                sbuf->size(), msg_index,
-                                                &param);
+        void *sreq = ucp_tag_send_nbx(e1.ep(), sbuf->ptr(), msg_size, 0,
+                                      &param);
+        void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(), sbuf->ptr(), msg_size,
+                                                0, &param);
         reqs.insert(reqs.end(), {sreq, sreq_sync});
 
         for (unsigned iter = 0; iter < 2; iter++) {
-            void *rreq = ucp_tag_recv_nbx(e2.worker(), rbuf->ptr(),
-                                          rbuf->size(), msg_index, UCS_MASK(64),
-                                          &param);
+            void *rreq = ucp_tag_recv_nbx(e2.worker(), rbuf->ptr(), msg_size,
+                                          0, 0, &param);
             reqs.push_back(rreq);
         }
     }
@@ -169,12 +167,13 @@ public:
 
             for (unsigned i = 0; i < num_iterations; ++i) {
                 send_message(sender(), receiver(), sbufs[i].get(),
-                             rbufs[i].get(), i, reqs);
+                             rbufs[i].get(), msg_size, reqs);
 
                 if (bidirectional) {
                     send_message(receiver(), sender(),
                                  sbufs[i + num_iterations].get(),
-                                 rbufs[i + num_iterations].get(), i, reqs);
+                                 rbufs[i + num_iterations].get(), msg_size,
+                                 reqs);
                 }
             }
 
@@ -427,6 +426,11 @@ UCS_TEST_SKIP_COND_P(test_ucp_ep_reconfig, resolve_remote_id, is_self(),
         UCS_TEST_SKIP_R("asymmetric setup is not supported for this transport "
                         "due to a reachability issue - only matching "
                         "interfaces can connect");
+    }
+
+    if (has_transport("shm")) {
+        UCS_TEST_SKIP_R("AM messages might be sent before reconfiguration"
+                        "(would be supported in next PR)");
     }
 
     run(true);
