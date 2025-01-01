@@ -23,6 +23,9 @@
 #ifdef __AVX__
 #  include <immintrin.h>
 #endif
+#ifdef __SSE2__
+#  include <emmintrin.h>
+#endif
 
 BEGIN_C_DECLS
 
@@ -131,6 +134,14 @@ ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
 {
     ucs_x86_memcpy_sse_movntdqa(dst, src, len);
 }
+
+#ifdef __SSE2__
+static UCS_F_ALWAYS_INLINE void ucs_cpu_relax()
+{
+    _mm_pause();
+}
+#define UCS_HAS_CPU_RELAX
+#endif
 
 END_C_DECLS
 
