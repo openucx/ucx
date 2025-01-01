@@ -112,6 +112,13 @@ typedef struct uct_dc_mlx5_iface_flush_addr {
 } UCS_S_PACKED uct_dc_mlx5_iface_flush_addr_t;
 
 
+typedef enum {
+    UCT_DC_MLX5_POLICY_CAP_QUOTA = UCS_BIT(0),
+    /* Policies with shared DCI */
+    UCT_DC_MLX5_POLICY_CAP_SHARED = UCS_BIT(1),
+    UCT_DC_MLX5_POLICY_CAP_HW_DCI = UCS_BIT(2),
+} uct_dc_mlx5_policy_cap_t;
+
 /**
  * dci policies:
  * - fixed: all eps always use same dci no matter what
@@ -146,13 +153,13 @@ typedef struct uct_dc_mlx5_iface_flush_addr {
  */
 typedef enum {
     /* Policies with dedicated DCI per active connection */
-    UCT_DC_TX_POLICY_DCS,
-    UCT_DC_TX_POLICY_DCS_QUOTA,
-    UCT_DC_TX_POLICY_DCS_HYBRID,
-    /* Policies with shared DCI */
-    UCT_DC_TX_POLICY_SHARED_FIRST,
-    UCT_DC_TX_POLICY_RAND = UCT_DC_TX_POLICY_SHARED_FIRST,
-    UCT_DC_TX_POLICY_HW_DCS,
+    UCT_DC_TX_POLICY_DCS        = 0,
+    UCT_DC_TX_POLICY_DCS_QUOTA  = UCT_DC_MLX5_POLICY_CAP_QUOTA,
+    UCT_DC_TX_POLICY_DCS_HYBRID = UCT_DC_MLX5_POLICY_CAP_QUOTA |
+                                  UCT_DC_MLX5_POLICY_CAP_HW_DCI,
+    UCT_DC_TX_POLICY_RAND       = UCT_DC_MLX5_POLICY_CAP_SHARED,
+    UCT_DC_TX_POLICY_HW_DCS     = UCT_DC_MLX5_POLICY_CAP_HW_DCI |
+                                  UCT_DC_MLX5_POLICY_CAP_SHARED,
     UCT_DC_TX_POLICY_LAST
 } uct_dc_tx_policy_t;
 
@@ -411,6 +418,13 @@ ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
 
 ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
                                                     uint16_t size);
+
+uct_dci_index_t
+uct_dc_mlx5_hw_dci_index(uct_dc_mlx5_iface_t *iface, uint8_t pool_index);
+
+void uct_dc_mlx5_iface_init_hw_dci(uct_dc_mlx5_iface_t *iface,
+                                   uint8_t pool_index);
+
 
 /**
  * Checks whether dci pool config is present in dc_config_hash and returns 

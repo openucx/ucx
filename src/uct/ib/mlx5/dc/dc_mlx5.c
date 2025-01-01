@@ -34,6 +34,8 @@ const char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS_HYBRID] = "dcs_hybrid",
     [UCT_DC_TX_POLICY_RAND]       = "rand",
     [UCT_DC_TX_POLICY_HW_DCS]     = "hw_dcs",
+    [3] = "DUMMY",
+    [4] = "DUMMY2",
     [UCT_DC_TX_POLICY_LAST]       = NULL
 };
 
@@ -789,8 +791,10 @@ static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface)
     for (dci_index = 0; dci_index < num_dcis; dci_index++) {
         dci = uct_dc_mlx5_iface_dci(iface, dci_index);
         if (!uct_dc_mlx5_is_dci_valid(dci)) {
+            ucs_info("not destroying dci[%d] - dci is not valid", dci_index);
             continue;
         }
+        ucs_info("destroying dci[%d]", dci_index);
 
         uct_dc_mlx5_destroy_dci(iface, dci);
     }
@@ -807,6 +811,22 @@ uct_dc_mlx5_dump_dci_pool_config(const uct_dc_mlx5_dci_config_t *config)
 {
     ucs_debug("dci pool config: (path_index=%u, max_rd_atomic=%u)",
               config->path_index, config->max_rd_atomic);
+}
+
+uct_dci_index_t
+uct_dc_mlx5_hw_dci_index(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
+{
+    return iface->tx.ndci * pool_index + UCT_DC_MLX5_HW_DCI_INDEX;
+}
+
+void uct_dc_mlx5_iface_init_hw_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
+{
+    uct_dci_index_t hw_dci_index = uct_dc_mlx5_hw_dci_index(iface, pool_index);
+
+    if (!uct_dc_mlx5_is_dci_valid(uct_dc_mlx5_iface_dci(iface, hw_dci_index))) {
+        uct_dc_mlx5_iface_resize_and_fill_dcis(iface, hw_dci_index);
+        uct_dc_mlx5_dci_pool_init_dci(iface, pool_index, hw_dci_index);
+    }
 }
 
 static void
@@ -832,6 +852,10 @@ uct_dc_mlx5_iface_create_dci_pool(uct_dc_mlx5_iface_t *iface,
     dci_pool->config            = *config;
     ucs_arbiter_init(&dci_pool->arbiter);
     ucs_array_init_dynamic(&dci_pool->stack);
+
+    if (iface->tx.policy & UCT_DC_MLX5_POLICY_CAP_HW_DCI) {
+        uct_dc_mlx5_iface_init_hw_dci(iface, pool_index);
+    }
 
     iface->tx.num_dci_pools++;
     *pool_index_p = pool_index;
@@ -916,6 +940,7 @@ uct_dc_mlx5_iface_init_dcis_array(uct_dc_mlx5_iface_t *iface,
     dci = uct_dc_mlx5_iface_dci(iface, 0);
 
     iface->tx.bb_max = dci->txwq.bb_max;
+    ucs_info("DCI 0 is being destroyed in dcis array initialization");
     uct_dc_mlx5_destroy_dci(iface, dci);
 
     ucs_array_length(&iface->tx.dcis) = 0;
@@ -1677,8 +1702,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (uct_dc_mlx5_iface_is_hw_dcs(self) ||
-        uct_dc_mlx5_iface_is_hybrid(self)) {
+    if (uct_dc_mlx5_iface_has_hw_dci(self)) {
         /* Calculate num_dci_channels: select minimum from requested by runtime
          * and supported by HCA, must be power of two */
         num_dci_channels          = ucs_roundup_pow2(config->num_dci_channels);
