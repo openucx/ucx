@@ -442,17 +442,19 @@ protected:
     }
 };
 
-UCS_TEST_P(test_reconfig_asymmetric, basic)
+UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, basic, !has_transport("ib"))
 {
     run();
 }
 
-UCS_TEST_P(test_reconfig_asymmetric, request_reset, "PROTO_REQUEST_RESET=y")
+UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, request_reset,
+                     !has_transport("ib"), "PROTO_REQUEST_RESET=y")
 {
     run();
 }
 
-UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
+UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, resolve_remote_id,
+                     !has_transport("ib"))
 {
     run(true);
 }
