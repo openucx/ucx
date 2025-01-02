@@ -49,9 +49,12 @@ enum uct_dc_mlx5_ep_flags {
     /* Flush remote operation should be invoked */
     UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(10),
 
+    /* Use atomic offset on EP */
+    UCT_DC_MLX5_EP_FLAG_ATOMIC_OFFSET       = UCS_BIT(11),
+
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(11)
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(12)
 #else
     UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
 #endif
