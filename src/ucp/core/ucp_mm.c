@@ -462,7 +462,7 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
 }
 
 static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
-                                          ucp_md_map_t md_map)
+                                          ucp_md_map_t md_map, unsigned uct_flags)
 {
     ucp_md_map_t reg_md_map = context->gva_md_map[memh->mem_type] & md_map;
     void *address           = ucp_memh_address(memh);
@@ -477,7 +477,7 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
     }
 
     params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-    params.flags      = UCT_MD_MEM_GVA;
+    params.flags      = UCT_MD_MEM_GVA | uct_flags;
 
     if (context->config.ext.gva_mlock &&
         !(memh->flags & UCP_MEMH_FLAG_MLOCKED)) {
@@ -537,7 +537,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_align;
 
     if (gva_enable) {
-        status = ucp_memh_register_gva(context, memh, md_map);
+        status = ucp_memh_register_gva(context, memh, md_map, uct_flags);
         if ((status != UCS_OK) && !(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
             return status;
         }
