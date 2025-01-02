@@ -749,12 +749,20 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                      const ucp_ep_config_key_t *key2,
                                      ucp_lane_index_t lane2);
 
+ucp_lane_index_t ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
+                                               ucp_lane_index_t lane1,
+                                               const ucp_ep_config_key_t *key2);
+
 void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
                                    const ucp_ep_config_key_t *key2,
                                    const ucp_ep_h ep,
                                    const ucp_unpacked_address_t *remote_address,
                                    const unsigned *addr_indices,
                                    ucp_lane_index_t *lane_map);
+
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);

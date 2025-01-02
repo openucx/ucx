@@ -826,6 +826,7 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ucp_tl_bitmap_t ep_tl_bitmap;
     ucs_status_t status;
     ucp_ep_h ep;
+    int is_am_replaced;
 
     /* allocate endpoint */
     status = ucp_ep_create_base(worker, ep_init_flags, remote_address->name,
@@ -836,7 +837,8 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
 
     /* initialize transport endpoints */
     status = ucp_wireup_init_lanes(ep, ep_init_flags, local_tl_bitmap,
-                                   remote_address, addr_indices);
+                                   remote_address, addr_indices,
+                                   &is_am_replaced);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -1859,10 +1861,9 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                           config_lane2->dst_md_index);
 }
 
-static ucp_lane_index_t
-ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
-                              ucp_lane_index_t lane1,
-                              const ucp_ep_config_key_t *key2)
+ucp_lane_index_t ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
+                                               ucp_lane_index_t lane1,
+                                               const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane_idx;
 
@@ -1936,9 +1937,9 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
     }
 }
 
-static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
-                                       const ucp_ep_config_key_t *key2,
-                                       ucp_lane_index_t lane)
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane)
 {
     const ucp_ep_config_key_lane_t *config_lane1 = &key1->lanes[lane];
     const ucp_ep_config_key_lane_t *config_lane2 = &key2->lanes[lane];
