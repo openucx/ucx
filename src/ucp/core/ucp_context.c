@@ -2334,6 +2334,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         }
     } else {
         context->rcache = NULL;
+        memset(&context->cache_md_map, 0, sizeof(context->cache_md_map));
     }
 
     if (dfl_config != NULL) {

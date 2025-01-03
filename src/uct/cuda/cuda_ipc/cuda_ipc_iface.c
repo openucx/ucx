@@ -42,7 +42,7 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Max number of event completions to pick during cuda events polling",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_poll), UCS_CONFIG_TYPE_UINT},
 
-    {"MAX_STREAMS", "16",
+    {"MAX_STREAMS", UCS_PP_MAKE_STRING(UCT_CUDA_IPC_MAX_PEERS),
      "Max number of CUDA streams to make concurrent progress on",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_streams), UCS_CONFIG_TYPE_UINT},
 
@@ -634,14 +634,11 @@ uct_cuda_ipc_query_devices(
         uct_md_h uct_md, uct_tl_device_resource_t **tl_devices_p,
         unsigned *num_tl_devices_p)
 {
-    uct_device_type_t dev_type = UCT_DEVICE_TYPE_SHM;
-    uct_cuda_ipc_md_t *md      = ucs_derived_of(uct_md, uct_cuda_ipc_md_t);
-
-    if (md->enable_mnnvl) {
-        dev_type = UCT_DEVICE_TYPE_NET;
-    }
-
-    return uct_cuda_base_query_devices_common(uct_md, dev_type,
+    /* Declare cuda-ipc as shm device even if MNNVL is supported. In this case
+     * UCX_NET_DEVICES doesn't affect cuda-ipc (which is well established
+     * interface). When MNNVL is supported cuda-ipc iface sets
+     * UCT_IFACE_FLAG_INTER_NODE flag instead. */
+    return uct_cuda_base_query_devices_common(uct_md, UCT_DEVICE_TYPE_SHM,
                                               tl_devices_p, num_tl_devices_p);
 }
 

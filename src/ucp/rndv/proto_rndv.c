@@ -493,7 +493,7 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
 {
     ucp_lane_index_t lane, num_lanes;
 
-    num_lanes = ucp_proto_common_find_lanes(params, UCT_EP_OP_LAST,
+    num_lanes = ucp_proto_common_find_lanes(params,
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
                                             UCP_PROTO_COMMON_OFFSET_INVALID, 1,
                                             UCP_LANE_TYPE_AM,
