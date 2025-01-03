@@ -88,14 +88,14 @@ private:
          * Store first device name, that will be used to instantiate all the
          * mocks. Then mock device query response to return mocks instead.
          */
-        uct_tl_device_resource_t *tmp;
         m_self->m_real_dev_name  = (*tl_devices_p)[0].name;
         unsigned size            = m_self->m_iface_attrs_funcs.size();
-        tmp                      = (uct_tl_device_resource_t *)ucs_malloc(
-                                        sizeof(*tmp) * size,"mock_tl_devices");
+        auto tmp                 = (uct_tl_device_resource_t *)ucs_malloc(
+                                        sizeof(uct_tl_device_resource_t) * size,
+                                        "mock_tl_devices");
         ucs_sys_device_t sys_dev = 1;
         unsigned i               = 0;
-        for (auto & it : m_self->m_iface_attrs_funcs) {
+        for (const auto & it : m_self->m_iface_attrs_funcs) {
             ucs_strncpy_safe(tmp[i].name, it.first.c_str(), UCT_DEVICE_NAME_MAX);
             tmp[i].type         = (*tl_devices_p)[0].type;
             tmp[i++].sys_device = sys_dev++;
