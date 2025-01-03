@@ -341,6 +341,7 @@ public:
         /* Device with higher BW and latency */
         add_mock_iface("mock_0:1",
             [](uct_iface_attr_t &iface_attr) {
+                iface_attr.cap.flags       |= UCT_IFACE_FLAG_AM_SHORT;
                 iface_attr.cap.am.max_short = 2000;
                 iface_attr.bandwidth.shared = 28000000000;
                 iface_attr.latency.c        = 0.0000006;
@@ -349,6 +350,7 @@ public:
         /* Device with smaller BW but lower latency */
         add_mock_iface("mock_1:1",
             [](uct_iface_attr_t &iface_attr) {
+                iface_attr.cap.flags       |= UCT_IFACE_FLAG_AM_SHORT;
                 iface_attr.cap.am.max_short = 208;
                 iface_attr.bandwidth.shared = 24000000000;
                 iface_attr.latency.c        = 0.0000005;
@@ -365,10 +367,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_1_lane,
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    /*
-     * This is expected behaviour that is fixed by lane sorting by BW.
-     * Prefer mock_0:1 iface for RNDV because it has larger BW
-     */
+    /* Prefer mock_0:1 iface for RNDV because it has larger BW */
     check_ep_config(sender(), {
         {0,     200,   "short",                "rc_mlx5/mock_1:1"},
         {201,   6650,  "copy-in",              "rc_mlx5/mock_1:1"},
@@ -386,18 +385,14 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_2_lanes,
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    /*
-     * FIXME: Here we reproduce the issue with lane sorting by BW.
-     * The optimal RNDV config must use mock_0:1 and mock_1:1 proportionally,
-     * not just 2 paths of mock_0:1.
-     */
+    /* The optimal RNDV config must use mock_0:1 and mock_1:1 proportionally. */
     check_ep_config(sender(), {
         {0,     200,   "short",                "rc_mlx5/mock_1:1/path0"},
         {201,   6650,  "copy-in",              "rc_mlx5/mock_1:1/path0"},
         {6651,  8246,  "zero-copy",            "rc_mlx5/mock_1:1/path0"},
-        {8247,  20076, "multi-frag zero-copy", "rc_mlx5/mock_1:1/path0"},
-        {20077, INF,   "rendezvous zero-copy read from remote",
-                       "rc_mlx5/mock_0:1 50% on path0 and 50% on path1"},
+        {8247,  20300, "multi-frag zero-copy", "rc_mlx5/mock_1:1/path0"},
+        {20301, INF,   "rendezvous zero-copy read from remote",
+         "47% on rc_mlx5/mock_1:1/path0 and 53% on rc_mlx5/mock_0:1/path0"},
     }, key);
 }
 
