@@ -172,17 +172,17 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
 }
 
 static inline size_t
-ucp_proto_select_elem_selected_count(const ucp_proto_select_elem_t *select_elem)
+ucp_proto_select_elem_selections(const ucp_proto_select_elem_t *select_elem)
 {
-#ifdef ENABLE_STATS
+#ifdef ENABLE_DEBUG_DATA
     const ucp_proto_threshold_elem_t *thresh_elem = select_elem->thresholds;
-    size_t total_selected_count                   = 0;
+    size_t total_selections                       = 0;
 
     do {
-        total_selected_count += thresh_elem->proto_config.selected_count;
+        total_selections += thresh_elem->proto_config.selections;
     } while ((thresh_elem++)->max_msg_length < SIZE_MAX);
 
-    return total_selected_count;
+    return total_selections;
 #else
     return 0;
 #endif
@@ -206,7 +206,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     size_t range_start, range_end;
     int proto_valid;
 
-    if (show_used && (0 == ucp_proto_select_elem_selected_count(select_elem))) {
+    if (show_used && (0 == ucp_proto_select_elem_selections(select_elem))) {
         return;
     }
 
@@ -247,10 +247,10 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
         ucs_memunits_range_str(range_start, range_end, row_elem->range_str,
                                sizeof(row_elem->range_str));
 
-        if (show_used && (proto_attr.selected_count > 0)) {
+        if (show_used && (proto_attr.selections > 0)) {
             ucs_snprintf_safe(row_elem->counter_str,
                               sizeof(row_elem->counter_str), "%zu  ",
-                              proto_attr.selected_count);
+                              proto_attr.selections);
         } else {
             row_elem->counter_str[0] = '\0';
         }

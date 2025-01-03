@@ -122,9 +122,9 @@ typedef struct {
     /* Pointer to the corresponding initialization data */
     const ucp_proto_init_elem_t *init_elem;
 
-#ifdef ENABLE_STATS
+#ifdef ENABLE_DEBUG_DATA
     /* Usage counter */
-    size_t                      selected_count;
+    size_t                      selections;
 #endif
 } ucp_proto_config_t;
 

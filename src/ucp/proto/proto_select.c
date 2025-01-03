@@ -298,8 +298,8 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
             proto_config->rkey_cfg_index = rkey_cfg_index;
             proto_config->select_param   = *select_param;
             proto_config->init_elem      = proto;
-#ifdef ENABLE_STATS
-            proto_config->selected_count = 0;
+#ifdef ENABLE_DEBUG_DATA
+            proto_config->selections     = 0;
 #endif
             *last_proto_idx              = proto_idx;
         }
@@ -590,7 +590,7 @@ void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select)
 void ucp_proto_select_trace(ucp_worker_h worker,
                             ucp_proto_select_t *proto_select)
 {
-#ifdef ENABLE_STATS
+#ifdef ENABLE_DEBUG_DATA
     ucp_proto_select_elem_t select_elem;
     ucp_proto_select_key_t key;
 
@@ -734,9 +734,9 @@ void ucp_proto_select_short_init(ucp_worker_h worker,
             goto out_disable;
         }
 
-#ifdef ENABLE_STATS
+#ifdef ENABLE_DEBUG_DATA
         /* Revert stats counter for probe operation */
-        --((ucp_proto_threshold_elem_t *)thresh)->proto_config.selected_count;
+        --((ucp_proto_threshold_elem_t *)thresh)->proto_config.selections;
 #endif
 
         ucs_assert(thresh->proto_config.proto != NULL);
@@ -884,10 +884,10 @@ int ucp_proto_select_elem_query(ucp_worker_h worker,
 
     proto_attr->max_msg_length = ucs_min(proto_attr->max_msg_length,
                                          thresh_elem->max_msg_length);
-#ifdef ENABLE_STATS
-    proto_attr->selected_count = proto_config->selected_count;
+#ifdef ENABLE_DEBUG_DATA
+    proto_attr->selections = proto_config->selections;
 #else
-    proto_attr->selected_count = 0;
+    proto_attr->selections = 0;
 #endif
 
     return !(thresh_elem->proto_config.proto->flags & UCP_PROTO_FLAG_INVALID);

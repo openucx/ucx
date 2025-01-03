@@ -110,8 +110,8 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
     }
 
     thresh = ucp_proto_select_thresholds_search(select_elem, msg_length);
-#ifdef ENABLE_STATS
-    ++((ucp_proto_threshold_elem_t *)thresh)->proto_config.selected_count;
+#ifdef ENABLE_DEBUG_DATA
+    ++((ucp_proto_threshold_elem_t *)thresh)->proto_config.selections;
 #endif
     return thresh;
 }
