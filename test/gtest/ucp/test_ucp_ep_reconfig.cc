@@ -89,7 +89,7 @@ protected:
     }
 
 public:
-    void init()
+    virtual void init()
     {
         ucp_test::init();
 
@@ -439,6 +439,24 @@ protected:
     ucp_tl_bitmap_t tl_bitmap() override
     {
         return ucp_tl_bitmap_max;
+    }
+
+    void init() override
+    {
+        static const std::string ib_tls[5] = {"rc_mlx5", "dc_mlx5", "rc_verbs",
+                                              "ud_verbs", "ud_mlx5"};
+
+        test_ucp_ep_reconfig::init();
+        bool has_ib = std::any_of(ib_tls, ib_tls + sizeof(ib_tls),
+                                  [&](const std::string &tl_name) {
+                                      return has_resource(sender(), tl_name);
+                                  });
+
+        if (!has_ib) {
+            /* In case there's no IB devices, new config will be identical to
+             * old config (thus no reconfiguration will be triggered). */
+            UCS_TEST_SKIP_R("No IB devices found");
+        }
     }
 };
 
