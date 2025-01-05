@@ -443,11 +443,12 @@ protected:
 
     void init() override
     {
-        static const std::string ib_tls[5] = {"rc_mlx5", "dc_mlx5", "rc_verbs",
-                                              "ud_verbs", "ud_mlx5"};
+        static const std::string ib_tls[] = {"rc_mlx5", "dc_mlx5", "rc_verbs",
+                                             "ud_verbs", "ud_mlx5"};
 
         test_ucp_ep_reconfig::init();
-        bool has_ib = std::any_of(ib_tls, ib_tls + sizeof(ib_tls),
+        bool has_ib = std::any_of(ib_tls,
+                                  ib_tls + ucs_static_array_size(ib_tls),
                                   [&](const std::string &tl_name) {
                                       return has_resource(sender(), tl_name);
                                   });
