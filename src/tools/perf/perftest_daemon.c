@@ -307,8 +307,13 @@ ucp_perf_daemon_memh_import(ucp_perf_daemon_context_t *ctx, void *packed_memh)
     ucs_status_t status;
     ucp_mem_h memh;
 
-    params.field_mask           = UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER;
+    params.field_mask           = UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER |
+                                  UCP_MEM_MAP_PARAM_FIELD_PROT;
     params.exported_memh_buffer = packed_memh;
+    params.prot                 = UCP_MEM_MAP_PROT_LOCAL_READ |
+                                  UCP_MEM_MAP_PROT_LOCAL_WRITE |
+                                  UCP_MEM_MAP_PROT_REMOTE_READ |
+                                  UCP_MEM_MAP_PROT_REMOTE_WRITE;
 
     status = ucp_mem_map(ctx->context, &params, &memh);
     if (status != UCS_OK) {
