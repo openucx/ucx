@@ -110,11 +110,14 @@ resource_speed::resource_speed(uct_component_h component,
 std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 
     static std::vector<uct_test::md_resource> all_md_resources;
+    static bool populated = false;
 
-    if (all_md_resources.empty()) {
+    if (!populated) {
         uct_component_h *uct_components;
         unsigned num_components;
         ucs_status_t status;
+
+        const char *str = getenv("GTEST_MAX_COMP_RESOURCES");
 
         status = uct_query_components(&uct_components, &num_components);
         ASSERT_UCS_OK(status);
@@ -147,12 +150,19 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
                                          &component_attr_resouces);
             ASSERT_UCS_OK(status);
 
+            int md_resource_count = md_rsc.cmpt_attr.md_resource_count;
+            if (str != NULL) {
+                md_resource_count = ucs_min(md_resource_count, atoi(str));
+            }
+
             for (unsigned md_index = 0;
-                 md_index < md_rsc.cmpt_attr.md_resource_count; ++md_index) {
+                 md_index < md_resource_count; ++md_index) {
                 md_rsc.rsc_desc = md_resources[md_index];
                 all_md_resources.push_back(md_rsc);
             }
         }
+
+        populated = true;
     }
 
     return all_md_resources;
