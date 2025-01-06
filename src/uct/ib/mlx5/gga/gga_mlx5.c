@@ -238,8 +238,7 @@ uct_gga_mlx5_rkey_handle_dereg(uct_gga_mlx5_rkey_handle_t *rkey_handle)
 
     pthread_mutex_lock(&uct_gga_mlx5_rkeys_lock);
     kh_foreach(&uct_gga_mlx5_rkey_cache, hash_key, hash_val, {
-        if (hash_key.rkey_handle == rkey_handle) {
-            ucs_assert(hash_val != NULL);
+        if ((hash_key.rkey_handle == rkey_handle) && (hash_val != NULL)) {
             uct_gga_mlx5_md_rkey_handle_release(hash_key.md, hash_val);
             uct_gga_mlx5_rkey_hash_put(&hash_key, NULL);
         }
