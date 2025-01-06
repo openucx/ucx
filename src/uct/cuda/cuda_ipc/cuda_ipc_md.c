@@ -117,7 +117,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
 #if HAVE_CUDA_FABRIC
-#define UCT_CUDA_IPC_QUERY_NUM_ATTRS 2
+#define UCT_CUDA_IPC_QUERY_NUM_ATTRS 4
     CUmemGenericAllocationHandle handle;
     CUmemoryPool mempool;
     CUpointer_attribute attr_type[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
@@ -143,6 +143,10 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     attr_data[0] = &legacy_capable;
     attr_type[1] = CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES;
     attr_data[1] = &allowed_handle_types;
+    attr_type[2] = CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE;
+    attr_data[2] = &mempool;
+    attr_type[3] = CU_POINTER_ATTRIBUTE_BUFFER_ID;
+    attr_data[3] = &key->ph.buffer_id;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
@@ -185,9 +189,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto common_path;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&mempool,
-                CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE, (CUdeviceptr)addr));
-    if ((status != UCS_OK) || (mempool == 0)) {
+    if (mempool == 0) {
         /* cuda_ipc can only handle UCS_MEMORY_TYPE_CUDA, which has to be either
          * legacy type, or VMM type, or mempool type. Return error if memory
          * does not belong to any of the three types */

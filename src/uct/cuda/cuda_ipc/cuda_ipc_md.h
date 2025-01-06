@@ -31,6 +31,7 @@ typedef struct uct_cuda_ipc_md_handle {
     } handle;
     CUmemPoolPtrExportData    ptr;
     CUmemoryPool              pool;
+    unsigned long long        buffer_id;
 } uct_cuda_ipc_md_handle_t;
 #else
 typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
