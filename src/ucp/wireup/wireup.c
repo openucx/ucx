@@ -2075,15 +2075,18 @@ double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface)
         wiface->attr.latency.c;
 }
 
-double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface)
+double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface,
+                                        unsigned ep_init_flags)
 {
     ucp_context_h context = wiface->worker->context;
     ucs_linear_func_t lat = wiface->attr.latency;
+    int is_prioritized    = ucp_ep_is_prioritized(ep_init_flags);
 
     if (context->config.ext.proto_enable) {
         lat.c += wiface->distance.latency;
     }
-    return ucp_tl_iface_latency(context, &lat);
+
+    return ucp_tl_iface_latency_with_priority(context, &lat, is_prioritized);
 }
 
 double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface)

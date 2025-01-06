@@ -794,7 +794,7 @@ ucp_address_pack_iface_attr_v2(const ucp_worker_iface_t *wiface, void *ptr,
     double latency_nsec, overhead_nsec, latency, bandwidth;
     size_t seg_size;
 
-    latency   = ucp_wireup_iface_lat_distance_v2(wiface);
+    latency   = ucp_wireup_iface_lat_distance_v2(wiface, 0);
     bandwidth = ucp_wireup_iface_bw_distance(wiface);
 
     latency_nsec  = latency * UCS_NSEC_PER_SEC;
