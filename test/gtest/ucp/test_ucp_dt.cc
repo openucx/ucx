@@ -104,8 +104,8 @@ protected:
 
         ucp_md_map_t md_map = m_ucph->reg_md_map[UCS_MEMORY_TYPE_HOST] &
                               m_ucph->cache_md_map[UCS_MEMORY_TYPE_HOST];
-        status = ucp_datatype_iter_mem_reg(m_ucph, &m_dt_iter, md_map, 0,
-                                           UINT_MAX);
+        status = ucp_datatype_iter_mem_reg(m_ucph, &m_dt_iter, md_map,
+                                           UCT_MD_MEM_ACCESS_ALL, UINT_MAX);
         ASSERT_UCS_OK(status);
 
         UCS_STRING_BUFFER_ONSTACK(strb, 64);
