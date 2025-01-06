@@ -135,7 +135,7 @@ static ucs_status_t ucp_proto_rndv_rtr_progress(uct_pending_req_t *self)
         status = ucp_datatype_iter_mem_reg(worker->context,
                                            &req->send.state.dt_iter,
                                            rpriv->super.md_map,
-                                           UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                                           UCT_MD_MEM_ACCESS_ALL |
                                            UCT_MD_MEM_FLAG_HIDE_ERRORS,
                                            UCP_DT_MASK_ALL);
         if (status != UCS_OK) {
