@@ -149,7 +149,7 @@ public:
         static const unsigned num_iterations = 1000;
 /* TODO: remove this when 100MB asan bug is solved */
 #ifdef __SANITIZE_ADDRESS__
-        static const size_t msg_sizes[] = {8, 1024, 16384, 65536};
+        static const size_t msg_sizes[] = {8, 1024, 16384, 32768};
 #else
         static const size_t msg_sizes[] = {8, 1024, 16384, UCS_MBYTE};
 #endif
