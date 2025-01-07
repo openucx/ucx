@@ -536,10 +536,11 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_ai,
     /* check initial window */
     disable_async(m_e1);
     disable_async(m_e2);
-    /* only test up to 'small' window when on valgrind
-     * valgrind drops rx packets when window is too big and resends are disabled in this test
+    /* only test up to 'small' window when on valgrind or EFA interface, as they
+     * drop rx packets when window is too big and resends are disabled in this test
      */
-    max_window = RUNNING_ON_VALGRIND ? 128 : UCT_UD_CA_MAX_WINDOW;
+    max_window = (ucs::is_aws() || RUNNING_ON_VALGRIND) ? 128 :
+                                                          UCT_UD_CA_MAX_WINDOW;
     connect();
     EXPECT_EQ(UCT_UD_CA_MIN_WINDOW, ep(m_e1)->ca.cwnd);
     EXPECT_EQ(UCT_UD_CA_MIN_WINDOW, ep(m_e2)->ca.cwnd);

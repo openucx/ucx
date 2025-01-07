@@ -240,6 +240,8 @@ struct ucp_config {
     ucs_list_link_t                        cached_key_list;
     /** This config environment prefix */
     char                                   *env_prefix;
+    /** Maximum number of memory domains to use per component **/
+    size_t                                 max_component_mds;
 };
 
 

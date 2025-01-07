@@ -339,6 +339,7 @@ std::string get_rdmacm_netdev(const char *ifa_name);
  */
 bool is_rdmacm_netdev(const char *ifa_name);
 
+bool is_aws();
 
 /**
  * Get an available port on the host.
