@@ -261,6 +261,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_gga_mlx5_rkey_resolve(uct_ib_mlx5_md_t *md,
                           uct_gga_mlx5_rkey_handle_t *rkey_handle)
 {
+    static pthread_mutex_t mem_attach_lock  = PTHREAD_MUTEX_INITIALIZER;
     uct_md_h uct_md                         = &md->super.super;
     uct_md_mem_attach_params_t atach_params = { 0 };
     uct_md_mkey_pack_params_t repack_params = { 0 };
@@ -272,9 +273,14 @@ uct_gga_mlx5_rkey_resolve(uct_ib_mlx5_md_t *md,
         return UCS_OK;
     }
 
+    /* TODO: this is a temporary solution to protect
+             @ref uct_ib_mlx5_md_t::umr::mkey_hash,
+             it should be reworked in PR #10236 */
+    pthread_mutex_lock(&mem_attach_lock);
     status = uct_ib_mlx5_devx_mem_attach(uct_md, &rkey_handle->packed_mkey,
                                          &atach_params,
                                          (uct_mem_h *)&rkey_handle->memh);
+    pthread_mutex_unlock(&mem_attach_lock);
     if (status != UCS_OK) {
         goto err_out;
     }
