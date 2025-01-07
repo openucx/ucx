@@ -817,9 +817,10 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     return uct_ib_device_is_supported(device);
 }
 
-ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
-                                       uct_md_resource_desc_t **resources_p,
-                                       unsigned *num_resources_p)
+ucs_status_t
+uct_ib_base_query_md_resources(uct_md_resource_desc_t **resources_p,
+                               unsigned *num_resources_p,
+                               uct_ib_check_device_cb_t check_device_cb)
 {
     int num_resources = 0;
     uct_md_resource_desc_t *resources;
@@ -856,6 +857,11 @@ ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     for (i = 0; i < num_devices; ++i) {
         /* Skip non-existent and non-accessible devices */
         if (!uct_ib_device_is_accessible(device_list[i])) {
+            continue;
+        }
+
+        /* Skip not applicable devices */
+        if (!check_device_cb(device_list[i])) {
             continue;
         }
 
@@ -1099,6 +1105,15 @@ uct_ib_fork_init(const uct_ib_md_config_t *md_config, int *fork_init_p)
 
     *fork_init_p = 1;
     return UCS_OK;
+}
+
+static ucs_status_t
+uct_ib_query_md_resources(uct_component_t *component,
+                          uct_md_resource_desc_t **resources_p,
+                          unsigned *num_resources_p)
+{
+    return uct_ib_base_query_md_resources(resources_p, num_resources_p,
+                                          ucs_empty_function_return_one_int);
 }
 
 static ucs_status_t
