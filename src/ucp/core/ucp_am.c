@@ -11,6 +11,7 @@
 #endif
 
 #include "ucp_am.h"
+#include <ucp/am/ucp_am.inl>
 
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
@@ -255,14 +256,6 @@ ucp_am_get_short_max(const ucp_request_t *req, ssize_t max_short)
     return (UCP_DT_IS_CONTIG(req->send.datatype) &&
             UCP_MEM_IS_HOST(req->send.mem_type)) ?
             max_short : -1;
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_am_fill_header(ucp_am_hdr_t *hdr, ucp_request_t *req)
-{
-    hdr->am_id         = req->send.msg_proto.am.am_id;
-    hdr->flags         = req->send.msg_proto.am.flags;
-    hdr->header_length = req->send.msg_proto.am.header.length;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -1040,6 +1033,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     if (worker->context->config.ext.proto_enable) {
         req->send.msg_proto.am.am_id           = id;
         req->send.msg_proto.am.flags           = flags;
+        req->send.msg_proto.am.internal_flags  = 0;
         req->send.msg_proto.am.header.ptr      = (void*)header;
         req->send.msg_proto.am.header.reg_desc = NULL;
         req->send.msg_proto.am.header.length   = header_length;

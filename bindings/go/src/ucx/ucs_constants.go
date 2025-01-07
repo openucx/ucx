@@ -5,11 +5,13 @@
 
 package ucx
 
+//#include "ucs_constants.h"
 //#include <ucp/api/ucp.h>
-//static inline const char* ucxgo_get_ucs_mem_type_name(ucs_memory_type_t idx) {
-//    return ucs_memory_type_names[idx];
-//}
 import "C"
+import (
+	"errors"
+	"unsafe"
+)
 
 type UcsThreadMode int
 
@@ -32,6 +34,16 @@ const (
 
 func (m UcsMemoryType) String() string {
 	return C.GoString(C.ucxgo_get_ucs_mem_type_name(C.ucs_memory_type_t(m)))
+}
+
+func (m *UcsMemoryType) Set (value string) error {
+	cValue := unsafe.Pointer(C.CString(value))
+	res := C.ucxgo_parse_ucs_mem_type_name(cValue)
+	if res == -1 {
+		return errors.New("memory type can be either host or cuda")
+	}
+	*m = UcsMemoryType(res)
+	return nil
 }
 
 // Checks whether context's memory type mask

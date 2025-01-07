@@ -561,6 +561,79 @@ run_ucx_perftest() {
 	fi
 }
 
+start_perftest_daemon() {
+	daemon_exe="$1"
+
+	# Find daemon port
+	dmn_port="$server_port"
+	step_server_port
+
+	# We explicitly disable cuda transport, because it's not p2p and therefore
+	# imposes INVALIDATE_RMA flag for all lanes (@see ucp_ep_config_init).
+	# However invalidating of imported rkeys is not supported by the daemon.
+	# TODO: Should we support invalidation of imported keys?
+	# Normally cuda_ipc cannot be used to communicate between host and DPU,
+	# unless we run both processes on host for testing purposes.
+
+	# Mandatory options to run the daemon
+	# - UCX_RNDV_THRESH=0 is needed to enforce RNDV protocol usage, as it's the
+	# only supported protocol between host and DPU
+	# - UCX_RNDV_SCHEME=put_zcopy. On low buffer dimensions (below ~8KB) UCX
+	# prefers bcopy over zero-copy, but bcopy workflow is not supported by DPU
+	# daemon. The workaround is to force rendezvous scheme to use zero-copy.
+	# get_zcopy option is not good enough, because bcopy is still selected for
+	# tiny messages (below 64 bytes)
+	dmn_env="UCX_TLS=^cuda UCX_TCP_CM_REUSEADDR=y UCX_RNDV_THRESH=0 UCX_RNDV_SCHEME=put_zcopy"
+
+	# Run the daemon
+	env $dmn_env $daemon_exe -p $dmn_port &
+
+	# Return the daemon pid and port
+	eval "$2=$!"
+	eval "$3=$dmn_port"
+}
+
+#
+# Run UCX performance daemon test
+#
+run_ucx_perftest_with_daemon() {
+	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+	ucx_perftest_daemon="$ucx_inst/bin/ucx_perftest_daemon"
+	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_daemon"
+
+	devices="$(get_ib_bf_devices $(get_active_ib_devices))"
+	for ucx_dev in $devices
+	do
+		echo "==== Running ucx_perftest over a daemon on $ucx_dev ===="
+		ip_addr=$(get_rdma_device_ip_addr $ucx_dev)
+		if [ -z "$ip_addr" ]
+		then
+			echo "Cannot find IPv4 address for device $ucx_dev"
+			continue
+		fi
+
+		export UCX_NET_DEVICES=$ucx_dev
+
+		# Start client and server daemons
+		start_perftest_daemon $ucx_perftest_daemon server_dmn_pid server_dmn_port
+		start_perftest_daemon $ucx_perftest_daemon client_dmn_pid client_dmn_port
+
+		ucp_client_args="-g $ip_addr:$client_dmn_port -G $ip_addr:$server_dmn_port $(hostname)"
+
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+
+		kill ${client_dmn_pid} || true # ignore failure
+		kill ${server_dmn_pid} || true # ignore failure
+		wait $client_dmn_pid || true
+		wait $server_dmn_pid || true
+
+		unset UCX_TLS
+		unset UCX_NET_DEVICES
+	done
+}
+
 #
 # Test malloc hooks with mpi
 #
@@ -878,7 +951,7 @@ run_malloc_hook_gtest() {
 
 	echo "==== Running cuda hooks with far jump, $compiler_name compiler ===="
 	$TIMEOUT env \
-		UCM_BISTRO_FORCE_FAR_JUMP=y \
+		UCX_MEM_BISTRO_FORCE_FAR_JUMP=y \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
 }
@@ -1099,6 +1172,7 @@ run_tests() {
 	do_distributed_task 2 4 test_init_mt
 	do_distributed_task 3 4 run_ucp_client_server
 	do_distributed_task 0 4 test_no_cuda_context
+	do_distributed_task 1 4 run_ucx_perftest_with_daemon
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello

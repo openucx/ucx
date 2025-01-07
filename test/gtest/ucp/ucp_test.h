@@ -158,6 +158,8 @@ public:
 
         bool is_rndv_put_ppln_supported() const;
 
+        bool is_rndv_supported() const;
+
         bool is_conn_reqs_queue_empty() const;
 
     protected:
@@ -438,15 +440,16 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
  * @param _test_case  Test case class, derived from ucp_test.
  */
 #define UCP_INSTANTIATE_TEST_CASE(_test_case) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,    "dc_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,     "ud_v") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,    "ud_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,     "rc_v") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,    "rc_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib, "shm,ib") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,   "ugni") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,   "self") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,    "tcp")
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,     "dc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,      "ud_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,     "ud_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,      "rc_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,     "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib,  "shm,ib") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,    "ugni") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,    "self") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,     "tcp") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_gga, "shm,gga")
 
 
 /**

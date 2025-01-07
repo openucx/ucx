@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+ * Copyright (c) Google, LLC, 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -86,6 +87,35 @@ uct_ib_mlx5_cqe_is_grh_present(struct mlx5_cqe64* cqe)
 {
     return cqe->flags_rqpn & htonl(UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA |
                                    UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+uct_ib_mlx5_cqe_roce_gid_len(struct mlx5_cqe64* cqe)
+{
+    /*
+     * Take the packet type from CQE, because:
+     * 1. According to Annex17_RoCEv2 (A17.4.5.1):
+     * For UD, the Completion Queue Entry (CQE) includes remote address
+     * information (InfiniBand Specification Vol. 1 Rev 1.2.1 Section 11.4.2.1).
+     * For RoCEv2, the remote address information comprises the source L2
+     * Address and a flag that indicates if the received frame is an IPv4,
+     * IPv6 or RoCE packet.
+     *
+     * 2. According to PRM, for responder UD/DC over RoCE sl represents RoCE
+     * packet type as:
+     * bit 3    : when set R-RoCE frame contains an UDP header otherwise not
+     * Bits[2:0]: L3_Header_Type, as defined below
+     *     - 0x0 : GRH - (RoCE v1.0)
+     *     - 0x1 : IPv6 - (RoCE v1.5/v2.0)
+     *     - 0x2 : IPv4 - (RoCE v1.5/v2.0)
+     *
+     * The service level is the most significant byte of cqe->flags_rqpn.
+     *
+     * Alternatively, this could be detected by examining the packet contents
+     * as is done for non-mlx5 transports.
+     */
+    return (cqe->flags_rqpn & htonl(UCT_IB_MLX5_RQPN_ROCE_FLAG_IPV4)) ?
+        UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN;
 }
 
 static UCS_F_ALWAYS_INLINE void*

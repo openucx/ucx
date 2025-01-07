@@ -22,6 +22,12 @@
 #define UCT_GGA_MAX_MSG_SIZE        (2u * UCS_MBYTE)
 
 
+#if ENABLE_ASSERT
+#define UCT_GGA_MLX5_MD_CAPS        (UCT_IB_MLX5_MD_FLAG_DEVX | \
+                                     UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI | \
+                                     UCT_IB_MLX5_MD_FLAG_MMO_DMA)
+#endif /* ENABLE_ASSERT */
+
 /**
  * Hashed per MD part of rkey
  */
@@ -259,13 +265,63 @@ static ucs_status_t uct_gga_mlx5_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
+static int uct_ib_mlx5_gga_check_device(struct ibv_device *device)
+{
+    int result = 0;
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)];
+    struct ibv_context *ctx;
+    ucs_status_t status;
+    size_t out_len;
+    char *cap;
+
+    ctx = uct_ib_mlx5_devx_open_device(device);
+    if (ctx == NULL) {
+        goto out;
+    }
+
+    out_len = ucs_static_array_size(out);
+    status  = uct_ib_mlx5_devx_query_cap(ctx,
+                                         UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
+                                         (UCT_IB_MLX5_CAP_GENERAL << 1),
+                                         out, out_len, "QUERY_HCA_CAP", 0);
+    if (status != UCS_OK) {
+        goto out_close_ctx;
+    }
+
+    cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
+    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dma_mmo_qp)) {
+        goto out_close_ctx;
+    }
+
+    status = uct_ib_mlx5_devx_query_cap_2(ctx, out, out_len);
+    if (status != UCS_OK) {
+        goto out_close_ctx;
+    }
+
+    result = uct_ib_mlx5_devx_check_xgvmi(cap, ibv_get_device_name(device));
+
+out_close_ctx:
+    uct_ib_md_device_context_close(ctx);
+out:
+    return result;
+}
+
+static ucs_status_t
+uct_ib_mlx5_gga_query_md_resources(uct_component_t *component,
+                                   uct_md_resource_desc_t **resources_p,
+                                   unsigned *num_resources_p)
+{
+    return uct_ib_base_query_md_resources(resources_p, num_resources_p,
+                                          uct_ib_mlx5_gga_check_device);
+}
+
 /* Forward declaration */
 static ucs_status_t
 uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
                         const uct_md_config_t *uct_md_config, uct_md_h *md_p);
 
 static uct_component_t uct_gga_component = {
-    .query_md_resources = uct_ib_query_md_resources,
+    .query_md_resources = uct_ib_mlx5_gga_query_md_resources,
     .md_open            = uct_ib_mlx5_gga_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_gga_mlx5_rkey_unpack,
@@ -431,6 +487,7 @@ static ucs_status_t
 uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    size_t iface_mtu      = uct_ib_mtu_value(iface->super.config.path_mtu);
     ucs_status_t status;
 
     status = uct_ib_iface_query(&iface->super, UCT_IB_RETH_LEN, iface_attr);
@@ -454,11 +511,13 @@ uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.max_zcopy       = UCT_GGA_MAX_MSG_SIZE;
     iface_attr->cap.put.max_iov         = 1;
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.put.align_mtu       = iface_mtu;
 
     iface_attr->cap.get.min_zcopy       = 1;
     iface_attr->cap.get.max_zcopy       = iface->config.max_get_zcopy;
     iface_attr->cap.get.max_iov         = 1;
     iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.get.align_mtu       = iface_mtu;
 
     iface_attr->latency.c += 200e-9;
 
@@ -849,7 +908,8 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                               &init_attr);
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(
-            &self->super, UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC,
+            &self->super,
+            ucs_min(md->dp_ordering_cap.rc, UCT_IB_MLX5_DP_ORDERING_OOO_RW),
             &config->rc_mlx5_common, "gga");
     if (status != UCS_OK) {
         return status;
@@ -890,16 +950,17 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
 {
     uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
 
-    if (strcmp(mlx5_md->super.name, UCT_IB_MD_NAME(gga)) ||
-        !ucs_test_all_flags(mlx5_md->flags, UCT_IB_MLX5_MD_FLAG_DEVX |
-                                            UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI |
-                                            UCT_IB_MLX5_MD_FLAG_MMO_DMA)) {
+    if (strcmp(mlx5_md->super.name, UCT_IB_MD_NAME(gga))) {
         return UCS_ERR_NO_DEVICE;
     }
 
+    ucs_assertv(ucs_test_all_flags(mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS),
+                "md %p: flags=0x%x do not have mandatory capabilities 0x%x",
+                mlx5_md, mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS);
+
     return uct_ib_device_query_ports(&mlx5_md->super.dev,
                                      UCT_IB_DEVICE_FLAG_SRQ |
-                                             UCT_IB_DEVICE_FLAG_MLX5_PRM,
+                                     UCT_IB_DEVICE_FLAG_MLX5_PRM,
                                      tl_devices_p, num_tl_devices_p);
 }
 
@@ -998,8 +1059,7 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
     ib_device_list = ibv_get_device_list(&num_devices);
     if (ib_device_list == NULL) {
         ucs_debug("Failed to get GGA device list, assuming no devices are present");
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
+        return UCS_ERR_NO_DEVICE;
     }
 
     status = uct_ib_get_device_by_name(ib_device_list, num_devices, md_name,

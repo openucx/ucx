@@ -451,6 +451,23 @@ AS_IF([test "x$enable_gcov" = xyes],
 
 
 #
+# Enable stack usage check
+#
+AC_ARG_ENABLE([stack-usage-check],
+        AS_HELP_STRING([--enable-stack-usage-check], [Enable stack usage check with -Wframe-larger-than=8192]),
+        [],
+        [enable_stack_usage_check=yes])
+
+AS_IF([test "x$enable_stack_usage_check" = xyes],
+      [AS_IF([test "x$enable_asan" = xyes],
+             [AC_MSG_NOTICE([Stack usage check was not added because ASAN is enabled])],
+             [ADD_COMPILER_FLAG_IF_SUPPORTED([stack_usage_check],
+                                             [-Wframe-larger-than=8192],
+                                             [AC_LANG_SOURCE([[int main(int argc, char** argv) { return 0; }]])])])],
+      [AC_MSG_NOTICE([Stack usage check is disabled])])
+
+
+#
 # Check for C++ support
 #
 CHECK_CXX_COMP()
@@ -523,6 +540,7 @@ AC_LANG_POP
 # --diag_suppress 188  - Suppress enumerated type mixed with another type
 # --diag_suppress 381  - Suppress extra ";" ignored
 # --diag_suppress 1215 - Suppress deprecated API warning for PGI18 compiler
+# --diag_suppress 1626 - Suppress routine is both "inline" and "noinline"
 # --diag_suppress 1901 - Use of a const variable in a constant expression is nonstandard in C
 # --diag_suppress 1902 - Use of a const variable in a constant expression is nonstandard in C (same as 1901)
 ADD_COMPILER_FLAGS_IF_SUPPORTED([[--display_error_number],
@@ -534,6 +552,7 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[--display_error_number],
                                  [--diag_suppress 188],
                                  [--diag_suppress 381],
                                  [--diag_suppress 1215],
+                                 [--diag_suppress 1626],
                                  [--diag_suppress 1901],
                                  [--diag_suppress 1902]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])

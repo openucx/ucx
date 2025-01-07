@@ -61,7 +61,7 @@ func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Po
 	}
 
 	if params.memTypeSet {
-		p.op_attr_mask = C.UCP_OP_ATTR_FIELD_MEMORY_TYPE
+		p.op_attr_mask |= C.UCP_OP_ATTR_FIELD_MEMORY_TYPE
 		p.memory_type = C.ucs_memory_type_t(params.memType)
 	}
 

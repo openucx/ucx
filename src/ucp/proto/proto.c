@@ -87,6 +87,7 @@ const char *ucp_operation_names[] = {
     [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
     [UCP_OP_ID_AM_SEND]        = "am_send",
     [UCP_OP_ID_AM_SEND_REPLY]  = "am_send_reply",
+    [UCP_OP_ID_STREAM_SEND]    = "stream",
     [UCP_OP_ID_PUT]            = "put",
     [UCP_OP_ID_GET]            = "get",
     [UCP_OP_ID_AMO_POST]       = "amo_post",
@@ -104,6 +105,7 @@ const char *ucp_operation_descs[] = {
     [UCP_OP_ID_AM_SEND]        = "active message by ucp_am_send*",
     [UCP_OP_ID_AM_SEND_REPLY]  = "active message by ucp_am_send* with reply "
                                  "flag",
+    [UCP_OP_ID_STREAM_SEND]    = "stream message by ucp_stream_send*",
     [UCP_OP_ID_PUT]            = "remote memory write by ucp_put*",
     [UCP_OP_ID_GET]            = "remote memory read by ucp_get*",
     [UCP_OP_ID_AMO_POST]       = "posted atomic by ucp_atomic_op*",

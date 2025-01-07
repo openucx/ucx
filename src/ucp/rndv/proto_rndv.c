@@ -395,24 +395,14 @@ static void ucp_proto_rndv_ctrl_variant_probe(
     /* Set priority and threshold for this variant */
     cfg_thresh   = params->super.cfg_thresh;
     cfg_priority = params->super.cfg_priority;
-    if ((remote_proto->cfg_thresh != UCS_MEMUNITS_INF) &&
-        (remote_proto->cfg_thresh != UCS_MEMUNITS_AUTO)) {
-        /* Consider remote priority and threshold only if RNDV_SCHEME or
-            * BCOPY/ZCOPY thresh are set to force these settings */
-        cfg_priority = remote_proto->cfg_priority;
-        cfg_thresh   = (cfg_thresh == UCS_MEMUNITS_AUTO) ?
-                                 remote_proto->cfg_thresh :
-                                 ucs_max(cfg_thresh, remote_proto->cfg_thresh);
+    if (remote_proto->cfg_thresh != UCS_MEMUNITS_AUTO) {
+        /* If RNDV_SCHEME is set, all protocols except forced one report INF */
+        ucs_assertv(remote_proto->cfg_thresh == UCS_MEMUNITS_INF,
+                    "variant_name=%s remote_proto->cfg_thresh=%zu",
+                    variant_name, remote_proto->cfg_thresh);
+        cfg_thresh = remote_proto->cfg_thresh;
     }
 
-    /* Remote variants priorities are used to respect RNDV_SCHEME setting
-     * so they should contain value greater than CTRL message `cfg_thresh`.
-     * Equality is allowed for RTR remote variants.
-     */
-    ucs_assertv(params->super.cfg_priority <= remote_proto->cfg_priority,
-                "remote_proto=%s params->super.cfg_priority=%u "
-                "remote_proto->cfg_priority=%u", variant_name,
-                params->super.cfg_priority, remote_proto->cfg_priority);
     ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
                                perf, rpriv, priv_size);
 
@@ -503,7 +493,7 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
 {
     ucp_lane_index_t lane, num_lanes;
 
-    num_lanes = ucp_proto_common_find_lanes(params, UCT_EP_OP_LAST,
+    num_lanes = ucp_proto_common_find_lanes(params,
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
                                             UCP_PROTO_COMMON_OFFSET_INVALID, 1,
                                             UCP_LANE_TYPE_AM,

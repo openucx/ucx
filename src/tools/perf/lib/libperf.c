@@ -12,8 +12,10 @@
 #  include "config.h"
 #endif
 
-#include <ucs/debug/log.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/datastruct/string_buffer.h>
+#include <ucs/datastruct/string_set.h>
+#include <ucs/debug/log.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
@@ -933,29 +935,13 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
     return UCS_OK;
 }
 
-static ucs_status_ptr_t
-ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index, int daemon_mode)
+static ucs_status_ptr_t ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index)
 {
     ucp_request_param_t ep_close_params = {0};
-    ucp_request_param_t dmn_fin_param   = {0};
     ucs_status_ptr_t req;
 
     if (NULL == ep) {
         return NULL;
-    }
-
-    if (daemon_mode) {
-        dmn_fin_param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-        dmn_fin_param.flags        = UCP_AM_SEND_FLAG_EAGER;
-        req = ucp_am_send_nbx(ep, UCP_PERF_DAEMON_AM_ID_FIN, NULL, 0, NULL, 0,
-                              &dmn_fin_param);
-        if (UCS_PTR_IS_PTR(req)) {
-            ucp_request_free(req);
-        } else if (UCS_PTR_STATUS(req) != UCS_OK) {
-            ucs_warn("failed to send FIN message to daemon ep %p "
-                     "on thread %d: %s\n",
-                     ep, index, ucs_status_string(UCS_PTR_STATUS(req)));
-        }
     }
 
     req = ucp_ep_close_nbx(ep, &ep_close_params);
@@ -1007,8 +993,7 @@ static void ucp_perf_test_destroy_self_eps(ucx_perf_context_t *perf)
         ucp_perf_test_rkey_destroy(perf->ucp.tctx[i].perf.ucp.self_send_rkey);
         ucp_perf_test_rkey_destroy(perf->ucp.tctx[i].perf.ucp.self_recv_rkey);
 
-        req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.self_ep, i,
-                                       perf->params.ucp.is_daemon_mode);
+        req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.self_ep, i);
         if (req != NULL) {
             reqs[num_in_prog++] = req;
         }
@@ -1028,8 +1013,7 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t *perf)
     for (i = 0; i < thread_count; ++i) {
         ucp_perf_test_rkey_destroy(perf->ucp.tctx[i].perf.ucp.rkey);
 
-        req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.ep, i,
-                                       perf->params.ucp.is_daemon_mode);
+        req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.ep, i);
         if (req != NULL) {
             reqs[num_in_prog++] = req;
         }
@@ -1135,6 +1119,20 @@ static ucs_status_t ucp_perf_test_create_self_rkey(ucx_perf_context_t *perf,
     return status;
 }
 
+static void ucp_perf_test_init_endpoints(ucx_perf_context_t *perf)
+{
+    unsigned i;
+
+    /* Initialize all endpoints and rkeys to NULL to handle error flow */
+    for (i = 0; i < perf->params.thread_count; ++i) {
+        perf->ucp.tctx[i].perf.ucp.ep             = NULL;
+        perf->ucp.tctx[i].perf.ucp.rkey           = NULL;
+        perf->ucp.tctx[i].perf.ucp.self_ep        = NULL;
+        perf->ucp.tctx[i].perf.ucp.self_send_rkey = NULL;
+        perf->ucp.tctx[i].perf.ucp.self_recv_rkey = NULL;
+    }
+}
+
 static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf,
                                                       unsigned peer_index)
 {
@@ -1158,14 +1156,7 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf,
         goto err;
     }
 
-    /* Initialize all endpoints and rkeys to NULL to handle error flow */
-    for (i = 0; i < thread_count; i++) {
-        perf->ucp.tctx[i].perf.ucp.ep             = NULL;
-        perf->ucp.tctx[i].perf.ucp.rkey           = NULL;
-        perf->ucp.tctx[i].perf.ucp.self_ep        = NULL;
-        perf->ucp.tctx[i].perf.ucp.self_send_rkey = NULL;
-        perf->ucp.tctx[i].perf.ucp.self_recv_rkey = NULL;
-    }
+    ucp_perf_test_init_endpoints(perf);
 
     /* Receive the data from the remote peer, extract the address from it
      * (along with additional wireup info) and create an endpoint to the peer */
@@ -1430,6 +1421,7 @@ static ucs_status_t ucp_perf_setup_daemon_endpoints(ucx_perf_context_t *perf)
 
     ucs_assert_always(is_local_sender != is_remote_sender);
     ucs_assert_always(perf->params.thread_count == 1);
+    ucp_perf_test_init_endpoints(perf);
 
     if (is_local_sender) {
         local_dmn_addr  = &perf->params.ucp.dmn_local_addr;
@@ -1725,26 +1717,82 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
     return UCS_OK;
 }
 
+static void uct_perf_log_avaiable_resources(ucs_string_set_t *available_resources, 
+                                            const char* requested_resource,
+                                            const char* resource_type)
+{
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    ucs_string_set_print_sorted(available_resources, &strb, ",");
+
+    ucs_error("%s %s was not found\nAvailable %ss: %s", resource_type,
+              requested_resource, resource_type, ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+static int 
+uct_perf_collect_available_devices(unsigned num_tl_resources,
+                                   const uct_tl_resource_desc_t *tl_resources,
+                                   const ucx_perf_context_t *perf,
+                                   ucs_string_set_t *devices_hint,
+                                   ucs_string_set_t *tls_hint,
+                                   ucs_string_set_t *all_devices,
+                                   ucs_string_set_t *all_tls)
+{
+    unsigned tl_index;
+    int same_device, same_tl;
+
+    for (tl_index = 0; tl_index < num_tl_resources; ++tl_index) {
+        same_tl     = !strcmp(perf->params.uct.tl_name,
+                              tl_resources[tl_index].tl_name);
+        same_device = !strcmp(perf->params.uct.dev_name,
+                              tl_resources[tl_index].dev_name);
+        if (same_tl && same_device) {
+            return 1;
+        }
+
+        if (same_tl) {
+            ucs_string_set_add(devices_hint, tl_resources[tl_index].dev_name);
+        } else if (same_device) {
+            ucs_string_set_add(tls_hint, tl_resources[tl_index].tl_name);
+        }
+
+        ucs_string_set_add(all_devices, tl_resources[tl_index].dev_name);
+        ucs_string_set_add(all_tls, tl_resources[tl_index].tl_name);
+    }
+
+    return 0;
+}
+
 static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
 {
+    int is_valid_tl     = 0;
+    int is_valid_device = 0;
     uct_component_h *uct_components;
     uct_component_attr_t component_attr;
     uct_tl_resource_desc_t *tl_resources;
     unsigned md_index, num_components;
-    unsigned tl_index, num_tl_resources;
+    unsigned num_tl_resources;
     unsigned cmpt_index;
     ucs_status_t status;
     uct_md_h md;
     uct_md_config_t *md_config;
-
+    int found;
+    ucs_string_set_t devices_hint, all_devices_hint;
+    ucs_string_set_t tls_hint, all_tls_hint;
 
     status = uct_query_components(&uct_components, &num_components);
     if (status != UCS_OK) {
         goto out;
     }
 
-    for (cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
+    ucs_string_set_init(&devices_hint);
+    ucs_string_set_init(&tls_hint);
+    ucs_string_set_init(&all_devices_hint);
+    ucs_string_set_init(&all_tls_hint);
 
+    for (cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
         component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
         status = uct_component_query(uct_components[cmpt_index], &component_attr);
         if (status != UCS_OK) {
@@ -1784,28 +1832,50 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
                 goto out_release_components_list;
             }
 
-            for (tl_index = 0; tl_index < num_tl_resources; ++tl_index) {
-                if (!strcmp(perf->params.uct.tl_name,  tl_resources[tl_index].tl_name) &&
-                    !strcmp(perf->params.uct.dev_name, tl_resources[tl_index].dev_name))
-                {
-                    uct_release_tl_resource_list(tl_resources);
-                    perf->uct.cmpt = uct_components[cmpt_index];
-                    perf->uct.md   = md;
-                    status         = UCS_OK;
-                    goto out_release_components_list;
-                }
+            found = uct_perf_collect_available_devices(num_tl_resources,
+                                                       tl_resources, perf,
+                                                       &devices_hint, &tls_hint,
+                                                       &all_devices_hint,
+                                                       &all_tls_hint);
+            uct_release_tl_resource_list(tl_resources);
+
+            if (found) {
+                perf->uct.cmpt = uct_components[cmpt_index];
+                perf->uct.md   = md;
+                status         = UCS_OK;
+                goto out_release_components_list;
             }
 
             uct_md_close(md);
-            uct_release_tl_resource_list(tl_resources);
         }
     }
 
     ucs_error("Cannot use "UCT_PERF_TEST_PARAMS_FMT,
               UCT_PERF_TEST_PARAMS_ARG(&perf->params));
+
+    is_valid_device = !ucs_string_set_is_empty(&devices_hint);
+    is_valid_tl     = !ucs_string_set_is_empty(&tls_hint);
+
+    if (!is_valid_device && !is_valid_tl) {
+        uct_perf_log_avaiable_resources(&all_devices_hint,
+                                        perf->params.uct.dev_name, "Device");
+        uct_perf_log_avaiable_resources(&all_tls_hint, perf->params.uct.tl_name,
+                                        "Transport");
+    } else if (!is_valid_device) {
+        uct_perf_log_avaiable_resources(&tls_hint, perf->params.uct.tl_name,
+                                        "Transport");
+    } else {
+        uct_perf_log_avaiable_resources(&devices_hint,
+                                        perf->params.uct.dev_name, "Device");
+    }
+
     status = UCS_ERR_NO_DEVICE;
 
 out_release_components_list:
+    ucs_string_set_cleanup(&tls_hint);
+    ucs_string_set_cleanup(&devices_hint);
+    ucs_string_set_cleanup(&all_tls_hint);
+    ucs_string_set_cleanup(&all_devices_hint);
     uct_release_component_list(uct_components);
 out:
     return status;

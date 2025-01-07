@@ -17,6 +17,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
+#include <ucs/sys/string.h>
 #include <uct/api/v2/uct_v2.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -25,7 +26,7 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_cuda_ipc_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {"ENABLE_MNNVL", "no",
+    {"ENABLE_MNNVL", "try",
      "Enable multi-node NVLINK capabilities.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl), UCS_CONFIG_TYPE_TERNARY},
 
@@ -282,9 +283,8 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
     uct_cuda_ipc_dev_cache_t *cache;
     uint8_t *accessible;
 
-    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&this_device));
-    if (UCS_OK != status) {
-        return status;
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&this_device)) != UCS_OK) {
+        return UCS_ERR_UNREACHABLE;
     }
 
     pthread_mutex_lock(&component->lock);
@@ -407,6 +407,71 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     return UCS_OK;
 }
 
+static int
+uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
+                                  ucs_ternary_auto_value_t mnnvl_enable)
+{
+#if !HAVE_NVML_FABRIC_INFO
+    static int mnnvl_supported = 0;
+#else
+    static int mnnvl_supported = -1;
+    nvmlGpuFabricInfo_t fabric_info;
+    nvmlDevice_t device;
+    ucs_status_t status;
+    char buf[64];
+
+    if (mnnvl_supported != -1) {
+        goto out;
+    }
+
+    if ((mnnvl_enable == UCS_NO) ||
+        (UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG) != UCS_OK)) {
+        mnnvl_supported = 0;
+        goto out;
+    }
+
+    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(0, &device));
+    if (status != UCS_OK) {
+        goto out_not_supported;
+    }
+
+    /**
+     * nvmlDeviceGetGpuFabricInfo was deprecated in CUDA 12.4.0. The old API is
+     * used to ensure compatibility of the UCX. Thus, UCX built with CUDA 12.4.0
+     * or newer can be used on a system with older CUDA 12 versions.
+     * TODO: Replace the deprecated API along with the major CUDA release.
+     */
+    status = UCT_NVML_FUNC_LOG_ERR(
+            nvmlDeviceGetGpuFabricInfo(device, &fabric_info));
+    if (status != UCS_OK) {
+        goto out_not_supported;
+    }
+
+    ucs_debug("fabric_info: state=%u status=%u uuid=%s", fabric_info.state,
+              fabric_info.status,
+              ucs_str_dump_hex(fabric_info.clusterUuid,
+                               NVML_GPU_FABRIC_UUID_LEN, buf, sizeof(buf),
+                               SIZE_MAX));
+
+    if ((fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
+        (fabric_info.status == NVML_SUCCESS)) {
+        mnnvl_supported = 1;
+        goto out_sd;
+    }
+
+out_not_supported:
+    mnnvl_supported = 0;
+out_sd:
+    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
+out:
+#endif
+    if ((mnnvl_enable == UCS_YES) && !mnnvl_supported) {
+        ucs_error("multi-node NVLINK support is requested but not supported");
+    }
+
+    return mnnvl_supported;
+}
+
 static void uct_cuda_ipc_md_close(uct_md_h md)
 {
     ucs_free(md);
@@ -436,9 +501,10 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops       = &md_ops;
     md->super.component = &uct_cuda_ipc_component.super;
-    md->enable_mnnvl    = ipc_config->enable_mnnvl;
+    md->enable_mnnvl    = uct_cuda_ipc_md_check_fabric_info(
+                                                  md, ipc_config->enable_mnnvl);
     *md_p               = &md->super;
-  
+
     return UCS_OK;
 }
 

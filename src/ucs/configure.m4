@@ -55,9 +55,8 @@ AC_ARG_WITH([bfd],
             [], [with_bfd=guess])
 AS_IF([test "x$with_bfd" != xno],
       [
-       # Do not define BFD_CFLAGS, BFD_LIBS, etc to make sure automake will not
+       # Do not define BFD_LIBS, etc to make sure automake will not
        # try to use them when bfd_happy=no
-       BFD_CHECK_CFLAGS=""
        BFD_CHECK_LIBS="-lbfd -ldl -lz"
        AS_IF([test "x$with_bfd" = "xguess" -o "x$with_bfd" = "xyes"],
              [BFD_CHECK_CPPFLAGS=""
@@ -79,7 +78,7 @@ AS_IF([test "x$with_bfd" != xno],
        # not a PIC object.
        # Do not allow undefined symbols, to ensure all references are resolved.
        # TODO Allow static link with static libbfd
-       CFLAGS="$CFLAGS $BFD_CHECK_CFLAGS -fPIC"
+       CFLAGS="$CFLAGS -fPIC"
        LDFLAGS="$LDFLAGS $BFD_CHECK_LDFLAGS -shared -Wl,--no-undefined"
 
        bfd_happy="no"
@@ -121,13 +120,8 @@ AS_IF([test "x$with_bfd" != xno],
               # Check if demange is supported
               AC_CHECK_FUNCS([cplus_demangle])
 
-              case ${host} in
-                  aarch64*) BFD_CHECK_CFLAGS="$BFD_CHECK_CFLAGS -funwind-tables" ;;
-              esac
-
               # Define macros and variable substitutions for BFD support
               AC_DEFINE([HAVE_DETAILED_BACKTRACE], 1, [Enable detailed backtrace])
-              AC_SUBST([BFD_CFLAGS], [$BFD_CHECK_CFLAGS])
               AC_SUBST([BFD_CPPFLAGS], [$BFD_CHECK_CPPFLAGS])
               AC_SUBST([BFD_LIBS], [$BFD_CHECK_LIBS])
               AC_SUBST([BFD_LDFLAGS], [$BFD_CHECK_LDFLAGS])

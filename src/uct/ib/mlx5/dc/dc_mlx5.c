@@ -79,7 +79,10 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      "           Multiple endpoints may share the same DCI.\n"
      "\n"
      "hw_dcs     A single DCI that operates as a HW DCS queue. The channels are assigned\n"
-     "           in a round-robin fashion.",
+     "           in a round-robin fashion.\n"
+     "\n"
+     "dcs_hybrid Same as \"dcs_quota\" but when there are no DCIs available,\n" 
+     "           a dedicated HW DCI is used in the same manner as in \"hw_dcs\" policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
@@ -249,9 +252,10 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                    UCT_IFACE_FLAG_PUT_ZCOPY);
     }
 
-    /* Error handling is not supported with random dci policy
+    /* Error handling is not supported with shared dci policies
      * TODO: Fix */
-    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
+    if (uct_dc_mlx5_iface_is_policy_shared(iface) ||
+        uct_dc_mlx5_iface_is_hybrid(iface)) {
         iface_attr->cap.flags &= ~(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    |
                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM);
@@ -270,7 +274,7 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
 {
-    uint8_t dci_index;
+    uct_dci_index_t dci_index;
     struct mlx5_cqe64 *cqe;
     uint16_t hw_ci;
     uct_dc_dci_t *dci;
@@ -367,8 +371,8 @@ static void uct_ib_mlx5dv_dci_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
 }
 
 ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
-                                          uint8_t dci_index, int connect,
-                                          uint8_t num_dci_channels)
+                                          uct_dci_index_t dci_index,
+                                          int connect, uint8_t num_dci_channels)
 {
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
     uct_ib_mlx5_qp_attr_t attr = {};
@@ -777,9 +781,10 @@ uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
 
 static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface)
 {
-    uint8_t num_dcis = ucs_array_length(&iface->tx.dcis);
+    uct_dci_index_t num_dcis = ucs_array_length(&iface->tx.dcis);
     uct_dc_dci_t *dci;
-    uint8_t pool_index, dci_index;
+    uint8_t pool_index;
+    uct_dci_index_t dci_index;
 
     for (dci_index = 0; dci_index < num_dcis; dci_index++) {
         dci = uct_dc_mlx5_iface_dci(iface, dci_index);
@@ -1175,12 +1180,12 @@ static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
     ucs_arbiter_group_cleanup(&fc_ep->arb_group);
     uct_rc_fc_cleanup(&fc_ep->fc);
 
-    if ((fc_ep->dci != UCT_DC_MLX5_EP_NO_DCI) &&
+    if ((fc_ep->dci == UCT_DC_MLX5_EP_NO_DCI) ||
         !uct_dc_mlx5_is_dci_valid(fc_dci)) {
         goto out;
     }
 
-    if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
+    if (uct_dc_mlx5_is_dci_shared(iface, fc_ep->dci)) {
         txqp = &fc_dci->txqp;
         ucs_queue_for_each_safe(op, iter, &txqp->outstanding, queue) {
             if (op->handler == uct_dc_mlx5_ep_fc_pure_grant_send_completion) {
@@ -1351,7 +1356,7 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 
 static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
                                            struct mlx5_cqe64 *cqe,
-                                           uint8_t dci_index,
+                                           uct_dci_index_t dci_index,
                                            ucs_status_t status)
 {
     uct_dc_mlx5_ep_t *ep;
@@ -1380,7 +1385,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
     struct mlx5_cqe64 *cqe     = arg;
-    uint8_t dci_index          = uct_dc_mlx5_iface_dci_find(iface, cqe);
+    uct_dci_index_t dci_index  = uct_dc_mlx5_iface_dci_find(iface, cqe);
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, dci_index, txqp, txwq);
@@ -1609,6 +1614,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
+    if (md->dp_ordering_cap.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
+        init_attr.flags |= UCT_IB_DDP_SUPPORTED;
+    }
+
     status = uct_dc_mlx5_calc_sq_length(md, tx_queue_len, &sq_length);
     if (status != UCS_OK) {
         return status;
@@ -1622,9 +1631,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                               tl_md, worker, params, &config->super,
                               &config->rc_mlx5_common, &init_attr);
 
-    status = uct_rc_mlx5_dp_ordering_ooo_init(
-            &self->super, UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC,
-            &config->rc_mlx5_common, "dc");
+    status = uct_rc_mlx5_dp_ordering_ooo_init(&self->super,
+                                              md->dp_ordering_cap.dc,
+                                              &config->rc_mlx5_common, "dc");
     if (status != UCS_OK) {
         return status;
     }
@@ -1809,7 +1818,8 @@ UCT_TL_DEFINE_ENTRY(&uct_ib_component, dc_mlx5, uct_dc_mlx5_query_tl_devices,
                     uct_dc_mlx5_iface_t, "DC_MLX5_",
                     uct_dc_mlx5_iface_config_table, uct_dc_mlx5_iface_config_t);
 
-void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
+                                 uct_dci_index_t dci_index)
 {
     uct_dc_dci_t *dci        = uct_dc_mlx5_iface_dci(iface, dci_index);
     uct_ib_mlx5_txwq_t *txwq = &dci->txwq;

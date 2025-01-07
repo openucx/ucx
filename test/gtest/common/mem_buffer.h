@@ -28,10 +28,11 @@ public:
     static bool is_mem_type_supported(ucs_memory_type_t mem_type);
 
     /* allocate buffer of a given memory type */
-    static void *allocate(size_t size, ucs_memory_type_t mem_type);
-
+    static void *
+    allocate(size_t size, ucs_memory_type_t mem_type, bool async = false);
     /* release buffer of a given memory type */
-    static void release(void *ptr, ucs_memory_type_t mem_type);
+    static void
+    release(void *ptr, ucs_memory_type_t mem_type, bool async = false);
 
     /* fill pattern in a host-accessible buffer */
     static void pattern_fill(void *buffer, size_t length, uint64_t seed);
@@ -102,6 +103,11 @@ public:
     {
         return m_bar1_free_size;
     }
+
+    /**
+     * Check whether asynchronous operations are supported for the memory type
+     */
+    static bool is_async_supported(ucs_memory_type_t mem_type);
 
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);

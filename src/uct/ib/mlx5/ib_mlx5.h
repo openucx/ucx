@@ -1,6 +1,7 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (c) Google, LLC, 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -66,6 +67,9 @@
 #define UCT_IB_MLX5_ATOMIC_MODE_EXT      3
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA  UCS_BIT(28) /* GRH/IP in the receive buffer */
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE   UCS_BIT(29) /* GRH/IP in the CQE */
+/* Bits 24-26 of flags_rqpn indicate the packet type */
+#define UCT_IB_MLX5_RQPN_ROCE_FLAG_IPV6  UCS_BIT(24)
+#define UCT_IB_MLX5_RQPN_ROCE_FLAG_IPV4  UCS_BIT(25)
 #define UCT_IB_MLX5_CQE_FORMAT_MASK      0xc
 #define UCT_IB_MLX5_MINICQE_ARR_MAX_SIZE 7
 #define UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK  0x0000FFFF  /* Byte count mask for multi-packet RQs */
@@ -204,17 +208,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
     /* Device supports implicit ODP with PCI relaxed order */
     UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(18),
-    /* RoCE supports out-of-order RDMA for RC */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC = UCS_BIT(19),
-    /* RoCE supports out-of-order RDMA for DC */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC = UCS_BIT(20),
-    /* RoCE supports forcing ordering configuration */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(21),
-    /* Device supports DDP (OOO data placement)*/
-    UCT_IB_MLX5_MD_FLAG_DDP                   = UCS_BIT(22),
+    /* Device supports forcing ordering configuration */
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(19),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 23,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -256,7 +254,7 @@ typedef struct uct_ib_mlx5_dma_opaque_mr {
 } uct_ib_mlx5_dma_opaque_mr_t;
 
 
-#if HAVE_DEVX
+#if HAVE_MLX5_MMO
 /**
  * full WQE format:
  * struct mlx5_wqe_ctrl_seg;
@@ -269,8 +267,10 @@ typedef struct uct_ib_mlx5_dma_seg {
     uint32_t be_opaque_lkey;
     uint64_t be_opaque_vaddr;
 } UCS_S_PACKED uct_ib_mlx5_dma_seg_t;
+#endif
 
 
+#if HAVE_DEVX
 typedef struct {
     struct mlx5dv_devx_obj *dvmr;
     int                    mr_num;
@@ -301,13 +301,14 @@ typedef struct {
 typedef struct {
     struct mlx5dv_devx_obj *cross_mr;
     uint32_t               lkey;
+    uint64_t               md_uuid;
 } uct_ib_mlx5_devx_umr_alias_t;
 
 
-#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x"
+#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x uuid %" PRIu64
 #define UCT_IB_MLX5_UMR_ALIAS_ARG(_umr_alias) \
-    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey)
-
+    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey), \
+    (_umr_alias)->md_uuid
 
 /* Hash map of indirect mkey (from the host) to mkey alias (on the DPU) */
 /* Note the hash key here is: gvmi_id << 32 | mkey (both uint32_t) */
@@ -386,6 +387,16 @@ KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
 #endif
 
 
+typedef enum {
+    /* IBTA-compliant ordering semantics */
+    UCT_IB_MLX5_DP_ORDERING_IBTA    = 0x0,
+    /* Out-of-order RDMA reads and writes */
+    UCT_IB_MLX5_DP_ORDERING_OOO_RW  = 0x1,
+    /* Out-of-order RDMA read/write/send/recv (DDP) */
+    UCT_IB_MLX5_DP_ORDERING_OOO_ALL = 0x2,
+} uct_ib_mlx5_dp_ordering_t;
+
+
 /**
  * MLX5 IB memory domain.
  */
@@ -431,6 +442,12 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  max_rd_atomic_dc;
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
+    struct {
+        /* Max dp ordering level per transport, 
+           as listed in uct_ib_mlx5_dp_ordering_t */
+        uint8_t              rc;
+        uint8_t              dc;
+    } dp_ordering_cap;
 } uct_ib_mlx5_md_t;
 
 
@@ -965,17 +982,27 @@ uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
                              void *out, size_t outlen,
                              char *msg_arg, int silent)
 {
-    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    ucs_log_level_t level;
+    ucs_status_t status;
     int ret;
     unsigned syndrome;
 
+    memset(out, 0, outlen);
     ret = mlx5dv_devx_general_cmd(context, in, inlen, out, outlen);
     if (ret != 0) {
+        if ((errno == EPERM) || (errno == EPROTONOSUPPORT) ||
+            (errno == EOPNOTSUPP)) {
+            status = UCS_ERR_UNSUPPORTED;
+        } else {
+            status = UCS_ERR_IO_ERROR;
+        }
+
         syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        level    = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
         ucs_log(level,
                 "mlx5dv_devx_general_cmd(%s) failed on %s, syndrome 0x%x: %m",
                 msg_arg, ibv_get_device_name(context->device), syndrome);
-        return UCS_ERR_IO_ERROR;
+        return status;
     }
 
     return UCS_OK;
@@ -985,9 +1012,6 @@ uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p);
-
-void uct_ib_mlx5_devx_set_qpc_dp_ordering(
-        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo);
 
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,
@@ -1150,6 +1174,15 @@ ucs_status_t
 uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
                            const uct_md_mem_dereg_params_t *params);
 
+int uct_ib_mlx5_devx_check_xgvmi(void *cap_2, const char *dev_name);
+
+ucs_status_t uct_ib_mlx5_devx_query_cap(struct ibv_context *ctx, uint32_t opmod,
+                                        void *out, size_t size, char *msg_arg,
+                                        int silent);
+
+ucs_status_t uct_ib_mlx5_devx_query_cap_2(struct ibv_context *ctx,
+                                          void *out, size_t size);
+
 ucs_status_t
 uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md, const void *mkey_buffer,
                             uct_md_mem_attach_params_t *params,
@@ -1160,6 +1193,8 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                            void *address, size_t length,
                            const uct_md_mkey_pack_params_t *params,
                            void *mkey_buffer);
+
+struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device);
 
 ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                       const uct_ib_md_config_t *md_config,

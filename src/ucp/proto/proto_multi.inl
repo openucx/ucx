@@ -63,11 +63,16 @@ ucp_proto_multi_max_payload(ucp_request_t *req,
                             size_t hdr_size)
 {
     size_t length   = req->send.state.dt_iter.length;
-    size_t max_frag = lpriv->max_frag - hdr_size;
+    size_t max_frag;
     size_t max_payload;
 
-    ucs_assertv(lpriv->max_frag > hdr_size, "max_frag=%zu hdr_size=%zu",
-                lpriv->max_frag, hdr_size);
+    /* If header is greater than max_frag - that's ok, we allow it, but we send
+     * only the header data and empty payload. */
+    if (lpriv->max_frag <= hdr_size) {
+        return 0;
+    }
+
+    max_frag = lpriv->max_frag - hdr_size;
 
     /* Do not split very small sends to chunks, it's not worth it, and
        generic datatype may not be able to pack to a smaller buffer */
