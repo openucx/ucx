@@ -171,12 +171,12 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
     return fnmatch(proto_info_config, select_param_str, FNM_CASEFOLD) == 0;
 }
 
-static inline size_t
+static inline unsigned
 ucp_proto_select_elem_selections(const ucp_proto_select_elem_t *select_elem)
 {
 #ifdef ENABLE_DEBUG_DATA
     const ucp_proto_threshold_elem_t *thresh_elem = select_elem->thresholds;
-    size_t total_selections                       = 0;
+    unsigned total_selections                     = 0;
 
     do {
         total_selections += thresh_elem->proto_config.selections;
@@ -249,7 +249,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
 
         if (show_used && (proto_attr.selections > 0)) {
             ucs_snprintf_safe(row_elem->counter_str,
-                              sizeof(row_elem->counter_str), "%zu  ",
+                              sizeof(row_elem->counter_str), "%u  ",
                               proto_attr.selections);
         } else {
             row_elem->counter_str[0] = '\0';

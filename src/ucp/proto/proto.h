@@ -143,7 +143,7 @@ typedef struct {
     ucp_lane_map_t lane_map;
 
     /* Selections count */
-    size_t         selections;
+    unsigned       selections;
 } ucp_proto_query_attr_t;
 
 

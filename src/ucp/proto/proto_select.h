@@ -124,7 +124,7 @@ typedef struct {
 
 #ifdef ENABLE_DEBUG_DATA
     /* Usage counter */
-    size_t                      selections;
+    unsigned                    selections;
 #endif
 } ucp_proto_config_t;
 
