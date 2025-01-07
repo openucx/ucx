@@ -1048,9 +1048,14 @@ ucp_mem_h ucp_test_base::entity::mem_map(void *address, size_t length)
     ucp_mem_map_params_t params;
 
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_PROT;
     params.address    = address;
     params.length     = length;
+    params.prot       = UCP_MEM_MAP_PROT_LOCAL_READ |
+                        UCP_MEM_MAP_PROT_LOCAL_WRITE |
+                        UCP_MEM_MAP_PROT_REMOTE_READ |
+                        UCP_MEM_MAP_PROT_REMOTE_WRITE;
 
     ucp_mem_h memh;
     ucs_status_t status = ucp_mem_map(ucph(), &params, &memh);
@@ -1246,10 +1251,15 @@ ucp_test::mapped_buffer::mapped_buffer(size_t size, const entity& entity,
     ucp_mem_map_params_t params;
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS |
+                        UCP_MEM_MAP_PARAM_FIELD_PROT;
     params.flags      = flags;
     params.address    = ptr();
     params.length     = size;
+    params.prot       = UCP_MEM_MAP_PROT_LOCAL_READ |
+                        UCP_MEM_MAP_PROT_LOCAL_WRITE |
+                        UCP_MEM_MAP_PROT_REMOTE_READ |
+                        UCP_MEM_MAP_PROT_REMOTE_WRITE;
 
     status = ucp_mem_map(m_entity.ucph(), &params, &m_memh);
     ASSERT_UCS_OK(status);
