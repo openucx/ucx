@@ -124,7 +124,7 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
                         (CUdeviceptr)region->mapped_addr, region->key.b_len));
         }
     } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
-        return UCT_CUDADRV_FUNC_LOG_WARN(cuMemPoolDestroy(region->key.ph.pool));
+        return UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)region->mapped_addr));
     } else
 #endif
     {
