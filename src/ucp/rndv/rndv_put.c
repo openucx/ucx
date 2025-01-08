@@ -573,6 +573,21 @@ static void ucp_proto_rndv_put_mtype_frag_completion(uct_completion_t *uct_comp)
     ucp_proto_rndv_ppln_send_frag_complete(req, 1);
 }
 
+static ucs_memory_type_t
+ucp_proto_rndv_put_mtype_frag_mem_type(uint64_t rndv_frag_mem_types,
+                                       ucs_memory_type_t rkey_mem_type)
+{
+    ucs_assert(rndv_frag_mem_types != 0);
+
+    if (UCS_BIT_GET(rndv_frag_mem_types, rkey_mem_type)) {
+        return rkey_mem_type;
+    } else if (UCS_BIT_GET(rndv_frag_mem_types, UCS_MEMORY_TYPE_HOST)) {
+        return UCS_MEMORY_TYPE_HOST;
+    } else {
+        return ucs_ffs64(rndv_frag_mem_types);
+    }
+}
+
 static void
 ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
@@ -585,7 +600,8 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucp_md_index_t UCS_V_UNUSED dummy_md_id;
     ucp_memory_info_t frag_mem_info;
 
-    if (init_params->rkey_config_key == NULL) {
+    if ((init_params->rkey_config_key == NULL) ||
+        (context->config.ext.rndv_frag_mem_types == 0)) {
         return;
     }
 
@@ -593,7 +609,9 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
      * because pipeline protocols assume that both peers use the same
      * fragment sizes (and they are different for different memory types by
      * default). */
-    frag_mem_info.type = init_params->rkey_config_key->mem_type;
+    frag_mem_info.type = ucp_proto_rndv_put_mtype_frag_mem_type(
+            context->config.ext.rndv_frag_mem_types,
+            init_params->rkey_config_key->mem_type);
 
     status = ucp_proto_rndv_mtype_init(init_params, frag_mem_info.type,
                                        &mdesc_md_map, &frag_size);

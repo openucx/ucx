@@ -1243,10 +1243,12 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_context_h context      = ep->worker->context;
     ucp_worker_iface_t *wiface = ucp_worker_iface(ep->worker, rsc_index);
     uct_iface_is_reachable_params_t params = {
-        .field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                       UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
-        .device_addr = ae->dev_addr,
-        .iface_addr  = ae->iface_addr,
+        .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                              UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH,
+        .device_addr        = ae->dev_addr,
+        .iface_addr         = ae->iface_addr,
+        .device_addr_length = ae->dev_addr_len
     };
 
     if (info_str != NULL) {
@@ -1349,29 +1351,12 @@ static void ucp_wireup_discard_uct_eps(ucp_ep_h ep, uct_ep_h *uct_eps,
     }
 }
 
-
-
-static unsigned
-ucp_ep_num_reused_lanes(ucp_ep_h ep, const ucp_lane_index_t *reuse_lane_map)
-{
-    unsigned num_reused = 0;
-    ucp_lane_index_t lane;
-
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        num_reused += (reuse_lane_map[lane] != UCP_NULL_LANE);
-    }
-
-    return num_reused;
-}
-
 static int
 ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
                                    const ucp_ep_config_key_t *new_key,
                                    const ucp_unpacked_address_t *remote_address,
                                    const unsigned *addr_indices)
 {
-    ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES];
-    const ucp_ep_config_key_t *old_key;
     ucp_lane_index_t lane;
 
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
@@ -1387,27 +1372,40 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
         }
     }
 
-    old_key = &ucp_ep_config(ep)->key;
-    ucp_ep_config_lanes_intersect(old_key, new_key, ep, remote_address,
-                                  addr_indices, reuse_lane_map);
+    return 1;
+}
 
-    /* For now, reconfig is supported only if no lanes are reused */
-    return ucp_ep_num_reused_lanes(ep, reuse_lane_map) == 0;
+static ucp_lane_index_t
+ucp_wireup_find_reused_wireup_ep_lane(ucp_ep_h ep,
+                                      const ucp_lane_index_t *reuse_lane_map)
+{
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
+        if ((reuse_lane_map[lane] != UCP_NULL_LANE) &&
+            ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
+            return reuse_lane_map[lane];
+        }
+    }
+
+    return UCP_NULL_LANE;
 }
 
 static ucp_lane_index_t
 ucp_wireup_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
                                 const ucp_lane_index_t *reuse_lane_map)
 {
-    if (ucp_ep_has_cm_lane(ep)) {
-        return key->cm_lane;
+    ucp_lane_map_t lane_bitmap = 0;
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
+        if (reuse_lane_map[lane] != UCP_NULL_LANE) {
+            lane_bitmap |= UCS_BIT(reuse_lane_map[lane]);
+        }
     }
 
-    /* Just use first lane, as only non-reused lanes are allowed at the
-     * moment. */
-    ucs_assert(key->num_lanes > 0);
-    ucs_assert(ucp_ep_num_reused_lanes(ep, reuse_lane_map) == 0);
-    return 0;
+    lane = ucs_ffs64_safe(~lane_bitmap);
+    return (lane < key->num_lanes) ? lane : UCP_NULL_LANE;
 }
 
 static ucs_status_t
@@ -1427,20 +1425,35 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     old_wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, old_lane));
     ucs_assert_always(old_wireup_ep != NULL);
 
-    /* Set wireup EP for new configuration's wireup lane */
-    if (ucp_ep_has_cm_lane(ep)) {
-        /* Use existing EP from CM lane */
-        new_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-        ucs_assert(new_wireup_ep != NULL);
-    } else {
-        /* Create new EP for non-CM flow */
-        status = ucp_wireup_ep_create(ep, &uct_ep);
-        if (status != UCS_OK) {
-            return status;
-        }
+    /* If wireup lane is required for new configuration, select it according
+     * to the following priority:
+     * 1) If CM lane exists, use it.
+     * 2) If any reused wireup_ep lane exists in old configuration, use it.
+     * 3) Otherwise select a non-reused lane (which must exist), and wrap
+     *    it with a new wireup_ep wrapper. */
 
+    if (ucp_ep_has_cm_lane(ep)) {
+        new_wireup_ep   = ucp_ep_get_cm_wireup_ep(ep);
+        new_wireup_lane = key->cm_lane;
+    } else {
+        new_wireup_lane = ucp_wireup_find_reused_wireup_ep_lane(ep,
+                                                                reuse_lane_map);
+        if (new_wireup_lane != UCP_NULL_LANE) {
+            uct_ep = ucp_ep_get_lane(ep, new_wireup_lane);
+        } else {
+            new_wireup_lane = ucp_wireup_find_non_reused_lane(ep, key,
+                                                              reuse_lane_map);
+            ucs_assert(new_wireup_lane != UCP_NULL_LANE);
+
+            status = ucp_wireup_ep_create(ep, &uct_ep);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
         new_wireup_ep = ucp_wireup_ep(uct_ep);
     }
+
+    ucs_assert(new_wireup_ep != NULL);
 
     /* Get correct aux_rsc_index either from next_ep or aux_ep */
     aux_rsc_index = ucp_wireup_ep_is_next_ep_active(old_wireup_ep) ?
@@ -1464,9 +1477,6 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
      * code). */
     uct_ep_destroy(&old_wireup_ep->super.super);
     ucp_ep_set_lane(ep, old_lane, NULL);
-
-    /* Select CM/non-reused lane as new wireup lane */
-    new_wireup_lane = ucp_wireup_find_non_reused_lane(ep, key, reuse_lane_map);
 
     new_uct_eps[new_wireup_lane] = &new_wireup_ep->super.super;
     key->wireup_msg_lane         = new_wireup_lane;

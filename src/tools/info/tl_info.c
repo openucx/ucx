@@ -409,13 +409,16 @@ static void print_md_info(uct_component_h component,
     status = uct_md_open(component, md_name, md_config, &md);
     uct_config_release(md_config);
     if (status != UCS_OK) {
-        printf("# < failed to open memory domain %s >\n", md_name);
+        printf("# < failed to open memory domain %s for component %s >\n",
+               md_name, component_attr->name);
         goto out;
     }
 
     status = uct_md_query_tl_resources(md, &resources, &num_resources);
     if (status != UCS_OK) {
-        printf("#   < failed to query memory domain resources >\n");
+        printf("#   < failed to query memory domain %s resources for component "
+               "%s >\n",
+               md_name, component_attr->name);
         goto out_close_md;
     }
 

@@ -270,9 +270,8 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
 
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
-                            uct_ep_operation_t memtype_op, unsigned flags,
-                            ptrdiff_t max_iov_offs, size_t min_iov,
-                            ucp_lane_type_t lane_type,
+                            unsigned flags, ptrdiff_t max_iov_offs,
+                            size_t min_iov, ucp_lane_type_t lane_type,
                             ucs_memory_type_t reg_mem_type,
                             uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,

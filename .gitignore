@@ -109,6 +109,7 @@ test/apps/profiling/ucx_profiling
 test/apps/uct_info/uct_info
 test/apps/uct_info/uct_info_static
 test/apps/uct_info/ucp_hello_world_static
+test/apps/test_cuda_get_symbol_address
 cmake/*.cmake
 *.gcno
 *.gcda

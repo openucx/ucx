@@ -73,6 +73,12 @@ extern ucs_list_link_t ucs_sys_topo_providers_list;
 
 
 /**
+ * Reset the internal singleton system topology provider.
+ */
+void ucs_sys_topo_reset_provider(void);
+
+
+/**
  * Find system device by pci bus id.
  *
  * @param [in]  bus_id  pointer to bus id of the device of interest.

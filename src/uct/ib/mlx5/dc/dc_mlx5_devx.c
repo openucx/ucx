@@ -49,15 +49,14 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
                               ib_iface->config.max_inl_cqe[UCT_IB_DIR_RX], 1));
     UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode,
                       uct_ib_mlx5_get_atomic_mode(ib_iface));
-    if (uct_ib_iface_is_roce(&iface->super.super.super)) {
-        UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_0,
-                          ucs_ternary_auto_value_is_yes_or_try(
-                                  ib_iface->config.dp_ordering_ooo));
-        UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_1, 0);
-        UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_force,
-                          ucs_ternary_auto_value_is_yes_or_no(
-                                  ib_iface->config.dp_ordering_ooo));
-    } else {
+    UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_0,
+                      UCS_BIT_GET(iface->super.config.dp_ordering, 0));
+    UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_1,
+                      UCS_BIT_GET(iface->super.config.dp_ordering, 1));
+    UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_force,
+                      iface->super.config.dp_ordering_force);
+
+    if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, ib_iface->pkey_index);
     }
 
@@ -145,6 +144,9 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode,
                       uct_ib_mlx5_get_atomic_mode(&rc_iface->super));
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
+
+    uct_ib_mlx5_devx_set_qpc_dp_ordering(md, qpc, &iface->super);
+
     if (uct_ib_iface_is_roce(&rc_iface->super)) {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio,
                           rc_iface->super.config.sl);
@@ -152,9 +154,6 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
             uct_ib_mlx5_devx_set_qpc_port_affinity(md, dci_config->path_index,
                                                    qpc, &opt_param_mask);
         }
-
-        uct_ib_mlx5_devx_set_qpc_dp_ordering(
-                qpc, rc_iface->super.config.dp_ordering_ooo);
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
                           rc_iface->super.config.sl);
