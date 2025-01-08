@@ -1268,7 +1268,9 @@ public:
     {
         const ucp_ep_config_t *config = ucp_ep_config(e->ep());
         ucp_lane_index_t lane_index   = config->key.rma_lanes[0];
-        return ucp_ep_get_tl_rsc(e->ep(), lane_index)->tl_name;
+        return (lane_index != UCP_NULL_LANE) ?
+                       ucp_ep_get_tl_rsc(e->ep(), lane_index)->tl_name :
+                       NULL;
     }
 
     void verify_symmetric_tl_selection(const std::string &num_eps1,
@@ -1285,8 +1287,14 @@ public:
         e1->connect(e2, get_ep_params());
         e2->connect(e1, get_ep_params());
 
+        auto tl1 = rma_transport(e1);
+        auto tl2 = rma_transport(e2);
+
         /* Verify that selection is the same for both eps */
-        ASSERT_STREQ(rma_transport(e1), rma_transport(e2));
+        ASSERT_EQ(!tl1, !tl2);
+        if (tl1 != NULL) {
+            ASSERT_STREQ(tl1, tl2);
+        }
     }
 };
 
