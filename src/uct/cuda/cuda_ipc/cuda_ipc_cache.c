@@ -492,15 +492,15 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup,
                                   &cache->pgtable, key->d_bptr);
     if (ucs_likely(pgt_region != NULL)) {
-        region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+        region   = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
 #if HAVE_CUDA_FABRIC
-    cmp_size = sizeof(key->ph.buffer_id);
-    arg1     = (const void *)&key->ph.buffer_id;
-    arg2     = (const void *)&region->key.ph.buffer_id;
+        cmp_size = sizeof(key->ph.buffer_id);
+        arg1     = (const void*)&key->ph.buffer_id;
+        arg2     = (const void*)&region->key.ph.buffer_id;
 #else
-    cmp_size = sizeof(key->ph);
-    arg1     = (const void *)&key->ph;
-    arg2     = (const void *)&region->key.ph;
+        cmp_size = sizeof(key->ph);
+        arg1     = (const void*)&key->ph;
+        arg2     = (const void*)&region->key.ph;
 #endif
         if (memcmp(arg1, arg2, cmp_size) == 0) {
             /*cache hit */
