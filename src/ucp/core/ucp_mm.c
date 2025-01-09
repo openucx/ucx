@@ -314,18 +314,15 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
 
         if (params->prot & UCP_MEM_MAP_PROT_REMOTE_WRITE) {
             flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT;
-
-            if (context->config.features & UCP_FEATURE_AMO) {
-                flags |= UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
-            }
         }
     } else {
         if (context->config.features & UCP_FEATURE_RMA) {
             flags |= UCT_MD_MEM_ACCESS_RMA;
         }
-        if (context->config.features & UCP_FEATURE_AMO) {
-            flags |= UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
-        }
+    }
+
+    if (context->config.features & UCP_FEATURE_AMO) {
+        flags |= UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
     }
 
     if (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) {
