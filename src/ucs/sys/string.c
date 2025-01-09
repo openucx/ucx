@@ -304,13 +304,14 @@ const char * ucs_str_dump_hex(const void* data, size_t length, char *buf,
     return buf;
 }
 
-const char* ucs_flags_str(char *buf, size_t max,
-                          uint64_t flags, const char **str_table)
+const char* ucs_flags_str(char *buf, size_t max, uint64_t flags,
+                          const char **str_table, unsigned str_table_size)
 {
     size_t i, len = 0;
 
-    for (i = 0; *str_table; ++str_table, ++i) {
-        if (flags & UCS_BIT(i)) { /* not using ucs_for_each_bit to silence coverity */
+    for (i = 0; i < str_table_size; ++str_table, ++i) {
+        /* not using ucs_for_each_bit to silence coverity */
+        if ((flags & UCS_BIT(i)) && (*str_table != NULL)) {
             snprintf(buf + len, max - len, "%s,", *str_table);
             len = strlen(buf);
         }

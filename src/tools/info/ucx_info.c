@@ -49,6 +49,9 @@ static void usage()
 {
     char buf[128];
 
+    const ucs_config_allowed_values_t *memory_type_names =
+                UCS_CONFIG_GET_ALLOWED_VALUES(ucs_memory_type_names);
+
     printf("Usage: ucx_info [options]\n");
     printf("At least one of the following options must be set:\n");
     printf("  -v                   Show version information\n");
@@ -67,7 +70,7 @@ static void usage()
     printf("  -m <size>[,<type>]   Show UCP memory allocation info for a given size and type\n");
     printf("                       Supported memory types are: %s\n",
            ucs_flags_str(buf, sizeof(buf), supported_mem_types(),
-                         ucs_memory_type_names));
+                         memory_type_names->values, memory_type_names->count));
     printf("  -u <features>        UCP context features to use. String of one or more of:\n");
     printf("                        'a' : atomic operations\n");
     printf("                        'r' : remote memory access\n");

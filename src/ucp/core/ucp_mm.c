@@ -1507,7 +1507,7 @@ void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
                    mem_type_str,
                    ucs_flags_str(mem_types_buf, sizeof(mem_types_buf),
                                  context->mem_type_mask,
-                                 ucs_memory_type_names));
+                                 type_names->values, type_names->count));
             return;
         }
     } else {

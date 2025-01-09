@@ -496,8 +496,8 @@ int ucs_config_sprintf_bitmap(char *buf, size_t max,
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
                                                       arg;
 
-    ucs_flags_str(buf, max, *((uint64_t*)src),
-                  allowed_values->values);
+    ucs_flags_str(buf, max, *((uint64_t*)src), allowed_values->values,
+                  allowed_values->count);
     return 1;
 }
 
@@ -757,7 +757,11 @@ int ucs_config_sscanf_signo(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_signo(char *buf, size_t max,
                              const void *src, const void *arg)
 {
-    return ucs_config_sprintf_enum(buf, max, src, arg);
+    const ucs_config_allowed_values_t *signal_names =
+        UCS_CONFIG_GET_ALLOWED_VALUES(ucs_signal_names);
+    const char **table = signal_names->values;
+    strncpy(buf, table[*(unsigned*)src], max);
+    return 1;
 }
 
 int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)

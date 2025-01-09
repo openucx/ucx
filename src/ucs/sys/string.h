@@ -241,11 +241,12 @@ const char *ucs_str_dump_hex(const void* data, size_t length, char *buf,
  * @param  max            Size of the string.
  * @param  flags          Flags to be converted.
  * @param  str_table      Conversion table - from flag value to a string.
+ * @param  str_table_size Size of the conversion table.
  *
  * @return String that holds the representation of the given flags.
  */
-const char* ucs_flags_str(char *str, size_t max,
-                          uint64_t flags, const char **str_table);
+const char* ucs_flags_str(char *buf, size_t max, uint64_t flags,
+                          const char **str_table, unsigned str_table_size);
 
 
 /**

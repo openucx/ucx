@@ -32,8 +32,7 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
         [ucs_ilog2(UCT_RDMACM_CM_EP_SERVER_NOTIFY_CB_INVOKED)] = "notify_cb_invoked",
         [ucs_ilog2(UCT_RDMACM_CM_EP_GOT_DISCONNECT)]           = "got_disconnect",
         [ucs_ilog2(UCT_RDMACM_CM_EP_DISCONNECTING)]            = "disconnecting",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_FAILED)]                   = "failed",
-        NULL
+        [ucs_ilog2(UCT_RDMACM_CM_EP_FAILED)]                   = "failed"
     };
 
     if ((local_addr != NULL) && ucs_sockaddr_is_known_af(local_addr)) {
@@ -48,7 +47,8 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
         ucs_strncpy_safe(remote_ip_port_str, "<invalid>", UCS_SOCKADDR_STRING_LEN);
     }
 
-    ucs_flags_str(flags_buf, sizeof(flags_buf), cep->flags, ep_flag_to_str);
+    ucs_flags_str(flags_buf, sizeof(flags_buf), cep->flags, ep_flag_to_str,
+                  ucs_static_array_size(ep_flag_to_str));
     ucs_snprintf_safe(str, max_len, "[cep %p %s->%s %s %s]",
                       cep, local_ip_port_str, remote_ip_port_str, flags_buf,
                       ucs_status_string(cep->status));
