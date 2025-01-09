@@ -41,18 +41,18 @@ void ucs_arch_print_memcpy_limits(ucs_arch_global_opts_t *config)
 
 #if ENABLE_BUILTIN_MEMCPY
     char max_thresh_str[32];
-    ucs_config_sprintf_memunits(NULL, min_thresh_str, sizeof(min_thresh_str),
-                                &config->builtin_memcpy_min);
-    ucs_config_sprintf_memunits(NULL, max_thresh_str, sizeof(max_thresh_str),
-                                &config->builtin_memcpy_max);
+    ucs_config_sprintf_memunits(min_thresh_str, sizeof(min_thresh_str),
+                                &config->builtin_memcpy_min, NULL);
+    ucs_config_sprintf_memunits(max_thresh_str, sizeof(max_thresh_str),
+                                &config->builtin_memcpy_max, NULL);
     printf("# Using built-in memcpy() for size %s..%s\n",
            min_thresh_str, max_thresh_str);
 #endif
 
-    ucs_config_sprintf_memunits(NULL, min_thresh_str, sizeof(min_thresh_str),
-                                &config->nt_buffer_transfer_min);
-    ucs_config_sprintf_memunits(NULL, dest_thresh_str, sizeof(dest_thresh_str),
-                                &config->nt_dest_threshold);
+    ucs_config_sprintf_memunits(min_thresh_str, sizeof(min_thresh_str),
+                                &config->nt_buffer_transfer_min, NULL);
+    ucs_config_sprintf_memunits(dest_thresh_str, sizeof(dest_thresh_str),
+                                &config->nt_dest_threshold, NULL);
     printf("# Using nt-buffer-transfer for sizes from %s\n",
            min_thresh_str);
     printf("# Using nt-destination-hint for sizes from %s\n",

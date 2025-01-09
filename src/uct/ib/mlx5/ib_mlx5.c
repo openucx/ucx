@@ -1090,9 +1090,9 @@ out_str_buf_clean:
 
 err:
     ucs_assert(ar_enable != UCS_TRY);
-    ucs_config_sprintf_ulunits(NULL, sl_str, sizeof(sl_str), &ib_config->sl);
-    ucs_config_sprintf_ternary_auto(NULL, ar_enable_str, sizeof(ar_enable_str),
-                                    &ar_enable);
+    ucs_config_sprintf_ulunits(sl_str, sizeof(sl_str), &ib_config->sl, NULL);
+    ucs_config_sprintf_ternary_auto(ar_enable_str, sizeof(ar_enable_str),
+                                    &ar_enable, NULL);
     ucs_error("AR=%s was requested for SL=%s, but %s %s AR on %s:%u,"
               " SLs with AR support = { %s }, SLs without AR support = { %s }",
               ar_enable_str, sl_str,

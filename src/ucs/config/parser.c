@@ -86,22 +86,20 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
                                      const char *name, const char *value,
                                      const char *table_prefix, int recurse);
 
-int ucs_config_sscanf_string(const ucs_config_parser_t *self, const char *buf,
-                             void *dest)
+int ucs_config_sscanf_string(const char *buf, void *dest, const void *arg)
 {
     *((char**)dest) = ucs_strdup(buf, "config_sscanf_string");
     return 1;
 }
 
-int ucs_config_sprintf_string(const ucs_config_parser_t *self, char *buf,
-                              size_t max, const void *src)
+int ucs_config_sprintf_string(char *buf, size_t max,
+                              const void *src, const void *arg)
 {
     strncpy(buf, *((char**)src), max);
     return 1;
 }
 
-ucs_status_t ucs_config_clone_string(const ucs_config_parser_t *self,
-                                     const void *src, void *dest)
+ucs_status_t ucs_config_clone_string(const void *src, void *dest, const void *arg)
 {
     char *new_str = ucs_strdup(*(char**)src, "config_clone_string");
     if (new_str == NULL) {
@@ -112,32 +110,29 @@ ucs_status_t ucs_config_clone_string(const ucs_config_parser_t *self,
     return UCS_OK;
 }
 
-void ucs_config_release_string(const ucs_config_parser_t *self, void *ptr)
+void ucs_config_release_string(void *ptr, const void *arg)
 {
     ucs_free(*(char**)ptr);
 }
 
-int ucs_config_sscanf_int(const ucs_config_parser_t *self, const char *buf,
-                          void *dest)
+int ucs_config_sscanf_int(const char *buf, void *dest, const void *arg)
 {
     return sscanf(buf, "%i", (unsigned*)dest);
 }
 
-ucs_status_t ucs_config_clone_int(const ucs_config_parser_t *self,
-                                  const void *src, void *dest)
+ucs_status_t ucs_config_clone_int(const void *src, void *dest, const void *arg)
 {
     *(int*)dest = *(int*)src;
     return UCS_OK;
 }
 
-int ucs_config_sprintf_int(const ucs_config_parser_t *self, char *buf,
-                           size_t max, const void *src)
+int ucs_config_sprintf_int(char *buf, size_t max,
+                           const void *src, const void *arg)
 {
     return snprintf(buf, max, "%i", *(unsigned*)src);
 }
 
-int ucs_config_sscanf_uint(const ucs_config_parser_t *self, const char *buf,
-                           void *dest)
+int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg)
 {
     if (!strcasecmp(buf, UCS_NUMERIC_INF_STR)) {
         *(unsigned*)dest = UINT_MAX;
@@ -147,15 +142,14 @@ int ucs_config_sscanf_uint(const ucs_config_parser_t *self, const char *buf,
     }
 }
 
-ucs_status_t ucs_config_clone_uint(const ucs_config_parser_t *self,
-                                   const void *src, void *dest)
+ucs_status_t ucs_config_clone_uint(const void *src, void *dest, const void *arg)
 {
     *(unsigned*)dest = *(unsigned*)src;
     return UCS_OK;
 }
 
-int ucs_config_sprintf_uint(const ucs_config_parser_t *self, char *buf,
-                            size_t max, const void *src)
+int ucs_config_sprintf_uint(char *buf, size_t max,
+                            const void *src, const void *arg)
 {
     unsigned value = *(unsigned*)src;
     if (value == UINT_MAX) {
@@ -166,38 +160,35 @@ int ucs_config_sprintf_uint(const ucs_config_parser_t *self, char *buf,
     }
 }
 
-int ucs_config_sscanf_ulong(const ucs_config_parser_t *self, const char *buf,
-                            void *dest)
+int ucs_config_sscanf_ulong(const char *buf, void *dest, const void *arg)
 {
     return sscanf(buf, "%lu", (unsigned long*)dest);
 }
 
-int ucs_config_sprintf_ulong(const ucs_config_parser_t *self, char *buf,
-                             size_t max, const void *src)
+int ucs_config_sprintf_ulong(char *buf, size_t max,
+                             const void *src, const void *arg)
 {
     return snprintf(buf, max, "%lu", *(unsigned long*)src);
 }
 
-ucs_status_t ucs_config_clone_ulong(const ucs_config_parser_t *self,
-                                    const void *src, void *dest)
+ucs_status_t ucs_config_clone_ulong(const void *src, void *dest, const void *arg)
 {
     *(unsigned long*)dest = *(unsigned long*)src;
     return UCS_OK;
 }
 
-int ucs_config_sscanf_pos_double(const ucs_config_parser_t *self,
-                                 const char *buf, void *dest)
+int ucs_config_sscanf_pos_double(const char *buf, void *dest, const void *arg)
 {
     if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
         *(double*)dest = UCS_CONFIG_DBL_AUTO;
         return 1;
     }
 
-    return ucs_config_sscanf_double(self, buf, dest) && (*(double*)dest > 0);
+    return ucs_config_sscanf_double(buf, dest, arg) && (*(double*)dest > 0);
 }
 
-int ucs_config_sprintf_pos_double(const ucs_config_parser_t *self, char *buf,
-                                  size_t max, const void *src)
+int ucs_config_sprintf_pos_double(char *buf, size_t max, const void *src,
+                                  const void *arg)
 {
     double value = *(double*)src;
 
@@ -206,30 +197,27 @@ int ucs_config_sprintf_pos_double(const ucs_config_parser_t *self, char *buf,
         return 1;
     }
 
-    return ucs_config_sprintf_double(self, buf, max, src);
+    return ucs_config_sprintf_double(buf, max, src, arg);
 }
 
-int ucs_config_sscanf_double(const ucs_config_parser_t *self, const char *buf,
-                             void *dest)
+int ucs_config_sscanf_double(const char *buf, void *dest, const void *arg)
 {
     return sscanf(buf, "%lf", (double*)dest);
 }
 
-int ucs_config_sprintf_double(const ucs_config_parser_t *self, char *buf,
-                              size_t max, const void *src)
+int ucs_config_sprintf_double(char *buf, size_t max,
+                              const void *src, const void *arg)
 {
     return snprintf(buf, max, "%.3f", *(double*)src);
 }
 
-ucs_status_t ucs_config_clone_double(const ucs_config_parser_t *self,
-                                     const void *src, void *dest)
+ucs_status_t ucs_config_clone_double(const void *src, void *dest, const void *arg)
 {
     *(double*)dest = *(double*)src;
     return UCS_OK;
 }
 
-int ucs_config_sscanf_hex(const ucs_config_parser_t *self, const char *buf,
-                          void *dest)
+int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg)
 {
     /* Special value: auto */
     if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
@@ -242,8 +230,8 @@ int ucs_config_sscanf_hex(const ucs_config_parser_t *self, const char *buf,
     }
 }
 
-int ucs_config_sprintf_hex(const ucs_config_parser_t *self, char *buf,
-                           size_t max, const void *src)
+int ucs_config_sprintf_hex(char *buf, size_t max,
+                           const void *src, const void *arg)
 {
     uint16_t val = *(uint16_t*)src;
 
@@ -254,8 +242,7 @@ int ucs_config_sprintf_hex(const ucs_config_parser_t *self, char *buf,
     return snprintf(buf, max, "0x%x", *(unsigned int*)src);
 }
 
-int ucs_config_sscanf_bool(const ucs_config_parser_t *self, const char *buf,
-                           void *dest)
+int ucs_config_sscanf_bool(const char *buf, void *dest, const void *arg)
 {
     if (!strcasecmp(buf, "y") || !strcasecmp(buf, "yes") ||
         !strcmp(buf, "on") || !strcmp(buf, "1")) {
@@ -270,14 +257,12 @@ int ucs_config_sscanf_bool(const ucs_config_parser_t *self, const char *buf,
     }
 }
 
-int ucs_config_sprintf_bool(const ucs_config_parser_t *self, char *buf,
-                            size_t max, const void *src)
+int ucs_config_sprintf_bool(char *buf, size_t max, const void *src, const void *arg)
 {
     return snprintf(buf, max, "%c", *(int*)src ? 'y' : 'n');
 }
 
-int ucs_config_sscanf_ternary(const ucs_config_parser_t *self, const char *buf,
-                              void *dest)
+int ucs_config_sscanf_ternary(const char *buf, void *dest, const void *arg)
 {
     UCS_STATIC_ASSERT(UCS_NO  == 0);
     UCS_STATIC_ASSERT(UCS_YES == 1);
@@ -286,22 +271,21 @@ int ucs_config_sscanf_ternary(const ucs_config_parser_t *self, const char *buf,
         return 1;
     }
 
-    return ucs_config_sscanf_bool(self, buf, dest);
+    return ucs_config_sscanf_bool(buf, dest, arg);
 }
 
-int ucs_config_sscanf_ternary_auto(const ucs_config_parser_t *self,
-                                   const char *buf, void *dest)
+int ucs_config_sscanf_ternary_auto(const char *buf, void *dest, const void *arg)
 {
     if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
         *(int*)dest = UCS_AUTO;
         return 1;
     }
 
-    return ucs_config_sscanf_ternary(self, buf, dest);
+    return ucs_config_sscanf_ternary(buf, dest, arg);
 }
 
-int ucs_config_sprintf_ternary_auto(const ucs_config_parser_t *self, char *buf,
-                                    size_t max, const void *src)
+int ucs_config_sprintf_ternary_auto(char *buf, size_t max,
+                                    const void *src, const void *arg)
 {
     if (*(int*)src == UCS_AUTO) {
         return snprintf(buf, max, UCS_VALUE_AUTO_STR);
@@ -309,11 +293,10 @@ int ucs_config_sprintf_ternary_auto(const ucs_config_parser_t *self, char *buf,
         return snprintf(buf, max, "try");
     }
 
-    return ucs_config_sprintf_bool(self, buf, max, src);
+    return ucs_config_sprintf_bool(buf, max, src, arg);
 }
 
-int ucs_config_sscanf_on_off(const ucs_config_parser_t *self, const char *buf,
-                             void *dest)
+int ucs_config_sscanf_on_off(const char *buf, void *dest, const void *arg)
 {
     if (!strcasecmp(buf, "on") || !strcmp(buf, "1") ||
         !strcasecmp(buf, "yes") || !strcasecmp(buf, "y")) {
@@ -328,8 +311,7 @@ int ucs_config_sscanf_on_off(const ucs_config_parser_t *self, const char *buf,
     }
 }
 
-int ucs_config_sscanf_on_off_auto(const ucs_config_parser_t *self,
-                                  const char *buf, void *dest)
+int ucs_config_sscanf_on_off_auto(const char *buf, void *dest, const void *arg)
 {
     if (!strcasecmp(buf, "try")   ||
         !strcasecmp(buf, "maybe") ||
@@ -337,12 +319,12 @@ int ucs_config_sscanf_on_off_auto(const ucs_config_parser_t *self,
         *(int*)dest = UCS_CONFIG_AUTO;
         return 1;
     } else {
-        return ucs_config_sscanf_on_off(self, buf, dest);
+        return ucs_config_sscanf_on_off(buf, dest, arg);
     }
 }
 
-int ucs_config_sprintf_on_off_auto(const ucs_config_parser_t *self, char *buf,
-                                   size_t max, const void *src)
+int ucs_config_sprintf_on_off_auto(char *buf, size_t max,
+                                   const void *src, const void *arg)
 {
     switch (*(int*)src) {
     case UCS_CONFIG_AUTO:
@@ -356,11 +338,10 @@ int ucs_config_sprintf_on_off_auto(const ucs_config_parser_t *self, char *buf,
     }
 }
 
-int ucs_config_sscanf_enum(const ucs_config_parser_t *self, const char *buf,
-                           void *dest)
+int ucs_config_sscanf_enum(const char *buf, void *dest, const void *arg)
 {
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
-                                                          self->arg;
+                                                      arg;
     ssize_t i = ucs_string_find_in_list(buf, allowed_values->values,
                                         allowed_values->count);
     if (i < 0) {
@@ -371,21 +352,20 @@ int ucs_config_sscanf_enum(const ucs_config_parser_t *self, const char *buf,
     return 1;
 }
 
-int ucs_config_sprintf_enum(const ucs_config_parser_t *self, char *buf,
-                            size_t max, const void *src)
+int ucs_config_sprintf_enum(char *buf, size_t max,
+                            const void *src, const void *arg)
 {
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
-                                                          self->arg;
+                                                      arg;
     const char **table = allowed_values->values;
     strncpy(buf, table[*(unsigned*)src], max);
     return 1;
 }
 
-int ucs_config_sscanf_uint_enum(const ucs_config_parser_t *self,
-                                const char *buf, void *dest)
+int ucs_config_sscanf_uint_enum(const char *buf, void *dest, const void *arg)
 {
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
-                                                          self->arg;
+                                                      arg;
 
     ssize_t i = ucs_string_find_in_list(buf,
                                         allowed_values->values,
@@ -398,11 +378,11 @@ int ucs_config_sscanf_uint_enum(const ucs_config_parser_t *self,
     return sscanf(buf, "%u", (unsigned*)dest);
 }
 
-int ucs_config_sprintf_uint_enum(const ucs_config_parser_t *self, char *buf,
-                                 size_t max, const void *src)
+int ucs_config_sprintf_uint_enum(char *buf, size_t max,
+                                 const void *src, const void *arg)
 {
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
-                                                          self->arg;
+                                                      arg;
     const char **table = allowed_values->values;
     unsigned value     = *(unsigned*)src;
 
@@ -445,20 +425,18 @@ static void __print_table_values(const char **table, unsigned int table_size,
     *ptr = '\0';
 }
 
-void ucs_config_help_enum(const ucs_config_parser_t *self, char *buf,
-                          size_t max)
+void ucs_config_help_enum(char *buf, size_t max, const void *arg)
 {
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
-                                                          self->arg;
+                                                      arg;
     __print_table_values(allowed_values->values, allowed_values->count, buf,
                          max);
 }
 
-void ucs_config_help_uint_enum(const ucs_config_parser_t *self, char *buf,
-                               size_t max)
+void ucs_config_help_uint_enum(char *buf, size_t max, const void *arg)
 {
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
-                                                          self->arg;
+                                                      arg;
     size_t len;
 
     snprintf(buf, max, "a numerical value, or:");
@@ -468,11 +446,10 @@ void ucs_config_help_uint_enum(const ucs_config_parser_t *self, char *buf,
                          buf + len, max - len);
 }
 
-ucs_status_t ucs_config_clone_log_comp(const ucs_config_parser_t *self,
-                                       const void *src, void *dest)
+ucs_status_t ucs_config_clone_log_comp(const void *src, void *dst, const void *arg)
 {
     const ucs_log_component_config_t *src_comp = src;
-    ucs_log_component_config_t *dst_comp       = dest;
+    ucs_log_component_config_t       *dst_comp = dst;
 
     dst_comp->log_level = src_comp->log_level;
     ucs_strncpy_safe(dst_comp->name, src_comp->name, sizeof(dst_comp->name));
@@ -480,11 +457,10 @@ ucs_status_t ucs_config_clone_log_comp(const ucs_config_parser_t *self,
     return UCS_OK;
 }
 
-int ucs_config_sscanf_bitmap(const ucs_config_parser_t *self, const char *buf,
-                             void *dest)
+int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 {
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
-                                                          self->arg;
+                                                      arg;
     char *str = ucs_strdup(buf, "config_sscanf_bitmap_str");
     char *p, *saveptr;
     int ret, i;
@@ -514,22 +490,21 @@ int ucs_config_sscanf_bitmap(const ucs_config_parser_t *self, const char *buf,
     return ret;
 }
 
-int ucs_config_sprintf_bitmap(const ucs_config_parser_t *self, char *buf,
-                              size_t max, const void *src)
+int ucs_config_sprintf_bitmap(char *buf, size_t max,
+                              const void *src, const void *arg)
 {
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
-                                                          self->arg;
+                                                      arg;
 
     ucs_flags_str(buf, max, *((uint64_t*)src),
                   allowed_values->values);
     return 1;
 }
 
-void ucs_config_help_bitmap(const ucs_config_parser_t *self, char *buf,
-                            size_t max)
+void ucs_config_help_bitmap(char *buf, size_t max, const void *arg)
 {
     ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
-                                                          self->arg;
+                                                      arg;
 
     snprintf(buf, max, "comma-separated list of: ");
     __print_table_values(allowed_values->values,
@@ -537,8 +512,7 @@ void ucs_config_help_bitmap(const ucs_config_parser_t *self, char *buf,
                          max - strlen(buf));
 }
 
-int ucs_config_sscanf_bitmask(const ucs_config_parser_t *self, const char *buf,
-                              void *dest)
+int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg)
 {
     int ret = sscanf(buf, "%u", (unsigned*)dest);
     if (*(unsigned*)dest != 0) {
@@ -547,14 +521,13 @@ int ucs_config_sscanf_bitmask(const ucs_config_parser_t *self, const char *buf,
     return ret;
 }
 
-int ucs_config_sprintf_bitmask(const ucs_config_parser_t *self, char *buf,
-                               size_t max, const void *src)
+int ucs_config_sprintf_bitmask(char *buf, size_t max,
+                               const void *src, const void *arg)
 {
     return snprintf(buf, max, "%u", __builtin_popcount(*(unsigned*)src));
 }
 
-int ucs_config_sscanf_time(const ucs_config_parser_t *self, const char *buf,
-                           void *dest)
+int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg)
 {
     char units[3];
     int num_fields;
@@ -588,14 +561,13 @@ int ucs_config_sscanf_time(const ucs_config_parser_t *self, const char *buf,
     return 1;
 }
 
-int ucs_config_sprintf_time(const ucs_config_parser_t *self, char *buf,
-                            size_t max, const void *src)
+int ucs_config_sprintf_time(char *buf, size_t max,
+                            const void *src, const void *arg)
 {
     return snprintf(buf, max, "%.2fus", *(double*)src * UCS_USEC_PER_SEC);
 }
 
-int ucs_config_sscanf_time_units(const ucs_config_parser_t *self,
-                                 const char *buf, void *dest)
+int ucs_config_sscanf_time_units(const char *buf, void *dest, const void *arg)
 {
     double value;
     int ret;
@@ -608,7 +580,7 @@ int ucs_config_sscanf_time_units(const ucs_config_parser_t *self,
         return 1;
     }
 
-    ret = ucs_config_sscanf_time(self, buf, &value);
+    ret = ucs_config_sscanf_time(buf, &value, arg);
     if (ret == 0) {
         return 0;
     }
@@ -617,8 +589,8 @@ int ucs_config_sscanf_time_units(const ucs_config_parser_t *self,
     return 1;
 }
 
-int ucs_config_sprintf_time_units(const ucs_config_parser_t *self, char *buf,
-                                  size_t max, const void *src)
+int ucs_config_sprintf_time_units(char *buf, size_t max,
+                                  const void *src, const void *arg)
 {
     double value;
 
@@ -629,11 +601,10 @@ int ucs_config_sprintf_time_units(const ucs_config_parser_t *self, char *buf,
     }
 
     value = ucs_time_to_sec(*(ucs_time_t*)src);
-    return ucs_config_sprintf_time(self, buf, max, &value);
+    return ucs_config_sprintf_time(buf, max, &value, arg);
 }
 
-int ucs_config_sscanf_bw(const ucs_config_parser_t *self, const char *buf,
-                         void *dest)
+int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
 {
     double *dst     = (double*)dest;
     char    str[16] = {0};
@@ -685,8 +656,8 @@ int ucs_config_sscanf_bw(const ucs_config_parser_t *self, const char *buf,
     return 1;
 }
 
-int ucs_config_sprintf_bw(const ucs_config_parser_t *self, char *buf,
-                          size_t max, const void *src)
+int ucs_config_sprintf_bw(char *buf, size_t max, const void *src,
+                          const void *arg)
 {
     static const double max_value = 50000.0;
     double value                  = *(double*)src;
@@ -707,8 +678,7 @@ int ucs_config_sprintf_bw(const ucs_config_parser_t *self, char *buf,
     return 1;
 }
 
-int ucs_config_sscanf_bw_spec(const ucs_config_parser_t *self, const char *buf,
-                              void *dest)
+int ucs_config_sscanf_bw_spec(const char *buf, void *dest, const void *arg)
 {
     ucs_config_bw_spec_t *dst = (ucs_config_bw_spec_t*)dest;
     char                 *delim;
@@ -718,7 +688,7 @@ int ucs_config_sscanf_bw_spec(const ucs_config_parser_t *self, const char *buf,
         return 0;
     }
 
-    if (!ucs_config_sscanf_bw(self, delim + 1, &dst->bw)) {
+    if (!ucs_config_sscanf_bw(delim + 1, &dst->bw, arg)) {
         return 0;
     }
 
@@ -726,8 +696,8 @@ int ucs_config_sscanf_bw_spec(const ucs_config_parser_t *self, const char *buf,
     return dst->name != NULL;
 }
 
-int ucs_config_sprintf_bw_spec(const ucs_config_parser_t *self, char *buf,
-                               size_t max, const void *src)
+int ucs_config_sprintf_bw_spec(char *buf, size_t max,
+                               const void *src, const void *arg)
 {
     ucs_config_bw_spec_t *bw  = (ucs_config_bw_spec_t*)src;
     int                   len;
@@ -735,14 +705,13 @@ int ucs_config_sprintf_bw_spec(const ucs_config_parser_t *self, char *buf,
     if (max) {
         snprintf(buf, max, "%s:", bw->name);
         len = strlen(buf);
-        ucs_config_sprintf_bw(self, buf + len, max - len, &bw->bw);
+        ucs_config_sprintf_bw(buf + len, max - len, &bw->bw, arg);
     }
 
     return 1;
 }
 
-ucs_status_t ucs_config_clone_bw_spec(const ucs_config_parser_t *self,
-                                      const void *src, void *dest)
+ucs_status_t ucs_config_clone_bw_spec(const void *src, void *dest, const void *arg)
 {
     ucs_config_bw_spec_t *s = (ucs_config_bw_spec_t*)src;
     ucs_config_bw_spec_t *d = (ucs_config_bw_spec_t*)dest;
@@ -753,13 +722,12 @@ ucs_status_t ucs_config_clone_bw_spec(const ucs_config_parser_t *self,
     return d->name ? UCS_OK : UCS_ERR_NO_MEMORY;
 }
 
-void ucs_config_release_bw_spec(const ucs_config_parser_t *self, void *ptr)
+void ucs_config_release_bw_spec(void *ptr, const void *arg)
 {
     ucs_free(((ucs_config_bw_spec_t*)ptr)->name);
 }
 
-int ucs_config_sscanf_signo(const ucs_config_parser_t *self, const char *buf,
-                            void *dest)
+int ucs_config_sscanf_signo(const char *buf, void *dest, const void *arg)
 {
     const ucs_config_allowed_values_t *signal_names =
         UCS_CONFIG_GET_ALLOWED_VALUES(ucs_signal_names);
@@ -786,14 +754,13 @@ int ucs_config_sscanf_signo(const ucs_config_parser_t *self, const char *buf,
     return 1;
 }
 
-int ucs_config_sprintf_signo(const ucs_config_parser_t *self, char *buf,
-                             size_t max, const void *src)
+int ucs_config_sprintf_signo(char *buf, size_t max,
+                             const void *src, const void *arg)
 {
-    return ucs_config_sprintf_enum(self, buf, max, src);
+    return ucs_config_sprintf_enum(buf, max, src, arg);
 }
 
-int ucs_config_sscanf_memunits(const ucs_config_parser_t *self, const char *buf,
-                               void *dest)
+int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)
 {
     if (ucs_str_to_memunits(buf, dest) != UCS_OK) {
         return 0;
@@ -801,15 +768,14 @@ int ucs_config_sscanf_memunits(const ucs_config_parser_t *self, const char *buf,
     return 1;
 }
 
-int ucs_config_sprintf_memunits(const ucs_config_parser_t *self, char *buf,
-                                size_t max, const void *src)
+int ucs_config_sprintf_memunits(char *buf, size_t max,
+                                const void *src, const void *arg)
 {
     ucs_memunits_to_str(*(size_t*)src, buf, max);
     return 1;
 }
 
-int ucs_config_sscanf_ulunits(const ucs_config_parser_t *self, const char *buf,
-                              void *dest)
+int ucs_config_sscanf_ulunits(const char *buf, void *dest, const void *arg)
 {
     /* Special value: auto */
     if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
@@ -820,11 +786,11 @@ int ucs_config_sscanf_ulunits(const ucs_config_parser_t *self, const char *buf,
         return 1;
     }
 
-    return ucs_config_sscanf_ulong(self, buf, dest);
+    return ucs_config_sscanf_ulong(buf, dest, arg);
 }
 
-int ucs_config_sprintf_ulunits(const ucs_config_parser_t *self, char *buf,
-                               size_t max, const void *src)
+int ucs_config_sprintf_ulunits(char *buf, size_t max,
+                               const void *src, const void *arg)
 {
     unsigned long val = *(unsigned long*)src;
 
@@ -834,11 +800,10 @@ int ucs_config_sprintf_ulunits(const ucs_config_parser_t *self, char *buf,
         return snprintf(buf, max, UCS_NUMERIC_INF_STR);
     }
 
-    return ucs_config_sprintf_ulong(self, buf, max, src);
+    return ucs_config_sprintf_ulong(buf, max, src, arg);
 }
 
-int ucs_config_sscanf_range_spec(const ucs_config_parser_t *self,
-                                 const char *buf, void *dest)
+int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
 {
     ucs_range_spec_t *range_spec = dest;
     unsigned first, last;
@@ -878,8 +843,8 @@ out:
     return ret;
 }
 
-int ucs_config_sprintf_range_spec(const ucs_config_parser_t *self, char *buf,
-                                  size_t max, const void *src)
+int ucs_config_sprintf_range_spec(char *buf, size_t max,
+                                  const void *src, const void *arg)
 {
     const ucs_range_spec_t *range_spec = src;
 
@@ -892,8 +857,7 @@ int ucs_config_sprintf_range_spec(const ucs_config_parser_t *self, char *buf,
     return 1;
 }
 
-ucs_status_t ucs_config_clone_range_spec(const ucs_config_parser_t *self,
-                                         const void *src, void *dest)
+ucs_status_t ucs_config_clone_range_spec(const void *src, void *dest, const void *arg)
 {
     const ucs_range_spec_t *src_range_spec = src;
     ucs_range_spec_t *dest_ragne_spec      = dest;
@@ -904,12 +868,11 @@ ucs_status_t ucs_config_clone_range_spec(const ucs_config_parser_t *self,
     return UCS_OK;
 }
 
-int ucs_config_sscanf_array(const ucs_config_parser_t *self, const char *buf,
-                            void *dest)
+int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 {
     ucs_config_array_field_t *field = dest;
-    const ucs_config_array_t *array = self->arg;
     void *temp_field;
+    const ucs_config_array_t *array = arg;
     char *str_dup, *token, *saveptr;
     int ret;
     unsigned i;
@@ -924,8 +887,8 @@ int ucs_config_sscanf_array(const ucs_config_parser_t *self, const char *buf,
     temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
     i = 0;
     while (token != NULL) {
-        ret = array->parser.read(&array->parser, token,
-                                 (char*)temp_field + i * array->elem_size);
+        ret = array->parser.read(token, (char*)temp_field + i * array->elem_size,
+                                 array->parser.arg);
         if (!ret) {
             ucs_free(temp_field);
             ucs_free(str_dup);
@@ -945,11 +908,11 @@ int ucs_config_sscanf_array(const ucs_config_parser_t *self, const char *buf,
     return 1;
 }
 
-int ucs_config_sprintf_array(const ucs_config_parser_t *self, char *buf,
-                             size_t max, const void *src)
+int ucs_config_sprintf_array(char *buf, size_t max,
+                             const void *src, const void *arg)
 {
     const ucs_config_array_field_t *field = src;
-    const ucs_config_array_t *array       = self->arg;
+    const ucs_config_array_t *array       = arg;
     size_t offset;
     unsigned i;
     int ret;
@@ -959,8 +922,9 @@ int ucs_config_sprintf_array(const ucs_config_parser_t *self, char *buf,
         if (i > 0 && offset < max) {
             buf[offset++] = ',';
         }
-        ret = array->parser.write(&array->parser, buf + offset, max - offset,
-                                  (char*)field->data + i * array->elem_size);
+        ret = array->parser.write(buf + offset, max - offset,
+                                  (char*)field->data + i * array->elem_size,
+                                  array->parser.arg);
         if (!ret) {
             return 0;
         }
@@ -970,11 +934,10 @@ int ucs_config_sprintf_array(const ucs_config_parser_t *self, char *buf,
     return 1;
 }
 
-ucs_status_t ucs_config_clone_array(const ucs_config_parser_t *self,
-                                    const void *src, void *dest)
+ucs_status_t ucs_config_clone_array(const void *src, void *dest, const void *arg)
 {
     const ucs_config_array_field_t *src_array = src;
-    const ucs_config_array_t *array           = self->arg;
+    const ucs_config_array_t *array           = arg;
     ucs_config_array_field_t *dest_array      = dest;
     ucs_status_t status;
     unsigned i;
@@ -991,11 +954,9 @@ ucs_status_t ucs_config_clone_array(const ucs_config_parser_t *self,
 
     dest_array->count = src_array->count;
     for (i = 0; i < src_array->count; ++i) {
-        status = array->parser.clone(&array->parser,
-                                     (const char*)src_array->data +
-                                             i * array->elem_size,
-                                     (char*)dest_array->data +
-                                             i * array->elem_size);
+        status = array->parser.clone((const char*)src_array->data  + i * array->elem_size,
+                                    (char*)dest_array->data + i * array->elem_size,
+                                    array->parser.arg);
         if (status != UCS_OK) {
             ucs_free(dest_array->data);
             return status;
@@ -1005,29 +966,28 @@ ucs_status_t ucs_config_clone_array(const ucs_config_parser_t *self,
     return UCS_OK;
 }
 
-void ucs_config_release_array(const ucs_config_parser_t *self, void *ptr)
+void ucs_config_release_array(void *ptr, const void *arg)
 {
     ucs_config_array_field_t *array_field = ptr;
-    const ucs_config_array_t *array       = self->arg;
+    const ucs_config_array_t *array = arg;
     unsigned i;
 
     for (i = 0; i < array_field->count; ++i) {
-        array->parser.release(&array->parser,
-                              (char*)array_field->data + i * array->elem_size);
+        array->parser.release((char*)array_field->data  + i * array->elem_size,
+                              array->parser.arg);
     }
     ucs_free(array_field->data);
 }
 
-void ucs_config_help_array(const ucs_config_parser_t *self, char *buf,
-                           size_t max)
+void ucs_config_help_array(char *buf, size_t max, const void *arg)
 {
-    const ucs_config_array_t *array = self->arg;
+    const ucs_config_array_t *array = arg;
 
     snprintf(buf, max, "comma-separated list of: ");
-    array->parser.help(&array->parser, buf + strlen(buf), max - strlen(buf));
+    array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
-int ucs_config_sscanf_allow_list(const ucs_config_parser_t *self,
-                                 const char *buf, void *dest)
+
+int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
 {
     ucs_config_allow_list_t *field  = dest;
     unsigned offset                 = 0;
@@ -1039,14 +999,14 @@ int ucs_config_sscanf_allow_list(const ucs_config_parser_t *self,
         field->mode = UCS_CONFIG_ALLOW_LIST_ALLOW;
     }
 
-    if (!ucs_config_sscanf_array(self, &buf[offset], &field->array)) {
+    if (!ucs_config_sscanf_array(&buf[offset], &field->array, arg)) {
         return 0;
     }
 
     if ((field->array.count >= 1) &&
         !strcmp(field->array.names[0], UCS_CONFIG_PARSER_ALL)) {
         field->mode = UCS_CONFIG_ALLOW_LIST_ALLOW_ALL;
-        ucs_config_release_array(self, &field->array);
+        ucs_config_release_array(&field->array, arg);
         if (field->array.count != 1) {
             return 0;
         }
@@ -1057,8 +1017,8 @@ int ucs_config_sscanf_allow_list(const ucs_config_parser_t *self,
     return 1;
 }
 
-int ucs_config_sprintf_allow_list(const ucs_config_parser_t *self, char *buf,
-                                  size_t max, const void *src)
+int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
+                                  const void *arg)
 {
     const ucs_config_allow_list_t *allow_list = src;
     size_t offset                             = 0;
@@ -1073,21 +1033,19 @@ int ucs_config_sprintf_allow_list(const ucs_config_parser_t *self, char *buf,
         max--;
     }
 
-    return ucs_config_sprintf_array(self, &buf[offset], max,
-                                    &allow_list->array);
+    return ucs_config_sprintf_array(&buf[offset], max, &allow_list->array, arg);
 }
 
-ucs_status_t ucs_config_clone_allow_list(const ucs_config_parser_t *self,
-                                         const void *src, void *dest)
+ucs_status_t ucs_config_clone_allow_list(const void *src, void *dest, const void *arg)
 {
     const ucs_config_allow_list_t *src_list = src;
     ucs_config_allow_list_t *dest_list      = dest;
 
     dest_list->mode = src_list->mode;
-    return ucs_config_clone_array(self, &src_list->array, &dest_list->array);
+    return ucs_config_clone_array(&src_list->array, &dest_list->array, arg);
 }
 
-void ucs_config_release_allow_list(const ucs_config_parser_t *self, void *ptr)
+void ucs_config_release_allow_list(void *ptr, const void *arg)
 {
     ucs_config_allow_list_t *allow_list = ptr;
 
@@ -1095,21 +1053,21 @@ void ucs_config_release_allow_list(const ucs_config_parser_t *self, void *ptr)
         return;
     }
 
-    ucs_config_release_array(self, &allow_list->array);
+    ucs_config_release_array(&allow_list->array, arg);
 }
 
-void ucs_config_help_allow_list(const ucs_config_parser_t *self, char *buf,
-                                size_t max)
+void ucs_config_help_allow_list(char *buf, size_t max, const void *arg)
 {
+    const ucs_config_array_t *array = arg;
+
     snprintf(
         buf,
         max, "comma-separated list (use \"all\" for including "
              "all items or \'^\' for negation) of: ");
-    self->help(self, buf + strlen(buf), max - strlen(buf));
+    array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
 
-int ucs_config_sscanf_table(const ucs_config_parser_t *self, const char *buf,
-                            void *dest)
+int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
 {
     char *tokens;
     char *token, *saveptr1;
@@ -1133,8 +1091,8 @@ int ucs_config_sscanf_table(const ucs_config_parser_t *self, const char *buf,
             return 0;
         }
 
-        status = ucs_config_parser_set_value_internal(
-                dest, (ucs_config_field_t*)self->arg, name, value, NULL, 1);
+        status = ucs_config_parser_set_value_internal(dest, (ucs_config_field_t*)arg,
+                                                     name, value, NULL, 1);
         if (status != UCS_OK) {
             if (status == UCS_ERR_NO_ELEM) {
                 ucs_error("Field '%s' does not exist", name);
@@ -1153,20 +1111,17 @@ int ucs_config_sscanf_table(const ucs_config_parser_t *self, const char *buf,
     return 1;
 }
 
-ucs_status_t ucs_config_clone_table(const ucs_config_parser_t *self,
-                                    const void *src, void *dest)
+ucs_status_t ucs_config_clone_table(const void *src, void *dst, const void *arg)
 {
-    return ucs_config_parser_clone_opts(src, dest,
-                                        (ucs_config_field_t*)self->arg);
+    return ucs_config_parser_clone_opts(src, dst, (ucs_config_field_t*)arg);
 }
 
-void ucs_config_release_table(const ucs_config_parser_t *self, void *ptr)
+void ucs_config_release_table(void *ptr, const void *arg)
 {
-    ucs_config_parser_release_opts(ptr, (ucs_config_field_t*)self->arg);
+    ucs_config_parser_release_opts(ptr, (ucs_config_field_t*)arg);
 }
 
-void ucs_config_help_table(const ucs_config_parser_t *self, char *buf,
-                           size_t max)
+void ucs_config_help_table(char *buf, size_t max, const void *arg)
 {
     snprintf(buf, max, "Table");
 }
@@ -1197,10 +1152,9 @@ static int ucs_config_key_find(const ucs_config_key_field_t *cfg_key,
     return -1;
 }
 
-int ucs_config_sscanf_key_value(const ucs_config_parser_t *self,
-                                const char *buf, void *dest)
+int ucs_config_sscanf_key_value(const char *buf, void *dest, const void *arg)
 {
-    const ucs_config_key_value_param_t *param = self->arg;
+    const ucs_config_key_value_param_t *param = arg;
     size_t buf_len                            = strlen(buf) + 1;
     const char *TOKEN_DELIM                   = ",";
     const char *VALUE_DELIM                   = ":";
@@ -1245,19 +1199,16 @@ int ucs_config_sscanf_key_value(const ucs_config_parser_t *self,
         value = (values[idx] == NULL) ? default_value : values[idx];
         if (NULL == value) {
             ucs_error("no value configured for key '%s'", param->keys[idx].name);
-        } else if ((param->parser.read(
-                            self, value,
-                            UCS_PTR_BYTE_OFFSET(dest,
-                                                param->keys[idx].offset)) ==
-                    1)) {
+        } else if ((param->parser.read(value,
+                                       UCS_PTR_BYTE_OFFSET(dest, param->keys[idx].offset),
+                                       param->parser.arg) == 1)) {
             continue;
         }
 
         /* Revert already made settings */
         while (idx-- > 0) {
-            param->parser.release(self,
-                                  UCS_PTR_BYTE_OFFSET(dest,
-                                                      param->keys[idx].offset));
+            param->parser.release(UCS_PTR_BYTE_OFFSET(dest, param->keys[idx].offset),
+                                  param->parser.arg);
         }
 
         return 0;
@@ -1266,17 +1217,18 @@ int ucs_config_sscanf_key_value(const ucs_config_parser_t *self,
     return 1;
 }
 
-int ucs_config_sprintf_key_value(const ucs_config_parser_t *self, char *buf,
-                                 size_t max, const void *src)
+int ucs_config_sprintf_key_value(char *buf, size_t max, const void *src,
+                                 const void *arg)
 {
-    const ucs_config_key_value_param_t *param = self->arg;
+    const ucs_config_key_value_param_t *param = arg;
     char value_buf[256]                       = "";
     const ucs_config_key_field_t *cfg_key;
     UCS_STRING_BUFFER_FIXED(strb, buf, max);
 
     for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
-        if (!param->parser.write(&param->parser, value_buf, sizeof(value_buf),
-                                 UCS_PTR_BYTE_OFFSET(src, cfg_key->offset))) {
+        if (!param->parser.write(value_buf, sizeof(value_buf),
+                                 UCS_PTR_BYTE_OFFSET(src, cfg_key->offset),
+                                 param->parser.arg)) {
             /* Error is logged by parser impl */
             return 0;
         }
@@ -1288,18 +1240,17 @@ int ucs_config_sprintf_key_value(const ucs_config_parser_t *self, char *buf,
     return 1;
 }
 
-ucs_status_t ucs_config_clone_key_value(const ucs_config_parser_t *self,
-                                        const void *src, void *dest)
+ucs_status_t ucs_config_clone_key_value(const void *src, void *dest,
+                                        const void *arg)
 {
-    const ucs_config_key_value_param_t *param = self->arg;
+    const ucs_config_key_value_param_t *param = arg;
     ucs_status_t status                       = UCS_OK;
     const ucs_config_key_field_t *cfg_key;
 
     for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
-        status = param->parser.clone(&param->parser,
-                                     UCS_PTR_BYTE_OFFSET(src, cfg_key->offset),
-                                     UCS_PTR_BYTE_OFFSET(dest,
-                                                         cfg_key->offset));
+        status = param->parser.clone(UCS_PTR_BYTE_OFFSET(src, cfg_key->offset),
+                                     UCS_PTR_BYTE_OFFSET(dest, cfg_key->offset),
+                                     param->parser.arg);
         if (UCS_OK != status) {
             /* Error is logged by parser impl */
             break;
@@ -1308,21 +1259,20 @@ ucs_status_t ucs_config_clone_key_value(const ucs_config_parser_t *self,
     return status;
 }
 
-void ucs_config_release_key_value(const ucs_config_parser_t *self, void *ptr)
+void ucs_config_release_key_value(void *ptr, const void *arg)
 {
-    const ucs_config_key_value_param_t *param = self->arg;
+    const ucs_config_key_value_param_t *param = arg;
     const ucs_config_key_field_t *cfg_key;
 
     for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
-        param->parser.release(&param->parser,
-                              UCS_PTR_BYTE_OFFSET(ptr, cfg_key->offset));
+        param->parser.release(UCS_PTR_BYTE_OFFSET(ptr, cfg_key->offset),
+                              param->parser.arg);
     }
 }
 
-void ucs_config_help_key_value(const ucs_config_parser_t *self, char *buf,
-                               size_t max)
+void ucs_config_help_key_value(char *buf, size_t max, const void *arg)
 {
-    const ucs_config_key_value_param_t *param = self->arg;
+    const ucs_config_key_value_param_t *param = arg;
     char syntax_buf[256]                      = "";
     const ucs_config_key_field_t *cfg_key;
     UCS_STRING_BUFFER_FIXED(strb, buf, max);
@@ -1337,15 +1287,14 @@ void ucs_config_help_key_value(const ucs_config_parser_t *self, char *buf,
     ucs_string_buffer_rtrim(&strb, ",");
     ucs_string_buffer_appendf(&strb, "] and value is: ");
 
-    param->parser.help(&param->parser, syntax_buf, sizeof(syntax_buf));
+    param->parser.help(syntax_buf, sizeof(syntax_buf), param->parser.arg);
     ucs_string_buffer_appendf(&strb, "%s. A value without a key is the default.",
                               syntax_buf);
 }
 
-void ucs_config_doc_key_value(const ucs_config_parser_t *self,
-                              ucs_string_buffer_t *strb)
+void ucs_config_doc_key_value(ucs_string_buffer_t *strb, const void *arg)
 {
-    const ucs_config_key_value_param_t *param = self->arg;
+    const ucs_config_key_value_param_t *param = arg;
     const ucs_config_key_field_t *cfg_key;
 
     for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
@@ -1356,19 +1305,17 @@ void ucs_config_doc_key_value(const ucs_config_parser_t *self,
     ucs_string_buffer_rtrim(strb, "\n");
 }
 
-void ucs_config_release_nop(const ucs_config_parser_t *self, void *ptr)
+void ucs_config_release_nop(void *ptr, const void *arg)
 {
 }
 
-void ucs_config_doc_nop(const ucs_config_parser_t *self,
-                        ucs_string_buffer_t *strb)
+void ucs_config_doc_nop(ucs_string_buffer_t *strb, const void *arg)
 {
 }
 
-void ucs_config_help_generic(const ucs_config_parser_t *self, char *buf,
-                             size_t max)
+void ucs_config_help_generic(char *buf, size_t max, const void *arg)
 {
-    strncpy(buf, (char*)self->arg, max);
+    strncpy(buf, (char*)arg, max);
 }
 
 static inline int ucs_config_is_deprecated_field(const ucs_config_field_t *field)
@@ -1396,7 +1343,7 @@ static char *ucs_config_get_doc(const ucs_config_field_t *field)
     ucs_string_buffer_init(&strb);
 
     ucs_string_buffer_appendf(&strb, "%s\n", field->doc);
-    field->parser.doc(&field->parser, &strb);
+    field->parser.doc(&strb, field->parser.arg);
 
     return ucs_string_buffer_extract_mem(&strb);
 }
@@ -1429,14 +1376,13 @@ ucs_config_parser_parse_field(const ucs_config_field_t *field,
     char syntax_buf[256];
     int ret;
 
-    ret = field->parser.read(&field->parser, value, var);
+    ret = field->parser.read(value, var, field->parser.arg);
     if (ret != 1) {
         if (ucs_config_is_table_field(field)) {
             ucs_error("Could not set table value for %s: '%s'", field->name, value);
 
         } else {
-            field->parser.help(&field->parser, syntax_buf,
-                               sizeof(syntax_buf) - 1);
+            field->parser.help(syntax_buf, sizeof(syntax_buf) - 1, field->parser.arg);
             ucs_error("Invalid value for %s: '%s'. Expected: %s", field->name,
                       value, syntax_buf);
         }
@@ -1448,7 +1394,7 @@ ucs_config_parser_parse_field(const ucs_config_field_t *field,
 
 static void ucs_config_parser_release_field(ucs_config_field_t *field, void *var)
 {
-    field->parser.release(&field->parser, var);
+    field->parser.release(var, field->parser.arg);
 }
 
 static int ucs_config_field_is_last(const ucs_config_field_t *field)
@@ -1569,8 +1515,8 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
 
             /* backup current value to restore it in case if new value
              * is not accepted */
-            ret = field->parser.write(&field->parser, value_buf,
-                                      sizeof(value_buf) - 1, var);
+            ret = field->parser.write(value_buf, sizeof(value_buf) - 1, var,
+                                      field->parser.arg);
             ucs_assert(ret != 0); /* write success */
             ucs_config_parser_release_field(field, var);
             status = ucs_config_parser_parse_field(field, value, var);
@@ -2012,7 +1958,7 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
         } else if (!strncmp(field->name, name, strlen(name))) {
             if (value) {
                 value_ptr = (char *)opts + field->offset;
-                field->parser.write(&field->parser, value, max, value_ptr);
+                field->parser.write(value, max, value_ptr, field->parser.arg);
             }
             status = UCS_OK;
         }
@@ -2021,8 +1967,8 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
     return status;
 }
 
-ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dest,
-                                          ucs_config_field_t *fields)
+ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
+                                         ucs_config_field_t *fields)
 {
     ucs_status_t status;
 
@@ -2033,9 +1979,9 @@ ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dest,
             continue;
         }
 
-        status = field->parser.clone(&field->parser,
-                                     (const char*)src + field->offset,
-                                     (char*)dest + field->offset);
+        status = field->parser.clone((const char*)src + field->offset,
+                                    (char*)dst + field->offset,
+                                    field->parser.arg);
         if (status != UCS_OK) {
             ucs_error("Failed to clone the field '%s': %s", field->name,
                       ucs_status_string(status));
@@ -2132,9 +2078,10 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
         snprintf(syntax_buf, sizeof(syntax_buf), "N/A");
     } else {
         snprintf(value_buf, sizeof(value_buf), "=");
-        field->parser.write(&field->parser, value_buf + 1,
-                            sizeof(value_buf) - 2, (char*)opts + field->offset);
-        field->parser.help(&field->parser, syntax_buf, sizeof(syntax_buf) - 1);
+        field->parser.write(value_buf + 1, sizeof(value_buf) - 2,
+                            (char*)opts + field->offset,
+                            field->parser.arg);
+        field->parser.help(syntax_buf, sizeof(syntax_buf) - 1, field->parser.arg);
     }
 
     if ((flags & UCS_CONFIG_PRINT_COMMENT_DEFAULT) &&

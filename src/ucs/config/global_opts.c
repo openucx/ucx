@@ -433,15 +433,12 @@ static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
                                             uint64_t arg_u64)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 32);
-    ucs_config_parser_t parser = {0};
     unsigned log_level;
-
-    parser.arg = ucs_log_level_names;
 
     ucs_string_buffer_appendf(&strb, "%s", buffer);
     ucs_string_buffer_rtrim(&strb, "\n");
-    if (!ucs_config_sscanf_enum(&parser, ucs_string_buffer_cstr(&strb),
-                                &log_level)) {
+    if (!ucs_config_sscanf_enum(ucs_string_buffer_cstr(&strb), &log_level,
+                                UCS_CONFIG_GET_ALLOWED_VALUES(ucs_log_level_names))) {
         return UCS_ERR_INVALID_PARAM;
     }
 

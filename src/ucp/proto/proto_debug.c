@@ -158,7 +158,7 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
     const char *proto_info_config = context->config.ext.proto_info;
     int bool_value;
 
-    if (ucs_config_sscanf_bool(NULL, proto_info_config, &bool_value)) {
+    if (ucs_config_sscanf_bool(proto_info_config, &bool_value, NULL)) {
         return bool_value;
     }
 

@@ -193,12 +193,12 @@ void ucs_profile_record(ucs_profile_context_t *ctx, ucs_profile_type_t type,
 
 
 /**
- * Calculates number of threads in the profiled execution
+ * Calculates number of threads in the profiled execution 
  * given total number of profiling records, num of location and threads
- *
+ * 
  * @param   total_num_records   accumulated num of records from all threads
- * @param   header              profiling header struct
- *
+ * @param   header              profiling header struct 
+ * 
  * @return  number of threads in the profiled code
  */
 unsigned ucs_profile_calc_num_threads(size_t total_num_records,

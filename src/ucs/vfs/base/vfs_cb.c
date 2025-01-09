@@ -72,7 +72,7 @@ void ucs_vfs_show_ulunits(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
 {
     char buf[64];
 
-    ucs_config_sprintf_ulunits(NULL, buf, sizeof(buf), arg_ptr);
+    ucs_config_sprintf_ulunits(buf, sizeof(buf), arg_ptr, NULL);
     ucs_string_buffer_appendf(strb, "%s\n", buf);
 }
 

@@ -791,9 +791,8 @@ UCS_TEST_F(test_config, test_allow_list_negative)
 {
     ucs_config_allow_list_t field;
 
-    EXPECT_EQ(ucs_config_sscanf_allow_list(&ucs_config_array_string.parser,
-                                           "all,all", &field),
-              0);
+    EXPECT_EQ(ucs_config_sscanf_allow_list("all,all", &field,
+                                           &ucs_config_array_string), 0);
 }
 
 UCS_TEST_F(test_config, test_key_value_generic_value) {

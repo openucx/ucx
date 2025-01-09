@@ -766,7 +766,7 @@ static void ucs_stats_set_trigger()
         ucs_stats_context.flags |= UCS_STATS_FLAG_ON_EXIT;
     } else if (!strncmp(ucs_global_opts.stats_trigger, "timer:", 6)) {
         p = ucs_global_opts.stats_trigger + 6;
-        if (!ucs_config_sscanf_time(NULL, p, &ucs_stats_context.interval)) {
+        if (!ucs_config_sscanf_time(p, &ucs_stats_context.interval, NULL)) {
             ucs_error("Invalid statistics interval time format: %s", p);
             return;
         }
@@ -776,7 +776,7 @@ static void ucs_stats_set_trigger()
                            NULL, "stats");
    } else if (!strncmp(ucs_global_opts.stats_trigger, "signal:", 7)) {
         p = ucs_global_opts.stats_trigger + 7;
-        if (!ucs_config_sscanf_signo(NULL, p, &ucs_stats_context.signo)) {
+        if (!ucs_config_sscanf_signo(p, &ucs_stats_context.signo, NULL)) {
             ucs_error("Invalid statistics signal specification: %s", p);
             return;
         }
