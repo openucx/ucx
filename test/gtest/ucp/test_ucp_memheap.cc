@@ -42,10 +42,13 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
     /* Allocate heap */
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS |
+                        UCP_MEM_MAP_PARAM_FIELD_PROT;
     params.address    = memheap.ptr();
     params.length     = memheap.size();
     params.flags      = mem_map_flags;
+    params.prot       = UCP_MEM_MAP_PROT_LOCAL_WRITE |
+                        UCP_MEM_MAP_PROT_REMOTE_WRITE;
 
     status = ucp_mem_map(receiver().ucph(), &params, &memheap_memh);
     ASSERT_UCS_OK(status);
@@ -71,6 +74,8 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
     if (user_memh) {
         params.address = expected_data.ptr();
         params.length  = expected_data.size();
+        params.prot    = UCP_MEM_MAP_PROT_LOCAL_READ |
+                         UCP_MEM_MAP_PROT_REMOTE_READ;
         status         = ucp_mem_map(sender().ucph(), &params, &send_memh);
         ASSERT_UCS_OK(status);
     }
