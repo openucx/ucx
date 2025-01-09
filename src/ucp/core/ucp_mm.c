@@ -2023,3 +2023,131 @@ out_memh_update:
 out:
     return status;
 }
+
+static UCS_F_ALWAYS_INLINE int ucp_is_invalidate_cap(unsigned uct_flags)
+{
+    return uct_flags & (UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
+                        UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_memh_is_invalidate_cap(const ucp_mem_h memh, ucp_md_index_t md_idx)
+{
+    return ucp_is_invalidate_cap(memh->context->tl_mds[md_idx].pack_flags_mask);
+}
+
+static void ucp_memh_derived_destroy(ucp_mem_h derived)
+{
+    ucp_context_h context = derived->context;
+    uct_md_mem_dereg_params_t params;
+    ucp_md_index_t md_index;
+    ucs_status_t status;
+
+    ucs_trace("destroying derived memh=%p", derived);
+    ucs_for_each_bit(md_index, derived->md_map) {
+        if (ucp_memh_is_invalidate_cap(derived, md_index)) {
+            params.memh = derived->uct[md_index];
+            ucs_trace("de-registering derived memh[%d]=%p", md_index,
+                      derived->uct[md_index]);
+            status = uct_md_mem_dereg_v2(context->tl_mds[md_index].md, &params);
+            if (status != UCS_OK) {
+                ucs_warn("derived memh %p failed to dereg from md[%d]=%s: %s",
+                         derived, md_index, context->tl_mds[md_index].rsc.md_name,
+                         ucs_status_string(status));
+            }
+        }
+    }
+
+    ucs_free(derived);
+}
+
+static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
+{
+    ucp_mem_h derived;
+    ucp_md_index_t md_index;
+    ucs_status_t status;
+    uct_md_mem_reg_params_t params;
+
+    ucs_trace("creating derived memh from %p", memh);
+    derived = ucs_calloc(1, ucp_memh_size(memh->context), "ucp_memh_derived");
+    if (derived == NULL) {
+        ucs_error("failed to allocate memory for derived memh");
+        return NULL;
+    }
+
+    /* Intentionally copy UCP memh data without UCT memory handles */
+    memcpy(derived, memh, sizeof(ucp_mem_t));
+
+    params.field_mask = UCT_MD_MEM_REG_FIELD_MEMH;
+
+    /* Now copy all the UCT memory handles from the original UCP memh */
+    ucs_for_each_bit(md_index, derived->md_map) {
+        if (ucp_memh_is_invalidate_cap(memh, md_index)) {
+            /* Invalidation is supported: create derived UCT memh */
+            params.memh = &memh->uct[md_index];
+
+            ucs_trace("registering derived memh[%d]=%p", md_index, params.memh);
+            status = uct_md_mem_reg_v2(memh->context->tl_mds[md_index].md, NULL,
+                                       0ul, &params, &derived->uct[md_index]);
+            if (status == UCS_ERR_UNSUPPORTED) {
+                /* Invalidation is declared but not supported: shallow copy */
+                ucs_trace("unsupported derived memh[%d]=%p, shallow copy",
+                          md_index, params.memh);
+                derived->uct[md_index] = memh->uct[md_index];
+            } else if (status != UCS_OK) {
+                ucp_memh_derived_destroy(derived);
+                return NULL;
+            }
+        } else {
+            /* Invalidation is not supported: do shallow copy */
+            ucs_trace("shallow copy memh[%d]=%p", md_index, params.memh);
+            derived->uct[md_index] = memh->uct[md_index];
+        }
+    }
+
+    derived->flags  |= UCP_MEMH_FLAG_DERIVED;
+    derived->parent  = memh;
+    derived->derived = memh->derived;
+    memh->derived    = derived;
+
+    ucs_trace("created derived memh=%p from memh=%p", derived, memh);
+    return derived;
+}
+
+static ucp_mem_h
+ucp_memh_derived_get(ucp_mem_h memh, int create)
+{
+    if ((memh->derived != NULL) &&
+        !(memh->derived->flags & UCP_MEMH_FLAG_INVALIDATED)) {
+        return memh->derived;
+    }
+
+    if (!create) {
+        ucs_error("no valid derived memory handle for %p", memh);
+        return NULL;
+    }
+
+    return ucp_memh_derived_create(memh);
+}
+
+ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
+                                 unsigned uct_flags, int create)
+{
+    int md_invalidate_cap = 0;
+    ucp_md_index_t md_index;
+
+    if (!ucp_is_invalidate_cap(uct_flags)) {
+        return memh;
+    }
+
+    /* Check if any of the requested MDs supports invalidation */
+    ucs_for_each_bit(md_index, md_map) {
+        md_invalidate_cap += ucp_memh_is_invalidate_cap(memh, md_index);
+    }
+
+    if (md_invalidate_cap == 0) {
+        return memh;
+    }
+
+    return ucp_memh_derived_get(memh, create);
+}

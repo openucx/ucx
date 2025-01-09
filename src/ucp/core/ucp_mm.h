@@ -43,7 +43,17 @@ enum {
     /**
      * Avoid using registration cache for the particular memory region.
      */
-    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3)
+    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3),
+
+    /**
+     * TODO
+     */
+    UCP_MEMH_FLAG_DERIVED      = UCS_BIT(4),
+
+    /**
+     * TODO
+     */
+    UCP_MEMH_FLAG_INVALIDATED  = UCS_BIT(5),
 };
 
 
@@ -78,6 +88,7 @@ typedef struct ucp_mem {
                                            - pointer to rcache memh if entry is a user memh
                                            - pointer to self if entry is a user memh
                                              and rcache is disabled */
+    ucp_mem_h           derived;        /* TODO */
     uint64_t            reg_id;         /* Registration ID */
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
@@ -208,6 +219,12 @@ void ucp_mem_rcache_cleanup(ucp_context_h context);
 void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
 
 /**
+ * TODO
+ */
+ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
+                                 unsigned uct_flags, int create);
+
+/**
  * Get memory domain index that is used to allocate certain memory type.
  *
  * @param [in]  context        UCP context containing memory domain indexes to
@@ -259,7 +276,6 @@ static UCS_F_ALWAYS_INLINE size_t ucp_memh_length(const ucp_mem_h memh)
 {
     return memh->super.super.end - memh->super.super.start;
 }
-
 
 #define UCP_MEM_IS_HOST(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_HOST)
 #define UCP_MEM_IS_ROCM(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ROCM)
