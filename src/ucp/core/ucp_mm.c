@@ -2084,11 +2084,11 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
     ucs_for_each_bit(md_index, derived->md_map) {
         if (ucp_memh_is_invalidate_cap(memh, md_index)) {
             /* Invalidation is supported: create derived UCT memh */
-            params.memh = &memh->uct[md_index];
+            params.memh = memh->uct[md_index];
 
             ucs_trace("registering derived memh[%d]=%p", md_index, params.memh);
             status = uct_md_mem_reg_v2(memh->context->tl_mds[md_index].md, NULL,
-                                       0ul, &params, &derived->uct[md_index]);
+                                       1ul, &params, &derived->uct[md_index]);
             if (status == UCS_ERR_UNSUPPORTED) {
                 /* Invalidation is declared but not supported: shallow copy */
                 ucs_trace("unsupported derived memh[%d]=%p, shallow copy",

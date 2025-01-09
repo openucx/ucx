@@ -300,6 +300,14 @@ ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
     }
 }
 
+static void ucp_proto_rndv_rtr_mtype_complete_abort(void *request,
+                                                    ucs_status_t status,
+                                                    void *user_data)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+    ucp_proto_rndv_rtr_mtype_complete(req, 1);
+}
+
 static void
 ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 {
@@ -313,8 +321,17 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
         ucp_request_get_super(super_req)->status = status;
     }
 
-    /*TODO: Invalidate memh */
     ucp_send_request_id_release(req);
+    ucp_request_set_callback(req, send.cb,
+                             ucp_proto_rndv_rtr_mtype_complete_abort);
+    if (req->send.rndv.rkey != NULL) {
+        ucp_proto_rndv_rkey_destroy(req);
+    }
+
+    if (ucp_request_memh_invalidate(req, status)) {
+        return;
+    }
+
     ucp_proto_rndv_rtr_mtype_complete(req, 1);
 }
 
