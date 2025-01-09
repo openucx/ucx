@@ -23,6 +23,17 @@ protected:
                          size_t size = 8192, bool aligned = false);
     bool has_ksm() const;
 
+    bool has_devx() const
+    {
+#if HAVE_DEVX
+        return ((ib_md().dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) &&
+                (ucs_derived_of(md(), uct_ib_mlx5_md_t)->flags &
+                 UCT_IB_MLX5_MD_FLAG_DEVX));
+#else
+        return 0;
+#endif
+    }
+
     ucs_status_t reg_smkey_pack(void *buffer, size_t size, uct_ib_mem_t **memh,
                                 uct_rkey_t *rkey_p = NULL);
     void check_smkeys(uct_rkey_t rkey1, uct_rkey_t rkey2);
@@ -56,6 +67,10 @@ const uct_ib_md_t &test_ib_md::ib_md() const {
 void test_ib_md::check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected)
 {
 #if HAVE_DEVX
+    if (!has_devx()) {
+        return;
+    }
+
     uct_ib_mlx5_devx_mem_t *memh = ucs_derived_of(ib_memh,
                                                   uct_ib_mlx5_devx_mem_t);
     if (is_expected) {
