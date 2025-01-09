@@ -62,9 +62,9 @@ struct ucs_config_parser {
 /**
  * Passed as `arg` to the parser to handle arrays of allowed values.
  */
-typedef struct ucs_config_allowed_values {
+typedef struct {
     const char   **values; /**< Pointer to allowed values array */
-    unsigned int count;    /**< Number of elements in the array */
+    unsigned     count;    /**< Number of elements in the array */
 } ucs_config_allowed_values_t;
 
 
@@ -83,7 +83,7 @@ typedef struct ucs_config_field {
 } ucs_config_field_t;
 
 
-typedef struct ucs_config_key_field {
+typedef struct {
     const char               *name;   /* Key name */
     const char               *doc;    /* Documentation */
     size_t                   offset;  /* Storage offset */
