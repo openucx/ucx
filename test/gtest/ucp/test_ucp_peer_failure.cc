@@ -874,9 +874,6 @@ public:
         // Avoid 2-stage ppln being selected, as the intent is to test 3-stage
         // ppln protocol
         modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
-        /* FIXME: Advertise error handling support for RNDV PPLN protocol.
-         * Remove this once invalidation workflow is implemented. */
-        modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
         test_ucp_peer_failure_rndv_abort::init();
         if (!sender().is_rndv_put_ppln_supported()) {
             cleanup();
@@ -887,13 +884,13 @@ public:
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
 {
-    rndv_progress_failure_test(rndv_mode::put_ppln, true);
+    rndv_progress_failure_test(rndv_mode::put_ppln, false);
 }
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
            "RNDV_FRAG_SIZE=host:8K")
 {
-    rndv_progress_failure_test(rndv_mode::put_ppln, true);
+    rndv_progress_failure_test(rndv_mode::put_ppln, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);
