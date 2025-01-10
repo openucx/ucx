@@ -89,6 +89,8 @@ static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
 {
     ucp_context_h context = memh->context;
 
+    memh = ucp_memh_put_pack_memh(memh);
+
     ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64,
               memh, ucp_memh_address(memh), ucp_memh_length(memh),
               memh->md_map);
