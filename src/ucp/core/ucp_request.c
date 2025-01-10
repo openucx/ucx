@@ -401,11 +401,13 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
     }
 
     ucs_assert(status != UCS_OK);
+    ucs_assert(!ucp_request_is_invalidated(req));
 
     req->send.invalidate.worker    = worker;
     req->send.invalidate.comp.func = ucp_request_mem_invalidate_completion;
     req->send.invalidate.comp.arg  = req;
     req->status                    = status;
+    req->flags                    |= UCP_REQUEST_FLAG_INVALIDATED;
 
     ucp_memh_invalidate(*memh_p, &req->send.invalidate.comp);
     *memh_p = NULL;
