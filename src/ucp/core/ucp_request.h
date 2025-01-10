@@ -122,16 +122,6 @@ enum {
 
 
 /**
- * Request invalidation completion
- */
-typedef struct {
-    ucs_list_link_t        list;
-    ucp_request_callback_t func;
-    void                   *arg;
-} ucp_request_invalidate_comp_t;
-
-
-/**
  * Request in progress.
  */
 struct ucp_request {
@@ -348,8 +338,8 @@ struct ucp_request {
                 } flush;
 
                 struct {
-                    ucp_worker_h                  worker;
-                    ucp_request_invalidate_comp_t comp;
+                    ucp_worker_h               worker;
+                    ucp_memh_invalidate_comp_t comp;
                 } invalidate;
 
                 struct {
