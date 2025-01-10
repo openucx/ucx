@@ -372,29 +372,6 @@ ucp_request_dt_dereg(ucp_mem_h *memhs, size_t count, ucp_request_t *req_dbg)
     }
 }
 
-static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
-{
-    ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
-    ucp_lane_index_t lane;
-    ucp_lane_index_t i;
-    ucp_md_map_t inv_map;
-
-    for (i = 0, inv_map = 0;
-         (key->rma_bw_lanes[i] != UCP_NULL_LANE) && (i < UCP_MAX_LANES); i++) {
-        lane = key->rma_bw_lanes[i];
-
-        if (!ucp_ep_is_lane_p2p(ep, lane)) {
-            ucs_assert(ucp_ep_get_iface_attr(ep, lane)->cap.flags &
-                       UCT_IFACE_FLAG_GET_ZCOPY);
-            ucs_assert(ucp_ep_md_attr(ep, lane)->flags &
-                       UCT_MD_FLAG_INVALIDATE_RMA);
-            inv_map |= UCS_BIT(ucp_ep_md_index(ep, lane));
-        }
-    }
-
-    return inv_map;
-}
-
 int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
 {
     ucp_ep_h ep                      = req->send.ep;
@@ -402,7 +379,6 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
     ucp_worker_h worker              = ep->worker;
     ucp_context_h context            = worker->context;
     ucp_mem_h *memh_p;
-    ucp_md_map_t invalidate_map;
 
     if ((err_mode != UCP_ERR_HANDLING_MODE_PEER) ||
         !(req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
@@ -421,7 +397,7 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
         memh_p = &req->send.state.dt.dt.contig.memh;
     }
 
-    if ((*memh_p == NULL) || ucp_memh_is_user_memh(*memh_p)) {
+    if ((*memh_p == NULL) || !ucp_memh_is_derived_memh(*memh_p)) {
         return 0;
     }
 
@@ -430,11 +406,9 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
     req->send.invalidate.worker = worker;
     req->status                 = status;
 
-    invalidate_map = ucp_request_get_invalidation_map(ep);
-    ucp_trace_req(req, "mem invalidate buffer md_map 0x%" PRIx64 "/0x%" PRIx64,
-                  invalidate_map, (*memh_p)->md_map);
-    ucp_memh_invalidate(context, *memh_p, ucp_request_mem_invalidate_completion,
-                        req, invalidate_map);
+    ucp_memh_invalidate(context, *memh_p, invalidate_map);
+    // TODO
+    (void)ucp_request_mem_invalidate_completion;
 
     ucp_memh_put(*memh_p);
     *memh_p = NULL;

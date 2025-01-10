@@ -54,10 +54,11 @@ enum {
     UCP_REQUEST_FLAG_RKEY_INUSE            = UCS_BIT(18),
     UCP_REQUEST_FLAG_USER_HEADER_COPIED    = UCS_BIT(19),
     UCP_REQUEST_FLAG_USAGE_TRACKED         = UCS_BIT(20),
+    UCP_REQUEST_FLAG_INVALIDATED           = UCS_BIT(21),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(21),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(22),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(23),
+    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(22),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(23),
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(24),
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
@@ -118,6 +119,16 @@ enum {
     UCP_RDESC_HASH_LIST = 0,
     UCP_RDESC_ALL_LIST  = 1
 };
+
+
+/**
+ * Request invalidation completion
+ */
+typedef struct {
+    ucs_list_link_t        list;
+    ucp_request_callback_t func;
+    void                   *arg;
+} ucp_request_invalidate_comp_t;
 
 
 /**
@@ -337,7 +348,8 @@ struct ucp_request {
                 } flush;
 
                 struct {
-                    ucp_worker_h       worker;
+                    ucp_worker_h                  worker;
+                    ucp_request_invalidate_comp_t comp;
                 } invalidate;
 
                 struct {

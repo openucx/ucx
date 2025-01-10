@@ -62,13 +62,6 @@ typedef struct ucs_rcache_inv_entry {
 } ucs_rcache_inv_entry_t;
 
 
-typedef struct ucs_rcache_comp_entry {
-    ucs_list_link_t                   list;
-    ucs_rcache_invalidate_comp_func_t func;
-    void                              *arg;
-} ucs_rcache_comp_entry_t;
-
-
 typedef struct {
     ucs_rcache_t        *rcache;
     ucs_rcache_region_t *region;
@@ -410,7 +403,6 @@ void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
                                      ucs_rcache_region_t *region,
                                      int drop_lock)
 {
-    ucs_rcache_comp_entry_t *comp;
     size_t region_size;
     ucs_rcache_distribution_t *distribution_bin;
 
@@ -453,15 +445,6 @@ void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
     distribution_bin = ucs_rcache_distribution_get_bin(rcache, region_size);
     --distribution_bin->count;
     distribution_bin->total_size -= region_size;
-
-    while (!ucs_list_is_empty(&region->comp_list)) {
-        comp = ucs_list_extract_head(&region->comp_list,
-                                     ucs_rcache_comp_entry_t, list);
-        comp->func(comp->arg);
-        ucs_spin_lock(&rcache->lock);
-        ucs_mpool_put(comp);
-        ucs_spin_unlock(&rcache->lock);
-    }
 
     ucs_free(region);
     /* coverity[missing_unlock] */
@@ -981,7 +964,6 @@ retry:
     }
 
     memset(region, 0, rcache->params.region_struct_size);
-    ucs_list_head_init(&region->comp_list);
 
     region->super.start = start;
     region->super.end   = end;
@@ -1121,27 +1103,9 @@ void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 }
 
 void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
-                                  ucs_rcache_region_t *region,
-                                  ucs_rcache_invalidate_comp_func_t cb,
-                                  void *arg)
+                                  ucs_rcache_region_t *region)
 {
-    ucs_rcache_comp_entry_t *comp;
-
-    /* Completion entry should be added before region is invalidated */
-    ucs_spin_lock(&rcache->lock);
-    comp = ucs_mpool_get(&rcache->mp);
-    ucs_spin_unlock(&rcache->lock);
-
     pthread_rwlock_wrlock(&rcache->pgt_lock);
-    if (comp != NULL) {
-        comp->func = cb;
-        comp->arg  = arg;
-        ucs_list_add_tail(&region->comp_list, &comp->list);
-    } else {
-        ucs_rcache_region_error(rcache, region,
-                                "failed to allocate completion object");
-    }
-
     /* coverity[double_lock] */
     ucs_rcache_region_invalidate_internal(rcache, region, 0);
     /* coverity[double_unlock] */
@@ -1313,8 +1277,6 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     }
 
     mp_obj_size = ucs_max(sizeof(ucs_pgt_dir_t), sizeof(ucs_rcache_inv_entry_t));
-    mp_obj_size = ucs_max(mp_obj_size, sizeof(ucs_rcache_comp_entry_t));
-
     mp_align    = ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN);
 
     ucs_mpool_params_reset(&mp_params);
