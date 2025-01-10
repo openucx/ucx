@@ -341,6 +341,7 @@ struct ucp_request {
                 struct {
                     ucp_worker_h               worker;
                     ucp_memh_invalidate_comp_t comp;
+                    ucp_mem_desc_t             *mdesc;
                 } invalidate;
 
                 struct {

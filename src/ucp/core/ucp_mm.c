@@ -2006,6 +2006,17 @@ static void ucp_memh_derived_remove_from_list(ucp_mem_h memh, ucp_mem_h derived)
     }
 }
 
+static void ucp_memh_derived_completion(ucp_mem_h derived)
+{
+    ucp_memh_invalidate_comp_t *comp;
+
+    while(!ucs_list_is_empty(&derived->comp_list)) {
+        comp = ucs_list_extract_head(&derived->comp_list,
+                                     ucp_memh_invalidate_comp_t, list);
+        comp->func(comp->arg);
+    }
+}
+
 static void ucp_memh_derived_destroy(ucp_mem_h derived)
 {
     ucp_context_h context = derived->context;
@@ -2018,6 +2029,9 @@ static void ucp_memh_derived_destroy(ucp_mem_h derived)
                 derived, derived->super.refcount);
 
     ucp_memh_derived_remove_from_list(derived->parent, derived);
+    ucp_memh_derived_completion(derived);
+
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
 
     ucs_trace("destroying derived memh=%p", derived);
     ucs_for_each_bit(md_index, derived->md_map) {
