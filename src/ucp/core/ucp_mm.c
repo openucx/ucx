@@ -388,7 +388,6 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
 }
 
 void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                         ucs_rcache_invalidate_comp_func_t cb, void *arg,
                          ucp_md_map_t inv_md_map)
 {
     ucs_trace("memh %p: invalidate address %p length %zu md_map %" PRIx64
@@ -402,7 +401,8 @@ void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
     UCP_THREAD_CS_ENTER(&context->mt_lock);
     memh->inv_md_map |= inv_md_map;
     UCP_THREAD_CS_EXIT(&context->mt_lock);
-    ucs_rcache_region_invalidate(context->rcache, &memh->super, cb, arg);
+    // TODO
+    ucs_rcache_region_invalidate(context->rcache, &memh->super);
 }
 
 static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
@@ -910,9 +910,7 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
         uct_flags |= UCP_MM_UCT_ACCESS_FLAGS(memh->uct_flags);
 
         /* Invalidate the mismatching region and get a new one */
-        ucs_rcache_region_invalidate(
-                context->rcache, &memh->super,
-                (ucs_rcache_invalidate_comp_func_t)ucs_empty_function, NULL);
+        ucs_rcache_region_invalidate(context->rcache, &memh->super);
         ucp_memh_put(memh);
     }
 }
@@ -1997,10 +1995,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                             "This may indicate that exported memory handle was "
                             "destroyed, but imported memory handle was not",
                             rregion->refcount);
-                ucs_rcache_region_invalidate(
-                        rcache, rregion,
-                        (ucs_rcache_invalidate_comp_func_t)ucs_empty_function,
-                        NULL);
+                ucs_rcache_region_invalidate(rcache, rregion);
                 ucs_rcache_region_put_unsafe(rcache, rregion);
             }
         }
@@ -2043,6 +2038,8 @@ static void ucp_memh_derived_destroy(ucp_mem_h derived)
     ucp_md_index_t md_index;
     ucs_status_t status;
 
+    ucs_assert(ucp_memh_is_derived_memh(derived));
+
     ucs_trace("destroying derived memh=%p", derived);
     ucs_for_each_bit(md_index, derived->md_map) {
         if (ucp_memh_is_invalidate_cap(derived, md_index)) {
@@ -2063,13 +2060,15 @@ static void ucp_memh_derived_destroy(ucp_mem_h derived)
 
 static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
 {
+    ucp_context_h context = memh->context;
     ucp_mem_h derived;
     ucp_md_index_t md_index;
     ucs_status_t status;
     uct_md_mem_reg_params_t params;
 
+    /* TODO: use memory pool for derived handles? */
     ucs_trace("creating derived memh from %p", memh);
-    derived = ucs_calloc(1, ucp_memh_size(memh->context), "ucp_memh_derived");
+    derived = ucs_calloc(1, ucp_memh_size(context), "ucp_memh_derived");
     if (derived == NULL) {
         ucs_error("failed to allocate memory for derived memh");
         return NULL;
@@ -2078,6 +2077,7 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
     /* Intentionally copy UCP memh data without UCT memory handles */
     memcpy(derived, memh, sizeof(ucp_mem_t));
 
+    derived->flags   |= UCP_MEMH_FLAG_DERIVED;
     params.field_mask = UCT_MD_MEM_REG_FIELD_MEMH;
 
     /* Now copy all the UCT memory handles from the original UCP memh */
@@ -2087,8 +2087,8 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
             params.memh = memh->uct[md_index];
 
             ucs_trace("registering derived memh[%d]=%p", md_index, params.memh);
-            status = uct_md_mem_reg_v2(memh->context->tl_mds[md_index].md, NULL,
-                                       1ul, &params, &derived->uct[md_index]);
+            status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, NULL, 1ul,
+                                       &params, &derived->uct[md_index]);
             if (status == UCS_ERR_UNSUPPORTED) {
                 /* Invalidation is declared but not supported: shallow copy */
                 ucs_trace("unsupported derived memh[%d]=%p, shallow copy",
@@ -2105,7 +2105,6 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
         }
     }
 
-    derived->flags  |= UCP_MEMH_FLAG_DERIVED;
     derived->parent  = memh;
     derived->derived = memh->derived;
     memh->derived    = derived;
@@ -2136,6 +2135,7 @@ ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
     int md_invalidate_cap = 0;
     ucp_md_index_t md_index;
 
+    /* TODO: disable invalidation for user memh? */
     if (!ucp_is_invalidate_cap(uct_flags)) {
         return memh;
     }

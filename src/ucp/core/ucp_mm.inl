@@ -113,6 +113,11 @@ static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)
     return (memh->parent != NULL) && !ucp_memh_is_zero_length(memh);
 }
 
+static UCS_F_ALWAYS_INLINE int ucp_memh_is_derived_memh(ucp_mem_h memh)
+{
+    return (memh->flags & UCP_MEMH_FLAG_DERIVED);
+}
+
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_buffer_in_range(const ucp_mem_h memh,
                                                            const void *buffer,
                                                            size_t length)
