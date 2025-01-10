@@ -332,15 +332,8 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
 static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map)
 {
-    uct_completion_t comp            = {
-        .count = 1,
-        .func  = (uct_completion_callback_t)ucs_empty_function_do_assert_void
-    };
     uct_md_mem_dereg_params_t params = {
-        .field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
-                      UCT_MD_MEM_DEREG_FIELD_FLAGS |
-                      UCT_MD_MEM_DEREG_FIELD_COMPLETION,
-        .comp       = &comp
+        .field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH
     };
     ucp_md_index_t md_index;
     ucs_status_t status;
@@ -358,21 +351,11 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         ucs_assert(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG);
 
         params.memh = memh->uct[md_index];
-        if (memh->inv_md_map & UCS_BIT(md_index)) {
-            params.flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
-            comp.count++;
-        } else {
-            params.flags = 0;
-        }
-
         status = uct_md_mem_dereg_v2(context->tl_mds[md_index].md, &params);
         if (status != UCS_OK) {
             ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
                      context->tl_mds[md_index].rsc.md_name,
                      ucs_status_string(status));
-            if (params.flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
-                comp.count--;
-            }
         }
 
         memh->uct[md_index] = NULL;
@@ -383,26 +366,6 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         munlock(ucp_memh_address(memh), ucp_memh_length(memh));
         memh->flags &= ~UCP_MEMH_FLAG_MLOCKED;
     }
-
-    ucs_assert(comp.count == 1);
-}
-
-void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                         ucp_md_map_t inv_md_map)
-{
-    ucs_trace("memh %p: invalidate address %p length %zu md_map %" PRIx64
-              " inv_md_map %" PRIx64,
-              memh, ucp_memh_address(memh), ucp_memh_length(memh), memh->md_map,
-              inv_md_map);
-
-    ucs_assert(memh->parent == NULL);
-    ucs_assert(!(memh->flags & UCP_MEMH_FLAG_IMPORTED));
-
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
-    memh->inv_md_map |= inv_md_map;
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
-    // TODO
-    ucs_rcache_region_invalidate(context->rcache, &memh->super);
 }
 
 static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
@@ -676,7 +639,6 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
                           uct_alloc_method_t method, ucs_memory_type_t mem_type)
 {
     memh->md_map         = 0;
-    memh->inv_md_map     = 0;
     memh->uct_flags      = UCP_MM_UCT_ACCESS_FLAGS(uct_flags);
     memh->context        = context;
     memh->flags          = memh_flags;
@@ -2031,6 +1993,19 @@ ucp_memh_is_invalidate_cap(const ucp_mem_h memh, ucp_md_index_t md_idx)
     return ucp_is_invalidate_cap(memh->context->tl_mds[md_idx].pack_flags_mask);
 }
 
+
+static void ucp_memh_derived_remove_from_list(ucp_mem_h memh, ucp_mem_h derived)
+{
+    ucp_mem_h *it;
+
+    for (it = &memh->derived; *it != NULL; it = &(*it)->derived) {
+        if (*it == derived) {
+            *it = derived->derived;
+            break;
+        }
+    }
+}
+
 static void ucp_memh_derived_destroy(ucp_mem_h derived)
 {
     ucp_context_h context = derived->context;
@@ -2039,6 +2014,10 @@ static void ucp_memh_derived_destroy(ucp_mem_h derived)
     ucs_status_t status;
 
     ucs_assert(ucp_memh_is_derived_memh(derived));
+    ucs_assertv(derived->super.refcount == 0, "derived memh %p refcount=%d",
+                derived, derived->super.refcount);
+
+    ucp_memh_derived_remove_from_list(derived->parent, derived);
 
     ucs_trace("destroying derived memh=%p", derived);
     ucs_for_each_bit(md_index, derived->md_map) {
@@ -2077,8 +2056,11 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
     /* Intentionally copy UCP memh data without UCT memory handles */
     memcpy(derived, memh, sizeof(ucp_mem_t));
 
-    derived->flags   |= UCP_MEMH_FLAG_DERIVED;
-    params.field_mask = UCT_MD_MEM_REG_FIELD_MEMH;
+    derived->parent         = memh;
+    derived->super.refcount = 0;
+    derived->flags         |= UCP_MEMH_FLAG_DERIVED;
+    params.field_mask       = UCT_MD_MEM_REG_FIELD_MEMH;
+    ucs_list_head_init(&derived->comp_list);
 
     /* Now copy all the UCT memory handles from the original UCP memh */
     ucs_for_each_bit(md_index, derived->md_map) {
@@ -2105,9 +2087,9 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
         }
     }
 
-    derived->parent  = memh;
-    derived->derived = memh->derived;
-    memh->derived    = derived;
+    derived->super.refcount = 1;
+    derived->derived        = memh->derived;
+    memh->derived           = derived;
 
     ucs_trace("created derived memh=%p from memh=%p", derived, memh);
     return derived;
@@ -2118,6 +2100,7 @@ ucp_memh_derived_get(ucp_mem_h memh, int create)
 {
     if ((memh->derived != NULL) &&
         !(memh->derived->flags & UCP_MEMH_FLAG_INVALIDATED)) {
+        memh->derived->super.refcount += create;
         return memh->derived;
     }
 
@@ -2135,6 +2118,8 @@ ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
     int md_invalidate_cap = 0;
     ucp_md_index_t md_index;
 
+    ucs_assert(!ucp_memh_is_derived_memh(memh));
+
     /* TODO: disable invalidation for user memh? */
     if (!ucp_is_invalidate_cap(uct_flags)) {
         return memh;
@@ -2145,9 +2130,43 @@ ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
         md_invalidate_cap += ucp_memh_is_invalidate_cap(memh, md_index);
     }
 
+    /* TODO: Cache this value? */
     if (md_invalidate_cap == 0) {
         return memh;
     }
 
     return ucp_memh_derived_get(memh, create);
+}
+
+ucp_mem_h ucp_memh_put_pack_memh(ucp_mem_h memh)
+{
+    ucp_mem_h parent;
+
+    if (!ucp_memh_is_derived_memh(memh)) {
+        return memh;
+    }
+
+    ucs_assert(memh->super.refcount > 0);
+    --memh->super.refcount;
+    parent = memh->parent;
+
+    if ((memh->super.refcount == 0) &&
+        (memh->flags & UCP_MEMH_FLAG_INVALIDATED)) {
+        ucp_memh_derived_destroy(memh);
+    }
+
+    return parent;
+}
+
+void ucp_memh_invalidate(ucp_mem_h memh, ucp_memh_invalidate_comp_t *comp)
+{
+    ucs_assert(ucp_memh_is_derived_memh(memh));
+    ucs_assert(memh->super.refcount > 0);
+
+    if (comp != NULL) {
+        ucs_list_add_tail(&memh->comp_list, &comp->list);
+    }
+
+    memh->flags |= UCP_MEMH_FLAG_INVALIDATED;
+    ucp_memh_put_pack_memh(memh);
 }

@@ -351,9 +351,8 @@ static unsigned ucp_request_memh_invalidate_progress(void *arg)
     return 1;
 }
 
-static void ucp_request_mem_invalidate_completion(void *arg)
+static void ucp_request_mem_invalidate_completion(ucp_request_t *req)
 {
-    ucp_request_t *req  = arg;
     ucp_worker_h worker = req->send.invalidate.worker;
 
     ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
@@ -403,14 +402,12 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
 
     ucs_assert(status != UCS_OK);
 
-    req->send.invalidate.worker = worker;
-    req->status                 = status;
+    req->send.invalidate.worker    = worker;
+    req->send.invalidate.comp.func = ucp_request_mem_invalidate_completion;
+    req->send.invalidate.comp.arg  = req;
+    req->status                    = status;
 
-    ucp_memh_invalidate(context, *memh_p, invalidate_map);
-    // TODO
-    (void)ucp_request_mem_invalidate_completion;
-
-    ucp_memh_put(*memh_p);
+    ucp_memh_invalidate(*memh_p, &req->send.invalidate.comp);
     *memh_p = NULL;
     return 1;
 }

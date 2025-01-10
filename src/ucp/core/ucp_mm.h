@@ -82,13 +82,12 @@ typedef struct ucp_mem {
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
-    ucp_md_map_t        inv_md_map;     /* Which memory handles should be invalidated
-                                           when this handle is released */
     ucp_mem_h           parent;         /* - NULL if entry was obtained via ucp_memh_get()
                                            - pointer to rcache memh if entry is a user memh
                                            - pointer to self if entry is a user memh
                                              and rcache is disabled */
     ucp_mem_h           derived;        /* TODO */
+    ucs_list_link_t     comp_list;      /* TODO */
     uint64_t            reg_id;         /* Registration ID */
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
@@ -138,6 +137,16 @@ typedef struct {
     uct_mem_h         uct_memh; /* memh for specific MD */
     uct_rkey_bundle_t rkey_bundle; /* rkey bundle from memh */
 } ucp_mtype_pack_context_t;
+
+
+/**
+ * TODO
+ */
+typedef struct {
+    ucs_list_link_t        list;
+    ucp_request_callback_t func;
+    void                   *arg;
+} ucp_memh_invalidate_comp_t;
 
 
 extern ucp_mem_dummy_handle_t ucp_mem_dummy_handle;
@@ -205,9 +214,6 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                ucp_md_map_t md_map, unsigned uct_flags,
                                const char *alloc_name);
 
-void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                         ucp_md_map_t inv_md_map);
-
 void ucp_memh_put_slow(ucp_context_h context, ucp_mem_h memh);
 
 ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
@@ -222,6 +228,16 @@ void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
  */
 ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
                                  unsigned uct_flags, int create);
+
+/**
+ * TODO
+ */
+ucp_mem_h ucp_memh_put_pack_memh(ucp_mem_h memh);
+
+/**
+ * TODO
+ */
+void ucp_memh_invalidate(ucp_mem_h memh, ucp_memh_invalidate_comp_t *comp);
 
 /**
  * Get memory domain index that is used to allocate certain memory type.
