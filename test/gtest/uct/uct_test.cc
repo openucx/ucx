@@ -959,6 +959,7 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
     params.address         = address;
 
     for (unsigned i = 0; i <= num_retries; ++i) {
+        scoped_log_handler slh(wrap_errors_logger);
         if ((md_attr().flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG)) &&
             (mem_type == UCS_MEMORY_TYPE_HOST)) {
             status = uct_iface_mem_alloc(m_iface, length, mem_flags, "uct_test",
