@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 #include <ucs/sys/compiler_def.h>
-#include <ucs/config/parser.h>
+#include <ucs/config/types.h>
 
 BEGIN_C_DECLS
 

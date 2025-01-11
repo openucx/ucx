@@ -12,7 +12,6 @@
 #endif
 
 #include <ucm/api/ucm.h>
-#include <ucs/config/parser.h>
 #include <ucs/config/types.h>
 
 

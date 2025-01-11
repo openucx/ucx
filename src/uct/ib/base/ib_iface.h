@@ -13,6 +13,7 @@
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_iov.inl>
+#include <ucs/config/types.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>

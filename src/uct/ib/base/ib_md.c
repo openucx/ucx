@@ -15,7 +15,7 @@
 #include "ib_log.h"
 
 #include <ucs/arch/atomic.h>
-#include <ucs/config/parser.h>
+#include <ucs/config/types.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/ptr_arith.h>

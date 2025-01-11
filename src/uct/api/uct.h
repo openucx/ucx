@@ -14,10 +14,10 @@
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
-#include <ucs/config/parser.h>
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/callbackq_compat.h>
 #include <ucs/datastruct/linear_func.h>
+#include <ucs/config/types.h>
 #include <ucs/memory/memory_type.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>

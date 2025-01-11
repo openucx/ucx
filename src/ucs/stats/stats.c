@@ -17,6 +17,7 @@
 #include <ucs/time/time.h>
 #include <ucs/config/global_opts.h>
 #include <ucs/config/parser.h>
+#include <ucs/config/types.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/sys.h>
 #include <ucs/datastruct/array.h>

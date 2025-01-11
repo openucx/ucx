@@ -18,6 +18,7 @@
 #include <ucp/proto/proto.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
+#include <ucs/config/types.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/conn_match.h>

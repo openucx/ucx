@@ -9,6 +9,7 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/sys.h>
+#include <ucs/config/types.h>
 #include <ucs/sys/checker.h>
 
 #define UCM_MMAP_HOOK_RELOC_STR  "reloc"

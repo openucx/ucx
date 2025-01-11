@@ -9,7 +9,6 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
-#include <ucs/config/parser.h>
 #include <ucs/config/types.h>
 #include <ucs/debug/debug.h>
 #include <stdio.h>

@@ -53,14 +53,6 @@ typedef struct ucs_config_parser {
     const void               *arg;
 } ucs_config_parser_t;
 
-/**
- * Passed as `arg` to the parser to handle arrays of allowed values.
- */
-typedef struct {
-    const char   **values; /**< Pointer to allowed values array */
-    unsigned     count;    /**< Number of elements in the array */
-} ucs_config_allowed_values_t;
-
 
 typedef struct ucs_config_array {
     size_t                   elem_size;
@@ -184,46 +176,6 @@ typedef struct ucs_config_bw_spec {
 extern ucs_list_link_t ucs_config_global_list;
 
 #define UCS_CONFIG_UINT_ENUM_INDEX(_value) (UINT_MAX - (_value))
-
-#define UCS_CONFIG_ALLOWED_VALUES_NAME(_arr) _arr##_allowed_values
-
-
-/**
- * Use this in a header file when the allowed values object is defined in a
- * different source file. If the allowed values array is defined and used
- * in the same file, this macro is not needed.
- * For example:
- * UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucm_log_level_names);
- */
-#define UCS_CONFIG_DECLARE_ALLOWED_VALUES(_arr) \
-    extern const char *(_arr)[]; \
-    extern const ucs_config_allowed_values_t UCS_CONFIG_ALLOWED_VALUES_NAME( \
-            _arr)
-
-
-/**
- * Use this in a source file to define allowed values for a specific array.
- * For example:
- * UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_handle_error_modes, {
- *     [UCS_HANDLE_ERROR_BACKTRACE] = "bt",
- *     [UCS_HANDLE_ERROR_FREEZE]    = "freeze",
- *     [UCS_HANDLE_ERROR_DEBUG]     = "debug",
- *     [UCS_HANDLE_ERROR_NONE]      = "none"
- * });
- */
-#define UCS_CONFIG_DEFINE_ALLOWED_VALUES(_arr, ...) \
-    const char *(_arr)[] = __VA_ARGS__; \
-    const ucs_config_allowed_values_t UCS_CONFIG_ALLOWED_VALUES_NAME(_arr) = { \
-        .values = (_arr), \
-        .count  = ucs_static_array_size(_arr) \
-    }
-
-
-/**
- * Get the allowed values object for a specific array.
- */
-#define UCS_CONFIG_GET_ALLOWED_VALUES(_arr) \
-    (&UCS_CONFIG_ALLOWED_VALUES_NAME(_arr))
 
 
 /*

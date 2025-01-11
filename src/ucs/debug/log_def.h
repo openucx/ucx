@@ -13,7 +13,7 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/config/global_opts.h>
-#include <ucs/config/parser.h>
+#include <ucs/config/types.h>
 #include <stdarg.h>
 #include <stdint.h>
 
