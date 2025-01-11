@@ -54,8 +54,6 @@ typedef enum ucs_memory_type {
 /**
  * Array of string names for each memory type
  */
-extern const char *ucs_memory_type_names[];
-
 UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_memory_type_names);
 
 /**

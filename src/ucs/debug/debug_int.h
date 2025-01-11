@@ -33,7 +33,6 @@ typedef struct backtrace *backtrace_h;
 typedef struct backtrace_line *backtrace_line_h;
 
 extern const char *ucs_state_detail_level_names[];
-extern const char *ucs_signal_names[];
 UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_signal_names);
 
 

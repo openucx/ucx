@@ -1837,9 +1837,7 @@ enum {
 };
 
 
-extern const char *uct_alloc_method_names[];
 UCS_CONFIG_DECLARE_ALLOWED_VALUES(uct_alloc_method_names);
-
 extern const char *uct_device_type_names[];
 
 

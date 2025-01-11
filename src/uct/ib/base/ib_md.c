@@ -38,16 +38,14 @@ static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
                                sizeof(ucs_config_bw_spec_t),
                                UCS_CONFIG_TYPE_BW_SPEC);
 
-static const char *uct_ib_devx_objs[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_devx_objs, {
     [UCT_IB_DEVX_OBJ_RCQP]  = "rcqp",
     [UCT_IB_DEVX_OBJ_RCSRQ] = "rcsrq",
     [UCT_IB_DEVX_OBJ_DCT]   = "dct",
     [UCT_IB_DEVX_OBJ_DCSRQ] = "dcsrq",
     [UCT_IB_DEVX_OBJ_DCI]   = "dci",
     [UCT_IB_DEVX_OBJ_CQ]    = "cq"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_devx_objs);
+});
 
 ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
@@ -1316,7 +1314,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     /* Check for GPU-direct support */
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
-        /* Check peer memory driver is loaded, different driver versions use 
+        /* Check peer memory driver is loaded, different driver versions use
          * different paths */
         uct_ib_check_gpudirect_driver(
                 md, "/sys/kernel/mm/memory_peers/nv_mem/version",
@@ -1327,7 +1325,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         uct_ib_check_gpudirect_driver(
                 md, "/sys/module/nv_peer_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
-                
+
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);

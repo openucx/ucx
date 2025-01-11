@@ -74,12 +74,10 @@ struct ucs_profile_context  {
          ++(_var))
 
 
-const char *ucs_profile_mode_names[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_profile_mode_names, {
     [UCS_PROFILE_MODE_ACCUM] = "accum",
     [UCS_PROFILE_MODE_LOG]   = "log"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_profile_mode_names);
+});
 
 /**
  *  Default ucs profile context is initialized in ucs_init() and used by

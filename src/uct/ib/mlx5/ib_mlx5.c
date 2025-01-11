@@ -22,15 +22,13 @@
 #include <string.h>
 
 
-static const char *uct_ib_mlx5_mmio_modes[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_mlx5_mmio_modes, {
     [UCT_IB_MLX5_MMIO_MODE_BF_POST]    = "bf_post",
     [UCT_IB_MLX5_MMIO_MODE_BF_POST_MT] = "bf_post_mt",
     [UCT_IB_MLX5_MMIO_MODE_DB]         = "db",
     [UCT_IB_MLX5_MMIO_MODE_DB_LOCK]    = "db_lock",
     [UCT_IB_MLX5_MMIO_MODE_AUTO]       = "auto"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_mlx5_mmio_modes);
+});
 
 ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
 #if HAVE_IBV_DM

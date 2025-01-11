@@ -30,7 +30,7 @@
 static int  ucm_log_fileno                  = 1; /* stdout */
 static char ucm_log_hostname[HOST_NAME_MAX] = {0};
 
-const char *ucm_log_level_names[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_log_level_names, {
     [UCS_LOG_LEVEL_FATAL] = "FATAL",
     [UCS_LOG_LEVEL_ERROR] = "ERROR",
     [UCS_LOG_LEVEL_WARN]  = "WARN",
@@ -38,9 +38,7 @@ const char *ucm_log_level_names[] = {
     [UCS_LOG_LEVEL_INFO]  = "INFO",
     [UCS_LOG_LEVEL_DEBUG] = "DEBUG",
     [UCS_LOG_LEVEL_TRACE] = "TRACE"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_log_level_names);
+});
 
 /* Flags for ucm_log_ltoa */
 #define UCM_LOG_LTOA_FLAG_SIGN   UCS_BIT(0)  /* print sign */

@@ -133,7 +133,7 @@ struct backtrace {
 #endif /* HAVE_DETAILED_BACKTRACE */
 
 #define UCS_SYS_SIGNAME(signame) [SIG ## signame] = #signame
-const char *ucs_signal_names[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_signal_names, {
     [0] = "SIGNAL0",
     UCS_SYS_SIGNAME(HUP),
     UCS_SYS_SIGNAME(INT),
@@ -177,9 +177,7 @@ const char *ucs_signal_names[] = {
 #else
 #error "Port me"
 #endif
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_signal_names);
+});
 
 #if HAVE_SIGACTION_SA_RESTORER
 static void    *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;

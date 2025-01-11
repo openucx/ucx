@@ -110,9 +110,7 @@ typedef ucs_log_func_rc_t (*ucs_log_func_t)(const char *file, unsigned line,
                                             const char *message, va_list ap);
 
 
-extern const char *ucs_log_level_names[];
 UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_log_level_names);
-
 extern const char *ucs_log_category_names[];
 
 

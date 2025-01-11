@@ -33,15 +33,13 @@ static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
                                UCS_CONFIG_TYPE_RANGE_SPEC);
 
-const char *uct_ib_mtu_values[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_mtu_values, {
     [UCT_IB_MTU_DEFAULT]    = "default",
     [UCT_IB_MTU_512]        = "512",
     [UCT_IB_MTU_1024]       = "1024",
     [UCT_IB_MTU_2048]       = "2048",
     [UCT_IB_MTU_4096]       = "4096"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_mtu_values);
+});
 
 enum {
     UCT_IB_ADDRESS_TYPE_LINK_LOCAL,
@@ -52,15 +50,13 @@ enum {
     UCT_IB_IFACE_ADDRESS_TYPE_AUTO  = UCT_IB_ADDRESS_TYPE_LAST
 };
 
-static const char *uct_ib_iface_addr_types[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_iface_addr_types, {
    [UCT_IB_ADDRESS_TYPE_LINK_LOCAL] = "ib_local",
    [UCT_IB_ADDRESS_TYPE_SITE_LOCAL] = "ib_site_local",
    [UCT_IB_ADDRESS_TYPE_GLOBAL]     = "ib_global",
    [UCT_IB_ADDRESS_TYPE_ETH]        = "eth",
    [UCT_IB_IFACE_ADDRESS_TYPE_AUTO] = "auto"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_ib_iface_addr_types);
+});
 
 ucs_config_field_t uct_ib_iface_config_table[] = {
   {"", "ALLOC=thp,mmap,heap", NULL,

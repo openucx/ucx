@@ -44,8 +44,6 @@ void ucm_mmap_init();
 /**
  * Memory hooks mode names.
  */
-extern const char *ucm_mmap_hook_modes[];
-
 UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucm_mmap_hook_modes);
 
 static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t ucm_mmap_hook_mode(void)

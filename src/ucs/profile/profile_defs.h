@@ -136,9 +136,7 @@ typedef struct ucs_profile_context ucs_profile_context_t;
 typedef short ucs_profile_loc_id_t;
 
 
-extern const char *ucs_profile_mode_names[];
 UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_profile_mode_names);
-
 extern ucs_profile_context_t *ucs_profile_default_ctx;
 
 

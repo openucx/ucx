@@ -57,7 +57,6 @@
 #endif
 
 
-extern const char *ucm_log_level_names[];
 UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucm_log_level_names);
 
 

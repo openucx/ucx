@@ -31,23 +31,19 @@ typedef enum {
     MATERIAL_TEXTILE
 } material_t;
 
-const char *color_names[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(color_names, {
     /* [COLOR_RED]    = */ "red",
     /* [COLOR_BLUE]   = */ "blue",
     /* [COLOR_BLACK]  = */ "black",
     /* [COLOR_YELLOW] = */ "yellow",
     /* [COLOR_WHITE]  = */ "white"
-};
+});
 
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(color_names);
-
-const char *material_names[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(material_names, {
     /* [MATERIAL_LEATHER]   = */ "leather",
     /* [MATERIAL_ALCANTARA] = */ "alcantara",
     /* [MATERIAL_TEXTILE]   = */ "textile"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(material_names);
+});
 
 typedef struct {
     color_t         color;

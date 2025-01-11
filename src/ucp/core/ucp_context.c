@@ -83,23 +83,19 @@ ucp_am_handler_t *ucp_am_handlers[UCP_AM_ID_LAST] = {
     UCP_AM_HANDLER_FOREACH(UCP_AM_HANDLER_ENTRY)
 };
 
-static const char *ucp_atomic_modes[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_atomic_modes, {
     [UCP_ATOMIC_MODE_CPU]    = "cpu",
     [UCP_ATOMIC_MODE_DEVICE] = "device",
     [UCP_ATOMIC_MODE_GUESS]  = "guess"
-};
+});
 
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_atomic_modes);
-
-static const char *ucp_fence_modes[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_fence_modes, {
     [UCP_FENCE_MODE_WEAK]   = "weak",
     [UCP_FENCE_MODE_STRONG] = "strong",
     [UCP_FENCE_MODE_AUTO]   = "auto"
-};
+});
 
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_fence_modes);
-
-static const char *ucp_rndv_modes[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_rndv_modes, {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
     [UCP_RNDV_MODE_PUT_ZCOPY]    = "put_zcopy",
@@ -107,9 +103,7 @@ static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_PUT_PIPELINE] = "put_ppln",
     [UCP_RNDV_MODE_AM]           = "am",
     [UCP_RNDV_MODE_RKEY_PTR]     = "rkey_ptr"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_rndv_modes);
+});
 
 static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_HOST]         = 512 * UCS_KBYTE,
@@ -137,19 +131,15 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
-const char *ucp_object_versions[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_object_versions, {
     [UCP_OBJECT_VERSION_V1]   = "v1",
     [UCP_OBJECT_VERSION_V2]   = "v2"
-};
+});
 
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_object_versions);
-
-const char *ucp_extra_op_attr_flags_names[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_extra_op_attr_flags_names, {
     [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FAST_CMPL)]      = "fast_cmpl",
     [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_MULTI_SEND)]     = "multi_send"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_extra_op_attr_flags_names);
+});
 
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
@@ -686,7 +676,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
 };
 
 
-const char *ucp_feature_str[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_feature_str, {
     [ucs_ilog2(UCP_FEATURE_TAG)]    = "UCP_FEATURE_TAG",
     [ucs_ilog2(UCP_FEATURE_RMA)]    = "UCP_FEATURE_RMA",
     [ucs_ilog2(UCP_FEATURE_AMO32)]  = "UCP_FEATURE_AMO32",
@@ -694,9 +684,8 @@ const char *ucp_feature_str[] = {
     [ucs_ilog2(UCP_FEATURE_WAKEUP)] = "UCP_FEATURE_WAKEUP",
     [ucs_ilog2(UCP_FEATURE_STREAM)] = "UCP_FEATURE_STREAM",
     [ucs_ilog2(UCP_FEATURE_AM)]     = "UCP_FEATURE_AM"
-};
+});
 
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucp_feature_str);
 
 const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX}};
 const ucp_tl_bitmap_t ucp_tl_bitmap_min = {{0}};

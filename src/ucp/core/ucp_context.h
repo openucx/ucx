@@ -578,8 +578,6 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 
 extern ucp_am_handler_t *ucp_am_handlers[];
-extern const char       *ucp_feature_str[];
-
 UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucp_feature_str);
 
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,

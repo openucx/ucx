@@ -27,9 +27,7 @@ typedef enum {
     UCS_STATS_SUMMARY      /* Summary statistics report */
 } ucs_stats_formats_t;
 
-extern const char *ucs_stats_formats_names[];
 UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_stats_formats_names);
-
 ucs_stats_node_t * ucs_stats_get_root(void);
 
 END_C_DECLS

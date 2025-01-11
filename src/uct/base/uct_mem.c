@@ -29,16 +29,13 @@ typedef struct {
 } uct_iface_mp_priv_t;
 
 
-const char *uct_alloc_method_names[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_alloc_method_names, {
     [UCT_ALLOC_METHOD_THP]  = "thp",
     [UCT_ALLOC_METHOD_MD]   = "md",
     [UCT_ALLOC_METHOD_HEAP] = "heap",
     [UCT_ALLOC_METHOD_MMAP] = "mmap",
     [UCT_ALLOC_METHOD_HUGE] = "huge",
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(uct_alloc_method_names);
-
+});
 
 static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 {

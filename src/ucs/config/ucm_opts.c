@@ -19,13 +19,11 @@
 
 #define UCM_CONFIG_PREFIX   "MEM_"
 
-static const char *ucm_module_unload_prevent_modes[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_module_unload_prevent_modes, {
     [UCM_UNLOAD_PREVENT_MODE_LAZY] = "lazy",
     [UCM_UNLOAD_PREVENT_MODE_NOW]  = "now",
     [UCM_UNLOAD_PREVENT_MODE_NONE] = "none"
-};
-
-UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_module_unload_prevent_modes);
+});
 
 static ucs_config_field_t ucm_global_config_table[] = {
   {"LOG_LEVEL", "warn",
