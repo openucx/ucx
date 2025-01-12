@@ -96,7 +96,7 @@
  * Fixed missing reg_id on memh creation
  * Fixed repeated invalidations by retaining existing access flags
  * Fixed abort reason propagation for rendezvous RTR mtype
- * Do not check transport availability if it is disabled by UCX_TLS environemnt variable
+ * Do not check transport availability if it is disabled by UCX_TLS environment variable
  * Fixed wrong flag being used for checking BCOPY capability
  * Fixed sending too many ATPs for small messages
  * Enforced 16 bits size for Active Messages identifiers
