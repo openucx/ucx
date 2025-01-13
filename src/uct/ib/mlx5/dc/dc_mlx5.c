@@ -140,6 +140,12 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dcis_initial_capacity),
      UCS_CONFIG_TYPE_UINT},
 
+     {"FULL_HANDSHAKE_ADDED_LATENCY", "110ns",
+      "Amount of latency added to performance estimation of DC due to full handshake "
+      "(used when AR is enabled).",
+      ucs_offsetof(uct_dc_mlx5_iface_config_t, fhs_added_latency),
+      UCS_CONFIG_TYPE_TIME_UNITS},
+
     {NULL}
 };
 
@@ -241,6 +247,11 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                  sizeof(uct_dc_mlx5_iface_flush_addr_t) :
                                  sizeof(uct_dc_mlx5_iface_addr_t);
     iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
+
+    /* Full handshake is used when AR is enabled */
+    if (iface->super.config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_OOO_RW) {
+        iface_attr->latency.c += ucs_time_to_sec(iface->tx.fhs_added_latency);
+    }
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
                                    max_am_inline,
@@ -1662,6 +1673,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.fc_hard_req_progress_cb_id = UCS_CALLBACKQ_ID_NULL;
     self->tx.num_dci_pools              = 0;
     self->flags                         = 0;
+    self->tx.fhs_added_latency          = config->fhs_added_latency;
     self->tx.av_fl_mlid = self->super.super.super.path_bits[0] & 0x7f;
 
     kh_init_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
