@@ -384,10 +384,12 @@ uct_gga_mlx5_rkey_resolve_slow(const uct_gga_mlx5_rkey_hash_key_t *hash_key,
         goto err_out;
     }
 
-    attach_params.field_mask = 0;
+    /* TODO: this is a temporary solution to protect
+             @ref uct_ib_mlx5_md_t::umr::mkey_hash,
+             it should be reworked in PR #10236 */
     pthread_mutex_lock(&mem_attach_lock);
-    status = uct_ib_mlx5_devx_mem_attach(uct_md,
-                                         &rkey_handle->packed_mkey,
+    attach_params.field_mask = 0;
+    status = uct_ib_mlx5_devx_mem_attach(uct_md, &rkey_handle->packed_mkey,
                                          &attach_params,
                                          (uct_mem_h*)&rkey_bundle->memh);
     pthread_mutex_unlock(&mem_attach_lock);
@@ -846,10 +848,22 @@ uct_gga_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
             UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr,
                             IFACE_ADDR, NULL);
 
-    return (iface_addr != NULL) &&
-           (iface_addr->be_sys_image_guid ==
-            device->dev_attr.orig_attr.sys_image_guid) &&
-           uct_ib_iface_is_reachable_v2(tl_iface, params);
+    if (iface_addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "iface address is empty");
+        return 0;
+    }
+
+    if (iface_addr->be_sys_image_guid !=
+        device->dev_attr.orig_attr.sys_image_guid) {
+        uct_iface_fill_info_str_buf(
+                params,
+                "different GUID 0x%"PRIx64" (local) vs 0x%"PRIx64" (remote)",
+                be64toh(device->dev_attr.orig_attr.sys_image_guid),
+                be64toh(iface_addr->be_sys_image_guid));
+        return 0;
+    }
+
+    return uct_ib_iface_is_reachable_v2(tl_iface, params);
 }
 
 static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {

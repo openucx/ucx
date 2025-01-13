@@ -1068,6 +1068,10 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
         addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16;
     }
 
+    if (!md->config.enable_indirect_atomic) {
+        addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_NO_ATOMIC_OFFSET;
+    }
+
     return UCS_OK;
 }
 

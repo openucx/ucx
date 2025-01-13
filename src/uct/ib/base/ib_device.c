@@ -569,6 +569,11 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
     dev->async_events = async_events;
 
+    if (!dev->req_notify_cq_support) {
+        ucs_trace("%s does not support async event handling",
+                  uct_ib_device_name(dev));
+    }
+
     uct_ib_device_get_locality(ibv_get_device_name(ibv_device),
                                &dev->local_cpus);
 
