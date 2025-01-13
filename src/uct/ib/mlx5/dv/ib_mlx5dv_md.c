@@ -2167,9 +2167,49 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
-ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
-                                      const uct_ib_md_config_t *md_config,
-                                      uct_ib_md_t **p_md)
+ucs_status_t uct_ib_mlx5_devx_md_alloc(struct ibv_device *ibv_device,
+                                       size_t size, uct_ib_mlx5_md_t **md_p)
+{
+    struct ibv_context *ctx;
+    uct_ib_mlx5_md_t *md;
+    ucs_status_t status;
+
+    ctx = uct_ib_mlx5_devx_open_device(ibv_device);
+    if (ctx == NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_ib_mlx5_devx_check_event_channel(ctx);
+    if (status != UCS_OK) {
+        goto err_close_ctx;
+    }
+
+    md = ucs_derived_of(uct_ib_md_alloc(size, "ib_mlx5_devx_md", ctx),
+                        uct_ib_mlx5_md_t);
+    if (md == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_close_ctx;
+    }
+
+    *md_p = md;
+    return UCS_OK;
+
+err_close_ctx:
+    uct_ib_md_device_context_close(ctx);
+    return status;
+}
+
+void uct_ib_mlx5_devx_md_free(uct_ib_mlx5_md_t *md)
+{
+    struct ibv_context *ctx = md->super.dev.ibv_context;
+
+    uct_ib_md_free(&md->super);
+    uct_ib_md_device_context_close(ctx);
+}
+
+ucs_status_t uct_ib_mlx5_devx_md_init(uct_ib_mlx5_md_t *md,
+                                      struct ibv_device *ibv_device,
+                                      const uct_ib_md_config_t *md_config)
 {
     uint8_t lag_state = 0;
     size_t out_len    = UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out);
@@ -2179,9 +2219,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     ucs_status_t status;
     uint8_t log_max_qp;
     uint16_t vhca_id;
-    struct ibv_context *ctx;
     uct_ib_device_t *dev;
-    uct_ib_mlx5_md_t *md;
     unsigned max_rd_atomic_dc;
     ucs_mpool_params_t mp_params;
     int ksm_atomic;
@@ -2196,37 +2234,9 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     out       = buf;
     cap_2_out = UCS_PTR_BYTE_OFFSET(out, out_len);
 
-    if (!mlx5dv_is_supported(ibv_device)) {
-        status = UCS_ERR_UNSUPPORTED;
-        goto err_free_buffer;
-    }
-
-    if (md_config->devx == UCS_NO) {
-        status = UCS_ERR_UNSUPPORTED;
-        goto err_free_buffer;
-    }
-
-    ctx = uct_ib_mlx5_devx_open_device(ibv_device);
-    if (ctx == NULL) {
-        status = UCS_ERR_UNSUPPORTED;
-        goto err_free_buffer;
-    }
-
-    status = uct_ib_mlx5_devx_check_event_channel(ctx);
-    if (status != UCS_OK) {
-        goto err_free_context;
-    }
-
-    md = ucs_derived_of(uct_ib_md_alloc(sizeof(*md), "ib_mlx5_devx_md", ctx),
-                        uct_ib_mlx5_md_t);
-    if (md == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_free_context;
-    }
-
     status = uct_ib_mlx5_devx_check_uar(md);
     if (status != UCS_OK) {
-        goto err_free_md;
+        goto err_free_buffer;
     }
 
     dev          = &md->super.dev;
@@ -2244,7 +2254,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     dev->req_notify_cq_support = 1;
 
     cap    = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
-    status = uct_ib_mlx5_devx_query_cap(ctx,
+    status = uct_ib_mlx5_devx_query_cap(dev->ibv_context,
                                         UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                         (UCT_IB_MLX5_CAP_GENERAL << 1),
                                         out, out_len, "QUERY_HCA_CAP", 0);
@@ -2354,7 +2364,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     vhca_id = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, vhca_id);
 
-    status = uct_ib_mlx5_devx_query_cap_2(ctx, cap_2_out, out_len);
+    status = uct_ib_mlx5_devx_query_cap_2(dev->ibv_context, cap_2_out, out_len);
     if (status == UCS_OK) {
         cap_2 = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, cap_2_out, capability);
         if (uct_ib_mlx5_devx_check_xgvmi(cap_2, uct_ib_device_name(dev))) {
@@ -2377,7 +2387,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         uint8_t arg_size;
         int cap_ops, mode8b;
 
-        status = uct_ib_mlx5_devx_query_cap(ctx,
+        status = uct_ib_mlx5_devx_query_cap(dev->ibv_context,
                                             UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                             (UCT_IB_MLX5_CAP_ATOMIC << 1),
                                             out, out_len,
@@ -2482,7 +2492,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     uct_ib_mlx5_devx_init_flush_mr(md);
 
-    *p_md = &md->super;
     ucs_free(buf);
     return UCS_OK;
 
@@ -2493,10 +2502,6 @@ err_lock_destroy:
     uct_ib_md_close_common(&md->super);
 err_lru_cleanup:
     uct_ib_mlx5_devx_mr_lru_cleanup(md);
-err_free_md:
-    uct_ib_md_free(&md->super);
-err_free_context:
-    uct_ib_md_device_context_close(ctx);
 err_free_buffer:
     ucs_free(buf);
 err:
@@ -2509,6 +2514,37 @@ err:
     }
 
     return status;
+}
+
+static ucs_status_t
+uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
+                         const uct_ib_md_config_t *md_config,
+                         uct_ib_md_t **md_p)
+{
+    uct_ib_mlx5_md_t *md;
+    ucs_status_t status;
+
+    if (!mlx5dv_is_supported(ibv_device)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (md_config->devx == UCS_NO) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_ib_mlx5_devx_md_alloc(ibv_device, sizeof(*md), &md);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_mlx5_devx_md_init(md, ibv_device, md_config);
+    if (status != UCS_OK) {
+        uct_ib_mlx5_devx_md_free(md);
+        return status;
+    }
+
+    *md_p = &md->super;
+    return UCS_OK;
 }
 
 static void uct_ib_mlx5_devx_cleanup_flush_mr(uct_ib_mlx5_md_t *md)
