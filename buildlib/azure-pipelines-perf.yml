@@ -21,7 +21,7 @@ resources:
     type: github
     name: Mellanox-lab/PerfX
     endpoint: Mellanox-lab
-    ref: refs/tags/v1.0.1
+    ref: refs/tags/v1.0.2
 
 stages:
   - stage: Prepare
