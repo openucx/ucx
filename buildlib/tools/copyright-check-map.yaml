@@ -1,0 +1,25 @@
+general:
+  exclude:
+    - "\\.git.*"
+    - "\\.(yml|yaml|md|txt|mod|supp|log|m4|ac|conf|cu|awk|el|vim|pc|slurm|lua|install|prerm|S|json|xml|Dockerfile)"
+    - "NEWS|AUTHORS|LICENSE"
+    - "docs/*"
+    - "src/ucg/*" # Submodule
+    - "buildlib/*" # CI
+    - "contrib/ucx_perftest_config/msg_pow2*" # Must not contain header
+    - "test/gtest/common/googletest/*" # 3rd party files
+    - "src/ucs/datastruct/sglib.h" # 3rd party file
+    - "debian/rules.in" # 3rd party file
+    - "debian/changelog.in" # Must not contain header
+    - "debian/copyright"
+    - "debian/compat"
+    - "debian/source/format"
+
+bsd:
+  validate-spdx-license: true
+  include:
+    - ".*\\.(am|in|hpp|cpp|py|cc|h|c|sh|go|java|inl)$"
+    - "perftest_msg_pow2"
+    - "contrib/*"
+    - "debian/*"
+    - "src/*"

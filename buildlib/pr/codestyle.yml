@@ -123,3 +123,26 @@ jobs:
       - bash: |
           ./buildlib/tools/test_ctags.sh
         displayName: ctags generation test
+
+  - job: copyright_check
+    displayName: Copyright Check
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+
+      - bash: |
+          ./buildlib/tools/copyright_check.sh
+        displayName: Copyright Check
+
+      - task: PublishPipelineArtifact@1
+        displayName: Publish Repaired Files
+        inputs:
+          targetPath: $(System.DefaultWorkingDirectory)/copyright_repaired_files_$(Build.BuildId).tar.gz
+          artifact: CopyrightRepairedFiles
+        condition: failed()
