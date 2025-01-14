@@ -55,9 +55,9 @@ enum {
 };
 
 typedef struct {
-    uint8_t         flags;
-    uct_ib_uint24_t qp_num;
-    uct_ib_uint24_t flush_rkey;
+    uct_rc_mlx5_base_ep_address_t super;
+    uint8_t                       flags;
+    uct_ib_uint24_t               flush_rkey;
 } UCS_S_PACKED uct_gga_mlx5_ep_address_t;
 
 typedef struct {
@@ -465,7 +465,7 @@ uct_gga_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_gga_mlx5_ep_address_t *gga_addr = (uct_gga_mlx5_ep_address_t*)addr;
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
 
-    uct_ib_pack_uint24(gga_addr->qp_num, ep->super.tx.wq.super.qp_num);
+    uct_ib_pack_uint24(gga_addr->super.qp_num, ep->super.tx.wq.super.qp_num);
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
         gga_addr->flags = UCT_GGA_MLX5_EP_ADDRESS_FLAG_FLUSH_RKEY;
         uct_ib_pack_uint24(gga_addr->flush_rkey, md->flush_rkey >> 8);
@@ -499,7 +499,7 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                         &path_mtu);
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
-    qp_num = uct_ib_unpack_uint24(gga_ep_addr->qp_num);
+    qp_num = uct_ib_unpack_uint24(gga_ep_addr->super.qp_num);
     status = uct_rc_mlx5_iface_common_devx_connect_qp(
             iface, &ep->super.tx.wq.super, qp_num, &ah_attr, path_mtu,
             ep->super.super.path_index, iface->super.config.max_rd_atomic);
@@ -671,6 +671,17 @@ static uct_iface_ops_t uct_gga_mlx5_iface_tl_ops = {
 };
 
 static int
+uct_gga_mlx5_iface_is_same_device(const uct_iface_h tl_iface,
+                                  const uct_gga_mlx5_iface_addr_t *iface_addr)
+{
+    uct_ib_iface_t *iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_ib_device_t *device = uct_ib_iface_device(iface);
+
+    return iface_addr->be_sys_image_guid ==
+           device->dev_attr.orig_attr.sys_image_guid;
+}
+
+static int
 uct_gga_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
@@ -686,8 +697,7 @@ uct_gga_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (iface_addr->be_sys_image_guid !=
-        device->dev_attr.orig_attr.sys_image_guid) {
+    if (!uct_gga_mlx5_iface_is_same_device(tl_iface, iface_addr)) {
         uct_iface_fill_info_str_buf(
                 params,
                 "different GUID 0x%"PRIx64" (local) vs 0x%"PRIx64" (remote)",
@@ -699,6 +709,20 @@ uct_gga_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     return uct_ib_iface_is_reachable_v2(tl_iface, params);
 }
 
+static int
+uct_gga_mlx5_ep_is_connected(uct_ep_h tl_ep,
+                             const uct_ep_is_connected_params_t *params)
+{
+    const uct_gga_mlx5_iface_addr_t *iface_addr =
+            (const uct_gga_mlx5_iface_addr_t*)
+            UCS_PARAM_VALUE(UCT_EP_IS_CONNECTED_FIELD, params, iface_addr,
+                            IFACE_ADDR, NULL);
+
+    return (iface_addr != NULL) &&
+           uct_gga_mlx5_iface_is_same_device(tl_ep->iface, iface_addr) &&
+           uct_rc_mlx5_base_ep_is_connected(tl_ep, params);
+}
+
 static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
     .super = {
         .super = {
@@ -708,7 +732,7 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
             .ep_invalidate         = uct_rc_mlx5_base_ep_invalidate,
             .ep_connect_to_ep_v2   = uct_gga_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2 = uct_gga_mlx5_iface_is_reachable_v2,
-            .ep_is_connected       = ucs_empty_function_do_assert
+            .ep_is_connected       = uct_gga_mlx5_ep_is_connected
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
