@@ -893,7 +893,7 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
 
     ret = pthread_mutex_init(&md->mem_attach_lock, NULL);
     if (ret != 0) {
-        ucs_error("failed to initialize mutex");
+        ucs_error("pthread_mutex_init failed with error: %s", strerror(ret));
         status = UCS_ERR_IO_ERROR;
         uct_ib_mlx5_devx_md_close(&md->super.super.super);
         goto out_free_dev_list;
