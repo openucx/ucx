@@ -122,10 +122,8 @@ typedef struct {
     /* Pointer to the corresponding initialization data */
     const ucp_proto_init_elem_t *init_elem;
 
-#ifdef ENABLE_DEBUG_DATA
-    /* Usage counter */
+    /* Number of times this protocol was selected */
     unsigned                    selections;
-#endif
 } ucp_proto_config_t;
 
 
@@ -189,7 +187,7 @@ void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
 
 
 void ucp_proto_select_trace(ucp_worker_h worker,
-                            ucp_proto_select_t *proto_select);
+                            const ucp_proto_select_t *proto_select);
 
 
 void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,

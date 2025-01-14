@@ -22,7 +22,10 @@
 
 
 ucs_global_opts_t ucs_global_opts = {
-    .log_component         = {UCS_LOG_LEVEL_WARN, "UCX", "*"},
+    .log_component         = {UCS_LOG_LEVEL_WARN, "UCX", "*",
+                              UCS_LIST_INITIALIZER(
+                                    &ucs_global_opts.log_component.handlers,
+                                    &ucs_global_opts.log_component.handlers)},
     .log_print_enable      = 0,
     .log_file              = "",
     .log_file_size         = SIZE_MAX,
@@ -395,6 +398,8 @@ ucs_status_t ucs_global_opts_clone(void *dst)
         return status;
     }
 
+    ucs_list_head_init(&((ucs_global_opts_t *)dst)->log_component.handlers);
+
     /* Both modifiable and read-only tables of global options use the common
      * storage for parameters. So, cloning parameters to the same destination
      * is ok due to different offsets of parameter's fields in the storage */
@@ -434,6 +439,7 @@ static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 32);
     unsigned log_level;
+    ucs_log_event_handler_t *handler;
 
     ucs_string_buffer_appendf(&strb, "%s", buffer);
     ucs_string_buffer_rtrim(&strb, "\n");
@@ -443,6 +449,10 @@ static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
     }
 
     ucs_global_opts.log_component.log_level = log_level;
+    ucs_list_for_each(handler, &ucs_global_opts.log_component.handlers, list) {
+        handler->cb(handler->ctx);
+    }
+
     return UCS_OK;
 }
 
@@ -479,6 +489,8 @@ void ucs_global_opts_init()
     ucs_vfs_obj_add_dir(NULL, &ucs_global_opts, "ucs/global_opts");
     ucs_vfs_obj_add_rw_file(&ucs_global_opts, ucs_vfs_read_log_level,
                             ucs_vfs_write_log_level, NULL, 0, "log_level");
+
+    ucs_list_head_init(&ucs_global_opts.log_component.handlers);
 }
 
 void ucs_global_opts_cleanup()

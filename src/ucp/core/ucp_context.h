@@ -427,6 +427,12 @@ typedef struct ucp_context {
         /* Progress wrapper enabled */
         int                       progress_wrapper_enabled;
 
+        /* Indicate whether tracing for protocol selections is enabled */
+        int                       trace_proto_selections;
+
+        /* Indicate whether tracing for used protocol selections is enabled */
+        int                       trace_used_proto_selections;
+
         struct {
            unsigned               count;
            size_t                 *sizes;
@@ -446,6 +452,9 @@ typedef struct ucp_context {
 
     /* Save cached uct configurations */
     ucs_list_link_t               cached_key_list;
+
+    /* Log event handler */
+    ucs_log_event_handler_t       log_event_handler;
 } ucp_context_t;
 
 

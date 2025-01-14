@@ -293,7 +293,7 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         freq->send.rndv.offset         = req->send.rndv.offset +
                                          req->send.state.dt_iter.offset;
 
-        ucp_proto_request_set_proto(freq, &rpriv->frag_proto_cfg,
+        ucp_proto_request_set_proto(worker, freq, &rpriv->frag_proto_cfg,
                                     freq->send.state.dt_iter.length);
 
         ucp_trace_req(req, "send freq %p offset %zu size %zu", freq,

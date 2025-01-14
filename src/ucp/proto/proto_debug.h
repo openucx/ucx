@@ -154,7 +154,7 @@ void ucp_proto_perf_node_replace(ucp_proto_perf_node_t **old_perf_node_p,
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,
                                  const ucp_proto_select_param_t *select_param,
-                                 ucp_proto_select_elem_t *select_elem,
+                                 const ucp_proto_select_elem_t *select_elem,
                                  int show_used);
 
 

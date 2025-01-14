@@ -161,7 +161,7 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
     int bool_value;
 
     if (show_used) {
-        return !strcmp(proto_info_config, "used");
+        return context->config.trace_used_proto_selections;
     }
 
     if (ucs_config_sscanf_bool(proto_info_config, &bool_value, NULL)) {
@@ -174,7 +174,6 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
 static inline unsigned
 ucp_proto_select_elem_selections(const ucp_proto_select_elem_t *select_elem)
 {
-#ifdef ENABLE_DEBUG_DATA
     const ucp_proto_threshold_elem_t *thresh_elem = select_elem->thresholds;
     unsigned total_selections                     = 0;
 
@@ -183,9 +182,6 @@ ucp_proto_select_elem_selections(const ucp_proto_select_elem_t *select_elem)
     } while ((thresh_elem++)->max_msg_length < SIZE_MAX);
 
     return total_selections;
-#else
-    return 0;
-#endif
 }
 
 static void
@@ -193,8 +189,8 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
                            ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
                            const ucp_proto_select_param_t *select_param,
-                           ucp_proto_select_elem_t *select_elem, int show_all,
-                           int show_used, ucs_string_buffer_t *strb)
+                           const ucp_proto_select_elem_t *select_elem,
+                           int show_all, int show_used, ucs_string_buffer_t *strb)
 {
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);
@@ -1068,7 +1064,7 @@ out:
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,
                                  const ucp_proto_select_param_t *select_param,
-                                 ucp_proto_select_elem_t *select_elem,
+                                 const ucp_proto_select_elem_t *select_elem,
                                  int show_used)
 {
     const ucp_proto_config_t *proto_config = &select_elem->thresholds[0].proto_config;

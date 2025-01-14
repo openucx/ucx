@@ -2893,7 +2893,9 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker,
 void ucp_worker_destroy(ucp_worker_h worker)
 {
     ucs_debug("destroy worker %p", worker);
-    ucp_worker_trace_configs(worker);
+    if (worker->context->config.trace_used_proto_selections) {
+        ucp_worker_trace_configs(worker);
+    }
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
