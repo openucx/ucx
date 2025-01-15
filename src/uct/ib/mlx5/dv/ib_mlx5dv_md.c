@@ -909,7 +909,7 @@ uct_ib_devx_dereg_invalidate_rkey_check(uct_ib_mlx5_md_t *md,
     if (!(md->super.cap_flags & cap_mask)) {
         ucs_debug("%s: invalidate %s is not supported (rkey=0x%x)",
                   uct_ib_device_name(&md->super.dev), name, rkey);
-        return UCS_OK;
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (rkey == UCT_IB_INVALID_MKEY) {
