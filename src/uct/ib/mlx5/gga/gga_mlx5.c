@@ -99,6 +99,21 @@ uct_ib_mlx5_gga_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 }
 
 static ucs_status_t
+uct_ib_mlx5_gga_mem_attach(uct_md_h uct_md, const void *mkey_buffer,
+                           uct_md_mem_attach_params_t *params,
+                           uct_mem_h *memh_p)
+{
+    uct_gga_mlx5_md_t *gga_md = ucs_derived_of(uct_md, uct_gga_mlx5_md_t);
+    ucs_status_t status;
+
+    pthread_mutex_lock(&gga_md->mem_attach_lock);
+    status = uct_ib_mlx5_devx_mem_attach(uct_md, mkey_buffer, params, memh_p);
+    pthread_mutex_unlock(&gga_md->mem_attach_lock);
+    return status;
+}
+
+
+static ucs_status_t
 uct_ib_mlx5_gga_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                           void *address, size_t length,
                           const uct_md_mkey_pack_params_t *params,
@@ -836,7 +851,7 @@ static uct_md_ops_t uct_mlx5_gga_md_ops = {
     .mem_free           = uct_ib_mlx5_devx_device_mem_free,
     .mem_reg            = uct_ib_mlx5_devx_mem_reg,
     .mem_dereg          = uct_ib_mlx5_devx_mem_dereg,
-    .mem_attach         = uct_ib_mlx5_devx_mem_attach,
+    .mem_attach         = uct_ib_mlx5_gga_mem_attach,
     .mem_advise         = uct_ib_mem_advise,
     .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
     .detect_memory_type = ucs_empty_function_return_unsupported,
