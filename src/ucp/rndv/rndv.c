@@ -1730,7 +1730,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
             ucp_datatype_iter_mem_reg(context, &rreq->recv.dt_iter,
                                       context->reg_md_map[mem_type] &
                                               ep_config->key.rma_bw_md_map,
-                                      UCT_MD_MEM_ACCESS_ALL,
+                                      UCT_MD_MEM_ACCESS_RMA,
                                       UCS_BIT(UCP_DATATYPE_CONTIG));
 
             rtr_md_map = ep_config->key.rma_bw_md_map;
