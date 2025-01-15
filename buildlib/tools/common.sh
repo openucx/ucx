@@ -109,34 +109,6 @@ prepare_build() {
 }
 
 #
-# Test if an environment module exists and load it if yes.
-# Otherwise, return error code.
-#
-module_load() {
-	set +x
-	module=$1
-	m_avail="$(module avail $module 2>&1)" || true
-
-	if module avail -t 2>&1 | grep -q "^$module\$"
-	then
-		module load $module
-		set -x
-		return 0
-	else
-		set -x
-		return 1
-	fi
-}
-
-#
-# Safe unload for env modules (even if it doesn't exist)
-#
-module_unload() {
-	module=$1
-	module unload "${module}" || true
-}
-
-#
 # Get list IB devices
 #
 get_ib_devices() {

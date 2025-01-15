@@ -121,7 +121,7 @@ int main(int argc, char **argv)
     printf("opening '%s'\n", filename);
     handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
     if (handle == NULL) {
-        fprintf(stderr, "failed to open %s: %m\n", filename);
+        fprintf(stderr, "failed to open %s: %s\n", filename, dlerror());
         ret = -1;
         goto failed_dlopen;
     }

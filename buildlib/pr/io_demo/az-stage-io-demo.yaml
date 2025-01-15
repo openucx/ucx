@@ -34,6 +34,7 @@ steps:
 - bash: |
     set -eEx
     source $(workspace)/buildlib/az-helpers.sh
+    trap "log_info_on_exit" EXIT
     $(workspace)/buildlib/az-network-corrupter.sh \
       initial_delay=${{ parameters.initial_delay }} \
       cycles=$(cycles) \
@@ -56,6 +57,7 @@ steps:
 - bash: |
     set -eEx
     source $(workspace)/buildlib/az-helpers.sh
+    trap "log_info_on_exit" EXIT
     sudo /hpc/local/bin/lshca
     mkdir -p $(workspace)/${{ parameters.name }}
     # set UCX environment variables
@@ -100,7 +102,7 @@ steps:
             -t 60 \
             ${{ parameters.iodemo_args }}
   displayName: Launch with run_io_demo.sh ( ${{ parameters.name }} )
-  timeoutInMinutes: 15
+  timeoutInMinutes: 20
 
 - bash: |
     set -eEx
