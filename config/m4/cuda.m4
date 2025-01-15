@@ -52,6 +52,13 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          AS_IF([test "x$cuda_happy" = "xyes"],
                [AC_CHECK_LIB([cudart], [cudaGetDeviceCount],
                              [CUDART_LIBS="$CUDART_LIBS -lcudart"], [cuda_happy="no"])])
+         # Check optional cuda library members
+         AS_IF([test "x$cuda_happy" = "xyes"],
+               [AC_CHECK_LIB([cuda], [cuMemRetainAllocationHandle],
+                             [AC_DEFINE([HAVE_CUMEMRETAINALLOCATIONHANDLE], [1],
+                                        [Enable cuMemRetainAllocationHandle() usage])]),
+                AC_CHECK_DECLS([CU_MEM_LOCATION_TYPE_HOST],
+                               [], [], [[#include <cuda.h>]])])
 
          # Check nvml header files
          AS_IF([test "x$cuda_happy" = "xyes"],
