@@ -282,9 +282,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_gga_mlx5_rkey_resolve(uct_gga_mlx5_md_t *md,
                           uct_gga_mlx5_rkey_handle_t *rkey_handle)
 {
-    uct_md_h uct_md                         = &md->super.super.super;
-    uct_md_mem_attach_params_t atach_params = { 0 };
-    uct_md_mkey_pack_params_t repack_params = { 0 };
+    uct_md_h uct_md                          = &md->super.super.super;
+    uct_md_mem_attach_params_t attach_params = { 0 };
+    uct_md_mkey_pack_params_t repack_params  = { 0 };
     uint64_t repack_mkey;
     ucs_status_t status;
 
@@ -293,11 +293,9 @@ uct_gga_mlx5_rkey_resolve(uct_gga_mlx5_md_t *md,
         return UCS_OK;
     }
 
-    pthread_mutex_lock(&md->mem_attach_lock);
-    status = uct_ib_mlx5_devx_mem_attach(uct_md, &rkey_handle->packed_mkey,
-                                         &atach_params,
-                                         (uct_mem_h *)&rkey_handle->memh);
-    pthread_mutex_unlock(&md->mem_attach_lock);
+    status = uct_ib_mlx5_gga_mem_attach(uct_md, &rkey_handle->packed_mkey,
+                                        &attach_params,
+                                        (uct_mem_h *)&rkey_handle->memh);
     if (status != UCS_OK) {
         goto err_out;
     }
