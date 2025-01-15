@@ -32,13 +32,22 @@ static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_fast_lane(ucp_ep_h ep,
 static UCS_F_ALWAYS_INLINE uct_ep_h
 ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
 {
+    ucp_lane_index_t slow_lane_index;
+    uct_ep_h slow_lane_ep;
+
     ucs_assertv(lane_index < UCP_MAX_LANES, "lane=%d", lane_index);
 
     if (ucs_likely(lane_index < UCP_MAX_FAST_PATH_LANES)) {
         return ep->uct_eps[lane_index];
-    } else {
-        return ep->ext->uct_eps[lane_index - UCP_MAX_FAST_PATH_LANES];
     }
+
+    slow_lane_index = lane_index - UCP_MAX_FAST_PATH_LANES;
+    slow_lane_ep    = ep->ext->uct_eps[slow_lane_index];
+    if (ucs_likely(slow_lane_ep != NULL)) {
+        return slow_lane_ep;
+    }
+
+    return ucp_wireup_init_slow_lane(ep, slow_lane_index);
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,
