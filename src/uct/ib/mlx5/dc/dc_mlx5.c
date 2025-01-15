@@ -258,8 +258,10 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     }
 #endif
 
-    /* Full handshake is used when AR is enabled */
-    if ((iface->super.config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_OOO_RW) ||
+    /* Full handshake is used when AR / DDP is enabled
+     * or when the user explicitly forces it
+     */
+    if ((iface->super.config.dp_ordering >= UCT_IB_MLX5_DP_ORDERING_OOO_RW) ||
         (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE) ||
         (UCS_BIT(iface->super.super.super.config.sl) & ooo_sl_mask)) {
         iface_attr->latency.c += ucs_time_to_sec(iface->tx.fhs_added_latency);
