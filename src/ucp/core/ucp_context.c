@@ -2224,8 +2224,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     /* Register context for log events */
     context->log_event_handler.cb  = ucp_context_log_event_handler;
     context->log_event_handler.ctx = context;
-    ucs_log_component_add_event_handler(&ucs_global_opts.log_component,
-                                        &context->log_event_handler);
+    ucs_global_opts_event_handler_add(&context->log_event_handler);
 
     ucp_context_log_event_handler(context);
     return UCS_OK;
@@ -2245,7 +2244,7 @@ err:
 
 static void ucp_free_config(ucp_context_h context)
 {
-    ucs_log_component_remove_event_handler(&context->log_event_handler);
+    ucs_global_opts_event_handler_remove(&context->log_event_handler);
     ucs_free(context->config.am_mpools.sizes);
     ucp_cached_key_list_release(&context->cached_key_list);
     ucs_free(context->config.alloc_methods);

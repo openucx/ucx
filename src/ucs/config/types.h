@@ -162,7 +162,6 @@ typedef struct ucs_log_component_config {
     ucs_log_level_t log_level;
     char            name[16];
     const char      *file_filter; /* glob pattern of source files */
-    ucs_list_link_t handlers;
 } ucs_log_component_config_t;
 
 
@@ -172,21 +171,6 @@ typedef struct {
     ucs_log_event_callback cb;
     void                   *ctx;
 } ucs_log_event_handler_t;
-
-
-static UCS_F_ALWAYS_INLINE void
-ucs_log_component_add_event_handler(ucs_log_component_config_t *conf,
-                                    ucs_log_event_handler_t *handler)
-{
-    ucs_list_add_tail(&conf->handlers, &handler->list);
-}
-
-
-static UCS_F_ALWAYS_INLINE void
-ucs_log_component_remove_event_handler(ucs_log_event_handler_t *handler)
-{
-    ucs_list_del(&handler->list);
-}
 
 
 #endif /* TYPES_H_ */

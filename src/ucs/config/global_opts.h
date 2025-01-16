@@ -180,6 +180,9 @@ ucs_status_t ucs_global_opts_clone(void *dst);
 void ucs_global_opts_release();
 void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags);
 
+void ucs_global_opts_event_handler_add(ucs_log_event_handler_t *handler);
+void ucs_global_opts_event_handler_remove(ucs_log_event_handler_t *handler);
+
 END_C_DECLS
 
 #endif

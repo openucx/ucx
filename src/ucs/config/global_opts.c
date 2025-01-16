@@ -19,13 +19,11 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/vfs/sock/vfs_sock.h>
 #include <sys/signal.h>
+#include <pthread.h>
 
 
 ucs_global_opts_t ucs_global_opts = {
-    .log_component         = {UCS_LOG_LEVEL_WARN, "UCX", "*",
-                              UCS_LIST_INITIALIZER(
-                                    &ucs_global_opts.log_component.handlers,
-                                    &ucs_global_opts.log_component.handlers)},
+    .log_component         = {UCS_LOG_LEVEL_WARN, "UCX", "*"},
     .log_print_enable      = 0,
     .log_file              = "",
     .log_file_size         = SIZE_MAX,
@@ -350,6 +348,42 @@ UCS_CONFIG_DECLARE_TABLE(ucs_global_opts_read_only_table,
                          "UCS global (runtime read-only)", NULL,
                          ucs_global_opts_t)
 
+typedef struct {
+    ucs_list_link_t handlers;
+    pthread_mutex_t lock;
+} ucs_global_opts_log_event_handler_t;
+
+static ucs_global_opts_log_event_handler_t ucs_global_log_handler = {
+    .handlers = UCS_LIST_INITIALIZER(&ucs_global_log_handler.handlers,
+                                     &ucs_global_log_handler.handlers),
+    .lock     = PTHREAD_MUTEX_INITIALIZER
+};
+
+void ucs_global_opts_event_handler_add(ucs_log_event_handler_t *handler)
+{
+    pthread_mutex_lock(&ucs_global_log_handler.lock);
+    ucs_list_add_tail(&ucs_global_log_handler.handlers, &handler->list);
+    pthread_mutex_unlock(&ucs_global_log_handler.lock);
+}
+
+void ucs_global_opts_event_handler_remove(ucs_log_event_handler_t *handler)
+{
+    pthread_mutex_lock(&ucs_global_log_handler.lock);
+    ucs_list_del(&handler->list);
+    pthread_mutex_unlock(&ucs_global_log_handler.lock);
+}
+
+static void ucs_global_opts_event_handler_notify(void)
+{
+    ucs_log_event_handler_t *handler;
+
+    pthread_mutex_lock(&ucs_global_log_handler.lock);
+    ucs_list_for_each(handler, &ucs_global_log_handler.handlers, list) {
+        handler->cb(handler->ctx);
+    }
+    pthread_mutex_unlock(&ucs_global_log_handler.lock);
+}
+
 
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
 {
@@ -398,8 +432,6 @@ ucs_status_t ucs_global_opts_clone(void *dst)
         return status;
     }
 
-    ucs_list_head_init(&((ucs_global_opts_t *)dst)->log_component.handlers);
-
     /* Both modifiable and read-only tables of global options use the common
      * storage for parameters. So, cloning parameters to the same destination
      * is ok due to different offsets of parameter's fields in the storage */
@@ -439,7 +471,6 @@ static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 32);
     unsigned log_level;
-    ucs_log_event_handler_t *handler;
 
     ucs_string_buffer_appendf(&strb, "%s", buffer);
     ucs_string_buffer_rtrim(&strb, "\n");
@@ -449,10 +480,7 @@ static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
     }
 
     ucs_global_opts.log_component.log_level = log_level;
-    ucs_list_for_each(handler, &ucs_global_opts.log_component.handlers, list) {
-        handler->cb(handler->ctx);
-    }
-
+    ucs_global_opts_event_handler_notify();
     return UCS_OK;
 }
 
@@ -489,8 +517,6 @@ void ucs_global_opts_init()
     ucs_vfs_obj_add_dir(NULL, &ucs_global_opts, "ucs/global_opts");
     ucs_vfs_obj_add_rw_file(&ucs_global_opts, ucs_vfs_read_log_level,
                             ucs_vfs_write_log_level, NULL, 0, "log_level");
-
-    ucs_list_head_init(&ucs_global_opts.log_component.handlers);
 }
 
 void ucs_global_opts_cleanup()
