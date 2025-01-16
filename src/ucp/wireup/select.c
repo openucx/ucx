@@ -607,9 +607,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             }
 
             score          = criteria->calc_score(wiface, md_attr, address, ae,
-                                                  select_params->ep_init_flags &
-                                                  UCP_EP_INIT_FLAG_PRIORITIZED,
-                                                  criteria->arg);
+                                                  0, criteria->arg);
             priority       = iface_attr->priority + ae->iface_attr.priority;
             is_reachable   = 1;
 
