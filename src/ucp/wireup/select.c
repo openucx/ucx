@@ -415,7 +415,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uct_iface_attr_t *iface_attr;
     uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
-    int is_reachable, is_prioritized;
+    int is_reachable;
     double score;
     uint8_t priority;
     ucp_md_index_t md_index;
@@ -606,10 +606,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                 continue;
             }
 
-            is_prioritized = select_params->ep_init_flags &
-                             UCP_EP_INIT_FLAG_PRIORITIZED;
             score          = criteria->calc_score(wiface, md_attr, address, ae,
-                                                  is_prioritized,
+                                                  select_params->ep_init_flags &
+                                                  UCP_EP_INIT_FLAG_PRIORITIZED,
                                                   criteria->arg);
             priority       = iface_attr->priority + ae->iface_attr.priority;
             is_reachable   = 1;
