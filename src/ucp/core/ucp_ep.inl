@@ -289,9 +289,4 @@ ucp_ep_config_err_mode_eq(ucp_ep_h ep, ucp_err_handling_mode_t err_mode)
     return ucp_ep_config(ep)->key.err_mode == err_mode;
 }
 
-static UCS_F_ALWAYS_INLINE int ucp_ep_is_prioritized(unsigned ep_init_flags)
-{
-    return ep_init_flags & UCP_EP_INIT_FLAG_PRIORITIZED;
-}
-
 #endif
