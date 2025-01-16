@@ -304,6 +304,59 @@ err_mem_release:
     return UCS_ERR_NO_MEMORY;
 }
 
+typedef CUresult (*uct_cuda_cuCtxSetFlags_t)(unsigned);
+
+static void uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md,
+                                      const void *address, int is_vmm)
+{
+    unsigned sync_memops_value = 1;
+#if HAVE_CUDA_FABRIC
+    static uct_cuda_cuCtxSetFlags_t cuda_cuCtxSetFlags_func =
+        (uct_cuda_cuCtxSetFlags_t)ucs_empty_function;
+    CUdriverProcAddressQueryResult sym_status;
+    CUresult cu_err;
+    ucs_status_t status;
+
+    if (md->sync_memops_set) {
+        return;
+    }
+
+    if (cuda_cuCtxSetFlags_func ==
+        (uct_cuda_cuCtxSetFlags_t)ucs_empty_function) {
+        cu_err = cuGetProcAddress("cuCtxSetFlags",
+                                  (void**)&cuda_cuCtxSetFlags_func, 12010,
+                                  CU_GET_PROC_ADDRESS_DEFAULT, &sym_status);
+        if ((cu_err != CUDA_SUCCESS) ||
+            (sym_status != CU_GET_PROC_ADDRESS_SUCCESS)) {
+            cuda_cuCtxSetFlags_func = NULL;
+        }
+    }
+
+    if (cuda_cuCtxSetFlags_func != NULL) {
+        /* Synchronize future DMA operations for all memory types */
+        status = UCT_CUDADRV_FUNC_LOG_WARN(
+                    cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS));
+        if (status == UCS_OK) {
+            md->sync_memops_set = 1;
+        }
+
+        return;
+    }
+#endif
+
+    if (is_vmm) {
+        ucs_warn("cannot set sync_memops on CUDA VMM without cuCtxSetFlags() "
+                 "(address=%p)", address);
+        return;
+    }
+
+    /* Synchronize for DMA for legacy memory types */
+    UCT_CUDADRV_FUNC_LOG_WARN(
+            cuPointerSetAttribute(&sync_memops_value,
+                                  CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+                                  (CUdeviceptr)address));
+}
+
 static ucs_status_t
 uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                         ucs_memory_type_t mem_type, unsigned flags,
@@ -379,6 +432,9 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     }
 
 allocated:
+    uct_cuda_copy_sync_memops(md, (void *)alloc_handle->ptr,
+                              alloc_handle->is_vmm);
+
     *memh_p    = alloc_handle;
     *address_p = (void*)alloc_handle->ptr;
     *length_p  = alloc_handle->length;
@@ -414,7 +470,7 @@ static int uct_cuda_copy_detect_vmm(void *address,
                                     ucs_memory_type_t *vmm_mem_type,
                                     CUdevice *cuda_device)
 {
-#if HAVE_CUDA_FABRIC
+#ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
     ucs_status_t status      = UCS_OK;
     CUmemAllocationProp prop = {};
     CUmemGenericAllocationHandle alloc_handle;
@@ -437,12 +493,15 @@ static int uct_cuda_copy_detect_vmm(void *address,
     }
 
     *cuda_device = (CUdevice)prop.location.id;
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_HOST
     if ((prop.location.type == CU_MEM_LOCATION_TYPE_HOST) ||
         (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA) ||
         (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT)) {
         /* TODO: Marking as CUDA to allow cuda_ipc access vmm for now */
         *vmm_mem_type = UCS_MEMORY_TYPE_CUDA;
-    } else if (prop.location.type == CU_MEM_LOCATION_TYPE_DEVICE) {
+    } else
+#endif
+    if (prop.location.type == CU_MEM_LOCATION_TYPE_DEVICE) {
         *vmm_mem_type = UCS_MEMORY_TYPE_CUDA;
     }
 
@@ -510,27 +569,6 @@ static size_t uct_cuda_copy_md_get_total_device_mem(CUdevice cuda_device)
 err:
     pthread_mutex_unlock(&lock);
     return 1; /* return 1 byte to avoid division by zero */
-}
-
-static void
-uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md, const void *address)
-{
-#if HAVE_CUDA_FABRIC
-    ucs_status_t status;
-    if (!md->sync_memops_set) {
-        /* Synchronize future DMA operations for all memory types */
-        status = UCT_CUDADRV_FUNC_LOG_WARN(cuCtxSetFlags(CU_CTX_SYNC_MEMOPS));
-        if (status == UCS_OK) {
-            md->sync_memops_set = 1;
-        }
-    }
-#else
-    unsigned value = 1;
-    /* Synchronize for DMA for legacy memory types*/
-    UCT_CUDADRV_FUNC_LOG_WARN(
-            cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
-                                  (CUdeviceptr)address));
-#endif
 }
 
 static ucs_status_t
@@ -636,7 +674,7 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         return UCS_ERR_NO_DEVICE;
     }
 
-    uct_cuda_copy_sync_memops(md, address);
+    uct_cuda_copy_sync_memops(md, address, is_vmm);
 
     /* Extending the registration range is disable by configuration */
     if (md->config.alloc_whole_reg == UCS_CONFIG_OFF) {
