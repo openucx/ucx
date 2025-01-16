@@ -646,7 +646,7 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 }
 
 static UCS_F_ALWAYS_INLINE double
-ucp_context_get_num_eps(ucp_context_h context, int is_prioritized)
+ucp_context_get_est_num_eps(ucp_context_h context, int is_prioritized)
 {
     return is_prioritized ? context->config.ext.prio_est_num_eps :
                             context->config.est_num_eps;
@@ -657,7 +657,7 @@ ucp_tl_iface_latency_with_priority(ucp_context_h context,
                                    const ucs_linear_func_t *latency,
                                    int is_prioritized)
 {
-    unsigned num_eps = ucp_context_get_num_eps(context, is_prioritized);
+    unsigned num_eps = ucp_context_get_est_num_eps(context, is_prioritized);
 
     return ucs_linear_func_apply(*latency, num_eps);
 }
