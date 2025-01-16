@@ -51,6 +51,10 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
      ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.c), UCS_CONFIG_TYPE_TIME},
 
+    {"RCACHE_OVERHEAD", "250ns", "gdr_copy registration cache lookup overhead",
+     ucs_offsetof(uct_gdr_copy_md_config_t, rcache_overhead),
+     UCS_CONFIG_TYPE_TIME},
+
     {NULL}
 };
 
@@ -476,7 +480,7 @@ uct_gdr_copy_md_create(uct_component_t *component,
     }
 
     md->super.ops = &uct_gdr_copy_md_rcache_ops;
-    md->reg_cost  = UCS_LINEAR_FUNC_ZERO;
+    md->reg_cost  = ucs_linear_func_make(md_config->rcache_overhead, 0);
 
 out:
     *md_p = md;
