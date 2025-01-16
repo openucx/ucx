@@ -2084,7 +2084,6 @@ double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface,
     if (context->config.ext.proto_enable) {
         lat.c += wiface->distance.latency;
     }
-
     return ucp_tl_iface_latency_with_priority(context, &lat, is_prioritized);
 }
 

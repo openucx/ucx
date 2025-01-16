@@ -674,7 +674,7 @@ ucp_wireup_tl_iface_latency(const ucp_worker_iface_t *wiface,
     double local_lat, lat_lossy;
 
     if (unpacked_addr->addr_version == UCP_OBJECT_VERSION_V1) {
-        local_lat      = ucp_wireup_iface_lat_distance_v1(wiface);
+        local_lat = ucp_wireup_iface_lat_distance_v1(wiface);
         /* Address v1 contains just latency overhead */
         return ((local_lat + remote_iface_attr->lat_ovh) / 2) +
                (wiface->attr.latency.m *
@@ -1006,9 +1006,9 @@ static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
     }
 
     return 1e-3 /
-           (ucp_wireup_tl_iface_latency(wiface, unpacked_addr,
-                                        &remote_addr->iface_attr,
-                                        is_prioritized) +
+           (ucp_wireup_tl_iface_latency(
+                wiface, unpacked_addr, &remote_addr->iface_attr,
+                is_prioritized) +
             wiface->attr.overhead +
             (4096.0 / ucs_min(local_bw, remote_addr->iface_attr.bandwidth)));
 }
@@ -1032,9 +1032,9 @@ static double ucp_wireup_aux_score_func(const ucp_worker_iface_t *wiface,
 {
     /* best end-to-end latency and larger bcopy size */
     return (1e-3 /
-            (ucp_wireup_tl_iface_latency(wiface, unpacked_addr,
-                                         &remote_addr->iface_attr,
-                                         is_prioritized) +
+            (ucp_wireup_tl_iface_latency(
+                 wiface, unpacked_addr, &remote_addr->iface_attr,
+                 is_prioritized) +
              wiface->attr.overhead + remote_addr->iface_attr.overhead));
 }
 
@@ -1181,9 +1181,9 @@ double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
 {
     /* best one-sided latency */
     return 1e-3 /
-           (ucp_wireup_tl_iface_latency(wiface, unpacked_addr,
-                                        &remote_addr->iface_attr,
-                                        is_prioritized) +
+           (ucp_wireup_tl_iface_latency(
+                wiface, unpacked_addr, &remote_addr->iface_attr,
+                is_prioritized) +
             wiface->attr.overhead);
 }
 
@@ -1241,9 +1241,9 @@ ucp_wireup_am_score_func(const ucp_worker_iface_t *wiface,
 {
     /* best end-to-end latency */
     return 1e-3 /
-           (ucp_wireup_tl_iface_latency(wiface, unpacked_addr,
-                                        &remote_addr->iface_attr,
-                                        is_prioritized) +
+           (ucp_wireup_tl_iface_latency(
+                wiface, unpacked_addr, &remote_addr->iface_attr,
+                is_prioritized) +
             wiface->attr.overhead + remote_addr->iface_attr.overhead);
 }
 
