@@ -626,10 +626,9 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
     return UCS_OK;
 }
 
-uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order)
+uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
+                                  uint64_t access_flags)
 {
-    uint64_t access_flags = UCT_IB_MEM_ACCESS_FLAGS;
-
     if (memh->flags & UCT_IB_MEM_FLAG_ODP) {
         access_flags |= IBV_ACCESS_ON_DEMAND;
     }
@@ -661,7 +660,8 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     }
 
     memh         = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
-    access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order);
+    access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order,
+                                            md->dev.mr_access_flags);
 
     status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
                            &mr_default);
@@ -787,7 +787,11 @@ static const char *uct_ib_device_transport_type_name(struct ibv_device *device)
 static int uct_ib_device_is_supported(struct ibv_device *device)
 {
     /* TODO: enable additional transport types when ready */
-    int ret = device->transport_type == IBV_TRANSPORT_IB;
+    int ret =
+#if HAVE_DECL_IBV_TRANSPORT_UNSPECIFIED
+            (device->transport_type == IBV_TRANSPORT_UNSPECIFIED) ||
+#endif
+            (device->transport_type == IBV_TRANSPORT_IB);
     if (!ret) {
         ucs_debug("device %s of type %s is not supported",
                   device->dev_name, uct_ib_device_transport_type_name(device));
@@ -817,9 +821,10 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     return uct_ib_device_is_supported(device);
 }
 
-ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
-                                       uct_md_resource_desc_t **resources_p,
-                                       unsigned *num_resources_p)
+ucs_status_t
+uct_ib_base_query_md_resources(uct_md_resource_desc_t **resources_p,
+                               unsigned *num_resources_p,
+                               uct_ib_check_device_cb_t check_device_cb)
 {
     int num_resources = 0;
     uct_md_resource_desc_t *resources;
@@ -856,6 +861,11 @@ ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     for (i = 0; i < num_devices; ++i) {
         /* Skip non-existent and non-accessible devices */
         if (!uct_ib_device_is_accessible(device_list[i])) {
+            continue;
+        }
+
+        /* Skip not applicable devices */
+        if (!check_device_cb(device_list[i])) {
             continue;
         }
 
@@ -1099,6 +1109,15 @@ uct_ib_fork_init(const uct_ib_md_config_t *md_config, int *fork_init_p)
 
     *fork_init_p = 1;
     return UCS_OK;
+}
+
+static ucs_status_t
+uct_ib_query_md_resources(uct_component_t *component,
+                          uct_md_resource_desc_t **resources_p,
+                          unsigned *num_resources_p)
+{
+    return uct_ib_base_query_md_resources(resources_p, num_resources_p,
+                                          ucs_empty_function_return_one_int);
 }
 
 static ucs_status_t
@@ -1498,6 +1517,11 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     }
 
     md->super.ops = &uct_ib_verbs_md_ops.super;
+
+    dev->mr_access_flags       = UCT_IB_MEM_ACCESS_FLAGS;
+    dev->max_inline_data       = 4 * UCS_KBYTE;
+    dev->ordered_send_comp     = 1;
+    dev->req_notify_cq_support = 1;
 
     status = uct_ib_md_open_common(md, ibv_device, md_config);
     if (status != UCS_OK) {

@@ -36,6 +36,15 @@
 
 
 /**
+ * Callback function to check and filter out not applicable devices.
+ *
+ * @param [in]      device      IB device.
+ * @return 1 for acceptable device, otherwise 0.
+ */
+typedef int (*uct_ib_check_device_cb_t)(struct ibv_device *device);
+
+
+/**
  * IB MD statistics counters
  */
 enum {
@@ -388,7 +397,8 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             uint64_t access_flags, size_t mr_num,
                             struct ibv_mr **mrs);
 
-uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order);
+uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
+                                  uint64_t access_flags);
 
 ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,
@@ -406,9 +416,10 @@ ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
                                 const void *rkey_buffer, uct_rkey_t *rkey_p,
                                 void **handle_p);
 
-ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
-                                       uct_md_resource_desc_t **resources_p,
-                                       unsigned *num_resources_p);
+ucs_status_t
+uct_ib_base_query_md_resources(uct_md_resource_desc_t **resources_p,
+                               unsigned *num_resources_p,
+                               uct_ib_check_device_cb_t check_device_cb);
 
 ucs_status_t uct_ib_get_device_by_name(struct ibv_device **ib_device_list,
                                        int num_devices, const char *md_name,

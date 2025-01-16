@@ -27,7 +27,9 @@
 
 enum {
     /* EP address includes flush_rkey value */
-    UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY = UCS_BIT(0)
+    UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY       = UCS_BIT(0),
+    /* atomic key has no offset */
+    UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1)
 };
 
 
@@ -62,14 +64,17 @@ typedef struct {
     uct_ib_mlx5_mmio_reg_t        *reg; /* Doorbell register */
 } uct_rc_mlx5_iface_qp_cleanup_ctx_t;
 
+typedef struct uct_rc_mlx5_base_ep_address {
+    uct_ib_uint24_t qp_num;
+} UCS_S_PACKED uct_rc_mlx5_base_ep_address_t;
 
 typedef struct uct_rc_mlx5_ep_address {
-    uct_ib_uint24_t  qp_num;
+    uct_rc_mlx5_base_ep_address_t super;
     /* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
      * another one for HW (device will use it for RDMA reads and sending RNDV
      * Complete messages). */
-    uct_ib_uint24_t  tm_qp_num;
-    uint8_t          atomic_mr_id;
+    uct_ib_uint24_t               tm_qp_num;
+    uint8_t                       atomic_mr_id;
 } UCS_S_PACKED uct_rc_mlx5_ep_address_t;
 
 
