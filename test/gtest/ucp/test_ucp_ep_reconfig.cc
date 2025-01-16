@@ -57,7 +57,7 @@ protected:
         bool is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
         ucp_tl_bitmap_t reduced_tl_bitmap() const;
-        unsigned num_shm_lanes() const;
+        unsigned num_shm_rscs() const;
 
         ucp_worker_cfg_index_t m_cfg_index       = UCP_WORKER_CFG_INDEX_NULL;
         unsigned               m_num_reused_rscs = 0;
@@ -110,10 +110,6 @@ public:
                             "there's matching remote MDs and different "
                             "sys_devs");
         }
-
-        if (has_transport("gga")) {
-            UCS_TEST_SKIP_R("TODO: add support for GGA");
-        }
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -153,7 +149,7 @@ public:
 
     void send_recv(bool bidirectional)
     {
-/* TODO: remove this when 100MB asan bug is solved */
+/* TODO: remove this when large messages asan bug is solved (size > ~70MB) */
 #ifdef __SANITIZE_ADDRESS__
         static const size_t msg_sizes[] = {8, 1024, 16384, 32768};
 #else
@@ -208,10 +204,10 @@ void test_ucp_ep_reconfig::entity::store_config()
     auto test         = static_cast<const test_ucp_ep_reconfig*>(m_test);
     m_num_reused_rscs = m_exclude_ifaces ?
                                 (test->reuse_lanes() ? num_reused : 0) :
-                                num_shm_lanes();
+                                num_shm_rscs();
 }
 
-unsigned test_ucp_ep_reconfig::entity::num_shm_lanes() const
+unsigned test_ucp_ep_reconfig::entity::num_shm_rscs() const
 {
     unsigned num_shm = 0;
     auto tl_bitmap   = ep_tl_bitmap();
@@ -469,12 +465,12 @@ protected:
 
     void init() override
     {
-        static const std::string ib_tls[] = {"rc_mlx5", "dc_mlx5", "rc_verbs",
-                                             "ud_verbs", "ud_mlx5"};
+        static const std::vector<std::string> ib_tls = {"rc_mlx5", "dc_mlx5",
+                                                        "rc_verbs", "ud_verbs",
+                                                        "ud_mlx5"};
 
         test_ucp_ep_reconfig::init();
-        bool has_ib = std::any_of(ib_tls,
-                                  ib_tls + ucs_static_array_size(ib_tls),
+        bool has_ib = std::any_of(ib_tls.begin(), ib_tls.end(),
                                   [&](const std::string &tl_name) {
                                       return has_resource(sender(), tl_name);
                                   });
@@ -487,19 +483,17 @@ protected:
     }
 };
 
-UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, basic, !has_transport("ib"))
+UCS_TEST_P(test_reconfig_asymmetric, basic)
 {
     run();
 }
 
-UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, request_reset,
-                     !has_transport("ib"), "PROTO_REQUEST_RESET=y")
+UCS_TEST_P(test_reconfig_asymmetric, request_reset, "PROTO_REQUEST_RESET=y")
 {
     run();
 }
 
-UCS_TEST_SKIP_COND_P(test_reconfig_asymmetric, resolve_remote_id,
-                     !has_transport("ib"))
+UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
 {
     run(true);
 }

@@ -700,7 +700,10 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     send_reply = /* Always send the reply in case of CM, the client's EP has to
                   * be marked as REMOTE_CONNECTED */
             has_cm_lane || (msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID) ||
-            ucp_ep_config(ep)->p2p_lanes || is_am_replaced;
+            ucp_ep_config(ep)->p2p_lanes ||
+            /* Ensure AM messages sending order is kept by sending wireup
+             * reply, in case old lane is replaced */
+            is_am_replaced;
 
     /* Connect p2p addresses to remote endpoint, if at least one is true: */
     if (/* - EP has not been connected locally yet */
@@ -723,7 +726,10 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     /* don't mark as connected to remote now in case of CM, since it destroys
      * CM wireup EP (if it is hidden in the CM lane) that is used for sending
      * WIREUP MSGs */
-    if (!ucp_ep_config(ep)->p2p_lanes && !has_cm_lane && !is_am_replaced) {
+    if (!ucp_ep_config(ep)->p2p_lanes && !has_cm_lane &&
+        /* Ensure AM messages receiving order is kept by waiting for a wireup
+         * ack, in case old lane is replaced */
+        !is_am_replaced) {
         /* mark the endpoint as connected to remote */
         ucp_wireup_remote_connected(ep);
     }
@@ -1350,13 +1356,21 @@ static void ucp_wireup_discard_uct_eps(ucp_ep_h ep, uct_ep_h *uct_eps,
     }
 }
 
+/* Checks if AM lane was replaced after being operational (wireup process
+ * completed) */
 static int
 ucp_wireup_is_am_lane_replaced(ucp_ep_h ep,
                                const ucp_lane_index_t *reuse_lane_map)
 {
-    return !ucp_ep_has_cm_lane(ep) && (ep->am_lane != UCP_NULL_LANE) &&
-           (reuse_lane_map[ep->am_lane] == UCP_NULL_LANE) &&
-           !ucp_wireup_ep_test(ucp_ep_get_lane(ep, ep->am_lane));
+    ucp_lane_index_t am_lane = ucp_ep_get_am_lane(ep);
+
+    return !ucp_ep_has_cm_lane(ep) &&
+           /* Verify AM lane exists */
+           (am_lane != UCP_NULL_LANE) &&
+           /* Lane is not being reused */
+           (reuse_lane_map[am_lane] == UCP_NULL_LANE) &&
+           /* Lane is not yet operational */
+           !ucp_wireup_ep_test(ucp_ep_get_lane(ep, am_lane));
 }
 
 static int
@@ -1378,7 +1392,7 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
     /* TODO: 1) Support lanes which are connected to the same remote MD, but
      *          different remote sys_dev (eg. TCP). */
     for (lane = 0; lane < old_key->num_lanes; ++lane) {
-        if ((ucp_ep_config_find_match_lane(old_key, lane, new_key) !=
+        if ((ucp_ep_config_find_match_lane(old_key, new_key, lane) !=
              UCP_NULL_LANE) &&
             !ucp_ep_config_lane_is_equal(old_key, new_key, lane)) {
             return 0;
@@ -1392,7 +1406,7 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
     /* TODO: 2) Support reconfiguration for separated wireup and AM lanes
      *          during wireup process (request sent). */
     return !(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
-           (ep->am_lane == wireup_lane) ||
+           (ucp_ep_get_am_lane(ep) == wireup_lane) ||
            !ucp_wireup_is_am_lane_replaced(ep, reuse_lane_map);
 }
 
@@ -1402,7 +1416,7 @@ static int ucp_wireup_should_reconfigure(ucp_ep_h ep,
 {
     ucp_lane_index_t lane;
 
-    if (ucp_ep_has_cm_lane(ep)) {
+    if (ucp_ep_has_cm_lane(ep) || (ucp_ep_num_lanes(ep) != num_lanes)) {
         return 1;
     }
 
@@ -1413,7 +1427,7 @@ static int ucp_wireup_should_reconfigure(ucp_ep_h ep,
         }
     }
 
-    return ucp_ep_num_lanes(ep) != num_lanes;
+    return 0;
 }
 
 static ucp_lane_index_t
@@ -1465,7 +1479,7 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     ucs_status_t status;
 
     old_wireup_lane = ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
-    old_lane        = am_replaced ? ep->am_lane : old_wireup_lane;
+    old_lane        = am_replaced ? ucp_ep_get_am_lane(ep) : old_wireup_lane;
     old_wireup_ep   = ucp_ep_get_lane(ep, old_lane);
     old_ep_wrapper  = ucp_wireup_ep(old_wireup_ep);
     is_wireup_ep    = ucp_wireup_ep_test(old_wireup_ep);
@@ -1581,7 +1595,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
 
     is_am_replaced = ucp_wireup_is_am_lane_replaced(ep, reuse_lane_map);
     wireup_lane    = is_am_replaced ?
-                                ep->am_lane :
+                                ucp_ep_get_am_lane(ep) :
                                 ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
 
     /* wireup lane has to be selected for the old configuration */

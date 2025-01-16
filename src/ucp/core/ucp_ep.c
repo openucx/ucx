@@ -1862,8 +1862,8 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
 }
 
 ucp_lane_index_t ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
-                                               ucp_lane_index_t lane1,
-                                               const ucp_ep_config_key_t *key2)
+                                               const ucp_ep_config_key_t *key2,
+                                               ucp_lane_index_t lane1)
 {
     ucp_lane_index_t lane_idx;
 
@@ -1893,7 +1893,7 @@ ucp_ep_config_find_reusable_lane(const ucp_ep_config_key_t *key1,
         return key2->cm_lane;
     }
 
-    new_lane = ucp_ep_config_find_match_lane(key1, old_lane, key2);
+    new_lane = ucp_ep_config_find_match_lane(key1, key2, old_lane);
     if (new_lane == UCP_NULL_LANE) {
         /* No matching lane was found */
         return UCP_NULL_LANE;
