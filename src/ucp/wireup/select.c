@@ -606,10 +606,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                 continue;
             }
 
-            score          = criteria->calc_score(wiface, md_attr, address, ae,
-                                                  0, criteria->arg);
-            priority       = iface_attr->priority + ae->iface_attr.priority;
-            is_reachable   = 1;
+            score        = criteria->calc_score(wiface, md_attr, address, ae,
+                                                0, criteria->arg);
+            priority     = iface_attr->priority + ae->iface_attr.priority;
+            is_reachable = 1;
 
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       "->addr[%u] : %s score %.2f priority %d",
