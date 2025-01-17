@@ -186,8 +186,6 @@ static void ucp_proto_request_set_proto(ucp_request_t *req,
                                         const ucp_proto_config_t *proto_config,
                                         size_t msg_length)
 {
-    ucp_proto_config_t *mutable_proto_config;
-
     ucs_assertv(req->flags & UCP_REQUEST_FLAG_PROTO_SEND, "flags=0x%"PRIx32,
                 req->flags);
 
@@ -195,9 +193,6 @@ static void ucp_proto_request_set_proto(ucp_request_t *req,
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         ucp_proto_trace_selected(req, msg_length);
     }
-
-    mutable_proto_config = ucs_const_cast(ucp_proto_config_t*, proto_config);
-    mutable_proto_config->selections++;
 
     ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
 }

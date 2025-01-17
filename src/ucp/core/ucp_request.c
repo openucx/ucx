@@ -732,7 +732,9 @@ void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg)
 ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
 {
     ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
-    const ucp_proto_t *proto = req->send.proto_config->proto;
+    ucp_proto_config_t *conf = ucs_const_cast(ucp_proto_config_t *,
+                                              req->send.proto_config);
+    const ucp_proto_t *proto = conf->proto;
     uct_pending_callback_t progress_cb;
     ucs_status_t status;
 
@@ -740,8 +742,7 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
     ucp_trace_req(req,
                   "progress %s {%s} ep_cfg[%d] rkey_cfg[%d] offset %zu/%zu",
                   proto->name, ucs_debug_get_symbol_name(progress_cb),
-                  req->send.proto_config->ep_cfg_index,
-                  req->send.proto_config->rkey_cfg_index,
+                  conf->ep_cfg_index, conf->rkey_cfg_index,
                   req->send.state.dt_iter.offset,
                   req->send.state.dt_iter.length);
 
@@ -753,6 +754,10 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
         ucp_trace_req(req, "progress protocol %s returned: %s lane %d",
                       proto->name, ucs_status_string(status), req->send.lane);
     } else {
+        if (req->send.proto_stage == UCP_PROTO_STAGE_START) {
+            ++ conf->selections;
+        }
+
         ucp_trace_req(req, "progress protocol %s returned: %s", proto->name,
                       ucs_status_string(status));
     }

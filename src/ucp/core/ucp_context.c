@@ -2210,7 +2210,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     context->config.progress_wrapper_enabled =
             ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
-            ucp_context_usage_tracker_enabled(context);
+            ucp_context_usage_tracker_enabled(context) ||
+            context->config.trace_used_proto_selections;
 
     return UCS_OK;
 
