@@ -347,6 +347,7 @@ UCS_CONFIG_DECLARE_TABLE(ucs_global_opts_read_only_table,
                          "UCS global (runtime read-only)", NULL,
                          ucs_global_opts_t)
 
+
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
 {
     ucs_status_t status = ucs_global_opts_set_value_modifiable(name, value);

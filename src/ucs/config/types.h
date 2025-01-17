@@ -163,5 +163,4 @@ typedef struct ucs_log_component_config {
     const char      *file_filter; /* glob pattern of source files */
 } ucs_log_component_config_t;
 
-
 #endif /* TYPES_H_ */
