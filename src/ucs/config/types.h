@@ -7,7 +7,6 @@
 #ifndef UCS_CONFIG_TYPES_H
 #define UCS_CONFIG_TYPES_H
 
-#include <ucs/datastruct/list.h>
 #include <ucs/sys/compiler_def.h>
 #include <sys/socket.h>
 
@@ -163,14 +162,6 @@ typedef struct ucs_log_component_config {
     char            name[16];
     const char      *file_filter; /* glob pattern of source files */
 } ucs_log_component_config_t;
-
-
-typedef void (*ucs_log_event_callback)(void *ctx);
-typedef struct {
-    ucs_list_link_t        list;
-    ucs_log_event_callback cb;
-    void                   *ctx;
-} ucs_log_event_handler_t;
 
 
 #endif /* TYPES_H_ */

@@ -19,7 +19,6 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/vfs/sock/vfs_sock.h>
 #include <sys/signal.h>
-#include <pthread.h>
 
 
 ucs_global_opts_t ucs_global_opts = {
@@ -348,43 +347,6 @@ UCS_CONFIG_DECLARE_TABLE(ucs_global_opts_read_only_table,
                          "UCS global (runtime read-only)", NULL,
                          ucs_global_opts_t)
 
-typedef struct {
-    ucs_list_link_t handlers;
-    pthread_mutex_t lock;
-} ucs_global_opts_log_event_handler_t;
-
-static ucs_global_opts_log_event_handler_t ucs_global_log_handler = {
-    .handlers = UCS_LIST_INITIALIZER(&ucs_global_log_handler.handlers,
-                                     &ucs_global_log_handler.handlers),
-    .lock     = PTHREAD_MUTEX_INITIALIZER
-};
-
-void ucs_global_opts_event_handler_add(ucs_log_event_handler_t *handler)
-{
-    pthread_mutex_lock(&ucs_global_log_handler.lock);
-    ucs_list_add_tail(&ucs_global_log_handler.handlers, &handler->list);
-    pthread_mutex_unlock(&ucs_global_log_handler.lock);
-}
-
-void ucs_global_opts_event_handler_remove(ucs_log_event_handler_t *handler)
-{
-    pthread_mutex_lock(&ucs_global_log_handler.lock);
-    ucs_list_del(&handler->list);
-    pthread_mutex_unlock(&ucs_global_log_handler.lock);
-}
-
-static void ucs_global_opts_event_handler_notify(void)
-{
-    ucs_log_event_handler_t *handler;
-
-    pthread_mutex_lock(&ucs_global_log_handler.lock);
-    ucs_list_for_each(handler, &ucs_global_log_handler.handlers, list) {
-        handler->cb(handler->ctx);
-    }
-    pthread_mutex_unlock(&ucs_global_log_handler.lock);
-}
-
-
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
 {
     ucs_status_t status = ucs_global_opts_set_value_modifiable(name, value);
@@ -480,7 +442,6 @@ static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
     }
 
     ucs_global_opts.log_component.log_level = log_level;
-    ucs_global_opts_event_handler_notify();
     return UCS_OK;
 }
 

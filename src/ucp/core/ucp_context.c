@@ -2004,19 +2004,6 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
     return 1;
 }
 
-static void ucp_context_log_event_handler(void *ctx)
-{
-    ucp_context_h context = ctx;
-
-    context->config.progress_wrapper_enabled =
-            ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
-            ucp_context_usage_tracker_enabled(context);
-
-    context->config.trace_proto_selections =
-            ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
-            context->config.trace_used_proto_selections;
-}
-
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -2221,12 +2208,10 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.trace_used_proto_selections =
             !strcmp(context->config.ext.proto_info, "used");
 
-    /* Register context for log events */
-    context->log_event_handler.cb  = ucp_context_log_event_handler;
-    context->log_event_handler.ctx = context;
-    ucs_global_opts_event_handler_add(&context->log_event_handler);
+    context->config.progress_wrapper_enabled =
+            ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
+            ucp_context_usage_tracker_enabled(context);
 
-    ucp_context_log_event_handler(context);
     return UCS_OK;
 
 err_free_key_list:
@@ -2244,7 +2229,6 @@ err:
 
 static void ucp_free_config(ucp_context_h context)
 {
-    ucs_global_opts_event_handler_remove(&context->log_event_handler);
     ucs_free(context->config.am_mpools.sizes);
     ucp_cached_key_list_release(&context->cached_key_list);
     ucs_free(context->config.alloc_methods);

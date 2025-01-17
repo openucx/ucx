@@ -182,7 +182,7 @@ ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
 }
 
 /* Select protocol for the request and initialize protocol-related fields */
-static void ucp_proto_request_set_proto(ucp_worker_h worker, ucp_request_t *req,
+static void ucp_proto_request_set_proto(ucp_request_t *req,
                                         const ucp_proto_config_t *proto_config,
                                         size_t msg_length)
 {
@@ -192,14 +192,12 @@ static void ucp_proto_request_set_proto(ucp_worker_h worker, ucp_request_t *req,
                 req->flags);
 
     req->send.proto_config = proto_config;
-    if (ucs_unlikely(worker->context->config.trace_proto_selections)) {
-        mutable_proto_config = ucs_const_cast(ucp_proto_config_t*, proto_config);
-        mutable_proto_config->selections++;
-
-        if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
-            ucp_proto_trace_selected(req, msg_length);
-        }
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+        ucp_proto_trace_selected(req, msg_length);
     }
+
+    mutable_proto_config = ucs_const_cast(ucp_proto_config_t*, proto_config);
+    mutable_proto_config->selections++;
 
     ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
 }
@@ -225,8 +223,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
     /* Set pointer to request's protocol configuration */
     ucs_assert(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index);
     ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
-    ucp_proto_request_set_proto(worker, req, &thresh_elem->proto_config,
-                                msg_length);
+    ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
     return UCS_OK;
 }
 
