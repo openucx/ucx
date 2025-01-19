@@ -124,6 +124,28 @@ void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
 }
 
 #if HAVE_DEVX
+
+static void uct_ib_mlx5_devx_set_smbrwq_attr(const uct_ib_mlx5_md_t *md, char *create_qp_in)
+{
+    void *qpce = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, create_qp_in, qpc_data_extension);
+
+    UCT_IB_MLX5DV_SET(create_qp_in, create_qp_in, qpc_ext, 1);
+    UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
+                      UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
+    UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size, 512);
+}
+
+static int uct_ib_mlx5_devx_is_smbrwq_enabled(uct_ib_mlx5_md_t *md,
+                                             uct_ib_mlx5_qp_attr_t *attr)
+{
+    return (attr->is_smbrwq_associated) &&
+           (md->flags & UCT_IB_MLX5_MD_FLAG_QP_CTX_EXTENSION) &&
+           (((md->smbrwq.supported_tls & UCT_IB_MLX5_SMBRWQ_SUPPORT_RC) &&
+             (attr->super.qp_type == IBV_QPT_RC)) ||
+            ((md->smbrwq.supported_tls & UCT_IB_MLX5_SMBRWQ_SUPPORT_DC) &&
+             (attr->super.qp_type == UCT_IB_QPT_DCI)));
+}
+
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         const uct_ib_mlx5_cq_t *send_cq,
                                         const uct_ib_mlx5_cq_t *recv_cq,
@@ -232,6 +254,10 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                           UCT_IB_MLX5_DEVX_ECE_TRIG_RESP);
     }
 
+    if (uct_ib_mlx5_devx_is_smbrwq_enabled(md, attr)) {
+        uct_ib_mlx5_devx_set_smbrwq_attr(md, in);
+    }
+
     qp->devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
                                                sizeof(in), out, sizeof(out),
                                                "QP", UCS_LOG_LEVEL_ERROR);
@@ -255,13 +281,13 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(qpc, qpc, counter_set_id,
                           uct_ib_mlx5_iface_get_counter_set_id(iface));
         UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
+    }
 
-        status = uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in_2init,
-                                             sizeof(in_2init), out_2init,
-                                             sizeof(out_2init), "2INIT_QP");
-        if (status != UCS_OK) {
-            goto err_free;
-        }
+    status = uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in_2init,
+                                         sizeof(in_2init), out_2init,
+                                         sizeof(out_2init), "2INIT_QP");
+    if (status != UCS_OK) {
+        goto err_free;
     }
 
     qp->type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
