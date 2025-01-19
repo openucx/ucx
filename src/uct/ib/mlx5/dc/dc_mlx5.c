@@ -214,10 +214,10 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    uct_ib_mlx5_md_t *md       = uct_ib_mlx5_iface_md(&iface->super.super.super);
     size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
     size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
     uint16_t ooo_sl_mask       = 0;
+    uct_ib_mlx5_md_t UCS_V_UNUSED *md;
     ucs_status_t status;
 
 #if HAVE_IBV_DM
@@ -251,6 +251,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
 
 #if HAVE_DEVX
+    md     = uct_ib_mlx5_iface_md(&iface->super.super.super);
     status = uct_ib_mlx5_devx_query_ooo_sl_mask(
             md, iface->super.super.super.config.port_num, &ooo_sl_mask);
     if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
