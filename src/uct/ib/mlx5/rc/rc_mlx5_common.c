@@ -64,7 +64,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
-  {"SRQ_TOPO", "cyclic,cyclic_emulated,list",
+  {"SRQ_TOPO", "striding_message_based,cyclic,cyclic_emulated,list",
    "List of SRQ topology types in order of preference. Supported types are:\n"
    "\n"
    "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
@@ -289,6 +289,7 @@ ucs_status_t uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     attr.super.srq_num          = iface->rx.srq.srq_num;
     attr.super.port             = dev->first_port;
     attr.mmio_mode              = iface->tx.mmio_mode;
+    attr.is_smbrwq_associated   = uct_rc_mlx5_iface_is_srq_smbrwq(iface);
     status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
                                         &iface->cq[UCT_IB_DIR_RX],
                                         &iface->cq[UCT_IB_DIR_RX],

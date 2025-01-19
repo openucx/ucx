@@ -96,6 +96,7 @@ enum {
     UCT_IB_MLX5_CAP_ODP       = 0x2,
     UCT_IB_MLX5_CAP_ATOMIC    = 0x3,
     UCT_IB_MLX5_CAP_2_GENERAL = 0x20,
+    UCT_IB_MLX5_CAP_ADV_RDMA  = 0x28,
 };
 
 enum {
@@ -145,7 +146,10 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    null_mkey[0x1];
     uint8_t    log_max_klm_list_size[0x6];
 
-    uint8_t    reserved_at_120[0xa];
+    uint8_t    non_wire_sq[0x1];
+    uint8_t    ats_ro_dependence[0x1];
+    uint8_t    qpc_extension[0x1];
+    uint8_t    reserved_at_123[0x7];
     uint8_t    log_max_ra_req_dc[0x6];
     uint8_t    reserved_at_130[0x8];
     uint8_t    ooo_sl_mask[0x1];
@@ -404,8 +408,19 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
 
     uint8_t    reserved_at_500[0x20];
     uint8_t    num_of_uars_per_page[0x20];
-    uint8_t    reserved_at_540[0x40];
-
+    uint8_t    flex_parser_protocols[0x20];
+    uint8_t    max_geneve_tlv_options[0x8];
+    uint8_t    geneve_tlv_sample[0x1];
+    uint8_t    geneve_tlv_option_offset[0x1];
+    uint8_t    max_geneve_tlv_option_data_len[0x5];
+    uint8_t    flex_parser_header_modify[0x1];
+    uint8_t    adv_rdma_cap[0x1];
+    uint8_t    path_select_prov_cap[0x1];
+    uint8_t    log_max_guaranteed_connections[0x5];
+    uint8_t    driver_version_before_init_hca[0x1];
+    uint8_t    adv_virtualization[0x1];
+    uint8_t    driver_metadata_ptr[0x1];
+    uint8_t    log_max_dct_connections[0x5];
     uint8_t    reserved_at_580[0xb];
     uint8_t    log_max_dci_stream_channels[0x5];
     uint8_t    reserved_at_590[0x3];
@@ -594,11 +609,25 @@ struct uct_ib_mlx5_odp_cap_bits {
     uint8_t         reserved_at_620[0x1e0];
 };
 
+
+struct uct_ib_mlx5_adv_rdma_cap_bits {
+    uint8_t   reserved_at_0[0x40];
+    uint8_t   mp_max_num_queues[0x8];
+    uint8_t   ps_user_context_max_log_size[0x8];
+    uint8_t   message_based_qp_and_striding_wq[0x8];
+    uint8_t   rx_ooo_psn_win_size[0x8];
+    uint8_t   max_receive_send_message_size_stride[0x10];
+    uint8_t   rdma_ctrl_max_num[0x10];
+    uint8_t   max_receive_send_message_size_byte[0x20];
+    uint8_t   reserved_at_a0[0xc80];
+};
+
 union uct_ib_mlx5_hca_cap_union_bits {
     struct uct_ib_mlx5_cmd_hca_cap_bits cmd_hca_cap;
     struct uct_ib_mlx5_odp_cap_bits odp_cap;
     struct uct_ib_mlx5_atomic_caps_bits atomic_caps;
     struct uct_ib_mlx5_cmd_hca_cap_2_bits cmd_hca_cap_2;
+    struct uct_ib_mlx5_adv_rdma_cap_bits adv_rdma_cap;
     uint8_t    reserved_at_0[0x8000];
 };
 
@@ -622,6 +651,14 @@ struct uct_ib_mlx5_query_hca_cap_in_bits {
 
     uint8_t    reserved_at_40[0x40];
 };
+
+typedef enum {
+    UCT_IB_MLX5_SMBRWQ_SUPPORT_RC  = UCS_BIT(0),
+    UCT_IB_MLX5_SMBRWQ_SUPPORT_UC  = UCS_BIT(1),
+    UCT_IB_MLX5_SMBRWQ_SUPPORT_DC  = UCS_BIT(2),
+    UCT_IB_MLX5_SMBRWQ_SUPPORT_UD  = UCS_BIT(3),
+    UCT_IB_MLX5_SMBRWQ_SUPPORT_XRC = UCS_BIT(4),
+} uct_ib_mlx5_smbrwq_supported_tls_t;
 
 typedef enum {
     /* QP are associated with port affinity */
@@ -922,7 +959,9 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         offload_type[0x4];
     uint8_t         reserved_at_1c[0x4];
 
-    uint8_t         reserved_at_20[0x7];
+    uint8_t         reserved_at_20[0x1];
+    uint8_t         receive_send_cqe_granularity[0x3];
+    uint8_t         reserved_at_24[0x3];
     uint8_t         dp_ordering_force[0x1];
     uint8_t         user_index[0x18];
 
@@ -982,7 +1021,8 @@ struct uct_ib_mlx5_dctc_bits {
 
     uint8_t         ece[0x20];
 
-    uint8_t         reserved_at_220[0x160];
+    uint8_t         max_receive_send_message_size[0x10];
+    uint8_t         reserved_at_230[0x150];
 };
 
 struct uct_ib_mlx5_create_dct_out_bits {
@@ -1526,14 +1566,22 @@ struct uct_ib_mlx5_qpc_ext_bits {
     uint8_t         delay_drop_en[0x1];
     uint8_t         vl15[0x1];
     uint8_t         mmo[0x1];
-    uint8_t         reserved_at_3[0xd];
+    uint8_t         error_syndrome_origin[0x1];
+    uint8_t         path_select_obj_id_valid[0x1];
+    uint8_t         receive_send_cqe_granularity[0x3];
+    uint8_t         reserved_at_7[0x8];
     uint8_t         dci_stream_channel_id[0x10];
 
     uint8_t         qos_queue_group_id_requester[0x20];
 
     uint8_t         qos_queue_group_id_responder[0x20];
 
-    uint8_t         reserved_at_80[0x5a0];
+    uint8_t         error_syndrom[0x20];
+    uint8_t         max_receive_send_message_size[0x10];
+    uint8_t         mmo_type[0x10];
+    uint8_t         path_select_obj_id[0x20];
+
+    uint8_t         reserved_at_c0[0x540];
 };
 
 struct uct_ib_mlx5_create_qp_out_bits {
@@ -1549,28 +1597,32 @@ struct uct_ib_mlx5_create_qp_out_bits {
 };
 
 struct uct_ib_mlx5_create_qp_in_bits {
-    uint8_t         opcode[0x10];
-    uint8_t         uid[0x10];
+    uint8_t                         opcode[0x10];
+    uint8_t                         uid[0x10];
 
-    uint8_t         reserved_at_20[0x10];
-    uint8_t         op_mod[0x10];
+    uint8_t                         reserved_at_20[0x10];
+    uint8_t                         op_mod[0x10];
 
-    uint8_t         reserved_at_40[0x40];
+    uint8_t                         qpc_ext[0x1];
 
-    uint8_t         opt_param_mask[0x20];
+    uint8_t                         reserved_at_41[0x3f];
 
-    uint8_t         ece[0x20];
+    uint8_t                         opt_param_mask[0x20];
 
-    struct uct_ib_mlx5_qpc_bits qpc;
+    uint8_t                         ece[0x20];
 
-    uint8_t         reserved_at_800[0x40];
+    struct uct_ib_mlx5_qpc_bits     qpc;
 
-    uint8_t         wq_umem_id[0x20];
+    uint8_t                         reserved_at_800[0x40];
 
-    uint8_t         wq_umem_valid[0x1];
-    uint8_t         reserved_at_861[0x1f];
+    uint8_t                         wq_umem_id[0x20];
 
-    uint8_t         pas[0][0x40];
+    uint8_t                         wq_umem_valid[0x1];
+    uint8_t                         reserved_at_861[0x1f];
+
+    struct uct_ib_mlx5_qpc_ext_bits qpc_data_extension;
+
+    uint8_t                         pas_ext[0][0x40];
 };
 
 struct uct_ib_mlx5_init2init_qp_out_bits {
@@ -1797,6 +1849,14 @@ struct uct_ib_mlx5_create_reserved_qpn_in_bits {
 enum {
     UCT_IB_MLX5_OBJ_TYPE_RESERVED_QPN = 0x002C,
     UCT_IB_MLX5_OBJ_TYPE_MKEY         = 0xFF01
+};
+
+/* Possible values for @ref uct_ib_mlx5_qpc_ext_bits::receive_send_cqe_granularity field*/
+enum {
+    /* CQE is generated for every packet that arrives on the QP. */
+    UCT_IB_MLX5_CQE_GRANULARITY_PER_PACKET  = 0x0,
+    /* CQE is generated once for every message arriving on the QP. */
+    UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE = 0x1
 };
 
 struct uct_ib_mlx5_allow_other_vhca_access_in_bits {

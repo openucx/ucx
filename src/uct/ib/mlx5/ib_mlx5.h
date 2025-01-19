@@ -168,6 +168,8 @@ struct mlx5_grh_av {
 
 #define UCT_IB_MLX5_DEVX_ECE_TRIG_RESP    0x10000000
 
+#define UCT_IB_MLX5_DEVX_SMBRWQ_MAX_SEND_RECEIVE_MESSAGE_SIZE 512
+
 enum {
     /* Device supports KSM */
     UCT_IB_MLX5_MD_FLAG_KSM                  = UCS_BIT(0),
@@ -211,8 +213,11 @@ enum {
     /* Device supports forcing ordering configuration */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(19),
 
+    /* Device supports extended QP context capabilities */
+    UCT_IB_MLX5_MD_FLAG_QP_CTX_EXTENSION      = UCS_BIT(20),
+
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 21,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -226,7 +231,7 @@ enum {
     UCT_IB_MLX5_SRQ_TOPO_LIST         = 0x0,
     UCT_IB_MLX5_SRQ_TOPO_CYCLIC       = 0x1,
     UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ   = 0x2,
-    UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ = 0x3
+    UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ = 0x3,
 };
 
 
@@ -448,8 +453,21 @@ typedef struct uct_ib_mlx5_md {
         uint8_t              rc;
         uint8_t              dc;
     } dp_ordering_cap;
+
+    struct {
+        uint8_t supported_tls;
+        uint16_t max_message_size_stride;
+        uint32_t max_message_size_bytes;
+    } smbrwq;
 } uct_ib_mlx5_md_t;
 
+enum {
+    UCT_IB_MLX5_SMBRWQ_TLS_RC  = UCS_BIT(0),
+    UCT_IB_MLX5_SMBRWQ_TLS_UC  = UCS_BIT(1),
+    UCT_IB_MLX5_SMBRWQ_TLS_DC  = UCS_BIT(2),
+    UCT_IB_MLX5_SMBRWQ_TLS_UD  = UCS_BIT(3),
+    UCT_IB_MLX5_SMBRWQ_TLS_XRC = UCS_BIT(4),
+};
 
 typedef enum {
     UCT_IB_MLX5_MMIO_MODE_BF_POST,    /* BF without flush, can be used only from
@@ -629,6 +647,7 @@ typedef struct uct_ib_mlx5_qp_attr {
     int                         full_handshake;
     int                         rdma_wr_disabled;
     uint8_t                     log_num_dci_stream_channels;
+    int                         is_smbrwq_associated;
 } uct_ib_mlx5_qp_attr_t;
 
 

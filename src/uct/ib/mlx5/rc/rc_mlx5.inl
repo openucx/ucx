@@ -1954,3 +1954,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_base_ep_zcopy_post(
 
     return UCS_INPROGRESS;
 }
+
+static UCS_F_ALWAYS_INLINE int uct_rc_mlx5_iface_is_srq_smbrwq(uct_rc_mlx5_iface_common_t *iface)
+{
+    return iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST;
+}
