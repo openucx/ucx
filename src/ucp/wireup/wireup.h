@@ -92,7 +92,7 @@ typedef struct {
      * @param [in]  md_attr        Local MD attributes.
      * @param [in]  unpacked_addr  The whole remote address unpacked.
      * @param [in]  remote_addr    Remote transport address info and attributes.
-     * @param [in]  is_prioritized Endpoint is prioritized.
+     * @param [in]  prioritized_ep Endpoint is prioritized.
      * @param [in]  arg            Custom argument.
      *
      * @return Transport score, the higher the better.
@@ -101,7 +101,7 @@ typedef struct {
                                               const uct_md_attr_v2_t *md_attr,
                                               const ucp_unpacked_address_t *unpacked_addr,
                                               const ucp_address_entry_t *remote_addr,
-                                              int is_prioritized,
+                                              int prioritized_ep,
                                               void *arg);
 
     /* Custom argument of @a calc_score function */
@@ -157,7 +157,7 @@ double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  const uct_md_attr_v2_t *md_attr,
                                  const ucp_unpacked_address_t *unpacked_address,
                                  const ucp_address_entry_t *remote_addr,
-                                 int is_prioritized, void *arg);
+                                 int prioritized_ep, void *arg);
 
 size_t ucp_wireup_msg_pack(void *dest, void *arg);
 
@@ -217,7 +217,7 @@ unsigned ucp_wireup_eps_progress(void *arg);
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 
 double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface,
-                                        int is_prioritized);
+                                        int prioritized_ep);
 
 double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 
