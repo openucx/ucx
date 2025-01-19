@@ -23,7 +23,11 @@
 
 
 #define UCT_DC_MLX5_IFACE_TXQP_GET(_iface, _ep, _txqp, _txwq) \
-    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, (_ep)->dci, _txqp, _txwq)
+    { \
+        ucs_assert((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI); \
+        _txqp = &uct_dc_mlx5_iface_dci(_iface, (_ep)->dci)->txqp; \
+        _txwq = &uct_dc_mlx5_iface_dci(_iface, (_ep)->dci)->txwq; \
+    }
 
 
 enum uct_dc_mlx5_ep_flags {
@@ -346,8 +350,8 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
                               uct_dci_index_t dci_index)
 {
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
-    uct_dc_dci_t *dci            = uct_dc_mlx5_iface_dci(iface, dci_index);
     uint8_t num_channels         = 1;
+    uct_dc_dci_t *dci;
     ucs_status_t status;
 
     ucs_assertv(ucs_array_length(&pool->stack) < iface->tx.ndci,
@@ -365,6 +369,7 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
         return status;
     }
 
+    dci             = uct_dc_mlx5_iface_dci(iface, dci_index);
     dci->path_index = pool->config.path_index;
     dci->pool_index = pool_index;
 
