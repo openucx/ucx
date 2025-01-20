@@ -407,11 +407,12 @@ private:
     }
 };
 
-UCS_TEST_P(test_ucp_rma_reg, put_blocking) {
+/* TODO temp workaround. Pending RM 4170682 fix */
+UCS_TEST_P(test_ucp_rma_reg, put_blocking, "IB_INDIRECT_ATOMIC?=n") {
     test_reg(static_cast<send_func_t>(&test_ucp_rma::put_b));
 }
 
-UCS_TEST_P(test_ucp_rma_reg, put_nonblocking) {
+UCS_TEST_P(test_ucp_rma_reg, put_nonblocking, "IB_INDIRECT_ATOMIC?=n") {
     test_reg(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
 }
 

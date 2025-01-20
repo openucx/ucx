@@ -161,7 +161,6 @@ struct ucs_rcache_params {
  * Registration cache configuration parameters.
  */
 struct ucs_rcache_config {
-    size_t        alignment;      /**< Force address alignment */
     unsigned      event_prio;     /**< Memory events priority */
     ucs_time_t    overhead;       /**< Lookup overhead estimation */
     unsigned long max_regions;    /**< Maximal number of rcache regions */

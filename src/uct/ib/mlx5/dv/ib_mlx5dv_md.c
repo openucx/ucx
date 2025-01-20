@@ -873,7 +873,7 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
         status = uct_ib_mlx5_devx_reg_mr(md, memh, address, length, params,
                                          UCT_IB_MR_STRICT_ORDER,
                                          ~IBV_ACCESS_RELAXED_ORDERING,
-                                         &dummy_mkey, &dummy_mkey);
+                                         &dummy_mkey, &memh->atomic_rkey);
         if (status != UCS_OK) {
             goto err_dereg_default;
         }
@@ -2918,6 +2918,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         ((memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) ||
          uct_ib_mlx5_devx_memh_has_ro(md, memh)) &&
         !(memh->super.flags & UCT_IB_MEM_IMPORTED) &&
+        md->super.config.enable_indirect_atomic &&
         ucs_test_all_flags(md->flags,
                            UCT_IB_MLX5_MD_FLAG_KSM |
                            UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS)) {
