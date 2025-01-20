@@ -53,7 +53,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          AS_IF([test "x$cuda_happy" = "xyes"],
                [AC_CHECK_LIB([cuda], [cuMemRetainAllocationHandle],
                              [AC_DEFINE([HAVE_CUMEMRETAINALLOCATIONHANDLE], [1],
-                                        [Enable cuMemRetainAllocationHandle() usage])]),
+                                        [Enable cuMemRetainAllocationHandle() usage])])
                 AC_CHECK_DECLS([CU_MEM_LOCATION_TYPE_HOST],
                                [], [], [[#include <cuda.h>]])])
 
