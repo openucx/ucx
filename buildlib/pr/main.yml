@@ -227,12 +227,12 @@ stages:
               CONTAINER: rhel82
             rhel90:
               CONTAINER: rhel90
-            # fedora41:
-            #   CONTAINER: fedora41
+            fedora41:
+              CONTAINER: fedora41
             centos7:
               CONTAINER: centos7_ib
-            # centos10stream:
-            #   CONTAINER: centos10stream
+            centos10stream:
+              CONTAINER: centos10stream
             ubuntu2004_rocm:
               CONTAINER: ubuntu2004_rocm_5_4_0
             ubuntu2204_rocm:

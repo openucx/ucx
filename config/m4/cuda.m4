@@ -95,7 +95,22 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                         [AC_DEFINE([HAVE_CUDA_FABRIC], 1, [Enable CUDA fabric handle support])],
                         [], [[#include <cuda.h>]])
 
+         # Check NVCC exists and able to compile
+         nvcc_happy="no"
          AC_PATH_PROGS(NVCC, nvcc, "", $CUDA_BIN_PATH:$PATH)
+         AS_IF([test "x$NVCC" != "x"],
+               [AC_LANG_PUSH([C])
+                AC_LANG_CONFTEST([AC_LANG_SOURCE([[#include <cuda_runtime.h>]])])
+                mv conftest.c conftest.cu
+                AC_MSG_CHECKING([$NVCC can compile])
+                AS_IF([$NVCC -c conftest.cu 2>&AS_MESSAGE_LOG_FD],
+                  [AC_MSG_RESULT([yes])
+                   nvcc_happy="yes"],
+                  [AC_MSG_RESULT([no])
+                   cat conftest.cu >&AS_MESSAGE_LOG_FD])
+                rm conftest.cu
+                AC_LANG_POP
+                ])
 
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"
@@ -117,7 +132,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
         cuda_checked=yes
         AM_CONDITIONAL([HAVE_CUDA], [test "x$cuda_happy" != xno])
         AM_CONDITIONAL([HAVE_CUDA_STATIC], [test "X$have_cuda_static" = "Xyes"])
-        AM_CONDITIONAL([HAVE_NVCC], [test "x$NVCC" != "x"])
+        AM_CONDITIONAL([HAVE_NVCC], [test "x$nvcc_happy" != xno])
 
    ]) # "x$cuda_checked" != "xyes"
 
