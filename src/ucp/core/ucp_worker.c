@@ -109,16 +109,16 @@ static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
 ucs_mpool_ops_t ucp_am_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
-    .obj_init      = ucs_empty_function,
-    .obj_cleanup   = ucs_empty_function,
+    .obj_init      = ucs_mpool_obj_init_func_empty,
+    .obj_cleanup   = ucs_mpool_obj_cleanup_func_empty,
     .obj_str       = ucp_am_mpool_obj_str
 };
 
 ucs_mpool_ops_t ucp_reg_mpool_ops = {
     .chunk_alloc   = ucp_reg_mpool_malloc,
     .chunk_release = ucp_reg_mpool_free,
-    .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function,
+    .obj_init      = ucs_mpool_obj_init_func_empty,
+    .obj_cleanup   = ucs_mpool_obj_cleanup_func_empty,
     .obj_str       = NULL
 };
 

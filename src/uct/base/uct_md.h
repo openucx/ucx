@@ -73,6 +73,8 @@ struct uct_md_config {
 
 typedef void (*uct_md_close_func_t)(uct_md_h md);
 
+#define uct_md_close_func_empty (uct_md_close_func_t)ucs_empty_function
+
 typedef ucs_status_t (*uct_md_query_func_t)(uct_md_h md,
                                             uct_md_attr_v2_t *md_attr_v2);
 
@@ -92,14 +94,23 @@ typedef ucs_status_t (*uct_md_mem_advise_func_t)(uct_md_h md,
                                                  size_t length,
                                                  unsigned advice);
 
+#define uct_md_mem_advise_func_unsupported \
+        (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported
+
 typedef ucs_status_t
 (*uct_md_mem_reg_func_t)(uct_md_h md, void *address, size_t length,
                          const uct_md_mem_reg_params_t *params,
                          uct_mem_h *memh_p);
 
+#define uct_md_mem_reg_func_unsupported \
+        (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported
+
 typedef ucs_status_t
 (*uct_md_mem_dereg_func_t)(uct_md_h md,
                            const uct_md_mem_dereg_params_t *param);
+
+#define uct_md_mem_dereg_func_unsupported \
+        (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported
 
 typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 const void *address,
@@ -111,10 +122,16 @@ typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
         const uct_md_mkey_pack_params_t *params,
         void *buffer);
 
+#define uct_md_mkey_pack_func_empty \
+        (uct_md_mkey_pack_func_t)ucs_empty_function_return_success
+
 typedef ucs_status_t
 (*uct_md_mem_attach_func_t)(uct_md_h md, const void *mkey_buffer,
                             uct_md_mem_attach_params_t *params,
                             uct_mem_h *memh_p);
+
+#define uct_md_mem_attach_func_unsupported \
+        (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported
 
 typedef int (*uct_md_is_sockaddr_accessible_func_t)(uct_md_h md,
                                                     const ucs_sock_addr_t *sockaddr,
@@ -124,6 +141,9 @@ typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
                                                          const void *addr,
                                                          size_t length,
                                                          ucs_memory_type_t *mem_type_p);
+
+#define uct_md_detect_memory_type_func_unsupported \
+        (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
 
 
 /**

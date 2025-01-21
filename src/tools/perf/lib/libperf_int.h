@@ -44,6 +44,8 @@ typedef struct ucx_perf_thread_context ucx_perf_thread_context_t;
 
 
 typedef ucs_status_t (*ucx_perf_init_func_t)(ucx_perf_context_t *perf);
+#define ucx_perf_init_func_empty \
+    (ucx_perf_init_func_t)ucs_empty_function_return_success
 
 typedef ucs_status_t (*ucx_perf_uct_alloc_func_t)(
         const ucx_perf_context_t *perf, size_t length, unsigned flags,

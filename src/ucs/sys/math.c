@@ -35,12 +35,12 @@ uint64_t ucs_get_prime(unsigned index_val)
     return ucs_large_primes[index_val % num_primes];
 }
 
-void ucs_rand_seed_init()
+void ucs_rand_seed_init(void)
 {
     ucs_rand_seed = ucs_generate_uuid(0);
 }
 
-int ucs_rand()
+int ucs_rand(void)
 {
     return rand_r(&ucs_rand_seed);
 }

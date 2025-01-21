@@ -153,13 +153,13 @@ uint64_t ucs_get_prime(unsigned index);
 /*
  * Generate a random seed
  */
-void ucs_rand_seed_init();
+void ucs_rand_seed_init(void);
 
 
 /*
  * Generate a random number in the range 0..RAND_MAX
  */
-int ucs_rand();
+int ucs_rand(void);
 
 
 /*

@@ -9,6 +9,7 @@
 #endif
 
 #include <uct/base/uct_iface.h>
+#include <uct/base/uct_stubs.h>
 #include <uct/ib/base/ib_md.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 
@@ -229,9 +230,9 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
 static uct_component_t uct_gga_component = {
     .query_md_resources = uct_ib_mlx5_gga_query_md_resources,
     .md_open            = uct_ib_mlx5_gga_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = uct_component_cm_open_func_unsupported,
     .rkey_unpack        = uct_gga_mlx5_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = uct_component_rkey_ptr_func_unsupported,
     .rkey_release       = uct_gga_mlx5_rkey_release,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = "gga",
@@ -632,26 +633,26 @@ uct_gga_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr)
 }
 
 static uct_iface_ops_t uct_gga_mlx5_iface_tl_ops = {
-    .ep_put_short             = ucs_empty_function_return_unsupported,
+    .ep_put_short             = uct_ep_put_short_func_unsupported,
     .ep_put_bcopy             = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_unsupported,
     .ep_put_zcopy             = uct_gga_mlx5_ep_put_zcopy,
-    .ep_get_bcopy             = ucs_empty_function_return_unsupported,
+    .ep_get_bcopy             = uct_ep_get_bcopy_func_unsupported,
     .ep_get_zcopy             = uct_gga_mlx5_ep_get_zcopy,
     .ep_am_short              = (uct_ep_am_short_func_t)ucs_empty_function_return_unsupported,
     .ep_am_short_iov          = (uct_ep_am_short_iov_func_t)ucs_empty_function_return_unsupported,
     .ep_am_bcopy              = (uct_ep_am_bcopy_func_t)ucs_empty_function_return_unsupported,
     .ep_am_zcopy              = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_unsupported,
-    .ep_atomic_cswap64        = ucs_empty_function_return_unsupported,
-    .ep_atomic_cswap32        = ucs_empty_function_return_unsupported,
-    .ep_atomic64_post         = ucs_empty_function_return_unsupported,
-    .ep_atomic32_post         = ucs_empty_function_return_unsupported,
-    .ep_atomic64_fetch        = ucs_empty_function_return_unsupported,
-    .ep_atomic32_fetch        = ucs_empty_function_return_unsupported,
+    .ep_atomic_cswap64        = uct_ep_atomic_cswap64_func_unsupported,
+    .ep_atomic_cswap32        = uct_ep_atomic_cswap32_func_unsupported,
+    .ep_atomic64_post         = uct_ep_atomic64_post_func_unsupported,
+    .ep_atomic32_post         = uct_ep_atomic32_post_func_unsupported,
+    .ep_atomic64_fetch        = uct_ep_atomic64_fetch_func_unsupported,
+    .ep_atomic32_fetch        = uct_ep_atomic32_fetch_func_unsupported,
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_mlx5_base_ep_flush,
     .ep_fence                 = uct_rc_mlx5_base_ep_fence,
-    .ep_check                 = ucs_empty_function_return_unsupported,
+    .ep_check                 = uct_ep_check_func_unsupported,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_gga_mlx5_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_gga_mlx5_ep_t),
     .ep_get_address           = uct_gga_mlx5_ep_get_address,
@@ -739,11 +740,11 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
         .event_cq       = uct_rc_mlx5_iface_common_event_cq,
         .handle_failure = uct_rc_mlx5_iface_handle_failure,
     },
-    .init_rx         = ucs_empty_function_return_success,
-    .cleanup_rx      = ucs_empty_function,
-    .fc_ctrl         = ucs_empty_function_return_unsupported,
+    .init_rx         = uct_rc_iface_init_rx_func_empty,
+    .cleanup_rx      = uct_rc_iface_cleanup_rx_func_empty,
+    .fc_ctrl         = uct_rc_iface_fc_ctrl_func_unsupported,
     .fc_handler      = (uct_rc_iface_fc_handler_func_t)ucs_empty_function_do_assert,
-    .cleanup_qp      = ucs_empty_function_do_assert_void,
+    .cleanup_qp      = uct_rc_iface_qp_cleanup_func_assert,
     .ep_post_check   = uct_rc_mlx5_base_ep_post_check,
     .ep_vfs_populate = uct_rc_mlx5_base_ep_vfs_populate
 };
@@ -853,7 +854,7 @@ static uct_md_ops_t uct_mlx5_gga_md_ops = {
     .mem_attach         = uct_ib_mlx5_devx_mem_attach,
     .mem_advise         = uct_ib_mem_advise,
     .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .detect_memory_type = uct_md_detect_memory_type_func_unsupported,
 };
 
 static ucs_status_t

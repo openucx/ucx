@@ -11,6 +11,7 @@
 #include "tcp.h"
 #include "tcp/tcp.h"
 
+#include <uct/base/uct_stubs.h>
 #include <ucs/async/async.h>
 
 
@@ -376,7 +377,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
     uct_tcp_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                             uct_tcp_iface_t);
 
-    uct_ep_pending_purge(&self->super.super, ucs_empty_function_do_assert_void,
+    uct_ep_pending_purge(&self->super.super, uct_pending_purge_callback_assert,
                          NULL);
 
     if (self->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX) {

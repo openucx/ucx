@@ -74,6 +74,9 @@ enum {
 extern ucs_config_field_t ucs_config_rcache_table[];
 typedef void (*ucs_rcache_invalidate_comp_func_t)(void *arg);
 
+#define ucs_rcache_invalidate_comp_func_empty \
+    (ucs_rcache_invalidate_comp_func_t)ucs_empty_function
+
 
 /*
  * Registration cache operations.

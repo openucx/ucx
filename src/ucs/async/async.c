@@ -78,14 +78,14 @@ static ucs_async_ops_t ucs_async_poll_ops = {
     .block              = ucs_empty_function,
     .unblock            = ucs_empty_function,
     .context_init       = ucs_async_poll_init,
-    .context_cleanup    = ucs_empty_function,
+    .context_cleanup    = ucs_async_context_cleanup_empty,
     .context_try_block  = ucs_async_poll_tryblock,
-    .context_unblock    = ucs_empty_function,
+    .context_unblock    = ucs_async_context_unblock_empty,
     .add_event_fd       = (ucs_async_add_event_fd_t)ucs_empty_function_return_success,
-    .remove_event_fd    = ucs_empty_function_return_success,
+    .remove_event_fd    = ucs_async_remove_event_fd_empty,
     .modify_event_fd    = (ucs_async_modify_event_fd_t)ucs_empty_function_return_success,
-    .add_timer          = ucs_empty_function_return_success,
-    .remove_timer       = ucs_empty_function_return_success,
+    .add_timer          = ucs_async_add_timer_empty,
+    .remove_timer       = ucs_async_remove_timer_empty,
 };
 
 static inline khiter_t ucs_async_handler_kh_get(int id)

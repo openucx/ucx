@@ -76,6 +76,9 @@ typedef ucs_status_t (*uct_mm_mapper_query_func_t)(int *attach_shm_file_p);
 /* Return the size of memory-domain specific iface address (e.g mmap path) */
 typedef size_t (*uct_mm_mapper_iface_addr_length_func_t)(uct_mm_md_t *md);
 
+#define uct_mm_mapper_iface_addr_length_func_empty \
+    (uct_mm_mapper_iface_addr_length_func_t)ucs_empty_function_return_zero_size_t
+
 
 /* Pack interface address. Holds common information for all memory segments
  * allocated on the same interface. 'buffer' must be at least the size returned
@@ -84,6 +87,8 @@ typedef size_t (*uct_mm_mapper_iface_addr_length_func_t)(uct_mm_md_t *md);
 typedef ucs_status_t
 (*uct_mm_mapper_iface_addr_pack_func_t)(uct_mm_md_t *md, void *buffer);
 
+#define uct_mm_mapper_iface_addr_pack_func_empty \
+    (uct_mm_mapper_iface_addr_pack_func_t)ucs_empty_function_return_success
 
 /* Attach memory allocated by mem_alloc(). seg_id is from 'uct_mm_seg_t'
  * structure, and iface_addr is from iface_addr_pack() on the remote process
@@ -105,6 +110,8 @@ typedef int
 (*uct_mm_mapper_is_reachable_func_t)(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
                                      const void *iface_addr);
 
+#define uct_mm_mapper_is_reachable_func_true \
+    (uct_mm_mapper_is_reachable_func_t)ucs_empty_function_return_one_int
 
 /* Clean up the remote segment handle created by mem_attach() */
 typedef void
@@ -167,7 +174,7 @@ typedef struct uct_mm_component {
         .super = { \
             .query_md_resources = uct_mm_query_md_resources, \
             .md_open            = uct_mm_md_open, \
-            .cm_open            = ucs_empty_function_return_unsupported, \
+            .cm_open            = uct_component_cm_open_func_unsupported, \
             .rkey_unpack        = _rkey_unpack, \
             .rkey_ptr           = uct_sm_rkey_ptr, \
             .rkey_release       = _rkey_release, \
