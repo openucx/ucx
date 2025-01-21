@@ -47,6 +47,8 @@ enum {
     UCP_WIREUP_MSG_ACK,
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
+    UCP_WIREUP_MSG_PROMOTE,
+    UCP_WIREUP_MSG_DEMOTE,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -122,8 +124,12 @@ typedef struct {
  */
 typedef struct ucp_wireup_msg {
     uint8_t                type; /* Message type */
-    uint8_t                err_mode; /* Peer error handling mode defined in
-                                        @ucp_err_handling_mode_t */
+    union {
+        uint8_t            err_mode;  /* Peer error handling mode defined in
+                                         @ucp_err_handling_mode_t */
+        uint8_t            score;     /* Peer score determinted by amount of
+                                         traffic that flows through it */
+    };
     ucp_ep_match_conn_sn_t conn_sn; /* Connection sequence number */
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
@@ -224,6 +230,10 @@ double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 
 int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *addr_entry);
+
+void ucp_wireup_send_promotion_request(void *entry, void *arg, int is_external_event);
+
+void ucp_wireup_send_demotion_request(void *entry, void *arg, int is_external_event);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {

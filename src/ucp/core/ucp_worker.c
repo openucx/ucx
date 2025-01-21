@@ -2415,10 +2415,8 @@ static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
     params.remove_thresh    = UCP_WORKER_USAGE_TRACKER_REMOVE_THRESHOLD;
     params.exp_decay.m      = UCP_WORKER_USAGE_TRACKER_EXP_DECAY_MULTIPLIER;
     params.exp_decay.c      = UCP_WORKER_USAGE_TRACKER_EXP_DECAY_ADDER;
-    params.promote_cb       =
-            (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
-    params.demote_cb        =
-            (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
+    params.promote_cb       = ucp_wireup_send_promotion_request;
+    params.demote_cb        = ucp_wireup_send_demotion_request;
 
     status = ucs_usage_tracker_create(&params, &handle);
     if (status != UCS_OK) {
@@ -2604,10 +2602,16 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_close_ifaces;
     }
 
+    /* Create usage tracker to support dynamic TL switching */
+    status = ucp_worker_usage_tracker_create(worker);
+    if (status != UCS_OK) {
+        goto err_close_cms;
+    }
+
     /* Create loopback endpoints to copy across memory types */
     status = ucp_worker_mem_type_eps_create(worker);
     if (status != UCS_OK) {
-        goto err_close_cms;
+        goto err_destroy_usage_tracker;
     }
 
     /* Initialize memory pools, should be done after resources are added */
@@ -2643,22 +2647,17 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
-    status = ucp_worker_usage_tracker_create(worker);
-    if (status != UCS_OK) {
-        goto err_am_cleanup;
-    }
-
     *worker_p = worker;
     return UCS_OK;
 
-err_am_cleanup:
-    ucp_am_cleanup(worker);
 err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
 err_destroy_mpools:
     ucp_worker_destroy_mpools(worker);
 err_destroy_memtype_eps:
     ucp_worker_mem_type_eps_destroy(worker);
+err_destroy_usage_tracker:
+    ucp_worker_usage_tracker_destroy(worker);
 err_close_cms:
     ucp_worker_close_cms(worker);
 err_close_ifaces:
@@ -2882,7 +2881,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
-    ucp_worker_usage_tracker_destroy(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
     ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");
@@ -2919,6 +2917,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_vfs_obj_remove(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_destroy_mpools(worker);
+    ucp_worker_usage_tracker_destroy(worker);
     ucp_worker_close_cms(worker);
     ucp_worker_close_ifaces(worker);
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
