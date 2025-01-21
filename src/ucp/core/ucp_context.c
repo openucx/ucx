@@ -549,7 +549,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"PRIO_EST_NUM_EPS", "20",
    "Estimated number of prioritized endpoints. Does not affect semantics,\n"
    "but only transport selection criteria and resulting performance.",
-   ucs_offsetof(ucp_context_config_t, prio_est_num_eps),
+   ucs_offsetof(ucp_context_config_t, prio_max_num_eps),
    UCS_CONFIG_TYPE_UINT},
 
   {NULL}

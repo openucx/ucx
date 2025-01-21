@@ -204,7 +204,7 @@ typedef struct ucp_context_config {
     /** UCP extra operation attributes flags */
     uint64_t                               extra_op_attr_flags;
     /* How many prioritized endpoints are expected to be created */
-    unsigned                               prio_est_num_eps;
+    unsigned                               prio_max_num_eps;
 } ucp_context_config_t;
 
 
@@ -648,7 +648,7 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 static UCS_F_ALWAYS_INLINE double
 ucp_context_get_est_num_eps(ucp_context_h context, int is_prioritized)
 {
-    return is_prioritized ? context->config.ext.prio_est_num_eps :
+    return is_prioritized ? context->config.ext.prio_max_num_eps :
                             context->config.est_num_eps;
 }
 
