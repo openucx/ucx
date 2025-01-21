@@ -249,8 +249,7 @@ ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
     ucp_proto_perf_check(perf);
 
     va_start(ap, desc_fmt);
-    perf_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_DATA, 0, title,
-                                        desc_fmt, ap);
+    perf_node = ucp_proto_perf_node_new_data(title, desc_fmt, ap);
     va_end(ap);
 
     ucp_proto_perf_node_update_factors(perf_node, perf_factors);
