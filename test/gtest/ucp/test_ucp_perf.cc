@@ -410,7 +410,7 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
     }
     perf_avg /= max_iter;
 
-    /* Run ping-pong with WFE while re-using previous run numbers as
+    /* Run ping-pong with WFE while reusing previous run numbers as
      * a min/max boundary. The latency of the WFE run should stay nearly
      * identical with 200 percent margin. When WFE does not work as expected
      * the slow down is typically 10x-100x */
