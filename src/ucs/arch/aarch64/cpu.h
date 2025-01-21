@@ -1,8 +1,10 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+ * Copyright (c) 2001-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 * Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) Stony Brook University. 2016-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+ * SPDX-License-Identifier: BSD-3-Clause
 *
 * See file LICENSE for terms.
 */

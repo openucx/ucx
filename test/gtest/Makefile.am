@@ -1,11 +1,13 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+# SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2001-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
 # Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
+# SPDX-License-Identifier: BSD-3-Clause
 #
 # See file LICENSE for terms.
 #

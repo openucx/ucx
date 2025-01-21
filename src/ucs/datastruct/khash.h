@@ -1,6 +1,9 @@
 /* The MIT License
 
    Copyright (c) 2008, 2009, 2011 by Attractive Chaos <attractor@live.co.uk>
+ * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+ * Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
 
    Permission is hereby granted, free of charge, to any person obtaining
    a copy of this software and associated documentation files (the

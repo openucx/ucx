@@ -1,6 +1,8 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2011. ALL RIGHTS RESERVED.
+# SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2001-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+# SPDX-License-Identifier: BSD-3-Clause
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 #

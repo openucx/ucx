@@ -1,6 +1,8 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+ * Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * SPDX-License-Identifier: BSD-3-Clause
 * See file LICENSE for terms.
 */
 

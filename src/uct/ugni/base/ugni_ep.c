@@ -1,6 +1,8 @@
 /**
  * Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+ * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+ * Copyright (c) 2001-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
  * See file LICENSE for terms.
  */
 

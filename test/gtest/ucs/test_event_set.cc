@@ -1,5 +1,8 @@
 /**
 * Copyright (C) Hiroyuki Sato. 2019. ALL RIGHTS RESERVED.
+ * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+ * Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
 *
 * See file LICENSE for terms.
 */
