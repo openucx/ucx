@@ -30,7 +30,7 @@ UCS_ARRAY_DECLARE_TYPE(ucs_dynamic_bitmap_t, size_t, ucs_bitmap_word_t);
 
 
 /**
- * Initilaize a dynamic bitmap.
+ * Initialize a dynamic bitmap.
  *
  * @param [out] bitmap   Bitmap to initialize.
  */
