@@ -588,8 +588,15 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
         p += strlen(p);
     }
 
-    uct_ib_gid_str(&params.gid, p, endp - p);
-    p += strlen(p);
+    if (params.flags & (UCT_IB_ADDRESS_PACK_FLAG_ETH |
+                        UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
+                        UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID)) {
+        uct_ib_gid_str(&params.gid, p, endp - p);
+        p += strlen(p);
+
+        snprintf(p, endp - p, " ");
+        p += strlen(p);
+    }
 
     if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
         ucs_assert(params.gid_index != UCT_IB_ADDRESS_INVALID_GID_INDEX);
@@ -605,7 +612,7 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
 
     ucs_assert((params.flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) &&
                (params.flags != UCT_IB_ADDRESS_INVALID_PKEY));
-    snprintf(p, endp - p, "pkey 0x%x ", params.pkey);
+    snprintf(p, endp - p, "pkey 0x%x", params.pkey);
 
     return buf;
 }
