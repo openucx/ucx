@@ -50,4 +50,8 @@ ucs_status_t uct_ud_verbs_qp_max_send_sge(uct_ud_verbs_iface_t *iface,
 int uct_ud_verbs_ep_is_connected(const uct_ep_h tl_ep,
                                  const uct_ep_is_connected_params_t *params);
 
+
+void uct_ud_send_wr_init(struct ibv_send_wr *wr, struct ibv_sge *sge,
+                         int is_inline);
+
 #endif
