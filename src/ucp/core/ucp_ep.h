@@ -749,12 +749,13 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                      const ucp_ep_config_key_t *key2,
                                      ucp_lane_index_t lane2);
 
-ucp_lane_index_t ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
-                                               const ucp_ep_config_key_t *key2,
-                                               ucp_lane_index_t lane1);
+ucp_lane_index_t
+ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *old_key,
+                              const ucp_ep_config_key_t *new_key,
+                              ucp_lane_index_t old_lane);
 
-void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_ep_config_key_t *key2,
+void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *old_key,
+                                   const ucp_ep_config_key_t *new_key,
                                    const ucp_ep_h ep,
                                    const ucp_unpacked_address_t *remote_address,
                                    const unsigned *addr_indices,

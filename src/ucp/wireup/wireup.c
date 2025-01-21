@@ -1356,8 +1356,9 @@ static void ucp_wireup_discard_uct_eps(ucp_ep_h ep, uct_ep_h *uct_eps,
     }
 }
 
-/* Checks if AM lane was replaced after being operational (wireup process
- * completed) */
+/* Check if AM lane should be flushed after being operational (wireup process
+ * completed). If CM lane exists, no messages were sent, thus flush is not
+ * required. */
 static int
 ucp_wireup_is_am_lane_replaced(ucp_ep_h ep,
                                const ucp_lane_index_t *reuse_lane_map)
@@ -1421,13 +1422,10 @@ static int ucp_wireup_should_reconfigure(ucp_ep_h ep,
     }
 
     /* Check whether all lanes are reused */
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (reuse_lane_map[lane] == UCP_NULL_LANE) {
-            return 1;
-        }
-    }
+    for (lane = 0; (lane < ucp_ep_num_lanes(ep)) &&
+                   (reuse_lane_map[lane] != UCP_NULL_LANE); ++lane);
 
-    return 0;
+    return lane != ucp_ep_num_lanes(ep);
 }
 
 static ucp_lane_index_t
@@ -1696,8 +1694,6 @@ ucp_wireup_gather_pending_reqs(ucp_ep_h ep,
     ucp_request_t *req;
     ucp_lane_index_t lane;
 
-    ucs_queue_head_init(replay_pending_queue);
-
     if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         return;
     }
@@ -1759,6 +1755,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                             UCP_EP_FLAG_REMOTE_CONNECTED);
     }
 
+    ucs_queue_head_init(&replay_pending_queue);
     ucp_wireup_gather_pending_reqs(ep, &replay_pending_queue);
 
     status = ucp_wireup_try_select_lanes(ep, ep_init_flags, &tl_bitmap,

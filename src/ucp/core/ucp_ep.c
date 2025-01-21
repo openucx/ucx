@@ -1861,39 +1861,39 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                           config_lane2->dst_md_index);
 }
 
-ucp_lane_index_t ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
-                                               const ucp_ep_config_key_t *key2,
-                                               ucp_lane_index_t lane1)
+ucp_lane_index_t
+ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *old_key,
+                              const ucp_ep_config_key_t *new_key,
+                              ucp_lane_index_t old_lane)
 {
-    ucp_lane_index_t lane_idx;
+    ucp_lane_index_t new_lane;
 
-    for (lane_idx = 0; lane_idx < key2->num_lanes; ++lane_idx) {
-        if (ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane_idx)) {
-            return lane_idx;
+    for (new_lane = 0; new_lane < new_key->num_lanes; ++new_lane) {
+        if (ucp_ep_config_lane_is_peer_match(old_key, old_lane, new_key,
+                                             new_lane)) {
+            return new_lane;
         }
     }
 
     return UCP_NULL_LANE;
 }
 
-static ucp_lane_index_t
-ucp_ep_config_find_reusable_lane(const ucp_ep_config_key_t *key1,
-                                 const ucp_ep_config_key_t *key2, ucp_ep_h ep,
-                                 const ucp_unpacked_address_t *remote_address,
-                                 const unsigned *addr_indices,
-                                 ucp_lane_index_t old_lane)
+static ucp_lane_index_t ucp_ep_config_find_reusable_lane(
+        const ucp_ep_config_key_t *old_key, const ucp_ep_config_key_t *new_key,
+        ucp_ep_h ep, const ucp_unpacked_address_t *remote_address,
+        const unsigned *addr_indices, ucp_lane_index_t old_lane)
 {
     ucp_context_h context     = ep->worker->context;
-    ucp_rsc_index_t rsc_index = key1->lanes[old_lane].rsc_index;
+    ucp_rsc_index_t rsc_index = old_key->lanes[old_lane].rsc_index;
     ucp_lane_index_t new_lane;
     unsigned addr_index;
     const ucp_address_entry_t *ae;
 
-    if (old_lane == key1->cm_lane) {
-        return key2->cm_lane;
+    if (old_lane == old_key->cm_lane) {
+        return new_key->cm_lane;
     }
 
-    new_lane = ucp_ep_config_find_match_lane(key1, key2, old_lane);
+    new_lane = ucp_ep_config_find_match_lane(old_key, new_key, old_lane);
     if (new_lane == UCP_NULL_LANE) {
         /* No matching lane was found */
         return UCP_NULL_LANE;
@@ -1920,20 +1920,18 @@ ucp_ep_config_find_reusable_lane(const ucp_ep_config_key_t *key1,
 
 /* Go through the first configuration and check if the lanes selected
  * for this configuration could be used for the second configuration */
-void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_ep_config_key_t *key2,
+void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *old_key,
+                                   const ucp_ep_config_key_t *new_key,
                                    const ucp_ep_h ep,
                                    const ucp_unpacked_address_t *remote_address,
                                    const unsigned *addr_indices,
                                    ucp_lane_index_t *lane_map)
 {
-    ucp_lane_index_t lane1_idx;
+    ucp_lane_index_t old_lane;
 
-    for (lane1_idx = 0; lane1_idx < key1->num_lanes; ++lane1_idx) {
-        lane_map[lane1_idx] = ucp_ep_config_find_reusable_lane(key1, key2, ep,
-                                                               remote_address,
-                                                               addr_indices,
-                                                               lane1_idx);
+    for (old_lane = 0; old_lane < old_key->num_lanes; ++old_lane) {
+        lane_map[old_lane] = ucp_ep_config_find_reusable_lane(
+                old_key, new_key, ep, remote_address, addr_indices, old_lane);
     }
 }
 
