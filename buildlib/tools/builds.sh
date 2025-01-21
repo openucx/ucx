@@ -320,6 +320,10 @@ build_gcc_debug_opt() {
 	build_gcc CFLAGS=-Og CXXFLAGS=-Og
 }
 
+build_gcc_with_dndebug() {
+	build_gcc CFLAGS=-DNDEBUG CXXFLAGS=-DNDEBUG
+}
+
 #
 # Build with armclang compiler
 #
@@ -444,6 +448,7 @@ then
 			'build_no_devx' \
 			'build_no_openmp' \
 			'build_gcc_debug_opt' \
+			'build_gcc_with_dndebug' \
 			'build_clang' \
 			'build_armclang')
 fi
