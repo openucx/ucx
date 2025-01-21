@@ -755,7 +755,7 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
                       proto->name, ucs_status_string(status), req->send.lane);
     } else {
         if (req->send.proto_stage == UCP_PROTO_STAGE_START) {
-            ++ conf->selections;
+            ++conf->selections;
         }
 
         ucp_trace_req(req, "progress protocol %s returned: %s", proto->name,
