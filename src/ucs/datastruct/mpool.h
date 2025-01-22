@@ -89,10 +89,6 @@ struct ucs_mpool_data {
 };
 
 
-typedef void (*ucs_mpool_obj_init_func_t)(ucs_mpool_t *mp, void *obj, void *chunk);
-typedef void (*ucs_mpool_obj_cleanup_func_t)(ucs_mpool_t *mp, void *obj);
-
-
 /**
  * Defines callbacks for memory pool operations.
  */

@@ -64,6 +64,7 @@ typedef ucs_status_t (*uct_component_md_open_func_t)(
                 uct_component_t *component, const char *md_name,
                 const uct_md_config_t *config, uct_md_h *md_p);
 
+
 /**
  * Component method to open a client/server connection manager.
  *

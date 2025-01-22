@@ -204,7 +204,6 @@ typedef ucs_status_t
 typedef void (*uct_rc_iface_cleanup_rx_func_t)(uct_rc_iface_t *iface);
 
 typedef ucs_status_t (*uct_rc_iface_fc_ctrl_func_t)(uct_ep_t *ep, unsigned op,
-
                                                     uct_rc_pending_req_t *req);
 
 typedef ucs_status_t (*uct_rc_iface_fc_handler_func_t)(uct_rc_iface_t *iface,
@@ -217,6 +216,7 @@ typedef ucs_status_t (*uct_rc_iface_fc_handler_func_t)(uct_rc_iface_t *iface,
 
 typedef void (*uct_rc_iface_qp_cleanup_func_t)(
         uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx);
+
 
 typedef void (*uct_rc_iface_ep_post_check_func_t)(uct_ep_h tl_ep);
 
