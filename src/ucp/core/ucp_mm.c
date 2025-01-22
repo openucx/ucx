@@ -907,9 +907,9 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
         uct_flags |= UCP_MM_UCT_ACCESS_FLAGS(memh->uct_flags);
 
         /* Invalidate the mismatching region and get a new one */
-        ucs_rcache_region_invalidate(context->rcache, &memh->super,
-                                     ucs_rcache_invalidate_comp_func_empty,
-                                     NULL);
+        ucs_rcache_region_invalidate(
+                context->rcache, &memh->super,
+                (ucs_rcache_invalidate_comp_func_t)ucs_empty_function, NULL);
         ucp_memh_put(memh);
     }
 }
@@ -1976,7 +1976,8 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                             "destroyed, but imported memory handle was not",
                             rregion->refcount);
                 ucs_rcache_region_invalidate(
-                        rcache, rregion, ucs_rcache_invalidate_comp_func_empty,
+                        rcache, rregion,
+                        (ucs_rcache_invalidate_comp_func_t)ucs_empty_function,
                         NULL);
                 ucs_rcache_region_put_unsafe(rcache, rregion);
             }

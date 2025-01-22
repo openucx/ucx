@@ -10,7 +10,6 @@
 
 #include "tcp.h"
 
-#include <uct/base/uct_stubs.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <ucs/config/types.h>
@@ -518,7 +517,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_tcp_iface_progress,
     .iface_event_fd_get       = uct_tcp_iface_event_fd_get,
-    .iface_event_arm          = uct_iface_event_arm_func_empty,
+    .iface_event_arm          = (uct_iface_event_arm_func_t)ucs_empty_function,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
     .iface_query              = uct_tcp_iface_query,
     .iface_get_address        = uct_tcp_iface_get_address,

@@ -86,11 +86,6 @@ ucs_status_t ucs_empty_function_return_ep_timeout(void)
     return UCS_ERR_ENDPOINT_TIMEOUT;
 }
 
-ssize_t ucs_empty_function_return_bc_ep_timeout(void)
-{
-    return UCS_ERR_ENDPOINT_TIMEOUT;
-}
-
 ucs_status_t ucs_empty_function_return_busy(void)
 {
     return UCS_ERR_BUSY;

@@ -384,7 +384,7 @@ static uct_iface_internal_ops_t uct_self_iface_internal_ops = {
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = uct_ep_connect_to_ep_v2_func_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_self_iface_is_reachable_v2,
     .ep_is_connected       = uct_base_ep_is_connected
 };
@@ -440,13 +440,13 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
     uct_self_md_config_t *md_config = ucs_derived_of(config,
                                                      uct_self_md_config_t);
     static uct_md_ops_t md_ops = {
-        .close              = uct_md_close_func_empty,
+        .close              = (uct_md_close_func_t)ucs_empty_function,
         .query              = uct_self_md_query,
         .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
         .mem_reg            = uct_md_dummy_mem_reg,
         .mem_dereg          = uct_md_dummy_mem_dereg,
-        .mem_attach         = uct_md_mem_attach_func_unsupported,
-        .detect_memory_type = uct_md_detect_memory_type_func_unsupported
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     };
 
     static uct_self_md_t md;
@@ -475,10 +475,10 @@ static ucs_status_t uct_self_md_rkey_unpack(uct_component_t *component,
 static uct_component_t uct_self_component = {
     .query_md_resources = uct_md_query_single_md_resource,
     .md_open            = uct_self_md_open,
-    .cm_open            = uct_component_cm_open_func_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_self_md_rkey_unpack,
     .rkey_ptr           = uct_sm_rkey_ptr,
-    .rkey_release       = uct_component_rkey_release_func_empty,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = UCT_SELF_NAME,
     .md_config          = {

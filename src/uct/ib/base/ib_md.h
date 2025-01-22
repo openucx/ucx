@@ -43,8 +43,6 @@
  */
 typedef int (*uct_ib_check_device_cb_t)(struct ibv_device *device);
 
-#define uct_ib_check_device_cb_true \
-    (uct_ib_check_device_cb_t)ucs_empty_function_return_one_int
 
 /**
  * IB MD statistics counters

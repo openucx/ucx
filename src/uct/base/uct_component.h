@@ -64,9 +64,6 @@ typedef ucs_status_t (*uct_component_md_open_func_t)(
                 uct_component_t *component, const char *md_name,
                 const uct_md_config_t *config, uct_md_h *md_p);
 
-#define uct_component_md_open_func_unsupported \
-        (uct_component_md_open_func_t)ucs_empty_function_return_unsupported
-
 /**
  * Component method to open a client/server connection manager.
  *
@@ -81,9 +78,6 @@ typedef ucs_status_t (*uct_component_md_open_func_t)(
 typedef ucs_status_t (*uct_component_cm_open_func_t)(
                 uct_component_t *component, uct_worker_h worker,
                 const uct_cm_config_t *config, uct_cm_h *cm_p);
-
-#define uct_component_cm_open_func_unsupported \
-        (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported
 
 
 /**
@@ -106,8 +100,6 @@ typedef ucs_status_t (*uct_component_rkey_unpack_func_t)(
                 uct_component_t *component, const void *rkey_buffer,
                 uct_rkey_t *rkey_p, void **handle_p);
 
-#define uct_component_rkey_unpack_func_unsupported \
-        (uct_component_rkey_unpack_func_t)ucs_empty_function_return_unsupported
 
 /**
  * Component method to obtain a locally accessible pointer to a remote key.
@@ -126,9 +118,6 @@ typedef ucs_status_t (*uct_component_rkey_ptr_func_t)(
                 uct_component_t *component, uct_rkey_t rkey, void *handle,
                 uint64_t remote_addr, void **local_addr_p);
 
-#define uct_component_rkey_ptr_func_unsupported \
-        (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported
-
 
 /**
  * Component method to release an unpacked remote key.
@@ -143,9 +132,6 @@ typedef ucs_status_t (*uct_component_rkey_ptr_func_t)(
  */
 typedef ucs_status_t (*uct_component_rkey_release_func_t)(
                 uct_component_t *component, uct_rkey_t rkey, void *handle);
-
-#define uct_component_rkey_release_func_empty \
-        (uct_component_rkey_release_func_t)ucs_empty_function_return_success
 
 
 /**

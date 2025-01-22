@@ -31,7 +31,6 @@ noinst_HEADERS = \
 	base/uct_cm.h \
 	base/uct_iov.inl \
 	base/uct_vfs_attr.h \
-	base/uct_stubs.h \
 	sm/base/sm_ep.h \
 	sm/base/sm_md.h \
 	sm/base/sm_iface.h \

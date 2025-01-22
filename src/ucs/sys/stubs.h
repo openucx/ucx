@@ -40,12 +40,6 @@ ucs_status_t ucs_empty_function_return_busy(void);
 int ucs_empty_function_do_assert(void);
 void ucs_empty_function_do_assert_void(void);
 
-#define ucs_mpool_obj_init_func_empty \
-    (ucs_mpool_obj_init_func_t)ucs_empty_function_return_success
-
-#define ucs_mpool_obj_cleanup_func_empty \
-    (ucs_mpool_obj_cleanup_func_t)ucs_empty_function_return_success
-
 END_C_DECLS
 
 #endif

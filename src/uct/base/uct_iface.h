@@ -289,9 +289,6 @@ typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
         const uct_ep_addr_t *ep_addr,
         const uct_ep_connect_to_ep_params_t *params);
 
-#define uct_ep_connect_to_ep_v2_func_unsupported \
-    (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported
-
 
 /* Check if remote iface address is reachable */
 typedef int (*uct_iface_is_reachable_v2_func_t)(

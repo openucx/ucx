@@ -63,15 +63,9 @@ typedef ucs_status_t (*ucs_async_context_init_t)(ucs_async_context_t *async);
 
 typedef void (*ucs_async_context_cleanup_t)(ucs_async_context_t *async);
 
-#define ucs_async_context_cleanup_empty \
-    (ucs_async_context_cleanup_t)ucs_empty_function
-
 typedef int (*ucs_async_context_try_block_t)(ucs_async_context_t *async);
 
 typedef void (*ucs_async_context_unblock_t)(ucs_async_context_t *async);
-
-#define ucs_async_context_unblock_empty \
-    (ucs_async_context_unblock_t)ucs_empty_function
 
 typedef ucs_status_t (*ucs_async_add_event_fd_t)(ucs_async_context_t *async,
                                                  int event_fd,
@@ -79,9 +73,6 @@ typedef ucs_status_t (*ucs_async_add_event_fd_t)(ucs_async_context_t *async,
 
 typedef ucs_status_t (*ucs_async_remove_event_fd_t)(ucs_async_context_t *async,
                                                     int event_fd);
-
-#define ucs_async_remove_event_fd_empty \
-    (ucs_async_remove_event_fd_t)ucs_empty_function_return_success
 
 typedef ucs_status_t (*ucs_async_modify_event_fd_t)(ucs_async_context_t *async,
                                                     int event_fd,
@@ -91,14 +82,8 @@ typedef ucs_status_t (*ucs_async_add_timer_t)(ucs_async_context_t *async,
                                               int timer_id,
                                               ucs_time_t interval);
 
-#define ucs_async_add_timer_empty \
-    (ucs_async_add_timer_t)ucs_empty_function_return_success
-
 typedef ucs_status_t (*ucs_async_remove_timer_t)(ucs_async_context_t *async,
                                                  int timer_id);
-
-#define ucs_async_remove_timer_empty \
-    (ucs_async_remove_timer_t)ucs_empty_function_return_success
 
 
 /**

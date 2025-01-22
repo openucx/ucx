@@ -201,20 +201,11 @@ typedef ucs_status_t
 (*uct_rc_iface_init_rx_func_t)(uct_rc_iface_t *iface,
                                const uct_rc_iface_common_config_t *config);
 
-#define uct_rc_iface_init_rx_func_empty \
-    (uct_rc_iface_init_rx_func_t)ucs_empty_function_return_success
-
 typedef void (*uct_rc_iface_cleanup_rx_func_t)(uct_rc_iface_t *iface);
-
-#define uct_rc_iface_cleanup_rx_func_empty \
-    (uct_rc_iface_cleanup_rx_func_t)ucs_empty_function
 
 typedef ucs_status_t (*uct_rc_iface_fc_ctrl_func_t)(uct_ep_t *ep, unsigned op,
 
                                                     uct_rc_pending_req_t *req);
-
-#define uct_rc_iface_fc_ctrl_func_unsupported \
-    (uct_rc_iface_fc_ctrl_func_t)ucs_empty_function_return_unsupported
 
 typedef ucs_status_t (*uct_rc_iface_fc_handler_func_t)(uct_rc_iface_t *iface,
                                                        unsigned qp_num,
@@ -226,9 +217,6 @@ typedef ucs_status_t (*uct_rc_iface_fc_handler_func_t)(uct_rc_iface_t *iface,
 
 typedef void (*uct_rc_iface_qp_cleanup_func_t)(
         uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx);
-
-#define uct_rc_iface_qp_cleanup_func_assert \
-    (uct_rc_iface_qp_cleanup_func_t)ucs_empty_function_do_assert_void
 
 typedef void (*uct_rc_iface_ep_post_check_func_t)(uct_ep_h tl_ep);
 

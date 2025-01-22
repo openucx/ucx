@@ -13,7 +13,6 @@
 #include "cma_ep.h"
 
 #include <uct/base/uct_md.h>
-#include <uct/base/uct_stubs.h>
 #include <ucs/sys/string.h>
 
 
@@ -133,8 +132,8 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_cma_iface_t, uct_iface_t);
 static uct_iface_ops_t uct_cma_iface_tl_ops = {
     .ep_put_zcopy             = uct_scopy_ep_put_zcopy,
     .ep_get_zcopy             = uct_scopy_ep_get_zcopy,
-    .ep_pending_add           = uct_ep_pending_add_func_busy,
-    .ep_pending_purge         = uct_ep_pending_purge_func_empty,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function_return_success,
     .ep_flush                 = uct_scopy_ep_flush,
     .ep_fence                 = uct_sm_ep_fence,
     .ep_check                 = uct_cma_ep_check,
@@ -142,10 +141,10 @@ static uct_iface_ops_t uct_cma_iface_tl_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_ep_t),
     .iface_flush              = uct_scopy_iface_flush,
     .iface_fence              = uct_sm_iface_fence,
-    .iface_progress_enable    = uct_iface_progress_enable_func_empty,
-    .iface_progress_disable   = uct_iface_progress_disable_func_empty,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
     .iface_progress           = uct_scopy_iface_progress,
-    .iface_event_fd_get       = uct_iface_event_fd_get_func_unsupported,
+    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucs_empty_function_return_unsupported,
     .iface_event_arm          = uct_scopy_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_iface_t),
     .iface_query              = uct_cma_iface_query,
@@ -160,7 +159,7 @@ static uct_scopy_iface_ops_t uct_cma_iface_ops = {
         .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
         .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
         .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-        .ep_connect_to_ep_v2   = uct_ep_connect_to_ep_v2_func_unsupported,
+        .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
         .iface_is_reachable_v2 = uct_cma_iface_is_reachable_v2,
         .ep_is_connected       = uct_cma_ep_is_connected
     },
