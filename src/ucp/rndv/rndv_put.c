@@ -218,7 +218,7 @@ ucp_proto_rndv_put_common_data_sent(ucp_request_t *req)
     return UCS_INPROGRESS;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_put_common_request_init(ucp_request_t *req)
 {
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
@@ -226,7 +226,8 @@ ucp_proto_rndv_put_common_request_init(ucp_request_t *req)
     req->send.rndv.put.flush_lane = 0;
     req->send.rndv.put.atp_lane   = 0;
     req->send.rndv.put.atp_count  = 0;
-    ucp_proto_rndv_bulk_request_init(req, &rpriv->bulk);
+
+    return ucp_proto_rndv_bulk_request_init(req, &rpriv->bulk);
 }
 
 static void

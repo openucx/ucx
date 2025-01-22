@@ -861,7 +861,8 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     req = ucp_ep_flush_internal(reply_ep, UCP_REQUEST_FLAG_RELEASED,
                                 &ucp_request_null_param, NULL,
-                                ucp_ep_removed_flush_completion, "close");
+                                ucp_ep_removed_flush_completion, "close",
+                                UCT_FLUSH_FLAG_LOCAL);
     if (UCS_PTR_IS_PTR(req)) {
         return;
     }

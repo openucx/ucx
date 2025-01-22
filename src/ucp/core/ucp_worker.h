@@ -292,6 +292,8 @@ typedef struct ucp_worker {
     char                             address_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     unsigned                         flush_ops_count;     /* Number of pending operations */
+    uint64_t                         fence_seq;           /* Sequence number of
+                                                             the last fence */
 
     int                              event_fd;            /* Allocated (on-demand) event fd for wakeup */
     ucs_sys_event_set_t              *event_set;          /* Allocated UCS event set for wakeup */
