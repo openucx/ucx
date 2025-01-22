@@ -397,10 +397,17 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     uct_cuda_ipc_memh_t *memh = params->memh;
     uct_cuda_ipc_lkey_t *key, *tmp;
 
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
 
     ucs_list_for_each_safe(key, tmp, &memh->list, link) {
         ucs_free(key);
+    }
+
+    /* TODO: remove this when derived memory handle is ready */
+    if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
+        UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
+        ucs_assert(params->comp != NULL); /* suppress coverity false-positive */
+        uct_invoke_completion(params->comp, UCS_OK);
     }
 
     ucs_free(memh);
