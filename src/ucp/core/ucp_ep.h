@@ -501,6 +501,8 @@ typedef struct {
                               are waiting for remote completion */
     uint32_t         send_sn; /* Sequence number of sent operations */
     uint32_t         cmpl_sn; /* Sequence number of completions */
+    ucp_lane_map_t   unflushed_lanes; /* Bitmap of lanes which have unflushed
+                                         operations */
 } ucp_ep_flush_state_t;
 
 

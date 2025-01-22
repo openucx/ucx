@@ -58,6 +58,7 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
         req->send.length = req->send.state.dt_iter.length;
         req->flags      |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
         ucp_send_request_id_alloc(req);
+        ucp_proto_single_rma_init_func(req);
     }
 
     ucp_worker_flush_ops_count_add(worker, +1);

@@ -537,6 +537,7 @@ void ucp_ep_flush_state_reset(ucp_ep_h ep)
 
     flush_state->send_sn = 0;
     flush_state->cmpl_sn = 0;
+    flush_state->unflushed_lanes = 0;
     ucs_hlist_head_init(&flush_state->reqs);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
 }
