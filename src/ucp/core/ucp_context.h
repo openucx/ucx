@@ -648,7 +648,8 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 static UCS_F_ALWAYS_INLINE double
 ucp_context_get_est_num_eps(ucp_context_h context, int is_prioritized)
 {
-    return is_prioritized ? context->config.ext.prio_max_num_eps :
+    return is_prioritized ? ucs_min(context->config.est_num_eps,
+                                    context->config.ext.prio_max_num_eps) :
                             context->config.est_num_eps;
 }
 
