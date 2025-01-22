@@ -95,6 +95,7 @@ struct ucp_proto_select_param {
     } UCS_S_PACKED op;
 } UCS_S_PACKED;
 
+#define UCP_PROTO_SELECTIONS_COUNT_MAX  UINT8_MAX
 
 /**
  * Protocol and its private configuration
@@ -124,6 +125,9 @@ typedef struct {
 
     /* Number of times this protocol was selected */
     unsigned                    selections;
+
+    /* Progress wrapper callbacks */
+    uct_pending_callback_t      progress_wrapper[UCP_PROTO_STAGE_LAST];
 } ucp_proto_config_t;
 
 

@@ -300,6 +300,7 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
             proto_config->init_elem      = proto;
             proto_config->selections     = 0;
             *last_proto_idx              = proto_idx;
+            ucp_request_init_progress_wrapper(worker, proto_config, internal);
         }
 
         /* Print detailed protocol selection data to a user-configured path */

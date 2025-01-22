@@ -2205,13 +2205,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
              ((context->config.ext.max_rma_lanes > 1) ||
               context->config.ext.proto_enable));
 
-    context->config.trace_used_proto_selections =
-            !strcmp(context->config.ext.proto_info, "used");
-
     context->config.progress_wrapper_enabled =
             ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
-            ucp_context_usage_tracker_enabled(context) ||
-            context->config.trace_used_proto_selections;
+            ucp_context_usage_tracker_enabled(context);
+
+    context->config.trace_used_proto_selections =
+            !strcmp(context->config.ext.proto_info, "used");
 
     return UCS_OK;
 
