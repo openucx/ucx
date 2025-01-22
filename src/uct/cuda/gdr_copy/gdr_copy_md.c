@@ -51,9 +51,9 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
      ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.c), UCS_CONFIG_TYPE_TIME},
 
-    {"RCACHE_OVERHEAD", "250ns", "gdr_copy registration cache lookup overhead",
-     ucs_offsetof(uct_gdr_copy_md_config_t, rcache_overhead),
-     UCS_CONFIG_TYPE_TIME},
+    {"", "RCACHE_OVERHEAD=0;RCACHE_PURGE_ON_FORK=n;", NULL,
+     ucs_offsetof(uct_gdr_copy_md_config_t, rcache_config),
+     UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
     {NULL}
 };
@@ -464,12 +464,11 @@ uct_gdr_copy_md_create(uct_component_t *component,
         goto out;
     }
 
-    ucs_rcache_set_default_params(&rcache_params);
+    ucs_rcache_set_params(&rcache_params, &md_config->rcache_config);
     rcache_params.region_struct_size = sizeof(uct_gdr_copy_rcache_region_t);
     rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
     rcache_params.context            = md;
     rcache_params.ops                = &uct_gdr_copy_rcache_ops;
-    rcache_params.flags              = 0;
 
     status = ucs_rcache_create(&rcache_params, "gdr_copy", ucs_stats_get_root(),
                                &md->rcache);
@@ -480,7 +479,7 @@ uct_gdr_copy_md_create(uct_component_t *component,
     }
 
     md->super.ops = &uct_gdr_copy_md_rcache_ops;
-    md->reg_cost  = ucs_linear_func_make(md_config->rcache_overhead, 0);
+    md->reg_cost  = ucs_linear_func_make(md_config->rcache_config.overhead, 0);
 
 out:
     *md_p = md;
