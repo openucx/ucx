@@ -90,59 +90,95 @@ struct ucs_mpool_data {
 
 
 /**
+ * Allocate a chunk of memory to be used by the mpool.
+ *
+ * @param mp           Memory pool structure.
+ * @param size_p       Points to minimal size to allocate. The function may
+ *                     modify it to the actual allocated size. which must be
+ *                     larger or equal.
+ * @param chunk_p      Filled with a pointer to the allocated chunk.
+ *
+ * @return             Error status.
+ */
+typedef ucs_status_t (*ucs_mpool_chunk_alloc_func_t)(ucs_mpool_t *mp,
+                                                     size_t *size_p,
+                                                     void **chunk_p);
+
+
+/**
+ * Release previously allocated chunk of memory.
+ *
+ * @param mp           Memory pool structure.
+ * @param chunk        Chunk to release.
+ */
+typedef void (*ucs_mpool_chunk_release_func_t)(ucs_mpool_t *mp, void *chunk);
+
+
+/**
+ * Initialize an object in the memory pool on the first time it's allocated.
+ * May be NULL.
+ *
+ * @param mp           Memory pool structure.
+ * @param obj          Object to initialize.
+ * @param chunk        The chunk on which the object was allocated, as returned
+ *                     from chunk_alloc().
+ */
+typedef void (*ucs_mpool_obj_init_func_t)(ucs_mpool_t *mp, void *obj, void *chunk);
+
+
+/**
+ * Cleanup an object in the memory pool just before its memory is released.
+ * May be NULL.
+ *
+ * @param mp           Memory pool structure.
+ * @param obj          Object to initialize.
+ */
+typedef void (*ucs_mpool_obj_cleanup_func_t)(ucs_mpool_t *mp, void *obj);
+
+
+/**
+ * Return a string representing the object, used for debug.
+ * May be NULL.
+ *
+ * @param mp           Memory pool structure.
+ * @param obj          Object to show.
+ * @param strb         String buffer to fill with object information.
+ */
+typedef void (*ucs_mpool_obj_str_func_t)(ucs_mpool_t *mp, void *obj,
+                                         ucs_string_buffer_t *strb);
+
+
+/**
  * Defines callbacks for memory pool operations.
  */
 struct ucs_mpool_ops {
     /**
      * Allocate a chunk of memory to be used by the mpool.
-     *
-     * @param mp           Memory pool structure.
-     * @param size_p       Points to minimal size to allocate. The function may
-     *                      modify it to the actual allocated size. which must be
-     *                      larger or equal.
-     * @param chunk_p      Filled with a pointer to the allocated chunk.
-     *
-     * @return             Error status.
      */
-    ucs_status_t (*chunk_alloc)(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+    ucs_mpool_chunk_alloc_func_t   chunk_alloc;
 
     /**
      * Release previously allocated chunk of memory.
-     *
-     * @param mp           Memory pool structure.
-     * @param chunk        Chunk to release.
      */
-    void         (*chunk_release)(ucs_mpool_t *mp, void *chunk);
+    ucs_mpool_chunk_release_func_t chunk_release;
 
     /**
      * Initialize an object in the memory pool on the first time it's allocated.
      * May be NULL.
-     *
-     * @param mp           Memory pool structure.
-     * @param obj          Object to initialize.
-     * @param chunk        The chunk on which the object was allocated, as returned
-     *                      from chunk_alloc().
      */
-    void         (*obj_init)(ucs_mpool_t *mp, void *obj, void *chunk);
+    ucs_mpool_obj_init_func_t      obj_init;
 
     /**
      * Cleanup an object in the memory pool just before its memory is released.
      * May be NULL.
-     *
-     * @param mp           Memory pool structure.
-     * @param obj          Object to initialize.
      */
-    void         (*obj_cleanup)(ucs_mpool_t *mp, void *obj);
+    ucs_mpool_obj_cleanup_func_t   obj_cleanup;
 
     /**
      * Return a string representing the object, used for debug.
      * May be NULL.
-     *
-     * @param mp           Memory pool structure.
-     * @param obj          Object to show.
-     * @param strb         String buffer to fill with object information.
      */
-    void         (*obj_str)(ucs_mpool_t *mp, void *obj, ucs_string_buffer_t *strb);
+    ucs_mpool_obj_str_func_t       obj_str;
 };
 
 

@@ -120,7 +120,7 @@ void ucs_rcache_vfs_init(ucs_rcache_t *rcache);
 
 
 /* Disable any atfork hooks created by registration caches in the program */
-void ucs_rcache_atfork_disable();
+void ucs_rcache_atfork_disable(void);
 
 
 /**
@@ -129,7 +129,7 @@ void ucs_rcache_atfork_disable();
  *
  * @return Number of bins.
  */
-size_t ucs_rcache_distribution_get_num_bins();
+size_t ucs_rcache_distribution_get_num_bins(void);
 
 
 void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,

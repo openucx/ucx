@@ -20,7 +20,7 @@
 #include <limits.h>
 
 
-static uint64_t supported_mem_types()
+static uint64_t supported_mem_types(void)
 {
     static const uint64_t default_memory_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     ucp_context_attr_t context_attr;
@@ -45,7 +45,7 @@ static uint64_t supported_mem_types()
     return context_attr.memory_types;
 }
 
-static void usage()
+static void usage(void)
 {
     char buf[128];
 

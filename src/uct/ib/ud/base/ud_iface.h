@@ -118,7 +118,7 @@ typedef struct uct_ud_iface_ops {
                                                      const uct_ud_iface_addr_t *if_addr,
                                                      int path_index, void *address_p);
     void*                     (*ep_get_peer_address)(uct_ud_ep_t *ud_ep);
-    size_t                    (*get_peer_address_length)();
+    size_t                    (*get_peer_address_length)(void);
     const char*               (*peer_address_str)(const uct_ud_iface_t *iface,
                                                   const void *address,
                                                   char *str, size_t max_size);

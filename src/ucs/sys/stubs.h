@@ -35,7 +35,6 @@ ucs_status_t ucs_empty_function_return_no_resource(void);
 ucs_status_t ucs_empty_function_return_invalid_param(void);
 ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource(void);
 ucs_status_t ucs_empty_function_return_ep_timeout(void);
-ssize_t ucs_empty_function_return_bc_ep_timeout(void);
 ucs_status_t ucs_empty_function_return_busy(void);
 int ucs_empty_function_do_assert(void);
 void ucs_empty_function_do_assert_void(void);

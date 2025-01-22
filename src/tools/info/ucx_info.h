@@ -36,11 +36,11 @@ typedef enum {
 } process_placement_t;
 
 
-void print_version();
+void print_version(void);
 
 void print_sys_info(int print_opts);
 
-void print_build_config();
+void print_build_config(void);
 
 void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
                     const char *req_tl_name);

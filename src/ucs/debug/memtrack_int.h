@@ -43,19 +43,19 @@ typedef struct ucs_memtrack_entry {
 /**
  * Start tracking memory (or increment reference count).
  */
-void ucs_memtrack_init();
+void ucs_memtrack_init(void);
 
 
 /**
  * Stop tracking memory (or decrement reference count).
  */
-void ucs_memtrack_cleanup();
+void ucs_memtrack_cleanup(void);
 
 
 /*
  * Check if memtrack is enabled at the moment.
  */
-int ucs_memtrack_is_enabled();
+int ucs_memtrack_is_enabled(void);
 
 
 /**

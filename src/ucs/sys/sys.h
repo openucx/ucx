@@ -150,18 +150,18 @@ ucs_status_t ucs_sys_read_sysfs_file(const char *dev_name,
 /**
  * @return TMPDIR environment variable if set. Otherwise, return "/tmp".
  */
-const char *ucs_get_tmpdir();
+const char *ucs_get_tmpdir(void);
 
 /**
  * @return Host name.
  */
-const char *ucs_get_host_name();
+const char *ucs_get_host_name(void);
 
 
 /**
  * @return user name.
  */
-const char *ucs_get_user_name();
+const char *ucs_get_user_name(void);
 
 
 /**
@@ -177,7 +177,7 @@ void ucs_expand_path(const char *path, char *fullpath, size_t max);
 /**
  * @return Path to the main executable.
  */
-const char *ucs_get_exe();
+const char *ucs_get_exe(void);
 
 
 /**
@@ -189,13 +189,13 @@ uint32_t ucs_file_checksum(const char *filename);
 /**
  * Get a globally unique identifier of the machine running the current process.
  */
-uint64_t ucs_machine_guid();
+uint64_t ucs_machine_guid(void);
 
 
 /**
  * Get the first processor number we are bound to.
  */
-int ucs_get_first_cpu();
+int ucs_get_first_cpu(void);
 
 
 /**
@@ -215,7 +215,7 @@ uint64_t ucs_generate_uuid(uint64_t seed);
  *
  * @return The maximal number of files that could be opened simultaneously.
  */
-int ucs_sys_max_open_files();
+int ucs_sys_max_open_files(void);
 
 
 /**
@@ -305,7 +305,7 @@ ssize_t ucs_read_file_str(char *buffer, size_t max, int silent,
 /**
  * @return Regular page size on the system.
  */
-size_t ucs_get_page_size();
+size_t ucs_get_page_size(void);
 
 
 /**
@@ -335,19 +335,19 @@ void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
 /**
  * @return Huge page size on the system, or -1 if unsupported.
  */
-ssize_t ucs_get_huge_page_size();
+ssize_t ucs_get_huge_page_size(void);
 
 
 /**
  * @return free mem size on the system.
  */
-size_t ucs_get_memfree_size();
+size_t ucs_get_memfree_size(void);
 
 
 /**
  * @return Physical memory size on the system.
  */
-size_t ucs_get_phys_mem_size();
+size_t ucs_get_phys_mem_size(void);
 
 
 /**
@@ -451,7 +451,7 @@ ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove);
 /**
  * Get process command line
  */
-const char* ucs_get_process_cmdline();
+const char* ucs_get_process_cmdline(void);
 
 
 /**
@@ -480,7 +480,7 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header, double scale);
  *
  * @return 1 for true and 0 for false
  */
-int ucs_is_thp_enabled();
+int ucs_is_thp_enabled(void);
 
 
 /**
@@ -488,7 +488,7 @@ int ucs_is_thp_enabled();
  *
  * @return shmmax size
  */
-size_t ucs_get_shmmax();
+size_t ucs_get_shmmax(void);
 
 
 /**
@@ -639,7 +639,7 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *arg);
  * @return UCS_OK if the limit has not been reached. UCS_ERR_EXCEEDS_LIMIT,
  *         otherwise.
  */
-ucs_status_t ucs_sys_check_fd_limit_per_process();
+ucs_status_t ucs_sys_check_fd_limit_per_process(void);
 
 
 /*
@@ -661,7 +661,7 @@ ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
  *
  * @return number of CPUs, or -1 in case of error.
  */
-long ucs_sys_get_num_cpus();
+long ucs_sys_get_num_cpus(void);
 
 
 /*
@@ -697,7 +697,7 @@ int ucs_sys_is_dynamic_lib(void);
 /**
  * @return Product name from DMI table.
  */
-const char *ucs_sys_dmi_product_name();
+const char *ucs_sys_dmi_product_name(void);
 
 END_C_DECLS
 

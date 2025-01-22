@@ -29,13 +29,13 @@ ucs_status_t ucs_sys_get_lib_info(Dl_info *dl_info);
 /**
  * @return Full path to current library.
  */
-const char *ucs_sys_get_lib_path();
+const char *ucs_sys_get_lib_path(void);
 
 
 /**
  * @return UCS library loading address.
  */
-unsigned long ucs_sys_get_lib_base_addr();
+unsigned long ucs_sys_get_lib_base_addr(void);
 
 END_C_DECLS
 

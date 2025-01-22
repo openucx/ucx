@@ -12,7 +12,7 @@
 #include <ucs/sys/lib.h>
 #include <ucs/sys/string.h>
 
-void print_version()
+void print_version(void)
 {
     const char *path = ucs_sys_get_lib_path();
 
