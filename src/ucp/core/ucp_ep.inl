@@ -289,4 +289,16 @@ ucp_ep_config_err_mode_eq(ucp_ep_h ep, ucp_err_handling_mode_t err_mode)
     return ucp_ep_config(ep)->key.err_mode == err_mode;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_mark_unflushed_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
+{
+    ep->ext->flush_state.unflushed_lanes |= UCS_BIT(lane_index);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_mark_flushed(ucp_ep_h ep)
+{
+    ep->ext->flush_state.unflushed_lanes = 0;
+}
+
 #endif
