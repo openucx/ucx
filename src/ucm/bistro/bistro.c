@@ -1,6 +1,8 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+ * Copyright (c) 2018-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+ * SPDX-License-Identifier: BSD-3-Clause
  *
  * See file LICENSE for terms.
  */
