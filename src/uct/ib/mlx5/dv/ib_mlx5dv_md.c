@@ -778,6 +778,26 @@ uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md, size_t length,
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ib_mlx5_devx_memh_clone(uct_ib_mlx5_md_t *md,
+                            const uct_ib_mlx5_devx_mem_t *src,
+                            uct_ib_mlx5_devx_mem_t **memh_p)
+{
+    size_t mr_size = src->super.flags & UCT_IB_MEM_IMPORTED ?
+                            0 : sizeof(src->mrs[0]);
+    uct_ib_mem_t *ib_memh;
+    ucs_status_t status;
+
+    status = uct_ib_memh_clone(&md->super, &src->super, sizeof(**memh_p),
+                               mr_size, &ib_memh);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *memh_p = ucs_derived_of(ib_memh, uct_ib_mlx5_devx_mem_t);
+    return UCS_OK;
+}
+
 static int
 uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
 {
@@ -837,6 +857,34 @@ err:
     return status;
 }
 
+static ucs_status_t
+uct_ib_mlx5_devx_derived_mem_reg(uct_md_h uct_md, uct_ib_mlx5_devx_mem_t *base,
+                                 uct_mem_h *memh_p)
+{
+    uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+    uct_ib_mlx5_devx_mem_t *memh;
+    ucs_status_t status;
+
+    ucs_assertv(!(base->super.flags & UCT_IB_MEM_FLAG_DERIVED),
+                "memh=%p is already a derived memh", base);
+
+    status = uct_ib_mlx5_devx_memh_clone(md, base, &memh);
+    if (status != UCS_OK) {
+        ucs_error("%s: failed to clone memory handle: %s",
+                  uct_ib_mlx5_dev_name(md), ucs_status_string(status));
+        return status;
+    }
+
+    memh->super.flags  |= UCT_IB_MEM_FLAG_DERIVED;
+    memh->atomic_dvmr   = NULL;
+    memh->atomic_rkey   = UCT_IB_INVALID_MKEY;
+    memh->indirect_dvmr = NULL;
+    memh->indirect_rkey = UCT_IB_INVALID_MKEY;
+
+    *memh_p = memh;
+    return UCS_OK;
+}
+
 ucs_status_t
 uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
                          const uct_md_mem_reg_params_t *params,
@@ -844,12 +892,17 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     unsigned flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    uct_mem_h base = UCT_MD_MEM_REG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL);
     uct_ib_mlx5_devx_mem_t *memh;
     ucs_status_t status;
     uint32_t dummy_mkey;
 
     if (flags & UCT_MD_MEM_GVA) {
         return uct_ib_mlx5_devx_mem_reg_gva(uct_md, flags, memh_p);
+    }
+
+    if (base != NULL) {
+        return uct_ib_mlx5_devx_derived_mem_reg(uct_md, base, memh_p);
     }
 
     status = uct_ib_mlx5_devx_memh_alloc(md, length, flags,
@@ -1509,6 +1562,11 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
         return status;
     }
 
+    /* Derived memh owns only indirect keys, but not the other state */
+    if (memh->super.flags & UCT_IB_MEM_FLAG_DERIVED) {
+        goto out;
+    }
+
     if (memh->smkey_mr != NULL) {
         ucs_trace("%s: destroy smkey_mr %p with key %x",
                   uct_ib_device_name(&md->super.dev), memh->smkey_mr,
@@ -1567,6 +1625,7 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
         uct_invoke_completion(params->comp, UCS_OK);
     }
 
+out:
     ucs_free(memh);
     return UCS_OK;
 }
