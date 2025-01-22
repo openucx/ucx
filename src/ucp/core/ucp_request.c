@@ -800,12 +800,16 @@ void ucp_request_init_progress_wrapper(ucp_worker_h worker,
             proto_config->progress_wrapper[stage] =
                                                 ucp_request_progress_wrapper;
         }
-    } else if (worker->context->config.trace_used_proto_selections) {
+        return;
+    }
+
+    /* Set wrappers pointing to the original protocol functions */
+    memcpy(proto_config->progress_wrapper, proto_config->proto->progress,
+           sizeof(proto_config->progress_wrapper));
+
+    if (worker->context->config.trace_used_proto_selections) {
         /* TODO: should we disable progress wrapper for internal protocols? */
         proto_config->progress_wrapper[UCP_PROTO_STAGE_START] =
                                                 ucp_request_progress_counter;
-    } else {
-        memcpy(proto_config->progress_wrapper, proto_config->proto->progress,
-               sizeof(proto_config->progress_wrapper));
     }
 }
