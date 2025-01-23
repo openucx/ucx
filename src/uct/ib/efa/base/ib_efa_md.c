@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include <uct/ib/efa/ib_efa.h>
+#include <uct/ib/efa/base/ib_efa.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
 
@@ -104,12 +104,16 @@ static uct_ib_md_ops_t uct_ib_efa_md_ops = {
 
 UCT_IB_MD_DEFINE_ENTRY(efa, uct_ib_efa_md_ops);
 
+extern uct_tl_t UCT_TL_NAME(srd);
+
 void UCS_F_CTOR uct_efa_init(void)
 {
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(efa).list);
+    uct_tl_register(&uct_ib_component, &UCT_TL_NAME(srd));
 }
 
 void UCS_F_DTOR uct_efa_cleanup(void)
 {
+    uct_tl_unregister(&UCT_TL_NAME(srd));
     ucs_list_del(&UCT_IB_MD_OPS_NAME(efa).list);
 }
