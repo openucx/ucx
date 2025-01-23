@@ -71,6 +71,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
     const uct_alloc_method_t *method;
     ucs_log_level_t log_level;
     ucs_memory_type_t mem_type;
+    ucs_sys_device_t sys_dev;
     uct_md_attr_t md_attr;
     ucs_status_t status;
     unsigned flags;
@@ -101,12 +102,15 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                    params->name : "anonymous-uct_mem_alloc";
     mem_type     = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE) ?
                    params->mem_type : UCS_MEMORY_TYPE_HOST;
+    sys_dev      = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEVICE) ?
+                   params->sys_dev : UCS_SYS_DEVICE_ID_UNKNOWN;
     alloc_length = length;
     log_level    = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                    UCS_LOG_LEVEL_ERROR;
 
-    ucs_trace("allocating %s: %s memory length %zu flags 0x%x", alloc_name,
-              ucs_memory_type_names[mem_type], alloc_length, flags);
+    ucs_trace("allocating %s: %s memory length %zu sys_dev %s flags 0x%x",
+              alloc_name, ucs_memory_type_names[mem_type], alloc_length,
+              ucs_topo_sys_device_get_name(sys_dev), flags);
     ucs_log_indent(1);
 
     for (method = methods; method < methods + num_methods; ++method) {
@@ -153,7 +157,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                  */
                 status = uct_md_mem_alloc(md, &alloc_length, &address,
                                           mem_type, flags, alloc_name,
-                                          &memh);
+                                          sys_dev, &memh);
                 if (status != UCS_OK) {
                     ucs_log(log_level,
                             "failed to allocate %zu bytes using md %s for %s: %s",
@@ -165,6 +169,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 ucs_assert(memh != UCT_MEM_HANDLE_NULL);
                 mem->md       = md;
                 mem->mem_type = mem_type;
+                mem->sys_dev  = sys_dev;
                 mem->memh     = memh;
                 goto allocated;
             }

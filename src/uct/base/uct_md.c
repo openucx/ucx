@@ -539,10 +539,11 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
 
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
                               ucs_memory_type_t mem_type, unsigned flags,
-                              const char *alloc_name, uct_mem_h *memh_p)
+                              const char *alloc_name, ucs_sys_device_t sys_dev,
+                              uct_mem_h *memh_p)
 {
     return md->ops->mem_alloc(md, length_p, address_p, mem_type, flags,
-                              alloc_name, memh_p);
+                              alloc_name, sys_dev, memh_p);
 }
 
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)
