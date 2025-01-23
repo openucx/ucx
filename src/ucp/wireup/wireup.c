@@ -1356,8 +1356,8 @@ static void ucp_wireup_discard_uct_eps(ucp_ep_h ep, uct_ep_h *uct_eps,
     }
 }
 
-/* Check if AM lane should be flushed after being operational (wireup process
- * completed). If CM lane exists, no messages were sent, thus flush is not
+/* Check if AM lane should be flushed to remote side.
+ * If CM lane exists, no messages were sent, thus flush is not
  * required. */
 static int
 ucp_wireup_is_am_lane_replaced(ucp_ep_h ep,
@@ -1369,9 +1369,7 @@ ucp_wireup_is_am_lane_replaced(ucp_ep_h ep,
            /* Verify AM lane exists */
            (am_lane != UCP_NULL_LANE) &&
            /* Lane is not being reused */
-           (reuse_lane_map[am_lane] == UCP_NULL_LANE) &&
-           /* Lane is not yet operational */
-           !ucp_wireup_ep_test(ucp_ep_get_lane(ep, am_lane));
+           (reuse_lane_map[am_lane] == UCP_NULL_LANE);
 }
 
 static int
