@@ -55,10 +55,33 @@ void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
         goto err;
     }
 
+    status = ucs_topo_sys_device_set_user_value(*sys_dev_p, cuda_device);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     return;
 
 err:
     *sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
+}
+
+ucs_status_t
+uct_cuda_base_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device)
+{
+    uintptr_t user_value;
+
+    user_value = ucs_topo_sys_device_get_user_value(sys_dev);
+    if (user_value == UINTPTR_MAX) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    *device = user_value;
+    if (*device == CU_DEVICE_INVALID) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t

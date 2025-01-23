@@ -13,27 +13,31 @@ extern "C" {
 
 #include <cuda.h>
 #include <cuda_runtime.h>
-
 #include <thread>
 
+
 class test_switch_cuda_device : public test_md {
-public:
+protected:
     template<class T> void detect_mem_type(ucs_memory_type_t mem_type) const;
+
+    void init() override {
+        test_md::init();
+        ASSERT_EQ(cudaGetDeviceCount(&m_num_devices), cudaSuccess);
+    }
+
+    int m_num_devices;
 };
 
 template<class T>
 void test_switch_cuda_device::detect_mem_type(ucs_memory_type_t mem_type) const
 {
-    int num_devices;
-    ASSERT_EQ(cudaGetDeviceCount(&num_devices), cudaSuccess);
-
-    if (num_devices < 2) {
+    if (m_num_devices < 2) {
         UCS_TEST_SKIP_R("less than two cuda devices available");
     }
 
     int current_device;
     ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
-    ASSERT_EQ(cudaSetDevice((current_device + 1) % num_devices), cudaSuccess);
+    ASSERT_EQ(cudaSetDevice((current_device + 1) % m_num_devices), cudaSuccess);
 
     const size_t size = 16;
     T buffer(size, mem_type);
@@ -272,3 +276,155 @@ UCS_TEST_P(test_another_thread, detect_mem_type_cuda_fabric)
 #endif
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_another_thread, cuda_cpy);
+
+class test_mem_alloc_device : public test_switch_cuda_device {
+protected:
+    void init() override {
+        test_switch_cuda_device::init();
+
+        for (auto device = 0; device < m_num_devices; ++device) {
+            uct_md_mem_attr_t attr       = {
+                .field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV
+            };
+            static constexpr size_t size = 4096;
+            void *ptr;
+
+            ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
+            ASSERT_EQ(cudaSuccess, cudaMalloc(&ptr, size));
+            EXPECT_UCS_OK(uct_md_mem_query(md(), ptr, size, &attr));
+            ASSERT_EQ(cudaSuccess, cudaFree(ptr));
+
+            UCS_TEST_MESSAGE << "CUDA device " << device << " sys_dev "
+                             << static_cast<int>(attr.sys_dev);
+            m_sys_dev.push_back(attr.sys_dev);
+        }
+
+        ASSERT_EQ(m_num_devices, m_sys_dev.size());
+    }
+
+    ucs_status_t
+    allocate(ucs_memory_type_t mem_type,
+             ucs_sys_device_t sys_device = UCS_SYS_DEVICE_ID_UNKNOWN,
+             size_t size = 1024)
+    {
+        uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
+        uct_md_h md_p             = md();
+        uct_mem_alloc_params_t params;
+
+        params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MDS;
+        params.flags      = UCT_MD_MEM_ACCESS_ALL;
+        params.mem_type   = mem_type;
+        params.mds.mds    = &md_p;
+        params.mds.count  = 1;
+        if (sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            params.field_mask |= UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEVICE;
+            params.sys_device  = sys_device;
+        }
+
+        return uct_mem_alloc(size, &method, 1, &params, &mem);
+    }
+
+    ucs_status_t query_sys_dev(uct_allocated_memory_t &mem,
+                               ucs_sys_device_t &sys_dev)
+    {
+        uct_md_mem_attr_t attr = {
+            .field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV
+        };
+
+        ucs_status_t status = uct_md_mem_query(md(), mem.address, mem.length,
+                                               &attr);
+        sys_dev = attr.sys_dev;
+        return status;
+    }
+
+    void test_per_device_alloc(ucs_memory_type_t mem_type)
+    {
+        CUdevice current;
+
+        // Ensure a valid context for each device
+        for (auto device = 0; device < m_num_devices; ++device) {
+            ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
+        }
+
+        for (auto device = 0; device < m_num_devices; ++device) {
+            ASSERT_UCS_OK(allocate(mem_type, m_sys_dev[device]));
+            EXPECT_NE(CU_DEVICE_INVALID, m_sys_dev[device]);
+
+            ucs_sys_device_t sys_device;
+            EXPECT_UCS_OK(query_sys_dev(mem, sys_device));
+            EXPECT_EQ(m_sys_dev[device], sys_device);
+            EXPECT_EQ(cudaGetDevice(&current), cudaSuccess);
+            EXPECT_EQ(m_num_devices - 1, current);
+            ASSERT_UCS_OK(uct_mem_free(&mem));
+        }
+    }
+
+    void test_same_device_alloc(ucs_memory_type_t mem_type,
+                                bool set_sys_dev = true)
+    {
+        for (auto device = 0; device < m_num_devices; ++device) {
+            ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
+            ASSERT_UCS_OK(allocate(mem_type,
+               set_sys_dev ? m_sys_dev[device] : UCS_SYS_DEVICE_ID_UNKNOWN));
+            ucs_sys_device_t sys_device;
+            EXPECT_UCS_OK(query_sys_dev(mem, sys_device));
+            EXPECT_EQ(m_sys_dev[device], sys_device);
+            ASSERT_UCS_OK(uct_mem_free(&mem));
+        }
+    }
+
+    void skip_if_no_fabric(ucs_memory_type_t mem_type)
+    {
+#if HAVE_CUDA_FABRIC
+        cuda_fabric_mem_buffer test_fabric_support(1024, mem_type);
+#else
+        UCS_TEST_SKIP_R("build without fabric support");
+#endif
+    }
+
+private:
+    std::vector<ucs_sys_device_t> m_sys_dev;
+
+public:
+    uct_allocated_memory_t mem;
+};
+
+UCS_TEST_P(test_mem_alloc_device, different_device_cuda)
+{
+    test_per_device_alloc(UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_mem_alloc_device, different_device_cuda_fabric,
+           "CUDA_COPY_ENABLE_FABRIC=y")
+{
+    skip_if_no_fabric(UCS_MEMORY_TYPE_CUDA);
+    test_per_device_alloc(UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_mem_alloc_device, same_device_cuda)
+{
+    test_same_device_alloc(UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_mem_alloc_device, same_device_cuda_fabric,
+           "CUDA_COPY_ENABLE_FABRIC=y")
+{
+    skip_if_no_fabric(UCS_MEMORY_TYPE_CUDA);
+    test_same_device_alloc(UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_mem_alloc_device, same_device_cuda_implicit)
+{
+    test_same_device_alloc(UCS_MEMORY_TYPE_CUDA, false);
+}
+
+UCS_TEST_P(test_mem_alloc_device, same_device_cuda_fabric_implicit,
+           "CUDA_COPY_ENABLE_FABRIC=y")
+{
+    skip_if_no_fabric(UCS_MEMORY_TYPE_CUDA);
+    test_same_device_alloc(UCS_MEMORY_TYPE_CUDA, false);
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_mem_alloc_device, cuda_cpy);
