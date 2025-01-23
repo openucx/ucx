@@ -68,8 +68,9 @@ ucp_memory_info_t ucp_proto_common_select_param_mem_info(
                                    const ucp_proto_select_param_t *select_param)
 {
     ucp_memory_info_t mem_info = {
-        .type = select_param->mem_type,
-        .sys_dev = select_param->sys_dev
+        .type    = select_param->mem_type,
+        .sys_dev = select_param->sys_dev,
+        .flags   = select_param->op.mem_flags
     };
 
     return mem_info;
@@ -327,6 +328,10 @@ static void ucp_proto_common_tl_perf_reset(ucp_proto_common_tl_perf_t *tl_perf)
     tl_perf->max_frag           = SIZE_MAX;
 }
 
+#define UCP_WIFACE_FMT "iface %p (" UCT_TL_RESOURCE_DESC_FMT ")"
+#define UCP_WIFACE_ARG(_wiface) \
+    (_wiface)->iface, UCT_TL_RESOURCE_DESC_ARG( \
+            &(_wiface)->worker->context->tl_rscs[(_wiface)->rsc_index].tl_rsc)
 ucs_status_t
 ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
@@ -367,13 +372,31 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                              context->config.est_num_ppn,
                                              context->config.est_num_eps);
 
+    ucs_print("get perf for %s " UCP_WIFACE_FMT " memflags 0x%x",
+              ucp_proto_id_field(params->super.proto_id,name),
+              UCP_WIFACE_ARG(wiface), params->super.select_param->op.mem_flags);
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
                            UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                           UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_FLAGS |
+                           UCT_PERF_ATTR_FIELD_DISTANCE |
                            UCT_PERF_ATTR_FIELD_LATENCY;
-    perf_attr.operation  = params->send_op;
+    perf_attr.operation          = params->send_op;
+    perf_attr.local_memory_flags = params->reg_mem_info.flags;
+    perf_attr.distance           = params->super.ep_config_key->lanes[lane].distance;
+
+    if (params->super.rkey_config_key != NULL) {
+        perf_attr.field_mask         |= UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_FLAGS;
+        perf_attr.remote_memory_flags = params->super.rkey_config_key->mem_flags;
+    }
+
+    if (perf_attr.local_memory_flags) {
+        ucs_print("proto %s multi init with flags 0x%x, op %d",
+                   ucp_proto_id_field(params->super.proto_id, name),
+                   perf_attr.local_memory_flags, perf_attr.operation);
+    }
 
     status = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {

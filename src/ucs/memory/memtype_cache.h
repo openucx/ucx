@@ -34,6 +34,7 @@ typedef struct ucs_memory_info {
     ucs_sys_device_t  sys_dev;       /**< System device index */
     void              *base_address; /**< Base address of the underlying allocation */
     size_t            alloc_length;  /**< Whole length of the underlying allocation */
+    uint8_t           flags;
 } ucs_memory_info_t;
 
 
@@ -79,7 +80,7 @@ ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
  */
 void ucs_memtype_cache_update(const void *address, size_t size,
                               ucs_memory_type_t mem_type,
-                              ucs_sys_device_t sys_dev);
+                              ucs_sys_device_t sys_dev, uint8_t flags);
 
 
 /**
@@ -115,6 +116,7 @@ ucs_memory_info_set_host(ucs_memory_info_t *mem_info)
     mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
     mem_info->base_address = NULL;
     mem_info->alloc_length = -1;
+    mem_info->flags        = 0;
 }
 
 END_C_DECLS

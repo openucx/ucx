@@ -194,7 +194,7 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
     }
 
     ucs_memtype_cache_update(mem_info.base_address, mem_info.alloc_length,
-                             mem_info.type, mem_info.sys_dev);
+                             mem_info.type, mem_info.sys_dev, 0);
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
         mem_attr_p->mem_type = mem_info.type;
@@ -219,6 +219,9 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
         mem_attr_p->dmabuf_offset = UCS_PTR_BYTE_DIFF(mem_info.base_address,
                                                       addr);
+    }
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_FLAGS) {
+        mem_attr_p->flags = 0;
     }
     return UCS_OK;
 }

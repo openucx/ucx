@@ -31,6 +31,7 @@ ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
            (rkey_config_key1.ep_cfg_index == rkey_config_key2.ep_cfg_index) &&
            (rkey_config_key1.sys_dev == rkey_config_key2.sys_dev) &&
            (rkey_config_key1.mem_type == rkey_config_key2.mem_type) &&
+           (rkey_config_key1.mem_flags == rkey_config_key2.mem_flags) &&
            (rkey_config_key1.unreachable_md_map ==
             rkey_config_key2.unreachable_md_map);
 }
@@ -59,8 +60,8 @@ ucp_ep_rkey_unpack_reachable(ucp_ep_h ep, const void *buffer, size_t length,
 {
     ucp_ep_config_t *config = &ucs_array_elem(&ep->worker->ep_config,
                                               ep->cfg_index);
-    return ucp_ep_rkey_unpack_internal(ep, buffer, length,
-                                       config->key.reachable_md_map, 0, rkey_p);
+    return ucp_ep_rkey_unpack_internal(
+                ep, buffer, length, config->key.reachable_md_map, 0, 0, rkey_p);
 }
 
 #endif

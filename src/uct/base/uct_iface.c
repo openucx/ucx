@@ -314,7 +314,7 @@ int uct_iface_scope_is_reachable(const uct_iface_h iface,
 }
 
 int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                              const uct_iface_is_reachable_params_t *params)
+                              uct_iface_is_reachable_params_t *params)
 {
     const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     char *info_str_buf            = UCS_PARAM_VALUE(
@@ -327,6 +327,10 @@ int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     if ((info_str_buf != NULL) && (info_str_buf_len > 0)) {
         info_str_buf[0] = '\0';
+    }
+
+    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_DISTANCE) {
+        params->distance = 0;
     }
 
     return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);

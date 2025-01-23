@@ -182,7 +182,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                 worker->context, sreq->send.rndv.md_map,
                 sreq->send.state.dt.dt.contig.memh, sreq->send.buffer,
                 sreq->send.length, &mem_info, 0, NULL,
-                ucp_ep_config(sreq->send.ep)->uct_rkey_pack_flags, rkey_buf);
+                ucp_ep_config(sreq->send.ep)->uct_rkey_pack_flags, 0, rkey_buf);
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
                       ucs_status_string((ucs_status_t)packed_rkey_size));
@@ -225,7 +225,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
                 ep->worker->context, rndv_req->send.rndv.md_map,
                 rreq->recv.dt_iter.type.contig.memh,
                 rreq->recv.dt_iter.type.contig.buffer, rndv_req->send.length,
-                &mem_info, 0, NULL, ucp_ep_config(ep)->uct_rkey_pack_flags,
+                &mem_info, 0, NULL, ucp_ep_config(ep)->uct_rkey_pack_flags, 0,
                 rndv_rtr_hdr + 1);
         if (packed_rkey_size < 0) {
             return packed_rkey_size;

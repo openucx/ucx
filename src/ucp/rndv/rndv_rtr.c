@@ -51,7 +51,7 @@ static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
     size_t max_rtr_size;
     ucs_status_t status;
 
-    max_rtr_size = sizeof(ucp_rndv_rtr_hdr_t) + rpriv->super.packed_rkey_size;
+    max_rtr_size = sizeof(ucp_rndv_rtr_hdr_t) + rpriv->super.packed_rkey_size + 1; // TMP fix
     status       = ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTR,
                                                       rpriv->super.lane,
                                                       rpriv->pack_cb, req,
@@ -190,6 +190,9 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
+    ucs_assertv_always(init_params->select_param->op.mem_flags == 0, "memflagss 0x%x",
+                       init_params->select_param->op.mem_flags);
+
     if (init_params->select_param->dt_class == UCP_DATATYPE_CONTIG) {
         rpriv.pack_cb = ucp_proto_rndv_rtr_pack_with_rkey;
     } else {
@@ -197,7 +200,9 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
     }
     rpriv.data_received = ucp_proto_rndv_rtr_data_received;
 
+    ucs_print("MBR RTR probe enter");
     ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
+    ucs_print("MBR RTR probe exit");
 }
 
 static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
@@ -257,6 +262,7 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     ucp_mem_desc_t *mdesc                  = req->send.rndv.mdesc;
     ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
+    int pack_mem_flags;
 
     ucs_assert(mdesc != NULL);
     ucp_proto_rndv_rtr_hdr_pack(req, rtr, mdesc->ptr);
@@ -264,12 +270,15 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     ucs_assert(ucs_test_all_flags(mdesc->memh->md_map, md_map));
 
     /* Pack remote key for the fragment */
+    pack_mem_flags   = (ucp_ep_config(req->send.ep)->key.dst_version >= 19);
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info.flags   = 1; // TMP FIX
     packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
                                           mdesc->memh, mdesc->ptr,
                                           req->send.state.dt_iter.length,
-                                          &mem_info, 0, NULL, 0, rtr + 1);
+                                          &mem_info, 0, NULL, 0, pack_mem_flags,
+                                          rtr + 1);
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
                   ucs_status_string((ucs_status_t)packed_rkey_size));
@@ -372,7 +381,8 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 static void
 ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_h context                    = init_params->worker->context;
+    ucp_worker_h worker                      = init_params->worker;
+    ucp_context_h context                    = worker->context;
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -393,7 +403,7 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = 0.0,
-        .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
+        .ctrl_msg_name       = "RTR_MT",
     };
     ucs_memory_type_t frag_mem_type;
     ucp_proto_rndv_rtr_mtype_priv_t rpriv;
@@ -417,7 +427,8 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         params.super.reg_mem_info.type = frag_mem_type;
 
         status = ucp_mm_get_alloc_md_index(context, frag_mem_type, &md_index,
-                                           &params.super.reg_mem_info.sys_dev);
+                                           &params.super.reg_mem_info.sys_dev,
+                                           &params.super.reg_mem_info.flags);
         if ((status == UCS_OK) && (md_index != UCP_NULL_RESOURCE)) {
             params.md_map = UCS_BIT(md_index);
         } else if (frag_mem_type == UCS_MEMORY_TYPE_HOST) {
@@ -434,7 +445,7 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         }
 
         status = ucp_proto_init_add_buffer_copy_time(
-                init_params->worker, "unpack copy", frag_mem_type,
+                worker, "unpack copy", frag_mem_type,
                 init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
                 params.super.min_length, params.super.max_length, 1,
                 params.unpack_perf);
@@ -442,11 +453,16 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
             goto out_unpack_perf_destroy;
         }
 
+        params.super.reg_mem_info.type  = frag_mem_type;
+
         rpriv.super.pack_cb       = ucp_proto_rndv_rtr_mtype_pack;
         rpriv.super.data_received = ucp_proto_rndv_rtr_mtype_data_received;
         rpriv.frag_mem_type       = frag_mem_type;
 
+        ucs_print("MBR RTR-MTYPE probe enter with frag %s, flaags 0x%x",
+                ucs_memory_type_names[frag_mem_type], params.super.reg_mem_info.flags);
         ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
+        ucs_print("MBR RTR-MTYPE probe exit with frag %s", ucs_memory_type_names[frag_mem_type]);
 out_unpack_perf_destroy:
         ucp_proto_perf_destroy(params.unpack_perf);
     }

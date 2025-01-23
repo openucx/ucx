@@ -702,6 +702,7 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
     ucp_memory_detect(context, ucp_memh_address(memh), ucp_memh_length(memh),
                       &info);
     memh->sys_dev = info.sys_dev;
+    memh->mem_flags = info.flags;
 
     *memh_p = memh;
     return UCS_OK;
@@ -1732,7 +1733,8 @@ void ucp_mem_rcache_cleanup(ucp_context_h context)
 ucs_status_t
 ucp_mm_get_alloc_md_index(ucp_context_h context,
                           ucs_memory_type_t alloc_mem_type,
-                          ucp_md_index_t *md_idx, ucs_sys_device_t *sys_dev)
+                          ucp_md_index_t *md_idx, ucs_sys_device_t *sys_dev,
+                          uint8_t *mem_flags)
 {
     ucs_status_t status;
     uct_allocated_memory_t mem;
@@ -1757,14 +1759,16 @@ ucp_mm_get_alloc_md_index(ucp_context_h context,
 
         context->alloc_md[alloc_mem_type].initialized = 1;
         context->alloc_md[alloc_mem_type].sys_dev     = mem_info.sys_dev;
+        context->alloc_md[alloc_mem_type].mem_flags   = mem_info.flags;
         context->alloc_md[alloc_mem_type].md_index    =
                 ucp_mem_get_md_index(context, mem.md, mem.method);
 
         uct_mem_free(&mem);
     }
 
-    *md_idx  = context->alloc_md[alloc_mem_type].md_index;
-    *sys_dev = context->alloc_md[alloc_mem_type].sys_dev;
+    *md_idx    = context->alloc_md[alloc_mem_type].md_index;
+    *sys_dev   = context->alloc_md[alloc_mem_type].sys_dev;
+    *mem_flags = context->alloc_md[alloc_mem_type].mem_flags;
     return UCS_OK;
 }
 

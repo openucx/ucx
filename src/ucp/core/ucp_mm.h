@@ -69,6 +69,7 @@ typedef struct ucp_mem {
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_sys_device_t    sys_dev;        /* System device index */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
+    uint8_t             mem_flags;      /* Memory flags */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
@@ -216,6 +217,7 @@ void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
  * @param [out] md_idx         Index of the memory domain that is used to
  *                             allocate memory.
  * @param [out] sys_dev        Device id on which the memory was allocated.
+ * @param [out] mem_flags      Memory flags specific to the allocated memory.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
@@ -223,7 +225,8 @@ ucs_status_t
 ucp_mm_get_alloc_md_index(ucp_context_h context,
                           ucs_memory_type_t alloc_mem_type,
                           ucp_md_index_t *md_idx,
-                          ucs_sys_device_t *sys_dev);
+                          ucs_sys_device_t *sys_dev,
+                          uint8_t *mem_flags);
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)

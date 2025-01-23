@@ -158,6 +158,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].path_index   = 0;
         key->lanes[i].lane_types   = 0;
         key->lanes[i].seg_size     = 0;
+        key->lanes[i].distance     = 0;
     }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_msg_lane  = UCP_NULL_LANE;
@@ -318,7 +319,7 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
 
     data->size = size;
     ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(rkey_ptr_md_index), 0,
-                                &data->rkey);
+                                0, &data->rkey);
     rkey_index = ucs_bitmap2idx(data->rkey->md_map, rkey_ptr_md_index);
     status     = uct_rkey_ptr(data->rkey->tl_rkey[rkey_index].cmpt,
                               &data->rkey->tl_rkey[rkey_index].rkey, address,
@@ -1947,7 +1948,8 @@ static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->dst_md_index == config_lane2->dst_md_index) &&
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types) &&
-           (config_lane1->seg_size == config_lane2->seg_size);
+           (config_lane1->seg_size == config_lane2->seg_size) &&
+           (config_lane1->distance == config_lane2->distance);
 }
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
@@ -3164,9 +3166,9 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
     dst_md_index = key->lanes[lane].dst_md_index;
     cmpt_index   = ucp_ep_config_get_dst_md_cmpt(key, dst_md_index);
     ucs_string_buffer_appendf(
-         strbuf, "md[%d]/%s/sysdev[%d] seg %zu", dst_md_index,
+         strbuf, "md[%d]/%s/sysdev[%d] seg %zu distance %u", dst_md_index,
          context->tl_cmpts[cmpt_index].attr.name, key->lanes[lane].dst_sys_dev,
-         key->lanes[lane].seg_size);
+         key->lanes[lane].seg_size, key->lanes[lane].distance);
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane);
     if (prio != -1) {

@@ -236,7 +236,7 @@ ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
     } else {
         // Different MD map means different config index on proto v2
         ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_size,
-                                                  md_map, 0, &rkey));
+                                                  md_map, 0, 0, &rkey));
     }
 
     ucp_rkey_buffer_release(rkey_buffer);
@@ -468,7 +468,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
                                              memh, ucp_memh_address(memh),
                                              ucp_memh_length(memh), &mem_info,
                                              sys_dev_map, &sys_distance[0], 0,
-                                             &rkey_buffer[0]);
+                                             0, &rkey_buffer[0]);
     ASSERT_EQ((ssize_t)rkey_size, packed_size);
 
     /* Unpack remote key buffer */

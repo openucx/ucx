@@ -77,26 +77,36 @@ enum uct_perf_attr_field {
     /** Enables @ref uct_perf_attr_t::remote_sys_device */
     UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE  = UCS_BIT(4),
 
+    /** Enable @ref uct_perf_attr_t::local_memory_flags */
+    UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_FLAGS = UCS_BIT(5),
+
+    /** Enable @ref uct_perf_attr_t::remote_memory_flags */
+    UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_FLAGS = UCS_BIT(6),
+
+    /** Enable @ref uct_perf_attr_t::distance */
+    UCT_PERF_ATTR_FIELD_DISTANCE           = UCS_BIT(7),
+
     /** Enables @ref uct_perf_attr_t::send_pre_overhead */
-    UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD  = UCS_BIT(5),
+    UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD  = UCS_BIT(8),
 
     /** Enables @ref uct_perf_attr_t::send_post_overhead */
-    UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD = UCS_BIT(6),
+    UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD = UCS_BIT(9),
 
     /** Enables @ref uct_perf_attr_t::recv_overhead */
-    UCT_PERF_ATTR_FIELD_RECV_OVERHEAD      = UCS_BIT(7),
+    UCT_PERF_ATTR_FIELD_RECV_OVERHEAD      = UCS_BIT(10),
 
     /** Enables @ref uct_perf_attr_t::bandwidth */
-    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(8),
+    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(11),
 
     /** Enables @ref uct_perf_attr_t::latency */
-    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
+    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(12),
 
     /** Enable @ref uct_perf_attr_t::max_inflight_eps */
-    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10),
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(13),
 
     /** Enable @ref uct_perf_attr_t::flags */
-    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(11)
+    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(14)
+
 };
 
 /**
@@ -156,6 +166,12 @@ typedef struct {
      * This field must be initialized by the caller.
      */
     ucs_sys_device_t    remote_sys_device;
+
+    uint8_t             local_memory_flags;
+
+    uint8_t             remote_memory_flags;
+
+    uint16_t            distance;
 
     /**
      * This is the time spent in the UCT layer to prepare message request and
@@ -277,7 +293,8 @@ typedef enum {
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3), /**< info_string_length field */
     UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4), /**< scope field */
     UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(5), /**< device_addr_length field */
-    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH  = UCS_BIT(6)  /**< iface_addr_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH  = UCS_BIT(6), /**< iface_addr_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_DISTANCE           = UCS_BIT(7)  /**< distance field */
 } uct_iface_is_reachable_field_mask_t;
 
 
@@ -632,6 +649,8 @@ typedef struct uct_iface_is_reachable_params {
      * default minimum length according to the address buffer contents.
      */
     size_t                        iface_addr_length;
+
+    uint16_t                      distance;
 } uct_iface_is_reachable_params_t;
 
 
@@ -1068,7 +1087,7 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  * @return Nonzero if reachable, 0 if not.
  */
 int uct_iface_is_reachable_v2(uct_iface_h iface,
-                              const uct_iface_is_reachable_params_t *params);
+                              uct_iface_is_reachable_params_t *params);
 
 
 /**

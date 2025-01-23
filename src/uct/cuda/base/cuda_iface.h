@@ -13,6 +13,9 @@
 #include <cuda.h>
 #include <nvml.h>
 
+typedef enum {
+    UCT_CUDA_MEM_TYPE_FLAGS_FABRIC = UCS_BIT(0)
+} uct_cuda_base_memory_flags_t;
 
 const char *uct_cuda_base_cu_get_error_string(CUresult result);
 

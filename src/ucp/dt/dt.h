@@ -50,6 +50,7 @@ typedef struct ucp_dt_state {
 typedef struct {
     uint8_t          type;    /**< Memory type, use uint8 for compact size */
     ucs_sys_device_t sys_dev; /**< System device index */
+    uint8_t          flags;
 } ucp_memory_info_t;
 
 

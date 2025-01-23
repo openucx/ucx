@@ -26,6 +26,12 @@ typedef enum {
 } uct_cuda_ipc_device_addr_flags_t;
 
 
+typedef enum {
+    UCT_CUDA_IPC_PEER_DISTANCE_NODE,
+    UCT_CUDA_IPC_PEER_DISTANCE_NET
+} uct_cuda_ipc_peer_distance_t;
+
+
 typedef struct {
     uint64_t     system_uuid;
     uint8_t      flags; /* uct_cuda_ipc_device_addr_flags_t */
@@ -120,7 +126,7 @@ uct_cuda_ipc_iface_mnnvl_supported(uct_cuda_ipc_md_t *md,
 
 static int
 uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                                   const uct_iface_is_reachable_params_t *params)
+                                   uct_iface_is_reachable_params_t *params)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
     uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
@@ -138,6 +144,11 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    sizeof(dev_addr->system_uuid));
     dev_addr     = (const uct_cuda_ipc_device_addr_t *)params->device_addr;
     same_uuid    = (ucs_get_system_id() == dev_addr->system_uuid);
+
+    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_DISTANCE) {
+        params->distance = same_uuid ? UCT_CUDA_IPC_PEER_DISTANCE_NODE :
+                                       UCT_CUDA_IPC_PEER_DISTANCE_NET;
+    }
 
     if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid) {
         uct_iface_fill_info_str_buf(params, "same process");
@@ -496,6 +507,15 @@ static ucs_status_t
 uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uint8_t local_mem_flags     = UCT_ATTR_VALUE(PERF, perf_attr,
+                                                 local_memory_flags,
+                                                 LOCAL_MEMORY_FLAGS, 0);
+    uint8_t remote_mem_flags    = UCT_ATTR_VALUE(PERF, perf_attr,
+                                                 remote_memory_flags,
+                                                 REMOTE_MEMORY_FLAGS, 0);
+    uint16_t distance           = UCT_ATTR_VALUE(PERF, perf_attr, distance,
+                                                 DISTANCE,
+                                                 UCT_CUDA_IPC_PEER_DISTANCE_NODE);
 
     perf_attr->bandwidth.dedicated = 0;
 
@@ -510,8 +530,16 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
          *         (for now not checking because we do not want to report zero
          *          bandwidth for PCIe connected IPC-accessible devices)
          */
-
-        perf_attr->bandwidth.shared = uct_cuda_ipc_iface_get_bw();
+        if ((distance == UCT_CUDA_IPC_PEER_DISTANCE_NET) &&
+            !(local_mem_flags & remote_mem_flags &
+              UCT_CUDA_MEM_TYPE_FLAGS_FABRIC)) {
+            perf_attr->bandwidth.shared = 2;
+        } else {
+            perf_attr->bandwidth.shared = uct_cuda_ipc_iface_get_bw();
+        }
+        ucs_print("estimate cuda_ipc BW, dist %d, flags %d, %d bw %lf",
+                  distance, local_mem_flags, remote_mem_flags,
+                  perf_attr->bandwidth.shared);
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {

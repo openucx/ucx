@@ -143,7 +143,7 @@ static ucs_status_t uct_self_iface_get_address(uct_iface_h tl_iface,
 
 static int
 uct_self_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                               const uct_iface_is_reachable_params_t *params)
+                               uct_iface_is_reachable_params_t *params)
 {
     const uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
     const uct_self_iface_addr_t *addr;

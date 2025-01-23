@@ -120,15 +120,20 @@ ucp_proto_rndv_get_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_memory_info_t reg_mem_info = {
         .type    = init_params->select_param->mem_type,
-        .sys_dev = init_params->select_param->sys_dev
+        .sys_dev = init_params->select_param->sys_dev,
+        .flags   = init_params->select_param->op.mem_flags
     };
 
+    ucs_print("GET-ZCOPY enter, memtype %s, flags 0x%x", ucs_memory_type_names[init_params->select_param->mem_type],
+            init_params->select_param->op.mem_flags);
     ucp_proto_rndv_get_common_probe(
             init_params, UCS_BIT(UCP_RNDV_MODE_GET_ZCOPY), SIZE_MAX,
             UCT_EP_OP_LAST,
             UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
             UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
             0, 0, &reg_mem_info);
+    ucs_print("GET-ZCOPY exit");
+
 }
 
 static void
@@ -330,16 +335,21 @@ ucp_proto_rndv_get_mtype_probe(const ucp_proto_init_params_t *init_params)
 
         status = ucp_mm_get_alloc_md_index(context, frag_mem_info.type,
                                            &dummy_md_id,
-                                           &frag_mem_info.sys_dev);
+                                           &frag_mem_info.sys_dev,
+                                           &frag_mem_info.flags);
         if (status != UCS_OK) {
             continue;
         }
 
+        ucs_print("GET-MTYPE probe enter, frag type %s, flags 0x%x (rkey flags 0x%x)",
+            ucs_memory_type_names[frag_mem_info.type],
+            frag_mem_info.flags, init_params->rkey_config_key->mem_flags);
 
         ucp_proto_rndv_get_common_probe(init_params,
                                         UCS_BIT(UCP_RNDV_MODE_GET_PIPELINE),
                                         frag_size, UCT_EP_OP_PUT_ZCOPY, 0,
                                         mdesc_md_map, 1, &frag_mem_info);
+        ucs_print("GET-MTYPE exit");
     }
 }
 
