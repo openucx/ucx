@@ -2571,7 +2571,7 @@ typedef struct {
 
     /**
      * Index of the system device on which memory is to be allocated.
-     * Eg: UCS_SYS_DEVICE_ID_UNKNOWN to allocate on host memory, or a specfic
+     * Eg: UCS_SYS_DEVICE_ID_UNKNOWN to allocate on host memory, or a specific
      * index to allocate memory on GPU device.
      */
     ucs_sys_device_t             sys_dev;

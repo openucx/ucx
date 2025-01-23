@@ -155,9 +155,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                  * fall-back, because this MD already exposed support for memory
                  * allocation.
                  */
-                status = uct_md_mem_alloc(md, &alloc_length, &address,
-                                          mem_type, flags, alloc_name,
-                                          sys_dev, &memh);
+                status = uct_md_mem_alloc(md, &alloc_length, &address, mem_type,
+                                          flags, alloc_name, sys_dev, &memh);
                 if (status != UCS_OK) {
                     ucs_log(log_level,
                             "failed to allocate %zu bytes using md %s for %s: %s",

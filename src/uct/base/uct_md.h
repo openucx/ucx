@@ -198,7 +198,7 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
  */
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
                               ucs_memory_type_t mem_type, unsigned flags,
-                              const char *alloc_name, ucs_sys_device_t  sys_dev,
+                              const char *alloc_name, ucs_sys_device_t sys_dev,
                               uct_mem_h *memh_p);
 
 /**
