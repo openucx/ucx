@@ -30,10 +30,12 @@ uct_srd_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 static uct_ib_iface_ops_t uct_srd_iface_ops = {
     .super = {
         .iface_estimate_perf   = uct_base_iface_estimate_perf,
-        .iface_vfs_refresh     = ucs_empty_function,
+        .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)
+            ucs_empty_function,
         .ep_query              = (uct_ep_query_func_t)
             ucs_empty_function_return_unsupported,
-        .ep_invalidate         = ucs_empty_function_return_unsupported,
+        .ep_invalidate         = (uct_ep_invalidate_func_t)
+            ucs_empty_function_return_unsupported,
         .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
     },
     .create_cq      = uct_ib_verbs_create_cq,
@@ -329,27 +331,36 @@ uct_srd_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
 }
 
 static uct_iface_ops_t uct_srd_iface_tl_ops = {
-    .ep_flush                 = ucs_empty_function_return_unsupported,
-    .ep_fence                 = ucs_empty_function_return_unsupported,
-    .ep_create                = ucs_empty_function_return_unsupported,
-    .ep_get_address           = ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep         = ucs_empty_function_return_unsupported,
+    .ep_flush                 = (uct_ep_flush_func_t)
+        ucs_empty_function_return_unsupported,
+    .ep_fence                 = (uct_ep_fence_func_t)
+        ucs_empty_function_return_unsupported,
+    .ep_create                = (uct_ep_create_func_t)
+        ucs_empty_function_return_unsupported,
+    .ep_get_address           = (uct_ep_get_address_func_t)
+        ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep         = (uct_ep_connect_to_ep_func_t)
+        ucs_empty_function_return_unsupported,
     .ep_destroy               = (uct_ep_destroy_func_t)
         ucs_empty_function_return_unsupported,
     .ep_am_bcopy              = (uct_ep_am_bcopy_func_t)
         ucs_empty_function_return_unsupported,
     .ep_am_zcopy              = (uct_ep_am_zcopy_func_t)
         ucs_empty_function_return_unsupported,
-    .ep_get_zcopy             = ucs_empty_function_return_unsupported,
+    .ep_get_zcopy             = (uct_ep_get_zcopy_func_t)
+        ucs_empty_function_return_unsupported,
     .ep_am_short              = (uct_ep_am_short_func_t)
         ucs_empty_function_return_unsupported,
     .ep_am_short_iov          = (uct_ep_am_short_iov_func_t)
         ucs_empty_function_return_unsupported,
-    .ep_pending_add           = ucs_empty_function_return_unsupported,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)
+        ucs_empty_function_return_unsupported,
     .ep_pending_purge         = (uct_ep_pending_purge_func_t)
         ucs_empty_function_return_unsupported,
-    .iface_flush              = ucs_empty_function_return_unsupported,
-    .iface_fence              = ucs_empty_function_return_unsupported,
+    .iface_flush              = (uct_iface_flush_func_t)
+        ucs_empty_function_return_unsupported,
+    .iface_fence              = (uct_iface_fence_func_t)
+        ucs_empty_function_return_unsupported,
     .iface_progress_enable    = (uct_iface_progress_enable_func_t)
         ucs_empty_function_return_unsupported,
     .iface_progress_disable   = (uct_iface_progress_disable_func_t)
