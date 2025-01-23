@@ -675,7 +675,8 @@ ucp_wireup_tl_iface_latency(const ucp_worker_iface_t *wiface,
         /* Address v1 contains just latency overhead */
         return ((local_lat + remote_iface_attr->lat_ovh) / 2) +
                (wiface->attr.latency.m *
-                ucp_context_get_est_num_eps(context, prioritized_ep));
+                ucp_context_get_est_num_eps(context, &wiface->attr.latency,
+                                            prioritized_ep));
     } else {
         local_lat = ucp_wireup_iface_lat_distance_v2(wiface, prioritized_ep);
         /* FP8 is a lossy compression method, so in order to create a symmetric

@@ -2416,7 +2416,7 @@ static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
         return UCS_OK;
     }
 
-    params.promote_capacity = context->config.ext.prio_max_num_eps;
+    params.promote_capacity = context->config.ext.max_priority_eps;
     params.promote_thresh   = UCP_WORKER_USAGE_TRACKER_PROMOTE_THRESHOLD;
     params.remove_thresh    = UCP_WORKER_USAGE_TRACKER_REMOVE_THRESHOLD;
     params.exp_decay.m      = UCP_WORKER_USAGE_TRACKER_EXP_DECAY_MULTIPLIER;

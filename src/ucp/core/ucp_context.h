@@ -203,8 +203,8 @@ typedef struct ucp_context_config {
     double                                 rcache_overhead;
     /** UCP extra operation attributes flags */
     uint64_t                               extra_op_attr_flags;
-    /* How many prioritized endpoints are expected to be created */
-    unsigned                               prio_max_num_eps;
+    /* Upper limit to the amount of prioritized endpoints */
+    unsigned                               max_priority_eps;
 } ucp_context_config_t;
 
 
@@ -645,11 +645,27 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
     return (max_num_eps >= (size_t)context->config.est_num_eps);
 }
 
-static UCS_F_ALWAYS_INLINE double
-ucp_context_get_est_num_eps(ucp_context_h context, int is_prioritized)
+static UCS_F_ALWAYS_INLINE int
+ucp_context_usage_tracker_enabled(ucp_context_h context)
 {
+    return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
+}
+
+static UCS_F_ALWAYS_INLINE double
+ucp_context_get_est_num_eps(ucp_context_h context,
+                            const ucs_linear_func_t *latency,
+                            int is_prioritized)
+{
+    if (!ucp_context_usage_tracker_enabled(context)) {
+        return context->config.est_num_eps;
+    }
+
+    if ((latency->m > 0) && !is_prioritized) {
+        return INFINITY;
+    }
+
     return is_prioritized ? ucs_min(context->config.est_num_eps,
-                                    context->config.ext.prio_max_num_eps) :
+                                    context->config.ext.max_priority_eps) :
                             context->config.est_num_eps;
 }
 
@@ -658,7 +674,8 @@ ucp_tl_iface_latency_with_priority(ucp_context_h context,
                                    const ucs_linear_func_t *latency,
                                    int is_prioritized)
 {
-    unsigned num_eps = ucp_context_get_est_num_eps(context, is_prioritized);
+    unsigned num_eps = ucp_context_get_est_num_eps(context, latency,
+                                                   is_prioritized);
 
     return ucs_linear_func_apply(*latency, num_eps);
 }
@@ -741,12 +758,6 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_context_usage_tracker_enabled(ucp_context_h context)
-{
-    return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
 }
 
 void
