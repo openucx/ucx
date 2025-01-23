@@ -366,8 +366,8 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_1_lane,
-           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
+UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_1_lane, "IB_NUM_PATHS?=1",
+           "MAX_RNDV_LANES=1")
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
@@ -378,14 +378,31 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_1_lane,
         {0,     200,   "short",                "rc_mlx5/mock_1:1"},
         {201,   6650,  "copy-in",              "rc_mlx5/mock_1:1"},
         {6651,  8246,  "zero-copy",            "rc_mlx5/mock_1:1"},
+        {8247,  21991, "multi-frag zero-copy", "rc_mlx5/mock_1:1"},
+        {21992, INF,   "rendezvous zero-copy read from remote",
+                       "rc_mlx5/mock_0:1"},
+    }, key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, zero_rndv_perf_diff, "IB_NUM_PATHS?=1",
+           "MAX_RNDV_LANES=1", "RNDV_PERF_DIFF=0")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {0,     200,   "short",                "rc_mlx5/mock_1:1"},
+        {201,   6650,  "copy-in",              "rc_mlx5/mock_1:1"},
+        {6651,  8246,  "zero-copy",            "rc_mlx5/mock_1:1"},
         {8247,  22502, "multi-frag zero-copy", "rc_mlx5/mock_1:1"},
         {22503, INF,   "rendezvous zero-copy read from remote",
                        "rc_mlx5/mock_0:1"},
     }, key);
 }
 
-UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_2_lanes,
-           "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2")
+UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_2_lanes, "IB_NUM_PATHS?=2",
+           "MAX_RNDV_LANES=2")
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
@@ -396,8 +413,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_2_lanes,
         {0,     200,   "short",                "rc_mlx5/mock_1:1/path0"},
         {201,   6650,  "copy-in",              "rc_mlx5/mock_1:1/path0"},
         {6651,  8246,  "zero-copy",            "rc_mlx5/mock_1:1/path0"},
-        {8247,  20300, "multi-frag zero-copy", "rc_mlx5/mock_1:1/path0"},
-        {20301, INF,   "rendezvous zero-copy read from remote",
+        {8247,  19883, "multi-frag zero-copy", "rc_mlx5/mock_1:1/path0"},
+        {19884, INF,   "rendezvous zero-copy read from remote",
          "47% on rc_mlx5/mock_1:1/path0 and 53% on rc_mlx5/mock_0:1/path0"},
     }, key);
 }

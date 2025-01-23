@@ -156,24 +156,40 @@ static ucs_status_t ucp_proto_perf_segment_split(const ucp_proto_perf_t *perf,
     return UCS_OK;
 }
 
+static void ucp_proto_perf_node_update_factor(ucp_proto_perf_node_t *perf_node,
+                                              const char *perf_factor_name,
+                                              ucs_linear_func_t perf_factor)
+{
+    if (ucs_linear_func_is_zero(perf_factor, UCP_PROTO_PERF_EPSILON)) {
+        return;
+    }
+
+    ucp_proto_perf_node_update_data(perf_node, perf_factor_name, perf_factor);
+}
+
 static void
 ucp_proto_perf_node_update_factors(ucp_proto_perf_node_t *perf_node,
                                    const ucp_proto_perf_factors_t perf_factors)
 {
     ucp_proto_perf_factor_id_t factor_id;
-    ucs_linear_func_t perf_factor;
 
     /* Add the functions to the segment and the performance node */
     for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; ++factor_id) {
-        perf_factor = perf_factors[factor_id];
-        if (ucs_linear_func_is_zero(perf_factor, UCP_PROTO_PERF_EPSILON)) {
-            continue;
-        }
-
-        ucp_proto_perf_node_update_data(perf_node,
-                                        ucp_proto_perf_factor_names[factor_id],
-                                        perf_factors[factor_id]);
+        ucp_proto_perf_node_update_factor(perf_node,
+                                          ucp_proto_perf_factor_names[factor_id],
+                                          perf_factors[factor_id]);
     }
+}
+
+static void
+ucp_proto_perf_segment_update_factor(ucp_proto_perf_segment_t *seg,
+                                     ucp_proto_perf_factor_id_t factor_id,
+                                     ucs_linear_func_t perf_factor)
+{
+    seg->perf_factors[factor_id] = perf_factor;
+    ucp_proto_perf_node_update_factor(seg->node,
+                                      ucp_proto_perf_factor_names[factor_id],
+                                      perf_factor);
 }
 
 static void
@@ -190,11 +206,12 @@ ucp_proto_perf_segment_add_funcs(ucp_proto_perf_t *perf,
 
     /* Add the functions to the segment and the performance node */
     for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; ++factor_id) {
-        ucs_linear_func_add_inplace(&seg->perf_factors[factor_id],
-                                    perf_factors[factor_id]);
+        ucp_proto_perf_segment_update_factor(
+                seg, factor_id,
+                ucs_linear_func_add(seg->perf_factors[factor_id],
+                                    perf_factors[factor_id]));
     }
 
-    ucp_proto_perf_node_update_factors(seg->node, seg->perf_factors);
     ucp_proto_perf_node_add_child(seg->node, perf_node);
 }
 
@@ -428,6 +445,31 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
     const ucp_proto_perf_t *perf_elems[2] = {perf1, perf2};
 
     return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
+}
+
+void ucp_proto_perf_apply_func(ucp_proto_perf_t *perf, ucs_linear_func_t func,
+                               const char *name, const char *desc_fmt, ...)
+{
+    ucp_proto_perf_segment_t *seg;
+    ucp_proto_perf_factor_id_t factor_id;
+    va_list ap;
+    ucp_proto_perf_node_t *func_node;
+
+    ucp_proto_perf_segment_foreach(seg, perf) {
+        for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
+             ++factor_id) {
+            ucp_proto_perf_segment_update_factor(
+                    seg, factor_id,
+                    ucs_linear_func_compose(func,
+                                            seg->perf_factors[factor_id]));
+        }
+
+        va_start(ap, desc_fmt);
+        func_node = ucp_proto_perf_node_new_data(name, desc_fmt, ap);
+        va_end(ap);
+
+        ucp_proto_perf_node_own_child(seg->node, &func_node);
+    }
 }
 
 /* TODO:

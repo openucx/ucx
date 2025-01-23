@@ -160,6 +160,21 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
 
 
 /**
+ * Apply function to the performance factors of the given performance structure.
+ *
+ * @param [in] perf         Performance data structure to update.
+ * @param [in] func         Function to apply to the performance factors of the
+ *                          @a perf performance structure.
+ * @param [in] name         Name for the performance node that would be created
+ *                          to represent the impact of @a func.
+ * @param [in] desc_fmt     Formatted description for the performance node that
+ *                          would be created to represent the impact of @a func.
+ */
+void ucp_proto_perf_apply_func(ucp_proto_perf_t *perf, ucs_linear_func_t func,
+                               const char *name, const char *desc_fmt, ...);
+
+
+/**
  * Expand given perf by estimation that all messages on interval
  * [end of @a frag_seg + 1, @a max_length] would be sent in a pipeline async
  * manner using data provided by @a frag_seg as a performance for sending one
