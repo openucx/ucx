@@ -21,7 +21,7 @@ uct_ugni_device_t *uct_ugni_device_by_name(const char *dev_name);
 ucs_status_t uct_ugni_query_devices(uct_md_h md,
                                     uct_tl_device_resource_t **tl_devices_p,
                                     unsigned *num_tl_devices_p);
-ucs_status_t init_device_list();
+ucs_status_t init_device_list(void);
 ucs_status_t uct_ugni_create_md_cdm(uct_ugni_cdm_t *cdm);
 ucs_status_t uct_ugni_create_cq(gni_cq_handle_t *cq, unsigned cq_size, uct_ugni_cdm_t *cdm);
 ucs_status_t uct_ugni_destroy_cq(gni_cq_handle_t cq, uct_ugni_cdm_t *cdm);
