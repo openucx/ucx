@@ -160,6 +160,8 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                          ucp_rndv_rts_opcode_t opcode)
 {
     ucp_worker_h worker = sreq->send.ep->worker;
+    ucp_mem_h *memh     = &sreq->send.state.dt.dt.contig.memh;
+    unsigned pack_flags = ucp_ep_config(sreq->send.ep)->uct_rkey_pack_flags;
     ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
     void *rkey_buf;
@@ -179,10 +181,9 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
                                                     sizeof(*rndv_rts_hdr));
         packed_rkey_size      = ucp_rkey_pack_memh(
-                worker->context, sreq->send.rndv.md_map,
-                sreq->send.state.dt.dt.contig.memh, sreq->send.buffer,
-                sreq->send.length, &mem_info, 0, NULL,
-                ucp_ep_config(sreq->send.ep)->uct_rkey_pack_flags, rkey_buf);
+                worker->context, sreq->send.rndv.md_map, *memh,
+                sreq->send.buffer, sreq->send.length, &mem_info, 0, NULL,
+                pack_flags, rkey_buf);
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
                       ucs_status_string((ucs_status_t)packed_rkey_size));
@@ -191,6 +192,8 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         ucs_assert(packed_rkey_size <=
                    ucp_ep_config(sreq->send.ep)->rndv.rkey_size);
         sreq->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
+        *memh = ucp_memh_get_pack_memh(*memh, sreq->send.rndv.md_map,
+                                       pack_flags, 0);
     } else {
         rndv_rts_hdr->address = 0;
         packed_rkey_size      = 0;
@@ -205,6 +208,8 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = dest;
     ucp_request_t *rreq              = ucp_request_get_super(rndv_req);
     ucp_ep_h ep                      = rndv_req->send.ep;
+    ucp_mem_h *memh                  = &rreq->recv.dt_iter.type.contig.memh;
+    unsigned pack_flags              = ucp_ep_config(ep)->uct_rkey_pack_flags;
     ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
 
@@ -222,16 +227,16 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
         mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
         packed_rkey_size = ucp_rkey_pack_memh(
-                ep->worker->context, rndv_req->send.rndv.md_map,
-                rreq->recv.dt_iter.type.contig.memh,
+                ep->worker->context, rndv_req->send.rndv.md_map, *memh,
                 rreq->recv.dt_iter.type.contig.buffer, rndv_req->send.length,
-                &mem_info, 0, NULL, ucp_ep_config(ep)->uct_rkey_pack_flags,
-                rndv_rtr_hdr + 1);
+                &mem_info, 0, NULL, pack_flags, rndv_rtr_hdr + 1);
         if (packed_rkey_size < 0) {
             return packed_rkey_size;
         }
 
         rreq->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
+        *memh        = ucp_memh_get_pack_memh(*memh, rndv_req->send.rndv.md_map,
+                                              pack_flags, 0);
     } else {
         rndv_rtr_hdr->address = 0;
         rndv_rtr_hdr->size    = 0;
