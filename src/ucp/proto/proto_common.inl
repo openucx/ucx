@@ -351,6 +351,7 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
     ucp_mem_h memh;
     ssize_t packed_rkey_size;
+    unsigned pack_flags;
 
     /* For contiguous buffer, pack one rkey
      * TODO to support IOV datatype write N [address+length] records,
@@ -374,11 +375,11 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
                   md_map);
     }
 
+    pack_flags       = ucp_ep_config(req->send.ep)->uct_rkey_pack_flags;
     packed_rkey_size = ucp_rkey_pack_memh(
             req->send.ep->worker->context, md_map & memh->md_map, memh,
             dt_iter->type.contig.buffer, dt_iter->length, &dt_iter->mem_info,
-            distance_dev_map, dev_distance,
-            ucp_ep_config(req->send.ep)->uct_rkey_pack_flags, rkey_buffer);
+            distance_dev_map, dev_distance, pack_flags, rkey_buffer);
 
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
@@ -387,6 +388,8 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     }
 
     req->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
+    req->send.state.dt_iter.type.contig.memh =
+                    ucp_memh_get_pack_memh(memh, md_map, pack_flags, 0);
 
     return packed_rkey_size;
 }

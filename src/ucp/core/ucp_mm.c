@@ -2132,7 +2132,9 @@ ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
     int md_invalidate_cap = 0;
     ucp_md_index_t md_index;
 
-    ucs_assert(!ucp_memh_is_derived_memh(memh));
+    if(ucp_memh_is_derived_memh(memh)) {
+        return memh;
+    }
 
     /* TODO: disable invalidation for user memh? */
     if (!ucp_is_invalidate_cap(uct_flags)) {
@@ -2174,6 +2176,8 @@ ucp_mem_h ucp_memh_put_pack_memh(ucp_mem_h memh)
 
 void ucp_memh_invalidate(ucp_mem_h memh, ucp_memh_invalidate_comp_t *comp)
 {
+    ucp_mem_h parent;
+
     ucs_assert(ucp_memh_is_derived_memh(memh));
     ucs_assert(memh->super.refcount > 0);
 
@@ -2182,5 +2186,6 @@ void ucp_memh_invalidate(ucp_mem_h memh, ucp_memh_invalidate_comp_t *comp)
     }
 
     memh->flags |= UCP_MEMH_FLAG_INVALIDATED;
-    ucp_memh_put_pack_memh(memh);
+    parent       = ucp_memh_put_pack_memh(memh);
+    ucp_memh_put(parent);
 }
