@@ -319,8 +319,8 @@ static uct_md_ops_t uct_gdr_copy_md_ops = {
     .mkey_pack          = uct_gdr_copy_mkey_pack,
     .mem_reg            = uct_gdr_copy_mem_reg,
     .mem_dereg          = uct_gdr_copy_mem_dereg,
-    .mem_attach         = ucs_empty_function_return_unsupported,
-    .detect_memory_type = ucs_empty_function_return_unsupported
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+    .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
 };
 
 /**
@@ -375,7 +375,7 @@ static uct_md_ops_t uct_gdr_copy_md_rcache_ops = {
     .mkey_pack          = uct_gdr_copy_mkey_pack,
     .mem_reg            = uct_gdr_copy_mem_rcache_reg,
     .mem_dereg          = uct_gdr_copy_mem_rcache_dereg,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
 };
 
 static ucs_status_t
@@ -533,9 +533,9 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
 uct_component_t uct_gdr_copy_component = {
     .query_md_resources = uct_gdr_copy_query_md_resources,
     .md_open            = uct_gdr_copy_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_gdr_copy_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
     .rkey_release       = uct_gdr_copy_rkey_release,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = "gdr_copy",

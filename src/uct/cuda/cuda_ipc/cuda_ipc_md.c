@@ -487,8 +487,8 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         .mkey_pack          = uct_cuda_ipc_mkey_pack,
         .mem_reg            = uct_cuda_ipc_mem_reg,
         .mem_dereg          = uct_cuda_ipc_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
-        .detect_memory_type = ucs_empty_function_return_unsupported
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     };
     uct_cuda_ipc_md_config_t *ipc_config = ucs_derived_of(config,
                                                           uct_cuda_ipc_md_config_t);
@@ -512,9 +512,9 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
     .super = {
         .query_md_resources = uct_cuda_base_query_md_resources,
         .md_open            = uct_cuda_ipc_md_open,
-        .cm_open            = ucs_empty_function_return_unsupported,
+        .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
         .rkey_unpack        = uct_cuda_ipc_rkey_unpack,
-        .rkey_ptr           = ucs_empty_function_return_unsupported,
+        .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
         .rkey_release       = uct_cuda_ipc_rkey_release,
         .rkey_compare       = uct_base_rkey_compare,
         .name               = "cuda_ipc",

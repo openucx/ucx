@@ -856,7 +856,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack          = uct_cuda_copy_mkey_pack,
     .mem_reg            = uct_cuda_copy_mem_reg,
     .mem_dereg          = uct_cuda_copy_mem_dereg,
-    .mem_attach         = ucs_empty_function_return_unsupported,
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .mem_query          = uct_cuda_copy_md_mem_query,
     .detect_memory_type = uct_cuda_copy_md_detect_memory_type
 };
@@ -922,9 +922,9 @@ err:
 uct_component_t uct_cuda_copy_component = {
     .query_md_resources = uct_cuda_base_query_md_resources,
     .md_open            = uct_cuda_copy_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_cuda_copy_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
     .rkey_release       = uct_cuda_copy_rkey_release,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = "cuda_cpy",
