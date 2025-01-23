@@ -287,7 +287,7 @@ static uct_md_ops_t md_ops = {
     .mem_free           = uct_rocm_copy_mem_free,
     .mem_reg            = uct_rocm_copy_mem_reg,
     .mem_dereg          = uct_rocm_copy_mem_dereg,
-    .mem_attach         = ucs_empty_function_return_unsupported,
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .mem_query          = uct_rocm_base_mem_query,
     .detect_memory_type = uct_rocm_base_detect_memory_type,
 };
@@ -345,7 +345,7 @@ static uct_md_ops_t md_rcache_ops = {
     .mkey_pack          = uct_rocm_copy_mkey_pack,
     .mem_reg            = uct_rocm_copy_mem_rcache_reg,
     .mem_dereg          = uct_rocm_copy_mem_rcache_dereg,
-    .mem_attach         = ucs_empty_function_return_unsupported,
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .mem_query          = uct_rocm_base_mem_query,
     .detect_memory_type = uct_rocm_base_detect_memory_type,
 };
@@ -463,9 +463,9 @@ err:
 uct_component_t uct_rocm_copy_component = {
     .query_md_resources = uct_rocm_base_query_md_resources,
     .md_open            = uct_rocm_copy_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_rocm_copy_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
     .rkey_release       = uct_rocm_copy_rkey_release,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = "rocm_cpy",
