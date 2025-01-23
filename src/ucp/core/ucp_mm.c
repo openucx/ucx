@@ -2110,24 +2110,19 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
 }
 
 static ucp_mem_h
-ucp_memh_derived_get(ucp_mem_h memh, int create)
+ucp_memh_derived_get(ucp_mem_h memh)
 {
     if ((memh->derived != NULL) &&
         !(memh->derived->flags & UCP_MEMH_FLAG_INVALIDATED)) {
-        memh->derived->super.refcount += create;
+        ++memh->derived->super.refcount;
         return memh->derived;
-    }
-
-    if (!create) {
-        ucs_error("no valid derived memory handle for %p", memh);
-        return NULL;
     }
 
     return ucp_memh_derived_create(memh);
 }
 
 ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
-                                 unsigned uct_flags, int create)
+                                 unsigned uct_flags)
 {
     int md_invalidate_cap = 0;
     ucp_md_index_t md_index;
@@ -2151,7 +2146,7 @@ ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
         return memh;
     }
 
-    return ucp_memh_derived_get(memh, create);
+    return ucp_memh_derived_get(memh);
 }
 
 ucp_mem_h ucp_memh_put_pack_memh(ucp_mem_h memh)

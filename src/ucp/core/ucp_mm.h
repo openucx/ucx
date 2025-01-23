@@ -227,7 +227,7 @@ void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
  * TODO
  */
 ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
-                                 unsigned uct_flags, int create);
+                                 unsigned uct_flags);
 
 /**
  * TODO

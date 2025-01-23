@@ -464,7 +464,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
 
     /* Pack the rkey and validate packed size */
     ssize_t packed_size = ucp_rkey_pack_memh(sender().ucph(), memh->md_map,
-                                             memh, ucp_memh_address(memh),
+                                             &memh, ucp_memh_address(memh),
                                              ucp_memh_length(memh), &mem_info,
                                              sys_dev_map, &sys_distance[0], 0,
                                              &rkey_buffer[0]);

@@ -181,7 +181,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
                                                     sizeof(*rndv_rts_hdr));
         packed_rkey_size      = ucp_rkey_pack_memh(
-                worker->context, sreq->send.rndv.md_map, *memh,
+                worker->context, sreq->send.rndv.md_map, memh,
                 sreq->send.buffer, sreq->send.length, &mem_info, 0, NULL,
                 pack_flags, rkey_buf);
         if (packed_rkey_size < 0) {
@@ -192,8 +192,6 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         ucs_assert(packed_rkey_size <=
                    ucp_ep_config(sreq->send.ep)->rndv.rkey_size);
         sreq->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
-        *memh = ucp_memh_get_pack_memh(*memh, sreq->send.rndv.md_map,
-                                       pack_flags, 0);
     } else {
         rndv_rts_hdr->address = 0;
         packed_rkey_size      = 0;
@@ -227,7 +225,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
         mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
         packed_rkey_size = ucp_rkey_pack_memh(
-                ep->worker->context, rndv_req->send.rndv.md_map, *memh,
+                ep->worker->context, rndv_req->send.rndv.md_map, memh,
                 rreq->recv.dt_iter.type.contig.buffer, rndv_req->send.length,
                 &mem_info, 0, NULL, pack_flags, rndv_rtr_hdr + 1);
         if (packed_rkey_size < 0) {
@@ -235,8 +233,6 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
         }
 
         rreq->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
-        *memh        = ucp_memh_get_pack_memh(*memh, rndv_req->send.rndv.md_map,
-                                              pack_flags, 0);
     } else {
         rndv_rtr_hdr->address = 0;
         rndv_rtr_hdr->size    = 0;
