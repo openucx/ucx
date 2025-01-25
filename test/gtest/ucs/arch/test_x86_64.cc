@@ -82,8 +82,10 @@ protected:
          */
         total_size = test_window_size + (2 * hole_size);
 
-        ASSERT_EQ(posix_memalign((void **)&test_window_src, align, total_size), 0);
-        ASSERT_EQ(posix_memalign((void **)&test_window_dst, align, total_size), 0);
+        ASSERT_EQ(posix_memalign((void **)&test_window_src, align, total_size),
+                  0);
+        ASSERT_EQ(posix_memalign((void **)&test_window_dst, align, total_size),
+                  0);
         ASSERT_EQ(posix_memalign((void **)&dup, align, total_size), 0);
 
         src = test_window_src + hole_size;
