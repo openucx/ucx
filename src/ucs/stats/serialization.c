@@ -74,14 +74,14 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(ucs_stats_clsid_t, UCS_STATS_CLS_HASH_SI
 
 #define FREAD(_buf, _size, _stream) \
     { \
-        size_t _nread = fread(_buf, 1, _size, _stream); \
-        assert(_nread == _size); \
+        size_t UCS_V_UNUSED _nread = fread(_buf, 1, _size, _stream); \
+        ucs_assert(_nread == _size); \
     }
 
 #define FWRITE(_buf, _size, _stream) \
     { \
-        size_t nwrite = fwrite(_buf, 1, _size, _stream); \
-        assert(nwrite == _size); \
+        size_t UCS_V_UNUSED nwrite = fwrite(_buf, 1, _size, _stream); \
+        ucs_assert(nwrite == _size); \
     }
 
 #define FREAD_ONE(_ptr, _stream) \
