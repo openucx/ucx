@@ -169,7 +169,7 @@ bool mem_buffer::is_mem_type_supported(ucs_memory_type_t mem_type)
            mem_types.end();
 }
 
-void mem_buffer::set_device_context()
+void mem_buffer::set_device_context(int device)
 {
     static __thread bool device_set = false;
 
@@ -179,7 +179,7 @@ void mem_buffer::set_device_context()
 
 #if HAVE_CUDA
     if (is_cuda_supported()) {
-        cudaSetDevice(0);
+        cudaSetDevice(device);
         /* need to call free as context maybe lazily initialized when calling
          * cudaSetDevice(0) but calling cudaFree(0) should guarantee context
          * creation upon return */
@@ -189,7 +189,7 @@ void mem_buffer::set_device_context()
 
 #if HAVE_ROCM
     if (is_rocm_supported()) {
-        hipSetDevice(0);
+        hipSetDevice(device);
     }
 #endif
 
