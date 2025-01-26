@@ -34,6 +34,7 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep        = req->send.ep;
+    ucs_status_t status;
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
 
     /* This protocol should not be selected for valid and connected endpoint */
@@ -59,6 +60,13 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
         return ucp_proto_reconfig_select_progress(self);
     }
 
+    if (ucs_unlikely(req->send.msg_proto.am.flags &
+                     UCP_AM_SEND_FLAG_COPY_HEADER)) {
+        status = ucp_proto_am_req_copy_header(req);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
+    }
     /* TODO select wireup lane when needed */
     req->send.lane = ucp_ep_config(ep)->key.am_lane;
     return UCS_ERR_NO_RESOURCE;
