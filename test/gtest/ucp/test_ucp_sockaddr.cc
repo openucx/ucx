@@ -2526,6 +2526,7 @@ protected:
             std::string sb(size, 'x');
             std::string rb(size, 'y');
             std::string shdr(hdr_size, 'x');
+            std::string shdr_cpy(hdr_size, 'x');
             std::string rhdr(hdr_size, 'y');
             ucp_mem_h smemh(NULL);
             ucp_mem_h rmemh(NULL);
@@ -2550,8 +2551,11 @@ protected:
             param.flags         = flags;
 
             ucs_status_ptr_t sreq = ucp_am_send_nbx(sender().ep(), 0,
-                                                    &shdr[0], hdr_size,
+                                                    &shdr_cpy[0], hdr_size,
                                                     &sb[0], size, &param);
+            if (flags & UCP_AM_SEND_FLAG_COPY_HEADER) {
+                shdr_cpy[0] = 'X';
+            }
             request_wait(sreq);
             wait_for_flag(&arg.received);
             // wait for receive request completion after 'received' flag set to
@@ -2794,28 +2798,27 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols,
     test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
 }
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_short_reset,
-                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n", "ZCOPY_THRESH=inf")
+                     RUNNING_ON_VALGRIND, "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(16, 8, 1, false, false, UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_bcopy_reset,
-                     RUNNING_ON_VALGRIND,
-                     "PROTO_ENABLE=n", "ZCOPY_THRESH=inf")
+                     RUNNING_ON_VALGRIND, "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(2 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_zcopy_reset,
-                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n")
+                     RUNNING_ON_VALGRIND)
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_rndv_reset,
-                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n", "RNDV_THRESH=0")
+                     RUNNING_ON_VALGRIND, "RNDV_THRESH=0")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
