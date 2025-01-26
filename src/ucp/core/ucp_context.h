@@ -43,6 +43,12 @@ enum {
     UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
+/* Threshold to consider latency as not effected by number of endpoints */
+#define UCP_CONTEXT_EPSILON_LATENCY 1e-10
+
+/* Factor to multiply with in order to get infinite latency */
+#define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
+
 #define UCP_OP_ATTR_INDEX_MASK (UCP_OP_ATTR_FLAG_NO_IMM_CMPL    | \
                                 UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL | \
                                 UCP_OP_ATTR_FLAG_FAST_CMPL      | \
@@ -652,30 +658,23 @@ ucp_context_usage_tracker_enabled(ucp_context_h context)
 }
 
 static UCS_F_ALWAYS_INLINE double
-ucp_context_get_est_num_eps(ucp_context_h context,
-                            const ucs_linear_func_t *latency,
-                            int is_prioritized)
-{
-    if (!ucp_context_usage_tracker_enabled(context)) {
-        return context->config.est_num_eps;
-    }
-
-    if ((latency->m > 0) && !is_prioritized) {
-        return INFINITY;
-    }
-
-    return is_prioritized ? ucs_min(context->config.est_num_eps,
-                                    context->config.ext.max_priority_eps) :
-                            context->config.est_num_eps;
-}
-
-static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency_with_priority(ucp_context_h context,
                                    const ucs_linear_func_t *latency,
                                    int is_prioritized)
 {
-    unsigned num_eps = ucp_context_get_est_num_eps(context, latency,
-                                                   is_prioritized);
+    unsigned num_eps;
+
+    if (!ucp_context_usage_tracker_enabled(context)) {
+        num_eps = context->config.est_num_eps;
+    } else if (is_prioritized) {
+        num_eps = ucs_min(context->config.est_num_eps,
+                          context->config.ext.max_priority_eps);
+    } else if (latency->m > UCP_CONTEXT_EPSILON_LATENCY) {
+        num_eps = context->config.ext.max_priority_eps *
+                  UCP_CONTEXT_INFINITE_LAT_FACTOR;
+    } else {
+        num_eps = context->config.est_num_eps;
+    }
 
     return ucs_linear_func_apply(*latency, num_eps);
 }
