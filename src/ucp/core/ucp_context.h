@@ -43,9 +43,6 @@ enum {
     UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
-/* Threshold to consider latency as not effected by number of endpoints */
-#define UCP_CONTEXT_EPSILON_LATENCY 1e-10
-
 /* Factor to multiply with in order to get infinite latency */
 #define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
 
@@ -665,14 +662,18 @@ ucp_tl_iface_latency_with_priority(ucp_context_h context,
     unsigned num_eps;
 
     if (!ucp_context_usage_tracker_enabled(context)) {
+        /* No priority EPs exist, use default value */
         num_eps = context->config.est_num_eps;
     } else if (is_prioritized) {
+        /* Use small latency for priority EP */
         num_eps = ucs_min(context->config.est_num_eps,
                           context->config.ext.max_priority_eps);
-    } else if (latency->m > UCP_CONTEXT_EPSILON_LATENCY) {
+    } else if (latency->m > UCP_PROTO_PERF_EPSILON) {
+        /* Use "infinite" latency for "regular" EP in case TL is not scalable */
         num_eps = context->config.ext.max_priority_eps *
                   UCP_CONTEXT_INFINITE_LAT_FACTOR;
     } else {
+        /* Use default latency for "regular" EP + scalable TL */
         num_eps = context->config.est_num_eps;
     }
 
