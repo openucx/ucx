@@ -64,7 +64,6 @@ az_init_modules
 prepare_build
 
 # Don't cross-connect RoCE devices
-export UCX_IB_ROCE_LOCAL_SUBNET=y
 export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 build_static
 
