@@ -1341,11 +1341,15 @@ const char *ucp_tl_bitmap_str(ucp_context_h context,
 static void ucp_free_resources(ucp_context_t *context)
 {
     ucp_rsc_index_t i;
+    int gva_index;
 
     ucs_free(context->tl_rscs);
     for (i = 0; i < context->num_mds; ++i) {
-        if (context->tl_mds[i].gva_mr != NULL) {
-            uct_md_mem_dereg(context->tl_mds[i].md, context->tl_mds[i].gva_mr);
+        for (gva_index = 0; gva_index < UCP_GVA_MR_TYPE_LAST; gva_index++) {
+            if (context->tl_mds[i].gva_mrs[gva_index] != NULL) {
+                uct_md_mem_dereg(context->tl_mds[i].md,
+                                 context->tl_mds[i].gva_mrs[gva_index]);
+            }
         }
         uct_md_close(context->tl_mds[i].md);
     }

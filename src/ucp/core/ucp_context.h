@@ -276,6 +276,13 @@ typedef struct ucp_tl_cmpt {
 } ucp_tl_cmpt_t;
 
 
+enum {
+    UCP_GVA_MR_TYPE_READ_ONLY,
+    UCP_GVA_MR_TYPE_READ_WRITE,
+    UCP_GVA_MR_TYPE_LAST,
+};
+
+
 /**
  * Memory domain.
  */
@@ -306,9 +313,9 @@ typedef struct ucp_tl_md {
     unsigned               pack_flags_mask;
 
     /**
-     * Global VA memory handle
+     * Global VA memory handles for both read-only and read/write memory regions
      */
-    uct_mem_h              gva_mr;
+    uct_mem_h              gva_mrs[UCP_GVA_MR_TYPE_LAST];
 } ucp_tl_md_t;
 
 
