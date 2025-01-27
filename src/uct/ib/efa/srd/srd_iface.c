@@ -328,6 +328,13 @@ uct_srd_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                                      num_tl_devices_p);
 }
 
+static ucs_status_t uct_srd_iface_flush(uct_iface_h UCS_V_UNUSED iface,
+                                        unsigned UCS_V_UNUSED flags,
+                                        uct_completion_t * UCS_V_UNUSED comp)
+{
+    return UCS_OK;
+}
+
 static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .ep_flush                 = ucs_empty_function_return_unsupported,
     .ep_fence                 = ucs_empty_function_return_unsupported,
@@ -348,7 +355,7 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .ep_pending_add           = ucs_empty_function_return_unsupported,
     .ep_pending_purge         = (uct_ep_pending_purge_func_t)
         ucs_empty_function_return_unsupported,
-    .iface_flush              = ucs_empty_function_return_unsupported,
+    .iface_flush              = uct_srd_iface_flush,
     .iface_fence              = ucs_empty_function_return_unsupported,
     .iface_progress_enable    = (uct_iface_progress_enable_func_t)
         ucs_empty_function_return_unsupported,
