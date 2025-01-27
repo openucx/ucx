@@ -1,14 +1,24 @@
-#!/usr/bin/env bash
+#!/bin/bash -euE
 #
 # Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # See file LICENSE for terms.
 #
 
-set -euE
 
-branch="${1?Specify remote version to use like "upstream/v1.18.x"}"
+branch=${1:-""}
 remote="${branch%%/*}"
 version="$(echo "${branch##*/}" | sed -e 's@\(v[0-9]\+\.[0-9]\+\).*@\1@')"
+
+if [ -z "$branch" ] || [ -z "$remote" ] || [ -z "$version" ]; then
+    echo "usage: $0 <branch_name>" >&2
+    echo "" >&2
+    echo "Argument" >&2
+    echo "  <branch_name>    Remote branch to create documentation for"
+    echo "" >&2
+    echo "Sample" >&2
+    echo "  $0 upstream/v1.18.x" >&2
+    exit 1
+fi
 
 if ! git diff-index --quiet HEAD
 then
