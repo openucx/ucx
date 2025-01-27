@@ -68,7 +68,7 @@ protected:
 #ifndef __AVX__
         UCS_TEST_SKIP_R("Built without AVX support");
 #else
-        int i, j, result;
+        int i, j, result, ret = 0;
         char *test_window_src, *test_window_dst, *src, *dst, *dup;
         size_t len, total_size, test_window_size, hole_size, align;
 
@@ -82,9 +82,20 @@ protected:
          */
         total_size = test_window_size + (2 * hole_size);
 
-        posix_memalign((void **)&test_window_src, align, total_size);
-        posix_memalign((void **)&test_window_dst, align, total_size);
-        posix_memalign((void **)&dup, align, total_size);
+        ret = posix_memalign((void**)&test_window_src, align, total_size);
+        if (ret) {
+            goto src_fail;
+        }
+
+        ret = posix_memalign((void**)&test_window_dst, align, total_size);
+        if (ret) {
+            goto dst_fail;
+        }
+
+        ret = posix_memalign((void**)&dup, align, total_size);
+        if (ret) {
+            goto dup_fail;
+        }
 
         src = test_window_src + hole_size;
         dst = test_window_dst + hole_size;
@@ -122,9 +133,16 @@ protected:
             }
         }
 
-        free(test_window_src);
-        free(test_window_dst);
         free(dup);
+
+    dup_fail:
+        free(test_window_dst);
+    dst_fail:
+        free(test_window_src);
+    src_fail:
+        if (ret) {
+            UCS_TEST_ABORT("Failed to allocate memory: " << strerror(ret));
+        }
 #endif
     }
 };
