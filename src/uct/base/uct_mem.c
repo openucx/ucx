@@ -102,7 +102,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                    params->name : "anonymous-uct_mem_alloc";
     mem_type     = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE) ?
                    params->mem_type : UCS_MEMORY_TYPE_HOST;
-    sys_dev      = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEVICE) ?
+    sys_dev      = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEV) ?
                    params->sys_dev : UCS_SYS_DEVICE_ID_UNKNOWN;
     alloc_length = length;
     log_level    = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :

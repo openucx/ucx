@@ -2505,7 +2505,7 @@ typedef enum {
     UCT_MEM_ALLOC_PARAM_FIELD_NAME           = UCS_BIT(4),
 
     /** Enables @ref uct_mem_alloc_params_t::sys_device */
-    UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEVICE     = UCS_BIT(5)
+    UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEV        = UCS_BIT(5)
 } uct_mem_alloc_params_field_t;
 
 
@@ -2570,9 +2570,8 @@ typedef struct {
     const char                   *name;
 
     /**
-     * Index of the system device on which memory is to be allocated.
-     * Eg: UCS_SYS_DEVICE_ID_UNKNOWN to allocate on host memory, or a specific
-     * index to allocate memory on GPU device.
+     * System device on which memory is to be allocated, or
+     * UCS_SYS_DEVICE_ID_UNKNOWN to allow allocating on any device.
      */
     ucs_sys_device_t             sys_dev;
 } uct_mem_alloc_params_t;
