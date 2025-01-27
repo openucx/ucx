@@ -10,11 +10,11 @@
 
 #include "proto_debug.h"
 #include "proto_select.h"
-#include "proto_common.inl"
 #include "proto_am.inl"
+#include "proto_common.inl"
 
-#include <ucp/core/ucp_worker.inl>
 #include <ucp/am/ucp_am.inl>
+#include <ucp/core/ucp_worker.inl>
 
 
 /* Select a new protocol and start progressing it */
@@ -37,6 +37,7 @@ static void ucp_proto_reconfig_abort(ucp_request_t *req, ucs_status_t status)
     if (ucp_proto_config_is_am(req->send.proto_config)) {
         ucp_am_release_user_header(req);
     }
+
     ucp_request_complete_send(req, status);
 }
 
@@ -44,8 +45,8 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep        = req->send.ep;
-    ucs_status_t status;
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    ucs_status_t status;
 
     /* This protocol should not be selected for valid and connected endpoint */
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {

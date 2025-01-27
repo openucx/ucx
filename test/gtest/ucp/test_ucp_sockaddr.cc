@@ -2526,7 +2526,7 @@ protected:
             std::string sb(size, 'x');
             std::string rb(size, 'y');
             std::string shdr(hdr_size, 'x');
-            std::string shdr_cpy = shdr;
+            std::string shdr_copy = shdr;
             std::string rhdr(hdr_size, 'y');
             ucp_mem_h smemh(NULL);
             ucp_mem_h rmemh(NULL);
@@ -2551,10 +2551,14 @@ protected:
             param.flags         = flags;
 
             ucs_status_ptr_t sreq = ucp_am_send_nbx(sender().ep(), 0,
-                                                    &shdr_cpy[0], hdr_size,
+                                                    &shdr_copy[0], hdr_size,
                                                     &sb[0], size, &param);
+            /* First message request triggers connection establishment and
+             * is placed into pending queue.
+             * To check UCP_AM_SEND_FLAG_COPY_HEADER we change AM header 
+             * content while the request is still in pending queue.*/ 
             if (flags & UCP_AM_SEND_FLAG_COPY_HEADER) {
-                shdr_cpy[0] = 'X';
+                shdr_copy[0] = 'X';
             }
 
             request_wait(sreq);
