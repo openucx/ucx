@@ -19,6 +19,7 @@ static uct_iface_ops_t uct_srd_iface_tl_ops;
 void uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 {
     ep->ep_id = ucs_ptr_array_insert(&iface->eps, ep);
+    ucs_trace("iface(%p) added ep=%p ep_id=%d", iface, ep, ep->ep_id);
 }
 
 void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
@@ -26,8 +27,8 @@ void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
     ucs_assertv(ep->ep_id != UCT_UD_EP_NULL_ID, "iface=%p ep=%p ep_id=%d",
                 iface, ep, ep->ep_id);
 
-    ucs_trace("iface(%p) remove ep=%p ep_id=%d", iface, ep, ep->ep_id);
     ucs_ptr_array_remove(&iface->eps, ep->ep_id);
+    ucs_trace("iface(%p) removed ep=%p ep_id=%d", iface, ep, ep->ep_id);
 }
 
 ucs_status_t
