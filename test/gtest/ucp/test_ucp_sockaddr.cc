@@ -2554,7 +2554,7 @@ protected:
                                                     &shdr_cpy[0], hdr_size,
                                                     &sb[0], size, &param);
             if (flags & UCP_AM_SEND_FLAG_COPY_HEADER) {
-                ucs::fill_random(shdr_cpy);
+                shdr_cpy[0] = 'X';
             }
 
             request_wait(sreq);

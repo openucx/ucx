@@ -11,6 +11,7 @@
 #include "proto_debug.h"
 #include "proto_select.h"
 #include "proto_common.inl"
+#include "proto_am.inl"
 
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/am/ucp_am.inl>
@@ -31,6 +32,14 @@ static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
     return req->send.uct.func(&req->send.uct);
 }
 
+static void ucp_proto_reconfig_abort(ucp_request_t *req, ucs_status_t status)
+{
+    if (ucp_proto_config_is_am(req->send.proto_config)) {
+        ucp_am_release_user_header(req);
+    }
+    ucp_request_complete_send(req, status);
+}
+
 static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -49,7 +58,7 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
                                   ucp_operation_names, &strb);
         ucs_error("cannot find remote protocol for: %s",
                   ucs_string_buffer_cstr(&strb));
-        ucp_request_complete_send(req, UCS_ERR_CANCELED);
+        ucp_proto_reconfig_abort(req, UCS_ERR_CANCELED);
         return UCS_OK;
     }
 
@@ -107,6 +116,6 @@ ucp_proto_t ucp_reconfig_proto = {
     .probe    = ucp_proto_reconfig_probe,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_reconfig_progress},
-    .abort    = ucp_request_complete_send,
+    .abort    = ucp_proto_reconfig_abort,
     .reset    = (ucp_request_reset_func_t)ucs_empty_function_return_success
 };
