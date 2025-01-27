@@ -504,7 +504,7 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
  * Parse configuration files. This function searches for config in several
  * locations and parses them in order of precedence.
  */
-void ucs_config_parse_config_files();
+void ucs_config_parse_config_files(void);
 
 
 /**
@@ -632,7 +632,7 @@ void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
 /**
  * Global cleanup of the configuration parser.
  */
-void ucs_config_parser_cleanup();
+void ucs_config_parser_cleanup(void);
 
 
 END_C_DECLS

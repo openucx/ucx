@@ -253,7 +253,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
  * @return The queue length for completely established sockets
  * waiting to be accepted.
  */
-int ucs_socket_max_conn();
+int ucs_socket_max_conn(void);
 
 
 /**

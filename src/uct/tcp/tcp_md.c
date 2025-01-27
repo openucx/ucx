@@ -49,10 +49,10 @@ static void uct_tcp_md_close(uct_md_h md)
 static uct_md_ops_t uct_tcp_md_ops = {
     .close              = uct_tcp_md_close,
     .query              = uct_tcp_md_query,
-    .mkey_pack          = ucs_empty_function_return_success,
+    .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
     .mem_reg            = uct_md_dummy_mem_reg,
     .mem_dereg          = uct_md_dummy_mem_dereg,
-    .detect_memory_type = ucs_empty_function_return_unsupported
+    .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
 };
 
 static ucs_status_t
@@ -116,8 +116,8 @@ uct_component_t uct_tcp_component = {
     .md_open            = uct_tcp_md_open,
     .cm_open            = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_sockcm_t),
     .rkey_unpack        = uct_tcp_md_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
-    .rkey_release       = ucs_empty_function_return_success,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = UCT_TCP_NAME,
     .md_config          = {

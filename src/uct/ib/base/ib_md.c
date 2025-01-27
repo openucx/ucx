@@ -1116,8 +1116,9 @@ uct_ib_query_md_resources(uct_component_t *component,
                           uct_md_resource_desc_t **resources_p,
                           unsigned *num_resources_p)
 {
-    return uct_ib_base_query_md_resources(resources_p, num_resources_p,
-                                          ucs_empty_function_return_one_int);
+    return uct_ib_base_query_md_resources(
+        resources_p, num_resources_p,
+        (uct_ib_check_device_cb_t)ucs_empty_function_return_one_int);
 }
 
 static ucs_status_t
@@ -1565,10 +1566,10 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
         .query              = uct_ib_md_query,
         .mem_reg            = uct_ib_verbs_mem_reg,
         .mem_dereg          = uct_ib_verbs_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .mem_advise         = uct_ib_mem_advise,
         .mkey_pack          = uct_ib_verbs_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_verbs_md_open,
 };
@@ -1578,10 +1579,10 @@ static UCT_IB_MD_DEFINE_ENTRY(verbs, uct_ib_verbs_md_ops);
 uct_component_t uct_ib_component = {
     .query_md_resources = uct_ib_query_md_resources,
     .md_open            = uct_ib_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_ib_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
-    .rkey_release       = ucs_empty_function_return_success,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = "ib",
     .md_config          = {
