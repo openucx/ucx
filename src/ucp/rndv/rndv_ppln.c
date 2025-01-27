@@ -43,8 +43,8 @@ ucp_proto_rndv_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
     ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
     factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
             ucs_linear_func_make(frag_overhead, frag_overhead / frag_size);
-    node   = ucp_proto_perf_node_new_data("fragment overhead", "frag size: %s",
-                                          frag_str);
+    node = ucp_proto_perf_node_new_data("fragment overhead", "frag size: %s",
+                                        frag_str);
     return ucp_proto_perf_add_funcs(ppln_perf, frag_size + 1, SIZE_MAX, factors,
                                     node, NULL);
 }

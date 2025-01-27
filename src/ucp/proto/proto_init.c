@@ -234,11 +234,10 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
                                      perf_factors[cpu_factor_id]);
     }
 
-    perf_node     = ucp_proto_perf_node_new_data(perf_node_name, "%u mds",
-                                                 ucs_popcount(reg_md_map));
-    status        = ucp_proto_perf_add_funcs(perf, range_start, range_end,
-                                             perf_factors, perf_node,
-                                             reg_perf_node);
+    perf_node = ucp_proto_perf_node_new_data(perf_node_name, "%u mds",
+                                             ucs_popcount(reg_md_map));
+    status    = ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                         perf_factors, perf_node, reg_perf_node);
     ucp_proto_perf_node_deref(&reg_perf_node);
     return status;
 }
