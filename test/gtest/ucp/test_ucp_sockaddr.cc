@@ -2554,8 +2554,9 @@ protected:
                                                     &shdr_cpy[0], hdr_size,
                                                     &sb[0], size, &param);
             if (flags & UCP_AM_SEND_FLAG_COPY_HEADER) {
-                shdr_cpy[0] = 'X';
+                ucs::fill_random(shdr_cpy);
             }
+
             request_wait(sreq);
             wait_for_flag(&arg.received);
             // wait for receive request completion after 'received' flag set to
