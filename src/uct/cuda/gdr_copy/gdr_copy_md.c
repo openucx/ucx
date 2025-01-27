@@ -16,6 +16,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/time/time.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
 #include <ucm/api/ucm.h>
@@ -68,6 +69,7 @@ uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->rkey_packed_size = sizeof(uct_gdr_copy_key_t);
+    md_attr->reg_cost         = md->reg_cost;
 
     /* In absence of own cache require proper alignment from the global cache */
     if (md->rcache == NULL) {
@@ -479,7 +481,8 @@ uct_gdr_copy_md_create(uct_component_t *component,
     }
 
     md->super.ops = &uct_gdr_copy_md_rcache_ops;
-    md->reg_cost  = ucs_linear_func_make(md_config->rcache_config.overhead, 0);
+    md->reg_cost  = ucs_linear_func_make(
+            ucs_time_units_to_sec(md_config->rcache_config.overhead, 0), 0);
 
 out:
     *md_p = md;

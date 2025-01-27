@@ -113,21 +113,19 @@ const char *ucp_proto_perf_name(const ucp_proto_perf_t *perf);
  * @param [in] start           Add the performance function to this range start (inclusive).
  * @param [in] end             Add the performance function to this range end (inclusive).
  * @param [in] perf_factors    Array of performance functions to add.
+ * @param [in] perf_node       Performance node to represent @a perf_factors
+ *                             data.
  * @param [in] child_perf_node Performance node that would be considered as
  *                             child node for all segment nodes on [start, end]
  *                             interval.
- * @param [in] title           Title for performance node that would be created
- *                             to represent @a perf_factors data.
- * @param [in] desc_fmt        Formatted description for performance node that
- *                             would be created to represent @a perf_factors data.
  *
  * @note This function may adjust the reference count of @a perf_node as needed.
  */
 ucs_status_t
 ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
                          const ucp_proto_perf_factors_t perf_factors,
-                         ucp_proto_perf_node_t *child_perf_node,
-                         const char *title, const char *desc_fmt, ...);
+                         ucp_proto_perf_node_t *perf_node,
+                         ucp_proto_perf_node_t *child_perf_node);
 
 
 /**
