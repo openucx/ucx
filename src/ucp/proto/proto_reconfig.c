@@ -13,6 +13,7 @@
 #include "proto_common.inl"
 
 #include <ucp/core/ucp_worker.inl>
+#include <ucp/am/ucp_am.inl>
 
 
 /* Select a new protocol and start progressing it */
@@ -52,6 +53,15 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
         return UCS_OK;
     }
 
+    if (ucs_unlikely(ucp_proto_config_is_am(req->send.proto_config) &&
+                     (req->send.msg_proto.am.flags &
+                      UCP_AM_SEND_FLAG_COPY_HEADER))) {
+        status = ucp_proto_am_req_copy_header(req);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
+    }
+
     if (ep->cfg_index != req->send.proto_config->ep_cfg_index) {
         ucp_trace_req(req,
                       "ep configuration changed from %d to %d,"
@@ -60,13 +70,6 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
         return ucp_proto_reconfig_select_progress(self);
     }
 
-    if (ucs_unlikely(req->send.msg_proto.am.flags &
-                     UCP_AM_SEND_FLAG_COPY_HEADER)) {
-        status = ucp_proto_am_req_copy_header(req);
-        if (ucs_unlikely(status != UCS_OK)) {
-            return status;
-        }
-    }
     /* TODO select wireup lane when needed */
     req->send.lane = ucp_ep_config(ep)->key.am_lane;
     return UCS_ERR_NO_RESOURCE;
