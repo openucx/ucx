@@ -2526,7 +2526,7 @@ protected:
             std::string sb(size, 'x');
             std::string rb(size, 'y');
             std::string shdr(hdr_size, 'x');
-            std::string shdr_cpy(hdr_size, 'x');
+            std::string shdr_cpy = shdr;
             std::string rhdr(hdr_size, 'y');
             ucp_mem_h smemh(NULL);
             ucp_mem_h rmemh(NULL);
