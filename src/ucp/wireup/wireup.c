@@ -1406,7 +1406,9 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
      *          during wireup process (request sent). */
     return !(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
            (ucp_ep_get_am_lane(ep) == wireup_lane) ||
-           !ucp_wireup_is_am_lane_replaced(ep, reuse_lane_map);
+           !ucp_wireup_is_am_lane_replaced(ep, reuse_lane_map) ||
+           /* p2p lane guarantees that no messages were sent so far */
+           ucp_ep_is_lane_p2p(ep, ucp_ep_get_am_lane(ep));
 }
 
 static int ucp_wireup_should_reconfigure(ucp_ep_h ep,
