@@ -156,7 +156,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
     *ucs_serialize_next(&p, ucp_md_map_t) = md_map;
     *ucs_serialize_next(&p, uint8_t)      = mem_info->type;
 
-    memh = ucp_memh_get_pack_memh(*memh_p, md_map, uct_flags);
+    memh = ucp_memh_get_pack_memh(*memh_p, uct_flags);
 
     params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
     /* Write both size and rkey_buffer for each UCT rkey */

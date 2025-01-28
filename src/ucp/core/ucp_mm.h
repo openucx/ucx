@@ -226,18 +226,22 @@ void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
 /**
  * TODO
  */
-ucp_mem_h ucp_memh_get_pack_memh(ucp_mem_h memh, ucp_md_map_t md_map,
-                                 unsigned uct_flags);
+ucp_mem_h ucp_memh_derived_get(ucp_mem_h memh);
 
 /**
  * TODO
  */
-ucp_mem_h ucp_memh_put_pack_memh(ucp_mem_h memh);
+void ucp_memh_derived_destroy(ucp_mem_h derived);
 
 /**
  * TODO
  */
-void ucp_memh_invalidate(ucp_mem_h memh, ucp_memh_invalidate_comp_t *comp);
+ucp_mem_h ucp_memh_derived_reset(ucp_mem_h memh);
+
+/**
+ * TODO
+ */
+void ucp_memh_invalidate(ucp_mem_h derived, ucp_memh_invalidate_comp_t *comp);
 
 /**
  * Get memory domain index that is used to allocate certain memory type.
