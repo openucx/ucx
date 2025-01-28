@@ -279,7 +279,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
     }
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
-    status = ucp_memh_register(context, memh, md_map, uct_flags, alloc_name);
+    *memh_p = ucp_memh_derived_reset(memh);
+    status  = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }

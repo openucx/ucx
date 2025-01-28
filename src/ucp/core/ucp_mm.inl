@@ -36,6 +36,51 @@ ucp_memh_rcache_print(ucp_mem_h memh, void *address, size_t length)
               memh->md_map);
 }
 
+static UCS_F_ALWAYS_INLINE int ucp_memh_is_derived_memh(ucp_mem_h memh)
+{
+    return (memh->flags & UCP_MEMH_FLAG_DERIVED);
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_is_invalidate_cap(unsigned uct_flags)
+{
+    return uct_flags & (UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
+                        UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO);
+}
+
+static UCS_F_ALWAYS_INLINE ucp_mem_h
+ucp_memh_get_pack_memh(ucp_mem_h memh, unsigned uct_flags)
+{
+    if(ucp_memh_is_derived_memh(memh)) {
+        return memh;
+    }
+
+    /* TODO: disable invalidation for user memh? */
+    if (!ucp_is_invalidate_cap(uct_flags)) {
+        return memh;
+    }
+
+    /* TODO: Check if any of the requested MDs supports invalidation? */
+    /* TODO: Assert that context->mt_lock is acquired? */
+    return ucp_memh_derived_get(memh);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_memh_put_pack_memh(ucp_mem_h memh)
+{
+    if (!ucp_memh_is_derived_memh(memh)) {
+        return;
+    }
+
+    /* TODO: Assert that context->mt_lock is acquired? */
+    ucs_assert(memh->super.refcount > 0);
+    --memh->super.refcount;
+
+    if (ucs_unlikely(memh->flags & UCP_MEMH_FLAG_INVALIDATED) &&
+        (memh->super.refcount == 0)) {
+        ucp_memh_derived_destroy(memh);
+    }
+}
+
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_memh_get(ucp_context_h context, void *address, size_t length,
              ucs_memory_type_t mem_type, ucp_md_map_t reg_md_map,
@@ -88,24 +133,26 @@ not_found:
 static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
 {
     ucp_context_h context = memh->context;
-
-    memh = ucp_memh_put_pack_memh(memh);
+    ucp_mem_h orig_memh   = ucp_memh_is_derived_memh(memh) ? memh->parent : memh;
 
     ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64,
-              memh, ucp_memh_address(memh), ucp_memh_length(memh),
-              memh->md_map);
+              orig_memh, ucp_memh_address(orig_memh), ucp_memh_length(orig_memh),
+              orig_memh->md_map);
 
     /* user memh or zero length memh */
-    if (memh->parent != NULL) {
+    if (orig_memh->parent != NULL) {
+        ucp_memh_put_pack_memh(memh);
         return 0;
     }
 
     if (ucs_likely(context->rcache != NULL)) {
         UCP_THREAD_CS_ENTER(&context->mt_lock);
-        ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
+        ucp_memh_put_pack_memh(memh);
+        ucs_rcache_region_put_unsafe(context->rcache, &orig_memh->super);
         UCP_THREAD_CS_EXIT(&context->mt_lock);
     } else {
-        ucp_memh_put_slow(context, memh);
+        ucp_memh_put_pack_memh(memh);
+        ucp_memh_put_slow(context, orig_memh);
     }
     return 1;
 }
@@ -113,11 +160,6 @@ static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)
 {
     return (memh->parent != NULL) && !ucp_memh_is_zero_length(memh);
-}
-
-static UCS_F_ALWAYS_INLINE int ucp_memh_is_derived_memh(ucp_mem_h memh)
-{
-    return (memh->flags & UCP_MEMH_FLAG_DERIVED);
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_buffer_in_range(const ucp_mem_h memh,
@@ -179,7 +221,8 @@ ucp_memh_get_or_update(ucp_context_h context, void *address, size_t length,
     ucs_assert((context->rcache == NULL) ||
                ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
 
-    status = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
+    *memh_p = ucp_memh_derived_reset(*memh_p);
+    status  = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
 out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
