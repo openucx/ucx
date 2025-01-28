@@ -168,6 +168,8 @@ struct mlx5_grh_av {
 
 #define UCT_IB_MLX5_DEVX_ECE_TRIG_RESP    0x10000000
 
+#define UCT_IB_MLX5_DEVX_SMBRWQ_MAX_SEND_RECEIVE_MESSAGE_SIZE 512
+
 enum {
     /* Device supports KSM */
     UCT_IB_MLX5_MD_FLAG_KSM                  = UCS_BIT(0),

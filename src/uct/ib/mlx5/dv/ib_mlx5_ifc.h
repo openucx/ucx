@@ -959,7 +959,9 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         offload_type[0x4];
     uint8_t         reserved_at_1c[0x4];
 
-    uint8_t         reserved_at_20[0x7];
+    uint8_t         reserved_at_20[0x1];
+    uint8_t         receive_send_cqe_granularity[0x3];
+    uint8_t         reserved_at_24[0x3];
     uint8_t         dp_ordering_force[0x1];
     uint8_t         user_index[0x18];
 
@@ -1019,7 +1021,8 @@ struct uct_ib_mlx5_dctc_bits {
 
     uint8_t         ece[0x20];
 
-    uint8_t         reserved_at_220[0x160];
+    uint8_t         max_receive_send_message_size[0x10];
+    uint8_t         reserved_at_230[0x150];
 };
 
 struct uct_ib_mlx5_create_dct_out_bits {

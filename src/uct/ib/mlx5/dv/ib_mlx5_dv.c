@@ -132,7 +132,8 @@ static void uct_ib_mlx5_devx_set_smbrwq_attr(const uct_ib_mlx5_md_t *md, char *c
     UCT_IB_MLX5DV_SET(create_qp_in, create_qp_in, qpc_ext, 1);
     UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
                       UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
-    UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size, 512);
+    UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size,
+                      UCT_IB_MLX5_DEVX_SMBRWQ_MAX_SEND_RECEIVE_MESSAGE_SIZE);
 }
 
 static int uct_ib_mlx5_devx_is_smbrwq_enabled(uct_ib_mlx5_md_t *md,
