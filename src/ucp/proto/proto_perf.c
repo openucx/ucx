@@ -452,7 +452,6 @@ void ucp_proto_perf_apply_func(ucp_proto_perf_t *perf, ucs_linear_func_t func,
 {
     ucp_proto_perf_segment_t *seg;
     ucp_proto_perf_factor_id_t factor_id;
-    va_list ap;
     ucp_proto_perf_node_t *func_node;
 
     ucp_proto_perf_segment_foreach(seg, perf) {
@@ -464,9 +463,7 @@ void ucp_proto_perf_apply_func(ucp_proto_perf_t *perf, ucs_linear_func_t func,
                                             seg->perf_factors[factor_id]));
         }
 
-        va_start(ap, desc_fmt);
-        func_node = ucp_proto_perf_node_new_data(name, desc_fmt, ap);
-        va_end(ap);
+        func_node = UCP_PROTO_PERF_NODE_NEW_DATA(name, desc_fmt);
 
         ucp_proto_perf_node_own_child(seg->node, &func_node);
     }
