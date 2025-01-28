@@ -64,9 +64,8 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
     }
 
     if (ucp_proto_config_is_am(req->send.proto_config)) {
-        status = ucp_am_handle_user_header_send_status(req, UCS_ERR_NO_RESOURCE,
-                                                       0);
-        if (status != UCS_ERR_NO_RESOURCE) {
+        status = ucp_proto_am_req_copy_header(req);
+        if (status != UCS_OK) {
             ucp_proto_reconfig_abort(req, status);
             return UCS_OK;
         }
