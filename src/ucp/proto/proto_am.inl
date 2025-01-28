@@ -32,23 +32,6 @@ enum ucp_request_am_internal_flags {
 
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_am_handle_user_header_send_status(ucp_request_t *req,
-                                            ucs_status_t send_status)
-{
-    ucs_status_t status;
-
-    if (ucs_unlikely(send_status == UCS_ERR_NO_RESOURCE) &&
-        (req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER)) {
-        status = ucp_proto_am_req_copy_header(req);
-        if (ucs_unlikely(status != UCS_OK)) {
-            return status;
-        }
-    }
-
-    return send_status;
-}
-
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_am_is_first_fragment(const ucp_request_t *req)
 {
@@ -125,8 +108,35 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_am_req_copy_header(ucp_request_t *req)
+{
+    void *user_header;
+
+    if ((req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED) ||
+        (req->send.msg_proto.am.header.length == 0)) {
+        return UCS_OK;
+    }
+
+    ucs_assert(req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER);
+    user_header = ucs_mpool_set_get_inline(&req->send.ep->worker->am_mps,
+                                           req->send.msg_proto.am.header.length);
+    if (ucs_unlikely(user_header == NULL)) {
+        ucs_error("failed to allocate active message user header copy");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    memcpy(user_header, req->send.msg_proto.am.header.ptr,
+           req->send.msg_proto.am.header.length);
+    req->flags                       |= UCP_REQUEST_FLAG_USER_HEADER_COPIED;
+    req->send.msg_proto.am.header.ptr = user_header;
+
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_handle_user_header_send_status(ucp_request_t *req,
-                                      ucs_status_t send_status)
+                                      ucs_status_t send_status,
+                                      int release)
 {
     ucs_status_t status;
 
@@ -136,7 +146,7 @@ ucp_am_handle_user_header_send_status(ucp_request_t *req,
         if (ucs_unlikely(status != UCS_OK)) {
             return status;
         }
-    } else {
+    } else if (release) {
         ucp_am_release_user_header(req);
     }
 
@@ -170,7 +180,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_first",
                                                    packed_len, packed_len);
             if (handle_user_hdr) {
-                status = ucp_am_handle_user_header_send_status(req, packed_len);
+                status = ucp_am_handle_user_header_send_status(req, packed_len, 1);
                 if (ucs_unlikely(status == UCS_ERR_NO_MEMORY)) {
                     return status;
                 }
