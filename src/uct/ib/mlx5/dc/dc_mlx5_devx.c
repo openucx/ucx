@@ -60,6 +60,16 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
         UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, ib_iface->pkey_index);
     }
 
+
+    if ((iface->super.config.srq_topo ==
+         UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST) &&
+        (md->smbrwq.supported_tls & UCT_IB_MLX5_SMBRWQ_SUPPORT_DC)) {
+        UCT_IB_MLX5DV_SET(dctc, dctc, receive_send_cqe_granularity,
+                          UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
+        UCT_IB_MLX5DV_SET(dctc, dctc, max_receive_send_message_size,
+                          UCT_IB_MLX5_DEVX_SMBRWQ_MAX_SEND_RECEIVE_MESSAGE_SIZE);
+    }
+
     UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->rx.port_affinity);
     UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak,
                       iface->super.super.config.min_rnr_timer);
