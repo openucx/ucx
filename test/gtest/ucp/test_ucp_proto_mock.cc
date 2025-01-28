@@ -167,7 +167,8 @@ using proto_select_data_vec_t = std::vector<proto_select_data>;
 
 class test_ucp_proto_mock : public ucp_test, public mock_iface {
 public:
-    const static size_t INF = UCS_MEMUNITS_INF;
+    const static size_t INF     = UCS_MEMUNITS_INF;
+    const static uint16_t AM_ID = 123;
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
@@ -337,6 +338,70 @@ protected:
         CMP_FIELD(mem_type);
         return true;
     }
+
+    void send_recv_am(size_t size)
+    {
+        /* Prepare receiver data handler */
+        mem_buffer recv_buf(size, UCS_MEMORY_TYPE_HOST);
+        struct ctx_t {
+            mem_buffer                     *buf;
+            bool                            received;
+            ucp_worker_h                    worker;
+            ucp_am_recv_data_nbx_callback_t cmpl;
+        } ctx = {&recv_buf, false, receiver().worker()};
+
+        ctx.cmpl = [](void *req, ucs_status_t status, size_t len, void *arg) {
+            ((ctx_t *)arg)->received = true;
+            ucp_request_free(req);
+        };
+
+        auto cb = [](void *arg, const void *header, size_t header_length,
+                     void *data, size_t len, const ucp_am_recv_param_t *param) {
+            ctx_t *ctx = (ctx_t *)arg;
+
+            if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA) {
+                memcpy(ctx->buf->ptr(), data, len);
+                ctx->received = true;
+                return UCS_OK;
+            }
+
+            ucs_assert(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
+            ucp_request_param_t params;
+            params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                                  UCP_OP_ATTR_FIELD_USER_DATA;
+            params.user_data    = arg;
+            params.cb.recv_am   = ctx->cmpl;
+
+            auto sptr = ucp_am_recv_data_nbx(ctx->worker, data, ctx->buf->ptr(),
+                                             len, &params);
+            EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
+            return UCS_INPROGRESS;
+        };
+
+        /* Set receiver callback */
+        ucp_am_handler_param_t am_param;
+        am_param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                              UCP_AM_HANDLER_PARAM_FIELD_CB |
+                              UCP_AM_HANDLER_PARAM_FIELD_ARG |
+                              UCP_AM_HANDLER_PARAM_FIELD_FLAGS;
+        am_param.id         = AM_ID;
+        am_param.cb         = cb;
+        am_param.arg        = &ctx;
+        am_param.flags      = UCP_AM_FLAG_PERSISTENT_DATA;
+        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(ctx.worker, &am_param));
+
+        /* Send data */
+        mem_buffer buf(size, UCS_MEMORY_TYPE_HOST);
+        ucp_request_param_t param = {};
+        auto sptr = ucp_am_send_nbx(sender().ep(), AM_ID, NULL, 0ul, buf.ptr(),
+                                    buf.size(), &param);
+        EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
+
+        /* Wait for completion */
+        EXPECT_EQ(UCS_OK, request_wait(sptr));
+        wait_for_flag(&ctx.received);
+        EXPECT_TRUE(ctx.received);
+    }
 };
 
 class test_ucp_proto_mock_rcx : public test_ucp_proto_mock {
@@ -350,10 +415,11 @@ public:
     {
         /* Device with higher BW and latency */
         add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.am.max_short = 2000;
-            iface_attr.bandwidth.shared = 28000000000;
-            iface_attr.latency.c        = 0.0000006;
-            iface_attr.latency.m        = 0.000000001;
+            iface_attr.cap.am.max_short  = 2000;
+            iface_attr.bandwidth.shared  = 28000000000;
+            iface_attr.latency.c         = 0.0000006;
+            iface_attr.latency.m         = 0.000000001;
+            iface_attr.cap.get.max_zcopy = 16384;
         });
         /* Device with smaller BW but lower latency */
         add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
@@ -400,6 +466,14 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_2_lanes,
         {20301, INF,   "rendezvous zero-copy read from remote",
          "47% on rc_mlx5/mock_1:1/path0 and 53% on rc_mlx5/mock_0:1/path0"},
     }, key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_send_recv_small_frag,
+           "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2", "RNDV_THRESH=0")
+{
+    for (size_t i = 1024; i <= 65536; i += 1024) {
+        send_recv_am(i);
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
