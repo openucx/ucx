@@ -143,9 +143,14 @@ UCS_TEST_P(test_ucp_cuda, sparse_regions) {
 
         ucp_mem_map_params_t params;
         params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_PROT;
         params.address    = ptr[i];
         params.length     = size;
+        params.prot       = UCP_MEM_MAP_PROT_LOCAL_READ |
+                            UCP_MEM_MAP_PROT_LOCAL_WRITE |
+                            UCP_MEM_MAP_PROT_REMOTE_READ |
+                            UCP_MEM_MAP_PROT_REMOTE_WRITE;
 
         status = ucp_mem_map(sender().ucph(), &params, &memh[i]);
         ASSERT_UCS_OK(status);
