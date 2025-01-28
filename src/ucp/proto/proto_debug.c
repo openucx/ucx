@@ -468,10 +468,10 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
     }
 }
 
-static ucp_proto_perf_node_t *
-ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
-                        unsigned selected_child, const char *name,
-                        const char *desc_fmt, va_list ap)
+ucp_proto_perf_node_t *ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
+                                               unsigned selected_child,
+                                               const char *name,
+                                               const char *desc_fmt, va_list ap)
 {
     ucp_proto_perf_node_t *perf_node;
 
@@ -523,6 +523,10 @@ static void ucp_proto_perf_node_free(ucp_proto_perf_node_t *perf_node)
                                               _selected_child, _name, \
                                               _desc_fmt, __ap); \
         va_end(__ap); \
+        \
+        if (__perf_node == NULL) { \
+            return NULL; \
+        } \
         \
         __perf_node; \
     })
