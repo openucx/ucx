@@ -47,6 +47,8 @@ enum {
     UCP_WIREUP_MSG_ACK,
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
+    UCP_WIREUP_MSG_PROMOTE,
+    UCP_WIREUP_MSG_DEMOTE,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -88,11 +90,12 @@ typedef struct {
     /**
      * Calculates score of a potential transport.
      *
-     * @param [in]  wiface        UCP worker iface.
-     * @param [in]  md_attr       Local MD attributes.
-     * @param [in]  unpacked_addr The whole remote address unpacked.
-     * @param [in]  remote_addr   Remote transport address info and attributes.
-     * @param [in]  arg           Custom argument.
+     * @param [in]  wiface         UCP worker iface.
+     * @param [in]  md_attr        Local MD attributes.
+     * @param [in]  unpacked_addr  The whole remote address unpacked.
+     * @param [in]  remote_addr    Remote transport address info and attributes.
+     * @param [in]  prioritized_ep Endpoint is prioritized.
+     * @param [in]  arg            Custom argument.
      *
      * @return Transport score, the higher the better.
      */
@@ -100,6 +103,7 @@ typedef struct {
                                               const uct_md_attr_v2_t *md_attr,
                                               const ucp_unpacked_address_t *unpacked_addr,
                                               const ucp_address_entry_t *remote_addr,
+                                              int prioritized_ep,
                                               void *arg);
 
     /* Custom argument of @a calc_score function */
@@ -120,8 +124,12 @@ typedef struct {
  */
 typedef struct ucp_wireup_msg {
     uint8_t                type; /* Message type */
-    uint8_t                err_mode; /* Peer error handling mode defined in
-                                        @ucp_err_handling_mode_t */
+    union {
+        uint8_t            err_mode;  /* Peer error handling mode defined in
+                                         @ucp_err_handling_mode_t */
+        uint8_t            score;     /* Peer score determinted by amount of
+                                         traffic that flows through it */
+    };
     ucp_ep_match_conn_sn_t conn_sn; /* Connection sequence number */
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
@@ -155,7 +163,7 @@ double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  const uct_md_attr_v2_t *md_attr,
                                  const ucp_unpacked_address_t *unpacked_address,
                                  const ucp_address_entry_t *remote_addr,
-                                 void *arg);
+                                 int prioritized_ep, void *arg);
 
 size_t ucp_wireup_msg_pack(void *dest, void *arg);
 
@@ -180,7 +188,8 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_tl_bitmap_t *local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
-                                   unsigned *addr_indices);
+                                   unsigned *addr_indices,
+                                   int *is_am_replaced_p);
 
 ucs_status_t
 ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
@@ -214,12 +223,17 @@ unsigned ucp_wireup_eps_progress(void *arg);
 
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 
-double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface);
+double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface,
+                                        int prioritized_ep);
 
 double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 
 int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *addr_entry);
+
+void ucp_wireup_send_promotion_request(void *entry, void *arg, int is_external_event);
+
+void ucp_wireup_send_demotion_request(void *entry, void *arg, int is_external_event);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {
