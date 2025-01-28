@@ -513,10 +513,28 @@ static void ucp_proto_perf_node_free(ucp_proto_perf_node_t *perf_node)
     ucs_free(perf_node);
 }
 
+#define UCP_PROTO_PERF_NODE_NEW(_type, _selected_child, _name, _desc_fmt) \
+    ({ \
+        ucp_proto_perf_node_t *__perf_node; \
+        va_list __ap; \
+        \
+        va_start(__ap, _desc_fmt); \
+        __perf_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_##_type, \
+                                              _selected_child, _name, \
+                                              _desc_fmt, __ap); \
+        va_end(__ap); \
+        \
+        if (__perf_node == NULL) { \
+            return NULL; \
+        } \
+        \
+        __perf_node; \
+    })
+
 ucp_proto_perf_node_t *
 ucp_proto_perf_node_new_data(const char *name, const char *desc_fmt, ...)
 {
-    return UCP_PROTO_PERF_NODE_NEW_DATA(name, desc_fmt);
+    return UCP_PROTO_PERF_NODE_NEW(DATA, 0, name, desc_fmt);
 }
 
 ucp_proto_perf_node_t *ucp_proto_perf_node_new_select(const char *name,

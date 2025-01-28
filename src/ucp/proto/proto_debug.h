@@ -100,23 +100,6 @@ ucp_proto_perf_node_new_select(const char *name, unsigned selected_child,
                                const char *desc_fmt, ...);
 
 
-#define UCP_PROTO_PERF_NODE_NEW(_type, _selected_child, _name, _desc_fmt) \
-    ({ \
-        ucp_proto_perf_node_t *__perf_node; \
-        va_list __ap; \
-        \
-        va_start(__ap, _desc_fmt); \
-        __perf_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_##_type, \
-                                              _selected_child, _name, \
-                                              _desc_fmt, __ap); \
-        va_end(__ap); \
-        \
-        __perf_node; \
-    })
-
-#define UCP_PROTO_PERF_NODE_NEW_DATA(_name, _desc_fmt) \
-    UCP_PROTO_PERF_NODE_NEW(DATA, 0, _name, _desc_fmt) \
-
 void ucp_proto_perf_node_ref(ucp_proto_perf_node_t *perf_node);
 
 
