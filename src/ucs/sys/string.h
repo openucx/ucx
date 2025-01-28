@@ -241,11 +241,12 @@ const char *ucs_str_dump_hex(const void* data, size_t length, char *buf,
  * @param  max            Size of the string.
  * @param  flags          Flags to be converted.
  * @param  str_table      Conversion table - from flag value to a string.
+ * @param  str_table_size Size of the conversion table.
  *
  * @return String that holds the representation of the given flags.
  */
-const char* ucs_flags_str(char *str, size_t max,
-                          uint64_t flags, const char **str_table);
+const char* ucs_flags_str(char *buf, size_t max, uint64_t flags,
+                          const char **str_table, unsigned str_table_size);
 
 
 /**
@@ -313,17 +314,16 @@ const char* ucs_mask_str(uint64_t mask, ucs_string_buffer_t *strb);
 
 
 /**
- * Find a string in a NULL-terminated array of strings.
+ * Find a string in an array of strings.
  *
- * @param str          String to search for.
- * @param string_list  NULL-terminated array of strings.
- * @param case_sensitive Whether to perform case sensitive search.
+ * @param str             String to search for.
+ * @param string_list     Array of strings.
+ * @param str_array_size  Number of strings in the array.
  *
  * @return Index of the string in the array, or -1 if not found.
  */
 ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
-                                int case_sensitive);
-
+                                size_t str_array_size);
 
 /**
  * Split a string to tokens. The given string is modified in-place.

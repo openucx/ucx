@@ -61,13 +61,12 @@ ucs_global_opts_t ucs_global_opts = {
     .rcache_stat_max       = 0
 };
 
-static const char *ucs_handle_error_modes[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_handle_error_modes, {
     [UCS_HANDLE_ERROR_BACKTRACE] = "bt",
     [UCS_HANDLE_ERROR_FREEZE]    = "freeze",
     [UCS_HANDLE_ERROR_DEBUG]     = "debug",
-    [UCS_HANDLE_ERROR_NONE]      = "none",
-    [UCS_HANDLE_ERROR_LAST]      = NULL
-};
+    [UCS_HANDLE_ERROR_NONE]      = "none"
+});
 
 
 static UCS_CONFIG_DEFINE_ARRAY(signo,
@@ -438,7 +437,7 @@ static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
     ucs_string_buffer_appendf(&strb, "%s", buffer);
     ucs_string_buffer_rtrim(&strb, "\n");
     if (!ucs_config_sscanf_enum(ucs_string_buffer_cstr(&strb), &log_level,
-                                ucs_log_level_names)) {
+                                UCS_CONFIG_GET_ALLOWED_VALUES(ucs_log_level_names))) {
         return UCS_ERR_INVALID_PARAM;
     }
 
