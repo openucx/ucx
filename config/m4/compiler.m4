@@ -567,6 +567,13 @@ CHECK_COMPILER_FLAG([-pedantic], [-pedantic],
                     [])
 
 #
+# Check if "-Werror=strict-prototypes" flag is supported
+#
+CHECK_COMPILER_FLAG([-Werror=strict-prototypes], [-Werror=strict-prototypes],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
+                    [CFLAGS_STRICT_PROTOTYPES="-Werror=strict-prototypes"], [])
+
+#
 # Check if "-dynamic-list-data" flag is supported
 #
 CHECK_COMPILER_FLAG([-Wl,-dynamic-list-data], [-Wl,-dynamic-list-data],
@@ -623,6 +630,7 @@ AC_SUBST([BASE_CFLAGS])
 AC_SUBST(LT_CFLAGS)
 AC_SUBST([BASE_CXXFLAGS])
 AC_SUBST([CFLAGS_PEDANTIC])
+AC_SUBST([CFLAGS_STRICT_PROTOTYPES])
 AC_SUBST([LDFLAGS_DYNAMIC_LIST_DATA])
 
 

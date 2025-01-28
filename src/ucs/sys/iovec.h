@@ -66,7 +66,7 @@ void ucs_iov_advance(struct iovec *iov, size_t iov_cnt,
  *
  * @return The maximum number of IOVs.
  */
-size_t ucs_iov_get_max();
+size_t ucs_iov_get_max(void);
 
 END_C_DECLS
 

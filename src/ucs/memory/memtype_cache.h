@@ -43,8 +43,8 @@ struct ucs_memtype_cache {
 };
 
 
-void ucs_memtype_cache_global_init();
-void ucs_memtype_cache_cleanup();
+void ucs_memtype_cache_global_init(void);
+void ucs_memtype_cache_cleanup(void);
 
 
 /**
@@ -96,7 +96,7 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
  *
  * @return 1 if empty 0 if otherwise.
  */
-static UCS_F_ALWAYS_INLINE int ucs_memtype_cache_is_empty()
+static UCS_F_ALWAYS_INLINE int ucs_memtype_cache_is_empty(void)
 {
     return (ucs_memtype_cache_global_instance != NULL) &&
            (ucs_memtype_cache_global_instance->pgtable.num_regions == 0);

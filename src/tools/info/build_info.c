@@ -13,7 +13,7 @@
 #include <ucs/sys/preprocessor.h>
 
 
-void print_build_config()
+void print_build_config(void)
 {
     typedef struct {
         const char *name;

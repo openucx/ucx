@@ -111,7 +111,7 @@ static void print_table_header(const char *title, const char *distance_unit,
                         '+');
 }
 
-static void print_sys_topo()
+static void print_sys_topo(void)
 {
     const unsigned num_devices              = ucs_topo_num_devices();
     static const int distance_width         = 10;
@@ -186,7 +186,7 @@ static void print_sys_topo()
     printf("# Memory latency is calculated according to the CPU affinity\n");
 }
 
-static double measure_timer_accuracy()
+static double measure_timer_accuracy(void)
 {
     double elapsed, elapsed_accurate;
     ucs_time_t time0, time1;

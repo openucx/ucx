@@ -38,7 +38,7 @@ extern const char *ucs_signal_names[];
 /**
  * Initialize UCS debugging subsystem.
  */
-void ucs_debug_init();
+void ucs_debug_init(void);
 
 
 /**
@@ -51,7 +51,7 @@ void ucs_debug_cleanup(int on_error);
  * that was set in ucs_global_opts.error_signals.
  * Previous signal handlers are set.
  */
-void ucs_debug_disable_signals();
+void ucs_debug_disable_signals(void);
 /**
  * Get information about an address in the code of the current program.
  * @param address   Address to look up.

@@ -49,15 +49,15 @@ ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
                                        ucs_time_t current_time);
 
 
-typedef void (*ucs_async_init_t)();
+typedef void (*ucs_async_init_t)(void);
 
-typedef void (*ucs_async_cleanup_t)();
+typedef void (*ucs_async_cleanup_t)(void);
 
-typedef int (*ucs_async_is_from_async_t)();
+typedef int (*ucs_async_is_from_async_t)(void);
 
-typedef void (*ucs_async_block_t)();
+typedef void (*ucs_async_block_t)(void);
 
-typedef void (*ucs_async_unblock_t)();
+typedef void (*ucs_async_unblock_t)(void);
 
 typedef ucs_status_t (*ucs_async_context_init_t)(ucs_async_context_t *async);
 

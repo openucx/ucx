@@ -155,7 +155,7 @@ static inline void ucs_clear_cache(void *start, void *end)
 }
 
 
-static inline int ucs_cpu_prefer_relaxed_order()
+static inline int ucs_cpu_prefer_relaxed_order(void)
 {
     ucs_cpu_vendor_t cpu_vendor = ucs_arch_get_cpu_vendor();
     ucs_cpu_model_t cpu_model   = ucs_arch_get_cpu_model();
@@ -173,8 +173,8 @@ static inline int ucs_cpu_prefer_relaxed_order()
 #define UCS_CPU_MODEL_LABEL  "CPU model"
 
 
-const char *ucs_cpu_vendor_name();
-const char *ucs_cpu_model_name();
+const char *ucs_cpu_vendor_name(void);
+const char *ucs_cpu_model_name(void);
 
 END_C_DECLS
 

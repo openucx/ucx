@@ -167,7 +167,7 @@ typedef struct uct_mm_component {
         .super = { \
             .query_md_resources = uct_mm_query_md_resources, \
             .md_open            = uct_mm_md_open, \
-            .cm_open            = ucs_empty_function_return_unsupported, \
+            .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported, \
             .rkey_unpack        = _rkey_unpack, \
             .rkey_ptr           = uct_sm_rkey_ptr, \
             .rkey_release       = _rkey_release, \

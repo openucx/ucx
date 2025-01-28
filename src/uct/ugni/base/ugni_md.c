@@ -186,13 +186,13 @@ uct_ugni_md_open(uct_component_h component,const char *md_name,
     pthread_mutex_lock(&uct_ugni_global_lock);
     md_ops.close              = uct_ugni_md_close;
     md_ops.query              = uct_ugni_md_query;
-    md_ops.mem_alloc          = (void*)ucs_empty_function;
-    md_ops.mem_free           = (void*)ucs_empty_function;
+    md_ops.mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function;
+    md_ops.mem_free           = (uct_md_mem_free_func_t)ucs_empty_function;
     md_ops.mem_reg            = uct_ugni_mem_reg;
     md_ops.mem_dereg          = uct_ugni_mem_dereg;
-    md_ops.mem_attach         = ucs_empty_function_return_unsupported;
+    md_ops.mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported;
     md_ops.mkey_pack          = uct_ugni_mkey_pack;
-    md_ops.detect_memory_type = ucs_empty_function_return_unsupported;
+    md_ops.detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported;
 
     md.super.ops              = &md_ops;
     md.super.component        = &uct_ugni_component;
@@ -223,9 +223,9 @@ error:
 uct_component_t uct_ugni_component = {
     .query_md_resources = uct_ugni_query_md_resources,
     .md_open            = uct_ugni_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_ugni_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
     .rkey_release       = uct_ugni_rkey_release,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = UCT_UGNI_MD_NAME,
