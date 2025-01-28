@@ -344,6 +344,18 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
     return flags;
 }
 
+static int ucp_memh_is_gva_mr(ucp_context_h context, ucp_mem_h memh, int md_index)
+{
+    int gva_index;
+    for (gva_index = 0; gva_index < UCP_GVA_MR_TYPE_LAST; gva_index++) {
+        if (memh->uct[md_index] == context->tl_mds[md_index].gva_mrs[gva_index]) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map)
 {
@@ -359,17 +371,14 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
     };
     ucp_md_index_t md_index;
     ucs_status_t status;
-    int gva_index;
 
     /* Unregister from all memory domains */
     ucs_for_each_bit(md_index, md_map) {
         ucs_assertv(md_index != memh->alloc_md_index,
                     "memh %p: md_index %u alloc_md_index %u", memh, md_index,
                     memh->alloc_md_index);
-        for (gva_index = 0; gva_index < UCP_GVA_MR_TYPE_LAST; gva_index++) {
-            if (memh->uct[md_index] == context->tl_mds[md_index].gva_mrs[gva_index]) {
-                continue;
-            }
+        if (ucp_memh_is_gva_mr(context, memh, md_index)) {
+            continue;
         }
 
         ucs_trace("de-registering memh[%d]=%p", md_index, memh->uct[md_index]);
