@@ -329,15 +329,8 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
 static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map)
 {
-    uct_completion_t comp            = {
-        .count = 1,
-        .func  = (uct_completion_callback_t)ucs_empty_function_do_assert_void
-    };
     uct_md_mem_dereg_params_t params = {
-        .field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
-                      UCT_MD_MEM_DEREG_FIELD_FLAGS |
-                      UCT_MD_MEM_DEREG_FIELD_COMPLETION,
-        .comp       = &comp
+        .field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH
     };
     ucp_md_index_t md_index;
     ucs_status_t status;
@@ -355,21 +348,11 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         ucs_assert(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG);
 
         params.memh = memh->uct[md_index];
-        if (memh->inv_md_map & UCS_BIT(md_index)) {
-            params.flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
-            comp.count++;
-        } else {
-            params.flags = 0;
-        }
-
         status = uct_md_mem_dereg_v2(context->tl_mds[md_index].md, &params);
         if (status != UCS_OK) {
             ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
                      context->tl_mds[md_index].rsc.md_name,
                      ucs_status_string(status));
-            if (params.flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
-                comp.count--;
-            }
         }
 
         memh->uct[md_index] = NULL;
@@ -381,25 +364,7 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         memh->flags &= ~UCP_MEMH_FLAG_MLOCKED;
     }
 
-    ucs_assert(comp.count == 1);
-}
-
-void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                         ucs_rcache_invalidate_comp_func_t cb, void *arg,
-                         ucp_md_map_t inv_md_map)
-{
-    ucs_trace("memh %p: invalidate address %p length %zu md_map %" PRIx64
-              " inv_md_map %" PRIx64,
-              memh, ucp_memh_address(memh), ucp_memh_length(memh), memh->md_map,
-              inv_md_map);
-
-    ucs_assert(memh->parent == NULL);
-    ucs_assert(!(memh->flags & UCP_MEMH_FLAG_IMPORTED));
-
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
-    memh->inv_md_map |= inv_md_map;
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
-    ucs_rcache_region_invalidate(context->rcache, &memh->super, cb, arg);
+    ucp_memh_derived_reset(memh);
 }
 
 static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
@@ -673,7 +638,6 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
                           uct_alloc_method_t method, ucs_memory_type_t mem_type)
 {
     memh->md_map         = 0;
-    memh->inv_md_map     = 0;
     memh->uct_flags      = UCP_MM_UCT_ACCESS_FLAGS(uct_flags);
     memh->context        = context;
     memh->flags          = memh_flags;
@@ -907,8 +871,7 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
         uct_flags |= UCP_MM_UCT_ACCESS_FLAGS(memh->uct_flags);
 
         /* Invalidate the mismatching region and get a new one */
-        ucs_rcache_region_invalidate(context->rcache, &memh->super,
-                                     ucs_empty_function, NULL);
+        ucs_rcache_region_invalidate(context->rcache, &memh->super);
         ucp_memh_put(memh);
     }
 }
@@ -1974,8 +1937,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                             "This may indicate that exported memory handle was "
                             "destroyed, but imported memory handle was not",
                             rregion->refcount);
-                ucs_rcache_region_invalidate(rcache, rregion,
-                                             ucs_empty_function, NULL);
+                ucs_rcache_region_invalidate(rcache, rregion);
                 ucs_rcache_region_put_unsafe(rcache, rregion);
             }
         }
@@ -1997,4 +1959,171 @@ out_memh_update:
     *memh_p = memh;
 out:
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_memh_is_invalidate_cap(const ucp_mem_h memh, ucp_md_index_t md_idx)
+{
+    return ucp_is_invalidate_cap(memh->context->tl_mds[md_idx].pack_flags_mask);
+}
+
+static void ucp_memh_derived_remove_from_list(ucp_mem_h memh, ucp_mem_h derived)
+{
+    ucp_mem_h *it;
+
+    for (it = &memh->derived; *it != NULL; it = &(*it)->derived) {
+        if (*it == derived) {
+            *it = derived->derived;
+            break;
+        }
+    }
+}
+
+static void ucp_memh_derived_completion(ucp_mem_h derived)
+{
+    ucp_memh_invalidate_comp_t *comp;
+
+    while(!ucs_list_is_empty(&derived->comp_list)) {
+        comp = ucs_list_extract_head(&derived->comp_list,
+                                     ucp_memh_invalidate_comp_t, list);
+        comp->func(comp->arg);
+    }
+}
+
+void ucp_memh_derived_destroy(ucp_mem_h derived)
+{
+    ucp_context_h context = derived->context;
+    uct_md_mem_dereg_params_t params;
+    ucp_md_index_t md_index;
+    ucs_status_t status;
+
+    ucs_assert(ucp_memh_is_derived_memh(derived));
+    ucs_assertv(derived->super.refcount == 0, "derived memh %p refcount=%d",
+                derived, derived->super.refcount);
+
+    ucp_memh_derived_remove_from_list(derived->parent, derived);
+    ucp_memh_derived_completion(derived);
+
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+
+    ucs_trace("destroying derived memh=%p", derived);
+    ucs_for_each_bit(md_index, derived->md_map) {
+        if (ucp_memh_is_invalidate_cap(derived, md_index)) {
+            params.memh = derived->uct[md_index];
+            ucs_trace("de-registering derived memh[%d]=%p", md_index,
+                      derived->uct[md_index]);
+            status = uct_md_mem_dereg_v2(context->tl_mds[md_index].md, &params);
+            if (status != UCS_OK) {
+                ucs_warn("derived memh %p failed to dereg from md[%d]=%s: %s",
+                         derived, md_index, context->tl_mds[md_index].rsc.md_name,
+                         ucs_status_string(status));
+            }
+        }
+    }
+
+    ucs_free(derived);
+}
+
+static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
+{
+    ucp_context_h context = memh->context;
+    ucp_mem_h derived;
+    ucp_md_index_t md_index;
+    ucs_status_t status;
+    uct_md_mem_reg_params_t params;
+
+    /* TODO: use memory pool for derived handles? */
+    ucs_trace("creating derived memh from %p", memh);
+    derived = ucs_calloc(1, ucp_memh_size(context), "ucp_memh_derived");
+    if (derived == NULL) {
+        ucs_error("failed to allocate memory for derived memh");
+        return NULL;
+    }
+
+    /* Intentionally copy UCP memh data without UCT memory handles */
+    memcpy(derived, memh, sizeof(ucp_mem_t));
+
+    derived->parent         = memh;
+    derived->super.refcount = 0;
+    derived->flags         |= UCP_MEMH_FLAG_DERIVED;
+    params.field_mask       = UCT_MD_MEM_REG_FIELD_MEMH;
+    ucs_list_head_init(&derived->comp_list);
+
+    /* Now copy all the UCT memory handles from the original UCP memh */
+    ucs_for_each_bit(md_index, derived->md_map) {
+        if (ucp_memh_is_invalidate_cap(memh, md_index)) {
+            /* Invalidation is supported: create derived UCT memh */
+            params.memh = memh->uct[md_index];
+
+            ucs_trace("registering derived memh[%d]=%p", md_index, params.memh);
+            status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, NULL, 1ul,
+                                       &params, &derived->uct[md_index]);
+            if (status == UCS_ERR_UNSUPPORTED) {
+                /* Invalidation is declared but not supported: shallow copy */
+                ucs_trace("unsupported derived memh[%d]=%p, shallow copy",
+                          md_index, params.memh);
+                derived->uct[md_index] = memh->uct[md_index];
+            } else if (status != UCS_OK) {
+                ucp_memh_derived_destroy(derived);
+                return NULL;
+            }
+        } else {
+            /* Invalidation is not supported: do shallow copy */
+            ucs_trace("shallow copy memh[%d]=%p", md_index, params.memh);
+            derived->uct[md_index] = memh->uct[md_index];
+        }
+    }
+
+    derived->super.refcount = 1;
+    derived->derived        = memh->derived;
+    memh->derived           = derived;
+
+    ucs_trace("created derived memh=%p from memh=%p", derived, memh);
+    return derived;
+}
+
+ucp_mem_h ucp_memh_derived_get(ucp_mem_h memh)
+{
+    if ((memh->derived != NULL) &&
+        !(memh->derived->flags & UCP_MEMH_FLAG_INVALIDATED)) {
+        ++memh->derived->super.refcount;
+        return memh->derived;
+    }
+
+    return ucp_memh_derived_create(memh);
+}
+
+ucp_mem_h ucp_memh_derived_reset(ucp_mem_h memh)
+{
+    ucp_mem_h orig_memh = ucp_memh_is_derived_memh(memh) ? memh->parent : memh;
+    ucp_mem_h derived   = ucp_memh_is_derived_memh(memh) ? memh : memh->derived;
+
+    if (derived != NULL) {
+        derived->flags |= UCP_MEMH_FLAG_INVALIDATED;
+        if (derived->super.refcount == 0) {
+            ucp_memh_derived_destroy(derived);
+        }
+    }
+    return orig_memh;
+}
+
+void ucp_memh_invalidate(ucp_mem_h derived, ucp_memh_invalidate_comp_t *comp)
+{
+    ucp_context_h context = derived->context;
+    ucp_mem_h orig_memh;
+
+    ucs_assert(ucp_memh_is_derived_memh(derived));
+
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+    ucs_assert(derived->super.refcount > 0);
+
+    if (comp != NULL) {
+        ucs_list_add_tail(&derived->comp_list, &comp->list);
+    }
+
+    --derived->super.refcount;
+    orig_memh = ucp_memh_derived_reset(derived);
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+
+    ucp_memh_put(orig_memh);
 }
