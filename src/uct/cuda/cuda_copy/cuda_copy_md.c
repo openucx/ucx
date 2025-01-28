@@ -689,6 +689,13 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         return UCS_ERR_INVALID_ADDR;
     }
 
+    if ((uintptr_t)base_address + alloc_length < (uintptr_t)address + length) {
+        /* >1 PA behind VA range, treat as managed memory to force pipeline */
+        mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+        base_address   = (CUdeviceptr)address;
+        alloc_length   = length;
+    }
+
     ucs_trace("query address %p: 0x%llx..0x%llx length %zu", address,
               base_address, base_address + alloc_length, alloc_length);
 
