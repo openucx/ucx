@@ -567,4 +567,8 @@ void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg);
 
 ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self);
 
+void ucp_request_init_progress_wrapper(ucp_worker_h worker,
+                                       ucp_proto_config_t *proto_config,
+                                       int internal);
+
 #endif
