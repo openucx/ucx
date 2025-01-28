@@ -2551,14 +2551,14 @@ protected:
             param.flags         = flags;
 
             ucs_status_ptr_t sreq = ucp_am_send_nbx(sender().ep(), 0,
-                                                    &shdr_copy[0], hdr_size,
+                                                    &shdr[0], hdr_size,
                                                     &sb[0], size, &param);
             /* First message request triggers connection establishment and
              * is placed into pending queue.
              * To check UCP_AM_SEND_FLAG_COPY_HEADER we change AM header 
-             * content while the request is still in pending queue.*/ 
+             * content while the request is still in pending queue.*/
             if (flags & UCP_AM_SEND_FLAG_COPY_HEADER) {
-                shdr_copy[0] = 'X';
+                shdr.assign(shdr.size(), 'a');
             }
 
             request_wait(sreq);
@@ -2569,7 +2569,7 @@ protected:
             EXPECT_TRUE(arg.received);
 
             compare_buffers(sb, rb);
-            compare_buffers(shdr, rhdr);
+            compare_buffers(shdr_copy, rhdr);
 
             set_am_data_handler(receiver(), 0, NULL, NULL);
 

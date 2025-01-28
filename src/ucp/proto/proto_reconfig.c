@@ -63,12 +63,12 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
         return UCS_OK;
     }
 
-    if (ucs_unlikely(ucp_proto_config_is_am(req->send.proto_config) &&
-                     (req->send.msg_proto.am.flags &
-                      UCP_AM_SEND_FLAG_COPY_HEADER))) {
-        status = ucp_proto_am_req_copy_header(req);
-        if (ucs_unlikely(status != UCS_OK)) {
-            return status;
+    if (ucp_proto_config_is_am(req->send.proto_config)) {
+        status = ucp_am_handle_user_header_send_status(req, UCS_ERR_NO_RESOURCE,
+                                                       0);
+        if (status != UCS_ERR_NO_RESOURCE) {
+            ucp_proto_reconfig_abort(req, status);
+            return UCS_OK;
         }
     }
 
