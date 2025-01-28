@@ -254,6 +254,7 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
 {
     ucp_rndv_rtr_hdr_t *rtr                = dest;
     ucp_request_t *req                     = arg;
+    ucp_context_h context                  = req->send.ep->worker->context;
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
     ucp_md_map_t md_map                    = rpriv->super.md_map;
     ucp_mem_desc_t *mdesc                  = req->send.rndv.mdesc;
@@ -273,11 +274,14 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     pack_flags       = ucp_ep_config(req->send.ep)->uct_rkey_pack_flags;
-    packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
-                                          memh, mdesc->ptr,
+
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+    packed_rkey_size = ucp_rkey_pack_memh(context, md_map, memh, mdesc->ptr,
                                           req->send.state.dt_iter.length,
                                           &mem_info, 0, NULL, pack_flags,
                                           rtr + 1);
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
                   ucs_status_string((ucs_status_t)packed_rkey_size));

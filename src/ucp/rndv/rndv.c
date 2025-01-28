@@ -180,10 +180,14 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         rndv_rts_hdr->address = (uintptr_t)sreq->send.buffer;
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
                                                     sizeof(*rndv_rts_hdr));
-        packed_rkey_size      = ucp_rkey_pack_memh(
+
+        UCP_THREAD_CS_ENTER(&worker->context->mt_lock);
+        packed_rkey_size = ucp_rkey_pack_memh(
                 worker->context, sreq->send.rndv.md_map, memh,
                 sreq->send.buffer, sreq->send.length, &mem_info, 0, NULL,
                 pack_flags, rkey_buf);
+        UCP_THREAD_CS_EXIT(&worker->context->mt_lock);
+
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
                       ucs_status_string((ucs_status_t)packed_rkey_size));
@@ -206,6 +210,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = dest;
     ucp_request_t *rreq              = ucp_request_get_super(rndv_req);
     ucp_ep_h ep                      = rndv_req->send.ep;
+    ucp_context_h context            = ep->worker->context;
     ucp_mem_h *memh                  = &rreq->recv.dt_iter.type.contig.memh;
     unsigned pack_flags              = ucp_ep_config(ep)->uct_rkey_pack_flags;
     ucp_memory_info_t mem_info;
@@ -224,10 +229,13 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
         mem_info.type         = rreq->recv.dt_iter.mem_info.type;
         mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
+        UCP_THREAD_CS_ENTER(&context->mt_lock);
         packed_rkey_size = ucp_rkey_pack_memh(
                 ep->worker->context, rndv_req->send.rndv.md_map, memh,
                 rreq->recv.dt_iter.type.contig.buffer, rndv_req->send.length,
                 &mem_info, 0, NULL, pack_flags, rndv_rtr_hdr + 1);
+        UCP_THREAD_CS_EXIT(&context->mt_lock);
+
         if (packed_rkey_size < 0) {
             return packed_rkey_size;
         }

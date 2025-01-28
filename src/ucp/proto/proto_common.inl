@@ -348,6 +348,7 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
                             const ucs_sys_dev_distance_t *dev_distance,
                             void *rkey_buffer)
 {
+    ucp_context_h context        = req->send.ep->worker->context;
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
     ucp_mem_h *memh;
     ssize_t packed_rkey_size;
@@ -375,11 +376,16 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
                   (*memh)->md_map, md_map);
     }
 
-    pack_flags       = ucp_ep_config(req->send.ep)->uct_rkey_pack_flags;
+    pack_flags = ucp_ep_config(req->send.ep)->uct_rkey_pack_flags;
+
+    /* TODO: Central lock is not scalable. Consider fine-grained lock per memh,
+     * immutable memh/rkey cache, RCU/COW */
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
     packed_rkey_size = ucp_rkey_pack_memh(
-            req->send.ep->worker->context, md_map & (*memh)->md_map, memh,
+            context, md_map & (*memh)->md_map, memh,
             dt_iter->type.contig.buffer, dt_iter->length, &dt_iter->mem_info,
             distance_dev_map, dev_distance, pack_flags, rkey_buffer);
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
 
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
