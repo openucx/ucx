@@ -277,7 +277,7 @@ stages:
     - template: wire_compat.yml
       parameters:
         name: gpu
-        demands: ucx_gpu -equals yes
+        demands: ucx_gpu_double -equals yes
         container: centos7_cuda11
         ucx_targets:
           ucx_1_15:
@@ -317,7 +317,7 @@ stages:
     - template: tests.yml
       parameters:
         name: gpu
-        demands: ucx_gpu -equals yes
+        demands: ucx_gpu_double -equals yes
         test_perf: 1
         container: centos7_cuda11
     - template: tests.yml
@@ -363,7 +363,7 @@ stages:
         parameters:
           arch: amd64
           name: gpu
-          demands: ucx_gpu
+          demands: ucx_gpu_double
 
       - template: ../jucx/jucx-test.yml
         parameters:
@@ -380,7 +380,7 @@ stages:
       - template: go/go-test.yml
         parameters:
             name: gpu
-            demands: ucx_gpu -equals yes
+            demands: ucx_gpu_double -equals yes
 
   - stage: Build_Static
     dependsOn: [Static_check]
