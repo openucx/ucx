@@ -2176,8 +2176,9 @@ ucs_status_t uct_ib_mlx5_devx_query_adv_rdma_cap(uct_ib_mlx5_md_t *md, struct ib
     cap    = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     status = uct_ib_mlx5_devx_query_cap(ctx,
                                         UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
-                                        (UCT_IB_MLX5_CAP_ADV_RDMA << 1),
-                                        out, sizeof(out), "QUERY_ADV_RDMA_CAP", 0);
+                                                (UCT_IB_MLX5_CAP_ADV_RDMA << 1),
+                                        out, sizeof(out), "QUERY_ADV_RDMA_CAP",
+                                        0);
     md->smbrwq.supported_tls           = UCT_IB_MLX5DV_GET(
             adv_rdma_cap, cap, message_based_qp_and_striding_wq);
     md->smbrwq.max_message_size_stride = UCT_IB_MLX5DV_GET(

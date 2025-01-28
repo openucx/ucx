@@ -281,13 +281,13 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(qpc, qpc, counter_set_id,
                           uct_ib_mlx5_iface_get_counter_set_id(iface));
         UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
-    }
 
-    status = uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in_2init,
-                                         sizeof(in_2init), out_2init,
-                                         sizeof(out_2init), "2INIT_QP");
-    if (status != UCS_OK) {
-        goto err_free;
+        status = uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in_2init,
+                                             sizeof(in_2init), out_2init,
+                                             sizeof(out_2init), "2INIT_QP");
+        if (status != UCS_OK) {
+            goto err_free;
+        }
     }
 
     qp->type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
