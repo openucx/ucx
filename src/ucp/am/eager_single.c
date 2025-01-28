@@ -210,12 +210,19 @@ ucp_am_eager_single_bcopy_proto_progress(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucs_status_t status;
+    ucs_status_t send_status;
 
-    status = ucp_proto_am_bcopy_single_progress(
+    send_status = ucp_proto_am_bcopy_single_progress(
             req, UCP_AM_ID_AM_SINGLE, spriv->super.lane,
             ucp_am_eager_single_bcopy_pack, req, SIZE_MAX,
             ucp_proto_request_am_bcopy_complete_success, 1);
-    return ucp_am_handle_user_header_send_status(req, status, 0);
+    status = ucp_am_handle_user_header_send_status(req, send_status, 0);
+    if (ucs_unlikely(status != send_status)) {
+        ucp_proto_request_abort(req, status);
+        status = UCS_OK;
+    }
+
+    return status;
 }
 
 static void ucp_am_eager_single_bcopy_probe_common(
@@ -289,12 +296,19 @@ ucp_am_eager_single_bcopy_reply_proto_progress(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucs_status_t status;
+    ucs_status_t send_status;
 
-    status = ucp_proto_am_bcopy_single_progress(
+    send_status = ucp_proto_am_bcopy_single_progress(
             req, UCP_AM_ID_AM_SINGLE_REPLY, spriv->super.lane,
             ucp_am_eager_single_bcopy_reply_pack, req, SIZE_MAX,
             ucp_proto_request_am_bcopy_complete_success, 1);
-    return ucp_am_handle_user_header_send_status(req, status, 0);
+    status = ucp_am_handle_user_header_send_status(req, send_status, 0);
+    if (ucs_unlikely(status != send_status)) {
+        ucp_proto_request_abort(req, status);
+        status = UCS_OK;
+    }
+
+    return status;
 }
 
 ucp_proto_t ucp_am_eager_single_bcopy_reply_proto = {
