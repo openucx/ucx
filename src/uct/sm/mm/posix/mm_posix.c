@@ -764,12 +764,12 @@ static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
         .query              = uct_posix_md_query,
         .mem_alloc          = uct_posix_mem_alloc,
         .mem_free           = uct_posix_mem_free,
-        .mem_advise         = ucs_empty_function_return_unsupported,
-        .mem_reg            = ucs_empty_function_return_unsupported,
-        .mem_dereg          = ucs_empty_function_return_unsupported,
-        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_reg            = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
+        .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_posix_md_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     },
     .query             = uct_posix_query,
     .iface_addr_length = uct_posix_iface_addr_length,

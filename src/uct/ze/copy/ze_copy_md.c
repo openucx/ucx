@@ -248,7 +248,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack          = ucs_empty_function_return_success,
     .mem_reg            = uct_ze_copy_mem_reg,
     .mem_dereg          = ucs_empty_function_return_success,
-    .mem_attach         = ucs_empty_function_return_unsupported,
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .mem_query          = uct_ze_copy_md_mem_query,
     .detect_memory_type = uct_ze_copy_md_detect_memory_type,
 };
@@ -299,10 +299,10 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
 uct_component_t uct_ze_copy_component = {
     .query_md_resources = uct_ze_base_query_md_resources,
     .md_open            = uct_ze_copy_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_ze_copy_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
-    .rkey_release       = ucs_empty_function_return_success,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
     .name               = "ze_cpy",
     .md_config = {
         .name       = "ze-copy memory domain",

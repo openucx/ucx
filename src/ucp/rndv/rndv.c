@@ -1129,7 +1129,7 @@ ucs_mpool_ops_t ucp_frag_mpool_ops = {
     .chunk_alloc   = ucp_frag_mpool_malloc,
     .chunk_release = ucp_frag_mpool_free,
     .obj_init      = ucp_frag_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = (ucs_mpool_obj_cleanup_func_t)ucs_empty_function
 };
 
 ucp_mem_desc_t *

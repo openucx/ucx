@@ -376,8 +376,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
     uct_tcp_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                             uct_tcp_iface_t);
 
-    uct_ep_pending_purge(&self->super.super, ucs_empty_function_do_assert_void,
-                         NULL);
+    uct_ep_pending_purge(
+            &self->super.super,
+            (uct_pending_purge_callback_t)ucs_empty_function_do_assert_void,
+            NULL);
 
     if (self->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX) {
         uct_tcp_cm_remove_ep(iface, self);
