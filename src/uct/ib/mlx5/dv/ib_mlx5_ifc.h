@@ -412,6 +412,7 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    max_geneve_tlv_options[0x8];
     uint8_t    geneve_tlv_sample[0x1];
     uint8_t    geneve_tlv_option_offset[0x1];
+    uint8_t    reserved_at_56a[0x1];
     uint8_t    max_geneve_tlv_option_data_len[0x5];
     uint8_t    flex_parser_header_modify[0x1];
     uint8_t    adv_rdma_cap[0x1];
