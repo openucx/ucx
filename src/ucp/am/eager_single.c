@@ -34,13 +34,14 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
-    uint32_t header_length               = req->send.msg_proto.am.header.length;
-    size_t iov_cnt                       = 0ul;
+    uint32_t header_length   = req->send.msg_proto.am.header.length;
+    size_t iov_cnt           = 0ul;
     uct_iov_t iov[4];
     ucp_am_hdr_t am_hdr;
     ucs_status_t status;
     uint8_t am_id;
     ucp_am_reply_ftr_t ftr;
+    ucs_status_t copy_status;
 
     ucp_am_fill_header(&am_hdr, req);
 
@@ -72,17 +73,21 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
     status = uct_ep_am_short_iov(ucp_ep_get_fast_lane(req->send.ep,
                                                       spriv->super.lane),
                                  am_id, iov, iov_cnt);
-    if (ucs_unlikely(status !=
-                     ucp_am_handle_user_header_send_status(req, status, 0))) {
-        ucp_proto_request_abort(req, status);
-        return UCS_OK;
-    }
-
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req->send.lane = spriv->super.lane; /* for pending add */
+        if (ucs_unlikely(req->send.msg_proto.am.flags &
+                         UCP_AM_SEND_FLAG_COPY_HEADER)) {
+            copy_status = ucp_proto_am_req_copy_header(req);
+            if (ucs_unlikely(copy_status != UCS_OK)) {
+                status = copy_status;
+                goto complete;
+            }
+        }
+
         return status;
     }
 
+complete:
     ucp_am_release_user_header(req);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
@@ -220,13 +225,7 @@ ucp_am_eager_single_bcopy_proto_progress(uct_pending_req_t *self)
             req, UCP_AM_ID_AM_SINGLE, spriv->super.lane,
             ucp_am_eager_single_bcopy_pack, req, SIZE_MAX,
             ucp_proto_request_am_bcopy_complete_success, 1);
-    if (ucs_unlikely(status !=
-                     ucp_am_handle_user_header_send_status(req, status, 0))) {
-        ucp_proto_request_abort(req, status);
-        status = UCS_OK;
-    }
-
-    return status;
+    return ucp_am_handle_user_header_send_status_or_abort(req, status);
 }
 
 static void ucp_am_eager_single_bcopy_probe_common(
@@ -305,13 +304,7 @@ ucp_am_eager_single_bcopy_reply_proto_progress(uct_pending_req_t *self)
             req, UCP_AM_ID_AM_SINGLE_REPLY, spriv->super.lane,
             ucp_am_eager_single_bcopy_reply_pack, req, SIZE_MAX,
             ucp_proto_request_am_bcopy_complete_success, 1);
-    if (ucs_unlikely(status !=
-                     ucp_am_handle_user_header_send_status(req, status, 0))) {
-        ucp_proto_request_abort(req, status);
-        status = UCS_OK;
-    }
-
-    return status;
+    return ucp_am_handle_user_header_send_status_or_abort(req, status);
 }
 
 ucp_proto_t ucp_am_eager_single_bcopy_reply_proto = {

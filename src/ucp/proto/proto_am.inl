@@ -134,23 +134,42 @@ ucp_proto_am_req_copy_header(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_am_handle_user_header_send_status(ucp_request_t *req,
-                                      ucs_status_t send_status,
-                                      int release)
+ucp_am_handle_user_header_send_status_common(ucp_request_t *req,
+                                             ucs_status_t status, int abort,
+                                             int release)
 {
-    ucs_status_t status;
+    ucs_status_t copy_status;
 
-    if (ucs_unlikely(send_status == UCS_ERR_NO_RESOURCE) &&
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE) &&
         (req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER)) {
-        status = ucp_proto_am_req_copy_header(req);
-        if (ucs_unlikely(status != UCS_OK)) {
-            return status;
+        copy_status = ucp_proto_am_req_copy_header(req);
+        if (ucs_unlikely(copy_status != UCS_OK)) {
+            if (abort) {
+                ucp_proto_request_abort(req, copy_status);
+                return UCS_OK;
+            } else {
+                return copy_status;
+            }
         }
     } else if (release) {
         ucp_am_release_user_header(req);
     }
 
-    return send_status;
+    return status;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_handle_user_header_send_status_or_abort(ucp_request_t *req,
+                                               ucs_status_t status)
+{
+    return ucp_am_handle_user_header_send_status_common(req, status, 1, 0);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_handle_user_header_send_status_or_release(ucp_request_t *req,
+                                                 ucs_status_t status)
+{
+    return ucp_am_handle_user_header_send_status_common(req, status, 0, 1);
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -180,7 +199,8 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_first",
                                                    packed_len, packed_len);
             if (handle_user_hdr) {
-                status = ucp_am_handle_user_header_send_status(req, packed_len, 1);
+                status = ucp_am_handle_user_header_send_status_or_release(
+                        req, packed_len);
                 if (ucs_unlikely(status == UCS_ERR_NO_MEMORY)) {
                     return status;
                 }
