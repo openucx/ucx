@@ -1659,21 +1659,6 @@ ucp_wireup_gather_pending_reqs(ucp_ep_h ep,
     }
 }
 
-uct_ep_h ucp_wireup_create_slow_lane(ucp_ep_h ep, ucp_lane_index_t lane)
-{
-    ucp_wireup_ep_t *wireup_ep;
-    ucs_status_t status;
-
-    status = ucp_wireup_ep_create(ep, &wireup_ep);
-    if (status != UCS_OK) {
-        return NULL;
-    }
-
-    ucp_ep_set_lane(ep, lane, &wireup_ep->super.super);
-    ucp_wireup_ep_request_remote_address(&wireup_ep->super, lane);
-    return ucp_ep_get_lane(ep, lane);
-}
-
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_tl_bitmap_t *local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
@@ -1808,7 +1793,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         }
 
         if (worker->context->config.ext.on_demand_wireup) {
-            if (lane < UCP_MAX_FAST_PATH_LANES) {
+            if ((lane >= UCP_MAX_FAST_PATH_LANES) &&
+                (lane != ucp_ep_get_wireup_msg_lane(ep))) {
                 continue;
             }
         }
@@ -2150,6 +2136,23 @@ double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface)
     }
 
     return ucp_tl_iface_bandwidth(context, &bandwidth);
+}
+
+uct_ep_h ucp_wireup_init_slow_lane(ucp_ep_h ep, ucp_lane_index_t slow_lane_idx)
+{
+    ucp_wireup_ep_t *wireup_ep;
+    ucs_status_t status;
+
+    ucs_assert(ep->ext->uct_eps[slow_lane_idx] == NULL);
+
+    status = ucp_wireup_ep_create(ep, &ep->ext->uct_eps[slow_lane_idx]);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    wireup_ep = ucs_derived_of(ep->ext->uct_eps[slow_lane_idx],
+                               ucp_wireup_ep_t);
+    return &wireup_ep->super.super;
 }
 
 UCP_DEFINE_AM(UINT64_MAX, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler,
