@@ -1889,6 +1889,10 @@ public:
     }
 
 protected:
+    ucp_ep_config_key_t& ep_cfg_key(ucp_ep_h ep) {
+        return ucp_ep_config(ep)->key;
+    }
+
     void add_uniq_lane(ucp_lane_index_t lane) {
         bool is_new_lane = add_lane(lane);
         EXPECT_TRUE(is_new_lane) << "lane " << size_t(lane)
@@ -1901,20 +1905,28 @@ protected:
         return m_used_lanes.insert(lane).second;
     }
 
+    uct_ep_h ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index) {
+        if (lane_index < UCP_MAX_FAST_PATH_LANES) {
+            return ep->uct_eps[lane_index];
+        } else {
+            return ep->ext->uct_eps[lane_index - UCP_MAX_FAST_PATH_LANES];
+        }
+    }
+
     void check_lane_value(ucp_lane_index_t lane, const std::string& type,
                           bool is_valid = true) {
-        bool result       = ucp_ep_get_lane(sender().ep(), lane);
+        bool result       = ep_get_lane(sender().ep(), lane);
         bool is_fast_path = (lane < UCP_MAX_FAST_PATH_LANES);
         /* fast path lanes must be always initialized */
         ASSERT_EQ(result, is_valid || is_fast_path)
-                << type << (is_fast_path ? " fast" : " bw")
+                << type << (is_fast_path ? " fast" : " slow")
                 << " lane[" << size_t(lane) << "] check failed " << is_valid;
     }
 
-    void check_lanes_arr_value(const ucp_lane_index_t lanes[UCP_MAX_LANES],
+    void check_lanes_arr_value(const ucp_lane_index_t *lanes, size_t num_lanes,
                                const std::string& type,
                                bool is_valid = true) {
-        for (size_t i = 0; i < UCP_MAX_LANES; ++i) {
+        for (size_t i = 0; i < num_lanes; ++i) {
             ucp_lane_index_t lane_idx = lanes[i];
 
             if (lane_idx == UCP_NULL_LANE) {
@@ -1939,24 +1951,22 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes, "IB_NUM_PATHS?=4") {
     // checks before wireup
     ucp_ep_h ep = sender().ep();
 
-    ucp_ep_config_key_t cfg_key = ucp_ep_config(ep)->key;
-
     check_lane_value(ucp_ep_get_wireup_msg_lane(ep), "wireup_msg");
     UCS_TEST_MESSAGE << "add wireup lane " << ucp_ep_get_wireup_msg_lane(ep);
     add_uniq_lane(ucp_ep_get_wireup_msg_lane(ep));
 
-    check_lane_value(cfg_key.am_lane, "am");
-    UCS_TEST_MESSAGE << "add am lane " << int(cfg_key.am_lane);
-    add_lane(cfg_key.am_lane);
+    check_lane_value(ep_cfg_key(ep).am_lane, "am");
+    UCS_TEST_MESSAGE << "add am lane " << int(ep_cfg_key(ep).am_lane);
+    add_lane(ep_cfg_key(ep).am_lane);
 
-    check_lanes_arr_value(cfg_key.am_bw_lanes,  "am_bw", false);
-    check_lanes_arr_value(cfg_key.rma_bw_lanes, "rma_bw", false);
+    check_lanes_arr_value(ep_cfg_key(ep).am_bw_lanes,  ep_cfg_key(ep).num_lanes, "am_bw", false);
+    check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, ep_cfg_key(ep).num_lanes, "rma_bw", false);
 
     // complete first step of wireup
     flush_workers();
     return;
-    check_lanes_arr_value(cfg_key.am_bw_lanes, "am_bw", false);
-    check_lanes_arr_value(cfg_key.rma_bw_lanes, "rma_bw", false);
+    // check_lanes_arr_value(cfg_key.am_bw_lanes, "am_bw", false);
+    // check_lanes_arr_value(cfg_key.rma_bw_lanes, "rma_bw", false);
 
     // do RMA, then all rma_bw lanes must be initialized
     const size_t msg_size = 1 * UCS_MBYTE;
@@ -1969,7 +1979,7 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes, "IB_NUM_PATHS?=4") {
                             (uintptr_t)rbuf.ptr(),
                             rbuf.rkey(sender()), &params);
     ASSERT_UCS_OK(request_wait(req));
-    check_lanes_arr_value(cfg_key.rma_bw_lanes, "rma_bw", true);
+//    check_lanes_arr_value(cfg_key.rma_bw_lanes, "rma_bw", true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_ondemand);
