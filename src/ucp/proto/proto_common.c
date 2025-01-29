@@ -355,6 +355,13 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
     ucp_proto_common_get_frag_size(params, &wiface->attr, lane, &tl_min_frag,
                                    &tl_max_frag);
+    if (params->min_length > tl_max_frag) {
+        ucs_debug("protocol %s: params->min_length=%zu is invalid, larger than "
+                  "tl_max_frag=%zu",
+                  ucp_proto_id_field(params->super.proto_id, name),
+                  params->min_length, tl_max_frag);
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     perf_node = ucp_proto_perf_node_new_data("lane", "%u ppn %u eps",
                                              context->config.est_num_ppn,

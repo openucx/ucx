@@ -35,7 +35,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_lane_index_t i, lane, num_lanes;
     ucp_proto_multi_lane_priv_t *lpriv;
     ucp_proto_perf_node_t *perf_node;
-    size_t max_frag, min_length, min_end_offset;
+    size_t max_frag, min_length, min_end_offset, min_chunk;
     ucp_lane_map_t lane_map;
     ucp_md_map_t reg_md_map;
     uint32_t weight_sum;
@@ -167,6 +167,10 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         /* Make sure fragment is not zero */
         ucs_assert(max_frag > 0);
 
+        /* Min chunk is scaled, but must be within HW limits */
+        min_chunk       = ucs_min(lane_perf->bandwidth * params->min_chunk /
+                                  min_bandwidth, lane_perf->max_frag);
+        max_frag        = ucs_max(max_frag, min_chunk);
         lpriv->max_frag = max_frag;
         perf.max_frag  += max_frag;
 
@@ -215,9 +219,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         perf.min_length = ucs_max(perf.min_length, min_length);
 
         weight_sum           += lpriv->weight;
-        min_end_offset       += lane_perf->bandwidth *
-                                context->config.ext.min_rndv_chunk_size /
-                                min_bandwidth;
+        min_end_offset       += min_chunk;
         mpriv->min_frag       = ucs_max(mpriv->min_frag, lane_perf->min_length);
         mpriv->max_frag_sum  += lpriv->max_frag;
         lpriv->weight_sum     = weight_sum;
