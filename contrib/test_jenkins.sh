@@ -1149,6 +1149,26 @@ set_ucx_common_test_env() {
 	export ASAN_OPTIONS=protect_shadow_gap=0
 }
 
+run_configure_tests() {
+	echo "==== Run configure tests ===="
+
+	../contrib/configure-release --with-verbs
+	grep 'build_modules=' config.log
+	if ! grep -qwE '^build_modules=.*:ib.*:rdmacm.*:mlx5' config.log
+	then
+		azure_log_error "missing modules configuring with verbs"
+		exit 1
+	fi
+
+	../contrib/configure-release --without-verbs
+	grep 'build_modules=' config.log
+	if grep -wE '^build_modules=.*:(ib|rdmacm|efa|mlx5)' config.log
+	then
+		azure_log_error "some modules were not disabled without verbs"
+		exit 1
+	fi
+}
+
 #
 # Run all tests
 #
@@ -1157,6 +1177,9 @@ run_tests() {
 
 	# all are running mpi tests
 	run_mpi_tests
+
+	# configuration related tests
+	run_configure_tests
 
 	# build for devel tests and gtest
 	build devel --enable-gtest
