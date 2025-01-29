@@ -465,7 +465,8 @@ void ucp_proto_perf_apply_func(ucp_proto_perf_t *perf, ucs_linear_func_t func,
         }
 
         va_start(ap, desc_fmt);
-        func_node = ucp_proto_perf_node_new_data(name, desc_fmt, ap);
+        func_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_DATA, 0,
+                                            name, desc_fmt, ap);
         va_end(ap);
 
         ucp_proto_perf_node_own_child(seg->node, &func_node);
