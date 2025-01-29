@@ -110,6 +110,11 @@ public:
                             "there's matching remote MDs and different "
                             "sys_devs");
         }
+
+        if (has_transport("gga") && !reuse_lanes()) {
+            UCS_TEST_SKIP_R("TODO: revert this after replacing "
+                            "'is_lane_connected' with protocols check");
+        }
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
