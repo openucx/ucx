@@ -59,7 +59,7 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
                                   ucp_operation_names, &strb);
         ucs_error("cannot find remote protocol for: %s",
                   ucs_string_buffer_cstr(&strb));
-        ucp_proto_reconfig_abort(req, UCS_ERR_CANCELED);
+        ucp_proto_request_abort(req, UCS_ERR_CANCELED);
         return UCS_OK;
     }
 
@@ -67,7 +67,7 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
         (req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER)) {
         status = ucp_proto_am_req_copy_header(req);
         if (status != UCS_OK) {
-            ucp_proto_reconfig_abort(req, status);
+            ucp_proto_request_abort(req, status);
             return UCS_OK;
         }
     }
