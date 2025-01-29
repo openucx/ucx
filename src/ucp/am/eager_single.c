@@ -34,8 +34,8 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
-    uint32_t header_length   = req->send.msg_proto.am.header.length;
-    size_t iov_cnt           = 0ul;
+    uint32_t header_length               = req->send.msg_proto.am.header.length;
+    size_t iov_cnt                       = 0ul;
     uct_iov_t iov[4];
     ucp_am_hdr_t am_hdr;
     ucs_status_t status;
