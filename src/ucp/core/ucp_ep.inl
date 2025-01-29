@@ -30,24 +30,35 @@ static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_fast_lane(ucp_ep_h ep,
 }
 
 static UCS_F_ALWAYS_INLINE uct_ep_h
-ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
+ucp_ep_get_lane_raw(ucp_ep_h ep, ucp_lane_index_t lane_index)
 {
-    ucp_lane_index_t slow_lane_index;
-    uct_ep_h slow_lane_ep;
-
     ucs_assertv(lane_index < UCP_MAX_LANES, "lane=%d", lane_index);
 
     if (ucs_likely(lane_index < UCP_MAX_FAST_PATH_LANES)) {
         return ep->uct_eps[lane_index];
+    } else {
+        return ep->ext->uct_eps[lane_index - UCP_MAX_FAST_PATH_LANES];
+    }
+}
+
+static UCS_F_ALWAYS_INLINE uct_ep_h
+ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
+{
+    uct_ep_h lane;
+
+    /* fast-path lane must be initialized */
+    if (ucs_likely(lane_index < UCP_MAX_FAST_PATH_LANES)) {
+        lane = ep->uct_eps[lane_index];
+        ucs_assert(lane != NULL);
+        return lane;
     }
 
-    slow_lane_index = lane_index - UCP_MAX_FAST_PATH_LANES;
-    slow_lane_ep    = ep->ext->uct_eps[slow_lane_index];
-    if (ucs_likely(slow_lane_ep != NULL)) {
-        return slow_lane_ep;
+    lane = ucp_ep_get_lane_raw(ep, lane_index);
+    if (ucs_likely(lane != NULL)) {
+        return lane;
     }
 
-    return ucp_wireup_init_slow_lane(ep, slow_lane_index);
+    return ucp_wireup_init_slow_lane(ep, UCP_MAX_FAST_PATH_LANES - lane_index);
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,
@@ -144,6 +155,18 @@ static inline size_t ucp_ep_get_max_iov(ucp_ep_h ep, ucp_lane_index_t lane)
 static inline ucp_lane_index_t ucp_ep_num_lanes(ucp_ep_h ep)
 {
     return ucp_ep_config(ep)->key.num_lanes;
+}
+
+static inline ucp_lane_index_t ucp_ep_num_valid_lanes(ucp_ep_h ep)
+{
+    ucp_lane_index_t num_lanes;
+    ucp_lane_index_t i;
+
+    for (num_lanes = 0, i = 0; i < ucp_ep_num_lanes(ep); ++i) {
+        num_lanes += (ucp_ep_get_lane_raw(ep, i) != NULL);
+    }
+
+    return num_lanes;
 }
 
 static inline int ucp_ep_is_lane_p2p(ucp_ep_h ep, ucp_lane_index_t lane)

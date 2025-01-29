@@ -440,7 +440,7 @@ static int ucp_ep_has_wireup_msg_pending(ucp_ep_h ucp_ep)
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ucp_ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ucp_ep, lane);
         if (uct_ep == NULL) {
             continue;
         }
@@ -498,7 +498,7 @@ unsigned ucp_wireup_eps_progress(void *arg)
      */
     ucp_wireup_eps_pending_extract(ucp_ep, &tmp_pending_queue);
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ucp_ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ucp_ep, lane);
         if (uct_ep == NULL) {
             continue;
         }
@@ -535,7 +535,7 @@ void ucp_wireup_update_flags(ucp_ep_h ucp_ep, uint32_t new_flags)
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ucp_ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ucp_ep, lane);
         if (uct_ep == NULL) {
             continue;
         }
@@ -1126,11 +1126,11 @@ ucp_wireup_connect_lane_to_ep(ucp_ep_h ep, unsigned ep_init_flags,
                               ucp_worker_iface_t *wiface,
                               const ucp_unpacked_address_t *remote_address)
 {
+    uct_ep_h uct_ep = ucp_ep_get_lane_raw(ep, lane);
     int connect_aux;
-    uct_ep_h uct_ep;
     ucs_status_t status;
 
-    if (ucp_ep_get_lane(ep, lane) == NULL) {
+    if (uct_ep == NULL) {
         status = ucp_wireup_ep_create(ep, &uct_ep);
         if (status != UCS_OK) {
             /* coverity[leaked_storage] */
@@ -1140,7 +1140,6 @@ ucp_wireup_connect_lane_to_ep(ucp_ep_h ep, unsigned ep_init_flags,
         ucs_trace("ep %p: assign uct_ep[%d]=%p wireup", ep, lane, uct_ep);
         ucp_ep_set_lane(ep, lane, uct_ep);
     } else {
-        uct_ep = ucp_ep_get_lane(ep, lane);
         ucs_assert(ucp_wireup_ep_test(uct_ep));
     }
 

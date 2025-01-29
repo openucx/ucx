@@ -3940,3 +3940,17 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
     ucp_ep_config_activate_worker_ifaces(ep->worker, cfg_index);
     ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
+
+ucp_lane_index_t ucp_ep_get_num_valid_lanes(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane;
+    ucp_lane_index_t num_lanes = 0;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (ucp_ep_get_lane_raw(ep, lane) != NULL) {
+            ++num_lanes;
+        }
+    }
+
+    return num_lanes;
+}
