@@ -9,6 +9,7 @@
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <uct/base/uct_iface.h>
+#include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
 }
 
@@ -34,7 +35,9 @@ public:
         m_mock.cleanup();
     }
 
-    void add_mock_iface(const std::string &dev_name, iface_attr_func_t cb)
+    void add_mock_iface(
+            const std::string &dev_name = "mock",
+            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {})
     {
         m_iface_attrs_funcs[dev_name] = cb;
     }
@@ -152,19 +155,67 @@ private:
 
 mock_iface *mock_iface::m_self = nullptr;
 
-struct proto_select_data {
-    size_t      range_start;
-    size_t      range_end;
-    std::string desc;
-    std::string config;
-};
-
-using proto_select_data_vec_t = std::vector<proto_select_data>;
-
 class test_ucp_proto_mock : public ucp_test, public mock_iface {
 public:
-    const static size_t INF     = UCS_MEMUNITS_INF;
-    const static uint16_t AM_ID = 123;
+    const static size_t INF                               = UCS_MEMUNITS_INF;
+    const static uint16_t AM_ID                           = 123;
+    const static ucp_worker_cfg_index_t EP_CONFIG_INDEX   = 0;
+    const static ucp_worker_cfg_index_t RKEY_CONFIG_INDEX = 0;
+
+    struct proto_select_data {
+        size_t      range_start{0};
+        size_t      range_end{0};
+        std::string desc{"unknown"};
+        std::string config;
+
+        proto_select_data() = default;
+
+        proto_select_data(size_t range_start,
+                          const ucp_proto_query_attr_t &attr) :
+            proto_select_data(range_start, attr.max_msg_length, attr.desc,
+                              attr.config)
+        {
+        }
+
+        proto_select_data(size_t range_start, size_t range_end,
+                          std::string desc, std::string config) :
+            range_start(range_start),
+            range_end(range_end),
+            desc(desc),
+            config(config){};
+
+        bool operator==(const proto_select_data &other) const
+        {
+            return (range_start == other.range_start) &&
+                   (range_end == other.range_end) && (desc == other.desc) &&
+                   (config == other.config);
+        }
+
+        bool operator!=(const proto_select_data &other) const
+        {
+            return !(*this == other);
+        }
+
+        friend std::ostream &
+        operator<<(std::ostream &os, const proto_select_data &data)
+        {
+            os << data.range_start << "..";
+            if (data.range_end == SIZE_MAX) {
+                os << "inf";
+            } else {
+                os << data.range_end;
+            }
+            return os << " desc: " << data.desc << ", config: " << data.config;
+        }
+    };
+
+    struct worker_config {
+        ucp_worker_h           worker;
+        ucp_worker_cfg_index_t ep_cfg_index;
+        ucp_worker_cfg_index_t rkey_cfg_index;
+    };
+
+    using proto_select_data_vec_t = std::vector<proto_select_data>;
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
@@ -200,19 +251,26 @@ public:
         ucs_sys_topo_reset_provider();
     }
 
-    static void check_ep_config(entity &e, const proto_select_data_vec_t &data,
+    static void check_ep_config(entity &e,
+                                const proto_select_data_vec_t &data_vec,
                                 ucp_proto_select_key_t key)
     {
-        ucp_ep_config_t *config = ucp_worker_ep_config(e.worker(), 0);
-        check_proto_select(e.worker(), config->proto_select, data, key);
+        worker_config worker_cfg = {e.worker(), EP_CONFIG_INDEX,
+                                    UCP_WORKER_CFG_INDEX_NULL};
+        ucp_ep_config_t *config  = ucp_worker_ep_config(e.worker(),
+                                                        worker_cfg.ep_cfg_index);
+        check_proto_select(worker_cfg, config->proto_select, data_vec, key);
     }
 
     static void check_rkey_config(entity &e,
-                                  const proto_select_data_vec_t &data,
+                                  const proto_select_data_vec_t &data_vec,
                                   ucp_proto_select_key_t key)
     {
-        ucp_rkey_config_t *config = &e.worker()->rkey_config[0];
-        check_proto_select(e.worker(), config->proto_select, data, key);
+        worker_config worker_cfg = {e.worker(), EP_CONFIG_INDEX,
+                                    RKEY_CONFIG_INDEX};
+        ucp_rkey_config_t *config =
+                &e.worker()->rkey_config[worker_cfg.rkey_cfg_index];
+        check_proto_select(worker_cfg, config->proto_select, data_vec, key);
     }
 
     /*
@@ -232,14 +290,15 @@ public:
     void connect()
     {
         sender().connect(&receiver(), get_ep_params());
-        wait_for_cond([this] {
-            return (receiver().worker()->ep_config.length > 0);
-        }, [this] { progress(); });
+        wait_for_cond(
+                [this] {
+                    return (sender().worker()->ep_config.length >
+                            EP_CONFIG_INDEX);
+                },
+                [this] { progress(); });
 
         EXPECT_EQ(1, sender().worker()->ep_config.length);
         EXPECT_EQ(1, sender().worker()->rkey_config_count);
-        EXPECT_EQ(1, receiver().worker()->ep_config.length);
-        EXPECT_EQ(1, receiver().worker()->rkey_config_count);
     }
 
 protected:
@@ -256,62 +315,83 @@ protected:
                (data.desc == attr.desc) && (data.config == attr.config);
     }
 
-    static void dump_select_elem(ucp_worker_h worker,
-                                 const ucp_proto_select_elem_t &elem)
+    static proto_select_data
+    select_data_for_range(ucp_worker_h worker,
+                          const ucp_proto_select_elem_t &elem,
+                          size_t range_start)
     {
-        size_t range_end = -1;
-        size_t range_start;
-        do {
-            range_start = range_end + 1;
-            ucp_proto_query_attr_t attr;
-            if (ucp_proto_select_elem_query(worker, &elem, range_start, &attr)) {
-                UCS_TEST_MESSAGE << range_start <<  "-" << attr.max_msg_length
-                                 << " desc: " << attr.desc << ", config: "
-                                 << attr.config;
-            }
+        ucp_proto_query_attr_t attr;
 
-            range_end = attr.max_msg_length;
-        } while (range_end != SIZE_MAX);
+        if (ucp_proto_select_elem_query(worker, &elem, range_start, &attr)) {
+            return proto_select_data(range_start, attr);
+        }
+
+        return proto_select_data();
     }
 
-    static void check_proto_select_elem(ucp_worker_h worker,
-                                        const ucp_proto_select_elem_t &elem,
-                                        const proto_select_data_vec_t &data)
+    static void dump_select_info(const worker_config &worker_cfg,
+                                 const ucp_proto_select_param_t &select_param,
+                                 const ucp_proto_select_elem_t &select_elem)
     {
-        for (auto &it : data) {
-            EXPECT_TRUE(select_elem_match(worker, elem, it, it.range_start));
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+        ucp_proto_select_elem_info(worker_cfg.worker, worker_cfg.ep_cfg_index,
+                                   worker_cfg.rkey_cfg_index, &select_param,
+                                   &select_elem, 1, &strb);
+
+        char *line;
+        ucs_string_buffer_for_each_token(line, &strb, "\n") {
+            UCS_TEST_MESSAGE << line;
+        }
+        ucs_string_buffer_cleanup(&strb);
+    }
+
+    static void
+    check_proto_select_elem(const worker_config &worker_cfg,
+                            const ucp_proto_select_param_t &select_param,
+                            const ucp_proto_select_elem_t &select_elem,
+                            const proto_select_data_vec_t &data_vec)
+    {
+        bool failed        = false;
+        unsigned range_idx = 0;
+        for (auto &expected_data : data_vec) {
+            size_t range_start = expected_data.range_start;
+            auto actual_data   = select_data_for_range(worker_cfg.worker,
+                                                       select_elem, range_start);
+            EXPECT_EQ(expected_data, actual_data)
+                    << "unexpected difference at range["
+                    << (failed = true, range_idx) << "]";
+
             /* As we cannot get range_start directly, we assert that protocol
              * is different at that range */
-            if (it.range_start > 0) {
-                EXPECT_FALSE(select_elem_match(worker, elem, it,
-                                               it.range_start - 1));
+            if (range_start > 0) {
+                auto prev_actual_data = select_data_for_range(worker_cfg.worker,
+                                                              select_elem,
+                                                              range_start - 1);
+                EXPECT_NE(expected_data, prev_actual_data)
+                        << "unexpected equality at range["
+                        << (failed = true, range_idx) << "]";
             }
+            ++range_idx;
+        }
+        if (failed) {
+            dump_select_info(worker_cfg, select_param, select_elem);
         }
     }
 
-    static void check_proto_select(ucp_worker_h worker,
+    static void check_proto_select(const worker_config &worker_cfg,
                                    const ucp_proto_select_t &proto_select,
-                                   const proto_select_data_vec_t &data,
-                                   ucp_proto_select_key_t key)
+                                   const proto_select_data_vec_t &data_vec,
+                                   const ucp_proto_select_key_t &key)
     {
         ucp_proto_select_elem_t select_elem;
         ucp_proto_select_key_t select_key;
 
-        kh_foreach(proto_select.hash, select_key.u64, select_elem,
+        kh_foreach(proto_select.hash, select_key.u64, select_elem, {
             if (key_match(key, select_key)) {
-                check_proto_select_elem(worker, select_elem, data);
-            });
-
-        if (testing::Test::HasFailure()) {
-            kh_foreach(proto_select.hash, select_key.u64, select_elem,
-                if (key_match(key, select_key)) {
-                    UCS_TEST_MESSAGE << "Key op flags: "
-                                     << (int)select_key.param.op_id_flags
-                                     << ", attr: "
-                                     << (int)select_key.param.op_attr;
-                    dump_select_elem(worker, select_elem);
-                });
-        }
+                check_proto_select_elem(worker_cfg, select_key.param,
+                                        select_elem, data_vec);
+            }
+        })
     }
 
     static bool
@@ -412,17 +492,17 @@ public:
         /* Device with higher BW and latency */
         add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 2000;
-            iface_attr.bandwidth.shared  = 28000000000;
-            iface_attr.latency.c         = 0.0000006;
-            iface_attr.latency.m         = 0.000000001;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
             iface_attr.cap.get.max_zcopy = 16384;
         });
         /* Device with smaller BW but lower latency */
         add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short = 208;
-            iface_attr.bandwidth.shared = 24000000000;
-            iface_attr.latency.c        = 0.0000005;
-            iface_attr.latency.m        = 0.000000001;
+            iface_attr.bandwidth.shared = 24e9;
+            iface_attr.latency.c        = 500e-9;
+            iface_attr.latency.m        = 1e-9;
         });
         test_ucp_proto_mock::init();
     }
@@ -490,3 +570,95 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_send_recv_small_frag,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
+
+class test_ucp_proto_mock_cma : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_cma()
+    {
+        mock_transport("cma");
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface();
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_cma, am_send_1_lane)
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {0,      92, "short",                                 "posix/memory"},
+        {93,   5345, "copy-in",                               "posix/memory"},
+        {5346, INF,  "rendezvous zero-copy read from remote", "cma/mock"},
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_cma, mm_cma, "posix,cma")
+
+class test_ucp_proto_mock_tcp : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_tcp()
+    {
+        mock_transport("tcp");
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.bandwidth.dedicated = 0;
+            iface_attr.bandwidth.shared    = 100e9 / 8; /* 100Gb/s */
+            iface_attr.latency.c           = 20e-6;
+            iface_attr.latency.m           = 0;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_tcp, am_send_1_lane)
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {0,      8184,   "short",                                       "tcp/mock"},
+        {8185,   65528,  "zero-copy",                                   "tcp/mock"},
+        {65529,  366985, "multi-frag zero-copy",                        "tcp/mock"},
+        {366986, INF,    "rendezvous zero-copy fenced write to remote", "tcp/mock"},
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_tcp, tcp, "tcp")
+
+class test_ucp_proto_mock_self : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_self()
+    {
+        mock_transport("self");
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface();
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_self, rkey_ptr)
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {0,    2284, "short",                                     "self/mock"},
+        {2285, INF,  "rendezvous copy from mapped remote memory", "self/mock"},
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_self, self, "self")
