@@ -338,6 +338,8 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
     ucp_md_index_t md_index;
     ucs_status_t status;
 
+    ucs_assert(!ucp_memh_is_derived_memh(memh));
+
     /* Unregister from all memory domains */
     ucs_for_each_bit(md_index, md_map) {
         ucs_assertv(md_index != memh->alloc_md_index,
@@ -366,8 +368,6 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         munlock(ucp_memh_address(memh), ucp_memh_length(memh));
         memh->flags &= ~UCP_MEMH_FLAG_MLOCKED;
     }
-
-    ucp_memh_derived_reset(memh);
 }
 
 static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
@@ -398,6 +398,7 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
     ucs_trace("memh %p: cleanup", memh);
 
     ucs_assert(ucp_memh_is_user_memh(memh));
+    ucs_assert(!ucp_memh_is_derived_memh(memh));
 
     mem.address = ucp_memh_address(memh);
     mem.length  = ucp_memh_length(memh);
@@ -426,6 +427,7 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
         }
     }
 
+    ucp_memh_derived_reset(memh);
     ucs_free(memh);
 }
 
@@ -1582,6 +1584,7 @@ static void ucp_mem_rcache_mem_dereg_cb(void *ctx, ucs_rcache_t *rcache,
     ucp_mem_h memh        = ucs_derived_of(rregion, ucp_mem_t);
 
     ucp_memh_dereg(context, memh, memh->md_map);
+    ucp_memh_derived_reset(memh);
 }
 
 static void ucp_mem_rcache_merge_cb(void *ctx, ucs_rcache_t *rcache, void *arg,

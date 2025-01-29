@@ -50,7 +50,7 @@ static UCS_F_ALWAYS_INLINE int ucp_is_invalidate_cap(unsigned uct_flags)
 static UCS_F_ALWAYS_INLINE ucp_mem_h
 ucp_memh_get_pack_memh(ucp_mem_h memh, unsigned uct_flags)
 {
-    if(ucp_memh_is_derived_memh(memh)) {
+    if((memh == NULL) || ucp_memh_is_derived_memh(memh)) {
         return memh;
     }
 
