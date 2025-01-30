@@ -668,7 +668,7 @@ ucp_wireup_tl_iface_latency(const ucp_worker_iface_t *wiface,
                             int prioritized_ep)
 {
     ucp_context_h context    = wiface->worker->context;
-    ucs_linear_func_t lat_v1 = {wiface->attr.latency.m, 0};
+    ucs_linear_func_t lat_v1 = {0, wiface->attr.latency.m};
     double local_lat, lat_lossy;
 
     if (unpacked_addr->addr_version == UCP_OBJECT_VERSION_V1) {
