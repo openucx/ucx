@@ -79,15 +79,14 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
                          UCP_AM_SEND_FLAG_COPY_HEADER)) {
             copy_status = ucp_proto_am_req_copy_header(req);
             if (ucs_unlikely(copy_status != UCS_OK)) {
-                status = copy_status;
-                goto complete;
+                ucp_proto_request_abort(req, copy_status);
+                return UCS_OK;
             }
         }
 
         return status;
     }
 
-complete:
     ucp_am_release_user_header(req);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
