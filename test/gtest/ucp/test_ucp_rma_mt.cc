@@ -9,6 +9,10 @@
 
 #include <common/test_helpers.h>
 
+extern "C" {
+#include <ucp/proto/proto_common.inl>
+}
+
 #if _OPENMP
 #include "omp.h"
 #endif
@@ -35,6 +39,22 @@ public:
         add_variant(variants, UCP_FEATURE_RMA, MULTI_THREAD_CONTEXT);
         add_variant(variants, UCP_FEATURE_RMA, MULTI_THREAD_WORKER);
     }
+
+    ucp_mem_h mem_map(ucp_context_h context, void *data, size_t size)
+    {
+        ucp_mem_map_params_t params;
+        ucp_mem_h memh;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address    = data;
+        params.length     = size;
+        params.flags      = get_variant_value();
+
+        ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh));
+        return memh;
+    }
 };
 
 UCS_TEST_P(test_ucp_rma_mt, put_get) {
@@ -43,19 +63,9 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
     uint64_t orig_data[num_threads] GTEST_ATTRIBUTE_UNUSED_;
     uint64_t target_data[num_threads] GTEST_ATTRIBUTE_UNUSED_;
 
-    ucp_mem_map_params_t params;
-    ucp_mem_h memh;
     void *memheap = target_data;
-
-    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    params.address    = memheap;
-    params.length     = sizeof(uint64_t) * num_threads;
-    params.flags      = get_variant_value();
-
-    st = ucp_mem_map(receiver().ucph(), &params, &memh);
-    ASSERT_UCS_OK(st);
+    ucp_mem_h memh = mem_map(receiver().ucph(), memheap,
+                             sizeof(uint64_t) * num_threads);
 
     void *rkey_buffer;
     size_t rkey_buffer_size;
@@ -198,6 +208,36 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
 
     st = ucp_mem_unmap(receiver().ucph(), memh);
     ASSERT_UCS_OK(st);
+}
+
+UCS_TEST_P(test_ucp_rma_mt, rkey_pack) {
+    uint8_t data[1024] GTEST_ATTRIBUTE_UNUSED_;
+    ucp_context_h context = sender().ucph();
+    ucp_mem_h memh        = mem_map(context, data, sizeof(data));
+
+#if _OPENMP && ENABLE_MT
+#pragma omp parallel for
+    for (int i = 0; i < mt_num_threads(); i++) {
+        if (i % 2 == 0) {
+            void *rkey;
+            size_t rkey_size;
+            ASSERT_UCS_OK(ucp_rkey_pack(context, memh, &rkey, &rkey_size));
+            ucp_rkey_buffer_release(rkey);
+        } else {
+            ucs_sys_dev_distance_t sys_dev            = {};
+            ucp_request req                           = {};
+            req.send.ep                               = sender().ep();
+            req.send.state.dt_iter.type.contig.memh   = memh;
+            req.send.state.dt_iter.type.contig.buffer = data;
+            req.send.state.dt_iter.length             = sizeof(data);
+
+            uint8_t rkey[1024];
+            ucp_proto_request_pack_rkey(&req, memh->md_map, 0, &sys_dev, rkey);
+        }
+    }
+#endif
+
+    ASSERT_UCS_OK(ucp_mem_unmap(context, memh));
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_rma_mt)
