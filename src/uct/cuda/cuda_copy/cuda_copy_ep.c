@@ -58,11 +58,8 @@ static UCS_F_ALWAYS_INLINE CUstream *
 uct_cuda_copy_get_stream(uct_cuda_copy_per_ctx_rsc_t *ctx_rsc,
                          ucs_memory_type_t src_type, ucs_memory_type_t dst_type)
 {
-    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
     CUstream *stream;
     ucs_status_t status;
-
-    pthread_mutex_lock(&lock);
 
     ucs_assert((src_type < UCS_MEMORY_TYPE_LAST) &&
                (dst_type < UCS_MEMORY_TYPE_LAST));
@@ -71,11 +68,8 @@ uct_cuda_copy_get_stream(uct_cuda_copy_per_ctx_rsc_t *ctx_rsc,
 
     status = uct_cuda_copy_init_stream(stream);
     if (status != UCS_OK) {
-        pthread_mutex_unlock(&lock);
         return NULL;
     }
-
-    pthread_mutex_unlock(&lock);
 
     return stream;
 }
@@ -103,9 +97,9 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
     return mem_info.type;
 }
 
-static inline
-ucs_status_t uct_cuda_copy_get_ctx_rsc(uct_cuda_copy_iface_t *iface,
-                                       uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_copy_get_ctx_rsc(uct_cuda_copy_iface_t *iface,
+                          uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
 {
     CUcontext current_ctx;
     ucs_status_t status;
@@ -114,16 +108,16 @@ ucs_status_t uct_cuda_copy_get_ctx_rsc(uct_cuda_copy_iface_t *iface,
     if (status != UCS_OK) {
         return status;
     } else if (current_ctx == NULL) {
-        ucs_error("attempt to perform cuda memcpy without active context");
+        ucs_error("no context bound to calling thread");
         return UCS_ERR_IO_ERROR;
     }
 
     return uct_cuda_copy_get_per_ctx_rscs(iface, current_ctx, ctx_rsc);
 }
 
-static inline
-ucs_status_t uct_cuda_copy_get_short_stream(uct_cuda_copy_iface_t *iface,
-                                            uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_copy_get_short_stream(uct_cuda_copy_iface_t *iface,
+                               uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
 {
     ucs_status_t status;
 

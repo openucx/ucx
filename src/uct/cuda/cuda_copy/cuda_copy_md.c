@@ -388,7 +388,6 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         return UCS_ERR_INVALID_ADDR;
     }
 
-
     ucs_trace("query address %p: 0x%llx..0x%llx length %zu", address,
               base_address, base_address + alloc_length, alloc_length);
 

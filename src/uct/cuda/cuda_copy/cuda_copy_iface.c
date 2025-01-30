@@ -131,35 +131,6 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-#if 0
-static ucs_status_t uct_cuda_copy_sync_streams(uct_cuda_copy_iface_t *iface)
-{
-    CUstream stream;
-    uint32_t stream_index;
-    ucs_memory_type_t src_mem_type, dst_mem_type;
-    ucs_status_t status;
-
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(stream_index, &iface->streams_to_sync) {
-        src_mem_type = stream_index / UCS_MEMORY_TYPE_LAST;
-        if ((src_mem_type >= UCS_MEMORY_TYPE_LAST)) {
-            break;
-        }
-
-        dst_mem_type = stream_index % UCS_MEMORY_TYPE_LAST;
-        stream       = iface->queue_desc[src_mem_type][dst_mem_type].stream;
-        status       = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(stream));
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        UCS_STATIC_BITMAP_RESET(&iface->streams_to_sync,
-                                uct_cuda_copy_flush_bitmap_idx(src_mem_type,
-                                                               dst_mem_type));
-    }
-
-    return UCS_OK;
-}
-#endif
 
 static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                               uct_completion_t *comp)
@@ -167,21 +138,11 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
     uct_cuda_copy_queue_desc_t *q_desc;
     ucs_queue_iter_t iter;
-#if 0
-    ucs_status_t status;
-#endif
  
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
  
-#if 0
-    status = uct_cuda_copy_sync_streams(iface);
-    if (status != UCS_OK) {
-        return status;
-    }
-#endif
-
 
     ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
         if (!ucs_queue_is_empty(&q_desc->event_queue)) {
@@ -313,17 +274,6 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
 static ucs_status_t
 uct_cuda_copy_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
-#if 0
-    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                                  uct_cuda_copy_iface_t);
-    ucs_status_t status;
-
-    status = uct_cuda_copy_sync_streams(iface);
-    if (status != UCS_OK) {
-        return status;
-    }
-#endif
-
     return uct_base_ep_flush(tl_ep, flags, comp);
 }
 
@@ -487,9 +437,9 @@ uct_cuda_copy_init_per_ctx_rscs(const uct_cuda_copy_iface_t *iface,
     return UCS_OK;
 }
 
-ucs_status_t uct_cuda_copy_get_per_ctx_rscs(uct_cuda_copy_iface_t *iface,
-                                            CUcontext cuda_ctx,
-                                            uct_cuda_copy_per_ctx_rsc_t **ctx_rsc_p)
+ucs_status_t
+uct_cuda_copy_get_per_ctx_rscs(uct_cuda_copy_iface_t *iface, CUcontext cuda_ctx,
+                               uct_cuda_copy_per_ctx_rsc_t **ctx_rsc_p)
 {
     uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
     ucs_status_t status;
@@ -499,14 +449,14 @@ ucs_status_t uct_cuda_copy_get_per_ctx_rscs(uct_cuda_copy_iface_t *iface,
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetId(cuda_ctx, &ctx_id));
     if (status != UCS_OK) {
-        goto out;
+        goto err;
     }
 
     iter = kh_put(cuda_copy_ctx_rscs, &iface->ctx_rscs, ctx_id, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
         ucs_error("cannot allocate hash entry");
         status = UCS_ERR_NO_MEMORY;
-        goto out;
+        goto err;
     }
 
     if (ret == UCS_KH_PUT_KEY_PRESENT) {
@@ -534,7 +484,7 @@ err_free_ctx:
     ucs_free(ctx_rsc);
 err_kh_del:
     kh_del(cuda_copy_ctx_rscs, &iface->ctx_rscs, iter);
-out:
+err:
     return status;
 }
 
