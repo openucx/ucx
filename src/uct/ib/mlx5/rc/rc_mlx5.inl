@@ -1480,6 +1480,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         goto out;
     }
 
+
     ucs_memory_cpu_load_fence();
     UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
                              UCT_IB_IFACE_STAT_RX_COMPLETION, 1);
@@ -1487,15 +1488,17 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     byte_len = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
     count    = 1;
 
+
+    if ((poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) &&
+        (cqe->byte_cnt & ntohl(UCT_IB_MLX5_MP_RQ_FILLER_FLAG))) {
+        ucs_warn("Filler CQE arrived");
+        goto out_update_db;
+    }
+
     if (!(poll_flags & UCT_IB_MLX5_POLL_FLAG_TM)) {
         rc_hdr = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
         uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags,
                                             byte_len, poll_flags);
-        goto out_update_db;
-    }
-
-    if ((poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) &&
-        (cqe->byte_cnt & ntohl(UCT_IB_MLX5_MP_RQ_FILLER_FLAG))) {
         goto out_update_db;
     }
 
