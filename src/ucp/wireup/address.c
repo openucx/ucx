@@ -1444,7 +1444,9 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
 
                     /* pack ep address */
                     if (ep_addr_len > 0) {
-                        status = uct_ep_get_address(ucp_ep_get_lane(ep, lane), ptr);
+                        status = uct_ep_get_address(ucp_ep_get_lane_raw(ep,
+                                                                        lane),
+                                                    ptr);
                         if (status != UCS_OK) {
                             ucp_address_error(
                                     pack_flags,

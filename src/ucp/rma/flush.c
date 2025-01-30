@@ -67,7 +67,7 @@ static int ucp_ep_flush_is_completed(ucp_request_t *req)
 static void ucp_ep_flush_progress(ucp_request_t *req)
 {
     ucp_ep_h ep              = req->send.ep;
-    unsigned num_lanes       = ucp_ep_num_lanes(ep);
+    unsigned num_lanes       = ucp_ep_num_valid_lanes(ep);
     ucp_lane_map_t all_lanes = UCS_MASK(num_lanes);
     ucp_ep_flush_state_t *flush_state;
     ucp_lane_index_t lane;
@@ -109,7 +109,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
         /* Search for next lane to start flush */
         lane   = ucs_ffs64(all_lanes & ~req->send.flush.started_lanes);
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if (uct_ep == NULL) {
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
             continue;
