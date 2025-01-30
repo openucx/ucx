@@ -52,7 +52,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
 
     /* Since long timeout will block SRQ in case of network failure on single
      * peer default SRQ to list topology. Incur performance degradation. */
-    {"RC_", "SRQ_TOPO=striding_message_based,list", NULL,
+    {"RC_", "SRQ_TOPO=msg_based,list", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, rc_mlx5_common),
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
@@ -731,7 +731,8 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
         goto err;
     }
 
-    if (iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST) {
+    if ((iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST)
+        || (iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST)) {
         if (iface->super.cq[UCT_IB_DIR_RX].zip ||
             iface->super.cq[UCT_IB_DIR_TX].zip) {
             iface->super.super.progress = uct_dc_mlx5_iface_progress_ll_zip;

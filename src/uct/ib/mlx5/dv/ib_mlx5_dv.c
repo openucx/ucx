@@ -137,7 +137,7 @@ static void uct_ib_mlx5_devx_set_smbrwq_attr(const uct_ib_mlx5_md_t *md, char *c
 }
 
 static int uct_ib_mlx5_devx_is_smbrwq_enabled(uct_ib_mlx5_md_t *md,
-                                             uct_ib_mlx5_qp_attr_t *attr)
+                                              uct_ib_mlx5_qp_attr_t *attr)
 {
     return (attr->is_smbrwq_associated) &&
            (md->flags & UCT_IB_MLX5_MD_FLAG_QP_CTX_EXTENSION) &&

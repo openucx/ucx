@@ -145,6 +145,15 @@ static unsigned uct_rc_mlx5_iface_progress_ll(void *arg)
                                            UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
 }
 
+static unsigned uct_rc_mlx5_iface_progress_striding_ll(void *arg)
+{
+    return uct_rc_mlx5_iface_progress(
+            arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
+                         UCT_IB_MLX5_POLL_FLAG_LINKED_LIST |
+                         UCT_IB_MLX5_POLL_FLAG_CQE_ZIP |
+                         UCT_IB_MLX5_POLL_FLAG_SMBRWQ);
+}
+
 static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
 {
     return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
@@ -406,8 +415,7 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
                    !ddp_enabled) {
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED;
             return UCS_OK;
-        } else if (!strcmp(config->srq_topo.types[i],
-                           "striding_message_based") &&
+        } else if (!strcmp(config->srq_topo.types[i], "msg_based") &&
                    (md->smbrwq.supported_tls & smbrwq_flags)) {
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST;
             return UCS_OK;
@@ -591,8 +599,10 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
         return status;
     }
 
-    if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST) {
+    if ((iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST)) {
         iface->super.progress = uct_rc_mlx5_iface_progress_ll;
+    } else if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST) {
+        iface->super.progress = uct_rc_mlx5_iface_progress_striding_ll;
     } else if (iface->cq[UCT_IB_DIR_RX].zip || iface->cq[UCT_IB_DIR_TX].zip) {
         iface->super.progress = uct_rc_mlx5_iface_progress_cyclic_zip;
     } else {

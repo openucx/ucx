@@ -64,7 +64,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
-  {"SRQ_TOPO", "striding_message_based,cyclic,cyclic_emulated,list",
+  {"SRQ_TOPO", "msg_based,cyclic,cyclic_emulated,list",
    "List of SRQ topology types in order of preference. Supported types are:\n"
    "\n"
    "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
@@ -73,7 +73,10 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "                  cannot be used with DDP enabled.\n"
    "\n"
    "cyclic_emulated   SRQ is organized as a continuous array of WQEs, but HW\n"
-   "                  treats it as a linked list. Doesn`t require DEVX.",
+   "                  treats it as a linked list. Doesn`t require DEVX.\n"
+   "\n"
+   "msg_based         SRQ is organized as a striding linked list of messages,\n"
+   "                  a cqe is generated per message instead of per-packet",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
 

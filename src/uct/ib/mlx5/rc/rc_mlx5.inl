@@ -1494,6 +1494,11 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         goto out_update_db;
     }
 
+    if ((poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) &&
+        (cqe->byte_cnt & ntohl(UCT_IB_MLX5_MP_RQ_FILLER_FLAG))) {
+        goto out_update_db;
+    }
+
 #if IBV_HW_TM
     ucs_assert(cqe->app == UCT_RC_MLX5_CQE_APP_TAG_MATCHING);
 
