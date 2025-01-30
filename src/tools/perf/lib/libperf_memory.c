@@ -344,7 +344,7 @@ void ucx_perf_global_init()
         .uct_alloc = uct_perf_test_alloc_host,
         .uct_free  = uct_perf_test_free_host,
         .memcpy    = ucx_perf_test_memcpy_host,
-        .memset    = memset
+        .memset    = (ucx_perf_memset_func_t)memset
     };
     static ucx_perf_allocator_t rdma_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_RDMA,

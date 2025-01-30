@@ -130,7 +130,7 @@ static void ucx_perf_rocm_memcpy(void *dst, ucs_memory_type_t dst_mem_type,
     }
 }
 
-static void* ucx_perf_rocm_memset(void *dst, int value, size_t count)
+static void ucx_perf_rocm_memset(void *dst, int value, size_t count)
 {
     hipError_t ret;
 
@@ -138,8 +138,6 @@ static void* ucx_perf_rocm_memset(void *dst, int value, size_t count)
     if (ret != hipSuccess) {
         ucs_error("failed to set memory: %s", hipGetErrorString(ret));
     }
-
-    return dst;
 }
 
 UCS_STATIC_INIT {
