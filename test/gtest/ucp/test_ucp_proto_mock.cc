@@ -50,7 +50,6 @@ public:
             uct_tl_t *tl;
             ucs_list_for_each(tl, &component->tl_list, list) {
                 if (tl_name == tl->name) {
-                    m_mock.setup(&component->query_md_resources, query_md_mock);
                     m_mock.setup(&tl->query_devices, query_devices_mock);
                     m_mock.setup(&tl->iface_open, iface_open_mock);
                     m_tl = tl;
@@ -63,17 +62,6 @@ public:
     }
 
 private:
-    static ucs_status_t query_md_mock(uct_component_t *component,
-                                      uct_md_resource_desc_t **resources_p,
-                                      unsigned *num_resources_p)
-    {
-        UCS_MOCK_ORIG_FUNC(m_self->m_mock, &component->query_md_resources,
-                           component, resources_p, num_resources_p);
-        /* Keep only the first available MD */
-        *num_resources_p = ucs_min(*num_resources_p, 1);
-        return UCS_OK;
-    }
-
     static ucs_status_t
     query_devices_mock(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                        unsigned *num_tl_devices_p)
@@ -81,6 +69,15 @@ private:
         UCS_MOCK_ORIG_FUNC(m_self->m_mock, &m_self->m_tl->query_devices, md,
                            tl_devices_p, num_tl_devices_p);
         if (*num_tl_devices_p == 0) {
+            return UCS_OK;
+        }
+
+        /* Instantiate mock devices only for the first available device */
+        const char *first_dev_name = (*tl_devices_p)[0].name;
+        if (m_self->m_real_dev_name.empty()) {
+            m_self->m_real_dev_name = first_dev_name;
+        } else if (m_self->m_real_dev_name != first_dev_name) {
+            *num_tl_devices_p = 0;
             return UCS_OK;
         }
 
@@ -93,23 +90,22 @@ private:
          * devices. Later on the iface_open_mock will use the real device name
          * (same for all mocks) to create the mocked iface.
          */
-        m_self->m_real_dev_name  = (*tl_devices_p)[0].name;
-        unsigned size            = m_self->m_iface_attrs_funcs.size();
-        auto mock_devices        = (uct_tl_device_resource_t *)ucs_malloc(
-                                        sizeof(uct_tl_device_resource_t) * size,
-                                        "mock_tl_devices");
-        ucs_sys_device_t sys_dev = 1;
-        unsigned i               = 0;
+        auto mock_devices  = (uct_tl_device_resource_t*)ucs_calloc(
+                                    m_self->m_iface_attrs_funcs.size(),
+                                    sizeof(uct_tl_device_resource_t),
+                                    "mock_tl_devices");
+        unsigned dev_count = 0;
         for (const auto &it : m_self->m_iface_attrs_funcs) {
-            ucs_strncpy_safe(mock_devices[i].name, it.first.c_str(),
+            ucs_strncpy_safe(mock_devices[dev_count].name, it.first.c_str(),
                              UCT_DEVICE_NAME_MAX);
-            mock_devices[i].type         = (*tl_devices_p)[0].type;
-            mock_devices[i++].sys_device = sys_dev++;
+            mock_devices[dev_count].type       = (*tl_devices_p)[0].type;
+            mock_devices[dev_count].sys_device = dev_count + 1;
+            ++dev_count;
         }
 
         ucs_free(*tl_devices_p);
         *tl_devices_p     = mock_devices;
-        *num_tl_devices_p = size;
+        *num_tl_devices_p = dev_count;
         return UCS_OK;
     }
 
