@@ -75,7 +75,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rtr_common_complete(ucp_request_t *req, unsigned dt_mask)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, dt_mask);
-    if (req->send.rndv.rkey != NULL) {
+    if ((req->send.rndv.rkey != NULL) && !ucp_request_is_invalidated(req)) {
         ucp_proto_rndv_rkey_destroy(req);
     }
 
@@ -226,10 +226,11 @@ static void ucp_proto_rndv_rtr_abort(ucp_request_t *req, ucs_status_t status)
     rreq->status = status;
     ucp_request_set_callback(req, send.cb, ucp_proto_rndv_rtr_abort_super);
 
+    if (req->send.rndv.rkey != NULL) {
+        ucp_proto_rndv_rkey_destroy(req);
+    }
+
     if (ucp_request_memh_invalidate(req, status)) {
-        if (req->send.rndv.rkey != NULL) {
-            ucp_proto_rndv_rkey_destroy(req);
-        }
         ucp_proto_request_zcopy_id_reset(req);
         return;
     }
@@ -252,9 +253,12 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
 {
     ucp_rndv_rtr_hdr_t *rtr                = dest;
     ucp_request_t *req                     = arg;
+    ucp_context_h context                  = req->send.ep->worker->context;
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
     ucp_md_map_t md_map                    = rpriv->super.md_map;
     ucp_mem_desc_t *mdesc                  = req->send.rndv.mdesc;
+    ucp_mem_h *memh;
+    unsigned pack_flags;
     ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
 
@@ -264,16 +268,25 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     ucs_assert(ucs_test_all_flags(mdesc->memh->md_map, md_map));
 
     /* Pack remote key for the fragment */
+    memh             = &req->send.state.dt_iter.type.contig.memh;
+    *memh            = mdesc->memh;
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-    packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
-                                          mdesc->memh, mdesc->ptr,
+    pack_flags       = ucp_ep_config(req->send.ep)->uct_rkey_pack_flags;
+
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+    packed_rkey_size = ucp_rkey_pack_memh(context, md_map, memh, mdesc->ptr,
                                           req->send.state.dt_iter.length,
-                                          &mem_info, 0, NULL, 0, rtr + 1);
+                                          &mem_info, 0, NULL, pack_flags,
+                                          rtr + 1);
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
                   ucs_status_string((ucs_status_t)packed_rkey_size));
         packed_rkey_size = 0;
+    } else {
+        req->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
     }
 
     return sizeof(*rtr) + packed_rkey_size;
@@ -282,7 +295,8 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
 {
-    if (!abort || (req->send.rndv.mdesc != NULL)) {
+    if (!abort ||
+        ((req->send.rndv.mdesc != NULL) && !ucp_request_is_invalidated(req))) {
         ucs_mpool_put_inline(req->send.rndv.mdesc);
     }
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
@@ -292,10 +306,23 @@ ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
     }
 }
 
+static void ucp_proto_rndv_rtr_mtype_complete_abort(void *request,
+                                                    ucs_status_t status,
+                                                    void *user_data)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+
+    if (req->send.invalidate.mdesc != NULL) {
+        ucs_mpool_put_inline(req->send.invalidate.mdesc);
+    }
+    ucp_proto_rndv_rtr_mtype_complete(req, 1);
+}
+
 static void
 ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_request_t *super_req = ucp_request_get_super(req);
+    ucp_mem_desc_t *mdesc    = req->send.rndv.mdesc;
 
     super_req->status = status;
 
@@ -305,8 +332,18 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
         ucp_request_get_super(super_req)->status = status;
     }
 
-    /*TODO: Invalidate memh */
     ucp_send_request_id_release(req);
+    ucp_request_set_callback(req, send.cb,
+                             ucp_proto_rndv_rtr_mtype_complete_abort);
+    if (req->send.rndv.rkey != NULL) {
+        ucp_proto_rndv_rkey_destroy(req);
+    }
+
+    if (ucp_request_memh_invalidate(req, status)) {
+        req->send.invalidate.mdesc = mdesc;
+        return;
+    }
+
     ucp_proto_rndv_rtr_mtype_complete(req, 1);
 }
 
