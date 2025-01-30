@@ -403,7 +403,7 @@ ucp_wireup_connect_local(ucp_ep_h ep,
         }
 
         if (ep->worker->context->config.ext.on_demand_wireup) {
-            if ((ucp_ep_get_am_lane(ep) != lane) &&
+            if ((lane >= UCP_MAX_FAST_PATH_LANES) &&
                 (ucp_ep_get_wireup_msg_lane(ep) != lane)) {
                 continue;
             }
@@ -2151,6 +2151,7 @@ uct_ep_h ucp_wireup_init_slow_lane(ucp_ep_h ep, ucp_lane_index_t slow_lane_idx)
 
     wireup_ep = ucs_derived_of(ep->ext->uct_eps[slow_lane_idx],
                                ucp_wireup_ep_t);
+    ucs_assert(0 && "create slow lane");
     return &wireup_ep->super.super;
 }
 
