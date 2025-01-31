@@ -31,6 +31,7 @@ typedef struct uct_cuda_ipc_md_handle {
     } handle;
     CUmemPoolPtrExportData    ptr;
     CUmemoryPool              pool;
+    unsigned long long        buffer_id;
 } uct_cuda_ipc_md_handle_t;
 #else
 typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
@@ -121,6 +122,7 @@ typedef struct {
     uct_cuda_ipc_md_handle_t  ph;     /* Memory handle of GPU memory */
     CUdeviceptr               d_bptr; /* Allocation base address */
     size_t                    b_len;  /* Allocation size */
+    unsigned long long        buffer_id; /* Buffer ID for the allocation */
     ucs_list_link_t           link;
 } uct_cuda_ipc_lkey_t;
 
