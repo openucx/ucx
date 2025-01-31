@@ -158,15 +158,15 @@ static uct_iface_internal_ops_t uct_rocm_ipc_iface_internal_ops = {
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_rocm_ipc_iface_is_reachable_v2
 };
 
 static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
     .ep_put_zcopy             = uct_rocm_ipc_ep_put_zcopy,
     .ep_get_zcopy             = uct_rocm_ipc_ep_get_zcopy,
-    .ep_pending_add           = ucs_empty_function_return_busy,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_ipc_ep_t),

@@ -602,7 +602,7 @@ static uct_iface_internal_ops_t uct_mm_iface_internal_ops = {
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_mm_iface_is_reachable_v2,
     .ep_is_connected       = uct_mm_ep_is_connected
 };

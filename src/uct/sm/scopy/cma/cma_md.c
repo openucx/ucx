@@ -169,8 +169,8 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
         .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
         .mem_reg            = uct_md_dummy_mem_reg,
         .mem_dereg          = uct_md_dummy_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     };
     uct_cma_md_t *cma_md;
 
@@ -208,10 +208,10 @@ ucs_status_t uct_cma_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 uct_component_t uct_cma_component = {
     .query_md_resources = uct_cma_query_md_resources,
     .md_open            = uct_cma_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_md_stub_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
-    .rkey_release       = ucs_empty_function_return_success,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = "cma",
     .md_config          = {

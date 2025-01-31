@@ -496,7 +496,7 @@ static void ucs_fuse_thread_stop()
     sighandler_t orig_handler;
     int ret;
 
-    orig_handler = signal(SIGUSR1, ucs_empty_function);
+    orig_handler = signal(SIGUSR1, (sighandler_t)ucs_empty_function);
 
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 
