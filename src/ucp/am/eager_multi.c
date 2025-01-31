@@ -135,8 +135,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_bcopy_send_func(
         packed_size = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_AM_FIRST,
                                       ucp_am_eager_multi_bcopy_pack_args_first,
                                       &pack_ctx, 0);
-        status      = ucp_proto_bcopy_send_func_status(packed_size);
-        status      = ucp_proto_am_handle_user_header_send_status(req, status);
+        status      = ucp_am_handle_user_header_send_status_common(
+                req, ucp_proto_bcopy_send_func_status(packed_size), 0, 0);
     } else {
         pack_ctx.max_payload = ucp_proto_multi_max_payload(
                 req, lpriv, UCP_AM_MID_FRAG_META_LEN);
