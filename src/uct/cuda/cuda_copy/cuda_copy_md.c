@@ -580,6 +580,7 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     uint32_t is_managed        = 0;
     CUdevice cuda_device       = -1;
     CUcontext cuda_mem_ctx     = NULL;
+    CUcontext cuda_popped_ctx;
     CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     CUdeviceptr base_address;
@@ -681,8 +682,14 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         goto out_default_range;
     }
 
+    /* GetAddressRange requires context to be set. On DGXA100 it takes 0.03 us
+     * to push and pop the context associated with address (which should be
+     * non-NULL if we are at this point)*/
+    cuCtxPushCurrent(cuda_mem_ctx);
+
     cu_err = cuMemGetAddressRange(&base_address, &alloc_length,
                                   (CUdeviceptr)address);
+    cuCtxPopCurrent(&cuda_popped_ctx);
     if (cu_err != CUDA_SUCCESS) {
         ucs_error("cuMemGetAddressRange(%p) error: %s", address,
                   uct_cuda_base_cu_get_error_string(cu_err));
