@@ -1027,7 +1027,12 @@ typedef enum {
     /**
      * Memory domain performs memory type related copy operations.
      */
-    UCT_MD_FLAG_MEMTYPE_COPY   = UCS_BIT(13)
+    UCT_MD_FLAG_MEMTYPE_COPY   = UCS_BIT(13),
+
+    /**
+     * Memory domain supports derived memory handle registration.
+     */
+    UCT_MD_FLAG_DERIVED        = UCS_BIT(14)
 } uct_md_flags_v2_t;
 
 
