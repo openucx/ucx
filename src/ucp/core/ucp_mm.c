@@ -299,8 +299,26 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
 {
     unsigned flags = 0;
 
-    if (context->config.features & UCP_FEATURE_RMA) {
-        flags |= UCT_MD_MEM_ACCESS_RMA;
+    if (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_PROT) {
+        if (params->prot & UCP_MEM_MAP_PROT_LOCAL_READ) {
+            flags |= UCT_MD_MEM_ACCESS_LOCAL_READ;
+        }
+
+        if (params->prot & UCP_MEM_MAP_PROT_REMOTE_READ) {
+            flags |= UCT_MD_MEM_ACCESS_REMOTE_GET;
+        }
+
+        if (params->prot & UCP_MEM_MAP_PROT_LOCAL_WRITE) {
+            flags |= UCT_MD_MEM_ACCESS_LOCAL_WRITE;
+        }
+
+        if (params->prot & UCP_MEM_MAP_PROT_REMOTE_WRITE) {
+            flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT;
+        }
+    } else {
+        if (context->config.features & UCP_FEATURE_RMA) {
+            flags |= UCT_MD_MEM_ACCESS_RMA;
+        }
     }
 
     if (context->config.features & UCP_FEATURE_AMO) {
@@ -326,6 +344,18 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
     return flags;
 }
 
+static int ucp_memh_is_gva_mr(ucp_context_h context, ucp_mem_h memh, int md_index)
+{
+    int gva_index;
+    for (gva_index = 0; gva_index < UCP_GVA_MR_TYPE_LAST; gva_index++) {
+        if (memh->uct[md_index] == context->tl_mds[md_index].gva_mrs[gva_index]) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map)
 {
@@ -347,7 +377,7 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         ucs_assertv(md_index != memh->alloc_md_index,
                     "memh %p: md_index %u alloc_md_index %u", memh, md_index,
                     memh->alloc_md_index);
-        if (memh->uct[md_index] == context->tl_mds[md_index].gva_mr) {
+        if (ucp_memh_is_gva_mr(context, memh, md_index)) {
             continue;
         }
 
@@ -462,7 +492,7 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
 }
 
 static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
-                                          ucp_md_map_t md_map)
+                                          ucp_md_map_t md_map, unsigned uct_flags)
 {
     ucp_md_map_t reg_md_map = context->gva_md_map[memh->mem_type] & md_map;
     void *address           = ucp_memh_address(memh);
@@ -471,13 +501,25 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
     ucp_md_index_t md_index;
     ucs_status_t status;
     int ret;
+    int gva_mr_index;
 
     if (reg_md_map == 0) {
         return UCS_OK;
     }
 
+    if (uct_flags & (UCT_MD_MEM_ACCESS_LOCAL_WRITE |
+                     UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                     UCT_MD_MEM_ACCESS_REMOTE_ATOMIC)) {
+        gva_mr_index = UCP_GVA_MR_TYPE_READ_WRITE;
+        uct_flags   |= UCT_MD_MEM_ACCESS_ALL;
+    } else {
+        gva_mr_index = UCP_GVA_MR_TYPE_READ_ONLY;
+        uct_flags   |= UCT_MD_MEM_ACCESS_LOCAL_READ |
+                       UCT_MD_MEM_ACCESS_REMOTE_GET;
+    }
+
     params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-    params.flags      = UCT_MD_MEM_GVA;
+    params.flags      = UCT_MD_MEM_GVA | uct_flags;
 
     if (context->config.ext.gva_mlock &&
         !(memh->flags & UCP_MEMH_FLAG_MLOCKED)) {
@@ -490,16 +532,16 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
     }
 
     ucs_for_each_bit(md_index, reg_md_map) {
-        if (context->tl_mds[md_index].gva_mr == NULL) {
-            status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, NULL,
-                                       SIZE_MAX, &params,
-                                       &context->tl_mds[md_index].gva_mr);
+        if (context->tl_mds[md_index].gva_mrs[gva_mr_index] == NULL) {
+            status = uct_md_mem_reg_v2(
+                          context->tl_mds[md_index].md, NULL, SIZE_MAX, &params,
+                          &context->tl_mds[md_index].gva_mrs[gva_mr_index]);
             if (status != UCS_OK) {
                 return status;
             }
         }
 
-        memh->uct[md_index] = context->tl_mds[md_index].gva_mr;
+        memh->uct[md_index] = context->tl_mds[md_index].gva_mrs[gva_mr_index];
         if (context->config.ext.gva_prefetch) {
             uct_md_mem_advise(context->tl_mds[md_index].md, memh->uct[md_index],
                               address, length, UCT_MADV_WILLNEED);
@@ -537,7 +579,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_align;
 
     if (gva_enable) {
-        status = ucp_memh_register_gva(context, memh, md_map);
+        status = ucp_memh_register_gva(context, memh, md_map, uct_flags);
         if ((status != UCS_OK) && !(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
             return status;
         }

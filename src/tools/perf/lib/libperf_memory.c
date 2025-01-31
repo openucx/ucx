@@ -53,11 +53,16 @@ static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
     params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                          UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                          UCP_MEM_MAP_PARAM_FIELD_FLAGS |
-                         UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+                         UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE |
+                         UCP_MEM_MAP_PARAM_FIELD_PROT;
     params.address     = NULL;
     params.memory_type = mem_type;
     params.length      = length;
     params.flags       = UCP_MEM_MAP_ALLOCATE;
+    params.prot        = UCP_MEM_MAP_PROT_LOCAL_READ |
+                         UCP_MEM_MAP_PROT_LOCAL_WRITE |
+                         UCP_MEM_MAP_PROT_REMOTE_READ |
+                         UCP_MEM_MAP_PROT_REMOTE_WRITE;
     if (perf->params.flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) {
         params.flags |= UCP_MEM_MAP_NONBLOCK;
     }

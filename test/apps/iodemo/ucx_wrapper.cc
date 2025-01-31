@@ -761,9 +761,14 @@ bool UcxContext::map_buffer(size_t length, void *address, ucp_mem_h *memh_p)
     ucp_mem_map_params_t mem_map_params;
 
     mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                                UCP_MEM_MAP_PARAM_FIELD_PROT;
     mem_map_params.address    = address;
     mem_map_params.length     = length;
+    mem_map_params.prot       = UCP_MEM_MAP_PROT_LOCAL_READ |
+                                UCP_MEM_MAP_PROT_LOCAL_WRITE |
+                                UCP_MEM_MAP_PROT_REMOTE_READ |
+                                UCP_MEM_MAP_PROT_REMOTE_WRITE;
 
     return ucp_mem_map(_context, &mem_map_params, memh_p) == UCS_OK;
 }
