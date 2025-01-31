@@ -493,14 +493,14 @@ typedef struct uct_md_mem_reg_params {
     size_t                       dmabuf_offset;
 
     /**
-     * Represents a pointer to the existing memory handle.
-     * Used to register a derived memory handle: a shallow copy of existing UCT
-     * memory handle, which can be used to access the same memory region. When
-     * created, the derived memh inherits the original memh access flags and
-     * state. The lifetime of the derived memh is bound to the original memh,
-     * and the original memh cannot be destroyed until all its derived handles
-     * are destroyed. The derived memh cannot be used to register another
-     * derived memh.
+     * A pointer to an existing memory handle.
+     * Used to register a derived memh: a shallow copy of an existing UCT memh
+     * which can be used to access the same memory region. When created, the
+     * derived memh inherits the access flags and the state of the original
+     * memh. The lifetime of the derived memh is bound to the original memh.
+     * The original memh cannot be destroyed until all its derived handles have
+     * been destroyed. A derived memh cannot be used to register another derived
+     * memh.
      */
     uct_mem_h                    memh;
 } uct_md_mem_reg_params_t;

@@ -598,7 +598,6 @@ uct_ib_memh_alloc_internal(uct_ib_md_t *md, size_t memh_base_size,
     if (memh == NULL) {
         ucs_error("%s: failed to allocated memh struct",
                   uct_ib_device_name(&md->dev));
-        return NULL;
     }
 
     return memh;
