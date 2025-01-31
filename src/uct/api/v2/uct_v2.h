@@ -215,7 +215,8 @@ typedef struct {
 typedef enum {
     UCT_MD_MEM_REG_FIELD_FLAGS         = UCS_BIT(0),
     UCT_MD_MEM_REG_FIELD_DMABUF_FD     = UCS_BIT(1),
-    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2)
+    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2),
+    UCT_MD_MEM_REG_FIELD_MEMH          = UCS_BIT(3)
 } uct_md_mem_reg_field_mask_t;
 
 
@@ -480,6 +481,18 @@ typedef struct uct_md_mem_reg_params {
      * dmabuf region, then this field must be omitted or set to 0.
      */
     size_t                       dmabuf_offset;
+
+    /**
+     * A pointer to an existing memory handle.
+     * Used to register a derived memh: a shallow copy of an existing UCT memh
+     * which can be used to access the same memory region. When created, the
+     * derived memh inherits the access flags and the state of the original
+     * memh. The lifetime of the derived memh is bound to the original memh.
+     * The original memh cannot be destroyed until all its derived handles have
+     * been destroyed. A derived memh cannot be used to register another derived
+     * memh.
+     */
+    uct_mem_h                    memh;
 } uct_md_mem_reg_params_t;
 
 
@@ -969,7 +982,12 @@ typedef enum {
      * packed key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
-    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12)
+    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12),
+
+    /**
+     * Memory domain supports derived memory handle registration.
+     */
+    UCT_MD_FLAG_DERIVED        = UCS_BIT(13)
 } uct_md_flags_v2_t;
 
 
