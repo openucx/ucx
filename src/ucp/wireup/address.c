@@ -204,12 +204,6 @@ UCS_ARRAY_DECLARE_TYPE(ucp_address_remote_device_array_t, unsigned,
                                        UCP_ADDRESS_FLAG_LAST))
 
 #define UCP_ADDRESS_FLAG_MD_EMPTY_DEV 0x80u  /* Device without TL addresses */
-#define UCP_ADDRESS_FLAG_MD_ALLOC     0x40u  /* MD can register  */
-#define UCP_ADDRESS_FLAG_MD_REG       0x20u  /* MD can allocate */
-#define UCP_ADDRESS_FLAG_MD_MASK_V1   (UCS_MASK(8) ^ \
-                                        (UCP_ADDRESS_FLAG_MD_EMPTY_DEV | \
-                                         UCP_ADDRESS_FLAG_MD_ALLOC | \
-                                         UCP_ADDRESS_FLAG_MD_REG))
 #define UCP_ADDRESS_FLAG_MD_MASK      (UCS_MASK(8) ^ \
                                        UCP_ADDRESS_FLAG_MD_EMPTY_DEV)
 
@@ -471,7 +465,6 @@ ucp_address_packed_size(ucp_worker_h worker,
                         ucp_object_version_t addr_version)
 {
     size_t size = 0;
-    size_t md_mask;
     ssize_t value_size;
     const ucp_address_packed_device_t *dev;
     ucp_md_index_t md_index;
@@ -479,11 +472,9 @@ ucp_address_packed_size(ucp_worker_h worker,
 
     /* header: version and flags */
     if (addr_version == UCP_OBJECT_VERSION_V1) {
-        size   += sizeof(uint8_t);
-        md_mask = UCP_ADDRESS_FLAG_MD_MASK_V1;
+        size += sizeof(uint8_t);
     } else {
-        size   += sizeof(uint16_t);
-        md_mask = UCP_ADDRESS_FLAG_MD_MASK;
+        size += sizeof(uint16_t);
     }
 
     if (pack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
@@ -507,7 +498,8 @@ ucp_address_packed_size(ucp_worker_h worker,
             /* device md_index */
             md_index   = rsc->md_index;
             /* md index (+flags) can take 2 bytes with address version 2 */
-            value_size = ucp_address_packed_value_size(md_index, md_mask,
+            value_size = ucp_address_packed_value_size(md_index,
+                                                       UCP_ADDRESS_FLAG_MD_MASK,
                                                        addr_version,
                                                        rsc->tl_rsc.dev_name);
             if (value_size < 0) {
@@ -597,35 +589,19 @@ ucp_address_unpack_byte_extended(const void *ptr, size_t value_mask,
     return (void*)ptr;
 }
 
-static size_t ucp_address_md_mask(ucp_object_version_t addr_version)
-{
-    return (addr_version == UCP_OBJECT_VERSION_V1) ?
-           UCP_ADDRESS_FLAG_MD_MASK_V1 : UCP_ADDRESS_FLAG_MD_MASK;
-}
-
 static void *
 ucp_address_pack_md_info(void *ptr, int is_empty_dev, uint64_t md_flags,
                          ucp_md_index_t md_index,
                          ucp_object_version_t addr_version)
 {
     uint8_t *flags_ptr = ptr;
-    size_t mask        = ucp_address_md_mask(addr_version);
 
-    ptr = ucp_address_pack_byte_extended(ptr, md_index, mask, addr_version);
+    ptr = ucp_address_pack_byte_extended(ptr, md_index,
+                                         UCP_ADDRESS_FLAG_MD_MASK,
+                                         addr_version);
 
     if (is_empty_dev) {
         *flags_ptr |= UCP_ADDRESS_FLAG_MD_EMPTY_DEV;
-    }
-
-    if (addr_version == UCP_OBJECT_VERSION_V1) {
-        /* Preserve wire protocol even though these flags are not used */
-        if (md_flags & UCT_MD_FLAG_ALLOC) {
-            *flags_ptr |= UCP_ADDRESS_FLAG_MD_ALLOC;
-        }
-
-        if (md_flags & UCT_MD_FLAG_REG) {
-            *flags_ptr |= UCP_ADDRESS_FLAG_MD_REG;
-        }
     }
 
     return ptr;
@@ -637,12 +613,10 @@ static void *ucp_address_unpack_md_info(const void *ptr,
                                         int *empty_dev)
 {
     uint8_t md_byte = *(uint8_t*)ptr;
-    size_t mask;
 
     *empty_dev = md_byte & UCP_ADDRESS_FLAG_MD_EMPTY_DEV;
-    mask       = ucp_address_md_mask(addr_version);
-
-    return ucp_address_unpack_byte_extended(ptr, mask, addr_version, md_index);
+    return ucp_address_unpack_byte_extended(ptr, UCP_ADDRESS_FLAG_MD_MASK,
+                                            addr_version, md_index);
 }
 
 static uint32_t ucp_address_pack_flags(uint64_t input_flags,
