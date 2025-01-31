@@ -1938,11 +1938,15 @@ protected:
 };
 
 UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
-           "IB_NUM_PATHS?=4", "MAX_RMA_LANES?=8") {
+           "IB_NUM_PATHS?=6", "MAX_RMA_LANES?=6") {
     sender().connect(&receiver(), get_ep_params());
 
     // checks before wireup
     ucp_ep_h ep = sender().ep();
+
+    ASSERT_GT(ucp_ep_num_lanes(ep), UCP_MAX_FAST_PATH_LANES)
+            << "fast path lanes are only initialized,"
+               "need to increase number of lanes";
 
     check_lane_value(ucp_ep_get_wireup_msg_lane(ep), "wireup_msg");
     UCS_TEST_MESSAGE << "add wireup lane " << ucp_ep_get_wireup_msg_lane(ep);
