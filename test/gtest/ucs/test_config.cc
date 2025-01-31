@@ -362,15 +362,15 @@ protected:
             return &m_opts;
         }
 
-        std::string dump(ucs_config_print_flags_t flags) const {
-            char *dump_data = NULL;
+        std::string dump(ucs_config_print_flags_t flags, const char **filters = nullptr) const {
+            char *dump_data = nullptr;
             size_t dump_size;
             char line_buf[1024];
             std::string res;
 
             FILE *file = open_memstream(&dump_data, &dump_size);
-            ucs_config_parser_print_opts(file, "", &m_opts, car_opts_table,
-                                         NULL, UCS_DEFAULT_ENV_PREFIX, flags);
+            ucs_config_parser_print_opts(file, "", &m_opts, car_opts_table, nullptr,
+                                         UCS_DEFAULT_ENV_PREFIX, flags, filters);
             fseek(file, 0, SEEK_SET);
 
             while (fgets(line_buf, sizeof(line_buf), file)) {
@@ -428,7 +428,7 @@ protected:
         FILE *file = open_memstream(&dump_data, &dump_size);
         ucs_config_parser_print_opts(file, "", *opts, car_opts_table,
                                      prefix, UCS_DEFAULT_ENV_PREFIX,
-                                     (ucs_config_print_flags_t)flags);
+                                     (ucs_config_print_flags_t)flags, NULL);
 
         /* Sanity check - all lines begin with UCS_ */
         unsigned num_lines = 0;
@@ -930,6 +930,20 @@ UCS_TEST_F(test_config, test_key_value_dump_full) {
                           "#\n"
                           "UCX_TEMP=front:17,rear:16\n");
     EXPECT_NE(it, std::string::npos);
+}
+
+UCS_TEST_F(test_config, test_config_dump_filtered) {
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, nullptr);
+
+    const std::string dump1 = opts.dump(UCS_CONFIG_PRINT_CONFIG);
+    const char* filters[] = { "TIME_", nullptr };
+    const std::string dump2 = opts.dump(UCS_CONFIG_PRINT_CONFIG, filters);
+
+    EXPECT_NE(dump1.size(), dump2.size());
+    EXPECT_NE(dump1.find("TIME_"), std::string::npos);
+    EXPECT_NE(dump2.find("TIME_"), std::string::npos);
+    EXPECT_NE(dump1.find("TRANSMISSION"), std::string::npos);
+    EXPECT_EQ(dump2.find("TRANSMISSION"), std::string::npos);
 }
 
 UCS_TEST_F(test_config, test_config_file) {

@@ -39,6 +39,7 @@ int main(int argc, char **argv)
     ucp_worker_h worker;
     ucs_status_t status;
     int c, ret;
+    const char *args[] = { NULL };
 
     status = ucp_config_read(NULL, NULL, &config);
     if (status != UCS_OK) {
@@ -87,7 +88,7 @@ int main(int argc, char **argv)
     ucp_context_print_info(context, stdout);
     ucs_config_parser_print_all_opts(stdout, UCS_DEFAULT_ENV_PREFIX,
                                      UCS_CONFIG_PRINT_CONFIG,
-                                     &ucs_config_global_list);
+                                     &ucs_config_global_list, args);
     ucp_worker_destroy(worker);
     ret = 0;
 

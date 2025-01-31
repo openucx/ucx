@@ -56,10 +56,10 @@ static void usage()
     printf("  -b                   Show build configuration\n");
     printf("  -y                   Show type and structures information\n");
     printf("  -s                   Show system information\n");
-    printf("  -c                   Show UCX configuration\n");
+    printf("  -c [filter]          Show UCX configuration\n");
     printf("  -C                   Comment-out default configuration values\n");
     printf("  -a                   Show also hidden configuration\n");
-    printf("  -f                   Display fully decorated output\n");
+    printf("  -f [filter]          Display fully decorated output\n");
     printf("\nUCP information (-u is required):\n");
     printf("  -p                   Show UCP context information\n");
     printf("  -w                   Show UCP worker information\n");
@@ -304,7 +304,8 @@ int main(int argc, char **argv)
 
     if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
         ucs_config_parser_print_all_opts(stdout, UCS_DEFAULT_ENV_PREFIX,
-                                         print_flags, &ucs_config_global_list);
+                                         print_flags, &ucs_config_global_list,
+                                         (const char**)(argv + optind));
     }
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP|PRINT_MEM_MAP)) {
