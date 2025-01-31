@@ -42,7 +42,7 @@ protected:
     void test_mkey_pack_mt_internal(unsigned access_mask, bool invalidate);
     void test_smkey_reg_atomic(void);
 
-    uct_mem_h reg_derived_mem(uct_mem_h base) const {
+    uct_mem_h reg_derived_mem(const uct_mem_h base) const {
         uct_mem_h memh;
         uct_md_mem_reg_params_t params;
         params.field_mask = UCT_MD_MEM_REG_FIELD_MEMH;
