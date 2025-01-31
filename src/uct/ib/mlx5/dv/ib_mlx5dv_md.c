@@ -2144,7 +2144,7 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
     status = uct_ib_mlx5_devx_device_mem_alloc(uct_md, &length, &address,
                                                UCS_MEMORY_TYPE_RDMA, 0,
                                                "check dm ksm registration",
-                                               &memh);
+                                               UCS_SYS_DEVICE_ID_UNKNOWN, &memh);
     if (status != UCS_OK) {
         ucs_debug("%s: KSM over device memory is not supported",
                   ucs_status_string(status));
