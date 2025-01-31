@@ -32,6 +32,7 @@ static void apply_config_param(char *str, ucp_config_t *config)
 
 int main(int argc, char **argv)
 {
+    const char *args[] = { NULL };
     ucp_config_t *config;
     ucp_params_t params;
     ucp_context_h context;
@@ -39,7 +40,6 @@ int main(int argc, char **argv)
     ucp_worker_h worker;
     ucs_status_t status;
     int c, ret;
-    const char *args[] = { NULL };
 
     status = ucp_config_read(NULL, NULL, &config);
     if (status != UCS_OK) {
