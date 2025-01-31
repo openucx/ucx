@@ -15,8 +15,7 @@ extern uct_component_t uct_cuda_copy_component;
 
 typedef enum {
     UCT_CUDA_PREF_LOC_CPU,
-    UCT_CUDA_PREF_LOC_GPU,
-    UCT_CUDA_PREF_LOC_LAST
+    UCT_CUDA_PREF_LOC_GPU
 } uct_cuda_pref_loc_t;
 
 
