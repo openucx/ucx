@@ -1036,6 +1036,9 @@ static int client_server_do_work(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count,
             int rdev = is_server ? cdev : sdev;
             ucp_worker = dev_ucp_contexts[ldev].ucp_worker;
             ucp_ep = dev_ucp_contexts[ldev].ucp_eps[rdev];
+            /* Push the right GPU context */
+            cudaSetDevice(ldev);
+            cudaFree(0);
             for (i = 0; i < num_iterations; i++) {
                 ret = client_server_communication(ucp_worker, ucp_ep,
                                                   send_recv_type, is_server, i,
