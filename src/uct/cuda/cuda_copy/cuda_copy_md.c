@@ -832,6 +832,7 @@ static uct_md_ops_t md_ops = {
     .query              = uct_cuda_copy_md_query,
     .mem_alloc          = uct_cuda_copy_mem_alloc,
     .mem_free           = uct_cuda_copy_mem_free,
+    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
     .mem_reg            = uct_cuda_copy_mem_reg,
     .mem_dereg          = uct_cuda_copy_mem_dereg,

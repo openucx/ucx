@@ -43,9 +43,14 @@ static void uct_tcp_md_close(uct_md_h md)
 static uct_md_ops_t uct_tcp_md_ops = {
     .close              = uct_tcp_md_close,
     .query              = uct_tcp_md_query,
+    .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+    .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
     .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+    .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
     .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_unsupported,
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
 };
 
