@@ -848,6 +848,7 @@ static uct_md_ops_t uct_mlx5_gga_md_ops = {
     .query              = uct_ib_mlx5_gga_md_query,
     .mem_alloc          = uct_ib_mlx5_devx_device_mem_alloc,
     .mem_free           = uct_ib_mlx5_devx_device_mem_free,
+    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_ib_mlx5_devx_mem_reg,
     .mem_dereg          = uct_ib_mlx5_devx_mem_dereg,
     .mem_attach         = uct_ib_mlx5_devx_mem_attach,

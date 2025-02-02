@@ -1315,7 +1315,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     /* Check for GPU-direct support */
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
-        /* Check peer memory driver is loaded, different driver versions use 
+        /* Check peer memory driver is loaded, different driver versions use
          * different paths */
         uct_ib_check_gpudirect_driver(
                 md, "/sys/kernel/mm/memory_peers/nv_mem/version",
@@ -1326,7 +1326,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         uct_ib_check_gpudirect_driver(
                 md, "/sys/module/nv_peer_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
-                
+
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
@@ -1564,10 +1564,13 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .super = {
         .close              = uct_ib_md_close,
         .query              = uct_ib_md_query,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = uct_ib_mem_advise,
         .mem_reg            = uct_ib_verbs_mem_reg,
         .mem_dereg          = uct_ib_verbs_mem_dereg,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
-        .mem_advise         = uct_ib_mem_advise,
         .mkey_pack          = uct_ib_verbs_mkey_pack,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
