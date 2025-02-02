@@ -43,9 +43,6 @@ enum {
     UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
-/* Factor to multiply with in order to get infinite latency */
-#define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
-
 #define UCP_OP_ATTR_INDEX_MASK (UCP_OP_ATTR_FLAG_NO_IMM_CMPL    | \
                                 UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL | \
                                 UCP_OP_ATTR_FLAG_FAST_CMPL      | \
@@ -607,6 +604,10 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
 void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
                                 size_t length, ucs_memory_info_t *mem_info);
 
+double ucp_tl_iface_latency_with_priority(ucp_context_h context,
+                                          const ucs_linear_func_t *latency,
+                                          int is_prioritized_ep);
+
 /**
  * Calculate a small value to overcome float imprecision
  * between two float values
@@ -652,32 +653,6 @@ static UCS_F_ALWAYS_INLINE int
 ucp_context_usage_tracker_enabled(ucp_context_h context)
 {
     return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
-}
-
-static UCS_F_ALWAYS_INLINE double
-ucp_tl_iface_latency_with_priority(ucp_context_h context,
-                                   const ucs_linear_func_t *latency,
-                                   int is_prioritized)
-{
-    unsigned num_eps;
-
-    if (!ucp_context_usage_tracker_enabled(context)) {
-        /* No priority EPs exist, use default value */
-        num_eps = context->config.est_num_eps;
-    } else if (is_prioritized) {
-        /* Use small latency for priority EP */
-        num_eps = ucs_min(context->config.est_num_eps,
-                          context->config.ext.max_priority_eps);
-    } else if (latency->m > UCP_PROTO_PERF_EPSILON) {
-        /* Use "infinite" latency for "regular" EP in case TL is not scalable */
-        num_eps = context->config.ext.max_priority_eps *
-                  UCP_CONTEXT_INFINITE_LAT_FACTOR;
-    } else {
-        /* Use default latency for "regular" EP + scalable TL */
-        num_eps = context->config.est_num_eps;
-    }
-
-    return ucs_linear_func_apply(*latency, num_eps);
 }
 
 static UCS_F_ALWAYS_INLINE double
