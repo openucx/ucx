@@ -685,8 +685,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     unsigned addr_indices[UCP_MAX_LANES];
 
     ucs_memory_type_for_each(mem_type) {
-        UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, access_mem_types,
-                                mem_access_tls);
+        ucp_context_memaccess_tl_bitmap(context, mem_type, 0, &mem_access_tls);
         if (UCP_MEM_IS_HOST(mem_type) ||
             UCS_STATIC_BITMAP_IS_ZERO(mem_access_tls)) {
             continue;
@@ -3713,8 +3712,8 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
                                     lane_index * attr->transports.entry_size);
 
         /* Each field updated in the following block must have its ending offset
-         * compared to attr->transports.entry_size before the field is 
-         * updated. If the field's ending offset is greater than the 
+         * compared to attr->transports.entry_size before the field is
+         * updated. If the field's ending offset is greater than the
          * attr->transports.entry_size value, the field cannot be updated because
          * that will cause a storage overlay.
          */

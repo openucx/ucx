@@ -62,7 +62,8 @@ protected:
 
     virtual mapped_buffer alloc_buffer(const entity &entity, size_t offset);
 
-    void run(unsigned count, size_t offset = 0, size_t size_cap = SIZE_MAX);
+    void run(unsigned count, size_t offset = 0, size_t size_cap = SIZE_MAX,
+             double timeout = DEFAULT_TIMEOUT_SEC);
 
     virtual void init();
 
