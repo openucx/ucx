@@ -58,7 +58,7 @@ typedef void (*ucx_perf_memcpy_func_t)(void *dst,
                                        ucs_memory_type_t src_mem_type,
                                        size_t count);
 
-typedef void *(*ucx_perf_memset_func_t)(void *dst, int value, size_t count);
+typedef void (*ucx_perf_memset_func_t)(void *dst, int value, size_t count);
 
 struct ucx_perf_allocator {
     ucs_memory_type_t         mem_type;
