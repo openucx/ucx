@@ -22,6 +22,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define MAX_NETWORK_IFACES  32
+#define MAX_RULES_PER_IFACE 10
 
 typedef struct {
     const struct sockaddr *sa_remote;
@@ -29,6 +31,12 @@ typedef struct {
     int                    found;
 } ucs_netlink_route_info_t;
 
+
+typedef struct {
+    const struct sockaddr *destination; // Destination network address
+    uint32_t               subnet_mask; // Subnet mask
+    int                    if_index;    // Outgoing interface name
+} route_entry_t;
 
 /**
  * Callback function for parsing individual netlink messages.
@@ -42,6 +50,9 @@ typedef struct {
  */
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
                                                const void *nl_msg, void *arg);
+
+static route_entry_t routing_table[MAX_NETWORK_IFACES][MAX_RULES_PER_IFACE] = {0};
+static int route_data_exists                                                =  0;
 
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
@@ -92,6 +103,26 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
     return UCS_OK;
 }
 
+static void
+ucs_netlink_analyze_route_info(void *arg)
+{
+    ucs_netlink_route_info_t *info = (ucs_netlink_route_info_t *)arg;
+    route_entry_t *iface_rules     = routing_table[info->if_index];
+    int rule_index                 = 0;
+
+    while ((rule_index < MAX_RULES_PER_IFACE) &&
+           (iface_rules[rule_index].if_index > 0)) {
+        if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
+                                 iface_rules[rule_index].destination,
+                                 iface_rules[rule_index].subnet_mask)) {
+            info->found = 1;
+            return;
+        }
+
+        rule_index++;
+    }
+}
+
 static ucs_status_t
 ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                          const void *protocol_header, size_t header_length,
@@ -104,6 +135,10 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     ucs_status_t status;
     struct iovec iov[2];
     size_t bytes_sent;
+
+    if (route_data_exists) {
+        goto analyze;
+    }
 
     status = ucs_netlink_socket_init(&netlink_fd, protocol);
     if (status != UCS_OK) {
@@ -152,10 +187,15 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     }
 
     status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
+    route_data_exists = 1;
 
-out:
     ucs_close_fd(&netlink_fd);
     ucs_free(recv_msg);
+
+analyze:
+    ucs_netlink_analyze_route_info(arg);
+
+out:
     return status;
 }
 
@@ -182,13 +222,27 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
     return UCS_OK;
 }
 
+static int get_next_empty_rule(route_entry_t *rule_list)
+{
+    int i;
+
+    for (i = 0; i < MAX_RULES_PER_IFACE; i++) {
+        if (rule_list[i].if_index == 0) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
 static ucs_status_t
 ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
                               void *arg)
 {
-    ucs_netlink_route_info_t *info = (ucs_netlink_route_info_t *)arg;
     int rule_iface;
     const void *dst_in_addr;
+    int rule_index;
+    route_entry_t *curr_rule;
 
     if (ucs_netlink_get_route_info(RTM_RTA((const struct rtmsg *)nl_msg),
                                    RTM_PAYLOAD(nlh), &rule_iface,
@@ -196,16 +250,15 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
         return UCS_INPROGRESS;
     }
 
-    if (rule_iface != info->if_index) {
+    rule_index = get_next_empty_rule(routing_table[rule_iface]);
+    curr_rule  = &(routing_table[rule_iface][rule_index]);
+    if (rule_index < 0) {
         return UCS_INPROGRESS;
     }
 
-    if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
-                             dst_in_addr,
-                             ((const struct rtmsg *)nl_msg)->rtm_dst_len)) {
-        info->found = 1;
-        return UCS_OK;
-    }
+    curr_rule->destination = dst_in_addr;
+    curr_rule->if_index    = rule_iface;
+    curr_rule->subnet_mask = ((const struct rtmsg *)nl_msg)->rtm_dst_len;
 
     return UCS_INPROGRESS;
 }

@@ -686,6 +686,9 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, int gid_index,
         uct_iface_fill_info_str_buf(params, "remote address %s is not routable",
                                     ucs_sockaddr_str(sa_remote, remote_str, 128));
         return 0;
+    } else {
+        ucs_debug("remote address %s is routable",
+                  ucs_sockaddr_str(sa_remote, remote_str, 128));
     }
 
     return 1;
