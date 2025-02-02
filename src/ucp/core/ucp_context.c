@@ -427,11 +427,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, dynamic_tl_switch_interval),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
-  {"DYNAMIC_TL_PROGRESS_FACTOR", "10",
+  {"DYNAMIC_TL_PROGRESS_FACTOR", "1000",
    "Number of usage tracker rounds performed for each progress operation. Must be\n"
    "non-zero value.",
    ucs_offsetof(ucp_context_config_t, dynamic_tl_progress_factor),
-   UCS_CONFIG_TYPE_TIME_UNITS},
+   UCS_CONFIG_TYPE_UINT},
 
   {"RESOLVE_REMOTE_EP_ID", "n",
    "Defines whether resolving remote endpoint ID is required or not when\n"
@@ -545,6 +545,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Possible values are: no_imm_cmpl, fast_cmpl, force_imm_cmpl, multi_send.",
    ucs_offsetof(ucp_context_config_t, extra_op_attr_flags),
    UCS_CONFIG_TYPE_BITMAP(ucp_extra_op_attr_flags_names)},
+
+  {"PRIO_EST_NUM_EPS", "20",
+   "Estimated number of prioritized endpoints. Does not affect semantics,\n"
+   "but only transport selection criteria and resulting performance.",
+   ucs_offsetof(ucp_context_config_t, prio_max_num_eps),
+   UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };

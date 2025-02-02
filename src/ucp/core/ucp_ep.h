@@ -166,8 +166,9 @@ enum {
     UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8),  /**< Endpoint requires an AM lane only */
     UCP_EP_INIT_KA_FROM_EXIST_LANES    = UCS_BIT(9),  /**< Use only existing lanes to create
                                                            keepalive lane */
-    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10)  /**< Endpoint allows selecting of auxiliary
+    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10), /**< Endpoint allows selecting of auxiliary
                                                            transports for AM lane */
+    UCP_EP_INIT_FLAG_PRIORITIZED       = UCS_BIT(11)  /**< Endpoint is prioritized */
 };
 
 
@@ -749,12 +750,21 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                      const ucp_ep_config_key_t *key2,
                                      ucp_lane_index_t lane2);
 
-void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_ep_config_key_t *key2,
+ucp_lane_index_t
+ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *old_key,
+                              const ucp_ep_config_key_t *new_key,
+                              ucp_lane_index_t old_lane);
+
+void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *old_key,
+                                   const ucp_ep_config_key_t *new_key,
                                    const ucp_ep_h ep,
                                    const ucp_unpacked_address_t *remote_address,
                                    const unsigned *addr_indices,
                                    ucp_lane_index_t *lane_map);
+
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
