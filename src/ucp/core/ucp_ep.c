@@ -685,8 +685,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     unsigned addr_indices[UCP_MAX_LANES];
 
     ucs_memory_type_for_each(mem_type) {
-        UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, access_mem_types,
-                                mem_access_tls);
+        ucp_context_memaccess_tl_bitmap(context, mem_type, 0, &mem_access_tls);
         if (UCP_MEM_IS_HOST(mem_type) ||
             UCS_STATIC_BITMAP_IS_ZERO(mem_access_tls)) {
             continue;

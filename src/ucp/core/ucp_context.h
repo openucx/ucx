@@ -565,23 +565,6 @@ typedef struct ucp_tl_iface_atomic_flags {
     ucs_assert(ucp_memory_type_detect(_context, _buffer, _length) == (_mem_type))
 
 
-#define UCP_CONTEXT_MEM_CAP_TLS(_context, _mem_type, _cap_field, _tl_bitmap) \
-    { \
-        const uct_md_attr_v2_t *md_attr; \
-        ucp_md_index_t md_index; \
-        ucp_rsc_index_t tl_id; \
-        \
-        UCS_STATIC_BITMAP_RESET_ALL(&(_tl_bitmap)); \
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &(_context)->tl_bitmap) { \
-            md_index = (_context)->tl_rscs[tl_id].md_index; \
-            md_attr  = &(_context)->tl_mds[md_index].attr; \
-            if (md_attr->_cap_field & UCS_BIT(_mem_type)) { \
-                UCS_STATIC_BITMAP_SET(&(_tl_bitmap), tl_id); \
-            } \
-        } \
-    }
-
-
 extern ucp_am_handler_t *ucp_am_handlers[];
 extern const char       *ucp_feature_str[];
 
@@ -737,9 +720,14 @@ ucp_context_usage_tracker_enabled(ucp_context_h context)
     return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
 }
 
-void
-ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
-                          ucp_tl_bitmap_t *tl_bitmap);
+void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
+                                     ucs_memory_type_t mem_type,
+                                     uint64_t md_reg_flags,
+                                     ucp_tl_bitmap_t *tl_bitmap);
+
+
+void ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
+                               ucp_tl_bitmap_t *tl_bitmap);
 
 
 void

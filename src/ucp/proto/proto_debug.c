@@ -18,6 +18,9 @@
 #include <ctype.h>
 
 
+/* Maximal length of perf node name */
+#define UCP_PROTO_PERF_NAME_MAX 32
+
 /* Performance node data entry */
 typedef struct {
     const char        *name;
@@ -33,7 +36,7 @@ struct ucp_proto_perf_node {
     ucp_proto_perf_node_type_t                    type;
 
     /* Name of the range */
-    char                                          name[UCP_PROTO_DESC_STR_MAX];
+    char                                          name[UCP_PROTO_PERF_NAME_MAX];
 
     /* Description of the range */
     char                                          desc[UCP_PROTO_DESC_STR_MAX];

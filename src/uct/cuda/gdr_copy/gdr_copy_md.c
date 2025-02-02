@@ -326,9 +326,13 @@ out:
 static uct_md_ops_t uct_gdr_copy_md_ops = {
     .close              = uct_gdr_copy_md_close,
     .query              = uct_gdr_copy_md_query,
-    .mkey_pack          = uct_gdr_copy_mkey_pack,
+    .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+    .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_gdr_copy_mem_reg,
     .mem_dereg          = uct_gdr_copy_mem_dereg,
+    .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+    .mkey_pack          = uct_gdr_copy_mkey_pack,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
 };
@@ -382,9 +386,14 @@ uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md,
 static uct_md_ops_t uct_gdr_copy_md_rcache_ops = {
     .close              = uct_gdr_copy_md_close,
     .query              = uct_gdr_copy_md_query,
-    .mkey_pack          = uct_gdr_copy_mkey_pack,
+    .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+    .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_gdr_copy_mem_rcache_reg,
     .mem_dereg          = uct_gdr_copy_mem_rcache_dereg,
+    .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+    .mkey_pack          = uct_gdr_copy_mkey_pack,
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
 };
 

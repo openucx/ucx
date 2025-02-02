@@ -245,11 +245,12 @@ static uct_md_ops_t md_ops = {
     .query              = uct_ze_copy_md_query,
     .mem_alloc          = uct_ze_copy_mem_alloc,
     .mem_free           = uct_ze_copy_mem_free,
-    .mkey_pack          = ucs_empty_function_return_success,
+    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_ze_copy_mem_reg,
     .mem_dereg          = ucs_empty_function_return_success,
-    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .mem_query          = uct_ze_copy_md_mem_query,
+    .mkey_pack          = ucs_empty_function_return_success,
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_ze_copy_md_detect_memory_type,
 };
 

@@ -2571,6 +2571,31 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
     ucs_memory_info_set_host(mem_info);
 }
 
+void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
+                                     ucs_memory_type_t mem_type,
+                                     uint64_t md_reg_flags,
+                                     ucp_tl_bitmap_t *tl_bitmap)
+{
+    const uct_md_attr_v2_t *md_attr;
+    ucp_rsc_index_t rsc_index;
+    ucp_md_index_t md_index;
+    uint64_t mem_types;
+
+    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+        md_index = context->tl_rscs[rsc_index].md_index;
+        md_attr  = &context->tl_mds[md_index].attr;
+        if (md_attr->flags & md_reg_flags) {
+            mem_types = md_attr->reg_mem_types;
+        } else {
+            mem_types = md_attr->access_mem_types;
+        }
+        if (mem_types & UCS_BIT(mem_type)) {
+            UCS_STATIC_BITMAP_SET(tl_bitmap, rsc_index);
+        }
+    }
+}
+
 void
 ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
                           ucp_tl_bitmap_t *tl_bitmap)
