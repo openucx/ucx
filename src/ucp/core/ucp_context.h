@@ -649,12 +649,6 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
     return (max_num_eps >= (size_t)context->config.est_num_eps);
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_context_usage_tracker_enabled(ucp_context_h context)
-{
-    return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
-}
-
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency(ucp_context_h context, const ucs_linear_func_t *latency)
 {
@@ -733,6 +727,12 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_usage_tracker_enabled(ucp_context_h context)
+{
+    return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
 }
 
 void
