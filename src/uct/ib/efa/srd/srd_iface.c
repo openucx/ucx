@@ -375,8 +375,10 @@ uct_srd_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
 }
 
 static uct_iface_ops_t uct_srd_iface_tl_ops = {
-    .ep_flush                 = ucs_empty_function_return_unsupported,
-    .ep_fence                 = ucs_empty_function_return_unsupported,
+    .ep_flush                 = (uct_ep_flush_func_t)
+        ucs_empty_function_return_unsupported,
+    .ep_fence                 = (uct_ep_fence_func_t)
+        ucs_empty_function_return_unsupported,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_srd_ep_t),
     .ep_get_address           = uct_srd_ep_get_address,
     .ep_connect_to_ep         = uct_base_ep_connect_to_ep,
