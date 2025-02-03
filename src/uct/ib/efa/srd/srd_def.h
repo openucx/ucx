@@ -31,8 +31,8 @@ typedef struct uct_srd_ep_addr {
 
 
 typedef struct uct_srd_ep_peer_address {
-    uint32_t             dest_qpn;
     struct ibv_ah        *ah;
+    uint32_t             dest_qpn;
 } uct_srd_ep_peer_address_t;
 
 #endif

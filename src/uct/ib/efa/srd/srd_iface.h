@@ -61,9 +61,9 @@ void uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
 void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
 
 ucs_status_t uct_srd_iface_unpack_peer_address(uct_srd_iface_t *iface,
-                                  const uct_ib_address_t *ib_addr,
-                                  const uct_srd_iface_addr_t *if_addr,
-                                  int path_index, void *address_p);
+                                               const uct_ib_address_t *ib_addr,
+                                               const uct_srd_iface_addr_t *if_addr,
+                                               int path_index, void *address_p);
 
 END_C_DECLS
 

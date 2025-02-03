@@ -19,14 +19,6 @@ static void uct_srd_ep_set_dest_ep_id(uct_srd_ep_t *ep, uint32_t dest_id)
     ep->flags     |= UCT_SRD_EP_FLAG_CONNECTED;
 }
 
-static void uct_srd_ep_reset(uct_srd_ep_t *ep)
-{
-    ep->tx.psn        = UCT_SRD_INITIAL_PSN;
-    ep->rx_creq_count = 0;
-    ucs_frag_list_init(ep->tx.psn - 1, &ep->rx.ooo_pkts,
-                       -1 UCS_STATS_ARG(ep->super.stats));
-}
-
 static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
 {
     uct_srd_iface_t *iface = ucs_derived_of(params->iface, uct_srd_iface_t);
@@ -34,10 +26,13 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     memset(self, 0, sizeof(*self));
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    self->dest_ep_id = UCT_SRD_EP_NULL_ID;
-    self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->dest_ep_id    = UCT_SRD_EP_NULL_ID;
+    self->path_index    = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->tx.psn        = UCT_SRD_INITIAL_PSN;
+    self->rx_creq_count = 0;
+    ucs_frag_list_init(self->tx.psn - 1, &self->rx.ooo_pkts,
+                       -1 UCS_STATS_ARG(self->super.stats));
 
-    uct_srd_ep_reset(self);
     uct_srd_iface_add_ep(iface, self);
     ucs_debug("created ep ep=%p iface=%p ep_id=%d", self, iface, self->ep_id);
 
@@ -48,6 +43,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
 {
     uct_srd_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                             uct_srd_iface_t);
+
     uct_srd_iface_remove_ep(iface, self);
     ucs_frag_list_cleanup(&self->rx.ooo_pkts);
 }
@@ -73,8 +69,6 @@ uct_srd_ep_connect_to_ep_v2(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
     ucs_trace_func("");
 
     uct_srd_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ep_addr->ep_id));
-
-    uct_srd_ep_reset(ep);
 
     ucs_debug(UCT_IB_IFACE_FMT " slid %d qpn 0x%x epid %u connected to %s "
                                "qpn 0x%x epid %u",
@@ -131,8 +125,6 @@ uct_srd_ep_create_connected(const uct_ep_params_t *ep_params,
                                                   ep_params->dev_addr;
     const uct_srd_iface_addr_t *if_addr = (const uct_srd_iface_addr_t*)
                                                   ep_params->iface_addr;
-    int path_index                      = UCT_EP_PARAMS_GET_PATH_INDEX(
-                                                                   ep_params);
     /* FIXME: Add CEP connection management */
     static uct_srd_ep_conn_sn_t conn_sn;
     uct_ep_params_t params;
@@ -147,7 +139,7 @@ uct_srd_ep_create_connected(const uct_ep_params_t *ep_params,
     params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
                         UCT_EP_PARAM_FIELD_PATH_INDEX;
     params.iface      = &iface->super.super.super;
-    params.path_index = path_index;
+    params.path_index = UCT_EP_PARAMS_GET_PATH_INDEX(ep_params);
 
     status = uct_ep_create(&params, &new_ep_h);
     if (status != UCS_OK) {

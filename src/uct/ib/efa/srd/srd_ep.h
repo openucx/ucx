@@ -23,25 +23,25 @@ enum {
 typedef uint32_t uct_srd_ep_conn_sn_t;
 
 typedef struct uct_srd_ep {
-    uct_base_ep_t                     super;
-    uct_srd_ep_conn_sn_t              conn_sn;
+    uct_base_ep_t             super;
+    uct_srd_ep_conn_sn_t      conn_sn;
 
-    uint16_t                          flags;
-    uint32_t                          ep_id;
-    uint32_t                          dest_ep_id;
-    uint8_t                           path_index;
-    uct_srd_ep_peer_address_t         peer_address;
-
-    struct {
-        uct_srd_psn_t                 psn;     /* Next PSN to send */
-    } tx;
-    struct {
-        ucs_frag_list_t               ooo_pkts; /* Out of order packets that
-                                                   can not be processed yet */
-    } rx;
+    uint32_t                  ep_id;
+    uint32_t                  dest_ep_id;
+    uint8_t                   path_index;
 
     /* connection sequence number. assigned in connect_to_iface() */
-    uint8_t                           rx_creq_count;
+    uint8_t                   rx_creq_count;
+    uint16_t                  flags;
+    uct_srd_ep_peer_address_t peer_address;
+
+    struct {
+        ucs_frag_list_t       ooo_pkts; /* Out of order packets that
+                                           can not be processed yet */
+    } rx;
+    struct {
+        uct_srd_psn_t         psn;      /* Next PSN to send */
+    } tx;
 } uct_srd_ep_t;
 
 
