@@ -344,16 +344,13 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
     return flags;
 }
 
-static int ucp_memh_is_gva_mr(ucp_context_h context, ucp_mem_h memh, int md_index)
+static ucp_gva_mr_type_t get_gva_type(unsigned uct_flags)
 {
-    int gva_index;
-    for (gva_index = 0; gva_index < UCP_GVA_MR_TYPE_LAST; gva_index++) {
-        if (memh->uct[md_index] == context->tl_mds[md_index].gva_mrs[gva_index]) {
-            return 1;
-        }
-    }
-
-    return 0;
+    return (uct_flags & (UCT_MD_MEM_ACCESS_LOCAL_WRITE |
+                         UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                         UCT_MD_MEM_ACCESS_REMOTE_ATOMIC)) ?
+            UCP_GVA_MR_TYPE_READ_WRITE :
+            UCP_GVA_MR_TYPE_READ_ONLY;
 }
 
 static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
@@ -369,7 +366,8 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
                       UCT_MD_MEM_DEREG_FIELD_COMPLETION,
         .comp       = &comp
     };
-    ucp_md_index_t md_index;
+    ucp_md_index_t    md_index;
+    ucp_gva_mr_type_t mr_index;
     ucs_status_t status;
 
     /* Unregister from all memory domains */
@@ -377,7 +375,8 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         ucs_assertv(md_index != memh->alloc_md_index,
                     "memh %p: md_index %u alloc_md_index %u", memh, md_index,
                     memh->alloc_md_index);
-        if (ucp_memh_is_gva_mr(context, memh, md_index)) {
+        mr_index = get_gva_type(memh->uct_flags);
+        if (memh->uct[md_index] == context->tl_mds[md_index].gva_mrs[mr_index]) {
             continue;
         }
 
@@ -507,16 +506,10 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
         return UCS_OK;
     }
 
-    if (uct_flags & (UCT_MD_MEM_ACCESS_LOCAL_WRITE |
-                     UCT_MD_MEM_ACCESS_REMOTE_PUT |
-                     UCT_MD_MEM_ACCESS_REMOTE_ATOMIC)) {
-        gva_mr_index = UCP_GVA_MR_TYPE_READ_WRITE;
-        uct_flags   |= UCT_MD_MEM_ACCESS_ALL;
-    } else {
-        gva_mr_index = UCP_GVA_MR_TYPE_READ_ONLY;
-        uct_flags   |= UCT_MD_MEM_ACCESS_LOCAL_READ |
-                       UCT_MD_MEM_ACCESS_REMOTE_GET;
-    }
+    gva_mr_index = get_gva_type(uct_flags);
+    uct_flags   |= (gva_mr_index == UCP_GVA_MR_TYPE_READ_WRITE) ?
+                   UCT_MD_MEM_ACCESS_ALL :
+                   UCT_MD_MEM_ACCESS_LOCAL_READ | UCT_MD_MEM_ACCESS_REMOTE_GET;
 
     params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
     params.flags      = UCT_MD_MEM_GVA | uct_flags;

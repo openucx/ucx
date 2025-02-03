@@ -276,11 +276,14 @@ typedef struct ucp_tl_cmpt {
 } ucp_tl_cmpt_t;
 
 
-enum {
+/**
+ * Global VA MR type
+ */
+typedef enum ucp_gva_mr_type {
     UCP_GVA_MR_TYPE_READ_ONLY,
     UCP_GVA_MR_TYPE_READ_WRITE,
     UCP_GVA_MR_TYPE_LAST,
-};
+} ucp_gva_mr_type_t;
 
 
 /**
