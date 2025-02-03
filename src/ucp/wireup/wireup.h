@@ -47,6 +47,10 @@ enum {
     UCP_WIREUP_MSG_ACK,
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
+
+    UCP_WIREUP_MSG_LANE_ADDR_REQUEST,
+    UCP_WIREUP_MSG_LANE_ADDR_REPLY,
+
     UCP_WIREUP_MSG_LAST
 };
 
@@ -145,6 +149,9 @@ typedef struct {
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);
+
+ucs_status_t ucp_wireup_send_request_addr_lane(ucp_ep_h ep,
+                                               ucp_lane_index_t lane);
 
 ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane);
 
