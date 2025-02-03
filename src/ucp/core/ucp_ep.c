@@ -1826,11 +1826,13 @@ out:
 
 ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 {
+    uct_ep_h uct_ep_lane;
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-        if ((uct_ep == ucp_ep_get_lane(ucp_ep, lane)) ||
-            ucp_wireup_ep_is_owner(ucp_ep_get_lane(ucp_ep, lane), uct_ep)) {
+        uct_ep_lane = ucp_ep_get_lane_raw(ucp_ep, lane);
+        if ((uct_ep == uct_ep_lane) ||
+            ucp_wireup_ep_is_owner(uct_ep_lane, uct_ep)) {
             return lane;
         }
     }
