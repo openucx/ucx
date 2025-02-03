@@ -1,14 +1,18 @@
+Aboorva Devarajan <aboorvad@linux.ibm.com>
 Akshay Venkatesh <akvenkatesh@nvidia.com>
+Alastair McKinstry <mckinstry@debian.org>
 Aleksey Senin <alekseys@nvidia.com>
 Alex Margolin <alex.margolin@huawei.com>
 Alex Mikheev <alexm@mellanox.com>
 Alexey Rivkin <arivkin@nvidia.com>
 Alina Sklarevich <alinas@mellanox.com>
+Alma Mastbaum <amastbaum@nvidia.com>
 Anatoly Vildemanov <anatolyv@nvidia.com>
 Andrey Maslennikov <andreyma@mellanox.com>
 Artem Polyakov <artemp@nvidia.com>
 Artem Ryabov <artemry@nvidia.com>
 Artemy Kovalyov <artemyko@mellanox.com>
+Arun Chandran <Arun.Chandran@amd.com>
 Aurelien Bouteiller <bouteill@icl.utk.edu>
 Bin Lei <binl@mellanox.com>
 Boris Karasev <boriska@nvidia.com>
@@ -70,6 +74,7 @@ Pavan Balaji <balaji@anl.gov>
 Pavel Shamis (Pasha) <pasharesearch@gmail.com>
 Peter Andreas Entschev <peter@entschev.com>
 Peter Rudenko <peterr@mellanox.com>
+Peter-Jan Gootzen <pgootzen@nvidia.com>
 Qiang Yu <Qiang.Yu@amd.com>
 Raul Akhmetshin <rakhmetshin@nvidia.com>
 Robert Dietrich <rdietrich@nvidia.com>
@@ -96,9 +101,11 @@ Valentin Petrov <valentinp@mellanox.com>
 Wenbin Lu <wenbin.lu@stonybrook.edu>
 Xin Zhao <xinz@mellanox.com>
 Xu Yifeng <yifeng.xyf@alibaba-inc.com>
+Yiltan Hassan Temucin <yiltan.temucin@amd.com>
 Yossi Itigin <yosefe@nvidia.com>
 Yuriy Shestakov <yuriis@mellanox.com>
 Zhu Yanjun <yanjunz@mellanox.com>
+Zihao Zhao <zizhao@nvidia.com>
 
 In addition we would like to acknowledge the following members of UCX community
 for their participation in annual face-to-face meeting, design discussions, and

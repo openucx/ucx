@@ -384,7 +384,7 @@ static uct_iface_internal_ops_t uct_self_iface_internal_ops = {
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_self_iface_is_reachable_v2,
     .ep_is_connected       = uct_base_ep_is_connected
 };
@@ -404,19 +404,19 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_atomic32_fetch        = uct_sm_ep_atomic32_fetch,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_check                 = ucs_empty_function_return_success,
-    .ep_pending_add           = ucs_empty_function_return_busy,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_check                 = (uct_ep_check_func_t)ucs_empty_function_return_success,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_self_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_self_ep_t),
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = ucs_empty_function_return_zero,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
+    .iface_progress           = (uct_iface_progress_func_t)ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_self_iface_t),
     .iface_query              = uct_self_iface_query,
-    .iface_get_device_address = ucs_empty_function_return_success,
+    .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
     .iface_get_address        = uct_self_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable
 };
@@ -440,13 +440,13 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
     uct_self_md_config_t *md_config = ucs_derived_of(config,
                                                      uct_self_md_config_t);
     static uct_md_ops_t md_ops = {
-        .close              = ucs_empty_function,
+        .close              = (uct_md_close_func_t)ucs_empty_function,
         .query              = uct_self_md_query,
-        .mkey_pack          = ucs_empty_function_return_success,
+        .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
         .mem_reg            = uct_md_dummy_mem_reg,
         .mem_dereg          = uct_md_dummy_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
-        .detect_memory_type = ucs_empty_function_return_unsupported
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     };
 
     static uct_self_md_t md;
@@ -475,10 +475,10 @@ static ucs_status_t uct_self_md_rkey_unpack(uct_component_t *component,
 static uct_component_t uct_self_component = {
     .query_md_resources = uct_md_query_single_md_resource,
     .md_open            = uct_self_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_self_md_rkey_unpack,
     .rkey_ptr           = uct_sm_rkey_ptr,
-    .rkey_release       = ucs_empty_function_return_success,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = UCT_SELF_NAME,
     .md_config          = {
