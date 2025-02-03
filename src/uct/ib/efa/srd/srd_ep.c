@@ -11,6 +11,8 @@
 #include "srd_ep.h"
 #include "srd_iface.h"
 
+#include <ucs/arch/atomic.h>
+
 
 static void uct_srd_ep_set_dest_ep_id(uct_srd_ep_t *ep, uint32_t dest_id)
 {
@@ -115,6 +117,9 @@ ucs_status_t uct_srd_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     return UCS_OK;
 }
 
+/* FIXME: Replace by CEP connection management */
+static uint64_t uct_srd_ep_conn_sn;
+
 static ucs_status_t
 uct_srd_ep_create_connected(const uct_ep_params_t *ep_params,
                             uct_ep_h *new_ep_p)
@@ -125,15 +130,12 @@ uct_srd_ep_create_connected(const uct_ep_params_t *ep_params,
                                                   ep_params->dev_addr;
     const uct_srd_iface_addr_t *if_addr = (const uct_srd_iface_addr_t*)
                                                   ep_params->iface_addr;
-    /* FIXME: Add CEP connection management */
-    static uct_srd_ep_conn_sn_t conn_sn;
     uct_ep_params_t params;
     ucs_status_t status;
     uct_srd_ep_t *ep;
     uct_ep_h new_ep_h;
 
     *new_ep_p = NULL;
-    conn_sn++;
 
     /* First create endpoint */
     params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
@@ -141,13 +143,13 @@ uct_srd_ep_create_connected(const uct_ep_params_t *ep_params,
     params.iface      = &iface->super.super.super;
     params.path_index = UCT_EP_PARAMS_GET_PATH_INDEX(ep_params);
 
-    status = uct_ep_create(&params, &new_ep_h);
+    status = uct_srd_ep_create(&params, &new_ep_h);
     if (status != UCS_OK) {
         return status;
     }
 
     ep          = ucs_derived_of(new_ep_h, uct_srd_ep_t);
-    ep->conn_sn = conn_sn;
+    ep->conn_sn = ucs_atomic_fadd64(&uct_srd_ep_conn_sn, 1);
 
     /* Connect it to the interface */
     status = uct_srd_ep_connect_to_iface(ep, ib_addr, if_addr);

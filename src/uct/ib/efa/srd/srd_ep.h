@@ -11,13 +11,12 @@
 
 
 #define UCT_SRD_INITIAL_PSN 1
-#define UCT_SRD_EP_NULL_ID  ((1 << 24) - 1)
+#define UCT_SRD_EP_NULL_ID  UCS_MASK(24)
 
 enum {
-    UCT_SRD_EP_FLAG_DISCONNECTED      = UCS_BIT(0),  /* EP was disconnected */
-    UCT_SRD_EP_FLAG_PRIVATE           = UCS_BIT(1),  /* EP was created as internal */
-    UCT_SRD_EP_FLAG_HAS_PENDING       = UCS_BIT(2),  /* EP has some pending requests */
-    UCT_SRD_EP_FLAG_CONNECTED         = UCS_BIT(3),  /* EP is connected to the peer */
+    UCT_SRD_EP_FLAG_CONNECTED    = UCS_BIT(0),  /* EP is connected to the peer */
+    UCT_SRD_EP_FLAG_PRIVATE      = UCS_BIT(1),  /* EP was created as internal */
+    UCT_SRD_EP_FLAG_HAS_PENDING  = UCS_BIT(2),  /* EP has some pending requests */
 };
 
 typedef uint32_t uct_srd_ep_conn_sn_t;
