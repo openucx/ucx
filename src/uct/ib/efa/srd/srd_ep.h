@@ -44,13 +44,11 @@ typedef struct uct_srd_ep {
 } uct_srd_ep_t;
 
 
-ucs_status_t uct_srd_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
 ucs_status_t uct_srd_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 ucs_status_t
 uct_srd_ep_connect_to_ep_v2(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
                             const uct_ep_addr_t *uct_ep_addr,
                             const uct_ep_connect_to_ep_params_t *params);
-void uct_srd_ep_destroy(uct_ep_h ep);
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_srd_ep_t, uct_ep_t, const uct_ep_params_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_srd_ep_t, uct_ep_t);
