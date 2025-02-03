@@ -2013,10 +2013,10 @@ static int ucs_config_parser_is_default(const char *env_prefix,
 }
 
 static void ucs_config_parser_print_field(
-     FILE *stream, const void *opts, const char *env_prefix,
-     ucs_list_link_t *prefix_list, const char *name,
-     const ucs_config_field_t *field, unsigned long flags, const char *title,
-     size_t *printed, const char *filter, const char *docstr, ...)
+        FILE *stream, const void *opts, const char *env_prefix,
+        ucs_list_link_t *prefix_list, const char *name,
+        const ucs_config_field_t *field, unsigned long flags, const char *title,
+        size_t *printed, const char *filter, const char *docstr, ...)
 {
     char name_buf[128]   = {0};
     char value_buf[128]  = {0};
@@ -2028,7 +2028,8 @@ static void ucs_config_parser_print_field(
     ucs_assert(!ucs_list_is_empty(prefix_list));
     head = ucs_list_head(prefix_list, ucs_config_parser_prefix_t, list);
 
-    snprintf(name_buf, sizeof(name_buf), "%s%s%s", env_prefix, head->prefix, name);
+    snprintf(name_buf, sizeof(name_buf), "%s%s%s", env_prefix, head->prefix,
+             name);
 
     if ((filter != NULL) && (strstr(name_buf, filter) == NULL)) {
         return;
@@ -2106,7 +2107,7 @@ static void ucs_config_parser_print_field(
 static void ucs_config_parser_print_opts_recurs(
         FILE *stream, const void *opts, const ucs_config_field_t *fields,
         unsigned flags, const char *prefix, ucs_list_link_t *prefix_list,
-        const char* title, size_t *printed, const char *filter)
+        const char *title, size_t *printed, const char *filter)
 {
     const ucs_config_field_t *field, *aliased_field;
     ucs_config_parser_prefix_t *head;

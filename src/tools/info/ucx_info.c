@@ -58,7 +58,8 @@ static void usage()
     printf("  -s                   Show system information\n");
     printf("  -c                   Show UCX configuration\n");
     printf("  -C                   Comment-out default configuration values\n");
-    printf("  -F <string>          Only show configuration values whose name contains 'string'\n" );
+    printf("  -F <string>          Only show configuration values whose name "
+           "contains 'string'\n" );
     printf("  -a                   Show also hidden configuration\n");
     printf("  -f                   Display fully decorated output\n");
     printf("\nUCP information (-u is required):\n");
@@ -113,7 +114,6 @@ int main(int argc, char **argv)
                                            UCP_FEATURE_AMO64 | UCP_FEATURE_RMA |
                                            UCP_FEATURE_TAG | UCP_FEATURE_AM;
     char *ip_addr = NULL;
-    const char* cfg_filter = NULL;
     sa_family_t ip_addr_family;
     ucs_config_print_flags_t print_flags;
     ucp_ep_params_t ucp_ep_params;
@@ -124,6 +124,7 @@ int main(int argc, char **argv)
     size_t ucp_num_ppn;
     unsigned print_opts;
     char *tl_name, *mem_spec;
+    const char *cfg_filter;
     const char *f;
     int c;
 
@@ -134,12 +135,14 @@ int main(int argc, char **argv)
     ucp_num_eps              = 1;
     ucp_num_ppn              = 1;
     mem_spec                 = NULL;
+    cfg_filter               = NULL;
     dev_type_bitmap          = UINT_MAX;
     proc_placement           = PROCESS_PLACEMENT_SELF;
     ucp_ep_params.field_mask = 0;
     ip_addr_family           = AF_INET;
 
-    while ((c = getopt(argc, argv, "fahvc6ydbswpeCF:t:n:u:D:P:m:N:A:TM")) != -1) {
+    while ((c = getopt(argc, argv, "fahvc6ydbswpeCF:t:n:u:D:P:m:N:A:TM")) !=
+           -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
