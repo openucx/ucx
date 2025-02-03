@@ -1889,6 +1889,19 @@ public:
     }
 
 protected:
+    static ucs_status_t am_recv_callback(void *arg, const void *header,
+                                         size_t header_length,
+                                         void *data, size_t length,
+                                         const ucp_am_recv_param_t *param)
+    {
+        test_ucp_wireup_ondemand *self =
+                reinterpret_cast<test_ucp_wireup_ondemand*>(arg);
+
+        EXPECT_EQ(1ul, header_length);
+        self->m_am_recvd = true;
+        return UCS_OK;
+    }
+
     ucp_ep_config_key_t& ep_cfg_key(ucp_ep_h ep) {
         return ucp_ep_config(ep)->key;
     }
@@ -1933,12 +1946,29 @@ protected:
         }
     }
 
+    bool m_am_recvd = false;
     lanes_set_t m_used_lanes;
     lanes_set_t m_reused_lanes;
 };
 
 UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
            "IB_NUM_PATHS?=6", "MAX_RMA_LANES?=6") {
+    ucp_request_param_t params = { 0 };
+    const size_t msg_size = 1 * UCS_GBYTE;
+    mem_buffer sbuf(msg_size, UCS_MEMORY_TYPE_HOST, 0);
+    mapped_buffer rbuf(msg_size, receiver());
+    const unsigned ucp_am_id_test = 1;
+
+    ucp_am_handler_param_t am_handler_params = {
+        .field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                      UCP_AM_HANDLER_PARAM_FIELD_CB |
+                      UCP_AM_HANDLER_PARAM_FIELD_ARG,
+        .id         = ucp_am_id_test,
+        .cb         = am_recv_callback,
+        .arg        = this
+    };
+    ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(receiver().worker(),
+                                                 &am_handler_params));
     sender().connect(&receiver(), get_ep_params());
 
     // checks before wireup
@@ -1964,6 +1994,12 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
     // complete first step of wireup
     flush_workers();
 
+    // fast lanes must be initialized
+    void *req = ucp_am_send_nbx(ep, ucp_am_id_test, sbuf.ptr(), 1, NULL, 0,
+                                &params);
+    ASSERT_UCS_OK(request_wait(req));
+    wait_for_value(&m_am_recvd, true);
+
     //check lanes state is the same
     check_lanes_arr_value(ep_cfg_key(ep).am_bw_lanes, ep_cfg_key(ep).num_lanes,
                           "am_bw", false);
@@ -1971,15 +2007,8 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
                           "rma_bw", false);
 
     // do RMA, then all rma_bw lanes must be initialized
-    const size_t msg_size = 1 * UCS_GBYTE;
-    mem_buffer    sbuf(msg_size, UCS_MEMORY_TYPE_HOST, 0);
-    mapped_buffer rbuf(msg_size, receiver());
-
-    ucp_request_param_t params;
-    params.op_attr_mask = 0;
-    void *req = ucp_put_nbx(ep, sbuf.ptr(), sbuf.size(),
-                            (uintptr_t)rbuf.ptr(),
-                            rbuf.rkey(sender()), &params);
+    req = ucp_put_nbx(ep, sbuf.ptr(), sbuf.size(), (uintptr_t)rbuf.ptr(),
+                      rbuf.rkey(sender()), &params);
     ASSERT_UCS_OK(request_wait(req));
     check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, ep_cfg_key(ep).num_lanes,
                           "rma_bw", true);
