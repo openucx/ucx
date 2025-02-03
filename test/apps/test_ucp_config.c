@@ -32,7 +32,6 @@ static void apply_config_param(char *str, ucp_config_t *config)
 
 int main(int argc, char **argv)
 {
-    const char *args[] = { NULL };
     ucp_config_t *config;
     ucp_params_t params;
     ucp_context_h context;
@@ -88,7 +87,7 @@ int main(int argc, char **argv)
     ucp_context_print_info(context, stdout);
     ucs_config_parser_print_all_opts(stdout, UCS_DEFAULT_ENV_PREFIX,
                                      UCS_CONFIG_PRINT_CONFIG,
-                                     &ucs_config_global_list, args);
+                                     &ucs_config_global_list, NULL);
     ucp_worker_destroy(worker);
     ret = 0;
 

@@ -56,10 +56,11 @@ static void usage()
     printf("  -b                   Show build configuration\n");
     printf("  -y                   Show type and structures information\n");
     printf("  -s                   Show system information\n");
-    printf("  -c [filter]          Show UCX configuration\n");
+    printf("  -c                   Show UCX configuration\n");
     printf("  -C                   Comment-out default configuration values\n");
+    printf("  -F <string>          Only show configuration values whose name contains 'string'\n" );
     printf("  -a                   Show also hidden configuration\n");
-    printf("  -f [filter]          Display fully decorated output\n");
+    printf("  -f                   Display fully decorated output\n");
     printf("\nUCP information (-u is required):\n");
     printf("  -p                   Show UCP context information\n");
     printf("  -w                   Show UCP worker information\n");
@@ -112,6 +113,7 @@ int main(int argc, char **argv)
                                            UCP_FEATURE_AMO64 | UCP_FEATURE_RMA |
                                            UCP_FEATURE_TAG | UCP_FEATURE_AM;
     char *ip_addr = NULL;
+    const char* cfg_filter = NULL;
     sa_family_t ip_addr_family;
     ucs_config_print_flags_t print_flags;
     ucp_ep_params_t ucp_ep_params;
@@ -137,7 +139,7 @@ int main(int argc, char **argv)
     ucp_ep_params.field_mask = 0;
     ip_addr_family           = AF_INET;
 
-    while ((c = getopt(argc, argv, "fahvc6ydbswpeCt:n:u:D:P:m:N:A:TM")) != -1) {
+    while ((c = getopt(argc, argv, "fahvc6ydbswpeCF:t:n:u:D:P:m:N:A:TM")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -150,6 +152,9 @@ int main(int argc, char **argv)
             break;
         case 'C':
             print_flags |= UCS_CONFIG_PRINT_COMMENT_DEFAULT;
+            break;
+        case 'F':
+            cfg_filter = optarg;
             break;
         case 'v':
             print_opts |= PRINT_VERSION;
@@ -305,7 +310,7 @@ int main(int argc, char **argv)
     if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
         ucs_config_parser_print_all_opts(stdout, UCS_DEFAULT_ENV_PREFIX,
                                          print_flags, &ucs_config_global_list,
-                                         (const char**)(argv + optind));
+                                         cfg_filter);
     }
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP|PRINT_MEM_MAP)) {

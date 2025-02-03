@@ -362,7 +362,9 @@ protected:
             return &m_opts;
         }
 
-        std::string dump(ucs_config_print_flags_t flags, const char **filters = nullptr) const {
+        std::string dump(ucs_config_print_flags_t flags,
+                         const char *filter = nullptr) const
+        {
             char *dump_data = nullptr;
             size_t dump_size;
             char line_buf[1024];
@@ -370,7 +372,7 @@ protected:
 
             FILE *file = open_memstream(&dump_data, &dump_size);
             ucs_config_parser_print_opts(file, "", &m_opts, car_opts_table, nullptr,
-                                         UCS_DEFAULT_ENV_PREFIX, flags, filters);
+                                         UCS_DEFAULT_ENV_PREFIX, flags, filter);
             fseek(file, 0, SEEK_SET);
 
             while (fgets(line_buf, sizeof(line_buf), file)) {
@@ -426,9 +428,9 @@ protected:
         /* Dump configuration to a memory buffer */
         dump_data = NULL;
         FILE *file = open_memstream(&dump_data, &dump_size);
-        ucs_config_parser_print_opts(file, "", *opts, car_opts_table,
-                                     prefix, UCS_DEFAULT_ENV_PREFIX,
-                                     (ucs_config_print_flags_t)flags, NULL);
+        ucs_config_parser_print_opts(file, "", *opts, car_opts_table, prefix,
+                                     UCS_DEFAULT_ENV_PREFIX,
+                                     (ucs_config_print_flags_t)flags, nullptr);
 
         /* Sanity check - all lines begin with UCS_ */
         unsigned num_lines = 0;
@@ -936,8 +938,8 @@ UCS_TEST_F(test_config, test_config_dump_filtered) {
     car_opts opts(UCS_DEFAULT_ENV_PREFIX, nullptr);
 
     const std::string dump1 = opts.dump(UCS_CONFIG_PRINT_CONFIG);
-    const char* filters[] = { "TIME_", nullptr };
-    const std::string dump2 = opts.dump(UCS_CONFIG_PRINT_CONFIG, filters);
+    const char filter[]   = "TIME_";
+    const std::string dump2 = opts.dump(UCS_CONFIG_PRINT_CONFIG, filter);
 
     EXPECT_NE(dump1.size(), dump2.size());
     EXPECT_NE(dump1.find("TIME_"), std::string::npos);
