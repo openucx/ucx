@@ -416,9 +416,7 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
 {
     uct_cuda_ipc_memh_t *memh;
 
-    UCT_CHECK_PARAM((params == NULL) ||
-                    UCT_MD_MEM_REG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL) == NULL,
-                    "CUDA IPC does not support derived memory handles");
+    UCT_CHECK_NOT_DERIVED_MEMH(params, "cuda_ipc_md");
 
     memh = ucs_malloc(sizeof(*memh), "uct_cuda_ipc_memh_t");
     if (NULL == memh) {

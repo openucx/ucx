@@ -801,7 +801,7 @@ uct_ib_mlx5_devx_memh_clone(uct_ib_mlx5_md_t *md,
                             const uct_ib_mlx5_devx_mem_t *src,
                             uct_ib_mlx5_devx_mem_t **memh_p)
 {
-    size_t mr_size = src->super.flags & UCT_IB_MEM_IMPORTED ?
+    size_t mr_size = (src->super.flags & UCT_IB_MEM_IMPORTED) ?
                             0 : sizeof(src->mrs[0]);
     uct_ib_mem_t *ib_memh;
     ucs_status_t status;
@@ -2518,7 +2518,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     ksm_atomic = 0;
     if (md->flags & UCT_IB_MLX5_MD_FLAG_KSM) {
-        md->super.cap_flags |= UCT_MD_FLAG_DERIVED;
+        md->super.cap_flags |= UCT_MD_FLAG_REG_DERIVED;
         md->super.cap_flags |= UCT_MD_FLAG_INVALIDATE_RMA;
 
         if (md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS) {
