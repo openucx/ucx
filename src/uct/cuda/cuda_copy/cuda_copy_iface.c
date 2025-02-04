@@ -49,7 +49,7 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t)(uct_iface_t*);
 
 
-KHASH_IMPL(cuda_copy_ctx_rscs, khint64_t, uct_cuda_copy_per_ctx_rsc_t, 1,
+KHASH_IMPL(cuda_copy_ctx_rscs, khint64_t, uct_cuda_copy_ctx_rsc_t, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
 
 
@@ -417,8 +417,8 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
 };
 
 static ucs_status_t
-uct_cuda_copy_init_per_ctx_rscs(const uct_cuda_copy_iface_t *iface,
-                                uct_cuda_copy_per_ctx_rsc_t *ctx_rsc)
+uct_cuda_copy_init_ctx_rsc(unsigned int max_cuda_events,
+                           uct_cuda_copy_ctx_rsc_t *ctx_rsc)
 {
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
@@ -428,7 +428,7 @@ uct_cuda_copy_init_per_ctx_rscs(const uct_cuda_copy_iface_t *iface,
     mp_params.elem_size       = sizeof(uct_cuda_copy_event_desc_t);
     mp_params.elems_per_chunk = 128;
     mp_params.priv_size       = sizeof(CUcontext);
-    mp_params.max_elems       = iface->config.max_cuda_events;
+    mp_params.max_elems       = max_cuda_events;
     mp_params.ops             = &uct_cuda_copy_event_desc_mpool_ops;
     mp_params.name            = "CUDA EVENT objects";
     status = ucs_mpool_init(&mp_params, &ctx_rsc->cuda_event_desc);
@@ -450,14 +450,14 @@ uct_cuda_copy_init_per_ctx_rscs(const uct_cuda_copy_iface_t *iface,
 }
 
 ucs_status_t
-uct_cuda_copy_get_per_ctx_rscs(uct_cuda_copy_iface_t *iface, CUcontext cuda_ctx,
-                               uct_cuda_copy_per_ctx_rsc_t **ctx_rsc_p)
+uct_cuda_copy_iface_get_ctx_rsc(uct_cuda_copy_iface_t *iface, CUcontext cuda_ctx,
+                                uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
-    uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
-    ucs_status_t status;
-    khiter_t iter;
-    int ret;
     unsigned long long ctx_id;
+    ucs_status_t status;
+    int ret;
+    khiter_t iter;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
 
 #if CUDA_VERSION >= 12000
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetId(cuda_ctx, &ctx_id));
@@ -477,7 +477,8 @@ uct_cuda_copy_get_per_ctx_rscs(uct_cuda_copy_iface_t *iface, CUcontext cuda_ctx,
 
     ctx_rsc = &kh_value(&iface->ctx_rscs, iter);
     if (ret != UCS_KH_PUT_KEY_PRESENT) {
-        status = uct_cuda_copy_init_per_ctx_rscs(iface, ctx_rsc);
+        status = uct_cuda_copy_init_ctx_rsc(iface->config.max_cuda_events,
+                                            ctx_rsc);
         if (status != UCS_OK) {
             goto err_kh_del;
         }
@@ -525,7 +526,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
-    uct_cuda_copy_per_ctx_rsc_t ctx_rsc;
+    uct_cuda_copy_ctx_rsc_t ctx_rsc;
 
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);

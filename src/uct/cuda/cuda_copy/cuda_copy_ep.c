@@ -55,7 +55,7 @@ ucs_status_t uct_cuda_copy_init_stream(CUstream *stream)
 }
 
 static UCS_F_ALWAYS_INLINE CUstream
-uct_cuda_copy_get_stream(uct_cuda_copy_per_ctx_rsc_t *ctx_rsc,
+uct_cuda_copy_get_stream(uct_cuda_copy_ctx_rsc_t *ctx_rsc,
                          ucs_memory_type_t src_type, ucs_memory_type_t dst_type)
 {
     CUstream *stream;
@@ -97,7 +97,7 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_get_ctx_rsc(
-        uct_cuda_copy_iface_t *iface, uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
+        uct_cuda_copy_iface_t *iface, uct_cuda_copy_ctx_rsc_t **ctx_rsc)
 {
     CUcontext current_ctx;
     ucs_status_t status;
@@ -110,13 +110,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_get_ctx_rsc(
         return UCS_ERR_IO_ERROR;
     }
 
-    return uct_cuda_copy_get_per_ctx_rscs(iface, current_ctx, ctx_rsc);
+    return uct_cuda_copy_iface_get_ctx_rsc(iface, current_ctx, ctx_rsc);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_copy_get_short_stream(uct_cuda_copy_iface_t *iface, CUstream *stream)
 {
-    uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
     ucs_status_t status;
 
     status = uct_cuda_copy_get_ctx_rsc(iface, &ctx_rsc);
@@ -146,7 +146,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     ucs_memory_type_t dst_type;
     CUstream stream;
     ucs_queue_head_t *event_q;
-    uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
 
     if (!length) {
         return UCS_OK;
