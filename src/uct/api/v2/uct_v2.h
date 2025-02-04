@@ -987,7 +987,7 @@ typedef enum {
     /**
      * Memory domain supports derived memory handle registration.
      */
-    UCT_MD_FLAG_DERIVED        = UCS_BIT(13)
+    UCT_MD_FLAG_REG_DERIVED    = UCS_BIT(13)
 } uct_md_flags_v2_t;
 
 
