@@ -75,6 +75,11 @@ protected:
         return GetParam().transports.size() == 1;
     }
 
+    virtual bool should_reconfigure()
+    {
+        return true;
+    }
+
     void create_entity(bool push_front, bool exclude_ifaces)
     {
         auto e = new entity(GetParam(), m_ucp_config, get_worker_params(), this,
@@ -96,7 +101,7 @@ protected:
     }
 
 public:
-    virtual void init()
+    void init()
     {
         ucp_test::init();
 
@@ -417,7 +422,12 @@ void test_ucp_ep_reconfig::run(bool bidirectional)
     auto r_sender   = static_cast<const entity*>(&sender());
     auto r_receiver = static_cast<const entity*>(&receiver());
 
-    EXPECT_NE(r_sender->is_reconfigured(), r_receiver->is_reconfigured());
+    if (should_reconfigure()) {
+        EXPECT_NE(r_sender->is_reconfigured(), r_receiver->is_reconfigured());
+    } else {
+        EXPECT_FALSE(r_sender->is_reconfigured());
+        EXPECT_FALSE(r_receiver->is_reconfigured());
+    }
 
     r_sender->verify_configuration(*r_receiver, r_sender->num_reused_rscs());
     r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
@@ -468,23 +478,18 @@ protected:
         return ucp_tl_bitmap_max;
     }
 
-    void init() override
+    bool should_reconfigure() override
     {
         static const std::vector<std::string> ib_tls = {"rc_mlx5", "dc_mlx5",
                                                         "rc_verbs", "ud_verbs",
                                                         "ud_mlx5"};
 
-        test_ucp_ep_reconfig::init();
-        bool has_ib = std::any_of(ib_tls.begin(), ib_tls.end(),
-                                  [&](const std::string &tl_name) {
-                                      return has_resource(sender(), tl_name);
-                                  });
-
-        if (!has_ib) {
-            /* In case there's no IB devices, new config will be identical to
-             * old config (thus no reconfiguration will be triggered). */
-            UCS_TEST_SKIP_R("No IB devices found");
-        }
+        /* In case there's no IB devices, new config will be identical to
+         * old config (thus no reconfiguration will be triggered). */
+        return std::any_of(ib_tls.begin(), ib_tls.end(),
+                           [&](const std::string &tl_name) {
+                               return has_resource(sender(), tl_name);
+                           });
     }
 };
 

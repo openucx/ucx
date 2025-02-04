@@ -1470,7 +1470,6 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     uct_ep_h uct_ep = NULL;
     int am_replaced = ucp_wireup_is_am_lane_replaced(ep, reuse_lane_map);
     ucp_lane_index_t old_lane, new_wireup_lane, old_wireup_lane;
-    ucp_lane_index_t non_reused_lane;
     ucp_wireup_ep_t *new_wireup_ep, *old_ep_wrapper;
     uct_ep_h old_wireup_ep;
     ucp_rsc_index_t aux_rsc_index;
@@ -1487,16 +1486,18 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
      * to the following priority:
      * 1) If CM lane exists, use it.
      * 2) If old AM lane is replaced, use new AM lane.
-     * 3) If any non-reused lane exists, select it and wrap with a new
-     *    wireup_ep wrapper.
-     * 4) Otherwise select a reused wireup_ep lane (which must exist). */
+     * 3) If a non-reused lane exists, select it and wrap with a new wireup_ep
+     *    wrapper.
+     * 4) Otherwise select a reused wireup_ep lane (which must exist).
+     * The actual wireup messages will be sent from old wireup lane (used as
+     * aux), which is guaranteed to support AM. */
     if (ucp_ep_has_cm_lane(ep)) {
         new_wireup_ep   = ucp_ep_get_cm_wireup_ep(ep);
         new_wireup_lane = key->cm_lane;
     } else {
-        non_reused_lane = ucp_wireup_find_non_reused_lane(ep, key,
-                                                          reuse_lane_map);
-        new_wireup_lane = am_replaced ? key->am_lane : non_reused_lane;
+        new_wireup_lane = am_replaced ? ucp_ep_get_am_lane(ep) :
+                                        ucp_wireup_find_non_reused_lane(
+                                                ep, key, reuse_lane_map);
 
         if (new_wireup_lane != UCP_NULL_LANE) {
             status = ucp_wireup_ep_create(ep, &uct_ep);
