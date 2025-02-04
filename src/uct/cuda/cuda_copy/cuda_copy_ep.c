@@ -97,9 +97,8 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
     return mem_info.type;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_copy_get_ctx_rsc(uct_cuda_copy_iface_t *iface,
-                          uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_get_ctx_rsc(
+        uct_cuda_copy_iface_t *iface, uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
 {
     CUcontext current_ctx;
     ucs_status_t status;
@@ -115,9 +114,8 @@ uct_cuda_copy_get_ctx_rsc(uct_cuda_copy_iface_t *iface,
     return uct_cuda_copy_get_per_ctx_rscs(iface, current_ctx, ctx_rsc);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_copy_get_short_stream(uct_cuda_copy_iface_t *iface,
-                               uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_get_short_stream(
+        uct_cuda_copy_iface_t *iface, uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
 {
     ucs_status_t status;
 
@@ -255,7 +253,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
     UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync((CUdeviceptr)remote_addr,
                                            (CUdeviceptr)buffer, length,
                                            ctx_rsc->short_stream));
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(ctx_rsc->short_stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuStreamSynchronize(ctx_rsc->short_stream));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
@@ -280,7 +279,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
     UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync((CUdeviceptr)buffer,
                                            (CUdeviceptr)remote_addr, length,
                                            ctx_rsc->short_stream));
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(ctx_rsc->short_stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuStreamSynchronize(ctx_rsc->short_stream));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",

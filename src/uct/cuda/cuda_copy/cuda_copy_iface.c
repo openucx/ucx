@@ -148,11 +148,10 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
     uct_cuda_copy_queue_desc_t *q_desc;
     ucs_queue_iter_t iter;
- 
+
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
- 
 
     ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
         if (!ucs_queue_is_empty(&q_desc->event_queue)) {
@@ -164,7 +163,6 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
 
     UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_OK;
-
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
