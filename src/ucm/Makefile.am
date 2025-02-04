@@ -1,18 +1,20 @@
 #
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
+# Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
 
-SUBDIRS = . cuda rocm
+SUBDIRS = . cuda rocm ze
 
 lib_LTLIBRARIES    = libucm.la
 libucm_ladir       = $(includedir)/ucm
 libucm_la_LDFLAGS  = $(UCM_MODULE_LDFLAGS) \
                      -ldl -version-info $(SOVERSION)
 libucm_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCM_MALLOC_PREFIX=ucm_dl
-libucm_la_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_NO_DEPRECATED)
+libucm_la_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_NO_DEPRECATED) \
+                     $(LT_CFLAGS)
 
 nobase_dist_libucm_la_HEADERS = \
 	api/ucm.h

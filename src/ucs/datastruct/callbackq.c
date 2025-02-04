@@ -476,7 +476,7 @@ static unsigned ucs_callbackq_proxy_callback(void *arg)
     count = ucs_callbackq_spill_elems_dispatch(cbq) +
             ucs_callbackq_oneshot_elems_dispatch(cbq);
 
-    /* Remove remaning callbacks */
+    /* Remove remaining callbacks */
     ucs_callbackq_fast_elems_purge(cbq);
     ucs_callbackq_spill_elems_purge(cbq);
 

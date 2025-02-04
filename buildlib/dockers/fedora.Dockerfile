@@ -1,4 +1,5 @@
-# docker build -t ucfconsort.azurecr.io/ucx/fedora:5 -f buildlib/fedora.Dockerfile buildlib/
+# docker build -t harbor.mellanox.com/ucx/fedora33:2 -f buildlib/dockers/fedora.Dockerfile buildlib/
+# docker push harbor.mellanox.com/ucx/fedora33:2
 FROM fedora:33
 
 RUN dnf install -y \
@@ -23,6 +24,8 @@ RUN dnf install -y \
     python \
     rdma-core-devel \
     rpm-build \
+    vim \
+    ctags \
     && dnf clean dbcache packages
 RUN export BUILD_ROOT=/tmp/llvm-project && \
     git clone https://github.com/openucx/llvm-project.git --depth=1 -b ucx-clang-format --single-branch ${BUILD_ROOT} && \

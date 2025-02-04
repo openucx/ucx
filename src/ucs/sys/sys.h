@@ -67,6 +67,9 @@ typedef cpuset_t ucs_sys_cpuset_t;
 #define UCS_SYS_FS_CPUS_PATH   UCS_SYS_FS_SYSTEM_PATH "/cpu"
 
 
+#define UCS_SYS_DMI_PRODUCT_NAME_LABEL "Product name"
+
+
 BEGIN_C_DECLS
 
 /** @file sys.h */
@@ -226,7 +229,7 @@ int ucs_sys_max_open_files();
  * @param [in]  err_log_level  Logging level that should be used for printing
  *                             errors.
  * @param [out] p_fstream      Pointer that is filled with the stream handle.
- *                             User is responsible to close tha stream handle then.
+ *                             User is responsible to close the stream handle then.
  * @param [out] p_need_close   Pointer to the variable that is set to whether
  *                             fclose() should be called to release resources (1)
  *                             or not (0).
@@ -689,6 +692,12 @@ ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value);
  * @return 1 if built dynamically, 0 if statically.
  */
 int ucs_sys_is_dynamic_lib(void);
+
+
+/**
+ * @return Product name from DMI table.
+ */
+const char *ucs_sys_dmi_product_name();
 
 END_C_DECLS
 

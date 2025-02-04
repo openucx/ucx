@@ -13,6 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>    /* for testing EP RNDV configuration */
 #include <ucp/core/ucp_request.h> /* for debug */
 #include <ucp/core/ucp_worker.h>  /* for testing memory consumption */
+#include <ucp/rndv/proto_rndv.h>
 }
 
 #include <unordered_map>
@@ -27,7 +28,9 @@ public:
     ucp_ep_params_t get_ep_params();
 
 protected:
-    static const int AM_ID = 0;
+    static const int AM_ID        = 0;
+    static const uint64_t TX_SEED = 0x1111111111111111lu;
+    static const uint64_t RX_SEED = 0x2222222222222222lu;
 
     enum {
         TEST_AM  = UCS_BIT(0),
@@ -75,14 +78,17 @@ protected:
 
     void cleanup_rndv_descs();
 
-    void                    *m_sreq, *m_rreq;
-    std::queue<void *>      m_am_rndv_descs;
-    size_t                  m_am_rx_count;
-    size_t                  m_err_count;
-    ucs_status_t            m_err_status;
-    std::string             m_sbuf, m_rbuf;
-    mem_handle_t            m_stable_memh, m_failing_memh;
-    ucs::handle<ucp_rkey_h> m_stable_rkey, m_failing_rkey;
+    void init_buffers(size_t msg_size);
+    virtual ucs_memory_type_t memtype() const;
+
+    void                        *m_sreq, *m_rreq;
+    std::queue<void *>          m_am_rndv_descs;
+    size_t                      m_am_rx_count;
+    size_t                      m_err_count;
+    ucs_status_t                m_err_status;
+    std::unique_ptr<mem_buffer> m_sbuf, m_rbuf;
+    mem_handle_t                m_stable_memh, m_failing_memh;
+    ucs::handle<ucp_rkey_h>     m_stable_rkey, m_failing_rkey;
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
@@ -97,7 +103,6 @@ test_ucp_peer_failure::test_ucp_peer_failure() :
     m_err_count(0),
     m_err_status(UCS_OK)
 {
-    ucs::fill_random(m_sbuf);
     configure_peer_failure_settings();
 }
 
@@ -192,13 +197,13 @@ void *test_ucp_peer_failure::send_nb(ucp_ep_h ep, ucp_rkey_h rkey)
     param.datatype     = DATATYPE;
     param.cb.send      = send_cb;
     if (get_variant_value() & TEST_AM) {
-        return ucp_am_send_nbx(ep, AM_ID, NULL, 0, &m_sbuf[0], m_sbuf.size(),
+        return ucp_am_send_nbx(ep, AM_ID, NULL, 0, m_sbuf->ptr(), m_sbuf->size(),
                                &param);
     } else if (get_variant_value() & TEST_TAG) {
-        return ucp_tag_send_nbx(ep, &m_sbuf[0], m_sbuf.size(), 0, &param);
+        return ucp_tag_send_nbx(ep, m_sbuf->ptr(), m_sbuf->size(), 0, &param);
     } else if (get_variant_value() & TEST_RMA) {
-        return ucp_put_nbx(ep, &m_sbuf[0], m_sbuf.size(), (uintptr_t)&m_rbuf[0],
-                           rkey, &param);
+        return ucp_put_nbx(ep, m_sbuf->ptr(), m_sbuf->size(),
+                           (uintptr_t)m_rbuf->ptr(), rkey, &param);
     } else {
         ucs_fatal("invalid test case");
     }
@@ -265,21 +270,21 @@ test_ucp_peer_failure::smoke_test(bool stable_pair)
         while (!m_am_rndv_descs.empty()) {
             m_rreq        = ucp_am_recv_data_nbx(recv_entity.worker(),
                                                  m_am_rndv_descs.front(),
-                                                 &m_rbuf[0], m_rbuf.size(),
+                                                 m_rbuf->ptr(), m_rbuf->size(),
                                                  &req_param);
             result.second = request_wait(m_rreq);
             m_am_rndv_descs.pop();
         }
     } else if (get_variant_value() & TEST_TAG) {
-        m_rreq        = ucp_tag_recv_nbx(recv_entity.worker(), &m_rbuf[0],
-                                         m_rbuf.size(), 0, 0, &req_param);
+        m_rreq        = ucp_tag_recv_nbx(recv_entity.worker(), m_rbuf->ptr(),
+                                         m_rbuf->size(), 0, 0, &req_param);
         result.second = request_wait(m_rreq);
     } else if (get_variant_value() & TEST_RMA) {
         // Flush the sender and expect data to arrive on receiver
         void *freq = ucp_ep_flush_nb(send_ep, 0,
                                      (ucp_send_callback_t)ucs_empty_function);
         request_wait(freq);
-        EXPECT_EQ(m_sbuf, m_rbuf);
+        m_rbuf->pattern_check(TX_SEED);
         result.second = UCS_OK;
     }
 
@@ -302,8 +307,8 @@ void test_ucp_peer_failure::get_rkey(ucp_ep_h ep, entity& dst, mem_handle_t& mem
     memset(&params, 0, sizeof(params));
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH;
-    params.address    = &m_rbuf[0];
-    params.length     = m_rbuf.size();
+    params.address    = m_rbuf->ptr();
+    params.length     = m_rbuf->size();
 
     ucp_mem_h ucp_memh;
     ucs_status_t status = ucp_mem_map(dst.ucph(), &params, &ucp_memh);
@@ -351,8 +356,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 {
     skip_loopback();
 
-    m_sbuf.resize(msg_size);
-    m_rbuf.resize(msg_size);
+    init_buffers(msg_size);
 
     /* connect 2 ep's from sender() to 2 receiver entities */
     create_entity();
@@ -387,7 +391,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     flush_ep(sender(), 0, FAILING_EP_INDEX);
     EXPECT_EQ(UCS_OK, m_err_status);
 
-    /* Since UCT/UD EP has a SW implementation of reliablity on which peer
+    /* Since UCT/UD EP has a SW implementation of reliability on which peer
      * failure mechanism is based, we should set small UCT/UD EP timeout
      * for UCT/UD EPs for sender's UCP EP to reduce testing time */
     double prev_ib_ud_peer_timeout = sender().set_ib_ud_peer_timeout(3.);
@@ -477,6 +481,16 @@ void test_ucp_peer_failure::cleanup_rndv_descs() {
     }
 }
 
+void test_ucp_peer_failure::init_buffers(size_t msg_size) {
+    m_sbuf.reset(new mem_buffer(msg_size, memtype(), TX_SEED));
+    m_rbuf.reset(new mem_buffer(msg_size, memtype(), RX_SEED));
+}
+
+ucs_memory_type_t test_ucp_peer_failure::memtype() const
+{
+    return UCS_MEMORY_TYPE_HOST;
+}
+
 UCS_TEST_P(test_ucp_peer_failure, basic) {
     do_test(UCS_KBYTE, /* msg_size */
             0, /* pre_msg_cnt */
@@ -517,9 +531,6 @@ class test_ucp_peer_failure_keepalive : public test_ucp_peer_failure
 {
 public:
     test_ucp_peer_failure_keepalive() {
-        m_sbuf.resize(1 * UCS_MBYTE);
-        m_rbuf.resize(1 * UCS_MBYTE);
-
         m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
         m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", "3s"));
     }
@@ -533,6 +544,7 @@ public:
         failing_receiver().connect(&sender(), get_ep_params());
         set_am_handler(failing_receiver());
         set_am_handler(stable_receiver());
+        init_buffers(UCS_MBYTE);
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
@@ -636,50 +648,35 @@ public:
 protected:
     enum class rndv_mode {
         rndv_get,
-        rndv_put
+        rndv_put,
+        put_ppln
     };
 
     void init()
     {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+
         self = this;
+        modify_config("RNDV_THRESH", "0");
 
         test_ucp_peer_failure::init();
 
         receiver().connect(&sender(), get_ep_params());
         sender().connect(&receiver(), get_ep_params());
         set_am_handler(receiver());
-
-        m_sbuf.resize(UCS_KBYTE);
-        m_rbuf.resize(UCS_KBYTE);
     }
 
-    template<typename Func>
-    void for_each_protos_progress(Func func)
+    static void setup_progress_mock(ucs::mock &mock)
     {
         for (int proto_id = 0; proto_id < ucp_protocols_count(); ++proto_id) {
             auto proto = const_cast<ucp_proto_t*>(ucp_protocols[proto_id]);
             int stage = UCP_PROTO_STAGE_START;
             for (; stage < UCP_PROTO_STAGE_LAST; ++stage) {
-                func(proto, stage);
+                mock.setup(&proto->progress[stage], progress_wrapper);
             }
         }
-    }
-
-    void protos_replace_progress()
-    {
-        auto replace_progress = [&](ucp_proto_t* proto, int stage) {
-            m_progress_storage[proto][stage] = proto->progress[stage];
-            proto->progress[stage]           = &progress_wrapper;
-        };
-        for_each_protos_progress(replace_progress);
-    }
-
-    void protos_restore_progress()
-    {
-        auto restore_progress = [&](ucp_proto_t* proto, int stage) {
-            proto->progress[stage] = m_progress_storage[proto][stage];
-        };
-        for_each_protos_progress(restore_progress);
     }
 
     ucs_status_t static
@@ -690,7 +687,7 @@ protected:
         return UCS_ERR_CONNECTION_RESET;
     }
 
-    void replace_rndv_ops(ucp_ep_h ep)
+    static void mock_rndv_ops(ucp_ep_h ep, ucs::mock &mock)
     {
         for (auto lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
             if (lane == ucp_ep_get_cm_lane(ep)) {
@@ -698,18 +695,8 @@ protected:
             }
 
             auto iface  = ucp_ep_get_lane(ep, lane)->iface;
-            auto result = m_sender_uct_ops.emplace(iface, iface->ops);
-            if (result.second) {
-                iface->ops.ep_put_zcopy = return_err_connection_reset;
-                iface->ops.ep_get_zcopy = return_err_connection_reset;
-            }
-        }
-    }
-
-    void restore_rndv_ops()
-    {
-        for (auto &elem : m_sender_uct_ops) {
-            elem.first->ops = elem.second;
+            mock.setup(&iface->ops.ep_put_zcopy, return_err_connection_reset);
+            mock.setup(&iface->ops.ep_get_zcopy, return_err_connection_reset);
         }
     }
 
@@ -735,24 +722,21 @@ protected:
         auto *req   = ucs_container_of(uct_req, ucp_request_t, send.uct);
         auto stage  = req->send.proto_stage;
         auto *proto = req->send.proto_config->proto;
+        ucs::mock mock;
 
         if (proto->name == self->m_proto_name) {
             if (self->m_replace_ops) {
-                self->replace_rndv_ops(req->send.ep);
+                mock_rndv_ops(req->send.ep, mock);
             }
 
-            if (stage == UCP_PROTO_STAGE_START) {
+            if (stage == self->m_proto_xfer_stage) {
                 self->close_peer();
             }
         }
 
-        ucs_status_t status = self->m_progress_storage[proto][stage](uct_req);
-
-        if ((proto->name == self->m_proto_name) && self->m_replace_ops) {
-            self->restore_rndv_ops();
-        }
-
-        return status;
+        /* Call original proto progress */
+        return self->m_progress_mock.orig_func(&proto->progress[stage],
+                                               uct_req);
     }
 
     virtual void cleanup()
@@ -768,12 +752,19 @@ protected:
 
         switch (mode) {
         case rndv_mode::rndv_get:
-            m_proto_name    = "rndv/get/zcopy";
-            m_peer_to_close = &self->sender();
+            m_proto_name       = "rndv/get/zcopy";
+            m_proto_xfer_stage = UCP_PROTO_RNDV_GET_STAGE_FETCH;
+            m_peer_to_close    = &self->sender();
             break;
         case rndv_mode::rndv_put:
-            m_proto_name    = "rndv/put/zcopy";
-            m_peer_to_close = &self->receiver();
+            m_proto_name       = "rndv/put/zcopy";
+            m_proto_xfer_stage = UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND;
+            m_peer_to_close    = &self->receiver();
+            break;
+        case rndv_mode::put_ppln:
+            m_proto_name       = "rndv/put/mtype";
+            m_proto_xfer_stage = UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND;
+            m_peer_to_close    = &self->receiver();
             break;
         default:
             EXPECT_TRUE(false) << "Wrong RNDV mode";
@@ -787,38 +778,35 @@ protected:
             UCS_TEST_SKIP_R("transport has no rma_bw lanes");
         }
 
+        init_buffers(16 * UCS_KBYTE);
+
         define_test_settings(mode, replace_ops);
 
         smoke_test(true);
 
         /* Replace progress functions for all protocols and do another
-         * send-receive loop to fail the certain proto progress call.
-         */
-        protos_replace_progress();
+         * send-receive loop to fail the certain proto progress call. */
+        setup_progress_mock(m_progress_mock);
 
         {
-            scoped_log_handler slh(wrap_errors_logger);
+            scoped_log_handler err_wrapper(wrap_errors_logger);
+            scoped_log_handler warn_wrapper(wrap_warns_logger);
             auto result = smoke_test(true);
             ASSERT_TRUE(UCS_STATUS_IS_ERR(result.first));
             ASSERT_TRUE(UCS_STATUS_IS_ERR(result.second));
         }
 
-        protos_restore_progress();
+        m_progress_mock.cleanup();
 
         /* Check that certain progress was called and failed. */
         ASSERT_TRUE(m_is_peer_closed);
     }
 
-    using progress_array =
-            std::array<uct_pending_callback_t, UCP_PROTO_STAGE_LAST>;
-    using progress_hash_map =
-            std::unordered_map<const ucp_proto_t*, progress_array>;
-    using ops_map = std::map<uct_iface_h, uct_iface_ops_t>;
-
-    progress_hash_map m_progress_storage{};
-    ops_map           m_sender_uct_ops{};
+    ucs::mock         m_progress_mock;
     bool              m_is_peer_closed{false};
     std::string       m_proto_name{};
+    /* Protocol stage during which data transfer happens */
+    uint8_t           m_proto_xfer_stage{};
     entity            *m_peer_to_close{nullptr};
     /* Even if we close peer EP with the force flag, the next proto progress call
        probably would return UCS_OK. This option enables emulation of certain
@@ -830,40 +818,82 @@ protected:
 
 test_ucp_peer_failure_rndv_abort *test_ucp_peer_failure_rndv_abort::self = nullptr;
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, get_zcopy,
-                     !is_proto_enabled(), "RNDV_THRESH=0",
-                     "RNDV_SCHEME=get_zcopy")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort, get_zcopy, "RNDV_SCHEME=get_zcopy")
 {
     rndv_progress_failure_test(rndv_mode::rndv_get, true);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, put_zcopy_force_flush,
-                     !is_proto_enabled(), "RNDV_THRESH=0",
-                     "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort, put_zcopy_force_flush,
+           "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
 {
     rndv_progress_failure_test(rndv_mode::rndv_put, true);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
-                     get_zcopy_memory_invalidation, !is_proto_enabled(),
-                     "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort, get_zcopy_memory_invalidation,
+           "RNDV_SCHEME=get_zcopy")
 {
     rndv_progress_failure_test(rndv_mode::rndv_get, false);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
-                     put_zcopy_memory_invalidation, !is_proto_enabled(),
-                     "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort, put_zcopy_memory_invalidation,
+           "RNDV_SCHEME=put_zcopy")
 {
     rndv_progress_failure_test(rndv_mode::rndv_put, false);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
-                     put_zcopy_force_flush_memory_invalidation,
-                     !is_proto_enabled(), "RNDV_THRESH=0",
-                     "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort,
+           put_zcopy_force_flush_memory_invalidation, "RNDV_SCHEME=put_zcopy",
+           "RNDV_PUT_FORCE_FLUSH=y")
 {
     rndv_progress_failure_test(rndv_mode::rndv_put, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_rndv_abort)
+
+
+class test_ucp_peer_failure_rndv_put_ppln_abort :
+      public test_ucp_peer_failure_rndv_abort {
+public:
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        test_ucp_peer_failure_rndv_abort::get_test_variants(variants);
+    }
+
+    ucs_memory_type_t memtype() const override
+    {
+        return UCS_MEMORY_TYPE_CUDA;
+    }
+
+    void init() override
+    {
+        modify_config("RNDV_SCHEME", "put_ppln");
+        // Avoid 2-stage ppln being selected, as the intent is to test 3-stage
+        // ppln protocol
+        modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
+        /* FIXME: Advertise error handling support for RNDV PPLN protocol.
+         * Remove this once invalidation workflow is implemented. */
+        modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
+        test_ucp_peer_failure_rndv_abort::init();
+        if (!sender().is_rndv_put_ppln_supported()) {
+            cleanup();
+            UCS_TEST_SKIP_R("RNDV pipeline is not supported");
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
+{
+    rndv_progress_failure_test(rndv_mode::put_ppln, true);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
+           "RNDV_FRAG_SIZE=host:8K")
+{
+    rndv_progress_failure_test(rndv_mode::put_ppln, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);

@@ -93,9 +93,22 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
 
     /** Enable @ref uct_perf_attr_t::max_inflight_eps */
-    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10)
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10),
+
+    /** Enable @ref uct_perf_attr_t::flags */
+    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(11)
 };
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Flags of supported performance attributes functionalities
+ *
+ * This is used in @ref uct_perf_attr_t::flags.
+ */
+typedef enum {
+    /** TX operations can depend on unrelated RX operation completion */
+    UCT_PERF_ATTR_FLAGS_TX_RX_SHARED = UCS_BIT(0)
+} uct_perf_attr_flags_t;
 
 /**
  * @ingroup UCT_RESOURCE
@@ -183,10 +196,15 @@ typedef struct {
      * operations simultaneously.
      * Protocols that require sending to multiple destinations at the same time
      * (such as keepalive) could benefit from using a transport that has a
-     * large number of maximum inflight endpoints.
+     * large number of maximum in-flight endpoints.
      * This field is set by the UCT layer.
      */
     size_t              max_inflight_eps;
+
+    /**
+     * Performance characteristics of the network interface.
+     */
+    uint64_t            flags;
 } uct_perf_attr_t;
 
 
@@ -227,7 +245,9 @@ typedef enum {
  */
 typedef enum {
     /** Enables @ref uct_md_mem_attach_params_t.flags field */
-    UCT_MD_MEM_ATTACH_FIELD_FLAGS = UCS_BIT(0)
+    UCT_MD_MEM_ATTACH_FIELD_FLAGS     = UCS_BIT(0),
+    /** Enables @ref uct_md_mem_attach_params_t.mkey_size field */
+    UCT_MD_MEM_ATTACH_FIELD_MKEY_SIZE = UCS_BIT(1)
 } uct_md_mem_attach_field_mask_t;
 
 
@@ -255,7 +275,9 @@ typedef enum {
     UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR         = UCS_BIT(1), /**< iface_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING        = UCS_BIT(2), /**< info_string field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3), /**< info_string_length field */
-    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4) /**<  scope field */
+    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4), /**< scope field */
+    UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(5), /**< device_addr_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH  = UCS_BIT(6)  /**< iface_addr_length field */
 } uct_iface_is_reachable_field_mask_t;
 
 
@@ -526,6 +548,11 @@ typedef struct uct_md_mem_attach_params {
      * @ref uct_md_mem_attach_flags_t.
      */
     uint64_t                     flags;
+
+    /**
+     * Size of the memory key.
+     */
+    size_t                       mkey_size;
 } uct_md_mem_attach_params_t;
 
 
@@ -593,6 +620,18 @@ typedef struct uct_iface_is_reachable_params {
      * Reachability scope.
      */
     uct_iface_reachability_scope_t scope;
+
+    /**
+     * Device address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                        device_addr_length;
+
+    /**
+     * Iface address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                        iface_addr_length;
 } uct_iface_is_reachable_params_t;
 
 
@@ -787,7 +826,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
 
     /** Indicate registration alignment. */
-    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16)
+    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16),
+
+    /** Indicate memory types that the MD can register using global VA MR. */
+    UCT_MD_ATTR_FIELD_GVA_MEM_TYPES             = UCS_BIT(17)
 } uct_md_attr_field_t;
 
 
@@ -838,6 +880,11 @@ typedef struct {
      * Bitmap of memory types that can be cached for this memory domain.
      */
     uint64_t          cache_mem_types;
+
+    /**
+     * Bitmap of memory types that can create global memory handle.
+     */
+    uint64_t          gva_mem_types;
 
     /**
      * Bitmap of memory types that Memory Domain can detect if address belongs
@@ -912,7 +959,7 @@ typedef enum {
      * Memory domain supports invalidation of memory handle registered by
      * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_RMA flag and packed
      * key by @ref uct_md_mkey_pack_v2 with
-     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA flag.
      */
     UCT_MD_FLAG_INVALIDATE_RMA = UCT_MD_FLAG_V2_FIRST,
 
@@ -920,7 +967,7 @@ typedef enum {
      * Memory domain supports invalidation of memory handle registered by
      * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_REMOTE_ATOMIC flag and
      * packed key by @ref uct_md_mkey_pack_v2 with
-     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
     UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12)
 } uct_md_flags_v2_t;
@@ -1032,8 +1079,6 @@ int uct_iface_is_reachable_v2(uct_iface_h iface,
  *
  * @param [in] ep           Endpoint to connect.
  * @param [in] device_addr  Remote device address.
- * @param [in] iface_addr   Remote interface address or NULL if such address is
- *                          not available.
  * @param [in] ep_addr      Remote endpoint address.
  * @param [in] params       Parameters as defined in @ref
  *                          uct_ep_connect_to_ep_params_t.

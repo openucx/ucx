@@ -172,12 +172,12 @@ out:
 static int ucm_rocm_scan_regions_cb(void *arg, void *addr, size_t length,
                                     int prot, const char *path)
 {
-    static const char *rocm_path_pattern = "/dev/dri";
-    ucm_event_handler_t *handler = arg;
+    static const char rocm_path_pattern[] = "/dev/dri";
+    ucm_event_handler_t *handler          = arg;
     ucm_event_t event;
 
     if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
-        strncmp(path, rocm_path_pattern, strlen(rocm_path_pattern))) {
+        strncmp(path, rocm_path_pattern, sizeof(rocm_path_pattern) - 1)) {
         return 0;
     }
     ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,

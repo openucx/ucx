@@ -1,5 +1,6 @@
 #
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+# Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -31,6 +32,7 @@ LDFLAGS="$SAVE_LDFLAGS"
 ucm_modules=""
 m4_include([src/ucm/cuda/configure.m4])
 m4_include([src/ucm/rocm/configure.m4])
+m4_include([src/ucm/ze/configure.m4])
 AC_DEFINE_UNQUOTED([ucm_MODULES], ["${ucm_modules}"], [UCM loadable modules])
 
 AC_CONFIG_FILES([src/ucm/Makefile])

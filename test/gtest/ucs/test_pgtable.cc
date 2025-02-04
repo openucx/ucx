@@ -7,6 +7,7 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/datastruct/pgtable.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/time/time.h>
 }
 #include <algorithm>

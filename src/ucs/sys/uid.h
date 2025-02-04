@@ -21,7 +21,7 @@ BEGIN_C_DECLS
  *
  * @return 64-bit value representing system ID.
  */
-uint64_t ucs_get_system_id();
+uint64_t ucs_get_system_id(void);
 
 END_C_DECLS
 

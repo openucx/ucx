@@ -456,12 +456,13 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
 
 static bool netif_has_sysfs_file(const char *ifa_name, const char *file_name)
 {
-    char path[PATH_MAX];
-    ucs_snprintf_safe(path, sizeof(path), "/sys/class/net/%s/%s", ifa_name,
+    std::string path(PATH_MAX, '\0');
+
+    ucs_snprintf_safe(&path[0], path.size(), "/sys/class/net/%s/%s", ifa_name,
                       file_name);
 
     struct stat st;
-    return stat(path, &st) >= 0;
+    return stat(path.c_str(), &st) >= 0;
 }
 
 bool is_interface_usable(struct ifaddrs *ifa)
@@ -601,6 +602,19 @@ bool is_rdmacm_netdev(const char *ifa_name)
     return !get_rdmacm_netdev(ifa_name).empty();
 }
 
+bool is_aws()
+{
+    static bool result, initialized = false;
+
+    if (!initialized) {
+        const char *str = getenv("CLOUD_TYPE");
+        result          = (str != NULL) && !strcmp(str, "aws");
+        initialized     = true;
+    }
+
+    return result;
+}
+
 uint16_t get_port() {
     int sock_fd, ret;
     ucs_status_t status;
@@ -608,7 +622,7 @@ uint16_t get_port() {
     socklen_t len = sizeof(ret_addr);
     uint16_t port;
 
-    status = ucs_socket_create(AF_INET, SOCK_STREAM, &sock_fd);
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, 0, &sock_fd);
     EXPECT_EQ(status, UCS_OK);
 
     memset(&addr_in, 0, sizeof(struct sockaddr_in));
@@ -641,7 +655,9 @@ mmap_fixed_address::mmap_fixed_address(size_t length) : m_length(length) {
 }
 
 mmap_fixed_address::~mmap_fixed_address() {
-    munmap(m_ptr, m_length);
+    if (m_ptr != NULL) {
+        munmap(m_ptr, m_length);
+    }
 }
 
 std::string compact_string(const std::string &str, size_t length)
@@ -824,19 +840,11 @@ std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage)
     return os << ucs::sockaddr_to_str(sa_storage.get_sock_addr_ptr());
 }
 
-auto_buffer::auto_buffer(size_t size) : m_ptr(malloc(size)) {
-    if (!m_ptr) {
-        UCS_TEST_ABORT("Failed to allocate memory");
-    }
+auto_buffer::auto_buffer(size_t size) : m_buf(size) {
 }
 
-auto_buffer::~auto_buffer()
-{
-    free(m_ptr);
-}
-
-void* auto_buffer::operator*() const {
-    return m_ptr;
+void* auto_buffer::operator*() {
+    return as<void>();
 };
 
 scoped_log_level::scoped_log_level(ucs_log_level_t level)

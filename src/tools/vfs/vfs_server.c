@@ -11,6 +11,7 @@
 #include "vfs_daemon.h"
 
 #include <ucs/datastruct/khash.h>
+#include <ucs/debug/log_def.h>
 #include <sys/poll.h>
 #include <signal.h>
 
@@ -93,7 +94,7 @@ static int vfs_server_poll_events()
     if (ret < 0) {
         ret = -errno;
         if (errno != EINTR) {
-            vfs_error("poll(nfds=%d) failed: %m", vfs_server_context.nfds)
+            vfs_error("poll(nfds=%d) failed: %m", vfs_server_context.nfds);
         }
         return ret;
     }

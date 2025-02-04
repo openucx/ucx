@@ -46,6 +46,10 @@ ucp_proto_bcopy_send_func_status(ssize_t packed_size)
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_msg_multi_request_init(ucp_request_t *req)
 {
+    if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
+        return;
+    }
+
     req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
 }
 
@@ -170,7 +174,7 @@ ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
     req->send.proto_stage = proto_stage;
 
     /* Set pointer to progress function */
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+    if (req->send.ep->worker->context->config.progress_wrapper_enabled) {
         req->send.uct.func = ucp_request_progress_wrapper;
     } else {
         req->send.uct.func = proto->progress[proto_stage];
@@ -191,16 +195,6 @@ static void ucp_proto_request_set_proto(ucp_request_t *req,
     }
 
     ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_request_select_proto(ucp_request_t *req,
-                               const ucp_proto_select_elem_t *select_elem,
-                               size_t msg_length)
-{
-    const ucp_proto_threshold_elem_t *thresh_elem =
-            ucp_proto_select_thresholds_search(select_elem, msg_length);
-    ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
 }
 
 /* Select protocol for the request and initialize protocol-related fields */
@@ -363,6 +357,16 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
                 ucp_datatype_class_names[dt_iter->dt_class]);
 
     memh = dt_iter->type.contig.memh;
+
+    /* Since global VA registration doesn't support invalidation yet, and error
+     * handling is enabled on this EP, we replace GVA registrations with
+     * regular ones */
+    if (ucp_ep_config_err_mode_eq(req->send.ep,
+                                  UCP_ERR_HANDLING_MODE_PEER) &&
+        ucs_unlikely(memh->flags & UCP_MEMH_FLAG_HAS_AUTO_GVA)) {
+        ucp_memh_disable_gva(memh, md_map);
+    }
+
     if (!ucs_test_all_flags(memh->md_map, md_map)) {
         ucs_trace("dt_iter_md_map=0x%"PRIx64" md_map=0x%"PRIx64, memh->md_map,
                   md_map);

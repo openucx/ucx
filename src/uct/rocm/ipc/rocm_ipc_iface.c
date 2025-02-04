@@ -70,10 +70,22 @@ static int
 uct_rocm_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
-    return uct_iface_is_reachable_params_addrs_valid(params) &&
-           (ucs_get_system_id() == *((const uint64_t*)params->device_addr)) &&
-           (getpid() != *(pid_t*)params->iface_addr) &&
-           uct_iface_scope_is_reachable(tl_iface, params);
+    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+        return 0;
+    }
+
+    if (getpid() == *(pid_t*)params->iface_addr) {
+        uct_iface_fill_info_str_buf(params, "same process");
+        return 0;
+    }
+
+    if (ucs_get_system_id() != *((const uint64_t*)params->device_addr)) {
+        uct_iface_fill_info_str_buf(params,
+                                    "the device addr is from another machine");
+        return 0;
+    }
+
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
@@ -146,15 +158,15 @@ static uct_iface_internal_ops_t uct_rocm_ipc_iface_internal_ops = {
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_rocm_ipc_iface_is_reachable_v2
 };
 
 static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
     .ep_put_zcopy             = uct_rocm_ipc_ep_put_zcopy,
     .ep_get_zcopy             = uct_rocm_ipc_ep_get_zcopy,
-    .ep_pending_add           = ucs_empty_function_return_busy,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_ipc_ep_t),
@@ -181,7 +193,7 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops, 
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops,
                               &uct_rocm_ipc_iface_internal_ops,
                               md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)

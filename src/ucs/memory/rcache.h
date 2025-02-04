@@ -82,7 +82,7 @@ struct ucs_rcache_ops {
     /**
      * Register a memory region.
      *
-     * @param [in]  context    User context, as passed to @ref ucs_rcache_create
+     * @param [in]  context    User context, as passed to @ref ucs_rcache_create().
      * @param [in]  rcache     Pointer to the registration cache.
      * @param [in]  arg        Custom argument passed to @ref ucs_rcache_get().
      * @param [in]  region     Memory region to register. This may point to a larger
@@ -101,25 +101,37 @@ struct ucs_rcache_ops {
     ucs_status_t           (*mem_reg)(void *context, ucs_rcache_t *rcache,
                                       void *arg, ucs_rcache_region_t *region,
                                       uint16_t flags);
-   /**
-    * Deregister a memory region.
-    *
-    * @param [in]  context    User context, as passed to @ref ucs_rcache_create
-    * @param [in]  rcache     Pointer to the registration cache.
-    * @param [in]  region     Memory region to deregister.
-    */
+    /**
+     * Deregister a memory region.
+     *
+     * @param [in]  context  User context, as passed to @ref ucs_rcache_create().
+     * @param [in]  rcache   Pointer to the registration cache.
+     * @param [in]  region   Memory region to deregister.
+     */
     void                   (*mem_dereg)(void *context, ucs_rcache_t *rcache,
                                         ucs_rcache_region_t *region);
+
+    /**
+     * Called in the context of region lookup, for every existing region that
+     * we are potentially merging with.
+     *
+     * @param [in]  context  User context, as passed to @ref ucs_rcache_create().
+     * @param [in]  rcache   Pointer to the registration cache.
+     * @param [in]  arg      Custom argument passed to @ref ucs_rcache_get().
+     * @param [in]  region   Memory region we are merging with.
+     */
+    void                   (*merge)(void *context, ucs_rcache_t *rcache,
+                                    void *arg, ucs_rcache_region_t *region);
 
     /**
      * Dump memory region information to a string buffer.
      * (Only the user-defined part of the memory region should be dumped)
      *
-     * @param [in]  context    User context, as passed to @ref ucs_rcache_create
-     * @param [in]  rcache     Pointer to the registration cache.
-     * @param [in]  region    Memory region to dump.
-     * @param [in]  buf       String buffer to dump to.
-     * @param [in]  max       Maximal length of the string buffer.
+     * @param [in]  context  User context, as passed to @ref ucs_rcache_create().
+     * @param [in]  rcache   Pointer to the registration cache.
+     * @param [in]  region   Memory region to dump.
+     * @param [in]  buf      String buffer to dump to.
+     * @param [in]  max      Maximal length of the string buffer.
      */
     void                   (*dump_region)(void *context, ucs_rcache_t *rcache,
                                           ucs_rcache_region_t *region,
@@ -149,7 +161,6 @@ struct ucs_rcache_params {
  * Registration cache configuration parameters.
  */
 struct ucs_rcache_config {
-    size_t        alignment;      /**< Force address alignment */
     unsigned      event_prio;     /**< Memory events priority */
     ucs_time_t    overhead;       /**< Lookup overhead estimation */
     unsigned long max_regions;    /**< Maximal number of rcache regions */

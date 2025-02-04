@@ -14,7 +14,7 @@ BEGIN_C_DECLS
 
 
 /**
- * Represent either an unitialized or a closed event file descriptor.
+ * Represent either an uninitialized or a closed event file descriptor.
  */
 #define UCS_ASYNC_EVENTFD_INVALID_FD (-1)
 

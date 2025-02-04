@@ -22,6 +22,7 @@
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/proto/proto_common.h>
+#include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/rndv/rndv.h>
 #include <ucp/stream/stream.h>
@@ -585,7 +586,7 @@ ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode)
 {
-    if (ucp_ep_config(ep)->key.err_mode != err_mode) {
+    if (!ucp_ep_config_err_mode_eq(ep, err_mode)) {
         ucs_error("ep %p: asymmetric endpoint configuration is not supported,"
                   " error handling level mismatch (expected: %d, got: %d)",
                   ep, ucp_ep_config(ep)->key.err_mode, err_mode);
@@ -617,6 +618,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     if (params->field_mask & UCP_EP_PARAM_FIELD_USER_DATA) {
         /* user_data overrides err_handler.arg */
         ep->ext->user_data = params->user_data;
+        ep->flags |= UCP_EP_FLAG_USER_DATA_PARAM;
     }
 
     return UCS_OK;
@@ -762,12 +764,14 @@ void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
-                                       ucp_wireup_ep_t **wireup_ep)
+static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
+                                              unsigned ep_init_flags,
+                                              ucp_wireup_ep_t **wireup_ep)
 {
     ucp_ep_config_key_t key;
     uct_ep_h uct_ep;
     ucs_status_t status;
+    ucp_worker_cfg_index_t cfg_index;
 
     ucs_assert(ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
     ucs_assert(ucp_worker_num_cm_cmpts(ep->worker) != 0);
@@ -791,17 +795,18 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     status = ucp_worker_get_ep_config(ep->worker, &key, ep_init_flags,
-                                      &ep->cfg_index);
+                                      &cfg_index);
     if (status != UCS_OK) {
         return status;
     }
 
+    ucp_ep_set_cfg_index(ep, cfg_index);
     ep->am_lane = key.am_lane;
     if (!ucp_ep_has_cm_lane(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
 
-    status = ucp_wireup_ep_create(ep, NULL, &uct_ep);
+    status = ucp_wireup_ep_create(ep, &uct_ep);
     if (status != UCS_OK) {
         return status;
     }
@@ -1330,21 +1335,22 @@ ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps, uct_ep_h failed_ep)
 void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
                               ucp_rsc_index_t rsc_index)
 {
+    ucp_worker_h worker                 = ep->worker;
+    ucp_context_h context               = worker->context;
+    const ucp_context_config_t *ctx_cfg = &context->config.ext;
     ucp_worker_iface_t *wiface;
 
-    if ((rsc_index == UCP_NULL_RESOURCE) ||
-        !ep->worker->context->config.ext.adaptive_progress ||
+    if ((rsc_index == UCP_NULL_RESOURCE) || !ctx_cfg->adaptive_progress ||
         /* Do not unprogress an already failed lane */
-        ucp_is_uct_ep_failed(uct_ep) ||
-        ucp_wireup_ep_test(uct_ep)) {
+        ucp_is_uct_ep_failed(uct_ep) || ucp_wireup_ep_test(uct_ep) ||
+        ctx_cfg->proto_enable) {
         return;
     }
 
-    wiface = ucp_worker_iface(ep->worker, rsc_index);
-    ucs_debug("ep %p: unprogress iface %p " UCT_TL_RESOURCE_DESC_FMT,
-              ep, wiface->iface,
-              UCT_TL_RESOURCE_DESC_ARG(
-              &(ep->worker->context->tl_rscs[rsc_index].tl_rsc)));
+    wiface = ucp_worker_iface(worker, rsc_index);
+    ucs_debug("ep %p: unprogress iface %p " UCT_TL_RESOURCE_DESC_FMT, ep,
+              wiface->iface,
+              UCT_TL_RESOURCE_DESC_ARG(&(context->tl_rscs[rsc_index].tl_rsc)));
     ucp_worker_iface_unprogress_ep(wiface);
 }
 
@@ -1556,6 +1562,39 @@ void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_worker_signal_internal(worker);
 }
 
+static void
+ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
+                                     ucp_worker_cfg_index_t cfg_index)
+{
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
+
+    ucs_trace("activate wifaces worker %p ep config %u ep count %u", worker,
+              cfg_index, ep_config->ep_count);
+    if (ep_config->ep_count++ == 0) {
+        ucp_wiface_process_for_each_lane(worker, ep_config,
+                                         ep_config->proto_lane_map,
+                                         ucp_worker_iface_progress_ep);
+    }
+}
+
+static void
+ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
+                                       ucp_worker_cfg_index_t cfg_index)
+{
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
+
+    ucs_trace("deactivate wifaces worker %p ep config %u ep count %u", worker,
+              cfg_index, ep_config->ep_count);
+    ucs_assertv(ep_config->ep_count > 0, "worker %p ep config %u", worker,
+                cfg_index);
+
+    if (--ep_config->ep_count == 0) {
+        ucp_wiface_process_for_each_lane(worker, ep_config,
+                                         ep_config->proto_lane_map,
+                                         ucp_worker_iface_unprogress_ep);
+    }
+}
+
 void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 {
     uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
@@ -1578,6 +1617,8 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
         ucp_ep_unprogress_uct_ep(ep, uct_ep, ucp_ep_get_rsc_index(ep, lane));
         uct_ep_destroy(uct_ep);
     }
+
+    ucp_ep_config_deactivate_worker_ifaces(ep->worker, ep->cfg_index);
 }
 
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
@@ -1820,17 +1861,13 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
 
 static ucp_lane_index_t
 ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
-                              const ucp_rsc_index_t *dst_rsc_indices1,
                               ucp_lane_index_t lane1,
-                              const ucp_ep_config_key_t *key2,
-                              const ucp_rsc_index_t *dst_rsc_indices2)
+                              const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane_idx;
 
     for (lane_idx = 0; lane_idx < key2->num_lanes; ++lane_idx) {
-        if (ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane_idx) &&
-            ucp_ep_lane_is_dst_index_match(dst_rsc_indices1[lane1],
-                                           dst_rsc_indices2[lane_idx])) {
+        if (ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane_idx)) {
             return lane_idx;
         }
     }
@@ -1838,21 +1875,64 @@ ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
     return UCP_NULL_LANE;
 }
 
+static ucp_lane_index_t
+ucp_ep_config_find_reusable_lane(const ucp_ep_config_key_t *key1,
+                                 const ucp_ep_config_key_t *key2, ucp_ep_h ep,
+                                 const ucp_unpacked_address_t *remote_address,
+                                 const unsigned *addr_indices,
+                                 ucp_lane_index_t old_lane)
+{
+    ucp_context_h context     = ep->worker->context;
+    ucp_rsc_index_t rsc_index = key1->lanes[old_lane].rsc_index;
+    ucp_lane_index_t new_lane;
+    unsigned addr_index;
+    const ucp_address_entry_t *ae;
+
+    if (old_lane == key1->cm_lane) {
+        return key2->cm_lane;
+    }
+
+    new_lane = ucp_ep_config_find_match_lane(key1, old_lane, key2);
+    if (new_lane == UCP_NULL_LANE) {
+        /* No matching lane was found */
+        return UCP_NULL_LANE;
+    }
+
+    /* Return matching lane in case it is not connected yet */
+    if (!ucp_ep_is_local_connected(ep)) {
+        return new_lane;
+    }
+
+    addr_index = addr_indices[new_lane];
+    ae         = &remote_address->address_list[addr_index];
+
+    /* Verify both lane and address have the same transport */
+    ucs_assertv_always(context->tl_rscs[rsc_index].tl_name_csum ==
+                               ae->tl_name_csum,
+                       "lane=%u address=%u",
+                       context->tl_rscs[rsc_index].tl_name_csum,
+                       ae->tl_name_csum);
+
+    return ucp_wireup_is_lane_connected(ep, old_lane, ae) ? new_lane :
+                                                            UCP_NULL_LANE;
+}
+
 /* Go through the first configuration and check if the lanes selected
  * for this configuration could be used for the second configuration */
 void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_rsc_index_t *dst_rsc_indices1,
                                    const ucp_ep_config_key_t *key2,
-                                   const ucp_rsc_index_t *dst_rsc_indices2,
+                                   const ucp_ep_h ep,
+                                   const ucp_unpacked_address_t *remote_address,
+                                   const unsigned *addr_indices,
                                    ucp_lane_index_t *lane_map)
 {
     ucp_lane_index_t lane1_idx;
 
     for (lane1_idx = 0; lane1_idx < key1->num_lanes; ++lane1_idx) {
-        lane_map[lane1_idx] = ucp_ep_config_find_match_lane(key1,
-                                                            dst_rsc_indices1,
-                                                            lane1_idx, key2,
-                                                            dst_rsc_indices2);
+        lane_map[lane1_idx] = ucp_ep_config_find_reusable_lane(key1, key2, ep,
+                                                               remote_address,
+                                                               addr_indices,
+                                                               lane1_idx);
     }
 }
 
@@ -2359,13 +2439,14 @@ ucp_ep_config_max_short(ucp_context_t *context, uct_iface_attr_t *iface_attr,
 {
     ssize_t cfg_max_short;
 
-    if (!(iface_attr->cap.flags & short_flag)) {
+    if (!(iface_attr->cap.flags & short_flag) ||
+        ucp_context_usage_tracker_enabled(context)) {
         return -1;
     }
 
     cfg_max_short = max_short - hdr_len;
 
-    if ((context->config.ext.zcopy_thresh != UCS_MEMUNITS_AUTO)) {
+    if (context->config.ext.zcopy_thresh != UCS_MEMUNITS_AUTO) {
         /* Adjust max_short if zcopy_thresh is set externally */
         ucp_ep_config_adjust_max_short(&cfg_max_short, zcopy_thresh);
     }
@@ -2791,9 +2872,11 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     iface_attr->cap.am.max_short, sizeof(ucp_am_hdr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
-            ucp_ep_config_set_memtype_thresh(&config->am_u.max_eager_short,
-                                             am_max_eager_short,
-                                             context->num_mem_type_detect_mds);
+            if (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV) {
+                ucp_ep_config_set_memtype_thresh(
+                        &config->am_u.max_eager_short, am_max_eager_short,
+                        context->num_mem_type_detect_mds);
+            }
 
             /* All keys must fit in RNDV packet.
              * TODO remove some MDs if they don't
@@ -2826,9 +2909,11 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     sizeof(ucp_am_hdr_t) + sizeof(ucp_am_reply_ftr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
-            ucp_ep_config_set_memtype_thresh(&config->am_u.max_reply_eager_short,
-                                             am_max_eager_short,
-                                             context->num_mem_type_detect_mds);
+            if (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV) {
+                ucp_ep_config_set_memtype_thresh(
+                        &config->am_u.max_reply_eager_short, am_max_eager_short,
+                        context->num_mem_type_detect_mds);
+            }
         } else {
             /* Stub endpoint */
             config->am.max_bcopy        = UCP_MIN_BCOPY;
@@ -3437,7 +3522,7 @@ int ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_rsc_index_t rsc_index, int is_p2p)
             /* Transport is not connected as point-to-point */
             !is_p2p &&
             /* Transport supports active messages */
-            (ucp_worker_iface(ep->worker, rsc_index)->flags &
+            (ucp_worker_iface(ep->worker, rsc_index)->attr.cap.flags &
              UCT_IFACE_FLAG_AM_BCOPY);
 }
 
@@ -3620,7 +3705,7 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
          lane_index++) {
         /* Since the caller may be using a different size ucp_transport_entry_t
          * structure definition than this code, array indexing cannot be used
-         * when accesing array elements. The array element's offset must be computed
+         * when accessing array elements. The array element's offset must be computed
          * as 'lane_index' * attr->transports.entry_size and that offset added to the
          * array's base address. */
         transport_entry =
@@ -3735,6 +3820,10 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
         }
     }
 
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_USER_DATA) {
+        attr->user_data = ep->flags & UCP_EP_FLAG_USER_DATA_PARAM ? ep->ext->user_data : NULL;
+    }
+
     return UCS_OK;
 }
 
@@ -3770,4 +3859,84 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes)
     }
 
     return UCS_OK;
+}
+
+static void
+ucp_ep_select_short_init(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
+                         unsigned feature_flag, ucp_operation_id_t op_id,
+                         unsigned proto_flags, ucp_lane_index_t exp_lane,
+                         ucp_memtype_thresh_t *max_eager_short)
+{
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
+    ucp_proto_select_short_t proto_short;
+
+    if (worker->context->config.features & feature_flag) {
+        ucp_proto_select_short_init(worker, &ep_config->proto_select,
+                                    cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+                                    op_id, proto_flags, &proto_short);
+
+        /* Short protocol should be either disabled, or use expected lane */
+        ucs_assertv((proto_short.max_length_host_mem < 0) ||
+                    (proto_short.lane == exp_lane),
+                    "max_length_host_mem %ld, lane %d",
+                    proto_short.max_length_host_mem, proto_short.lane);
+    } else {
+        ucp_proto_select_short_disable(&proto_short);
+    }
+
+    max_eager_short->memtype_off = proto_short.max_length_unknown_mem;
+    max_eager_short->memtype_on  = proto_short.max_length_host_mem;
+}
+
+static void ucp_ep_config_proto_init(ucp_worker_h worker,
+                                     ucp_worker_cfg_index_t cfg_index)
+{
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
+    ucp_ep_config_key_t *key   = &ep_config->key;
+    ucp_memtype_thresh_t *tag_max_short;
+    ucp_lane_index_t tag_exp_lane;
+    unsigned tag_proto_flags;
+
+    /* Do protocol init once per EP config and only for protov2 */
+    if ((!worker->context->config.ext.proto_enable) ||
+        (ep_config->proto_init_flags & UCP_EP_PROTO_INITIALIZED)) {
+        return;
+    }
+
+    ep_config->proto_init_flags |= UCP_EP_PROTO_INITIALIZED;
+
+    if (ucp_ep_config_key_has_tag_lane(key)) {
+        tag_proto_flags = UCP_PROTO_FLAG_TAG_SHORT;
+        tag_max_short   = &ep_config->tag.offload.max_eager_short;
+        tag_exp_lane    = key->tag_lane;
+    } else {
+        tag_proto_flags = UCP_PROTO_FLAG_AM_SHORT;
+        tag_max_short   = &ep_config->tag.max_eager_short;
+        tag_exp_lane    = key->am_lane;
+    }
+
+    ucp_ep_select_short_init(worker, cfg_index,
+                             UCP_FEATURE_TAG, UCP_OP_ID_TAG_SEND,
+                             tag_proto_flags, tag_exp_lane, tag_max_short);
+
+    ucp_ep_select_short_init(worker, cfg_index,
+                             UCP_FEATURE_AM, UCP_OP_ID_AM_SEND,
+                             UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
+                             &ep_config->am_u.max_eager_short);
+
+    ucp_ep_select_short_init(worker, cfg_index,
+                             UCP_FEATURE_AM, UCP_OP_ID_AM_SEND_REPLY,
+                             UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
+                             &ep_config->am_u.max_reply_eager_short);
+}
+
+void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
+{
+    if (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+        ucp_ep_config_deactivate_worker_ifaces(ep->worker, ep->cfg_index);
+    }
+
+    ep->cfg_index = cfg_index;
+    ucp_ep_config_activate_worker_ifaces(ep->worker, cfg_index);
+    ucp_ep_config_proto_init(ep->worker, cfg_index);
 }

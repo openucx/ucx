@@ -18,7 +18,7 @@ The scripts in this directory use the Slurm job scheduler to run the MTT job.
    sbatch -N 2 -p slurm_partition run-ucx.slurm
 
 5. An output file will be created: slurm-$SLURM_JOBID.out.
-   Please view this file to moniter the progress of your MTT job.
+   Please view this file to monitor the progress of your MTT job.
 
 The mtt_ucx_oshmem.ini file will:
 =================================

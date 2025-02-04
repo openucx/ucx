@@ -13,6 +13,7 @@ ucx_vfs_CFLAGS   = $(BASE_CFLAGS)
 ucx_vfs_SOURCES  = vfs_main.c vfs_server.c
 noinst_HEADERS   = vfs_daemon.h
 ucx_vfs_LDADD    = $(FUSE3_LIBS) \
-                   $(top_builddir)/src/ucs/vfs/sock/libucs_vfs_sock.la
+                   $(top_builddir)/src/ucs/vfs/sock/libucs_vfs_sock.la \
+                   $(top_builddir)/src/ucs/libucs.la
 
 endif

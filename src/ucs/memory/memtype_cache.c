@@ -18,7 +18,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucm/api/ucm.h>
 
 
@@ -429,5 +429,6 @@ void ucs_memtype_cache_cleanup()
 
     if (ucs_memtype_cache_global_instance) {
         UCS_CLASS_DELETE(ucs_memtype_cache_t, ucs_memtype_cache_global_instance);
+        ucs_memtype_cache_global_instance = NULL;
     }
 }

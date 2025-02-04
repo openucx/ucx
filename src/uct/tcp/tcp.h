@@ -199,7 +199,7 @@ enum {
 typedef struct uct_tcp_cm_conn_req_pkt {
     uct_tcp_cm_conn_event_t event;         /* Connection event ID */
     uint8_t                 flags;         /* Packet flags */
-    uct_tcp_ep_cm_id_t      cm_id;         /* EP connection mananger ID */
+    uct_tcp_ep_cm_id_t      cm_id;         /* EP connection manager ID */
     /* Socket address follows. The address size is according
      * to the address family in use */
 } UCS_S_PACKED uct_tcp_cm_conn_req_pkt_t;
@@ -343,7 +343,7 @@ struct uct_tcp_ep {
     int                           stale_fd;     /* Old file descriptor which should be
                                                  * closed as soon as the EP is connected
                                                  * using the new fd */
-    uct_tcp_ep_cm_id_t            cm_id;        /* EP connection mananger ID */
+    uct_tcp_ep_cm_id_t            cm_id;        /* EP connection manager ID */
     uct_tcp_ep_ctx_t              tx;           /* TX resources */
     uct_tcp_ep_ctx_t              rx;           /* RX resources */
     ucs_queue_head_t              pending_q;    /* Pending operations */
@@ -400,6 +400,7 @@ typedef struct uct_tcp_iface {
         struct sockaddr_storage   ifaddr;            /* Network address */
         struct sockaddr_storage   netmask;           /* Network address mask */
         size_t                    sockaddr_len;      /* Network address length */
+        ucs_ternary_auto_value_t  ep_bind_src_addr;  /* Bind EP's FD to ifaddr */
         int                       prefer_default;    /* Prefer default gateway */
         int                       put_enable;        /* Enable PUT Zcopy operation support */
         int                       conn_nb;           /* Use non-blocking connect() */
@@ -457,6 +458,7 @@ typedef struct uct_tcp_iface_config {
         unsigned long              cnt;
         ucs_time_t                 intvl;
     } keepalive;
+    ucs_ternary_auto_value_t       ep_bind_src_addr;
 } uct_tcp_iface_config_t;
 
 

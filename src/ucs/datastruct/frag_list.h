@@ -40,7 +40,7 @@
  *    ready  elemlist     elemlist          elemlist
  *    list
  *
- *   elemlists and ready list are sorted and continuos - no holes
+ *   elemlists and ready list are sorted and continuous - no holes
  *   ready list contains elements that can be easily pulled: head->sn = read_list.last_sn
  */
 

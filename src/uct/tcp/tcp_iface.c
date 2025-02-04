@@ -111,6 +111,12 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
                 UCS_CONFIG_TYPE_TIME_UNITS},
 #endif /* UCT_TCP_EP_KEEPALIVE */
 
+  {"EP_BIND_SRC_ADDR", "try",
+   "Bind client socket to the local network interface before connecting to the "
+   "remote peer",
+   ucs_offsetof(uct_tcp_iface_config_t, ep_bind_src_addr),
+                UCS_CONFIG_TYPE_TERNARY},
+
   {NULL}
 };
 
@@ -194,6 +200,7 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     uct_iface_local_addr_ns_t *local_addr_ns;
     uct_tcp_device_addr_t *tcp_dev_addr;
+    int is_local_loopback, is_remote_loopback;
 
     if (!uct_iface_is_reachable_params_valid(
                 params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
@@ -202,19 +209,29 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     tcp_dev_addr = (uct_tcp_device_addr_t*)params->device_addr;
     if (iface->config.ifaddr.ss_family != tcp_dev_addr->sa_family) {
+        uct_iface_fill_info_str_buf(
+                params, "different address family %d vs %d",
+                iface->config.ifaddr.ss_family, tcp_dev_addr->sa_family);
         return 0;
     }
 
     /* Loopback can connect only to loopback */
-    if (!!(tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) !=
-        ucs_sockaddr_is_inaddr_loopback(
-                (const struct sockaddr*)&iface->config.ifaddr)) {
+    is_remote_loopback = !!(tcp_dev_addr->flags &
+                            UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK);
+    is_local_loopback  = ucs_sockaddr_is_inaddr_loopback(
+            (const struct sockaddr*)&iface->config.ifaddr);
+    if (is_remote_loopback != is_local_loopback) {
+        uct_iface_fill_info_str_buf(params,
+                                    "incompatible loopback flags, "
+                                    "%d (local) vs %d (remote)",
+                                    is_local_loopback, is_remote_loopback);
         return 0;
     }
 
-    if (tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) {
+    if (is_remote_loopback) {
         local_addr_ns = (uct_iface_local_addr_ns_t*)(tcp_dev_addr + 1);
-        if (!uct_iface_local_is_reachable(local_addr_ns, UCS_SYS_NS_TYPE_NET)) {
+        if (!uct_iface_local_is_reachable(local_addr_ns, UCS_SYS_NS_TYPE_NET,
+                                          params)) {
             return 0;
         }
     }
@@ -227,9 +244,14 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
 static const char *
 uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
 {
+    const char *sysfs_path = NULL;
     ucs_status_t status;
-    const char *sysfs_path;
-    char lowest_path_buf[PATH_MAX];
+    char *lowest_path_buf;
+
+    status = ucs_string_alloc_path_buffer(&lowest_path_buf, "lowest_path_buf");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     /* Deep search to find the lowest device sysfs path:
      * 1) For regular device, use regular sysfs form.
@@ -238,11 +260,15 @@ uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
     status = ucs_netif_get_lowest_device_path(dev_name, lowest_path_buf,
                                               PATH_MAX);
     if (status != UCS_OK) {
-        return NULL;
+        goto out_free_lowest_path_buf;
     }
 
     /* 'path_buffer' size is PATH_MAX */
     sysfs_path = ucs_topo_resolve_sysfs_path(lowest_path_buf, path_buffer);
+
+out_free_lowest_path_buf:
+    ucs_free(lowest_path_buf);
+out:
     return sysfs_path;
 }
 
@@ -255,14 +281,19 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     ucs_status_t status;
     int is_default;
     double pci_bw, network_bw, calculated_bw;
-    char path_buffer[PATH_MAX];
+    char *path_buffer;
     const char *sysfs_path;
 
     uct_base_iface_query(&iface->super, attr);
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.c, &network_bw);
     if (status != UCS_OK) {
-        return status;
+        goto out;
+    }
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        goto out;
     }
 
     sysfs_path             = uct_tcp_iface_get_sysfs_path(iface->if_name, path_buffer);
@@ -275,14 +306,15 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_tcp_iface_addr_t);
     attr->device_addr_len  = uct_tcp_iface_get_device_address_length(iface);
-    attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                             UCT_IFACE_FLAG_CONNECT_TO_EP    |
-                             UCT_IFACE_FLAG_AM_SHORT         |
-                             UCT_IFACE_FLAG_AM_BCOPY         |
-                             UCT_IFACE_FLAG_PENDING          |
-                             UCT_IFACE_FLAG_CB_SYNC          |
-                             UCT_IFACE_FLAG_EP_CHECK         |
-                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+    attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
+                             UCT_IFACE_FLAG_CONNECT_TO_EP          |
+                             UCT_IFACE_FLAG_AM_SHORT               |
+                             UCT_IFACE_FLAG_AM_BCOPY               |
+                             UCT_IFACE_FLAG_PENDING                |
+                             UCT_IFACE_FLAG_CB_SYNC                |
+                             UCT_IFACE_FLAG_EP_CHECK               |
+                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                             UCT_IFACE_FLAG_INTER_NODE;
     attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                              UCT_IFACE_FLAG_EVENT_RECV      |
                              UCT_IFACE_FLAG_EVENT_FD;
@@ -322,7 +354,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     if (iface->config.prefer_default) {
         status = uct_tcp_netif_is_default(iface->if_name, &is_default);
         if (status != UCS_OK) {
-             return status;
+            goto out_free_path_buffer;
         }
 
         attr->priority    = is_default ? 0 : 1;
@@ -330,7 +362,10 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
         attr->priority    = 0;
     }
 
-    return UCS_OK;
+out_free_path_buffer:
+    ucs_free(path_buffer);
+out:
+    return status;
 }
 
 static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
@@ -482,7 +517,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_tcp_iface_progress,
     .iface_event_fd_get       = uct_tcp_iface_event_fd_get,
-    .iface_event_arm          = ucs_empty_function_return_success,
+    .iface_event_arm          = (uct_iface_event_arm_func_t)ucs_empty_function_return_success,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
     .iface_query              = uct_tcp_iface_query,
     .iface_get_address        = uct_tcp_iface_get_address,
@@ -690,6 +725,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
     self->config.keepalive.cnt     = config->keepalive.cnt;
     self->config.keepalive.intvl   = config->keepalive.intvl;
+    self->config.ep_bind_src_addr  = config->ep_bind_src_addr;
     self->port_range.first         = config->port_range.first;
     self->port_range.last          = config->port_range.last;
 
@@ -864,13 +900,25 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_iface_t, uct_iface_t, uct_md_h,
 
 static int uct_tcp_is_bridge(const char *if_name)
 {
-    char path[PATH_MAX];
+    char *path;
+    int ret;
     struct stat st;
+    ucs_status_t status;
 
-    ucs_snprintf_safe(path, PATH_MAX, UCT_TCP_IFACE_NETDEV_DIR "/%s/bridge",
-                      if_name);
+    status = ucs_string_alloc_formatted_path(&path, "path",
+                                             UCT_TCP_IFACE_NETDEV_DIR
+                                             "/%s/bridge",
+                                             if_name);
+    if (status != UCS_OK) {
+        ret = 0;
+        goto out;
+    }
 
-    return (stat(path, &st) == 0) && S_ISDIR(st.st_mode);
+    ret = (stat(path, &st) == 0) && S_ISDIR(st.st_mode);
+
+    ucs_free(path);
+out:
+    return ret;
 }
 
 ucs_status_t uct_tcp_query_devices(uct_md_h md,
@@ -885,7 +933,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     int is_active, i, n;
     ucs_status_t status;
     const char *sysfs_path;
-    char path_buffer[PATH_MAX];
+    char *path_buffer;
     ucs_sys_device_t sys_dev;
 
     n = scandir(UCT_TCP_IFACE_NETDEV_DIR, &entries, NULL, alphasort);
@@ -897,6 +945,12 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
 
     devices     = NULL;
     num_devices = 0;
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     ucs_carray_for_each(entry, entries, n) {
         /* According to the sysfs(5) manual page, all of entries
          * has to be a symbolic link representing one of the real
@@ -959,6 +1013,7 @@ out_release:
     }
 
     free(entries);
+    ucs_free(path_buffer);
 out:
     return status;
 }

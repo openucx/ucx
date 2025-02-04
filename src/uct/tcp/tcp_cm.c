@@ -343,7 +343,7 @@ uct_tcp_ep_t *uct_tcp_cm_get_ep(uct_tcp_iface_t *iface,
         /* when creating new endpoint from API, search for the arrived
          * connection requests and remove from the connection matching
          * context, since the EP with RX-only capability will be destroyed
-         * or re-used for the EP created through uct_ep_create() and
+         * or reused for the EP created through uct_ep_create() and
          * returned to the user (it will be inserted to expected queue) */
         queue_type      = UCS_CONN_MATCH_QUEUE_UNEXP;
         remove_from_ctx = 1;
@@ -532,6 +532,8 @@ static unsigned uct_tcp_cm_handle_simult_conn(uct_tcp_iface_t *iface,
         if (connect_ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED) {
             uct_tcp_ep_mod_events(accept_ep, 0, UCS_EVENT_SET_EVREAD);
             ucs_assert(connect_ep->stale_fd == -1);
+            ucs_debug("tcp_ep %p: move accept_ep %p fd=%d to stale",
+                      connect_ep, accept_ep, accept_ep->fd);
             connect_ep->stale_fd = accept_ep->fd;
             accept_ep->fd        = -1;
         }

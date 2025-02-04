@@ -134,7 +134,7 @@ protected:
             std::vector<ucp_request_t*> pending_reqs;
 
             if (i < wireup_ep_count) {
-                status = ucp_wireup_ep_create(m_ucp_ep, NULL, &discard_ep);
+                status = ucp_wireup_ep_create(m_ucp_ep, &discard_ep);
                 ASSERT_UCS_OK(status);
 
                 wireup_eps.push_back(discard_ep);
@@ -859,7 +859,8 @@ public:
         }
 
         for (const auto &file : sysfs_files) {
-            if (file.find("slave_") != std::string::npos) {
+            if ((file.find("slave_") != std::string::npos) ||
+                (file.find("lower_") != std::string::npos)) {
                 dev_path += "/" + file;
                 break;
             }
@@ -902,17 +903,18 @@ UCS_TEST_P(test_pci_bw, get_pci_bw)
 {
     ucp_worker_h worker = sender().worker();
     ucp_context_h ctx   = worker->context;
-    char path_buffer[PATH_MAX];
+    std::string path_buffer(PATH_MAX, '\0');
     const ucp_worker_iface_t *wiface;
 
     for (auto i = 0; i < worker->num_ifaces; ++i) {
-        wiface                 = worker->ifaces[i];
-        const auto dev_name    = ctx->tl_rscs[wiface->rsc_index].tl_rsc.dev_name;
-        const auto tcp_device  = get_tcp_device(dev_name);
-        const auto dev_path    = !tcp_device.empty() ? tcp_device :
-                                                          get_ib_device(dev_name);
+        wiface              = worker->ifaces[i];
+        const auto dev_name = ctx->tl_rscs[wiface->rsc_index].tl_rsc.dev_name;
+        const auto tcp_device = get_tcp_device(dev_name);
+        const auto dev_path   = !tcp_device.empty() ? tcp_device :
+                                                        get_ib_device(dev_name);
+
         const char *sysfs_path = ucs_topo_resolve_sysfs_path(dev_path.c_str(),
-                                                             path_buffer);
+                                                             &path_buffer[0]);
         const double pci_bw    = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
         uct_iface_attr_t attr;
@@ -926,3 +928,62 @@ UCS_TEST_P(test_pci_bw, get_pci_bw)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_pci_bw, all, "all")
+
+class test_worker_cpu_mask : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+    }
+
+    test_worker_cpu_mask() :
+        m_rlimit(RLIMIT_NOFILE, m_fd_per_cpu * ucs_sys_get_num_cpus())
+    {
+    }
+
+protected:
+    void init() override
+    {
+        // Don't create any entities on startup
+    }
+
+    ucp_worker_params_t get_worker_params() override
+    {
+        auto params        = ucp_test::get_worker_params();
+        params.field_mask |= UCP_WORKER_PARAM_FIELD_CPU_MASK;
+        UCS_CPU_ZERO(&params.cpu_mask);
+        UCS_CPU_SET(m_cpu, &params.cpu_mask);
+        return params;
+    }
+
+    void set_cpu(unsigned cpu)
+    {
+        m_cpu = cpu;
+    }
+
+    ucs::rlimit_setter   m_rlimit;
+    static constexpr int m_fd_per_cpu = 60;
+
+private:
+    unsigned m_cpu = 0;
+};
+
+UCS_TEST_P(test_worker_cpu_mask, all_cpus)
+{
+    ucs_sys_cpuset_t mask;
+
+    CPU_ZERO(&mask);
+    ASSERT_GE(ucs_sys_getaffinity(&mask), 0);
+
+    long num_cpus = ucs_min(m_rlimit.limit() / m_fd_per_cpu,
+                            ucs_sys_get_num_cpus());
+    for (auto cpu = 0; cpu < num_cpus; ++cpu) {
+        if (CPU_ISSET(cpu, &mask)) {
+            set_cpu(cpu);
+            UCS_TEST_MESSAGE << "create entity on cpu " << cpu;
+            create_entity();
+        }
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_worker_cpu_mask, all, "all")

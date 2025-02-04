@@ -21,6 +21,9 @@
 #define UCS_CONFIG_ARRAY_MAX   128
 #define UCX_CONFIG_FILE_NAME   "ucx.conf"
 
+/* String literal for allow-list */
+#define UCS_CONFIG_PARSER_ALL "all"
+
 BEGIN_C_DECLS
 
 /** @file parser.h */
@@ -389,12 +392,12 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_TIME       {ucs_config_sscanf_time,      ucs_config_sprintf_time, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
                                     ucs_config_help_generic,     ucs_config_doc_nop, \
-                                    "time value: <number>[s|us|ms|ns]"}
+                                    "time value: <number>[m|s|ms|us|ns]"}
 
 #define UCS_CONFIG_TYPE_TIME_UNITS {ucs_config_sscanf_time_units, ucs_config_sprintf_time_units, \
                                     ucs_config_clone_ulong,       ucs_config_release_nop, \
                                     ucs_config_help_generic,      ucs_config_doc_nop, \
-                                    "time value: <number>[s|us|ms|ns], \"inf\", or \"auto\""}
+                                    "time value: <number>[m|s|ms|us|ns], \"inf\", or \"auto\""}
 
 #define UCS_CONFIG_TYPE_BW         {ucs_config_sscanf_bw,        ucs_config_sprintf_bw, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
@@ -501,7 +504,7 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
  * Parse configuration files. This function searches for config in several
  * locations and parses them in order of precedence.
  */
-void ucs_config_parse_config_files();
+void ucs_config_parse_config_files(void);
 
 
 /**
@@ -620,7 +623,7 @@ int ucs_config_names_search(const ucs_config_names_array_t *config_names,
 
 /**
  * @param   strb      An initiated ucs_string_buffer_t which will contain the env variables
- * @param   delimiter String that will seperate between each 2 env variables
+ * @param   delimiter String that will separate between each 2 env variables
 */
 void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
                                     const char *delimiter);
@@ -629,7 +632,7 @@ void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
 /**
  * Global cleanup of the configuration parser.
  */
-void ucs_config_parser_cleanup();
+void ucs_config_parser_cleanup(void);
 
 
 END_C_DECLS

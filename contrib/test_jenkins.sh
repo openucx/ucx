@@ -10,12 +10,11 @@
 #
 # Environment variables set by Jenkins CI:
 #  - WORKSPACE         : path to work dir
-#  - BUILD_NUMBER      : jenkins build number
-#  - JOB_URL           : jenkins job url
+#  - BUILD_NUMBER      : azure build number
+#  - JOB_URL           : azure job url
 #  - EXECUTOR_NUMBER   : number of executor within the test machine
-#  - JENKINS_RUN_TESTS : whether to run unit tests
-#  - RUN_TESTS         : same as JENKINS_RUN_TESTS, but for Azure
-#  - JENKINS_TEST_PERF : whether to validate performance
+#  - RUN_TESTS         : whether to run unit tests
+#  - TEST_PERF         : whether to validate performance
 #  - ASAN_CHECK        : set to enable Address Sanitizer instrumentation build
 #  - VALGRIND_CHECK    : set to enable running tests with Valgrind
 #
@@ -34,37 +33,25 @@ if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
 	BUILD_NUMBER=1
 	WS_URL=file://$WORKSPACE
-	JENKINS_RUN_TESTS=yes
-	JENKINS_TEST_PERF=1
+	RUN_TESTS=yes
+	TEST_PERF=1
 	TIMEOUT=""
 else
-	echo "Running under jenkins"
+	echo "Running under azure"
 	WS_URL=$JOB_URL/ws
 	if [[ "$VALGRIND_CHECK" == "yes" ]]; then
-		TIMEOUT="timeout 240m"
+		TIMEOUT="timeout 300m"
 	else
 		TIMEOUT="timeout 200m"
 	fi
 fi
 
 
-#
-# Set affinity to 2 cores according to Jenkins executor number.
-# Affinity is inherited from agent in Azure CI.
-# TODO: remove or rename after CI migration.
-#
-if [ -n "$EXECUTOR_NUMBER" ] && [ -n "$JENKINS_RUN_TESTS" ]
-then
-	AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
-else
-	AFFINITY=""
-fi
-
 have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
 have_strace=$(strace -V || true)
 
 #
-# Override maven repository path, to cache the downloaded packages accross tests
+# Override maven repository path, to cache the downloaded packages across tests
 #
 export maven_repo=${WORKSPACE}/.deps
 
@@ -166,7 +153,7 @@ slice_affinity() {
 	n=$1
 
 	# get affinity mask of the current process
-	compact_cpulist=$($AFFINITY bash -c 'taskset -cp $$' | cut -d: -f2)
+	compact_cpulist=$(bash -c 'taskset -cp $$' | cut -d: -f2)
 	cpulist=$(expand_cpulist ${compact_cpulist})
 
 	echo "${cpulist}" | head -n $((n + 1)) | tail -1
@@ -220,7 +207,7 @@ run_client_server_app() {
 
 	if [ $kill_server -eq 1 ]
 	then
-		kill -9 ${server_pid}
+		kill -9 ${server_pid} || true # ignore failure
 	fi
 	wait ${server_pid} || true
 }
@@ -369,7 +356,7 @@ run_client_server() {
 		do
 			for msg_size in ${msg_size_list}
 			do
-				echo "==== Running UCP client-server with \"${mem_type}\" memory type using \"{$api}\" API with msg_size={$msg_size} ===="
+				echo "==== Running UCP client-server with \"${mem_type}\" memory type using \"${api}\" API with msg_size={$msg_size} ===="
 				run_client_server_app "./examples/${test_name}" "-m ${mem_type} -c ${api} -s ${msg_size}" "-a ${server_ip}" 1 0
 			done
 		done
@@ -478,11 +465,11 @@ run_ucx_perftest() {
 		then
 			# Run UCP performance test
 			which mpirun
-			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $ucx_perftest $ucp_test_args
 
 			# Run UCP loopback performance test
 			which mpirun
-			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args "-l"
+			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $ucx_perftest $ucp_test_args "-l"
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
@@ -574,6 +561,79 @@ run_ucx_perftest() {
 	fi
 }
 
+start_perftest_daemon() {
+	daemon_exe="$1"
+
+	# Find daemon port
+	dmn_port="$server_port"
+	step_server_port
+
+	# We explicitly disable cuda transport, because it's not p2p and therefore
+	# imposes INVALIDATE_RMA flag for all lanes (@see ucp_ep_config_init).
+	# However invalidating of imported rkeys is not supported by the daemon.
+	# TODO: Should we support invalidation of imported keys?
+	# Normally cuda_ipc cannot be used to communicate between host and DPU,
+	# unless we run both processes on host for testing purposes.
+
+	# Mandatory options to run the daemon
+	# - UCX_RNDV_THRESH=0 is needed to enforce RNDV protocol usage, as it's the
+	# only supported protocol between host and DPU
+	# - UCX_RNDV_SCHEME=put_zcopy. On low buffer dimensions (below ~8KB) UCX
+	# prefers bcopy over zero-copy, but bcopy workflow is not supported by DPU
+	# daemon. The workaround is to force rendezvous scheme to use zero-copy.
+	# get_zcopy option is not good enough, because bcopy is still selected for
+	# tiny messages (below 64 bytes)
+	dmn_env="UCX_TLS=^cuda UCX_TCP_CM_REUSEADDR=y UCX_RNDV_THRESH=0 UCX_RNDV_SCHEME=put_zcopy"
+
+	# Run the daemon
+	env $dmn_env $daemon_exe -p $dmn_port &
+
+	# Return the daemon pid and port
+	eval "$2=$!"
+	eval "$3=$dmn_port"
+}
+
+#
+# Run UCX performance daemon test
+#
+run_ucx_perftest_with_daemon() {
+	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+	ucx_perftest_daemon="$ucx_inst/bin/ucx_perftest_daemon"
+	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_daemon"
+
+	devices="$(get_ib_bf_devices $(get_active_ib_devices))"
+	for ucx_dev in $devices
+	do
+		echo "==== Running ucx_perftest over a daemon on $ucx_dev ===="
+		ip_addr=$(get_rdma_device_ip_addr $ucx_dev)
+		if [ -z "$ip_addr" ]
+		then
+			echo "Cannot find IPv4 address for device $ucx_dev"
+			continue
+		fi
+
+		export UCX_NET_DEVICES=$ucx_dev
+
+		# Start client and server daemons
+		start_perftest_daemon $ucx_perftest_daemon server_dmn_pid server_dmn_port
+		start_perftest_daemon $ucx_perftest_daemon client_dmn_pid client_dmn_port
+
+		ucp_client_args="-g $ip_addr:$client_dmn_port -G $ip_addr:$server_dmn_port $(hostname)"
+
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+
+		kill ${client_dmn_pid} || true # ignore failure
+		kill ${server_dmn_pid} || true # ignore failure
+		wait $client_dmn_pid || true
+		wait $server_dmn_pid || true
+
+		unset UCX_TLS
+		unset UCX_NET_DEVICES
+	done
+}
+
 #
 # Test malloc hooks with mpi
 #
@@ -584,7 +644,7 @@ test_malloc_hooks_mpi() {
 		do
 			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
 			which mpirun
-			$MPIRUN -np 1 $AFFINITY \
+			$MPIRUN -np 1 \
 				./test/mpi/test_memhooks -t $tname -m ${mode}
 		done
 
@@ -592,7 +652,7 @@ test_malloc_hooks_mpi() {
 		ucm_lib=$PWD/src/ucm/.libs/libucm.so
 		ls -l $ucm_lib
 		which mpirun
-		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY \
+		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib \
 			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
 	done
 }
@@ -752,13 +812,13 @@ test_init_mt() {
 	$MAKEP
 	for ((i=0;i<10;++i))
 	do
-		OMP_NUM_THREADS=$num_threads $AFFINITY timeout 5m ./test/apps/test_init_mt
+		OMP_NUM_THREADS=$num_threads timeout 5m ./test/apps/test_init_mt
 	done
 }
 
 test_memtrack() {
 	echo "==== Running memtrack test ===="
-	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
+	UCX_MEMTRACK_DEST=stdout GTEST_FILTER=test_memtrack.sanity make -C ./test/gtest test
 
 	echo "==== Running memtrack limit test ===="
 	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
@@ -841,7 +901,7 @@ run_gtest_watchdog_test() {
 	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
 		WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
 		GTEST_FILTER=test_watchdog.watchdog_timeout \
-		./test/gtest/gtest 2>&1 | tee watchdog_timeout_test &
+		make -C ./test/gtest test 2>&1 | tee watchdog_timeout_test &
 	pid=$!
 	wait $pid
 
@@ -871,7 +931,7 @@ run_malloc_hook_gtest() {
 	# GTEST_SHARD_INDEX/GTEST_TOTAL_SHARDS should NOT be set
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		UCX_IB_RCACHE=n \
 		MALLOC_TRIM_THRESHOLD_=-1 \
 		MALLOC_MMAP_THRESHOLD_=-1 \
@@ -879,19 +939,19 @@ run_malloc_hook_gtest() {
 			make -C test/gtest test
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		MALLOC_MMAP_THRESHOLD_=16384 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 			make -C test/gtest test
 
 	echo "==== Running cuda hooks, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
 
 	echo "==== Running cuda hooks with far jump, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
-		UCM_BISTRO_FORCE_FAR_JUMP=y \
+	$TIMEOUT env \
+		UCX_MEM_BISTRO_FORCE_FAR_JUMP=y \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
 }
@@ -914,7 +974,7 @@ set_gtest_make_test_flags() {
 	export GTEST_REPORT_LONGEST_TESTS=20
 
 	GTEST_EXTRA_ARGS=""
-	if [ "$JENKINS_TEST_PERF" == 1 ] && [[ "$VALGRIND_CHECK" != "yes" ]]
+	if [ "$TEST_PERF" == 1 ] && [[ "$VALGRIND_CHECK" != "yes" ]]
 	then
 		# Check performance with 10 retries and 2 seconds interval
 		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
@@ -957,7 +1017,7 @@ run_gtest_make() {
 
 	# Run all tests
 	echo "==== Running make -C test/gtest $make_target, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT make -C test/gtest $make_target
+	$TIMEOUT make -C test/gtest $make_target
 
 	unset_test_flags
 }
@@ -1026,7 +1086,7 @@ run_gtest_release() {
 	# - Unexpected RNDV test, to cover rkey handling in tag offload flow
 	#   (see GH #3827 for details)
 	env GTEST_FILTER=\*test_obj_size\*:\*test_ucp_tag_match.rndv_rts_unexp\* \
-		$AFFINITY $TIMEOUT make -C test/gtest test
+		$TIMEOUT make -C test/gtest test
 
 	unset OMP_NUM_THREADS
 	unset GTEST_SHARD_INDEX
@@ -1064,6 +1124,18 @@ run_release_mode_tests() {
 	test_ucm_hooks
 }
 
+#
+# Run nt_buffer_transfer tests
+#
+run_nt_buffer_transfer_tests() {
+    if lscpu | grep -q 'AuthenticAMD'
+    then
+	    build release --enable-gtest --enable-optimizations
+	    echo "==== Running nt_buffer_transfer tests ===="
+	    ./test/gtest/gtest --gtest_filter="test_arch.nt_buffer_transfer_*"
+    fi
+}
+
 set_ucx_common_test_env() {
 	export UCX_HANDLE_ERRORS=bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
@@ -1071,11 +1143,30 @@ set_ucx_common_test_env() {
 	export UCX_TCP_CM_REUSEADDR=y
 
 	# Don't cross-connect RoCE devices
-	export UCX_IB_ROCE_LOCAL_SUBNET=y
 	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 
 	export LSAN_OPTIONS=suppressions=${WORKSPACE}/contrib/lsan.supp
 	export ASAN_OPTIONS=protect_shadow_gap=0
+}
+
+run_configure_tests() {
+	echo "==== Run configure tests ===="
+
+	../contrib/configure-release --with-verbs
+	grep 'build_modules=' config.log
+	if ! grep -qwE '^build_modules=.*:ib.*:rdmacm.*:mlx5' config.log
+	then
+		azure_log_error "missing modules configuring with verbs"
+		exit 1
+	fi
+
+	../contrib/configure-release --without-verbs
+	grep 'build_modules=' config.log
+	if grep -wE '^build_modules=.*:(ib|rdmacm|efa|mlx5)' config.log
+	then
+		azure_log_error "some modules were not disabled without verbs"
+		exit 1
+	fi
 }
 
 #
@@ -1086,6 +1177,9 @@ run_tests() {
 
 	# all are running mpi tests
 	run_mpi_tests
+
+	# configuration related tests
+	run_configure_tests
 
 	# build for devel tests and gtest
 	build devel --enable-gtest
@@ -1100,6 +1194,7 @@ run_tests() {
 	do_distributed_task 2 4 test_init_mt
 	do_distributed_task 3 4 run_ucp_client_server
 	do_distributed_task 0 4 test_no_cuda_context
+	do_distributed_task 1 4 run_ucx_perftest_with_daemon
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello
@@ -1115,6 +1210,9 @@ run_tests() {
 
 	# release mode tests
 	do_distributed_task 0 4 run_release_mode_tests
+
+	# nt_buffer_transfer tests
+	do_distributed_task 0 4 run_nt_buffer_transfer_tests
 }
 
 run_test_proto_disable() {
@@ -1129,6 +1227,13 @@ run_test_proto_disable() {
 
 run_asan_check() {
 	build devel --enable-gtest --enable-asan --without-valgrind
+
+	if ! ldd ${WORKSPACE}/build-test/test/gtest/gtest | grep -q "libasan.so"
+	then
+		azure_log_error "Error: ASan is not loaded."
+		exit 1
+	fi
+
 	run_gtest "default"
 }
 
@@ -1153,7 +1258,7 @@ run_valgrind_check() {
 prepare
 try_load_cuda_env
 
-if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
+if [ "$RUN_TESTS" == "yes" ]
 then
     check_machine
     set_ucx_common_test_env

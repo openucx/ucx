@@ -17,10 +17,11 @@ extern uct_component_t uct_gdr_copy_component;
 /**
  * @brief gdr_copy MD descriptor
  */
-typedef struct uct_gdr_copy_md {
+typedef struct {
     uct_md_t            super;      /**< Domain info */
     gdr_t               gdrcpy_ctx; /**< gdr copy context */
     ucs_linear_func_t   reg_cost;   /**< Memory registration cost */
+    ucs_rcache_t        *rcache;    /**< Registration cache */
 } uct_gdr_copy_md_t;
 
 
@@ -29,6 +30,8 @@ typedef struct uct_gdr_copy_md {
  */
 typedef struct uct_gdr_copy_md_config {
     uct_md_config_t         super;
+    int                     shared;       /**< Shared MD instance */
+    int                     enable_rcache;/**< Enable registration cache */
     ucs_linear_func_t       uc_reg_cost;  /**< Memory registration cost estimation
                                              without using the cache */
 } uct_gdr_copy_md_config_t;

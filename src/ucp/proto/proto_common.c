@@ -12,8 +12,33 @@
 #include "proto_common.inl"
 
 #include <ucp/am/ucp_am.inl>
+#include <ucp/wireup/wireup.h>
 #include <uct/api/v2/uct_v2.h>
 
+
+ucp_proto_common_init_params_t
+ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_common_init_params_t params = {
+        .super         = *init_params,
+        .latency       = 0,
+        .overhead      = 0,
+        .cfg_thresh    = UCS_MEMUNITS_AUTO,
+        .cfg_priority  = 0,
+        .min_length    = 0,
+        .max_length    = SIZE_MAX,
+        .min_iov       = 0,
+        .min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .hdr_size      = 0,
+        .send_op       = UCT_EP_OP_LAST,
+        .memtype_op    = UCT_EP_OP_LAST,
+        .flags         = 0,
+        .exclude_map   = 0
+    };
+    return params;
+}
 
 int ucp_proto_common_init_check_err_handling(
         const ucp_proto_common_init_params_t *init_params)
@@ -37,6 +62,17 @@ ucp_proto_common_get_seg_size(const ucp_proto_common_init_params_t *params,
 {
     ucs_assert(lane < UCP_MAX_LANES);
     return params->super.ep_config_key->lanes[lane].seg_size;
+}
+
+ucp_memory_info_t ucp_proto_common_select_param_mem_info(
+                                   const ucp_proto_select_param_t *select_param)
+{
+    ucp_memory_info_t mem_info = {
+        .type = select_param->mem_type,
+        .sys_dev = select_param->sys_dev
+    };
+
+    return mem_info;
 }
 
 void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
@@ -124,6 +160,14 @@ ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
     return params->worker->context->tl_rscs[rsc_index].tl_rsc.sys_device;
 }
 
+/* Pack/unpack local distance to make it equal to the remote one */
+static void
+ucp_proto_common_fp8_pack_unpack_distance(ucs_sys_dev_distance_t *distance)
+{
+    distance->latency   = ucp_wireup_fp8_pack_unpack_latency(distance->latency);
+    distance->bandwidth = UCS_FP8_PACK_UNPACK(BANDWIDTH, distance->bandwidth);
+}
+
 void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
                                         ucp_lane_index_t lane,
                                         ucs_sys_device_t sys_dev,
@@ -143,6 +187,8 @@ void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
     status     = ucs_topo_get_distance(sys_dev, tl_sys_dev, distance);
     ucs_assertv_always(status == UCS_OK, "sys_dev=%d tl_sys_dev=%d", sys_dev,
                        tl_sys_dev);
+
+    ucp_proto_common_fp8_pack_unpack_distance(distance);
 }
 
 const uct_iface_attr_t *
@@ -234,6 +280,11 @@ void ucp_proto_common_lane_perf_node(ucp_context_h context,
     const uct_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index].tl_rsc;
     ucp_proto_perf_node_t *perf_node;
 
+    if (perf_attr->operation == UCT_EP_OP_LAST) {
+        *perf_node_p = NULL;
+        return;
+    }
+
     perf_node = ucp_proto_perf_node_new_data(
             uct_ep_operation_names[perf_attr->operation],
             UCT_TL_RESOURCE_DESC_FMT, UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
@@ -304,6 +355,13 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
     ucp_proto_common_get_frag_size(params, &wiface->attr, lane, &tl_min_frag,
                                    &tl_max_frag);
+    if (params->min_length > tl_max_frag) {
+        ucs_debug("protocol %s: params->min_length=%zu is invalid, larger than "
+                  "tl_max_frag=%zu",
+                  ucp_proto_id_field(params->super.proto_id, name),
+                  params->min_length, tl_max_frag);
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     perf_node = ucp_proto_perf_node_new_data("lane", "%u ppn %u eps",
                                              context->config.est_num_ppn,
@@ -338,9 +396,18 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                     &lane_perf_node);
     ucp_proto_perf_node_own_child(perf_node, &lane_perf_node);
 
-    /* For zero copy send, consider local system topology distance */
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        sys_dev = params->super.select_param->sys_dev;
+    /* If reg_mem_info type is not unknown we assume the protocol is going to
+     * send that mem type in a zero copy fashion. So, need to consider the
+     * system device distance. */
+    if (params->reg_mem_info.type != UCS_MEMORY_TYPE_UNKNOWN) {
+        sys_dev = params->reg_mem_info.sys_dev;
+
+        ucs_assertv((sys_dev == params->super.select_param->sys_dev) ||
+                    !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY),
+                    "flags=0x%x sys_dev=%u select_param->sys_dev=%u",
+                    params->flags, sys_dev,
+                    params->super.select_param->sys_dev);
+
         ucp_proto_common_get_lane_distance(&params->super, lane, sys_dev,
                                            &distance);
         ucp_proto_common_update_lane_perf_by_distance(
@@ -389,12 +456,48 @@ err_deref_perf_node:
     return status;
 }
 
-static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
-        const ucp_proto_init_params_t *params, uct_ep_operation_t memtype_op,
-        unsigned flags, ptrdiff_t max_iov_offs, size_t min_iov,
-        ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-        ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
-        ucp_lane_index_t *lanes)
+/*
+ * TODO: This is a quickfix, needed to select lanes for multi-lane RNDV
+ * protocol in the order of rma_bw_lanes (RMA_BW lanes sorted by score).
+ * The proper solution is to have a generic mechanism to sort lanes based on
+ * the calculated performance, implemented in proto_multi.
+ * This function should be removed once the proper solution is implemented.
+ */
+static inline ucp_lane_index_t
+ucp_proto_common_lanes_iter(const ucp_ep_config_key_t *ep_config_key,
+                            ucp_lane_map_t lane_map, ucp_lane_type_t lane_type,
+                            ucp_lane_index_t start, ucp_lane_index_t *lane)
+{
+    if (start >= UCP_MAX_LANES) {
+        return UCP_MAX_LANES;
+    }
+
+    if (lane_type == UCP_LANE_TYPE_RMA_BW) {
+        for (; start < ep_config_key->num_lanes; ++start) {
+            *lane = ep_config_key->rma_bw_lanes[start];
+            if ((*lane == UCP_NULL_LANE) || (lane_map & UCS_BIT(*lane))) {
+                break;
+            }
+        }
+        return start;
+    }
+
+    /*
+     * By default iterate over all lanes in lane_map
+     * Reset lane_map bits below start position, then find first bit set
+     */
+    lane_map &= ~((1ULL << start) - 1);
+    *lane     = ucs_ffs64_safe(lane_map);
+    return *lane;
+}
+
+ucp_lane_index_t
+ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
+                            unsigned flags, ptrdiff_t max_iov_offs,
+                            size_t min_iov, ucp_lane_type_t lane_type,
+                            ucs_memory_type_t reg_mem_type,
+                            uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
+                            ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes)
 {
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
     ucp_context_h context                        = params->worker->context;
@@ -402,7 +505,7 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     const ucp_rkey_config_key_t *rkey_config_key = params->rkey_config_key;
     const ucp_proto_select_param_t *select_param = params->select_param;
     const uct_iface_attr_t *iface_attr;
-    ucp_lane_index_t lane, num_lanes;
+    ucp_lane_index_t lane, num_lanes, i;
     const uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
     ucp_rsc_index_t rsc_index;
@@ -416,12 +519,13 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     }
 
     ucp_proto_select_info_str(params->worker, params->rkey_cfg_index,
-                              params->select_param, ucp_operation_names,
+                              select_param, ucp_operation_names,
                               &sel_param_strb);
 
     num_lanes = 0;
     ucs_trace("selecting up to %d/%d lanes for %s %s", max_lanes,
-              ep_config_key->num_lanes, params->proto_name,
+              ep_config_key->num_lanes,
+              ucp_proto_id_field(params->proto_id, name),
               ucs_string_buffer_cstr(&sel_param_strb));
     ucs_log_indent(1);
 
@@ -434,7 +538,12 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     }
 
     lane_map = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
-    ucs_for_each_bit(lane, lane_map) {
+    lane     = 0;
+    for (i = ucp_proto_common_lanes_iter(ep_config_key, lane_map, lane_type,
+                                         0, &lane);
+         (i < ep_config_key->num_lanes) && (lane != UCP_NULL_LANE);
+         i = ucp_proto_common_lanes_iter(ep_config_key, lane_map, lane_type,
+                                         i + 1, &lane)) {
         if (num_lanes >= max_lanes) {
             break;
         }
@@ -452,7 +561,7 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
         /* Check if lane type matches */
         if ((lane_type != UCP_LANE_TYPE_LAST) &&
             !(ep_config_key->lanes[lane].lane_types & UCS_BIT(lane_type))) {
-            ucs_trace("%s: no %s in name types", lane_desc,
+            ucs_trace("%s: no %s in lane types", lane_desc,
                       ucp_lane_type_info[lane_type].short_name);
             continue;
         }
@@ -476,25 +585,29 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
         }
 
         /* Check memory registration capabilities for zero-copy case */
-        if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+        if (reg_mem_type != UCS_MEMORY_TYPE_UNKNOWN) {
+            ucs_assertv((reg_mem_type == select_param->mem_type) ||
+                        !(flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY),
+                        "flags=0x%x reg_mem_type=%s select_param->mem_type=%s",
+                        flags, ucs_memory_type_names[reg_mem_type],
+                        ucs_memory_type_names[select_param->mem_type]);
+
             if (md_attr->flags & UCT_MD_FLAG_NEED_MEMH) {
                 /* Memory domain must support registration on the relevant
                  * memory type */
-                if (!(context->reg_md_map[select_param->mem_type] &
-                      UCS_BIT(md_index))) {
+                if (!(context->reg_md_map[reg_mem_type] & UCS_BIT(md_index))) {
                     ucs_trace("%s: md %s cannot register %s memory", lane_desc,
                               context->tl_mds[md_index].rsc.md_name,
-                              ucs_memory_type_names[select_param->mem_type]);
+                              ucs_memory_type_names[reg_mem_type]);
                     continue;
                 }
-            } else if (!(md_attr->access_mem_types &
-                         UCS_BIT(select_param->mem_type))) {
+            } else if (!(md_attr->access_mem_types & UCS_BIT(reg_mem_type))) {
                 /*
                  * Memory domain which does not require a registration for zero
                  * copy operation must be able to access the relevant memory type
                  */
                 ucs_trace("%s: no access to mem type %s", lane_desc,
-                          ucs_memory_type_names[select_param->mem_type]);
+                          ucs_memory_type_names[reg_mem_type]);
                 continue;
             }
         }
@@ -578,20 +691,19 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
     return reg_md_map;
 }
 
-ucp_lane_index_t
-ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
-                            ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-                            ucp_lane_index_t max_lanes,
-                            ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes)
+ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
+        const ucp_proto_common_init_params_t *params, ucp_lane_type_t lane_type,
+        uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
+        ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes)
 {
     ucp_lane_index_t lane_index, lane, num_lanes, num_valid_lanes;
     const uct_iface_attr_t *iface_attr;
     size_t tl_min_frag, tl_max_frag;
 
-    num_lanes = ucp_proto_common_find_lanes_internal(
-            &params->super, params->memtype_op, params->flags,
-            params->max_iov_offs, params->min_iov, lane_type, tl_cap_flags,
-            max_lanes, exclude_map, lanes);
+    num_lanes = ucp_proto_common_find_lanes(
+                   &params->super, params->flags, params->max_iov_offs,
+                   params->min_iov, lane_type, params->reg_mem_info.type,
+                   tl_cap_flags, max_lanes, exclude_map, lanes);
 
     num_valid_lanes = 0;
     for (lane_index = 0; lane_index < num_lanes; ++lane_index) {
@@ -625,26 +737,6 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
     }
 
     return num_valid_lanes;
-}
-
-ucp_lane_index_t
-ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params)
-{
-    ucp_lane_index_t lane = UCP_NULL_LANE;
-    ucp_lane_index_t num_lanes;
-
-    num_lanes = ucp_proto_common_find_lanes_internal(
-            params, UCT_EP_OP_LAST, UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
-            UCP_PROTO_COMMON_OFFSET_INVALID, 1, UCP_LANE_TYPE_AM,
-            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, &lane);
-    if (num_lanes == 0) {
-        ucs_debug("no active message lane for %s", params->proto_name);
-        return UCP_NULL_LANE;
-    }
-
-    ucs_assert(num_lanes == 1);
-
-    return lane;
 }
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self)
@@ -715,7 +807,9 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
     }
 }
 
-ucs_status_t ucp_proto_request_init(ucp_request_t *req)
+ucs_status_t
+ucp_proto_request_init(ucp_request_t *req,
+                       const ucp_proto_select_param_t *select_param)
 {
     ucp_ep_h ep         = req->send.ep;
     ucp_worker_h worker = ep->worker;
@@ -736,40 +830,32 @@ ucs_status_t ucp_proto_request_init(ucp_request_t *req)
     }
 
     /* Select from protocol hash according to saved request parameters */
-    return ucp_proto_request_lookup_proto(
-            worker, ep, req, proto_select, rkey_cfg_index,
-            &req->send.proto_config->select_param, msg_length);
-}
-
-/**
- * Current implementation of @ref ucp_proto_t::reset supports only the case
- * that no data was sent yet.
- *
- * @param req   request to check
- */
-void ucp_proto_request_check_reset_state(const ucp_request_t *req)
-{
-    ucs_assertv_always(
-            ucp_datatype_iter_is_begin(&req->send.state.dt_iter),
-            "request %p: cannot reset the state after sending %zu bytes", req,
-            req->send.state.dt_iter.offset);
+    return ucp_proto_request_lookup_proto(worker, ep, req, proto_select,
+                                          rkey_cfg_index, select_param,
+                                          msg_length);
 }
 
 void ucp_proto_request_restart(ucp_request_t *req)
 {
+    const ucp_proto_config_t *proto_config = req->send.proto_config;
+    ucp_proto_select_param_t select_param  = proto_config->select_param;
     ucs_status_t status;
 
     ucp_trace_req(req, "proto %s at stage %d restarting",
-                  req->send.proto_config->proto->name, req->send.proto_stage);
+                  proto_config->proto->name, req->send.proto_stage);
 
-    ucp_proto_request_check_reset_state(req);
-    status = req->send.proto_config->proto->reset(req);
+    status = proto_config->proto->reset(req);
     if (status != UCS_OK) {
         ucs_assert_always(status == UCS_ERR_CANCELED);
         return;
     }
 
-    status = ucp_proto_request_init(req);
+    /* Select a protocol with resume request support */
+    if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
+        select_param.op_id_flags |= UCP_PROTO_SELECT_OP_FLAG_RESUME;
+    }
+
+    status = ucp_proto_request_init(req, &select_param);
     if (status == UCS_OK) {
         ucp_request_send(req);
     } else {
@@ -842,8 +928,8 @@ ucs_status_t ucp_proto_request_zcopy_id_reset(ucp_request_t *req)
 static void ucp_proto_stub_fatal_not_implemented(const char *func_name,
                                                  ucp_request_t *req)
 {
-    ucs_fatal("%s request %p proto %s, not implemented", func_name, req,
-              req->send.proto_config->proto->name);
+    ucs_fatal("'%s' is not implemented for protocol %s (req: %p)", func_name,
+              req->send.proto_config->proto->name, req);
 }
 
 void ucp_proto_abort_fatal_not_implemented(ucp_request_t *req,

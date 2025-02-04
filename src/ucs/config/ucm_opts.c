@@ -42,9 +42,9 @@ static ucs_config_field_t ucm_global_config_table[] = {
   {"MMAP_HOOK_MODE", UCM_DEFAULT_HOOK_MODE_STR,
    "MMAP hook mode\n"
    " none   - Don't set mmap hooks.\n"
-   " reloc  - Use ELF relocation table to set hooks.\n"
+   " reloc  - Use ELF relocation table to set hooks."
 #if UCM_BISTRO_HOOKS
-   " bistro - Use binary instrumentation to set hooks.\n"
+   "\n bistro - Use binary instrumentation to set hooks."
 #endif
    ,ucs_offsetof(ucm_global_config_t, mmap_hook_mode),
                  UCS_CONFIG_TYPE_ENUM(ucm_mmap_hook_modes)},
@@ -73,7 +73,7 @@ static ucs_config_field_t ucm_global_config_table[] = {
    "          part of the application is linked with Cuda runtime statically,\n"
    "          some memory events may be missed and not reported."
 #if UCM_BISTRO_HOOKS
-   " bistro - Use binary instrumentation to set hooks. In this mode, it's\n"
+   "\n bistro - Use binary instrumentation to set hooks. In this mode, it's\n"
    "          possible to intercept calls from the Cuda runtime library to\n"
    "          Cuda driver APIs, so memory events are reported properly even\n"
    "          for statically-linked applications."

@@ -12,6 +12,7 @@
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/arch/global_opts.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -53,7 +54,7 @@ typedef struct {
     int                        mpool_fifo;
 
     /* Handle errors mode */
-    unsigned                   handle_errors;
+    uint64_t                   handle_errors;
 
     /* Error signals */
     UCS_CONFIG_ARRAY_FIELD(int, signals) error_signals;
@@ -104,7 +105,7 @@ typedef struct {
     size_t                     memtrack_limit;
 
     /* Profiling mode */
-    unsigned                   profile_mode;
+    uint64_t                   profile_mode;
 
     /* Profiling output file name */
     char                       *profile_file;
@@ -123,6 +124,9 @@ typedef struct {
 
     /* Enable VFS monitoring */
     int                        vfs_enable;
+
+    /* Listening UNIX socket path of the VFS daemon */
+    char                       *vfs_sock_path;
 
     /* registration cache checks if physical pages are not moved */
     unsigned                   rcache_check_pfn;
@@ -147,20 +151,33 @@ typedef struct {
        values. */
     size_t                     rcache_stat_min;
     size_t                     rcache_stat_max;
+
+    /* Estimated latency and bandwidth between devices according to distance
+       within the sysfs device tree */
+    struct {
+        /* Connection traversing PCIe as well as a PCIe Host Bridge */
+        ucs_sys_dev_distance_t phb;
+        /* Connection traversing PCIe as well as the interconnect between PCIe
+           Host Bridges within a NUMA node */
+        ucs_sys_dev_distance_t node;
+        /* Connection traversing PCIe as well as the SMP interconnect between
+           NUMA nodes */
+        ucs_sys_dev_distance_t sys;
+    } dist;
 } ucs_global_opts_t;
 
 
 extern ucs_global_opts_t ucs_global_opts;
 
-void ucs_global_opts_init();
-void ucs_global_opts_cleanup();
+void ucs_global_opts_init(void);
+void ucs_global_opts_cleanup(void);
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value);
 ucs_status_t ucs_global_opts_set_value_modifiable(const char *name,
                                                   const char *value);
 ucs_status_t ucs_global_opts_get_value(const char *name, char *value,
                                        size_t max);
 ucs_status_t ucs_global_opts_clone(void *dst);
-void ucs_global_opts_release();
+void ucs_global_opts_release(void);
 void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags);
 
 END_C_DECLS

@@ -9,7 +9,7 @@ if HAVE_ROCM
 
 module_LTLIBRARIES      = libucm_rocm.la
 libucm_rocm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(ROCM_CPPFLAGS)
-libucm_rocm_la_CFLAGS   = $(BASE_CFLAGS) $(ROCM_CFLAGS)
+libucm_rocm_la_CFLAGS   = $(BASE_CFLAGS) $(ROCM_CFLAGS) $(LT_CFLAGS)
 libucm_rocm_la_LIBADD   = ../libucm.la
 libucm_rocm_la_LDFLAGS  = $(UCM_MODULE_LDFLAGS) \
                           $(ROCM_LDFLAGS) $(ROCM_LIBS) -version-info $(SOVERSION) \

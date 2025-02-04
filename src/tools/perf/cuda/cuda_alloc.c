@@ -12,6 +12,8 @@
 
 #include <cuda_runtime.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/ptr_arith.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
@@ -69,15 +71,27 @@ uct_perf_cuda_alloc_reg_mem(const ucx_perf_context_t *perf,
                             unsigned flags,
                             uct_allocated_memory_t *alloc_mem)
 {
+    uct_md_attr_v2_t md_attr = {.field_mask = UCT_MD_ATTR_FIELD_REG_ALIGNMENT};
+    void *reg_address;
     ucs_status_t status;
+
+    status = uct_md_query_v2(perf->uct.md, &md_attr);
+    if (status != UCS_OK) {
+        ucs_error("uct_md_query_v2() returned %d", status);
+        return status;
+    }
 
     status = ucx_perf_cuda_alloc(length, mem_type, &alloc_mem->address);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_md_mem_reg(perf->uct.md, alloc_mem->address,
-                            length, flags, &alloc_mem->memh);
+    /* Register memory respecting MD reg_alignment */
+    reg_address = alloc_mem->address;
+    ucs_align_ptr_range(&reg_address, &length, md_attr.reg_alignment);
+
+    status = uct_md_mem_reg(perf->uct.md, reg_address, length, flags,
+                            &alloc_mem->memh);
     if (status != UCS_OK) {
         cudaFree(alloc_mem->address);
         ucs_error("failed to register memory");

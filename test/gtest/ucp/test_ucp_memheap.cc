@@ -10,6 +10,7 @@
 #include <common/mem_buffer.h>
 #include <common/test_helpers.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/ptr_arith.h>
 
 
 void test_ucp_memheap::init()

@@ -4,6 +4,7 @@
 * See file LICENSE for terms.
 */
 
+#include <ucs/sys/ptr_arith.h>
 #include <uct/test_p2p_rma.h>
 #include <uct/test_p2p_mix.h>
 
@@ -11,6 +12,7 @@
 #ifdef HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
 #endif
+
 
 class uct_p2p_rma_test_xfer : public uct_p2p_rma_test {};
 
@@ -94,7 +96,8 @@ class uct_p2p_rma_test_alloc_methods : public uct_p2p_rma_test {
 protected:
     void test_put_zcopy() {
         test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
-                        0, sender().iface_attr().cap.put.max_zcopy,
+                        sender().iface_attr().cap.put.min_zcopy,
+                        sender().iface_attr().cap.put.max_zcopy,
                         TEST_UCT_FLAG_SEND_ZCOPY);
     }
 
@@ -117,15 +120,13 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg,
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_multithreaded,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
                                  UCT_IFACE_FLAG_GET_ZCOPY),
-                     "IB_REG_MT_THRESH=1", "IB_REG_MT_CHUNK=1G",
-                     "IB_REG_MT_BIND=y")
+                     "*REG_MT_THRESH=1", "*REG_MT_CHUNK=1G", "*REG_MT_BIND=y")
 {
     test_put_zcopy();
     test_get_zcopy();
 }
 
-UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_alloc_methods)
-
+UCT_INSTANTIATE_IB_AND_GGA_TEST_CASE(uct_p2p_rma_test_alloc_methods)
 
 class uct_p2p_mix_test_alloc_methods : public uct_p2p_mix_test {};
 
@@ -134,24 +135,15 @@ UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000)
     run(1000);
 }
 
-UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_mix_test_alloc_methods)
+UCT_INSTANTIATE_IB_AND_GGA_TEST_CASE(uct_p2p_mix_test_alloc_methods)
 
 
 class uct_p2p_mix_test_mt : public uct_p2p_mix_test {
 protected:
-    bool is_page_size_aligned(const mapped_buffer &buffer)
-    {
-        return ucs_padding((size_t)buffer.reg_addr(), ucs_get_page_size()) == 0;
-    }
-
     mapped_buffer alloc_buffer(const entity &entity, size_t offset) override
     {
         mapped_buffer buf = uct_p2p_mix_test::alloc_buffer(entity, offset);
-        if (!is_page_size_aligned(buf)) {
-            UCS_TEST_SKIP_R("Skip MT registration for unaligned buffers");
-        }
-
-        auto *ib_memh = static_cast<uct_ib_mem_t*>(buf.memh());
+        auto *ib_memh     = static_cast<uct_ib_mem_t*>(buf.memh());
         EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_MULTITHREADED);
         return buf;
     }
@@ -175,8 +167,8 @@ protected:
     virtual void init() override
     {
         push_config();
-        modify_config("IB_REG_MT_THRESH", ucs::to_string(reg_mt_chunk + 1));
-        modify_config("IB_REG_MT_CHUNK", ucs::to_string(reg_mt_chunk));
+        modify_config("*REG_MT_THRESH", ucs::to_string(reg_mt_chunk + 1));
+        modify_config("*REG_MT_CHUNK", ucs::to_string(reg_mt_chunk));
 
         uct_p2p_mix_test::init();
 
@@ -203,7 +195,7 @@ protected:
 
 constexpr size_t uct_p2p_mix_test_mt::reg_mt_chunk;
 
-UCS_TEST_P(uct_p2p_mix_test_mt, mix1000_alloc_methods, "IB_REG_MT_BIND=y")
+UCS_TEST_P(uct_p2p_mix_test_mt, mix1000_alloc_methods, "*REG_MT_BIND=y")
 {
     run(1000);
 }
@@ -219,7 +211,7 @@ UCS_TEST_P(uct_p2p_mix_test_mt, mix1000_last_byte_offset)
     run(1000, (reg_mt_chunk * 2) - 8, 8);
 }
 
-UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_mix_test_mt)
+UCT_INSTANTIATE_IB_AND_GGA_TEST_CASE(uct_p2p_mix_test_mt)
 
 
 class uct_p2p_mix_test_indirect_atomic : public uct_p2p_mix_test {};

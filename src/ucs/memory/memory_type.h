@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -17,8 +18,8 @@ BEGIN_C_DECLS
  * Memory types accessible from CPU
  */
 #define UCS_MEMORY_TYPES_CPU_ACCESSIBLE \
-    (UCS_BIT(UCS_MEMORY_TYPE_HOST) | \
-     UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED))
+    (UCS_BIT(UCS_MEMORY_TYPE_HOST) | UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED) | \
+     UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) | UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED))
 
 
 /**
@@ -41,6 +42,9 @@ typedef enum ucs_memory_type {
     UCS_MEMORY_TYPE_ROCM,          /**< AMD ROCM memory */
     UCS_MEMORY_TYPE_ROCM_MANAGED,  /**< AMD ROCM managed system memory */
     UCS_MEMORY_TYPE_RDMA,          /**< RDMA device memory */
+    UCS_MEMORY_TYPE_ZE_HOST,       /**< Intel ZE memory (USM host) */
+    UCS_MEMORY_TYPE_ZE_DEVICE,     /**< Intel ZE memory (USM device) */
+    UCS_MEMORY_TYPE_ZE_MANAGED,    /**< Intel ZE managed memory (USM shared) */
     UCS_MEMORY_TYPE_LAST,
     UCS_MEMORY_TYPE_UNKNOWN = UCS_MEMORY_TYPE_LAST
 } ucs_memory_type_t;

@@ -28,7 +28,9 @@ int main(int argc, char **argv)
     printf("starting test [%ld.%06ld] .. ", start.tv_sec, start.tv_usec);
     fflush(stdout);
 
-#pragma omp parallel
+#if _OPENMP
+#  pragma omp parallel
+#endif
     {
         ucs_status_t ctx_status, worker_status;
         ucp_context_h context;
@@ -47,7 +49,9 @@ int main(int argc, char **argv)
             }
         }
 
-#pragma omp barrier
+#if _OPENMP
+#  pragma omp barrier
+#endif
 
         if (ctx_status == UCS_OK) {
             if (worker_status == UCS_OK) {
@@ -57,7 +61,9 @@ int main(int argc, char **argv)
         }
     }
 
-#pragma omp barrier
+#if _OPENMP
+#  pragma omp barrier
+#endif
 
     gettimeofday(&finish, NULL);
     printf("[%ld.%06ld] finished %d threads\n",

@@ -118,8 +118,6 @@ enum {
  *      |                 |---------PEER_TX(AM)------->|                 |
  *      |                 |----------(TM msg)--------->|                 |
  *      |<---SEND_CMPL----|                            |---RECV_CMPL---->|
- *      |                 |                            |                 |
- *      |-------FIN------>|                            |<------FIN-------|
  *
  * (AM) used only when AM communication is configured
  * (TM) used only when tag matching communication is configured
@@ -144,11 +142,9 @@ enum {
      * unsolicited in case of AM communication. For tag matching transport it \
      * confirms the completion of RECV_REQ request */ \
     _macro(UCP_PERF_DAEMON_AM_ID_RECV_CMPL, UCP_PERF_AM_ID + 5) \
-    /* Host->DPU daemon finalize message */ \
-    _macro(UCP_PERF_DAEMON_AM_ID_FIN,       UCP_PERF_AM_ID + 6) \
     /* Sender DPU->Receiver DPU, message to establish communication between \
      * DPU peers */ \
-    _macro(UCP_PERF_DAEMON_AM_ID_PEER_INIT, UCP_PERF_AM_ID + 7)
+    _macro(UCP_PERF_DAEMON_AM_ID_PEER_INIT, UCP_PERF_AM_ID + 6)
 
 
 #define UCP_PERF_DAEMON_ENUMIFY(ID, VALUE) ID = VALUE,
@@ -191,6 +187,8 @@ typedef struct ucx_perf_result {
 
 typedef void (*ucx_perf_rte_progress_cb_t)(void *arg);
 
+typedef ucs_status_t (*ucx_perf_rte_setup_func_t)(void *arg);
+typedef void (*ucx_perf_rte_cleanup_func_t)(void *arg);
 typedef unsigned (*ucx_perf_rte_group_size_func_t)(void *rte_group);
 typedef unsigned (*ucx_perf_rte_group_index_func_t)(void *rte_group);
 typedef void (*ucx_perf_rte_barrier_func_t)(void *rte_group,
@@ -202,15 +200,18 @@ typedef void (*ucx_perf_rte_post_vec_func_t)(void *rte_group,
 typedef void (*ucx_perf_rte_recv_func_t)(void *rte_group, unsigned src,
                                          void *buffer, size_t max, void *req);
 typedef void (*ucx_perf_rte_exchange_vec_func_t)(void *rte_group, void *req);
-typedef void (*ucx_perf_rte_report_func_t)(void *rte_group,
-                                           const ucx_perf_result_t *result,
-                                           void *arg, const char *extra_info,
-                                           int is_final, int is_multi_thread);
+
 
 /**
  * RTE used to bring-up the test
  */
 typedef struct ucx_perf_rte {
+    /* @return UCS_OK, UCS_ERR_UNSUPPORTED or actual error */
+    ucx_perf_rte_setup_func_t        setup;
+
+    /* Cleanup on successfully setup RTE */
+    ucx_perf_rte_cleanup_func_t      cleanup;
+
     /* @return Group size */
     ucx_perf_rte_group_size_func_t   group_size;
 
@@ -225,11 +226,19 @@ typedef struct ucx_perf_rte {
     ucx_perf_rte_recv_func_t         recv;
     ucx_perf_rte_exchange_vec_func_t exchange_vec;
 
-    /* Handle results */
-    ucx_perf_rte_report_func_t       report;
+    /* List of supported RTE */
+    ucs_list_link_t                  list;
 
 } ucx_perf_rte_t;
 
+
+/**
+ * Common report function
+ */
+typedef void (*ucx_perf_report_func_t)(void *rte_group,
+                                       const ucx_perf_result_t *result,
+                                       void *arg, const char *extra_info,
+                                       int is_final, int is_multi_thread);
 
 /**
  * Describes a performance test.
@@ -265,6 +274,8 @@ typedef struct ucx_perf_params {
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
+
+    ucx_perf_report_func_t report_func;     /* Report function callback */
     void                   *report_arg;     /* Custom argument for report function */
 
     struct {

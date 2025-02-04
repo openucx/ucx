@@ -25,18 +25,8 @@ enum {
 };
 
 
-#define vfs_error(_fmt, ...) \
-    { \
-        fprintf(stderr, "Error: " _fmt "\n", ##__VA_ARGS__); \
-    }
-
-
-#define vfs_log(_fmt, ...) \
-    { \
-        if (g_opts.verbose) { \
-            fprintf(stderr, "Debug: " _fmt "\n", ##__VA_ARGS__); \
-        } \
-    }
+#define vfs_error ucs_error
+#define vfs_log   ucs_debug
 
 
 typedef struct {
@@ -45,7 +35,6 @@ typedef struct {
     int        verbose;
     const char *mountpoint_dir;
     const char *mount_opts;
-    const char *sock_path;
 } vfs_opts_t;
 
 

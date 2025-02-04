@@ -55,8 +55,8 @@ typedef ucs_bitmap_word_t (*ucs_bitmap_binary_op_t)(ucs_bitmap_word_t,
 /**
  * Check that destination number of words is at least as large as the source.
  *
- * @param _dst_num_words   Nunber of words in the destination bitmap.
- * @param _src_num_words   Nunber of words in the source bitmap.
+ * @param _dst_num_words   Number of words in the destination bitmap.
+ * @param _src_num_words   Number of words in the source bitmap.
  */
 #define UCS_BITMAP_CHECK_DST_NUM_WORDS(_dst_num_words, _src_num_words) \
     ucs_assertv((_dst_num_words) >= (_src_num_words), \
@@ -212,7 +212,7 @@ ucs_bitmap_bits_popcount(const ucs_bitmap_word_t *bits, size_t num_words)
 }
 
 
-/* Helper function to return the number of bits that are set to 1 upto a
+/* Helper function to return the number of bits that are set to 1 up to a
    given bit_index (excluding bit_index) */
 static UCS_F_ALWAYS_INLINE size_t ucs_bitmap_bits_popcount_upto_index(
         const ucs_bitmap_word_t *bits, size_t num_words, size_t bit_index)

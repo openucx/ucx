@@ -14,7 +14,7 @@
 #include <uct/ugni/base/ugni_md.h>
 #include <uct/ugni/base/ugni_device.h>
 #include <ucs/arch/cpu.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 
 
 extern ucs_class_t UCS_CLASS_DECL_NAME(uct_ugni_smsg_iface_t);
@@ -207,7 +207,8 @@ static ucs_status_t uct_ugni_smsg_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_AM_BCOPY |
                                          UCT_IFACE_FLAG_CONNECT_TO_EP |
                                          UCT_IFACE_FLAG_CB_SYNC  |
-                                         UCT_IFACE_FLAG_PENDING;
+                                         UCT_IFACE_FLAG_PENDING |
+                                         UCT_IFACE_FLAG_INTER_NODE;
 
     iface_attr->overhead               = 1e-6;  /* 1 usec */
     iface_attr->latency                = ucs_linear_func_make(40e-6, 0); /* 40 usec */
@@ -242,8 +243,8 @@ static uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .ep_connect_to_ep         = uct_base_ep_connect_to_ep,
     .iface_flush              = uct_ugni_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
     .iface_progress           = (void*)uct_ugni_smsg_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_smsg_iface_t),
     .iface_query              = uct_ugni_smsg_iface_query,

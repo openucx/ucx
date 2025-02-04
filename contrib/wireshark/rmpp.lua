@@ -100,7 +100,7 @@ rmpp_proto.fields = rmpp_fields
 local IB_MGMT_RMPP_DATA_SIZE = 220
 
 local MAD_HDR_SIZE = 24
-local RMPP_HDR_SIZE = 12 -- plus aligment
+local RMPP_HDR_SIZE = 12 -- plus alignment
 
 local ib_mad_mgmtclass_f = Field.new("infiniband.mad.mgmtclass")
 local ib_mad_data_f = Field.new("infiniband.mad.data")

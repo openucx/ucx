@@ -6,7 +6,7 @@
 if HAVE_KNEM
 
 module_LTLIBRARIES      = libuct_knem.la
-libuct_knem_la_CFLAGS   = $(BASE_CFLAGS)
+libuct_knem_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_knem_la_CPPFLAGS = $(BASE_CPPFLAGS) $(KNEM_CPPFLAGS)
 libuct_knem_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la

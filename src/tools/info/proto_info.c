@@ -322,7 +322,7 @@ out:
         ucp_listener_destroy(listener);
     }
 
-    if (worker_attrs.address == NULL) {
+    if (worker_attrs.address != NULL) {
         ucp_worker_release_address(peer_worker, worker_attrs.address);
     }
 

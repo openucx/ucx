@@ -29,21 +29,14 @@ static ucs_config_field_t uct_tcp_md_config_table[] = {
 
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
+    uct_md_base_md_query(attr);
     /* Dummy memory registration provided. No real memory handling exists */
     attr->flags                  = UCT_MD_FLAG_REG |
                                    UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->max_alloc              = 0;
     attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->alloc_mem_types        = 0;
     attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->detect_mem_types       = 0;
-    attr->dmabuf_mem_types       = 0;
-    attr->max_reg                = ULONG_MAX;
-    attr->rkey_packed_size       = 0;
-    attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
-    memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
 
@@ -56,10 +49,10 @@ static void uct_tcp_md_close(uct_md_h md)
 static uct_md_ops_t uct_tcp_md_ops = {
     .close              = uct_tcp_md_close,
     .query              = uct_tcp_md_query,
-    .mkey_pack          = ucs_empty_function_return_success,
+    .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
     .mem_reg            = uct_md_dummy_mem_reg,
     .mem_dereg          = uct_md_dummy_mem_dereg,
-    .detect_memory_type = ucs_empty_function_return_unsupported
+    .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
 };
 
 static ucs_status_t
@@ -123,8 +116,8 @@ uct_component_t uct_tcp_component = {
     .md_open            = uct_tcp_md_open,
     .cm_open            = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_sockcm_t),
     .rkey_unpack        = uct_tcp_md_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
-    .rkey_release       = ucs_empty_function_return_success,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = UCT_TCP_NAME,
     .md_config          = {

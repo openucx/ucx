@@ -9,6 +9,7 @@
 
 #include "proto.h"
 #include "proto_select.h"
+#include <ucp/dt/dt.h>
 
 #include <uct/api/v2/uct_v2.h>
 
@@ -57,7 +58,11 @@ typedef enum {
     UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE  = UCS_BIT(8),
 
     /* Supports error handling */
-    UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9)
+    UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9),
+
+    /* Supports starting the request when its datatype iterator offset is > 0 */
+    UCP_PROTO_COMMON_INIT_FLAG_RESUME        = UCS_BIT(10),
+    UCP_PROTO_COMMON_KEEP_MD_MAP             = UCS_BIT(11)
 } ucp_proto_common_init_flags_t;
 
 
@@ -117,6 +122,13 @@ typedef struct {
 
     /* Map of unsuitable lanes */
     ucp_lane_map_t          exclude_map;
+
+    /* Memory info of the buffer used for data transfer on the transport level.
+     * If UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY flag is set, it is expected to
+     * be the user buffer memory info. Alternatively, it refers to the type of
+     * memory used for bounce buffers (either in the UCP or UCT layer) where
+     * data needs to be copied as part of the protocol. */
+    ucp_memory_info_t       reg_mem_info;
 } ucp_proto_common_init_params_t;
 
 
@@ -177,6 +189,14 @@ typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
  * @return Status code to be returned from the progress function.
  */
 typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
+
+
+ucp_proto_common_init_params_t
+ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params);
+
+
+ucp_memory_info_t ucp_proto_common_select_param_mem_info(
+                                  const ucp_proto_select_param_t *select_param);
 
 
 /**
@@ -242,10 +262,18 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
 
 /* @return number of lanes found */
+ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
+        const ucp_proto_common_init_params_t *params, ucp_lane_type_t lane_type,
+        uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
+        ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes);
+
+
 ucp_lane_index_t
-ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
-                            ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-                            ucp_lane_index_t max_lanes,
+ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
+                            unsigned flags, ptrdiff_t max_iov_offs,
+                            size_t min_iov, ucp_lane_type_t lane_type,
+                            ucs_memory_type_t reg_mem_type,
+                            uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,
                             ucp_lane_index_t *lanes);
 
@@ -253,10 +281,6 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
 ucp_md_map_t
 ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
                             ucp_lane_map_t lane_map);
-
-
-ucp_lane_index_t
-ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
 
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
@@ -284,7 +308,9 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
-ucs_status_t ucp_proto_request_init(ucp_request_t *req);
+ucs_status_t
+ucp_proto_request_init(ucp_request_t *req,
+                       const ucp_proto_select_param_t *select_param);
 
 void ucp_proto_request_check_reset_state(const ucp_request_t *req);
 

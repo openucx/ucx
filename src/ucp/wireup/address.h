@@ -124,7 +124,6 @@ struct ucp_address_iface_attr {
     int                         priority;     /* Priority of device */
     double                      lat_ovh;      /* Address v1: latency overhead
                                                * address v2: latency */
-    ucp_rsc_index_t             dst_rsc_index;/* Destination resource index */
     ucp_tl_iface_atomic_flags_t atomic;       /* Atomic operations */
     size_t                      seg_size;     /* Maximal fragment size which can
                                                  be received on the particular

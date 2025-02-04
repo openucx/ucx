@@ -30,8 +30,6 @@
 /* width of titles in docstring */
 #define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
-/* String literal for allow-list */
-#define UCS_CONFIG_PARSER_ALL "all"
 
 /* list of prefixes for a configuration variable, used to dump all possible
  * aliases.
@@ -69,6 +67,19 @@ const char *ucs_async_mode_names[] = {
 };
 
 UCS_CONFIG_DEFINE_ARRAY(string, sizeof(char*), UCS_CONFIG_TYPE_STRING);
+
+
+typedef struct ucs_config_parse_section {
+    char name[64];
+    int  skip;
+} ucs_config_parse_section_t;
+
+
+typedef struct ucs_config_parse_arg {
+    int                        override;
+    ucs_config_parse_section_t section_info;
+} ucs_config_parse_arg_t;
+
 
 /* Fwd */
 static ucs_status_t
@@ -432,7 +443,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
     }
 
     ret = 1;
-    *((unsigned*)dest) = 0;
+    *((uint64_t*)dest) = 0;
     p = strtok_r(str, ",", &saveptr);
     while (p != NULL) {
         i = ucs_string_find_in_list(p, (const char**)arg, 0);
@@ -440,7 +451,10 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
             ret = 0;
             break;
         }
-        *((unsigned*)dest) |= UCS_BIT(i);
+
+        ucs_assertv(i < (sizeof(uint64_t) * 8), "bit %d overflows for '%s'", i,
+                    p);
+        *((uint64_t*)dest) |= UCS_BIT(i);
         p = strtok_r(NULL, ",", &saveptr);
     }
 
@@ -451,7 +465,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_bitmap(char *buf, size_t max,
                               const void *src, const void *arg)
 {
-    ucs_flags_str(buf, max, *((unsigned*)src), (const char**)arg);
+    ucs_flags_str(buf, max, *((uint64_t*)src), (const char**)arg);
     return 1;
 }
 
@@ -1376,6 +1390,27 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
     return UCS_OK;
 }
 
+static int
+ucs_config_prefix_name_match(const char *prefix, size_t prefix_len,
+                             const char *name, const char *pattern)
+{
+    const char *match_name;
+    char *full_name;
+    size_t full_name_len;
+
+    if (prefix_len == 0) {
+        match_name = name;
+    } else {
+        full_name_len = prefix_len + strlen(name) + 1;
+        full_name     = ucs_alloca(full_name_len);
+
+        ucs_snprintf_safe(full_name, full_name_len, "%s%s", prefix, name);
+        match_name = full_name;
+    }
+
+    return !fnmatch(pattern, match_name, 0);
+}
+
 /**
  * table_prefix == NULL  -> unused
  */
@@ -1406,8 +1441,8 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
             /* Check with sub-table prefix */
             if (recurse) {
                 status = ucs_config_parser_set_value_internal(var, sub_fields,
-                                                             name, value,
-                                                             field->name, 1);
+                                                              name, value,
+                                                              field->name, 1);
                 if (status == UCS_OK) {
                     ++count;
                 } else if (status != UCS_ERR_NO_ELEM) {
@@ -1418,17 +1453,16 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
             /* Possible override with my prefix */
             if (table_prefix != NULL) {
                 status = ucs_config_parser_set_value_internal(var, sub_fields,
-                                                             name, value,
-                                                             table_prefix, 0);
+                                                              name, value,
+                                                              table_prefix, 0);
                 if (status == UCS_OK) {
                     ++count;
                 } else if (status != UCS_ERR_NO_ELEM) {
                     return status;
                 }
             }
-        } else if (((table_prefix == NULL) || !strncmp(name, table_prefix, prefix_len)) &&
-                   !strcmp(name + prefix_len, field->name))
-        {
+        } else if (ucs_config_prefix_name_match(table_prefix, prefix_len,
+                                                field->name, name)) {
             if (ucs_config_is_deprecated_field(field)) {
                 return UCS_ERR_NO_ELEM;
             }
@@ -1512,16 +1546,68 @@ static char *ucs_config_get_value_from_config_file(const char *name)
     return kh_val(&ucs_config_file_vars, iter);
 }
 
+static int ucs_config_parse_check_filter(const char *name, const char *value)
+{
+    typedef struct {
+        const char *name;
+        const char *(*value_f)();
+    } filter_t;
+
+    static filter_t filters[] = {{UCS_CPU_VENDOR_LABEL, ucs_cpu_vendor_name},
+                                 {UCS_CPU_MODEL_LABEL, ucs_cpu_model_name},
+                                 {UCS_SYS_DMI_PRODUCT_NAME_LABEL,
+                                  ucs_sys_dmi_product_name}};
+    filter_t *filter;
+
+    ucs_carray_for_each(filter, filters, ucs_static_array_size(filters)) {
+        if ((strcmp(name, filter->name) == 0) &&
+            (fnmatch(value, filter->value_f(), FNM_CASEFOLD) != 0)) {
+            /**
+             * The value does not match the pattern for this filter. E.g.
+             * configuration file contains the line: CPU model = v1.*, and
+             * ucs_cpu_model_name() returns "v2.0".
+             */
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void
+ucs_config_parse_set_section_info(ucs_config_parse_section_t *section_info,
+                                  const char *section, const char *name,
+                                  const char *value)
+{
+    if (strcmp(section, section_info->name) != 0) {
+        /* A new section has started. Update section name. */
+        ucs_strncpy_zero(section_info->name, section,
+                         sizeof(section_info->name));
+    } else if (section_info->skip) {
+        /* The section has already been filtered out earlier. */
+        return;
+    }
+
+    section_info->skip = ucs_config_parse_check_filter(name, value);
+}
+
 static int ucs_config_parse_config_file_line(void *arg, const char *section,
                                              const char *name,
                                              const char *value)
 {
-    khiter_t iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
-    int override  = *(int*)arg;
+    ucs_config_parse_arg_t *parse_arg        = (ucs_config_parse_arg_t*)arg;
+    ucs_config_parse_section_t *section_info = &parse_arg->section_info;
+    khiter_t iter;
     int result;
 
+    ucs_config_parse_set_section_info(section_info, section, name, value);
+    if (section_info->skip) {
+        return 1;
+    }
+
+    iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
     if (iter != kh_end(&ucs_config_file_vars)) {
-        if (override) {
+        if (parse_arg->override) {
             ucs_free(kh_val(&ucs_config_file_vars, iter));
         } else {
             ucs_error("found duplicate '%s' in config map", name);
@@ -1543,25 +1629,41 @@ static int ucs_config_parse_config_file_line(void *arg, const char *section,
 void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
                                   int override)
 {
-    char file_path[MAXPATHLEN];
+    ucs_config_parse_arg_t parse_arg = {
+        .override     = override,
+        .section_info = {.name = "",
+                         .skip = 0}
+    };
+    char *file_path;
     int parse_result;
     FILE* file;
+    ucs_status_t status;
 
-    ucs_snprintf_safe(file_path, MAXPATHLEN, "%s/%s", dir_path, file_name);
+    status = ucs_string_alloc_formatted_path(&file_path, "file_path", "%s/%s",
+                                             dir_path, file_name);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     file = fopen(file_path, "r");
     if (file == NULL) {
         ucs_debug("failed to open config file %s: %m", file_path);
-        return;
+        goto out_free_file_path;
     }
 
     parse_result = ini_parse_file(file, ucs_config_parse_config_file_line,
-                                  &override);
+                                  &parse_arg);
     if (parse_result != 0) {
         ucs_warn("failed to parse config file %s: %d", file_path, parse_result);
     }
 
     ucs_debug("parsed config file %s", file_path);
     fclose(file);
+
+out_free_file_path:
+    ucs_free(file_path);
+out:
+    return;
 }
 
 static ucs_status_t
@@ -1679,17 +1781,26 @@ static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
 
 void ucs_config_parse_config_files()
 {
-    const char *path_p;
-    char path[PATH_MAX];
+    char *path;
+    const char *path_p, *dirname;
+    ucs_status_t status;
 
     /* System-wide configuration file */
     ucs_config_parse_config_file(UCX_CONFIG_DIR, UCX_CONFIG_FILE_NAME, 1);
 
     /* Library dir */
     path_p = ucs_sys_get_lib_path();
+
     if (path_p != NULL) {
-        ucs_strncpy_safe(path, path_p, PATH_MAX);
-        ucs_config_parse_config_file(dirname(path), "../etc/" UCX_CONFIG_FILE_NAME, 1);
+        status = ucs_string_alloc_path_buffer_and_get_dirname(&path, "path",
+                                                              path_p, &dirname);
+        if (status != UCS_OK) {
+            return;
+        }
+
+        ucs_config_parse_config_file(dirname,
+                                     "../etc/ucx/" UCX_CONFIG_FILE_NAME, 1);
+        ucs_free(path);
     }
 
     /* User home dir */

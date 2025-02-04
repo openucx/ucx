@@ -21,7 +21,6 @@
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <inttypes.h>
-#include <float.h>
 
 
 #define UCS_TOPO_MAX_SYS_DEVICES     256
@@ -86,7 +85,7 @@ typedef struct ucs_topo_global_ctx {
 
 const ucs_sys_dev_distance_t ucs_topo_default_distance = {
     .latency   = 0,
-    .bandwidth = DBL_MAX
+    .bandwidth = INFINITY
 };
 
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
@@ -94,6 +93,9 @@ static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 
 /* Global list of topology detectors */
 UCS_LIST_HEAD(ucs_sys_topo_providers_list);
+
+/* Selected topo provider */
+static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
 
 
 /* According to NUMA distance definition distances are normalized to 10
@@ -105,27 +107,31 @@ static inline double ucs_topo_sysfs_numa_distance_to_latency(double distance)
     return distance * 10e-9;
 }
 
+void ucs_sys_topo_reset_provider()
+{
+    ucs_sys_topo_provider = NULL;
+}
+
 static ucs_sys_topo_provider_t *ucs_sys_topo_get_provider()
 {
-    static ucs_sys_topo_provider_t *provider = NULL;
     ucs_sys_topo_provider_t *list_provider;
     unsigned i;
 
-    if (provider != NULL) {
-        return provider;
+    if (ucs_sys_topo_provider != NULL) {
+        return ucs_sys_topo_provider;
     }
 
     for (i = 0; i < ucs_global_opts.topo_prio.count; ++i) {
         ucs_list_for_each(list_provider, &ucs_sys_topo_providers_list, list) {
             if (!strcmp(ucs_global_opts.topo_prio.names[i],
                         list_provider->name)) {
-                provider = list_provider;
-                return provider;
+                ucs_sys_topo_provider = list_provider;
+                return ucs_sys_topo_provider;
             }
         }
     }
 
-    return provider;
+    return ucs_sys_topo_provider;
 }
 
 static ucs_status_t
@@ -207,34 +213,54 @@ ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id, char *path,
                               size_t max)
 {
     const size_t prefix_length = strlen(UCS_TOPO_SYSFS_PCI_PREFIX);
-    char link_path[PATH_MAX];
+    ucs_status_t status;
+    char *link_path;
 
     if (max < PATH_MAX) {
-        return UCS_ERR_BUFFER_TOO_SMALL;
+        status = UCS_ERR_BUFFER_TOO_SMALL;
+        goto out;
     }
 
-    ucs_strncpy_safe(link_path, UCS_TOPO_SYSFS_PCI_PREFIX, sizeof(link_path));
+    status = ucs_string_alloc_path_buffer(&link_path, "link_path");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    ucs_strncpy_safe(link_path, UCS_TOPO_SYSFS_PCI_PREFIX, PATH_MAX);
     ucs_topo_bus_id_str(bus_id, 0, link_path + prefix_length,
                         PATH_MAX - prefix_length);
     if (realpath(link_path, path) == NULL) {
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
     }
 
-    return UCS_OK;
+    ucs_free(link_path);
+out:
+    return status;
 }
 
 static int
 ucs_topo_read_device_numa_node(const ucs_sys_bus_id_t *bus_id)
 {
-    char path[PATH_MAX];
+    int numa_node = UCS_NUMA_NODE_UNDEFINED;
+    char *path;
     ucs_status_t status;
 
-    status = ucs_topo_bus_id_to_sysfs_path(bus_id, path, sizeof(path));
+    status = ucs_string_alloc_path_buffer(&path, "sysfs_path");
     if (status != UCS_OK) {
-        return UCS_NUMA_NODE_UNDEFINED;
+        goto out;
     }
 
-    return ucs_numa_node_of_device(path);
+    status = ucs_topo_bus_id_to_sysfs_path(bus_id, path, PATH_MAX);
+    if (status != UCS_OK) {
+        goto out_free_path;
+    }
+
+    numa_node = ucs_numa_node_of_device(path);
+
+out_free_path:
+    ucs_free(path);
+out:
+    return numa_node;
 }
 
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
@@ -332,23 +358,16 @@ static int ucs_topo_is_pci_root(const char *path)
     return count == strlen(path);
 }
 
-static void ucs_topo_sys_root_distance(ucs_sys_dev_distance_t *distance)
+static void ucs_topo_set_distance(const ucs_sys_dev_distance_t *distance_cfg,
+                                  double bw_auto,
+                                  ucs_sys_dev_distance_t *distance)
 {
-    distance->latency = 500e-9;
-    switch (ucs_arch_get_cpu_model()) {
-    case UCS_CPU_MODEL_AMD_ROME:
-    case UCS_CPU_MODEL_AMD_MILAN:
-    case UCS_CPU_MODEL_AMD_GENOA:
-        distance->bandwidth = 5100 * UCS_MBYTE;
-        break;
-    default:
-        distance->bandwidth = 220 * UCS_MBYTE;
-        break;
-    }
+    distance->latency   = distance_cfg->latency;
+    distance->bandwidth = UCS_CONFIG_DBL_IS_AUTO(distance_cfg->bandwidth) ?
+                                  bw_auto : distance_cfg->bandwidth;
 }
 
-static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
-                                       ucs_sys_dev_distance_t *distance)
+static double ucs_topo_pci_root_bw(const char *path1, const char *path2)
 {
     size_t path_distance = ucs_path_calc_distance(path1, path2);
 
@@ -356,16 +375,7 @@ static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
                    path_distance);
     ucs_assertv(path_distance > 0, "path1=%s path2=%s", path1, path2);
 
-    /* TODO set latency/bandwidth by CPU model */
-    distance->latency   = 300e-9;
-    distance->bandwidth = ucs_min(3500.0 * UCS_MBYTE,
-                                  (19200.0 * UCS_MBYTE) / path_distance);
-}
-
-static void ucs_topo_common_numa_node_distance(ucs_sys_dev_distance_t *distance)
-{
-    distance->latency   = 300e-9;
-    distance->bandwidth = 17000 * UCS_MBYTE;
+    return ucs_min(3500.0 * UCS_MBYTE, (19200.0 * UCS_MBYTE) / path_distance);
 }
 
 static int
@@ -383,46 +393,74 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
                             ucs_sys_device_t device2,
                             ucs_sys_dev_distance_t *distance)
 {
-    char path1[PATH_MAX], path2[PATH_MAX], common_path[PATH_MAX];
     ucs_status_t status;
+    char *path1, *path2, *common_path;
 
     /* If one of the devices is unknown, we assume near topology */
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
-        goto default_distance;
+        goto err_default_distance;
     }
 
-    status = ucs_topo_sys_dev_to_sysfs_path(device1, path1, sizeof(path1));
+    status = ucs_string_alloc_path_buffer(&path1, "path1");
+    if (status != UCS_OK) {
+        goto err_default_distance;
+    }
+
+    status = ucs_topo_sys_dev_to_sysfs_path(device1, path1, PATH_MAX);
     if (status != UCS_OK) {
         ucs_debug("failed to get sysfs path for %s",
                   ucs_topo_sys_device_get_name(device1));
-        goto default_distance;
+        goto err_free_path1;
     }
 
-    status = ucs_topo_sys_dev_to_sysfs_path(device2, path2, sizeof(path2));
+    status = ucs_string_alloc_path_buffer(&path2, "path2");
+    if (status != UCS_OK) {
+        goto err_free_path1;
+    }
+
+    status = ucs_topo_sys_dev_to_sysfs_path(device2, path2, PATH_MAX);
     if (status != UCS_OK) {
         ucs_debug("failed to get sysfs path for %s",
                   ucs_topo_sys_device_get_name(device2));
-        goto default_distance;
+        goto err_free_path2;
+    }
+
+    status = ucs_string_alloc_path_buffer(&common_path, "common_path");
+    if (status != UCS_OK) {
+        goto err_free_path2;
     }
 
     ucs_path_get_common_parent(path1, path2, common_path);
     if (ucs_topo_is_pci_root(common_path)) {
-        ucs_topo_pci_root_distance(path1, path2, distance);
-        return UCS_OK;
+        ucs_topo_set_distance(&ucs_global_opts.dist.phb,
+                              ucs_topo_pci_root_bw(path1, path2), distance);
+        goto out;
     } else if (ucs_topo_is_sys_root(common_path)) {
         if (ucs_topo_is_same_numa_node(device1, device2)) {
-            ucs_topo_common_numa_node_distance(distance);
-            return UCS_OK;
+            ucs_topo_set_distance(&ucs_global_opts.dist.node, 17000 * UCS_MBYTE,
+                                  distance);
+            goto out;
         }
 
-        ucs_topo_sys_root_distance(distance);
-        return UCS_OK;
+        ucs_topo_set_distance(&ucs_global_opts.dist.sys, 220 * UCS_MBYTE,
+                              distance);
+        goto out;
     }
 
     /* Report best perf for common PCI bridge or sysfs parsing error */
-default_distance:
+    ucs_free(common_path);
+err_free_path2:
+    ucs_free(path2);
+err_free_path1:
+    ucs_free(path1);
+err_default_distance:
     return ucs_topo_get_distance_default(device1, device2, distance);
+out:
+    ucs_free(common_path);
+    ucs_free(path2);
+    ucs_free(path1);
+    return UCS_OK;
 }
 
 static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
@@ -743,6 +781,14 @@ static const ucs_topo_pci_info_t ucs_topo_pci_info[] = {
      .ctrl_overhead = 16,
      .encoding      = 128,
      .decoding      = 130},
+    {.name          = "gen5",
+     .bw_gbps       = 32,
+     .payload       = 256,
+     .tlp_overhead  = 26,
+     .ctrl_ratio    = 4,
+     .ctrl_overhead = 16,
+     .encoding      = 128,
+     .decoding      = 130},
 };
 
 double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
@@ -808,16 +854,15 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 
 out_max_bw:
     ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
-    return DBL_MAX;
+    return INFINITY;
 }
 
 const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)
 {
     const char *detected_type = NULL;
-    char device_file_path[PATH_MAX];
-    char *sysfs_realpath;
+    char *device_file_path, *sysfs_realpath, *sysfs_path;
     struct stat st_buf;
-    char *sysfs_path;
+    ucs_status_t status;
 
     /* realpath name is expected to be like below:
      * PF: /sys/devices/.../0000:03:00.0/<interface_type>/<dev_name>
@@ -831,8 +876,13 @@ const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)
 
     /* Try PF: strip 2 components */
     sysfs_path = ucs_dirname(sysfs_realpath, 2);
-    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
-                      sysfs_path);
+
+    status = ucs_string_alloc_formatted_path(&device_file_path,
+                                             "device_file_path", "%s/device",
+                                             sysfs_path);
+    if (status != UCS_OK) {
+        goto out_undetected;
+    }
 
     if (!stat(device_file_path, &st_buf)) {
         detected_type = "PF";
@@ -841,20 +891,20 @@ const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)
 
     /* Try SF: strip 3 components (one more) */
     sysfs_path = ucs_dirname(sysfs_path, 1);
-    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
-                      sysfs_path);
+    ucs_snprintf_safe(device_file_path, PATH_MAX, "%s/device", sysfs_path);
 
     if (!stat(device_file_path, &st_buf)) {
         detected_type = "SF";
         goto out_detected;
     }
 
+    ucs_free(device_file_path);
 out_undetected:
     ucs_debug("%s: sysfs path undetected", dev_path);
     return NULL;
-
 out_detected:
     ucs_debug("%s: %s sysfs path is '%s'\n", dev_path, detected_type,
               sysfs_path);
+    ucs_free(device_file_path);
     return sysfs_path;
 }

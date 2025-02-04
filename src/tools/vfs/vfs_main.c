@@ -10,6 +10,9 @@
 
 #include "vfs_daemon.h"
 
+#include <ucs/sys/string.h>
+#include <ucs/debug/log_def.h>
+#include <ucs/debug/memtrack_int.h>
 #include <sys/wait.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -22,8 +25,7 @@ vfs_opts_t g_opts = {
     .foreground     = 0,
     .verbose        = 0,
     .mountpoint_dir = VFS_DEFAULT_MOUNTPOINT_DIR,
-    .mount_opts     = "",
-    .sock_path      = NULL
+    .mount_opts     = ""
 };
 
 const char *vfs_action_names[] = {
@@ -105,9 +107,18 @@ static int vfs_run_fusermount(char **extra_argv)
     return 0;
 }
 
-static void vfs_get_mountpoint(pid_t pid, char *mountpoint, size_t max_length)
+static char *vfs_get_mountpoint(pid_t pid)
 {
-    snprintf(mountpoint, max_length, "%s/%d", g_opts.mountpoint_dir, pid);
+    ucs_status_t status;
+    char *mountpoint;
+
+    status = ucs_string_alloc_formatted_path(&mountpoint, "mountpoint", "%s/%d",
+                                             g_opts.mountpoint_dir, pid);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    return mountpoint;
 }
 
 static const char *vfs_get_process_name(int pid, char *buf, size_t max_length)
@@ -151,9 +162,9 @@ out:
 
 int vfs_mount(int pid)
 {
-    char mountpoint[PATH_MAX];
     char mountopts[1024];
     char name[NAME_MAX];
+    char *mountpoint;
     int fuse_fd, ret;
 
     /* Add common mount options:
@@ -168,39 +179,60 @@ int vfs_mount(int pid)
             vfs_get_process_name(pid, name, sizeof(name)),
             (strlen(g_opts.mount_opts) > 0) ? "," : "", g_opts.mount_opts);
     if (ret >= sizeof(mountopts)) {
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto out;
     }
 
     /* Create the mount point directory, and ignore "already exists" error */
-    vfs_get_mountpoint(pid, mountpoint, sizeof(mountpoint));
+    mountpoint = vfs_get_mountpoint(pid);
+    if (mountpoint == NULL) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
     ret = mkdir(mountpoint, S_IRWXU);
-    if ((ret < 0) && (errno != EEXIST)) {
-        ret = -errno;
-        vfs_error("failed to create directory '%s': %m", mountpoint);
-        return ret;
+    if (ret < 0) {
+        if (errno == EEXIST) {
+            /* Directory already exists */
+            ret = 0;
+        } else {
+            ret = -errno;
+            vfs_error("failed to create directory '%s': %m", mountpoint);
+            goto out_free_mountpoint;
+        }
     }
 
     /* Mount a new FUSE filesystem in the mount point directory */
     vfs_log("mounting directory '%s' with options '%s'", mountpoint, mountopts);
-    fuse_fd = fuse_open_channel(mountpoint, mountopts);
-    if (fuse_fd < 0) {
+    ret = fuse_open_channel(mountpoint, mountopts);
+    if (ret < 0) {
         vfs_error("fuse_open_channel(%s,opts=%s) failed: %m", mountpoint,
                   mountopts);
-        return fuse_fd;
+        goto out_free_mountpoint;
     }
 
+    fuse_fd = ret;
     vfs_log("mounted directory '%s' with fd %d", mountpoint, fuse_fd);
-    return fuse_fd;
+
+out_free_mountpoint:
+    ucs_free(mountpoint);
+out:
+    return ret;
 }
 
 int vfs_unmount(int pid)
 {
-    char mountpoint[PATH_MAX];
+    char *mountpoint;
     char *argv[5];
     int ret;
 
     /* Unmount FUSE file system */
-    vfs_get_mountpoint(pid, mountpoint, sizeof(mountpoint));
+    mountpoint = vfs_get_mountpoint(pid);
+    if (mountpoint == NULL) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
     argv[0] = "-u";
     argv[1] = "-z";
     argv[2] = "--";
@@ -208,7 +240,7 @@ int vfs_unmount(int pid)
     argv[4] = NULL;
     ret     = vfs_run_fusermount(argv);
     if (ret < 0) {
-        return ret;
+        goto out_free_mountpoint;
     }
 
     /* Remove mount point directory */
@@ -216,10 +248,12 @@ int vfs_unmount(int pid)
     ret = rmdir(mountpoint);
     if (ret < 0) {
         vfs_error("failed to remove directory '%s': %m", mountpoint);
-        return ret;
     }
 
-    return 0;
+out_free_mountpoint:
+    ucs_free(mountpoint);
+out:
+    return ret;
 }
 
 static int vfs_unlink_socket(int silent_notexist)
@@ -251,6 +285,11 @@ static int vfs_listen(int silent_addinuse_err)
     if (ret < 0) {
         ret = -errno;
         vfs_error("failed to set umask permissions: %m");
+        goto out;
+    }
+
+    ret = ucs_vfs_sock_mkdir(g_sockaddr.sun_path, UCS_LOG_LEVEL_ERROR);
+    if (ret != 0) {
         goto out;
     }
 
@@ -387,9 +426,6 @@ out:
 
 static void vfs_usage()
 {
-    struct sockaddr_un sock_addr = {};
-
-    ucs_vfs_sock_get_address(&sock_addr);
     printf("Usage:   ucx_vfs [options]  [action]\n");
     printf("\n");
     printf("Options:\n");
@@ -398,8 +434,6 @@ static void vfs_usage()
     printf("  -o <opts>  Pass these mount options to mount.fuse\n");
     printf("  -f         Do not daemonize; run in foreground\n");
     printf("  -v         Enable verbose logging (requires -f)\n");
-    printf("  -l <path>  Set listening unix socket path (default: %s)\n",
-           sock_addr.sun_path);
     printf("\n");
     printf("Actions:\n");
     printf("   start     Run the daemon and listen for connection from UCX\n");
@@ -414,7 +448,7 @@ static int vfs_parse_args(int argc, char **argv)
     const char *action_str;
     int c, i;
 
-    while ((c = getopt(argc, argv, "d:o:vfl:h")) != -1) {
+    while ((c = getopt(argc, argv, "d:o:vfh")) != -1) {
         switch (c) {
         case 'd':
             g_opts.mountpoint_dir = optarg;
@@ -427,9 +461,6 @@ static int vfs_parse_args(int argc, char **argv)
             break;
         case 'f':
             g_opts.foreground = 1;
-            break;
-        case 'l':
-            g_opts.sock_path = optarg;
             break;
         case 'h':
         default:
@@ -494,14 +525,7 @@ int main(int argc, char **argv)
         fuse_daemonize(0);
     }
 
-    if (g_opts.sock_path == NULL) {
-        ucs_vfs_sock_get_address(&g_sockaddr);
-    } else {
-        g_sockaddr.sun_family = AF_UNIX;
-        memset(g_sockaddr.sun_path, 0, sizeof(g_sockaddr.sun_path));
-        strncpy(g_sockaddr.sun_path, g_opts.sock_path,
-                sizeof(g_sockaddr.sun_path) - 1);
-    }
+    ucs_vfs_sock_get_address(&g_sockaddr);
 
     switch (g_opts.action) {
     case VFS_DAEMON_ACTION_START:

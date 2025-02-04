@@ -73,6 +73,12 @@ extern ucs_list_link_t ucs_sys_topo_providers_list;
 
 
 /**
+ * Reset the internal singleton system topology provider.
+ */
+void ucs_sys_topo_reset_provider(void);
+
+
+/**
  * Find system device by pci bus id.
  *
  * @param [in]  bus_id  pointer to bus id of the device of interest.
@@ -181,7 +187,7 @@ ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev);
  * @param [in]  sys_dev  System device to set the name for.
  * @param [in]  name     Name to set for this system device. Note: the name can
  *                       be released after this call.
- * @param [in]  priority Determine whether device name will be overriden,
+ * @param [in]  priority Determine whether device name will be overridden,
  *                       in case it already exists.
  *
  * @return UCS_OK if the name was set, error otherwise.
@@ -239,7 +245,7 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
  *
  * @return Number of system devices.
  */
-unsigned ucs_topo_num_devices();
+unsigned ucs_topo_num_devices(void);
 
 
 /**
@@ -252,13 +258,13 @@ void ucs_topo_print_info(FILE *stream);
 /**
  * Initialize UCS topology subsystem.
  */
-void ucs_topo_init();
+void ucs_topo_init(void);
 
 
 /**
  * Cleanup UCS topology subsystem.
  */
-void ucs_topo_cleanup();
+void ucs_topo_cleanup(void);
 
 END_C_DECLS
 

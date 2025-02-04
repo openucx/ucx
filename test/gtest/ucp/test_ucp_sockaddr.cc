@@ -155,7 +155,7 @@ public:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    int is_skip_interface(struct ifaddrs *ifa) {
+    virtual int is_skip_interface(const struct ifaddrs *ifa) const {
         int skip = 0;
 
         if (!has_transport("tcp") && !has_transport("all") &&
@@ -618,6 +618,17 @@ public:
         EXPECT_EQ(1ul, e.get_err_num_rejected());
     }
 
+    template <typename Func>
+    void wait_progress(Func func)
+    {
+        ucs_time_t deadline = ucs::get_deadline();
+        while (!func() && (ucs_get_time() < deadline)) {
+            progress();
+        };
+
+        EXPECT_GT(deadline, ucs_get_time());
+    }
+
     virtual ucp_ep_params_t get_ep_params()
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
@@ -750,9 +761,9 @@ public:
         EXPECT_EQ(m_test_addr, attr.local_sockaddr);
     }
 
-    void one_sided_disconnect(entity &e, uint32_t flags = 0)
+    void one_sided_disconnect(entity &e, uint32_t flags = 0, int ep_index = 0)
     {
-        void *req           = e.disconnect_nb(0, 0, flags);
+        void *req           = e.disconnect_nb(0, ep_index, flags);
         ucs_time_t deadline = ucs::get_deadline();
         scoped_log_handler slh(detect_error_logger);
         while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
@@ -888,13 +899,18 @@ protected:
         return get_variant_value() & TEST_MODIFIER_SA_DATA_V1;
     }
 
-    bool has_rndv_lanes(ucp_ep_h ep)
+    bool has_rndv_lanes(const entity &entity)
     {
+        const auto *config   = &entity.worker()->context->config.ext;
+        const auto &ep       = entity.ep();
+        uint64_t iface_flags = (config->rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ?
+                                       UCT_IFACE_FLAG_GET_ZCOPY :
+                                       UCT_IFACE_FLAG_PUT_ZCOPY;
+
         for (ucp_lane_index_t lane_idx = 0;
              lane_idx < ucp_ep_num_lanes(ep); ++lane_idx) {
             if ((lane_idx != ucp_ep_get_cm_lane(ep)) &&
-                (ucp_ep_get_iface_attr(ep, lane_idx)->cap.flags &
-                 (UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_PUT_ZCOPY)) &&
+                (ucp_ep_get_iface_attr(ep, lane_idx)->cap.flags & iface_flags) &&
                 /* RNDV lanes should be selected if transport supports GET/PUT
                  * Zcopy and: */
                 (/* - either memory invalidation can be done on its MD */
@@ -927,6 +943,10 @@ protected:
         constexpr size_t length = 4 * UCS_KBYTE;
 
         listen_and_communicate(false, SEND_DIRECTION_BIDI);
+
+        if (!has_rndv_lanes(sender())) {
+            UCS_TEST_SKIP_R("no RNDV lanes");
+        }
 
         mem_buffer send_buffer(length, UCS_MEMORY_TYPE_HOST);
         send_buffer.pattern_fill(1, length);
@@ -1375,7 +1395,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup, compare_cm_and_wireup_configs,
     cm_ep_cfg_key           = &ucp_ep_config(sender().ep())->key;
     /* Don't check RNDV lanes, because CM prefers p2p connection mode for RNDV
      * lanes and they don't support memory invalidation on MD */
-    should_check_rndv_lanes = !has_rndv_lanes(sender().ep());
+    should_check_rndv_lanes = !has_rndv_lanes(sender());
     EXPECT_NE(UCP_NULL_LANE, ucp_ep_get_cm_lane(sender().ep()));
     disconnect(sender());
     disconnect(receiver());
@@ -1451,20 +1471,42 @@ public:
         get_test_variants_cm_mode(variants, UCP_FEATURE_TAG, CONN_REQ_TAG,
                                   "tag");
     }
+
+    size_t max_lanes() const
+    {
+        if (has_transport("dc") || !is_proto_enabled()) {
+            return UCP_MAX_LANES_LEGACY;
+        }
+        return UCP_MAX_LANES;
+    }
+
+    void init() override
+    {
+        auto num_lanes_str = ucs::to_string(max_lanes());
+        modify_config("MAX_RNDV_RAILS", num_lanes_str); // for protov1
+        modify_config("IB_NUM_PATHS", num_lanes_str, SETENV_IF_NOT_EXIST);
+        modify_config("TM_SW_RNDV", "y");
+
+        test_ucp_sockaddr::init();
+    }
+
+    void test_num_lanes()
+    {
+        /* get configuration index for EP created through CM */
+        listen_and_communicate(false, SEND_DIRECTION_C2S);
+
+        ASSERT_LE(max_lanes(), (int)ucp_ep_num_lanes(sender().ep()));
+        ASSERT_LE(max_lanes(), (int)ucp_ep_num_lanes(receiver().ep()));
+    }
 };
 
-UCS_TEST_SKIP_COND_P(test_max_lanes, 16_lanes_reconf, !cm_use_all_devices(),
-                     "MAX_RNDV_LANES=16", "MAX_EAGER_LANES=16",
-                     "IB_NUM_PATHS?=16", "TM_SW_RNDV=y")
+UCS_TEST_SKIP_COND_P(test_max_lanes, lanes_reconf, !cm_use_all_devices())
 {
-    /* get configuration index for EP created through CM */
-    listen_and_communicate(false, SEND_DIRECTION_C2S);
-
-    ASSERT_EQ(16, (int)ucp_ep_num_lanes(sender().ep()));
-    ASSERT_EQ(16, (int)ucp_ep_num_lanes(receiver().ep()));
+    test_num_lanes();
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, dc, "dc")
 
 class test_ucp_sockaddr_wireup_fail : public test_ucp_sockaddr_wireup {
 protected:
@@ -1722,7 +1764,7 @@ private:
         }
 
         if (test_ucp_sockaddr_wireup_fail::test_all_ep_flags(e, flags)) {
-            UCS_TEST_SKIP_R("trying the next CM calback wasn't scheduled");
+            UCS_TEST_SKIP_R("trying the next CM callback wasn't scheduled");
         }
 
         /* Waiting for ucp_cm_client_try_next_cm_progress() callback being
@@ -1963,8 +2005,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes,
 {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 
-    EXPECT_EQ(has_rndv_lanes(sender().ep()),
-              has_rndv_lanes(receiver().ep()));
+    EXPECT_EQ(has_rndv_lanes(sender()), has_rndv_lanes(receiver()));
 
     concurrent_disconnect();
 }
@@ -2071,7 +2112,7 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_sforce) {
 }
 
 /* The test check that a client disconnection works fine when a server received
- * a conenction request, but a conenction wasn't fully established */
+ * a connection request, but a connection wasn't fully established */
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
 {
     ucp_test_base::entity::listen_cb_type_t listen_cb_type = cb_type();
@@ -2099,7 +2140,7 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
             }
         }
 
-        /* Disconnect from a peer while conenction is not fully established with
+        /* Disconnect from a peer while connection is not fully established with
          * a peer */
         one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
 
@@ -2498,10 +2539,11 @@ protected:
             rx_am_msg_arg arg(receiver(), &rhdr[0], &rb[0], rmemh);
             set_am_data_handler(receiver(), 0, rx_am_msg_cb, &arg);
 
-            ucp_request_param_t param = {};
+            ucp_request_param_t param;
+            param.op_attr_mask = 0;
             if (smemh != NULL) {
-                param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
-                param.memh         = smemh;
+                param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+                param.memh          = smemh;
             }
 
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;
@@ -3083,7 +3125,6 @@ class test_ucp_sockaddr_protocols_err_sender
 protected:
     virtual void init() {
         m_err_count = 0;
-        modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
         /* receiver should try to read wrong data, instead of detecting error
            in keepalive process and closing the connection */
         disable_keepalive();
@@ -3126,7 +3167,6 @@ protected:
         send_buf.pattern_fill(1, size);
         for (size_t sender_idx = 0; sender_idx < num_senders; ++sender_idx) {
             ucp_send_nbx_callback_t send_cb;
-
             if (sender_idx > 0) {
                 send_cb = scomplete_always_ok_cbx;
                 client_ep_connect(sender_idx);
@@ -3137,6 +3177,10 @@ protected:
             /* Warmup */
             send_recv(sender(), receiver(), send_recv_type(), false, cb_type(),
                       sender_idx);
+
+            if (!has_rndv_lanes(sender())) {
+                UCS_TEST_SKIP_R("no RNDV lanes");
+            }
 
             for (size_t i = 0; i < num_sends; ++i) {
                 void *sreq = send(sender(), send_buf.ptr(), size,
@@ -3217,7 +3261,7 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 {
     size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
                                     ucs::test_time_multiplier());
-    do_tag_rndv_killed_sender_test(1, 128, num_sends);
+    do_tag_rndv_killed_sender_test(1, 1024, num_sends);
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
@@ -3226,9 +3270,76 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 {
     size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
                                     ucs::test_time_multiplier());
-    do_tag_rndv_killed_sender_test(4, 128, num_sends);
+    do_tag_rndv_killed_sender_test(4, 1024, num_sends);
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err_sender)
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_sockaddr_protocols_err_sender,
                                         rc_no_ud, "rc_mlx5,rc_verbs")
+
+
+class test_ucp_sockaddr_iface_activate : public test_ucp_sockaddr {
+public:
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        get_test_variants_mt(variants, UCP_FEATURE_TAG,
+                             CONN_REQ_TAG | TEST_MODIFIER_CM_USE_ALL_DEVICES,
+                             "tag");
+    }
+
+    virtual int is_skip_interface(const struct ifaddrs *ifa) const
+    {
+        return test_ucp_sockaddr::is_skip_interface(ifa) ||
+               ucs::is_rdmacm_netdev(ifa->ifa_name);
+    }
+
+    bool is_any_interface_activated(entity &e) const
+    {
+        ucp_worker_h worker = e.worker();
+        for (unsigned i = 0; i < worker->num_ifaces; ++i) {
+            if (ucp_worker_iface_is_activated(worker->ifaces[i])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void client_connect_disconnect()
+    {
+        /* Check state before connection establishment */
+        EXPECT_FALSE(is_any_interface_activated(receiver()));
+        int receiver_ep_count = receiver().get_num_eps();
+
+        /* Connect sender and receiver */
+        client_ep_connect_basic(get_ep_params(), 0, false);
+        wait_progress([&] {
+            return receiver().get_num_eps() == (receiver_ep_count + 1);
+        });
+
+        /* Check state after connection establishment */
+        EXPECT_EQ(0, sender().get_err_num());
+        EXPECT_TRUE(is_any_interface_activated(sender()));
+        EXPECT_TRUE(is_any_interface_activated(receiver()));
+
+        one_sided_disconnect(sender());
+        one_sided_disconnect(receiver(), 0, receiver_ep_count);
+
+        EXPECT_FALSE(is_any_interface_activated(receiver()));
+        receiver().reset_err_num();
+
+        /* TODO: check why receiver interfaces are not deactivated on one-sided
+         * client disconnect */
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_iface_activate, iface_activate_count,
+                     !is_proto_enabled())
+{
+    listen(cb_type());
+    client_connect_disconnect();
+    client_connect_disconnect();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_iface_activate, tcp, "tcp")

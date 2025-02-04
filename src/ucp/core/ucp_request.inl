@@ -264,6 +264,8 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
                   req->recv.tag.info.sender_tag, req->recv.tag.info.length,
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_tag_recv", status);
+    /* coverity[address_free] */
+    /* coverity[offset_free] */
     ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info,
                          req->user_data);
 }

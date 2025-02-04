@@ -31,7 +31,7 @@ func (d *UcpAmData) IsDataValid() bool {
 // Whether this amData descriptor can be persisted outside UcpAmRecvCallback
 // callback by returning UCS_INPROGRESS
 func (d *UcpAmData) CanPersist() bool {
-	return (d.flags & UCP_AM_RECV_ATTR_FLAG_DATA) != 0
+	return (d.flags & (UCP_AM_RECV_ATTR_FLAG_DATA | UCP_AM_RECV_ATTR_FLAG_RNDV)) != 0
 }
 
 // Pointer to a received data

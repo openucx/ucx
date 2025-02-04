@@ -295,7 +295,7 @@ void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
         ucp_request_param_t param = {};
         void *req = ucp_ep_flush_nbx(ep, &param);
         ASSERT_UCS_PTR_OK(req);
-        reqs.push_back(req);
+        request_wait(req);
 
         req = ucp_put_nb(ep, &m_send_data[0], sizeof(m_send_data[0]),
                          (uintptr_t)&m_recv_data[length], rkey,
@@ -1268,7 +1268,9 @@ public:
     {
         const ucp_ep_config_t *config = ucp_ep_config(e->ep());
         ucp_lane_index_t lane_index   = config->key.rma_lanes[0];
-        return ucp_ep_get_tl_rsc(e->ep(), lane_index)->tl_name;
+        return (lane_index != UCP_NULL_LANE) ?
+                       ucp_ep_get_tl_rsc(e->ep(), lane_index)->tl_name :
+                       NULL;
     }
 
     void verify_symmetric_tl_selection(const std::string &num_eps1,
@@ -1285,8 +1287,14 @@ public:
         e1->connect(e2, get_ep_params());
         e2->connect(e1, get_ep_params());
 
+        auto tl1 = rma_transport(e1);
+        auto tl2 = rma_transport(e2);
+
         /* Verify that selection is the same for both eps */
-        ASSERT_STREQ(rma_transport(e1), rma_transport(e2));
+        ASSERT_EQ(!tl1, !tl2);
+        if (tl1 != NULL) {
+            ASSERT_STREQ(tl1, tl2);
+        }
     }
 };
 
@@ -1761,6 +1769,35 @@ public:
         double max_error = original / pow(2, _UCS_FP8_MANTISSA_BITS);
         EXPECT_NEAR(original, unpacked, max_error);
     }
+
+    const uct_iface_attr_t *get_iface_attr(const ucp_address_entry_t *ae)
+    {
+        ucp_worker_h worker   = sender().worker();
+        ucp_context_h context = worker->context;
+        ucp_rsc_index_t rsc_index;
+        uct_iface_is_reachable_params_t params;
+
+        params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                             UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                             UCT_IFACE_IS_REACHABLE_FIELD_SCOPE;
+        params.device_addr = ae->dev_addr;
+        params.iface_addr  = ae->iface_addr;
+        params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
+
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+            auto wiface = ucp_worker_iface(worker, rsc_index);
+
+            /* Compare resources by device and transport */
+            if ((context->tl_rscs[rsc_index].tl_name_csum ==
+                 ae->tl_name_csum) &&
+                uct_iface_is_reachable_v2(wiface->iface, &params)) {
+                EXPECT_EQ(ae->md_index, context->tl_rscs[rsc_index].md_index);
+                return &wiface->attr;
+            }
+        }
+
+        return nullptr;
+    }
 };
 
 // On some systems TCP has very low BW and high latency, which would be
@@ -1791,8 +1828,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
 
     const ucp_address_entry_t *ae;
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
-        ucp_rsc_index_t rsc_idx = ae->iface_attr.dst_rsc_index;
-        uct_iface_attr_t *attr  = &ucp_worker_iface(worker, rsc_idx)->attr;
+        auto attr = get_iface_attr(ae);
+        ASSERT_NE(nullptr, attr);
 
         // Segment size is packed as a multiplicator of
         // UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR, thus the unpacked value may be

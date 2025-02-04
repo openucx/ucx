@@ -180,7 +180,7 @@ static int ucs_usage_tracker_compare(const void *elem_ptr1,
     return (elem1->key > elem2->key) ? 1 : -1;
 }
 
-/* Promote/Demote entires base on the latest score, and triggers user
+/* Promote/Demote entries base on the latest score, and triggers user
   * callback accordingly. */
 static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker)
 {

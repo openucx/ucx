@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -63,7 +64,7 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
     }
     VALGRIND_MAKE_MEM_DEFINED(&skb->lkey, sizeof(skb->lkey));
     skb->flags = 0;
-    ucs_prefetch(skb->neth);
+    ucs_read_prefetch(skb->neth);
     return skb;
 }
 

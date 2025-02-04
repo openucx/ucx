@@ -56,6 +56,11 @@ ucs_status_t ucs_empty_function_return_unsupported()
     return UCS_ERR_UNSUPPORTED;
 }
 
+ucs_status_ptr_t ucs_empty_function_return_ptr_unsupported()
+{
+    return UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
+}
+
 ucs_status_t ucs_empty_function_return_inprogress()
 {
     return UCS_INPROGRESS;

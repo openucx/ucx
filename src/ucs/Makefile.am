@@ -15,7 +15,7 @@ bin_PROGRAMS        =
 libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) $(BFD_CPPFLAGS) \
                      -DUCX_MODULE_DIR=\"$(moduledir)\" \
                      -DUCX_CONFIG_DIR=\"$(ucx_config_dir)\"
-libucs_la_CFLAGS   = $(BASE_CFLAGS) $(BFD_CFLAGS)
+libucs_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libucs_la_LDFLAGS  = -ldl $(BFD_LDFLAGS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
 libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la $(BFD_LIBS)
@@ -130,6 +130,8 @@ noinst_HEADERS = \
 	sys/sys.h \
 	sys/iovec.h \
 	sys/iovec.inl \
+	sys/ptr_arith.h \
+	sys/netlink.h \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \
@@ -204,6 +206,7 @@ libucs_la_SOURCES = \
 	sys/sock.c \
 	sys/topo/base/topo.c \
 	sys/stubs.c \
+	sys/netlink.c \
 	sys/uid.c \
 	time/time.c \
 	time/timer_wheel.c \

@@ -921,7 +921,7 @@ protected:
     void send_recv_data(UcxConnection* conn, const BufferIov &iov, uint32_t sn,
                         xfer_type_t send_recv_data,
                         UcxCallback* callback = EmptyCallback::get()) {
-        // Store the size of the IO vector into an auxillary variable to avoid
+        // Store the size of the IO vector into an auxiliary variable to avoid
         // touching IO vector object after it was released in the callback
         size_t iov_size = iov.size();
 

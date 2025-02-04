@@ -8,11 +8,17 @@ if HAVE_RDMACM
 # rdmacm is under IB, but it's actually a uct module, because it defines its own
 # component
 module_LTLIBRARIES        = libuct_rdmacm.la
-libuct_rdmacm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) $(RDMACM_CPPFLAGS)
-libuct_rdmacm_la_CFLAGS   = $(BASE_CFLAGS)
+libuct_rdmacm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) \
+                            $(RDMACM_CPPFLAGS)
+libuct_rdmacm_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_rdmacm_la_LIBADD   = $(RDMACM_LIBS) $(top_builddir)/src/ucs/libucs.la \
                             $(top_builddir)/src/uct/libuct.la \
                             $(top_builddir)/src/uct/ib/libuct_ib.la
+
+if HAVE_DEVX
+libuct_rdmacm_la_LIBADD  += $(LIB_MLX5)
+endif
+
 libuct_rdmacm_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(RDMACM_LDFLAGS) -version-info $(SOVERSION)
 
 noinst_HEADERS = \

@@ -34,7 +34,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     { \
         _rettype res; \
         UCM_BISTRO_PROLOGUE; \
-        ucm_trace("%s()", __FUNCTION__); \
+        ucm_trace("%s()", __func__); \
         \
         if (ucs_unlikely(ucm_reloc_get_orig_thread == pthread_self())) { \
             return (_rettype)_fail_val; \
@@ -43,9 +43,6 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         UCM_BISTRO_EPILOGUE; \
         return res; \
     }
-
-#define UCM_OVERRIDE_FUNC(_name, _rettype) \
-    _rettype _name() __attribute__ ((alias (UCS_PP_QUOTE(ucm_override_##_name)))); \
 
 #define UCM_DEFINE_DLSYM_FUNC(_name, _rettype, _fail_val, ...) \
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name, ucm_override_##_name, \
@@ -60,7 +57,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         typedef _rettype (*func_ptr_t) (__VA_ARGS__); \
         static func_ptr_t orig_func_ptr = NULL; \
         \
-        ucm_trace("%s()", __FUNCTION__); \
+        ucm_trace("%s()", __func__); \
         \
         if (ucs_unlikely(orig_func_ptr == NULL)) { \
             pthread_mutex_lock(&ucm_reloc_get_orig_lock); \

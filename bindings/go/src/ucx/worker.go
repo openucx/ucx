@@ -97,7 +97,7 @@ func (w *UcpWorker) Query(attrs ...UcpWorkerAttribute) (*UcpWorkerAttributes, er
 // is over, as part of the wake-up mechanism.
 //
 // The worker must be armed before waiting on an event (must be re-armed after
-// it has been signaled for re-use) with UcpWorker.Arm().
+// it has been signaled for reuse) with UcpWorker.Arm().
 // The events triggering a signal of the file descriptor from
 // UcpWorker.GetEfd() depend on the interfaces used by the worker and
 // defined in the transport layer, and typically represent a request completion
@@ -227,24 +227,12 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 	tag uint64, tagMask uint64, params *UcpRequestParams) (*UcpRequest, error) {
 	var requestParams C.ucp_request_param_t
 	var recvInfo C.ucp_tag_recv_info_t
-	var cbId uint64
 
 	requestParams.op_attr_mask = C.UCP_OP_ATTR_FIELD_RECV_INFO
 	recvInfoPtr := (*C.ucp_tag_recv_info_t)(unsafe.Pointer(&requestParams.recv_info[0]))
 	*recvInfoPtr = recvInfo
 
-	if params != nil {
-		(&requestParams).SetMemType(params)
-
-		if params.Cb != nil {
-			cbId = register(params.Cb)
-			requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
-			cbAddr := (*C.ucp_tag_recv_nbx_callback_t)(unsafe.Pointer(&requestParams.cb[0]))
-			*cbAddr = (C.ucp_tag_recv_nbx_callback_t)(C.ucxgo_completeGoTagRecvRequest)
-			requestParams.user_data = unsafe.Pointer(uintptr(cbId))
-		}
-	}
-
+	cbId := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeGoTagRecvRequest))
 	request := C.ucp_tag_recv_nbx(w.worker, address, C.size_t(size), C.ucp_tag_t(tag),
 		C.ucp_tag_t(tagMask), &requestParams)
 
@@ -298,26 +286,13 @@ func (w *UcpWorker) SetAmRecvHandler(id uint, flags UcpAmCbFlags, cb UcpAmRecvCa
 func (w *UcpWorker) RecvAmDataNonBlocking(dataDesc *UcpAmData, recvBuffer unsafe.Pointer, size uint64,
 	params *UcpRequestParams) (*UcpRequest, error) {
 	var requestParams C.ucp_request_param_t
-	var cbId uint64
 	var length C.size_t
 
 	requestParams.op_attr_mask = C.UCP_OP_ATTR_FIELD_RECV_INFO
 	recvInfoPtr := (**C.size_t)(unsafe.Pointer(&requestParams.recv_info[0]))
 	*recvInfoPtr = &length
 
-	if params != nil {
-		(&requestParams).SetMemType(params)
-
-		if params.Cb != nil {
-			cbId = register(params.Cb)
-			requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
-			cbAddr := (*C.ucp_am_recv_data_nbx_callback_t)(unsafe.Pointer(&requestParams.cb[0]))
-			*cbAddr = (C.ucp_am_recv_data_nbx_callback_t)(C.ucxgo_completeAmRecvData)
-
-			requestParams.user_data = unsafe.Pointer(uintptr(cbId))
-		}
-	}
-
+	cbId := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeAmRecvData))
 	request := C.ucp_am_recv_data_nbx(w.worker, dataDesc.dataPtr, recvBuffer, C.size_t(size), &requestParams)
 
 	return NewRequest(request, cbId, length)

@@ -50,7 +50,7 @@ BEGIN_C_DECLS
 #define ucs_trace_req(_fmt, ...)    ucs_log(UCS_LOG_LEVEL_TRACE_REQ, _fmt, ## __VA_ARGS__)
 #define ucs_trace_data(_fmt, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_DATA, _fmt, ## __VA_ARGS__)
 #define ucs_trace_async(_fmt, ...)  ucs_log(UCS_LOG_LEVEL_TRACE_ASYNC, _fmt, ## __VA_ARGS__)
-#define ucs_trace_func(_fmt, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_FUNC, "%s(" _fmt ")", __FUNCTION__, ## __VA_ARGS__)
+#define ucs_trace_func(_fmt, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_FUNC, "%s(" _fmt ")", __func__, ## __VA_ARGS__)
 #define ucs_trace_poll(_fmt, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_POLL, _fmt, ## __VA_ARGS__)
 
 #define ucs_log_indent_level(_level, _delta) \
@@ -78,7 +78,7 @@ BEGIN_C_DECLS
 #define ucs_print(_fmt, ...) \
     do { \
         if (ucs_global_opts.log_print_enable) { \
-            ucs_log_dispatch(__FILE__, __LINE__, __FUNCTION__, \
+            ucs_log_dispatch(__FILE__, __LINE__, __func__, \
                              UCS_LOG_LEVEL_PRINT, &ucs_global_opts.log_component, _fmt, ## __VA_ARGS__); \
         } \
     } while(0)
@@ -132,13 +132,13 @@ void ucs_log_dispatch(const char *file, unsigned line, const char *function,
 /**
  * Flush logging output.
  */
-void ucs_log_flush();
+void ucs_log_flush(void);
 
 
 /**
  * @return Configured log buffer size
  */
-size_t ucs_log_get_buffer_size();
+size_t ucs_log_get_buffer_size(void);
 
 
 /**
@@ -169,10 +169,10 @@ void ucs_log_fatal_error(const char *format, ...) UCS_F_PRINTF(1, 2);
 /**
  * Initialize/cleanup logging subsystem.
  */
-void ucs_log_early_init();
-void ucs_log_init();
-void ucs_component_log_init();
-void ucs_log_cleanup();
+void ucs_log_early_init(void);
+void ucs_log_init(void);
+void ucs_component_log_init(void);
+void ucs_log_cleanup(void);
 
 
 const char *ucs_log_bitmap_to_str(unsigned n, uint8_t *bitmap, size_t length);
@@ -181,8 +181,8 @@ const char *ucs_log_bitmap_to_str(unsigned n, uint8_t *bitmap, size_t length);
  * Add/remove logging handlers
  */
 void ucs_log_push_handler(ucs_log_func_t handler);
-void ucs_log_pop_handler();
-unsigned ucs_log_num_handlers();
+void ucs_log_pop_handler(void);
+unsigned ucs_log_num_handlers(void);
 
 
 /**
@@ -198,7 +198,7 @@ void ucs_log_indent(int delta);
 /**
  * @return Current log indent level.
  */
-int ucs_log_get_current_indent();
+int ucs_log_get_current_indent(void);
 
 
 /**
@@ -210,7 +210,7 @@ void ucs_log_print_backtrace(ucs_log_level_t level);
 
 
 /**
- * Set the name fo current thread, to appear in log messages
+ * Set the name for current thread, to appear in log messages
  *
  * @param name           Thread name to set
  */

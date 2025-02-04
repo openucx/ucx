@@ -7,7 +7,7 @@ package goucxtests
 
 import (
 	"testing"
-	. "ucx"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 )
 
 func TestUcpContext(t *testing.T) {

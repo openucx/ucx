@@ -10,6 +10,7 @@ jobs:
       - checkout: self
         clean: true
         fetchDepth: 100
+        retryCountOnTaskFailure: 5
 
       - bash: |
           set -eEx

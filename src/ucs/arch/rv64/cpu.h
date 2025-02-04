@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 * Copyright (C) Rivos Inc. 2023
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -97,7 +98,9 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 }
 #endif
 
-static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
+static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
+                                       ucs_arch_memcpy_hint_t hint,
+                                       size_t total_len)
 {
     return memcpy(dst, src, len);
 }

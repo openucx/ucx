@@ -257,7 +257,7 @@ AC_CHECK_HEADERS([malloc_np.h])
 
 
 #
-# endianess
+# endianness
 #
 AC_CHECK_HEADERS([endian.h, sys/endian.h])
 

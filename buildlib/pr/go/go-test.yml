@@ -5,7 +5,7 @@ parameters:
 jobs:
   - job: ${{ parameters.name }}
     workspace:
-      clean: all
+      clean: outputs
 
     pool:
       name: MLNX
@@ -16,6 +16,7 @@ jobs:
       fetchDepth: 100
       clean: true
       displayName: Checkout
+      retryCountOnTaskFailure: 5
     - bash: |
         set -x
         # Standard go pre-commit: https://github.com/golang/go/blob/release-branch.go1.1/misc/git/pre-commit
@@ -41,6 +42,7 @@ jobs:
         az_module_load dev/go-latest
         load_cuda_env
         ./autogen.sh
+        setup_go_env
         mkdir build
         cd build
         ../contrib/configure-devel --prefix=$(Agent.TempDirectory)/ucx-$(Build.BuildId) \
