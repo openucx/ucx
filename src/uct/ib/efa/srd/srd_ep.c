@@ -68,25 +68,26 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     uct_srd_iface_add_ep(iface, self);
     ucs_debug("created ep ep=%p iface=%p ep_id=%d", self, iface, self->ep_id);
 
-    if (ucs_test_all_flags(params->field_mask,
-                           UCT_EP_PARAM_FIELD_DEV_ADDR |
-                           UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
+    if (!ucs_test_all_flags(params->field_mask,
+                            UCT_EP_PARAM_FIELD_DEV_ADDR |
+                            UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
+        return UCS_OK;
+    }
 
-        self->conn_sn = ucs_atomic_fadd64(&uct_srd_ep_conn_sn, 1);
+    self->conn_sn = ucs_atomic_fadd64(&uct_srd_ep_conn_sn, 1);
 
-        /* Connect it to the interface */
-        status = uct_srd_ep_connect_to_iface(self, ib_addr, if_addr);
-        if (status != UCS_OK) {
-            goto err_ep_destroy;
-        }
+    /* Connect it to the interface */
+    status = uct_srd_ep_connect_to_iface(self, ib_addr, if_addr);
+    if (status != UCS_OK) {
+        goto err_ep_destroy;
+    }
 
-        /* Generate peer address */
-        status = uct_srd_iface_unpack_peer_address(iface, ib_addr, if_addr,
-                                                   self->path_index,
-                                                   &self->peer_address);
-        if (status != UCS_OK) {
-            goto err_ep_destroy;
-        }
+    /* Generate peer address */
+    status = uct_srd_iface_unpack_peer_address(iface, ib_addr, if_addr,
+                                               self->path_index,
+                                               &self->peer_address);
+    if (status != UCS_OK) {
+        goto err_ep_destroy;
     }
 
     return UCS_OK;
