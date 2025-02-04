@@ -457,10 +457,14 @@ uct_cuda_copy_get_per_ctx_rscs(uct_cuda_copy_iface_t *iface, CUcontext cuda_ctx,
     int ret;
     unsigned long long ctx_id;
 
+#if CUDA_VERSION >= 12000
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetId(cuda_ctx, &ctx_id));
     if (status != UCS_OK) {
         goto err;
     }
+#else
+    ctx_id = 0;
+#endif
 
     iter = kh_put(cuda_copy_ctx_rscs, &iface->ctx_rscs, ctx_id, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
