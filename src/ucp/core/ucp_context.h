@@ -203,6 +203,8 @@ typedef struct ucp_context_config {
     double                                 rcache_overhead;
     /** UCP extra operation attributes flags */
     uint64_t                               extra_op_attr_flags;
+    /* Upper limit to the amount of prioritized endpoints */
+    unsigned                               max_priority_eps;
 } ucp_context_config_t;
 
 
@@ -604,6 +606,10 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
 void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
                                 size_t length, ucs_memory_info_t *mem_info);
 
+double ucp_tl_iface_latency_with_priority(ucp_context_h context,
+                                          const ucs_linear_func_t *latency,
+                                          int is_prioritized_ep);
+
 /**
  * Calculate a small value to overcome float imprecision
  * between two float values
@@ -648,7 +654,7 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency(ucp_context_h context, const ucs_linear_func_t *latency)
 {
-    return ucs_linear_func_apply(*latency, context->config.est_num_eps);
+    return ucp_tl_iface_latency_with_priority(context, latency, 0);
 }
 
 static UCS_F_ALWAYS_INLINE double

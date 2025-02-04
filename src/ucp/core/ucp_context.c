@@ -68,6 +68,8 @@
 #define UCP_TL_AUX_SUFFIX    "aux"
 #define UCP_TL_AUX(_tl_name) _tl_name ":" UCP_TL_AUX_SUFFIX
 
+/* Factor to multiply with in order to get infinite latency */
+#define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
 
 typedef enum ucp_transports_list_search_result {
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY      = UCS_BIT(0),
@@ -545,6 +547,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Possible values are: no_imm_cmpl, fast_cmpl, force_imm_cmpl, multi_send.",
    ucs_offsetof(ucp_context_config_t, extra_op_attr_flags),
    UCS_CONFIG_TYPE_BITMAP(ucp_extra_op_attr_flags_names)},
+
+  {"MAX_PRIORITY_EPS", "20",
+   "Max number of prioritized endpoints. Does not affect semantics,\n"
+   "but only transport selection criteria and resulting performance.",
+   ucs_offsetof(ucp_context_config_t, max_priority_eps),
+   UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };
@@ -2606,6 +2614,28 @@ const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx)
 {
     ucs_assert(cm_idx != UCP_NULL_RESOURCE);
     return context->tl_cmpts[context->config.cm_cmpt_idxs[cm_idx]].attr.name;
+}
+
+double ucp_tl_iface_latency_with_priority(ucp_context_h context,
+                                          const ucs_linear_func_t *latency,
+                                          int is_prioritized_ep)
+{
+    unsigned num_eps = context->config.est_num_eps;
+
+    if (ucp_context_usage_tracker_enabled(context)) {
+        if (is_prioritized_ep) {
+            /* The number of priority endpoints is limited by
+             * max_priority_eps */
+            num_eps = ucs_min(num_eps, context->config.ext.max_priority_eps);
+        } else if (latency->m > UCP_PROTO_PERF_EPSILON) {
+            /* If the transport is not scalable, assume a high number of
+             * endpoints */
+            num_eps = ucs_max(num_eps, context->config.ext.max_priority_eps *
+                                               UCP_CONTEXT_INFINITE_LAT_FACTOR);
+        }
+    }
+
+    return ucs_linear_func_apply(*latency, num_eps);
 }
 
 UCS_F_CTOR void ucp_global_init(void)
