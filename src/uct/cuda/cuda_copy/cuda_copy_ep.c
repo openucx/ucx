@@ -54,7 +54,7 @@ ucs_status_t uct_cuda_copy_init_stream(CUstream *stream)
             cuStreamCreate(stream, CU_STREAM_NON_BLOCKING));
 }
 
-static UCS_F_ALWAYS_INLINE CUstream *
+static UCS_F_ALWAYS_INLINE CUstream
 uct_cuda_copy_get_stream(uct_cuda_copy_per_ctx_rsc_t *ctx_rsc,
                          ucs_memory_type_t src_type, ucs_memory_type_t dst_type)
 {
@@ -65,13 +65,12 @@ uct_cuda_copy_get_stream(uct_cuda_copy_per_ctx_rsc_t *ctx_rsc,
                (dst_type < UCS_MEMORY_TYPE_LAST));
 
     stream = &ctx_rsc->queue_desc[src_type][dst_type].stream;
-
     status = uct_cuda_copy_init_stream(stream);
     if (status != UCS_OK) {
         return NULL;
     }
 
-    return stream;
+    return *stream;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
@@ -115,16 +114,24 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_get_ctx_rsc(
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_get_short_stream(
-        uct_cuda_copy_iface_t *iface, uct_cuda_copy_per_ctx_rsc_t **ctx_rsc)
+        uct_cuda_copy_iface_t *iface, CUstream *stream)
 {
+    uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
     ucs_status_t status;
 
-    status = uct_cuda_copy_get_ctx_rsc(iface, ctx_rsc);
+    status = uct_cuda_copy_get_ctx_rsc(iface, &ctx_rsc);
     if (status != UCS_OK) {
         return status;
     }
 
-    return uct_cuda_copy_init_stream(&(*ctx_rsc)->short_stream);
+    status = uct_cuda_copy_init_stream(&ctx_rsc->short_stream);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *stream = ctx_rsc->short_stream;
+    return UCS_OK;
+
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -138,7 +145,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     ucs_status_t status;
     ucs_memory_type_t src_type;
     ucs_memory_type_t dst_type;
-    CUstream *stream;
+    CUstream stream;
     ucs_queue_head_t *event_q;
     uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
 
@@ -170,10 +177,10 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, *stream));
+            cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, stream));
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuEventRecord(cuda_event->event, *stream));
+            cuEventRecord(cuda_event->event, stream));
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
@@ -241,20 +248,20 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
                  uct_ep_h tl_ep, const void *buffer, unsigned length,
                  uint64_t remote_addr, uct_rkey_t rkey)
 {
-    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                  uct_cuda_copy_iface_t);
+    CUstream stream;
     ucs_status_t status;
-    uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
 
-    status = uct_cuda_copy_get_short_stream(iface, &ctx_rsc);
+    status = uct_cuda_copy_get_short_stream(iface, &stream);
     if (status != UCS_OK) {
         return status;
     }
 
     UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync((CUdeviceptr)remote_addr,
                                            (CUdeviceptr)buffer, length,
-                                           ctx_rsc->short_stream));
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuStreamSynchronize(ctx_rsc->short_stream));
+                                           stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(stream));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
@@ -267,20 +274,20 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
                  uct_ep_h tl_ep, void *buffer, unsigned length,
                  uint64_t remote_addr, uct_rkey_t rkey)
 {
-    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                  uct_cuda_copy_iface_t);
+    CUstream stream;
     ucs_status_t status;
-    uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
 
-    status = uct_cuda_copy_get_short_stream(iface, &ctx_rsc);
+    status = uct_cuda_copy_get_short_stream(iface, &stream);
     if (status != UCS_OK) {
         return status;
     }
 
     UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync((CUdeviceptr)buffer,
                                            (CUdeviceptr)remote_addr, length,
-                                           ctx_rsc->short_stream));
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuStreamSynchronize(ctx_rsc->short_stream));
+                                           stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(stream));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",

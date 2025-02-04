@@ -49,6 +49,10 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t)(uct_iface_t*);
 
 
+KHASH_IMPL(cuda_copy_ctx_rscs, khint64_t, uct_cuda_copy_per_ctx_rsc_t, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+
+
 static ucs_status_t uct_cuda_copy_iface_get_address(uct_iface_h tl_iface,
                                                     uct_iface_addr_t *iface_addr)
 {
@@ -471,29 +475,17 @@ uct_cuda_copy_get_per_ctx_rscs(uct_cuda_copy_iface_t *iface, CUcontext cuda_ctx,
         goto err;
     }
 
-    if (ret == UCS_KH_PUT_KEY_PRESENT) {
-        ctx_rsc = kh_value(&iface->ctx_rscs, iter);
-    } else {
-        ctx_rsc = ucs_malloc(sizeof(*ctx_rsc), "cuda_copy_per_ctx_rsc");
-        if (ctx_rsc == NULL) {
-            ucs_error("failed to allocate per context resource struct");
-            status = UCS_ERR_NO_MEMORY;
-            goto err_kh_del;
-        }
-
+    ctx_rsc = &kh_value(&iface->ctx_rscs, iter);
+    if (ret != UCS_KH_PUT_KEY_PRESENT) {
         status = uct_cuda_copy_init_per_ctx_rscs(iface, ctx_rsc);
         if (status != UCS_OK) {
-            goto err_free_ctx;
+            goto err_kh_del;
         }
-
-        kh_value(&iface->ctx_rscs, iter) = ctx_rsc;
     }
 
     *ctx_rsc_p = ctx_rsc;
     return UCS_OK;
 
-err_free_ctx:
-    ucs_free(ctx_rsc);
 err_kh_del:
     kh_del(cuda_copy_ctx_rscs, &iface->ctx_rscs, iter);
 err:
@@ -533,14 +525,13 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
-    uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
+    uct_cuda_copy_per_ctx_rsc_t ctx_rsc;
 
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     kh_foreach_value(&self->ctx_rscs, ctx_rsc, {
-        ucs_mpool_cleanup(&ctx_rsc->cuda_event_desc, 1);
-        ucs_free(ctx_rsc);
+        ucs_mpool_cleanup(&ctx_rsc.cuda_event_desc, 1);
     });
 
     kh_destroy_inplace(cuda_copy_ctx_rscs, &self->ctx_rscs);

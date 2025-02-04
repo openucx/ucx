@@ -60,7 +60,8 @@ typedef struct uct_cuda_copy_per_ctx_rsc {
 } uct_cuda_copy_per_ctx_rsc_t;
 
 
-KHASH_MAP_INIT_INT64(cuda_copy_ctx_rscs, struct uct_cuda_copy_per_ctx_rsc*);
+KHASH_TYPE(cuda_copy_ctx_rscs, khint64_t, uct_cuda_copy_per_ctx_rsc_t);
+
 
 typedef struct uct_cuda_copy_iface {
     uct_cuda_iface_t            super;
