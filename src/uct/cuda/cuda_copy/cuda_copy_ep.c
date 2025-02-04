@@ -113,8 +113,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_get_ctx_rsc(
     return uct_cuda_copy_get_per_ctx_rscs(iface, current_ctx, ctx_rsc);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_get_short_stream(
-        uct_cuda_copy_iface_t *iface, CUstream *stream)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_copy_get_short_stream(uct_cuda_copy_iface_t *iface, CUstream *stream)
 {
     uct_cuda_copy_per_ctx_rsc_t *ctx_rsc;
     ucs_status_t status;
@@ -131,7 +131,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_get_short_stream(
 
     *stream = ctx_rsc->short_stream;
     return UCS_OK;
-
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -179,8 +178,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, stream));
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuEventRecord(cuda_event->event, stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_event->event, stream));
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
