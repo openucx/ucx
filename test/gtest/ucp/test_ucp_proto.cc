@@ -412,12 +412,15 @@ protected:
     {
         ucp_proto_perf_factors_t perf_factors =
                 UCP_PROTO_PERF_FACTORS_INITIALIZER;
+        ucp_proto_perf_node_t *perf_node;
 
         for (auto &f : factors) {
             perf_factors[f.first] = f.second;
         }
+
+        perf_node = ucp_proto_perf_node_new_data("test", "");
         ASSERT_UCS_OK(ucp_proto_perf_add_funcs(perf.get(), start, end,
-                                               perf_factors, NULL, "test", ""));
+                                               perf_factors, perf_node, NULL));
     }
 
     static void add_func(perf_ptr_t perf, size_t start, size_t end,

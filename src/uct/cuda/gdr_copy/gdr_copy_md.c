@@ -16,11 +16,16 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/time/time.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
 #include <ucm/api/ucm.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_md.h>
+
+
+#define UCT_GDR_COPY_RCACHE_OVERHEAD_AUTO 50.0e-9
+
 
 typedef struct {
     pthread_mutex_t   lock;
@@ -51,6 +56,10 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
      ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.c), UCS_CONFIG_TYPE_TIME},
 
+    {"", "RCACHE_PURGE_ON_FORK=n", NULL,
+     ucs_offsetof(uct_gdr_copy_md_config_t, rcache_config),
+     UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
+
     {NULL}
 };
 
@@ -64,6 +73,7 @@ uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->rkey_packed_size = sizeof(uct_gdr_copy_key_t);
+    md_attr->reg_cost         = md->reg_cost;
 
     /* In absence of own cache require proper alignment from the global cache */
     if (md->rcache == NULL) {
@@ -460,12 +470,11 @@ uct_gdr_copy_md_create(uct_component_t *component,
         goto out;
     }
 
-    ucs_rcache_set_default_params(&rcache_params);
+    ucs_rcache_set_params(&rcache_params, &md_config->rcache_config);
     rcache_params.region_struct_size = sizeof(uct_gdr_copy_rcache_region_t);
     rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
     rcache_params.context            = md;
     rcache_params.ops                = &uct_gdr_copy_rcache_ops;
-    rcache_params.flags              = 0;
 
     status = ucs_rcache_create(&rcache_params, "gdr_copy", ucs_stats_get_root(),
                                &md->rcache);
@@ -476,7 +485,9 @@ uct_gdr_copy_md_create(uct_component_t *component,
     }
 
     md->super.ops = &uct_gdr_copy_md_rcache_ops;
-    md->reg_cost  = UCS_LINEAR_FUNC_ZERO;
+    md->reg_cost  = ucs_linear_func_make(
+            ucs_time_units_to_sec(md_config->rcache_config.overhead,
+                                  UCT_GDR_COPY_RCACHE_OVERHEAD_AUTO), 0);
 
 out:
     *md_p = md;
