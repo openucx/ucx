@@ -416,8 +416,6 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
 
 static ucs_status_t
 uct_cuda_copy_init_per_ctx_rscs(const uct_cuda_copy_iface_t *iface,
-                                CUcontext cuda_ctx,
-                                unsigned long long ctx_id,
                                 uct_cuda_copy_per_ctx_rsc_t *ctx_rsc)
 {
     ucs_status_t status;
@@ -445,8 +443,6 @@ uct_cuda_copy_init_per_ctx_rscs(const uct_cuda_copy_iface_t *iface,
     }
 
     ctx_rsc->short_stream = 0;
-    ctx_rsc->cuda_ctx     = cuda_ctx;
-    ctx_rsc->ctx_id       = ctx_id;
 
     return UCS_OK;
 }
@@ -483,7 +479,7 @@ uct_cuda_copy_get_per_ctx_rscs(uct_cuda_copy_iface_t *iface, CUcontext cuda_ctx,
             goto err_kh_del;
         }
 
-        status = uct_cuda_copy_init_per_ctx_rscs(iface, cuda_ctx, ctx_id, ctx_rsc);
+        status = uct_cuda_copy_init_per_ctx_rscs(iface, ctx_rsc);
         if (status != UCS_OK) {
             goto err_free_ctx;
         }

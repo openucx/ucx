@@ -50,8 +50,6 @@ typedef struct uct_cuda_copy_queue_desc {
 } uct_cuda_copy_queue_desc_t;
 
 typedef struct uct_cuda_copy_per_ctx_rsc {
-    CUcontext                   cuda_ctx;
-    unsigned long long          ctx_id;
     /* pool of cuda events to check completion of memcpy operations */
     ucs_mpool_t                 cuda_event_desc;
     /* stream used to issue short operations */
