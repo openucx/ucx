@@ -218,6 +218,11 @@ UCS_TEST_P(test_ucp_rma_mt, rkey_pack) {
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
     for (int i = 0; i < mt_num_threads(); i++) {
+        int worker_index = 0;
+        if (get_variant_thread_type() == MULTI_THREAD_CONTEXT) {
+            worker_index = i;
+        }
+
         if (i % 2 == 0) {
             void *rkey;
             size_t rkey_size;
@@ -226,13 +231,16 @@ UCS_TEST_P(test_ucp_rma_mt, rkey_pack) {
         } else {
             ucs_sys_dev_distance_t sys_dev            = {};
             ucp_request req                           = {};
-            req.send.ep                               = sender().ep();
+            req.send.ep                               = sender().ep(worker_index);
             req.send.state.dt_iter.type.contig.memh   = memh;
             req.send.state.dt_iter.type.contig.buffer = data;
             req.send.state.dt_iter.length             = sizeof(data);
 
             uint8_t rkey[1024];
+            ucp_worker_h worker = sender().worker(worker_index);
+            UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
             ucp_proto_request_pack_rkey(&req, memh->md_map, 0, &sys_dev, rkey);
+            UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
         }
     }
 #endif

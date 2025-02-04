@@ -755,4 +755,8 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
 
+
+void ucp_context_set_worker_async(ucp_context_h context,
+                                  ucs_async_context_t *async);
+
 #endif
