@@ -125,7 +125,8 @@ uct_cuda_copy_flush_bitmap_idx(ucs_memory_type_t src_mem_type,
  * @return Error code as defined by @ref ucs_status_t.
  */
 ucs_status_t
-uct_cuda_copy_iface_get_ctx_rsc(uct_cuda_copy_iface_t *iface, CUcontext cuda_ctx,
+uct_cuda_copy_iface_get_ctx_rsc(uct_cuda_copy_iface_t *iface,
+                                CUcontext cuda_ctx,
                                 uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
 
 #endif

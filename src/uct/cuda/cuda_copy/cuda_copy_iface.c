@@ -416,9 +416,8 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
     .ep_is_connected       = uct_base_ep_is_connected
 };
 
-static ucs_status_t
-uct_cuda_copy_init_ctx_rsc(unsigned int max_cuda_events,
-                           uct_cuda_copy_ctx_rsc_t *ctx_rsc)
+static ucs_status_t uct_cuda_copy_init_ctx_rsc(unsigned int max_cuda_events,
+                                               uct_cuda_copy_ctx_rsc_t *ctx_rsc)
 {
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
@@ -450,7 +449,8 @@ uct_cuda_copy_init_ctx_rsc(unsigned int max_cuda_events,
 }
 
 ucs_status_t
-uct_cuda_copy_iface_get_ctx_rsc(uct_cuda_copy_iface_t *iface, CUcontext cuda_ctx,
+uct_cuda_copy_iface_get_ctx_rsc(uct_cuda_copy_iface_t *iface,
+                                CUcontext cuda_ctx,
                                 uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
     unsigned long long ctx_id;
