@@ -400,7 +400,7 @@ static ucs_mpool_ops_t uct_cuda_copy_event_desc_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_cuda_copy_event_desc_init,
-    .obj_cleanup   = ucs_empty_function,
+    .obj_cleanup   = (ucs_mpool_obj_cleanup_func_t)ucs_empty_function,
     .obj_str       = NULL
 };
 
