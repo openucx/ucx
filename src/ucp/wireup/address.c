@@ -418,7 +418,8 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                     ucp_ep_config_connect_p2p(worker, key, rsc_index)) {
                     dev->tl_addrs_size += !ucp_worker_is_unified_mode(worker);
                     if (!(flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST) ||
-                         (lane < UCP_MAX_FAST_PATH_LANES)) {
+                         (lane < UCP_MAX_FAST_PATH_LANES) ||
+                         (lane == key->wireup_msg_lane)) {
                         dev->tl_addrs_size += iface_attr->ep_addr_len;
                     }
                     dev->tl_addrs_size += sizeof(uint8_t); /* lane index */
@@ -1429,7 +1430,8 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                     }
 
                     if ((pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST) &&
-                        (lane >= UCP_MAX_FAST_PATH_LANES)) {
+                        ((lane >= UCP_MAX_FAST_PATH_LANES) &&
+                         (lane != ucp_ep_get_wireup_msg_lane(ep)))) {
                         ucs_assert(context->config.ext.on_demand_wireup);
                         ep_addr_len = 0;
                     } else {
