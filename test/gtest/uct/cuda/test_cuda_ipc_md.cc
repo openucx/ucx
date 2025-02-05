@@ -22,9 +22,9 @@ protected:
         uct_mem_h memh;
         uct_cuda_ipc_rkey_t rkey;
         uct_md_mem_reg_params_t reg_params = {};
-        ASSERT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, &reg_params, &memh));
-        EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
-                                         &rkey));
+        void *addr                         = (void *)ptr;
+        ASSERT_UCS_OK(uct_md_mem_reg_v2(md, addr, size, &reg_params, &memh));
+        EXPECT_UCS_OK(uct_md_mkey_pack_v2(md, memh, addr, size, NULL, &rkey));
 
         int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
         uuid64[0]       = uuid;
@@ -40,7 +40,7 @@ protected:
         uct_md_mem_dereg_params_t params;
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
         params.memh       = memh;
-        EXPECT_UCS_OK(md->ops->mem_dereg(md, &params));
+        ASSERT_UCS_OK(uct_md_mem_dereg_v2(md, &params));
         return rkey;
     }
 
