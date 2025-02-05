@@ -201,6 +201,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
         if (next_index == (srq->free_idx & srq->mask)) {
             break;
         }
+        ucs_info("wqe_index %d, next_index %d", wqe_index, next_index);
         seg = uct_ib_mlx5_srq_get_wqe(srq, next_index);
 
         if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
