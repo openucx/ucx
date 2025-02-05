@@ -33,9 +33,9 @@ typedef struct {
 
 
 typedef struct {
-    const struct sockaddr *destination; // Destination network address
-    uint32_t               subnet_mask; // Subnet mask
-    int                    if_index;    // Outgoing interface name
+    struct sockaddr_storage destination;
+    uint32_t                subnet_mask;
+    int                     if_index;
 } route_entry_t;
 
 /**
@@ -51,8 +51,8 @@ typedef struct {
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
                                                const void *nl_msg, void *arg);
 
-static route_entry_t routing_table[MAX_NETWORK_IFACES][MAX_RULES_PER_IFACE] = {0};
-static int route_data_exists                                                =  0;
+route_entry_t routing_table[MAX_NETWORK_IFACES][MAX_RULES_PER_IFACE] = {0};
+int route_data_exists                                                =  0;
 
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
@@ -113,7 +113,7 @@ ucs_netlink_analyze_route_info(void *arg)
     while ((rule_index < MAX_RULES_PER_IFACE) &&
            (iface_rules[rule_index].if_index > 0)) {
         if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
-                                 iface_rules[rule_index].destination,
+                                 ucs_sockaddr_get_inet_addr((const struct sockaddr *)&iface_rules[rule_index].destination),
                                  iface_rules[rule_index].subnet_mask)) {
             info->found = 1;
             return;
@@ -256,7 +256,19 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
         return UCS_INPROGRESS;
     }
 
-    curr_rule->destination = dst_in_addr;
+    ((struct sockaddr_in *)&curr_rule->destination)->sin_family = AF_INET;
+    curr_rule->destination.ss_family = ((const struct rtmsg *)nl_msg)->rtm_family;
+
+    if (((const struct rtmsg *)nl_msg)->rtm_family == AF_INET) {
+        memcpy(&((struct sockaddr_in *)&curr_rule->destination)->sin_addr,
+               dst_in_addr,
+               sizeof(struct in_addr));
+    } else {
+        memcpy(&((struct sockaddr_in6 *)&curr_rule->destination)->sin6_addr,
+               dst_in_addr,
+               sizeof(struct in6_addr));
+    }
+
     curr_rule->if_index    = rule_iface;
     curr_rule->subnet_mask = ((const struct rtmsg *)nl_msg)->rtm_dst_len;
 
