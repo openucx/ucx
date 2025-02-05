@@ -838,22 +838,6 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     }
 }
 
-static UCS_F_NOINLINE void
-ucp_wireup_process_lane_addr_request(ucp_worker_h worker, ucp_ep_h ep,
-                                     const ucp_wireup_msg_t *msg,
-                                     const ucp_unpacked_address_t *remote_address)
-{
-    ucs_assert(0 && "ucp_wireup_process_lane_addr_request is not implemented");
-}
-
-static UCS_F_NOINLINE void
-ucp_wireup_process_lane_addr_reply(ucp_worker_h worker, ucp_ep_h ep,
-                                   const ucp_wireup_msg_t *msg,
-                                   const ucp_unpacked_address_t *remote_address)
-{
-    ucs_assert(0 && "ucp_wireup_process_lane_addr_reply is not implemented");
-}
-
 static void ucp_ep_removed_flush_completion(ucp_request_t *req)
 {
     ucs_log_level_t level = UCS_STATUS_IS_ERR(req->status) ?
@@ -923,6 +907,38 @@ out_cleanup_lanes:
     ucp_ep_cleanup_lanes(reply_ep);
 out_delete_ep:
     ucp_ep_delete(reply_ep);
+}
+
+static UCS_F_NOINLINE void
+ucp_wireup_process_lane_addr_request(ucp_worker_h worker, ucp_ep_h ep,
+                                     const ucp_wireup_msg_t *msg,
+                                     const ucp_unpacked_address_t *remote_address)
+{
+    if ((ep == NULL) && (1 /* TODO: p2p check  */)) {
+        if (msg->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+            /* If the remote side has peer error handling mode, then it is
+             * possible that the remote side has already destroyed the EP. In
+             * this case, we need to send a reply to the remote side to inform
+             * it that the EP has been destroyed. */
+            ucp_wireup_send_ep_removed(worker, msg, remote_address);
+        } else {
+            ucs_diag("ep with id 0x%" PRIx64
+                     " is not found for lane address request by requester ep"
+                     " with id 0x%" PRIx64, msg->src_ep_id, msg->dst_ep_id);
+        }
+
+        return;
+    }
+
+    ucs_assert(0 && "ucp_wireup_process_lane_addr_request is not implemented");
+}
+
+static UCS_F_NOINLINE void
+ucp_wireup_process_lane_addr_reply(ucp_worker_h worker, ucp_ep_h ep,
+                                   const ucp_wireup_msg_t *msg,
+                                   const ucp_unpacked_address_t *remote_address)
+{
+    ucs_assert(0 && "ucp_wireup_process_lane_addr_reply is not implemented");
 }
 
 static UCS_F_NOINLINE
