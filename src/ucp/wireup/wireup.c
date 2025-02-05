@@ -566,7 +566,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
                              UCP_EP_INIT_CM_WIREUP_CLIENT |
                              ucp_ep_err_mode_init_flags(msg->err_mode);
     unsigned addr_indices[UCP_MAX_LANES];
-    int is_am_replaced;
+    int am_need_flush;
     ucs_status_t status;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PRE_REQUEST);
@@ -591,7 +591,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
     /* initialize transport endpoints */
     status = ucp_wireup_init_lanes(ep, ep_init_flags, &ucp_tl_bitmap_max,
                                    remote_address, addr_indices,
-                                   &is_am_replaced);
+                                   &am_need_flush);
     if (status != UCS_OK) {
         goto err_ep_set_failed;
     }
@@ -615,7 +615,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
-    int has_cm_lane, is_am_replaced, full_handshake_required;
+    int has_cm_lane, am_need_flush, full_handshake_required;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REQUEST);
     ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
@@ -687,7 +687,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     /* Initialize lanes (possible destroy existing lanes) */
     status = ucp_wireup_init_lanes(ep, ep_init_flags, &ucp_tl_bitmap_max,
                                    remote_address, addr_indices,
-                                   &is_am_replaced);
+                                   &am_need_flush);
     if (status != UCS_OK) {
         goto err_set_ep_failed;
     }
@@ -699,7 +699,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
      * 2) P2P lanes exist in EP configuration (client-server flow)
      * 3) Old AM lane was replaced (ensures message order) */
     full_handshake_required = has_cm_lane || ucp_ep_config(ep)->p2p_lanes ||
-                              is_am_replaced;
+                              am_need_flush;
 
     /* Send a reply if remote side does not have ep_ptr (active-active flow) or
      * full handshake is required
@@ -834,7 +834,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     ucp_ep_h reply_ep;
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_ptr_t req;
-    int is_am_replaced;
+    int am_need_flush;
 
     /* If endpoint does not exist - create a temporary endpoint to send a
      * UCP_WIREUP_MSG_EP_REMOVED reply */
@@ -848,7 +848,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     /* Initialize lanes of the reply EP */
     status = ucp_wireup_init_lanes(reply_ep, ep_init_flags, &ucp_tl_bitmap_max,
                                    remote_address, addr_indices,
-                                   &is_am_replaced);
+                                   &am_need_flush);
     if (status != UCS_OK) {
         goto out_delete_ep;
     }
@@ -1544,7 +1544,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                                   const unsigned *addr_indices,
                                   ucp_lane_map_t *connect_lane_bitmap,
                                   ucs_queue_head_t *replay_pending_queue,
-                                  int *is_am_replaced_p)
+                                  int *am_need_flush_p)
 {
     uct_ep_h new_uct_eps[UCP_MAX_LANES]            = {NULL};
     ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES] = {UCP_NULL_LANE};
@@ -1552,10 +1552,10 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     ucp_lane_index_t lane, reuse_lane, wireup_lane;
     uct_ep_h uct_ep;
     ucs_status_t status;
-    int is_am_replaced;
+    int am_need_flush;
 
     *connect_lane_bitmap = UCS_MASK(new_key->num_lanes);
-    *is_am_replaced_p    = 0;
+    *am_need_flush_p     = 0;
 
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
         !ucp_wireup_check_is_reconfigurable(ep, new_key, remote_address,
@@ -1588,10 +1588,10 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                     "new_key->wireup_msg_lane=%u", new_key->wireup_msg_lane);
     }
 
-    is_am_replaced = ucp_wireup_is_am_need_flush(ep, reuse_lane_map);
-    wireup_lane    = is_am_replaced ?
-                                ucp_ep_get_am_lane(ep) :
-                                ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
+    am_need_flush = ucp_wireup_is_am_need_flush(ep, reuse_lane_map);
+    wireup_lane   = am_need_flush ?
+                              ucp_ep_get_am_lane(ep) :
+                              ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
 
     /* wireup lane has to be selected for the old configuration */
     ucs_assert(wireup_lane != UCP_NULL_LANE);
@@ -1652,7 +1652,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         ucp_ep_set_lane(ep, lane, new_uct_eps[lane]);
     }
 
-    *is_am_replaced_p = is_am_replaced;
+    *am_need_flush_p = am_need_flush;
     return UCS_OK;
 }
 
@@ -1722,8 +1722,7 @@ ucp_wireup_gather_pending_reqs(ucp_ep_h ep,
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_tl_bitmap_t *local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
-                                   unsigned *addr_indices,
-                                   int *is_am_replaced_p)
+                                   unsigned *addr_indices, int *am_need_flush_p)
 {
     ucp_worker_h worker    = ep->worker;
     ucp_rsc_index_t cm_idx = UCP_NULL_RESOURCE;
@@ -1798,7 +1797,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                                addr_indices,
                                                &connect_lane_bitmap,
                                                &replay_pending_queue,
-                                               is_am_replaced_p);
+                                               am_need_flush_p);
     if (status != UCS_OK) {
         goto out;
     }

@@ -181,7 +181,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_tl_bitmap_t *local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices,
-                                   int *is_am_replaced_p);
+                                   int *am_need_flush_p);
 
 ucs_status_t
 ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,

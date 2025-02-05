@@ -826,7 +826,7 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ucp_tl_bitmap_t ep_tl_bitmap;
     ucs_status_t status;
     ucp_ep_h ep;
-    int is_am_replaced;
+    int am_need_flush;
 
     /* allocate endpoint */
     status = ucp_ep_create_base(worker, ep_init_flags, remote_address->name,
@@ -838,7 +838,7 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     /* initialize transport endpoints */
     status = ucp_wireup_init_lanes(ep, ep_init_flags, local_tl_bitmap,
                                    remote_address, addr_indices,
-                                   &is_am_replaced);
+                                   &am_need_flush);
     if (status != UCS_OK) {
         goto err_delete;
     }
