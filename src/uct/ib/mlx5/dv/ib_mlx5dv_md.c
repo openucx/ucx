@@ -893,11 +893,18 @@ uct_ib_mlx5_devx_derived_mem_reg(uct_md_h uct_md, uct_ib_mlx5_devx_mem_t *base,
         return status;
     }
 
-    memh->super.flags  |= UCT_IB_MEM_FLAG_DERIVED;
-    memh->atomic_dvmr   = NULL;
-    memh->atomic_rkey   = UCT_IB_INVALID_MKEY;
-    memh->indirect_dvmr = NULL;
-    memh->indirect_rkey = UCT_IB_INVALID_MKEY;
+    memh->super.flags      |= UCT_IB_MEM_FLAG_DERIVED;
+
+    memh->atomic_dvmr       = NULL;
+    memh->indirect_dvmr     = NULL;
+    memh->cross_mr          = NULL;
+    memh->exported_umr_mkey = NULL;
+    memh->smkey_mr          = NULL;
+    memh->dm_addr_dvmr      = NULL;
+
+    memh->atomic_rkey       = UCT_IB_INVALID_MKEY;
+    memh->indirect_rkey     = UCT_IB_INVALID_MKEY;
+    memh->exported_lkey     = UCT_IB_INVALID_MKEY;
 
     *memh_p = memh;
     return UCS_OK;
@@ -1578,11 +1585,6 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
         return status;
     }
 
-    /* Derived memh owns only indirect keys, but not the other state */
-    if (memh->super.flags & UCT_IB_MEM_FLAG_DERIVED) {
-        goto out;
-    }
-
     if (memh->smkey_mr != NULL) {
         ucs_trace("%s: destroy smkey_mr %p with key %x",
                   uct_ib_device_name(&md->super.dev), memh->smkey_mr,
@@ -1610,6 +1612,11 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    /* Derived memh owns only keys, but not MRs */
+    if (memh->super.flags & UCT_IB_MEM_FLAG_DERIVED) {
+        goto out;
     }
 
     if (!(memh->super.flags & UCT_IB_MEM_IMPORTED)) {
