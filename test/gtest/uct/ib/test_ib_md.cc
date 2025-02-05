@@ -419,11 +419,14 @@ UCS_TEST_SKIP_COND_P(test_ib_md, derived_mem,
     std::vector<uint8_t> der1_rkey1 = mkey_pack(der1, flags);
     EXPECT_NE(der1_rkey1, der2_rkey1);
 
+    /* Test case 5: derived memh pack exported mkey */
+    mkey_pack(der1, UCT_MD_MKEY_PACK_FLAG_EXPORT);
+
     /* Invalidation = destroying derived memh */
     EXPECT_UCS_OK(uct_md_mem_dereg(md(), der1));
     EXPECT_UCS_OK(uct_md_mem_dereg(md(), der2));
 
-    /* Test case 5: base memh can still be used to pack mkeys */
+    /* Test case 6: base memh can still be used to pack mkeys */
     std::vector<uint8_t> base_rkey2 = mkey_pack(base, flags);
     EXPECT_EQ(base_rkey1, base_rkey2);
 
