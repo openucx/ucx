@@ -615,7 +615,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
-    int has_cm_lane, is_am_replaced;
+    int has_cm_lane, is_am_replaced, full_handshake_required;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REQUEST);
     ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
@@ -694,16 +694,18 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
     ucp_wireup_match_p2p_lanes(ep, remote_address, addr_indices, lanes2remote);
 
+    /* Full handshake is required in the following cases:
+     * 1) CM flow (the client's EP has to be marked as REMOTE_CONNECTED)
+     * 2) P2P lanes exist in EP configuration (client-server flow)
+     * 3) Old AM lane was replaced (ensures message order) */
+    full_handshake_required = has_cm_lane || ucp_ep_config(ep)->p2p_lanes ||
+                              is_am_replaced;
+
     /* Send a reply if remote side does not have ep_ptr (active-active flow) or
-     * there are p2p lanes (client-server flow)
+     * full handshake is required
      */
-    send_reply = /* Always send the reply in case of CM, the client's EP has to
-                  * be marked as REMOTE_CONNECTED */
-            has_cm_lane || (msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID) ||
-            ucp_ep_config(ep)->p2p_lanes ||
-            /* Ensure AM messages sending order is kept by sending wireup
-             * reply, in case old lane is replaced */
-            is_am_replaced;
+    send_reply = (msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID) ||
+                 full_handshake_required;
 
     /* Connect p2p addresses to remote endpoint, if at least one is true: */
     if (/* - EP has not been connected locally yet */
@@ -723,13 +725,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         ucs_assert(send_reply);
     }
 
-    /* don't mark as connected to remote now in case of CM, since it destroys
-     * CM wireup EP (if it is hidden in the CM lane) that is used for sending
-     * WIREUP MSGs */
-    if (!ucp_ep_config(ep)->p2p_lanes && !has_cm_lane &&
-        /* Ensure AM messages receiving order is kept by waiting for a wireup
-         * ack, in case old lane is replaced */
-        !is_am_replaced) {
+    if (!full_handshake_required) {
         /* mark the endpoint as connected to remote */
         ucp_wireup_remote_connected(ep);
     }
@@ -1357,14 +1353,13 @@ static void ucp_wireup_discard_uct_eps(ucp_ep_h ep, uct_ep_h *uct_eps,
 }
 
 /* Check if AM lane should be flushed after being operational (wireup process
- * completed). If CM lane exists, no messages were sent, thus flush is not
- * required. */
+ * completed) */
 static int
-ucp_wireup_is_am_lane_replaced(ucp_ep_h ep,
-                               const ucp_lane_index_t *reuse_lane_map)
+ucp_wireup_is_am_need_flush(ucp_ep_h ep, const ucp_lane_index_t *reuse_lane_map)
 {
     ucp_lane_index_t am_lane = ucp_ep_get_am_lane(ep);
 
+    /* If CM lane exists, no messages were sent, thus flush is not required */
     return !ucp_ep_has_cm_lane(ep) &&
            /* Verify AM lane exists */
            (am_lane != UCP_NULL_LANE) &&
@@ -1393,7 +1388,7 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
     /* TODO: 1) Support lanes which are connected to the same remote MD, but
      *          different remote sys_dev (eg. TCP). */
     for (lane = 0; lane < old_key->num_lanes; ++lane) {
-        if ((ucp_ep_config_find_match_lane(old_key, new_key, lane) !=
+        if ((ucp_ep_config_find_match_lane(old_key, lane, new_key) !=
              UCP_NULL_LANE) &&
             !ucp_ep_config_lane_is_equal(old_key, new_key, lane)) {
             return 0;
@@ -1408,7 +1403,7 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
      *          during wireup process (request sent). */
     return !(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
            (ucp_ep_get_am_lane(ep) == wireup_lane) ||
-           !ucp_wireup_is_am_lane_replaced(ep, reuse_lane_map) ||
+           !ucp_wireup_is_am_need_flush(ep, reuse_lane_map) ||
            ucp_ep_is_lane_p2p(ep, wireup_lane);
 }
 
@@ -1468,7 +1463,7 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
                                    const ucp_lane_index_t *reuse_lane_map)
 {
     uct_ep_h uct_ep = NULL;
-    int am_replaced = ucp_wireup_is_am_lane_replaced(ep, reuse_lane_map);
+    int am_replaced = ucp_wireup_is_am_need_flush(ep, reuse_lane_map);
     ucp_lane_index_t old_lane, new_wireup_lane, old_wireup_lane;
     ucp_wireup_ep_t *new_wireup_ep, *old_ep_wrapper;
     uct_ep_h old_wireup_ep;
@@ -1593,7 +1588,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                     "new_key->wireup_msg_lane=%u", new_key->wireup_msg_lane);
     }
 
-    is_am_replaced = ucp_wireup_is_am_lane_replaced(ep, reuse_lane_map);
+    is_am_replaced = ucp_wireup_is_am_need_flush(ep, reuse_lane_map);
     wireup_lane    = is_am_replaced ?
                                 ucp_ep_get_am_lane(ep) :
                                 ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
