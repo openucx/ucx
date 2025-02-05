@@ -21,7 +21,8 @@ protected:
     {
         uct_mem_h memh;
         uct_cuda_ipc_rkey_t rkey;
-        EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
+        uct_md_mem_reg_params_t reg_params = {};
+        ASSERT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, &reg_params, &memh));
         EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
                                          &rkey));
 
