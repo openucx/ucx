@@ -1462,8 +1462,8 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
                                    uct_ep_h *new_uct_eps,
                                    const ucp_lane_index_t *reuse_lane_map)
 {
-    uct_ep_h uct_ep = NULL;
-    int am_replaced = ucp_wireup_is_am_need_flush(ep, reuse_lane_map);
+    uct_ep_h uct_ep   = NULL;
+    int am_need_flush = ucp_wireup_is_am_need_flush(ep, reuse_lane_map);
     ucp_lane_index_t old_lane, new_wireup_lane, old_wireup_lane;
     ucp_wireup_ep_t *new_wireup_ep, *old_ep_wrapper;
     uct_ep_h old_wireup_ep;
@@ -1472,7 +1472,7 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     ucs_status_t status;
 
     old_wireup_lane = ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
-    old_lane        = am_replaced ? ucp_ep_get_am_lane(ep) : old_wireup_lane;
+    old_lane        = am_need_flush ? ucp_ep_get_am_lane(ep) : old_wireup_lane;
     old_wireup_ep   = ucp_ep_get_lane(ep, old_lane);
     old_ep_wrapper  = ucp_wireup_ep(old_wireup_ep);
     is_wireup_ep    = ucp_wireup_ep_test(old_wireup_ep);
@@ -1490,9 +1490,9 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
         new_wireup_ep   = ucp_ep_get_cm_wireup_ep(ep);
         new_wireup_lane = key->cm_lane;
     } else {
-        new_wireup_lane = am_replaced ? ucp_ep_get_am_lane(ep) :
-                                        ucp_wireup_find_non_reused_lane(
-                                                ep, key, reuse_lane_map);
+        new_wireup_lane = am_need_flush ? ucp_ep_get_am_lane(ep) :
+                                          ucp_wireup_find_non_reused_lane(
+                                                  ep, key, reuse_lane_map);
 
         if (new_wireup_lane != UCP_NULL_LANE) {
             status = ucp_wireup_ep_create(ep, &uct_ep);
