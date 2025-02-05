@@ -984,7 +984,7 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
                              << ": Allocation failed - "
                              << ucs_status_string(status);
             /* Sleep only if there are more retries remaining */
-            usleep(10000);
+            usleep(ucs::rand() % 10000);
         }
     }
 
