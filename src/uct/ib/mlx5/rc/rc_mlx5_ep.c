@@ -660,19 +660,26 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_mlx5_ep_ext_address_t *ext_addr;
     void *ptr;
 
-    uct_ib_pack_uint24(rc_addr->qp_num, ep->super.tx.wq.super.qp_num);
-    rc_addr->atomic_mr_id = uct_ib_md_get_atomic_mr_id(md);
+    uct_ib_pack_uint24(rc_addr->super.qp_num, ep->super.tx.wq.super.qp_num);
+    if (uct_rc_iface_flush_rkey_enabled(&iface->super) ||
+        md->config.enable_indirect_atomic) {
+        rc_addr->atomic_mr_id = uct_ib_md_get_atomic_mr_id(md);
+    } else {
+        rc_addr->atomic_mr_id = 0;
+    }
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp.qp_num);
     }
 
+    ext_addr = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
-        ext_addr                            = ucs_derived_of(rc_addr,
-                                                             uct_rc_mlx5_ep_ext_address_t);
         ext_addr->flags                     = UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY;
         ptr                                 = ext_addr + 1;
         *ucs_serialize_next(&ptr, uint16_t) = md->flush_rkey >> 16;
+        if (!md->config.enable_indirect_atomic) {
+            ext_addr->flags |= UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET;
+        }
     }
 
     return UCS_OK;
@@ -741,7 +748,7 @@ int uct_rc_mlx5_base_ep_is_connected(const uct_ep_h tl_ep,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uint32_t addr_qp = 0;
-    uct_rc_mlx5_ep_address_t *rc_addr;
+    uct_rc_mlx5_base_ep_address_t *rc_addr;
     ucs_status_t status;
     struct ibv_ah_attr ah_attr;
     uint32_t qp_num;
@@ -754,7 +761,7 @@ int uct_rc_mlx5_base_ep_is_connected(const uct_ep_h tl_ep,
     }
 
     if (params->field_mask & UCT_EP_IS_CONNECTED_FIELD_EP_ADDR) {
-        rc_addr = (uct_rc_mlx5_ep_address_t*)params->ep_addr;
+        rc_addr = (uct_rc_mlx5_base_ep_address_t*)params->ep_addr;
         addr_qp = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 
@@ -790,7 +797,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
         status = uct_rc_mlx5_ep_connect_qp(
-                iface, &ep->tm_qp, uct_ib_unpack_uint24(rc_addr->qp_num),
+                iface, &ep->tm_qp, uct_ib_unpack_uint24(rc_addr->super.qp_num),
                 &ah_attr, path_mtu, ep->super.super.path_index);
         if (status != UCS_OK) {
             return status;
@@ -800,7 +807,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
          * (and bound to XRQ) on the peer. */
         qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
     } else {
-        qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
+        qp_num = uct_ib_unpack_uint24(rc_addr->super.qp_num);
     }
 
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->super.tx.wq.super, qp_num,
@@ -830,6 +837,11 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                      ((uint32_t)rc_addr->atomic_mr_id << 8);
     } else {
         ep->super.super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
+    }
+
+    if (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET) {
+        /* override super.super.atomic_mr_offset that was set previously */
+        ep->super.super.atomic_mr_offset = 0;
     }
 
     return UCS_OK;

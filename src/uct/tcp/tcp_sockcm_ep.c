@@ -771,7 +771,7 @@ static ucs_status_t uct_tcp_sockcm_ep_recv_nb(uct_tcp_sockcm_ep_t *cep)
     status = ucs_socket_recv_nb(cep->fd,
                                 UCS_PTR_BYTE_OFFSET(cep->comm_ctx.buf,
                                                     cep->comm_ctx.offset),
-                                &recv_length);
+                                0, &recv_length);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
         if (status != UCS_ERR_NOT_CONNECTED) {  /* ECONNRESET cannot return from recv() */
             uct_cm_ep_peer_error(&cep->super,
@@ -874,7 +874,7 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     }
 
     server_addr = params->sockaddr->addr;
-    status = ucs_socket_create(server_addr->sa_family, SOCK_STREAM, &cep->fd);
+    status = ucs_socket_create(server_addr->sa_family, SOCK_STREAM, 0, &cep->fd);
     if (status != UCS_OK) {
         goto err;
     }

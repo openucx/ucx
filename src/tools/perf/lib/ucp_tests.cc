@@ -728,12 +728,7 @@ public:
     bool use_ack() const
     {
         /* TODO: daemon does not support bi-directional flow */
-        if (m_perf.params.ucp.is_daemon_mode) {
-            return false;
-        }
-
-        return (CMD == UCX_PERF_CMD_TAG) || (CMD == UCX_PERF_CMD_TAG_SYNC) ||
-               (CMD == UCX_PERF_CMD_AM);
+        return !m_perf.params.ucp.is_daemon_mode;
     }
 
     void send_ack(void *buffer, ucp_datatype_t datatype)

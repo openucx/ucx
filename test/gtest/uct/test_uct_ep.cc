@@ -199,7 +199,7 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_uct_ep, is_connected, has_transport("gga_mlx5"))
+UCS_TEST_P(test_uct_ep, is_connected)
 {
     create_sender();
 

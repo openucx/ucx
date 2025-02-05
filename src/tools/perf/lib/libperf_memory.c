@@ -340,7 +340,7 @@ void ucx_perf_global_init()
 {
     static ucx_perf_allocator_t host_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_HOST,
-        .init      = ucs_empty_function_return_success,
+        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
         .uct_alloc = uct_perf_test_alloc_host,
         .uct_free  = uct_perf_test_free_host,
         .memcpy    = ucx_perf_test_memcpy_host,
@@ -348,7 +348,7 @@ void ucx_perf_global_init()
     };
     static ucx_perf_allocator_t rdma_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_RDMA,
-        .init      = ucs_empty_function_return_success,
+        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
         .uct_alloc = (ucx_perf_uct_alloc_func_t)ucs_empty_function_do_assert,
         .uct_free  = (ucx_perf_uct_free_func_t)ucs_empty_function_do_assert,
         .memcpy    = (ucx_perf_memcpy_func_t)ucs_empty_function_do_assert,

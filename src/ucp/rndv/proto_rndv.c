@@ -403,6 +403,13 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         cfg_thresh = remote_proto->cfg_thresh;
     }
 
+    if (fabs(params->perf_bias) > UCP_PROTO_PERF_EPSILON) {
+        ucp_proto_perf_apply_func(perf,
+                                  ucs_linear_func_make(0.0,
+                                                       1.0 - params->perf_bias),
+                                  "bias", "%.2f %%", params->perf_bias);
+    }
+
     ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
                                perf, rpriv, priv_size);
 

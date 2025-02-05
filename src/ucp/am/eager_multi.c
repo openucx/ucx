@@ -39,6 +39,7 @@ ucp_am_eager_multi_bcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = context->config.ext.max_eager_lanes,
+        .min_chunk           = 0,
         .initial_reg_md_map  = 0,
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
@@ -210,6 +211,7 @@ ucp_am_eager_multi_zcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .max_lanes           = context->config.ext.max_eager_lanes,
+        .min_chunk           = 0,
         .initial_reg_md_map  = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.lane_type     = UCP_LANE_TYPE_AM,

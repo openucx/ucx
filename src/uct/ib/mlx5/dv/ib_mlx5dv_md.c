@@ -926,7 +926,7 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
         status = uct_ib_mlx5_devx_reg_mr(md, memh, address, length, params,
                                          UCT_IB_MR_STRICT_ORDER,
                                          ~IBV_ACCESS_RELAXED_ORDERING,
-                                         &dummy_mkey, &dummy_mkey);
+                                         &dummy_mkey, &memh->atomic_rkey);
         if (status != UCS_OK) {
             goto err_dereg_default;
         }
@@ -2978,6 +2978,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         ((memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) ||
          uct_ib_mlx5_devx_memh_has_ro(md, memh)) &&
         !(memh->super.flags & UCT_IB_MEM_IMPORTED) &&
+        md->super.config.enable_indirect_atomic &&
         ucs_test_all_flags(md->flags,
                            UCT_IB_MLX5_MD_FLAG_KSM |
                            UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS)) {
@@ -3169,7 +3170,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
         .mem_attach         = uct_ib_mlx5_devx_mem_attach,
         .mem_advise         = uct_ib_mem_advise,
         .mkey_pack          = uct_ib_mlx5_devx_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_mlx5_devx_md_open,
 };
@@ -3386,10 +3387,10 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
         .query              = uct_ib_md_query,
         .mem_reg            = uct_ib_verbs_mem_reg,
         .mem_dereg          = uct_ib_verbs_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .mem_advise         = uct_ib_mem_advise,
         .mkey_pack          = uct_ib_verbs_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_mlx5dv_md_open,
 };

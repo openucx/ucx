@@ -31,7 +31,7 @@ UCS_TEST_SKIP_COND_P(uct_atomic_key_reg_rdma_mem_type, fadd64,
                      !check_rdma_memory())
 {
     mapped_buffer recvbuf(sizeof(uint64_t), receiver(), 0UL,
-                          UCS_MEMORY_TYPE_RDMA);
+                          UCS_MEMORY_TYPE_RDMA, UCT_MD_MEM_ACCESS_ALL, 5);
     uint64_t add = rand64();
 
     run_workers(static_cast<send_func_t>(

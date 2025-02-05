@@ -111,11 +111,12 @@ unsigned ucs_netif_bond_ad_num_ports(const char *if_name);
  *
  * @param [in]   domain     Communication domain (AF_INET/AF_INET6/etc).
  * @param [in]   type       Communication semantics (SOCK_STREAM/SOCK_DGRAM/etc).
+ * @param [in]   protocol   Communication protocol (IPPROTO_TCP/NETLINK_ROUTE/etc).
  * @param [out]  fd_p       Pointer to created fd.
  *
  * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure.
  */
-ucs_status_t ucs_socket_create(int domain, int type, int *fd_p);
+ucs_status_t ucs_socket_create(int domain, int type, int protocol, int *fd_p);
 
 
 /**
@@ -253,7 +254,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
  * @return The queue length for completely established sockets
  * waiting to be accepted.
  */
-int ucs_socket_max_conn();
+int ucs_socket_max_conn(void);
 
 
 /**
@@ -279,13 +280,14 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p);
  * @param [in]      fd              Socket fd.
  * @param [in]      data            A pointer to a buffer to receive the incoming
  *                                  data.
+ * @param [in]      flags           recv flags.
  * @param [in/out]  length_p        The length, in bytes, of the data in buffer
  *                                  pointed to by the `data` parameter. The amount of
  *                                  data received is written to this argument.
  *
  * @return UCS_OK on success or an error code on failure.
  */
-ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p);
+ucs_status_t ucs_socket_recv_nb(int fd, void *data, int flags, size_t *length_p);
 
 
 /**

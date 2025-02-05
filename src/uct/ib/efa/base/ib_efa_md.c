@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include <uct/ib/efa/ib_efa.h>
+#include <uct/ib/efa/base/ib_efa.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
 
@@ -94,22 +94,26 @@ static uct_ib_md_ops_t uct_ib_efa_md_ops = {
         .query              = uct_ib_md_query,
         .mem_reg            = uct_ib_verbs_mem_reg,
         .mem_dereg          = uct_ib_verbs_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mem_attach         =(uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .mem_advise         = uct_ib_mem_advise,
         .mkey_pack          = uct_ib_verbs_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_efa_md_open,
 };
 
 UCT_IB_MD_DEFINE_ENTRY(efa, uct_ib_efa_md_ops);
 
+extern uct_tl_t UCT_TL_NAME(srd);
+
 void UCS_F_CTOR uct_efa_init(void)
 {
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(efa).list);
+    uct_tl_register(&uct_ib_component, &UCT_TL_NAME(srd));
 }
 
 void UCS_F_DTOR uct_efa_cleanup(void)
 {
+    uct_tl_unregister(&UCT_TL_NAME(srd));
     ucs_list_del(&UCT_IB_MD_OPS_NAME(efa).list);
 }

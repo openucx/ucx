@@ -28,7 +28,7 @@ do
 	fi
 
 	# try to compile a test program (from stdin) which includes hfile
-	for compile in "${CC} -x c" "${CXX} -x c++"
+	for compile in "${CC} -Werror=strict-prototypes -x c" "${CXX} -x c++"
 	do
 		${compile} -I. -c - -o /dev/null -DHAVE_CONFIG_H=1 <<EOF
 #include "${hfile}"

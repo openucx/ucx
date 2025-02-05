@@ -205,6 +205,7 @@ ucs_bitwise_is_equal(const void *ptr1, const void *ptr2, uint64_t bit_length)
 {
     size_t length          = bit_length / 8;
     unsigned remainder_val = bit_length % 8;
+    uint8_t mask;
 
     if (memcmp(ptr1, ptr2, length) != 0) {
         return 0;
@@ -215,8 +216,9 @@ ucs_bitwise_is_equal(const void *ptr1, const void *ptr2, uint64_t bit_length)
     }
 
     /* Compare up to 7 last bits */
-    return ((*((uint8_t*)ptr1 + length) & ~UCS_MASK(8 - remainder_val)) ==
-            (*((uint8_t*)ptr2 + length) & ~UCS_MASK(8 - remainder_val)));
+    mask = ~UCS_MASK(8 - remainder_val);
+    return (*((const uint8_t*)UCS_PTR_BYTE_OFFSET(ptr1, length)) & mask) ==
+           (*((const uint8_t*)UCS_PTR_BYTE_OFFSET(ptr2, length)) & mask);
 }
 
 END_C_DECLS

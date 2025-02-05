@@ -305,8 +305,6 @@ protected:
 
         status = UCS_PARAM_VALUE(UCT_CM_EP_RESOLVE_ARGS_FIELD, args, status,
                                  STATUS, UCS_OK);
-
-        self->handle_client_connecting_status(status);
         if (status != UCS_OK) {
             goto err;
         }
@@ -327,6 +325,7 @@ protected:
 
     err:
         self->del_user_data(sa_user_data);
+        self->handle_client_connecting_status(status);
         return status;
     }
 
