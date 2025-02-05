@@ -59,7 +59,7 @@ static void usage()
     printf("  -c                   Show UCX configuration\n");
     printf("  -C                   Comment-out default configuration values\n");
     printf("  -F <string>          Only show configuration values whose name "
-           "contains 'string'\n" );
+           "contains 'string'\n");
     printf("  -a                   Show also hidden configuration\n");
     printf("  -f                   Display fully decorated output\n");
     printf("\nUCP information (-u is required):\n");
