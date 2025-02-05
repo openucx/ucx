@@ -929,18 +929,18 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
-                              tl_md, worker, params, &config->super.super,
-                              &config->rc_mlx5_common, &init_attr);
-
-    status = uct_rc_mlx5_dp_ordering_ooo_init(&self->super,
+    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap.rc,
                                               &config->rc_mlx5_common,
                                               "rc_mlx5");
     if (status != UCS_OK) {
         return status;
     }
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
+                              tl_md, worker, params, &config->super.super,
+                              &config->rc_mlx5_common, &init_attr);
 
     status = uct_rc_init_fc_thresh(&config->super, &self->super.super);
     if (status != UCS_OK) {

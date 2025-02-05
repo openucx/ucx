@@ -656,19 +656,19 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                                                    max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_gga_mlx5_iface_tl_ops,
-                              &uct_gga_mlx5_iface_ops, tl_md, worker, params,
-                              &config->super.super, &config->rc_mlx5_common,
-                              &init_attr);
-
     status = uct_rc_mlx5_dp_ordering_ooo_init(
-            &self->super,
+            md, &self->super,
             ucs_min(md->dp_ordering_cap.rc, UCT_IB_MLX5_DP_ORDERING_OOO_RW),
             &config->rc_mlx5_common, "gga");
     if (status != UCS_OK) {
         return status;
     }
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_gga_mlx5_iface_tl_ops,
+                              &uct_gga_mlx5_iface_ops, tl_md, worker, params,
+                              &config->super.super, &config->rc_mlx5_common,
+                              &init_attr);
 
     uct_gga_mlx5_iface_disable_rx(&self->super);
 
