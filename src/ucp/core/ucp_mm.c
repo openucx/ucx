@@ -25,6 +25,12 @@
 #include <string.h>
 #include <inttypes.h>
 
+#define GVA_TYPE(_uct_flags) \
+            ((_uct_flags & (UCT_MD_MEM_ACCESS_LOCAL_WRITE     | \
+                            UCT_MD_MEM_ACCESS_REMOTE_PUT      | \
+                            UCT_MD_MEM_ACCESS_REMOTE_ATOMIC)) ? \
+             UCP_GVA_MR_TYPE_READ_WRITE : UCP_GVA_MR_TYPE_READ_ONLY)
+
 /* Context for rcache memory registration callback */
 typedef struct {
     ucs_memory_type_t mem_type;    /* Memory type */
@@ -344,15 +350,6 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
     return flags;
 }
 
-static ucp_gva_mr_type_t get_gva_type(unsigned uct_flags)
-{
-    return (uct_flags & (UCT_MD_MEM_ACCESS_LOCAL_WRITE |
-                         UCT_MD_MEM_ACCESS_REMOTE_PUT |
-                         UCT_MD_MEM_ACCESS_REMOTE_ATOMIC)) ?
-            UCP_GVA_MR_TYPE_READ_WRITE :
-            UCP_GVA_MR_TYPE_READ_ONLY;
-}
-
 static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map)
 {
@@ -375,7 +372,7 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         ucs_assertv(md_index != memh->alloc_md_index,
                     "memh %p: md_index %u alloc_md_index %u", memh, md_index,
                     memh->alloc_md_index);
-        mr_index = get_gva_type(memh->uct_flags);
+        mr_index = GVA_TYPE(memh->uct_flags);
         if (memh->uct[md_index] == context->tl_mds[md_index].gva_mrs[mr_index]) {
             continue;
         }
@@ -506,7 +503,7 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
         return UCS_OK;
     }
 
-    gva_mr_index = get_gva_type(uct_flags);
+    gva_mr_index = GVA_TYPE(uct_flags);
     uct_flags   |= (gva_mr_index == UCP_GVA_MR_TYPE_READ_WRITE) ?
                    UCT_MD_MEM_ACCESS_ALL :
                    UCT_MD_MEM_ACCESS_LOCAL_READ | UCT_MD_MEM_ACCESS_REMOTE_GET;
