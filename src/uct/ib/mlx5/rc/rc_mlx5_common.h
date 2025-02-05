@@ -481,7 +481,8 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
 
 
 ucs_status_t
-uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
+uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
+                                 uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_dp_ordering_t dp_ordering_cap,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name);
