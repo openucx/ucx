@@ -600,13 +600,14 @@ void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
     ucs_mpool_put_inline(ib_desc);
 }
 
+/* TODO do not pass iface, but only pass return value to config */
 ucs_status_t
-uct_rc_mlx5_dp_ordering_ooo_init(uct_rc_mlx5_iface_common_t *iface,
+uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
+                                 uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_dp_ordering_t dp_ordering_cap,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name)
 {
-    uct_ib_mlx5_md_t *md      = uct_ib_mlx5_iface_md(&iface->super.super);
     uct_ib_mlx5_dp_ordering_t min_forced_ordering;
 
     /*
