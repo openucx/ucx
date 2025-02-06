@@ -180,6 +180,18 @@ void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
 
 
 /**
+ * Append a list of strings separated by a custom token.
+ *
+ * @param [inout] strb        String buffer to append to.
+ * @param [in]    sep         Use this string as the separator
+ * @param [in]    strs        Array of strings to append.
+ * @param [in]    count       Number of strings in the array.
+ */
+void ucs_string_buffer_append_list(ucs_string_buffer_t *strb, const char *sep,
+                                   const char **strs, size_t count);
+
+
+/**
  * Append an IO vector representation to the string buffer.
  *
  * @param [inout] strb        String buffer to append to.
