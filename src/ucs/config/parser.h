@@ -550,10 +550,13 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
  * @param prefix         Prefix to add to all environment variables.
  * @param flags          Flags which control the output.
+ * @param filter         Filter output with substring match, if not NULL.
  */
-void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
-                                  ucs_config_field_t *fields, const char *table_prefix,
-                                  const char *prefix, ucs_config_print_flags_t flags);
+void ucs_config_parser_print_opts(FILE *stream, const char *title,
+                                  const void *opts, ucs_config_field_t *fields,
+                                  const char *table_prefix, const char *prefix,
+                                  ucs_config_print_flags_t flags,
+                                  const char *filter);
 
 /**
  * Print all options defined in the library - names, values, documentation.
@@ -561,11 +564,13 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
  * @param stream         Output stream to print to.
  * @param prefix         Prefix to add to all environment variables.
  * @param flags          Flags which control the output.
- * @param config_list    List of config tables
+ * @param config_list    List of config tables.
+ * @param filter         Filter output with substring match, if not NULL.
  */
 void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
                                       ucs_config_print_flags_t flags,
-                                      ucs_list_link_t *config_list);
+                                      ucs_list_link_t *config_list,
+                                      const char *filter);
 
 /**
  * Read a value from options structure.
