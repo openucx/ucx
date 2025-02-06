@@ -177,6 +177,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
 {
     struct mlx5_cqe64 *cqe;
     unsigned idx;
+    int strides_consumed;
 
     idx = cq->cq_ci;
     cqe = uct_ib_mlx5_get_cqe(cq, idx);
@@ -198,8 +199,10 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
         cq->cq_unzip.title_cqe_valid = 0;
     }
 
+    strides_consumed = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_NUM_OF_STRIDES_CONSUMED_MASk;
 
-    cq->cq_ci = idx + 1;
+
+    cq->cq_ci = idx + strides_consumed * cq->;
     return cqe; /* todo optimize - let compiler know cqe is not null */
 }
 
