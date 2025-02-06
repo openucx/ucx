@@ -360,7 +360,8 @@ static void uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md,
 static ucs_status_t
 uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                         ucs_memory_type_t mem_type, unsigned flags,
-                        const char *alloc_name, uct_mem_h *memh_p)
+                        const char *alloc_name, ucs_sys_device_t sys_dev,
+                        uct_mem_h *memh_p)
 {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
     ucs_status_t status;
