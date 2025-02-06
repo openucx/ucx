@@ -71,7 +71,7 @@ enum {
     UCP_ADDRESS_PACK_FLAG_IFACE_ADDR    = UCS_BIT(3),
 
     /* Pack endpoint addresses */
-    UCP_ADDRESS_PACK_FLAG_EP_ADDR       = UCS_BIT(4),
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL   = UCS_BIT(4),
 
     /* Pack TL resource index */
     UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX    = UCS_BIT(5),
@@ -88,6 +88,10 @@ enum {
     /* Pack release version for address v1 */
     UCP_ADDRESS_PACK_FLAG_RELEASE_VER_V1 = UCS_BIT(9),
 
+    /* Pack only fast lanes' endpoint addresses,
+     * subset of @a UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL  */
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST   = UCS_BIT(10),
+
     UCP_ADDRESS_PACK_FLAG_LAST,
 
     /* A bitmap of all flags: UCP_ADDRESS_PACK_FLAG_LAST is the last bit plus 1,
@@ -98,7 +102,7 @@ enum {
 
     /* Default packing flags for client-server protocol */
     UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                                        UCP_ADDRESS_PACK_FLAG_EP_ADDR,
+                                        UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL,
 
     /* Suppress debug tracing */
     UCP_ADDRESS_PACK_FLAG_NO_TRACE    = UCS_BIT(16)
