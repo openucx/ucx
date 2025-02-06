@@ -796,26 +796,6 @@ uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_ib_mlx5_devx_memh_clone(uct_ib_mlx5_md_t *md,
-                            const uct_ib_mlx5_devx_mem_t *src,
-                            uct_ib_mlx5_devx_mem_t **memh_p)
-{
-    size_t mr_size = (src->super.flags & UCT_IB_MEM_IMPORTED) ?
-                            0 : sizeof(src->mrs[0]);
-    uct_ib_mem_t *ib_memh;
-    ucs_status_t status;
-
-    status = uct_ib_memh_clone(&md->super, &src->super, sizeof(**memh_p),
-                               mr_size, &ib_memh);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    *memh_p = ucs_derived_of(ib_memh, uct_ib_mlx5_devx_mem_t);
-    return UCS_OK;
-}
-
 static int
 uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
 {
@@ -879,22 +859,31 @@ static ucs_status_t
 uct_ib_mlx5_devx_derived_mem_reg(uct_md_h uct_md, uct_ib_mlx5_devx_mem_t *base,
                                  uct_mem_h *memh_p)
 {
+    /* TODO: check access flags, align with parent, update documentation.
+     * Implement using uct_ib_flags_to_ibv_mem_access_flags from
+     * https://github.com/openucx/ucx/pull/10341 */
+
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+    size_t mr_size, memh_size;
     uct_ib_mlx5_devx_mem_t *memh;
-    ucs_status_t status;
 
     ucs_assertv(!(base->super.flags & UCT_IB_MEM_FLAG_DERIVED),
                 "memh=%p is already a derived memh", base);
 
-    status = uct_ib_mlx5_devx_memh_clone(md, base, &memh);
-    if (status != UCS_OK) {
-        ucs_error("%s: failed to clone memory handle: %s",
-                  uct_ib_mlx5_dev_name(md), ucs_status_string(status));
-        return status;
+    mr_size   = (base->super.flags & UCT_IB_MEM_IMPORTED) ?
+                    0 : sizeof(base->mrs[0]);
+    memh_size = uct_ib_memh_alloc_size(&md->super, sizeof(*base), mr_size);
+    memh      = malloc(memh_size);
+    if (memh == NULL) {
+        ucs_error("%s: failed to allocate derived memory handle",
+                  uct_ib_mlx5_dev_name(md));
+        return UCS_ERR_NO_MEMORY;
     }
 
+    memh->super             = base->super;
     memh->super.flags      |= UCT_IB_MEM_FLAG_DERIVED;
 
+    memh->address           = base->address;
     memh->atomic_dvmr       = NULL;
     memh->indirect_dvmr     = NULL;
     memh->cross_mr          = NULL;
@@ -902,9 +891,15 @@ uct_ib_mlx5_devx_derived_mem_reg(uct_md_h uct_md, uct_ib_mlx5_devx_mem_t *base,
     memh->smkey_mr          = NULL;
     memh->dm_addr_dvmr      = NULL;
 
+    memh->dm                = base->dm;
+
     memh->atomic_rkey       = UCT_IB_INVALID_MKEY;
     memh->indirect_rkey     = UCT_IB_INVALID_MKEY;
     memh->exported_lkey     = UCT_IB_INVALID_MKEY;
+
+    /* Shallow copy MRs */
+    memcpy(memh->mrs, base->mrs, memh_size -
+                                 ucs_offsetof(uct_ib_mlx5_devx_mem_t, mrs));
 
     *memh_p = memh;
     return UCS_OK;
