@@ -48,6 +48,4 @@ void ucp_proto_am_zcopy_completion(uct_completion_t *self);
 
 void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 
-ucs_status_t ucp_proto_am_req_copy_header(ucp_request_t *req);
-
 #endif
