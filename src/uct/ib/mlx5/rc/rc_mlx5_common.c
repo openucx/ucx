@@ -608,7 +608,15 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name)
 {
-    uct_ib_mlx5_dp_ordering_t min_forced_ordering;
+    static const char *dp_ordering_names[]    = {
+        [UCT_IB_MLX5_DP_ORDERING_IBTA]    = "IBTA",
+        [UCT_IB_MLX5_DP_ORDERING_OOO_RW]  = "OOO_RW",
+        [UCT_IB_MLX5_DP_ORDERING_OOO_ALL] = "OOO_ALL"
+    };
+    uct_ib_mlx5_dp_ordering_t max_dp_ordering = dp_ordering_cap;
+    uct_ib_mlx5_dp_ordering_t min_dp_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    char ar_enable_str[16], ddp_enable_str[16];
+    int force;
 
     /*
      * HCA has an mlxreg admin configuration to force enable adaptive routing
@@ -616,55 +624,59 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
      *
      * HCA cap/cap_2 booleans:
      * - if dp_ordering_ooo is set, QPC/DCTC can enable AR.
-     * - if UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE is set, QPC/DCTC can request mlxreg
-     *   configuration override, useful to force disable.
+     * - if UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE is set, QPC/DCTC can request
+     *   mlxreg configuration override, useful to force disable.
      */
-    iface->config.dp_ordering_force =
-            ucs_ternary_auto_value_is_yes_or_no(config->super.ar_enable) ||
-            ucs_ternary_auto_value_is_yes_or_no(config->ddp_enable);
+
+    if (config->ddp_enable == UCS_YES) {
+        /* At least OOO_ALL is forced */
+        min_dp_ordering = ucs_max(min_dp_ordering,
+                                  UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
+    } else if (config->ddp_enable == UCS_NO) {
+        /* No more than OOO_RW would be used */
+        max_dp_ordering = ucs_min(max_dp_ordering,
+                                  UCT_IB_MLX5_DP_ORDERING_OOO_RW);
+    }
+
+    if (config->super.ar_enable == UCS_YES) {
+        /* At least OOO_RW is forced */
+        min_dp_ordering = ucs_max(min_dp_ordering,
+                                  UCT_IB_MLX5_DP_ORDERING_OOO_RW);
+    } else if (config->super.ar_enable == UCS_NO) {
+        /* Force IBTA ordering only */
+        max_dp_ordering = ucs_min(max_dp_ordering,
+                                  UCT_IB_MLX5_DP_ORDERING_IBTA);
+    }
 
     /*
      * Fail at the following cases:
-     * - Want to force configuration but can't force it
-     * - Want to force enable or force disable adaptive routing but it is unavailable
-     * - Want to force disable adaptive routing but force enabling DDP
-    */
-    if (iface->config.dp_ordering_force &&
-        !(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE)) {
-        goto failure;
+     * - Min required ordering level is larger than max supported
+     * - Min required ordering level by ddp_enable conflicts the max allowed
+     *   according to ar_enable
+     * - Want to force configuration (because it's different than the default)
+     *   but can't force it
+     */
+    force = (min_dp_ordering > UCT_IB_MLX5_DP_ORDERING_IBTA) ||
+            (max_dp_ordering < dp_ordering_cap);
+    if ((min_dp_ordering > max_dp_ordering) ||
+        (force && !(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE))) {
+        ucs_config_sprintf_ternary_auto(ar_enable_str, sizeof(ar_enable_str),
+                                        &config->super.ar_enable, NULL);
+        ucs_config_sprintf_ternary_auto(ddp_enable_str, sizeof(ddp_enable_str),
+                                        &config->ddp_enable, NULL);
+        ucs_error("%s/%s: cannot set ar_enable=%s ddp_enable=%s cap=%s "
+                  "supp_force=%d (min=%s max=%s force=%d)",
+                  uct_ib_device_name(&md->super.dev), tl_name, ar_enable_str,
+                  ddp_enable_str, dp_ordering_names[dp_ordering_cap],
+                  !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
+                  dp_ordering_names[min_dp_ordering],
+                  dp_ordering_names[max_dp_ordering], force);
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    if (config->ddp_enable == UCS_YES) {
-        min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
-    } else if (config->super.ar_enable == UCS_YES) {
-        min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
-    } else {
-        min_forced_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
-    }
-
-    if (min_forced_ordering > dp_ordering_cap) {
-        goto failure;
-    }
-
-    if (config->super.ar_enable == UCS_NO) {
-        iface->config.dp_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
-        return UCS_OK;
-    }
-
-    iface->config.dp_ordering = config->ddp_enable ?
-                                        UCT_IB_MLX5_DP_ORDERING_OOO_ALL :
-                                        UCT_IB_MLX5_DP_ORDERING_OOO_RW;
-
-    iface->config.dp_ordering = ucs_min(iface->config.dp_ordering,
-                                        dp_ordering_cap);
-
+    iface->config.dp_ordering       = max_dp_ordering;
+    iface->config.dp_ordering_force = force;
     return UCS_OK;
-
-failure:
-    ucs_error("%s: cannot set ar_enable=%d, ddp_enable=%d, capability=%d on %s",
-              uct_ib_device_name(&md->super.dev), config->super.ar_enable,
-              config->ddp_enable, dp_ordering_cap, tl_name);
-    return UCS_ERR_INVALID_PARAM;
 }
 
 #if IBV_HW_TM
