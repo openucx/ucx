@@ -10,6 +10,7 @@
 #define UCS_MEMORY_TYPE_H_
 
 #include <ucs/sys/compiler_def.h>
+#include <ucs/config/types.h>
 
 BEGIN_C_DECLS
 
@@ -53,7 +54,7 @@ typedef enum ucs_memory_type {
 /**
  * Array of string names for each memory type
  */
-extern const char *ucs_memory_type_names[];
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucs_memory_type_names);
 
 /**
  * Array of string descriptions for each memory type

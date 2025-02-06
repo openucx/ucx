@@ -177,6 +177,7 @@ extern ucs_list_link_t ucs_config_global_list;
 
 #define UCS_CONFIG_UINT_ENUM_INDEX(_value) (UINT_MAX - (_value))
 
+
 /*
  * Parsing and printing different data types
  */
@@ -232,6 +233,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_bitmap(char *buf, size_t max, const void *src, const void *arg);
 void ucs_config_help_bitmap(char *buf, size_t max, const void *arg);
 
+int ucs_config_sscanf_flags(const char *buf, void *dest, const void *arg);
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_bitmask(char *buf, size_t max, const void *src, const void *arg);
 
@@ -304,6 +306,13 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_DEFINE_ARRAY(_name, _elem_size, ...) \
     ucs_config_array_t ucs_config_array_##_name = {_elem_size, __VA_ARGS__};
 
+/**
+ *  These macros define a ucs_config_parser_t that validates the
+ *  ucs_config_field_t types, the last argument of the macro is the
+ *  arg field of the ucs_config_parser_t structure, which is the validation
+ *  information for what the user passes UCX_* environment variables.
+ */
+
 #define UCS_CONFIG_TYPE_STRING     {ucs_config_sscanf_string,    ucs_config_sprintf_string, \
                                     ucs_config_clone_string,     ucs_config_release_string, \
                                     ucs_config_help_generic,     ucs_config_doc_nop, \
@@ -369,20 +378,20 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
                                      ucs_config_help_generic,       ucs_config_doc_nop, \
                                      "<on|off|auto>"}
 
-#define UCS_CONFIG_TYPE_ENUM(t)    {ucs_config_sscanf_enum,      ucs_config_sprintf_enum, \
-                                    ucs_config_clone_uint,       ucs_config_release_nop, \
-                                    ucs_config_help_enum,        ucs_config_doc_nop, \
-                                    t}
+#define UCS_CONFIG_TYPE_ENUM(_allowed_values) {ucs_config_sscanf_enum, ucs_config_sprintf_enum, \
+                                              ucs_config_clone_uint,  ucs_config_release_nop, \
+                                              ucs_config_help_enum,   ucs_config_doc_nop, \
+                                              &UCS_CONFIG_ALLOWED_VALUES_NAME(_allowed_values)}
 
-#define UCS_CONFIG_TYPE_UINT_ENUM(t) {ucs_config_sscanf_uint_enum, ucs_config_sprintf_uint_enum, \
-                                      ucs_config_clone_uint,       ucs_config_release_nop, \
-                                      ucs_config_help_uint_enum,   ucs_config_doc_nop, \
-                                      t}
+#define UCS_CONFIG_TYPE_UINT_ENUM(_allowed_values) {ucs_config_sscanf_uint_enum, ucs_config_sprintf_uint_enum, \
+                                                   ucs_config_clone_uint,       ucs_config_release_nop, \
+                                                   ucs_config_help_uint_enum,   ucs_config_doc_nop, \
+                                                   &UCS_CONFIG_ALLOWED_VALUES_NAME(_allowed_values)}
 
-#define UCS_CONFIG_TYPE_BITMAP(t)  {ucs_config_sscanf_bitmap,    ucs_config_sprintf_bitmap, \
-                                    ucs_config_clone_uint,       ucs_config_release_nop, \
-                                    ucs_config_help_bitmap,      ucs_config_doc_nop, \
-                                    t}
+#define UCS_CONFIG_TYPE_BITMAP(_allowed_values) {ucs_config_sscanf_bitmap, ucs_config_sprintf_bitmap, \
+                                                ucs_config_clone_uint,    ucs_config_release_nop, \
+                                                ucs_config_help_bitmap,   ucs_config_doc_nop, \
+                                                &UCS_CONFIG_ALLOWED_VALUES_NAME(_allowed_values)}
 
 #define UCS_CONFIG_TYPE_BITMASK    {ucs_config_sscanf_bitmask,   ucs_config_sprintf_bitmask, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
@@ -412,7 +421,7 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_LOG_COMP   {ucs_config_sscanf_enum,      ucs_config_sprintf_enum, \
                                     ucs_config_clone_log_comp,   ucs_config_release_nop, \
                                     ucs_config_help_enum,        ucs_config_doc_nop, \
-                                    ucs_log_level_names}
+                                    &UCS_CONFIG_ALLOWED_VALUES_NAME(ucs_log_level_names)}
 
 #define UCS_CONFIG_TYPE_SIGNO      {ucs_config_sscanf_signo,     ucs_config_sprintf_signo, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \

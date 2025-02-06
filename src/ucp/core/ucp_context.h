@@ -18,6 +18,7 @@
 #include <ucp/proto/proto.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
+#include <ucs/config/types.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/conn_match.h>
@@ -43,14 +44,8 @@ enum {
     UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
-#define UCP_OP_ATTR_INDEX_MASK (UCP_OP_ATTR_FLAG_NO_IMM_CMPL    | \
-                                UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL | \
-                                UCP_OP_ATTR_FLAG_FAST_CMPL      | \
-                                UCP_OP_ATTR_FLAG_MULTI_SEND)
-
 #define UCP_OP_ATTR_INDEX(_op_attr_flag) \
-    (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag), \
-                                             UCP_OP_ATTR_INDEX_MASK)))
+    (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag))))
 
 
 typedef struct ucp_context_config {
@@ -538,10 +533,13 @@ typedef struct ucp_tl_iface_atomic_flags {
             ucs_unlikely(!((_context)->config.features & (_flags)))) {  \
             size_t feature_list_str_max = 512; \
             char *feature_list_str = ucs_alloca(feature_list_str_max);  \
+            const ucs_config_allowed_values_t *ucp_feature_names = \
+                UCS_CONFIG_GET_ALLOWED_VALUES(ucp_feature_str); \
             ucs_error("feature flags %s were not set for ucp_init()", \
                       ucs_flags_str(feature_list_str, feature_list_str_max,  \
                                     (_flags) & ~(_context)->config.features, \
-                                    ucp_feature_str)); \
+                                    ucp_feature_names->values, \
+                                    ucp_feature_names->count)); \
             _action; \
         } \
     } while (0)
@@ -583,8 +581,7 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 
 extern ucp_am_handler_t *ucp_am_handlers[];
-extern const char       *ucp_feature_str[];
-
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucp_feature_str);
 
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length);
