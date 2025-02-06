@@ -357,8 +357,7 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
         ucs_empty_function_return_unsupported,
     .ep_pending_purge         = (uct_ep_pending_purge_func_t)
         ucs_empty_function_return_unsupported,
-    .iface_flush              = (uct_iface_flush_func_t)
-        ucs_empty_function_return_unsupported,
+    .iface_flush              = uct_base_iface_flush,
     .iface_fence              = (uct_iface_fence_func_t)
         ucs_empty_function_return_unsupported,
     .iface_progress_enable    = (uct_iface_progress_enable_func_t)
