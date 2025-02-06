@@ -264,11 +264,11 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     uint64_t cookie;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
-        attr->uidx      = 0xffffff;
-        status          = uct_ib_mlx5_devx_create_qp(ib_iface,
-                                                     &iface->cq[UCT_IB_DIR_TX],
-                                                     &iface->cq[UCT_IB_DIR_RX],
-                                                     qp, txwq, attr);
+        attr->uidx                 = 0xffffff;
+        attr->is_smbrwq_associated = uct_rc_mlx5_iface_is_srq_smbrwq(iface);
+        status = uct_ib_mlx5_devx_create_qp(ib_iface, &iface->cq[UCT_IB_DIR_TX],
+                                            &iface->cq[UCT_IB_DIR_RX], qp, txwq,
+                                            attr);
         if (status != UCS_OK) {
             return status;
         }
@@ -380,11 +380,17 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
 {
     int ddp_enabled           = (init_attr->flags & UCT_IB_DDP_SUPPORTED) &&
                                 (config->ddp_enable != UCS_NO);
-    unsigned cyclic_srq_flags = UCT_IB_MLX5_MD_FLAG_RMP |
-                                ((init_attr->qp_type == UCT_IB_QPT_DCI) ?
-                                         UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ :
-                                         UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ);
+    unsigned cyclic_srq_flags = UCT_IB_MLX5_MD_FLAG_RMP;
+    unsigned smbrwq_flags     = UCT_IB_MLX5_MD_FLAG_RMP;
     int i;
+
+    if (init_attr->qp_type == UCT_IB_QPT_DCI) {
+        cyclic_srq_flags |= UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ;
+        smbrwq_flags     |= UCT_IB_MLX5_SMBRWQ_SUPPORT_DC;
+    } else {
+        cyclic_srq_flags |= UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ;
+        smbrwq_flags     |= UCT_IB_MLX5_SMBRWQ_SUPPORT_RC;
+    }
 
     for (i = 0; i < config->srq_topo.count; ++i) {
         if (!strcasecmp(config->srq_topo.types[i], "list")) {
@@ -399,6 +405,11 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
         } else if (!strcasecmp(config->srq_topo.types[i], "cyclic_emulated") &&
                    !ddp_enabled) {
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED;
+            return UCS_OK;
+        } else if (!strcmp(config->srq_topo.types[i],
+                           "striding_message_based") &&
+                   (md->smbrwq.supported_tls & smbrwq_flags)) {
+            *topo_p = UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST;
             return UCS_OK;
         }
     }
