@@ -420,7 +420,9 @@ UCS_TEST_SKIP_COND_P(test_ib_md, derived_mem,
     EXPECT_NE(der1_rkey1, der2_rkey1);
 
     /* Test case 5: derived memh pack exported mkey */
-    mkey_pack(der1, UCT_MD_MKEY_PACK_FLAG_EXPORT);
+    if (check_caps(UCT_MD_FLAG_EXPORTED_MKEY)) {
+        mkey_pack(der1, UCT_MD_MKEY_PACK_FLAG_EXPORT);
+    }
 
     /* Invalidation = destroying derived memh */
     EXPECT_UCS_OK(uct_md_mem_dereg(md(), der1));
