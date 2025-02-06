@@ -13,6 +13,8 @@ remote=
 usage() {
     echo "usage: $0 -m <commit_message> [-r <remote_branch>] [-p <new_parent>]" >&2
     echo "" >&2
+    echo "Creates a commit ready to push on remote gh-pages branch" >&2
+    echo "" >&2
     echo "Arguments" >&2
     echo "  -m <commit_message>     commit message to use" >&2
     echo "  -r <remote_branch>      upstream master branch to merge into" >&2
