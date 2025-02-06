@@ -30,13 +30,7 @@ static ucs_config_field_t uct_tcp_md_config_table[] = {
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     uct_md_base_md_query(attr);
-    /* Dummy memory registration provided. No real memory handling exists */
-    attr->flags                  = UCT_MD_FLAG_REG |
-                                   UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     return UCS_OK;
 }
 
@@ -49,9 +43,14 @@ static void uct_tcp_md_close(uct_md_h md)
 static uct_md_ops_t uct_tcp_md_ops = {
     .close              = uct_tcp_md_close,
     .query              = uct_tcp_md_query,
-    .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
-    .mem_reg            = uct_md_dummy_mem_reg,
-    .mem_dereg          = uct_md_dummy_mem_dereg,
+    .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+    .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+    .mem_reg            = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
+    .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+    .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+    .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_unsupported,
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
 };
 
@@ -98,27 +97,14 @@ err:
     return status;
 }
 
-static ucs_status_t uct_tcp_md_rkey_unpack(uct_component_t *component,
-                                           const void *rkey_buffer,
-                                           uct_rkey_t *rkey_p, void **handle_p)
-{
-    /**
-     * Pseudo stub function for the key unpacking
-     * Need rkey == 0 due to work with same process to reuse uct_base_[put|get|atomic]*
-     */
-    *rkey_p   = 0;
-    *handle_p = NULL;
-    return UCS_OK;
-}
-
 uct_component_t uct_tcp_component = {
     .query_md_resources = uct_md_query_single_md_resource,
     .md_open            = uct_tcp_md_open,
     .cm_open            = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_sockcm_t),
-    .rkey_unpack        = uct_tcp_md_rkey_unpack,
+    .rkey_unpack        = (uct_component_rkey_unpack_func_t)ucs_empty_function_return_unsupported,
     .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
-    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
-    .rkey_compare       = uct_base_rkey_compare,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_unsupported,
+    .rkey_compare       = (uct_component_rkey_compare_func_t)ucs_empty_function_return_unsupported,
     .name               = UCT_TCP_NAME,
     .md_config          = {
         .name           = "TCP memory domain",
