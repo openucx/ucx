@@ -386,7 +386,8 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
         enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic)
 {
-    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
+    uct_ib_mlx5_md_t *md    = uct_ib_mlx5_iface_md(&iface->super.super);
+    struct ibv_context *ctx = md->super.dev.ibv_context;
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
     char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
     char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]    = {};
@@ -476,7 +477,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
 
-    status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),
+    status = uct_ib_mlx5_devx_modify_qp(ctx, qp, in_2rtr, sizeof(in_2rtr),
                                         out_2rtr, sizeof(out_2rtr));
     if (status != UCS_OK) {
         return status;
@@ -497,7 +498,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq,
                       iface->config.log_ack_req_freq);
 
-    status = uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
+    status = uct_ib_mlx5_devx_modify_qp(ctx, qp, in_2rts, sizeof(in_2rts),
                                         out_2rts, sizeof(out_2rts));
     if (status != UCS_OK) {
         return status;

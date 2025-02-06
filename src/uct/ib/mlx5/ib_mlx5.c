@@ -969,13 +969,13 @@ ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_iface_t *iface,
                                          enum ibv_qp_state state)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
+    struct ibv_context *ctx = md->super.dev.ibv_context;
 
     ucs_debug("device %s: modify QP %p num 0x%x to state %d",
-              md->super.dev.ibv_context->device->dev_name, qp, qp->qp_num,
-              state);
+              ctx->device->dev_name, qp, qp->qp_num, state);
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
-        return uct_ib_mlx5_devx_modify_qp_state(qp, state);
+        return uct_ib_mlx5_devx_modify_qp_state(ctx, qp, state);
     } else {
         return uct_ib_modify_qp(qp->verbs.qp, state);
     }

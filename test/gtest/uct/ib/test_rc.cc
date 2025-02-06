@@ -1141,6 +1141,9 @@ UCS_TEST_SKIP_COND_P(test_rc_srq, reorder_list,
 
 UCS_TEST_SKIP_COND_P(test_rc_srq, reorder_cyclic,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     /* Disable DDP to allow cyclic SRQ */
+                     "RC_MLX5_DDP_ENABLE?=n",
+                     "DC_MLX5_DDP_ENABLE?=n",
                      "RC_SRQ_TOPO?=cyclic,cyclic_emulated")
 {
     test_reorder();

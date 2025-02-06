@@ -627,7 +627,9 @@ const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs,
                      (RUNNING_ON_VALGRIND || m_rx_buf_limit_failed ||
                       !check_caps(UCT_IFACE_FLAG_AM_SHORT |
-                                  UCT_IFACE_FLAG_CB_SYNC)))
+                                  UCT_IFACE_FLAG_CB_SYNC)),
+                     "RC_MLX5_DDP_ENABLE?=n",
+                     "DC_MLX5_DDP_ENABLE?=n")
 {
     mapped_buffer sendbuf(ucs_min(sender().iface_attr().cap.am.max_short,
                                   10 * sizeof(uint64_t)),

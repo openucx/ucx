@@ -358,6 +358,9 @@ uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
 static ucs_status_t uct_gga_mlx5_ep_enable_mmo(uct_gga_mlx5_ep_t *ep)
 {
+    uct_gga_mlx5_iface_t *iface = ucs_derived_of(
+            ep->super.super.super.super.iface, uct_gga_mlx5_iface_t);
+
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(init2init_qp_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(init2init_qp_out)] = {};
     void *qpce = UCT_IB_MLX5DV_ADDR_OF(init2init_qp_in, in, qpc_data_extension);
@@ -370,9 +373,10 @@ static ucs_status_t uct_gga_mlx5_ep_enable_mmo(uct_gga_mlx5_ep_t *ep)
                         UCT_IB_MLX5_QPC_OPT_MASK_32_INIT2INIT_MMO);
     UCT_IB_MLX5DV_SET(qpc_ext, qpce, mmo, 1);
 
-    return uct_ib_mlx5_devx_obj_modify(ep->super.tx.wq.super.devx.obj, in,
-                                       sizeof(in), out, sizeof(out),
-                                       "2INIT_QP_MMO");
+    return uct_ib_mlx5_devx_obj_modify(
+            uct_ib_iface_device(&iface->super.super.super)->ibv_context,
+            ep->super.tx.wq.super.devx.obj, in, sizeof(in), out, sizeof(out),
+            "2INIT_QP_MMO");
 }
 
 static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_ep_t, const uct_ep_params_t *params)
@@ -772,19 +776,19 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                                                    max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_gga_mlx5_iface_tl_ops,
-                              &uct_gga_mlx5_iface_ops, tl_md, worker, params,
-                              &config->super.super, &config->rc_mlx5_common,
-                              &init_attr);
-
     status = uct_rc_mlx5_dp_ordering_ooo_init(
-            &self->super,
+            md, &self->super,
             ucs_min(md->dp_ordering_cap.rc, UCT_IB_MLX5_DP_ORDERING_OOO_RW),
             &config->rc_mlx5_common, "gga");
     if (status != UCS_OK) {
         return status;
     }
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_gga_mlx5_iface_tl_ops,
+                              &uct_gga_mlx5_iface_ops, tl_md, worker, params,
+                              &config->super.super, &config->rc_mlx5_common,
+                              &init_attr);
 
     uct_gga_mlx5_iface_disable_rx(&self->super);
 

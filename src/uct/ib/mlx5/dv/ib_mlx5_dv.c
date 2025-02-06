@@ -256,9 +256,10 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                           uct_ib_mlx5_iface_get_counter_set_id(iface));
         UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
 
-        status = uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in_2init,
-                                             sizeof(in_2init), out_2init,
-                                             sizeof(out_2init), "2INIT_QP");
+        status = uct_ib_mlx5_devx_obj_modify(dev->ibv_context, qp->devx.obj,
+                                             in_2init, sizeof(in_2init),
+                                             out_2init, sizeof(out_2init),
+                                             "2INIT_QP");
         if (status != UCS_OK) {
             goto err_free;
         }
@@ -297,9 +298,9 @@ err:
     return status;
 }
 
-ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
-                                        const void *in, size_t inlen,
-                                        void *out, size_t outlen)
+ucs_status_t uct_ib_mlx5_devx_modify_qp(struct ibv_context *context,
+                                        uct_ib_mlx5_qp_t *qp, const void *in,
+                                        size_t inlen, void *out, size_t outlen)
 {
     int ret;
     char opcode_str[16];
@@ -318,8 +319,8 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
         }
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
-        return uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in, inlen, out, outlen,
-                                           opcode_str);
+        return uct_ib_mlx5_devx_obj_modify(context, qp->devx.obj, in, inlen,
+                                           out, outlen, opcode_str);
     case UCT_IB_MLX5_OBJ_TYPE_NULL:
         return UCS_ERR_INVALID_PARAM;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
@@ -364,7 +365,8 @@ uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
+ucs_status_t uct_ib_mlx5_devx_modify_qp_state(struct ibv_context *context,
+                                              uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state)
 {
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(modify_qp_in)]   = {};
@@ -382,7 +384,8 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
     }
 
     UCT_IB_MLX5DV_SET(modify_qp_in, in, qpn, qp->qp_num);
-    return uct_ib_mlx5_devx_modify_qp(qp, in, sizeof(in), out, sizeof(out));
+    return uct_ib_mlx5_devx_modify_qp(context, qp, in, sizeof(in), out,
+                                      sizeof(out));
 }
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
@@ -392,7 +395,8 @@ void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
     uct_ib_mlx5_md_buf_free(md, qp->devx.wq_buf, &qp->devx.mem);
 }
 
-ucs_status_t uct_ib_mlx5_devx_obj_modify(struct mlx5dv_devx_obj *obj,
+ucs_status_t uct_ib_mlx5_devx_obj_modify(struct ibv_context *context,
+                                         struct mlx5dv_devx_obj *obj,
                                          const void *in, size_t inlen,
                                          void *out, size_t outlen,
                                          char *msg_arg)
@@ -403,8 +407,8 @@ ucs_status_t uct_ib_mlx5_devx_obj_modify(struct mlx5dv_devx_obj *obj,
     ret = mlx5dv_devx_obj_modify(obj, in, inlen, out, outlen);
     if (ret != 0) {
         syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
-        ucs_error("mlx5dv_devx_obj_modify(%s) failed, syndrome 0x%x: %m",
-                  msg_arg, syndrome);
+        ucs_error("mlx5dv_devx_obj_modify(%s) failed on %s, syndrome 0x%x: %m",
+                  msg_arg, ibv_get_device_name(context->device), syndrome);
         return UCS_ERR_IO_ERROR;
     }
 
