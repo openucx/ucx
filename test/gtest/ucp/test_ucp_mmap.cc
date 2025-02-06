@@ -17,6 +17,10 @@ extern "C" {
 #include <ucs/type/float8.h>
 }
 
+#if HAVE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 #include <cmath>
 #include <list>
 
@@ -1248,3 +1252,51 @@ UCS_TEST_P(test_ucp_mmap_export, export_import) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_export)
+
+#if HAVE_CUDA
+class test_ucp_mmap_mgpu : public ucs::test {
+};
+
+UCS_TEST_F(test_ucp_mmap_mgpu, switch_gpu) {
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("cuda is not supported");
+    }
+
+    int num_devices;
+    ASSERT_EQ(cudaGetDeviceCount(&num_devices), cudaSuccess);
+
+    if (num_devices < 2) {
+        UCS_TEST_SKIP_R("less than two cuda devices available");
+    }
+
+    ucs::handle<ucp_config_t*> config;
+    UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
+                           ucp_config_read, NULL, NULL);
+
+    ucs::handle<ucp_context_h> context;
+    ucp_params_t params;
+    params.field_mask = UCP_PARAM_FIELD_FEATURES;
+    params.features   = UCP_FEATURE_TAG;
+    UCS_TEST_CREATE_HANDLE(ucp_context_h, context, ucp_cleanup, ucp_init,
+                           &params, config.get());
+
+    int device;
+    ASSERT_EQ(cudaGetDevice(&device), cudaSuccess);
+    ASSERT_EQ(cudaSetDevice((device + 1) % num_devices), cudaSuccess);
+
+    const size_t size = 16;
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
+
+    ucp_mem_map_params_t mem_map_params;
+    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    mem_map_params.address    = buffer.ptr();
+    mem_map_params.length     = size;
+
+    ucp_mem_h ucp_mem;
+    ASSERT_EQ(ucp_mem_map(context.get(), &mem_map_params, &ucp_mem), UCS_OK);
+    EXPECT_EQ(ucp_mem_unmap(context.get(), ucp_mem), UCS_OK);
+}
+#endif
