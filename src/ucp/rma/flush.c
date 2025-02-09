@@ -748,3 +748,33 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
+
+ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep)
+{
+    ucs_status_t status;
+    ucp_lane_index_t lane;
+
+    lane = ucs_ffs64_safe(ep->ext->flush_state.unflushed_lanes);
+    status = uct_ep_fence(ucp_ep_get_lane(ep, lane), 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
+{
+    ucs_status_t status;
+    void *request;
+
+    request = ucp_ep_flush_internal(ep, 0, &ucp_request_null_param, NULL,
+                                    ucp_ep_flushed_callback, "ep_fence_strong");
+    status = ucp_flush_wait(ep->worker, request);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_ep_mark_flushed(ep);
+    return UCS_OK;
+}
