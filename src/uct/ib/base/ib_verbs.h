@@ -111,6 +111,12 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #  define uct_ib_grh_required(_attr)                0
 #endif
 
+#if HAVE_DECL_IBV_TRANSPORT_UNSPECIFIED
+#  define IBV_DEVICE_TRANSPORT_UNSPECIFIED(_dev)    ((_dev)->transport_type == IBV_TRANSPORT_UNSPECIFIED)
+#else
+#  define IBV_DEVICE_TRANSPORT_UNSPECIFIED(_dev)    0
+#endif
+
 /* Dummy structure declaration, when not present in verbs.h */
 #if !HAVE_IBV_DM
     struct ibv_dm;
