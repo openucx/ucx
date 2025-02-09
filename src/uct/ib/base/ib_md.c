@@ -1258,7 +1258,7 @@ int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
     return 1;
 }
 
-void uct_ib_md_check_odp(uct_ib_md_t *md)
+static void uct_ib_md_check_odp(uct_ib_md_t *md)
 {
     const char *device_name = uct_ib_device_name(&md->dev);
     const char *reason;

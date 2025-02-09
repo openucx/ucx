@@ -126,7 +126,7 @@ def exec_cmd(cmd):
 def find_am_transport(dev, neps=1, override=0, tls="ib"):
     if (override):
         os.putenv("UCX_NUM_EPS", "2")
-    
+
     with _override_env("UCX_TLS", tls), \
          _override_env("UCX_NET_DEVICES", dev):
 
@@ -250,7 +250,7 @@ if match:
 else:
     rc_max_num_eps = 0
 
-status, output = exec_cmd("ibv_devinfo  -l | tail -n +2 | sed -e 's/^[ \t]*//' | head -n -1 ")
+status, output = exec_cmd("ibv_devinfo -l | tail -n+2 | head -n-1 | sed -e 's/^[ \t]*//' | grep -v '^smi[0-9]*$'")
 dev_list = output.splitlines()
 port = "1"
 
