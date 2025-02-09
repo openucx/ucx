@@ -503,6 +503,7 @@ typedef struct {
     uint32_t         cmpl_sn; /* Sequence number of completions */
     ucp_lane_map_t   unflushed_lanes; /* Bitmap of lanes which have unflushed
                                          operations */
+    uint32_t         fence_seq; /* Sequence number for fence detection */
 } ucp_ep_flush_state_t;
 
 
