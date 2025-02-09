@@ -144,4 +144,13 @@ ucp_proto_sw_rma_cfg_thresh(ucp_context_h context, size_t default_value)
            default_value;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_ep_handle_fence(ucp_ep_h ep)
+{
+    if (ucp_ep_is_strong_fence(ep)) {
+        return ucp_ep_fence_strong(ep);
+    } else {
+        return ucp_ep_fence_weak(ep);
+    }
+}
+
 #endif
