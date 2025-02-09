@@ -95,6 +95,7 @@ static const char *ucp_atomic_modes[] = {
 static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_WEAK]   = "weak",
     [UCP_FENCE_MODE_STRONG] = "strong",
+    [UCP_FENCE_MODE_EP_BASED] = "ep_based",
     [UCP_FENCE_MODE_LAST]   = NULL
 };
 
@@ -381,6 +382,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Fence mode used in ucp_worker_fence routine.\n"
    " weak   - use weak fence mode.\n"
    " strong - use strong fence mode.\n"
+   " ep_based - use EP-based fence mode.",
    ucs_offsetof(ucp_context_config_t, fence_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_fence_modes)},
 

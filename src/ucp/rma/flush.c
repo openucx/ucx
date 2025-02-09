@@ -733,12 +733,13 @@ static ucs_status_t ucp_worker_fence_strong(ucp_worker_h worker)
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 {
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    if (worker->context->config.worker_strong_fence) {
-        /* force using flush on EPs */
+    if (worker->context->config.ext.fence_mode == UCP_FENCE_MODE_EP_BASED) {
+        worker->fence_seq++;
+    } else if (worker->context->config.worker_strong_fence) {
         status = ucp_worker_fence_strong(worker);
     } else {
         status = ucp_worker_fence_weak(worker);
