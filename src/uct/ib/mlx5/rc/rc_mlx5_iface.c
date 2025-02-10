@@ -384,6 +384,7 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
                                 ((init_attr->qp_type == UCT_IB_QPT_DCI) ?
                                          UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ :
                                          UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ);
+    ucs_string_buffer_t strb  = UCS_STRING_BUFFER_INITIALIZER;
     int i;
 
     for (i = 0; i < config->srq_topo.count; ++i) {
@@ -403,6 +404,12 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
         }
     }
 
+    ucs_string_buffer_append_array(&strb, ",", "%s", config->srq_topo.types,
+                                   config->srq_topo.count);
+    ucs_error("%s: none of the provided SRQ topology modes %s is supported",
+              uct_ib_device_name(&md->super.dev),
+              ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
     return UCS_ERR_INVALID_PARAM;
 }
 

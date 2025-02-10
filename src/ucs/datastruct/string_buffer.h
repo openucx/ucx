@@ -318,6 +318,29 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
          _tok != NULL; \
          _tok = ucs_string_buffer_next_token(_strb, _tok, _delim))
 
+
+/**
+ * Append a generic array, separated by a custom token.
+ *
+ * @param  _strb       String buffer to append to.
+ * @param  _sep        Use this string as the separator.
+ * @param  _fmt        Formal string for a single element.
+ * @param  _array      Array of elements to append.
+ * @param  _count      Number of elements in the array.
+ */
+#define ucs_string_buffer_append_array(_strb, _sep, _fmt, _array, _count) \
+    { \
+        size_t _i; \
+        \
+        if ((_count) > 0) { \
+            ucs_string_buffer_appendf((_strb), _fmt, (_array)[0]); \
+        } \
+        for (_i = 1; _i < (_count); ++_i) { \
+            ucs_string_buffer_appendf((_strb), "%s" _fmt, (_sep), \
+                                      (_array)[_i]); \
+        } \
+    }
+
 END_C_DECLS
 
 #endif
