@@ -28,6 +28,24 @@ static uint32_t uct_ib_mlx5_flush_rkey_make()
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
 }
 
+/* Should be called after DDP is initialized */
+static int
+uct_ib_mlx5_md_check_odp_common(uct_ib_mlx5_md_t *md, const char **reason_ptr)
+{
+    if (!uct_ib_md_check_odp_common(&md->super, reason_ptr)) {
+        return 0;
+    }
+
+    /* Issue 4238670 */
+    if ((md->dp_ordering_cap.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        (md->dp_ordering_cap.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL)) {
+        *reason_ptr = "ODP does not work with DDP";
+        return 0;
+    }
+
+    return 1;
+}
+
 #if HAVE_DEVX
 static const char uct_ib_mkey_token[] = "uct_ib_mkey_token";
 
@@ -1628,7 +1646,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     struct ibv_mr *mr;
     uint8_t version;
 
-    if (!uct_ib_md_check_odp_common(&md->super, &reason)) {
+    if (!uct_ib_mlx5_md_check_odp_common(md, &reason)) {
         goto no_odp;
     }
 
@@ -3218,7 +3236,7 @@ out:
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops;
 
-static ucs_status_t 
+static ucs_status_t
 uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
 {
 #ifdef HAVE_OOO_RECV_WRS
@@ -3245,6 +3263,21 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
     md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
 #endif
     return UCS_OK;
+}
+
+static void uct_ib_mlx5dv_md_check_odp(uct_ib_mlx5_md_t *md,
+                                       const uct_ib_md_config_t *md_config)
+{
+    const char *device_name = uct_ib_device_name(&md->super.dev);
+    const char *reason;
+
+    if (!uct_ib_mlx5_md_check_odp_common(md, &reason)) {
+        ucs_debug("%s: ODP is disabled because %s", device_name, reason);
+        return;
+    }
+
+    md->super.reg_nonblock_mem_types = md_config->ext.odp.mem_types;
+    ucs_debug("%s: ODP is supported", device_name);
 }
 
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
@@ -3315,7 +3348,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
-    uct_ib_md_check_odp(&md->super);
+    uct_ib_mlx5dv_md_check_odp(md, md_config);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 

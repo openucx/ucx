@@ -1256,7 +1256,8 @@ int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
     return 1;
 }
 
-void uct_ib_md_check_odp(uct_ib_md_t *md)
+static void
+uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
     const char *device_name = uct_ib_device_name(&md->dev);
     const char *reason;
@@ -1266,8 +1267,8 @@ void uct_ib_md_check_odp(uct_ib_md_t *md)
         return;
     }
 
-    md->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    ucs_debug("%s: ODP is supported, version 1", device_name);
+    md->reg_nonblock_mem_types = md_config->ext.odp.mem_types;
+    ucs_debug("%s: ODP is supported", device_name);
 }
 
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
@@ -1535,7 +1536,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 
     uct_ib_md_ece_check(md);
     uct_ib_md_parse_relaxed_order(md, md_config, 0);
-    uct_ib_md_check_odp(md);
+    uct_ib_md_check_odp(md, md_config);
 
     *p_md = md;
     return UCS_OK;
