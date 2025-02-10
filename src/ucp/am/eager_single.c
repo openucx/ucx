@@ -118,7 +118,8 @@ ucp_am_eager_short_probe_common(const ucp_proto_init_params_t *init_params,
 
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
-        !ucp_proto_is_short_supported(select_param)) {
+        !ucp_proto_is_short_supported(select_param) ||
+        init_params->worker->context->config.ext.avoid_copy_mem_types) {
         return;
     }
 
@@ -247,7 +248,8 @@ static void ucp_am_eager_single_bcopy_probe_common(
     };
 
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
-                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
+        context->config.ext.avoid_copy_mem_types) {
         return;
     }
 
@@ -340,7 +342,8 @@ static void ucp_am_eager_single_zcopy_probe_common(
 
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
+        context->config.ext.avoid_copy_mem_types) {
         return;
     }
 

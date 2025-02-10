@@ -74,7 +74,8 @@ ucp_proto_eager_short_probe(const ucp_proto_init_params_t *init_params)
 
     /* AM based proto can not be used if tag offload lane configured */
     if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0) ||
-        !ucp_proto_is_short_supported(select_param)) {
+        !ucp_proto_is_short_supported(select_param) ||
+        init_params->worker->context->config.ext.avoid_copy_mem_types) {
         return;
     }
 
@@ -147,7 +148,8 @@ ucp_proto_eager_bcopy_single_probe(const ucp_proto_init_params_t *init_params)
     };
 
     /* AM based proto can not be used if tag offload lane configured */
-    if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0)) {
+    if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0) ||
+        init_params->worker->context->config.ext.avoid_copy_mem_types) {
         return;
     }
 
@@ -197,7 +199,8 @@ ucp_proto_eager_zcopy_single_probe(const ucp_proto_init_params_t *init_params)
 
     /* AM based proto can not be used if tag offload lane configured */
     if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
+        init_params->worker->context->config.ext.avoid_copy_mem_types) {
         return;
     }
 

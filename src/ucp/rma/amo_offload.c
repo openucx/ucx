@@ -177,7 +177,8 @@ static void ucp_proto_amo_probe(const ucp_proto_init_params_t *init_params,
     };
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
+        !ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
+        init_params->worker->context->config.ext.avoid_copy_mem_types) {
         return;
     }
 

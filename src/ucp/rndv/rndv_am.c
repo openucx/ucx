@@ -120,6 +120,10 @@ static void ucp_rndv_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
 
+    if (init_params->worker->context->config.ext.avoid_copy_mem_types) {
+        return;
+    }
+
     ucp_rndv_am_probe_common(&params);
 }
 

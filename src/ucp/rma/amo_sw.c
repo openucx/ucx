@@ -431,6 +431,10 @@ static void ucp_proto_amo_sw_probe(const ucp_proto_init_params_t *init_params,
     const ucp_ep_config_key_lane_t *lane_config;
     const uct_iface_attr_t *iface_attr;
 
+    if (init_params->worker->context->config.ext.avoid_copy_mem_types) {
+        return;
+    }
+
     /* If the endpoint has device atomic lanes, it means the target worker
        expects only device atomics, so we cannot use SW atomics. */
     ucs_carray_for_each(lane_config, ep_config_key->lanes,
@@ -485,7 +489,8 @@ ucp_proto_amo_sw_fetch_probe(const ucp_proto_init_params_t *init_params)
     if (!ucp_proto_init_check_op(init_params,
                                  UCS_BIT(UCP_OP_ID_AMO_FETCH) |
                                  UCS_BIT(UCP_OP_ID_AMO_CSWAP)) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
+        init_params->worker->context->config.ext.avoid_copy_mem_types) {
         return;
     }
 
