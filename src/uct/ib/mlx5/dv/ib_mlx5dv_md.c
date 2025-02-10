@@ -28,6 +28,22 @@ static uint32_t uct_ib_mlx5_flush_rkey_make()
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
 }
 
+/* Should be called after DDP is initialized */
+static int
+uct_ib_mlx5_md_check_odp_common(uct_ib_mlx5_md_t *md, const char **reason_ptr)
+{
+    if (!uct_ib_md_check_odp_common(&md->super, reason_ptr)) {
+        return 0;
+    }
+
+    if (md->dp_ordering_cap.rc > UCT_IB_MLX5_DP_ORDERING_IBTA) {
+        *reason_ptr = "ODP does not work with DDP";
+        return 0;
+    }
+
+    return 1;
+}
+
 #if HAVE_DEVX
 static const char uct_ib_mkey_token[] = "uct_ib_mkey_token";
 
@@ -1614,22 +1630,6 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_cleanup   = NULL,
     .obj_str       = NULL
 };
-
-/* Should be called after DDP is initialized */
-static int
-uct_ib_mlx5_md_check_odp_common(uct_ib_mlx5_md_t *md, const char **reason_ptr)
-{
-    if (!uct_ib_md_check_odp_common(&md->super, reason_ptr)) {
-        return 0;
-    }
-
-    if (md->dp_ordering_cap.rc > UCT_IB_MLX5_DP_ORDERING_IBTA) {
-        *reason_ptr = "ODP does not work with DDP";
-        return 0;
-    }
-
-    return 1;
-}
 
 static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                                        const uct_ib_md_config_t *md_config,
