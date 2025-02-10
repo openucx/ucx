@@ -210,6 +210,11 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                             UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX;
     ucs_status_t status;
 
+    if (type == UCP_WIREUP_MSG_LANE_ADDR_REQUEST) {
+        pack_flags &= ~UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST;
+        pack_flags |= UCP_ADDRESS_PACK_FLAG_EP_ADDR_SLOW;
+    }
+
     msg_hdr->type      = type;
     msg_hdr->err_mode  = ucp_ep_config(ep)->key.err_mode;
     msg_hdr->conn_sn   = ep->conn_sn;
@@ -1914,8 +1919,23 @@ ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
 ucs_status_t ucp_wireup_send_request_addr_lane(ucp_ep_h ep,
                                                ucp_lane_index_t lane)
 {
-    ucp_lane_index_t lanes2remote[UCP_MAX_LANES] = {0};
+    ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     ucp_tl_bitmap_t tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, UCS_BIT(lane));
+    /*
+    ucp_lane_index_t i;
+
+    for (i = 0; i < ucp_ep_num_lanes(ep); ++i) {
+        if (ucp_ep_config(ep)->key.lanes[i].rsc_index ==
+            ucp_ep_config(ep)->key.lanes[lane].rsc_index) {
+            lanes2remote[i] = ucp_ep_config(ep)->key.lanes[i].path_index;
+            ucs_assert(lanes2remote[i] != UCP_NULL_LANE);
+        } else {
+            lanes2remote[i] = UCP_NULL_LANE;
+        }
+    }
+    */
+    memset(lanes2remote, UCP_NULL_LANE, sizeof(lanes2remote));
+    lanes2remote[lane] = ucp_ep_config(ep)->key.lanes[lane].path_index;
 
     return ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_LANE_ADDR_REQUEST,
                                &tl_bitmap, lanes2remote);
@@ -2206,6 +2226,8 @@ uct_ep_h ucp_wireup_init_slow_lane(ucp_ep_h ep, ucp_lane_index_t slow_lane_idx)
     if (status != UCS_OK) {
         goto err;
     }
+
+    /* TODO: create next lane */
 
     status = ucp_wireup_send_request_addr_lane(ep, UCP_MAX_FAST_PATH_LANES +
                                                    slow_lane_idx);

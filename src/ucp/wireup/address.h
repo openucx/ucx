@@ -92,6 +92,9 @@ enum {
      * subset of @a UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL  */
     UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST   = UCS_BIT(10),
 
+    /* Pack only slow lane endpoint addresses per request */
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR_SLOW   = UCS_BIT(11),
+
     UCP_ADDRESS_PACK_FLAG_LAST,
 
     /* A bitmap of all flags: UCP_ADDRESS_PACK_FLAG_LAST is the last bit plus 1,
