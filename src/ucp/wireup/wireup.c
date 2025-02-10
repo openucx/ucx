@@ -2217,29 +2217,35 @@ double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface)
 
 uct_ep_h ucp_wireup_init_slow_lane(ucp_ep_h ep, ucp_lane_index_t slow_lane_idx)
 {
-    uct_ep_h wireup_ep;
+    ucp_lane_index_t lane_index = UCP_MAX_FAST_PATH_LANES + slow_lane_idx;
+    ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status;
 
     ucs_assert(ep->ext->uct_eps[slow_lane_idx] == NULL);
 
-    status = ucp_wireup_ep_create(ep, &wireup_ep);
+    status = ucp_wireup_ep_create(ep, (uct_ep_h*)&wireup_ep);
     if (status != UCS_OK) {
         goto err;
     }
 
-    /* TODO: create next lane */
+    ep->ext->uct_eps[slow_lane_idx] = &wireup_ep->super.super;
+    status = ucp_wireup_ep_connect(
+        ep->ext->uct_eps[slow_lane_idx], 0,
+        ucp_ep_config(ep)->key.lanes[lane_index].rsc_index,
+        ucp_ep_config(ep)->key.lanes[lane_index].path_index, 0, NULL);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
-    status = ucp_wireup_send_request_addr_lane(ep, UCP_MAX_FAST_PATH_LANES +
-                                                   slow_lane_idx);
+    status = ucp_wireup_send_request_addr_lane(ep, lane_index);
     if (status != UCS_OK) {
         goto err_destroy_wireup_ep;
     }
 
-    ep->ext->uct_eps[slow_lane_idx] = wireup_ep;
-    return wireup_ep;
+    return ep->ext->uct_eps[slow_lane_idx];
 
 err_destroy_wireup_ep:
-    uct_ep_destroy(wireup_ep);
+    uct_ep_destroy(ep->ext->uct_eps[slow_lane_idx]);
 err:
     return NULL;
 }
