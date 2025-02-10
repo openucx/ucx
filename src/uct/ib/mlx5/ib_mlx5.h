@@ -943,16 +943,18 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_txwq_t *tx,
                                         uct_ib_mlx5_qp_attr_t *attr);
 
-ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
-                                        const void *in, size_t inlen,
-                                        void *out, size_t outlen);
+ucs_status_t uct_ib_mlx5_devx_modify_qp(struct ibv_context *context,
+                                        uct_ib_mlx5_qp_t *qp, const void *in,
+                                        size_t inlen, void *out, size_t outlen);
 
-ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
+ucs_status_t uct_ib_mlx5_devx_modify_qp_state(struct ibv_context *context,
+                                              uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp);
 
-ucs_status_t uct_ib_mlx5_devx_obj_modify(struct mlx5dv_devx_obj *obj,
+ucs_status_t uct_ib_mlx5_devx_obj_modify(struct ibv_context *context,
+                                         struct mlx5dv_devx_obj *obj,
                                          const void *in, size_t inlen,
                                          void *out, size_t outlen,
                                          char *msg_arg);
@@ -1117,14 +1119,15 @@ uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 }
 
 static inline ucs_status_t
-uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
+uct_ib_mlx5_devx_modify_qp(struct ibv_context *context, uct_ib_mlx5_qp_t *qp,
                            enum ibv_qp_state state)
 {
     return UCS_ERR_UNSUPPORTED;
 }
 
 static inline ucs_status_t
-uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
+uct_ib_mlx5_devx_modify_qp_state(struct ibv_context *context,
+                                 uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
 {
     return UCS_ERR_UNSUPPORTED;
 }

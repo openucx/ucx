@@ -100,6 +100,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 {
     uct_rc_iface_t *rc_iface = &iface->super.super;
     uct_ib_mlx5_md_t *md     = uct_ib_mlx5_iface_md(&rc_iface->super);
+    struct ibv_context *ctx  = md->super.dev.ibv_context;
+
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
     char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]    = {};
@@ -124,7 +126,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, counter_set_id,
                       uct_ib_mlx5_iface_get_counter_set_id(&rc_iface->super));
 
-    status = uct_ib_mlx5_devx_modify_qp(qp, in_2init, sizeof(in_2init),
+    status = uct_ib_mlx5_devx_modify_qp(ctx, qp, in_2init, sizeof(in_2init),
                                         out_2init, sizeof(out_2init));
     if (status != UCS_OK) {
         return status;
@@ -160,7 +162,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     }
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
-    status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),
+    status = uct_ib_mlx5_devx_modify_qp(ctx, qp, in_2rtr, sizeof(in_2rtr),
                                         out_2rtr, sizeof(out_2rtr));
     if (status != UCS_OK) {
         return status;
@@ -183,7 +185,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq,
                       iface->super.config.log_ack_req_freq);
 
-    return uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
+    return uct_ib_mlx5_devx_modify_qp(ctx, qp, in_2rts, sizeof(in_2rts),
                                       out_2rts, sizeof(out_2rts));
 }
 
@@ -191,17 +193,20 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
 {
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(set_xrq_dc_params_entry_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(set_xrq_dc_params_entry_out)] = {};
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    struct ibv_context *ctx  = uct_ib_iface_device(ib_iface)->ibv_context;
 
-    if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
+    if (!uct_ib_iface_is_roce(ib_iface)) {
         UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, pkey_table_index,
-                          iface->super.super.super.pkey_index);
+                          ib_iface->pkey_index);
     }
-    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, mtu, iface->super.super.super.config.path_mtu);
-    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, sl, iface->super.super.super.config.sl);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, mtu,
+                      ib_iface->config.path_mtu);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, sl, ib_iface->config.sl);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, reverse_sl,
-                      iface->super.super.super.config.reverse_sl);
+                      ib_iface->config.reverse_sl);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, cnak_reverse_sl,
-                      iface->super.super.super.config.reverse_sl);
+                      ib_iface->config.reverse_sl);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, ack_timeout, iface->super.super.config.timeout);
     UCT_IB_MLX5DV_SET64(set_xrq_dc_params_entry_in, in, dc_access_key, UCT_IB_KEY);
     ucs_assert(iface->super.rx.srq.srq_num != 0);
@@ -209,7 +214,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, opcode,
                       UCT_IB_MLX5_CMD_OP_SET_XRQ_DC_PARAMS_ENTRY);
 
-    return uct_ib_mlx5_devx_obj_modify(iface->super.rx.srq.devx.obj, in,
+    return uct_ib_mlx5_devx_obj_modify(ctx, iface->super.rx.srq.devx.obj, in,
                                        sizeof(in), out, sizeof(out),
                                        "SET_XRQ_DC_PARAMS");
 }

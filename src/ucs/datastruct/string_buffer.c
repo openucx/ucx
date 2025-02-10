@@ -135,6 +135,20 @@ void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
     ucs_string_buffer_rtrim(strb, ",|");
 }
 
+void ucs_string_buffer_append_list(ucs_string_buffer_t *strb, const char *sep,
+                                   const char **strs, size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; ++i) {
+        if (i > 0) {
+            ucs_string_buffer_appendf(strb, "%s%s", sep, strs[i]);
+        } else {
+            ucs_string_buffer_appendf(strb, "%s", strs[i]);
+        }
+    }
+}
+
 void ucs_string_buffer_append_iovec(ucs_string_buffer_t *strb,
                                     const struct iovec *iov, size_t iovcnt)
 {

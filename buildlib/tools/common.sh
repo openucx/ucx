@@ -145,6 +145,7 @@ get_ib_devices() {
 	set +x
 	for ibdev in $device_list
 	do
+		[[ "$device" =~ ^smi[0-9]*:.$ ]] && continue
 		num_ports=$(ibv_devinfo -d $ibdev| awk '/phys_port_cnt:/ {print $2}')
 		for port in $(seq 1 $num_ports)
 		do
