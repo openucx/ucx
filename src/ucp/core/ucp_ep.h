@@ -913,4 +913,6 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
  */
 void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
 
+ucp_lane_index_t ucp_ep_get_num_valid_lanes(ucp_ep_h ep);
+
 #endif
