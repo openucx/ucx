@@ -19,6 +19,11 @@
         ((ucp_am_hdr_t*)&(_rts)->hdr); \
     })
 
+/*
+ * Apart from protov1/v2, UCP can try to send specified number of iovs in one
+ * uct_ep_am_short_iov() call
+ */
+#define UCP_AM_SEND_SHORT_MIN_IOV 4
 
 enum {
     UCP_AM_CB_PRIV_FIRST_FLAG = UCS_BIT(15),

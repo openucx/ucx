@@ -339,6 +339,7 @@ std::string get_rdmacm_netdev(const char *ifa_name);
  */
 bool is_rdmacm_netdev(const char *ifa_name);
 
+bool is_aws();
 
 /**
  * Get an available port on the host.
@@ -1124,6 +1125,14 @@ private:
 
     std::unordered_map<func*, std::unique_ptr<mock_func>> m_mock_map;
 };
+
+#define UCS_MOCK_ORIG_FUNC(_mock, _orig_ptr, ...) \
+{ \
+    ucs_status_t _status = _mock.orig_func(_orig_ptr, ##__VA_ARGS__); \
+    if (_status != UCS_OK) { \
+        return _status; \
+    } \
+}
 
 // Used to manipulate and restore rlimits
 class rlimit_setter {

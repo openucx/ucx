@@ -200,6 +200,7 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_common_init_params_t *init_params,
     ucp_rsc_index_t rsc_index;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
+    ucp_proto_perf_node_t *perf_node;
 
     if (lane == UCP_NULL_LANE) {
         return UCS_ERR_NO_ELEM;
@@ -237,9 +238,10 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_common_init_params_t *init_params,
     perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY]    = ucs_linear_func_make(
             ucp_tl_iface_latency(worker->context, &perf_attr.latency), 0.0);
 
-    status = ucp_proto_perf_add_funcs(perf, init_params->min_length,
-                                      init_params->max_length, perf_factors,
-                                      NULL, name, "");
+    perf_node = ucp_proto_perf_node_new_data(name, "");
+    status    = ucp_proto_perf_add_funcs(perf, init_params->min_length,
+                                         init_params->max_length, perf_factors,
+                                         perf_node, NULL);
     if (status != UCS_OK) {
         goto err_destroy_perf;
     }
@@ -403,6 +405,13 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         cfg_thresh = remote_proto->cfg_thresh;
     }
 
+    if (fabs(params->perf_bias) > UCP_PROTO_PERF_EPSILON) {
+        ucp_proto_perf_apply_func(perf,
+                                  ucs_linear_func_make(0.0,
+                                                       1.0 - params->perf_bias),
+                                  "bias", "%.2f %%", params->perf_bias);
+    }
+
     ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
                                perf, rpriv, priv_size);
 
@@ -493,7 +502,7 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
 {
     ucp_lane_index_t lane, num_lanes;
 
-    num_lanes = ucp_proto_common_find_lanes(params, UCT_EP_OP_LAST,
+    num_lanes = ucp_proto_common_find_lanes(params,
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
                                             UCP_PROTO_COMMON_OFFSET_INVALID, 1,
                                             UCP_LANE_TYPE_AM,

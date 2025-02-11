@@ -24,22 +24,22 @@ typedef int16_t ucs_numa_node_t;
 extern const char *ucs_numa_policy_names[];
 
 
-void ucs_numa_init();
+void ucs_numa_init(void);
 
 
-void ucs_numa_cleanup();
+void ucs_numa_cleanup(void);
 
 
 /**
  * @return The number of CPU cores in the system.
  */
-unsigned ucs_numa_num_configured_cpus();
+unsigned ucs_numa_num_configured_cpus(void);
 
 
 /**
  * @return The number of memory nodes in the system.
  */
-unsigned ucs_numa_num_configured_nodes();
+unsigned ucs_numa_num_configured_nodes(void);
 
 
 /**

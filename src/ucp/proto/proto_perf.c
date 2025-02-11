@@ -156,24 +156,40 @@ static ucs_status_t ucp_proto_perf_segment_split(const ucp_proto_perf_t *perf,
     return UCS_OK;
 }
 
+static void ucp_proto_perf_node_update_factor(ucp_proto_perf_node_t *perf_node,
+                                              const char *perf_factor_name,
+                                              ucs_linear_func_t perf_factor)
+{
+    if (ucs_linear_func_is_zero(perf_factor, UCP_PROTO_PERF_EPSILON)) {
+        return;
+    }
+
+    ucp_proto_perf_node_update_data(perf_node, perf_factor_name, perf_factor);
+}
+
 static void
 ucp_proto_perf_node_update_factors(ucp_proto_perf_node_t *perf_node,
                                    const ucp_proto_perf_factors_t perf_factors)
 {
     ucp_proto_perf_factor_id_t factor_id;
-    ucs_linear_func_t perf_factor;
 
     /* Add the functions to the segment and the performance node */
     for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; ++factor_id) {
-        perf_factor = perf_factors[factor_id];
-        if (ucs_linear_func_is_zero(perf_factor, UCP_PROTO_PERF_EPSILON)) {
-            continue;
-        }
-
-        ucp_proto_perf_node_update_data(perf_node,
-                                        ucp_proto_perf_factor_names[factor_id],
-                                        perf_factors[factor_id]);
+        ucp_proto_perf_node_update_factor(perf_node,
+                                          ucp_proto_perf_factor_names[factor_id],
+                                          perf_factors[factor_id]);
     }
+}
+
+static void
+ucp_proto_perf_segment_update_factor(ucp_proto_perf_segment_t *seg,
+                                     ucp_proto_perf_factor_id_t factor_id,
+                                     ucs_linear_func_t perf_factor)
+{
+    seg->perf_factors[factor_id] = perf_factor;
+    ucp_proto_perf_node_update_factor(seg->node,
+                                      ucp_proto_perf_factor_names[factor_id],
+                                      perf_factor);
 }
 
 static void
@@ -190,11 +206,12 @@ ucp_proto_perf_segment_add_funcs(ucp_proto_perf_t *perf,
 
     /* Add the functions to the segment and the performance node */
     for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; ++factor_id) {
-        ucs_linear_func_add_inplace(&seg->perf_factors[factor_id],
-                                    perf_factors[factor_id]);
+        ucp_proto_perf_segment_update_factor(
+                seg, factor_id,
+                ucs_linear_func_add(seg->perf_factors[factor_id],
+                                    perf_factors[factor_id]));
     }
 
-    ucp_proto_perf_node_update_factors(seg->node, seg->perf_factors);
     ucp_proto_perf_node_add_child(seg->node, perf_node);
 }
 
@@ -237,22 +254,14 @@ const char *ucp_proto_perf_name(const ucp_proto_perf_t *perf)
 ucs_status_t
 ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
                          const ucp_proto_perf_factors_t perf_factors,
-                         ucp_proto_perf_node_t *child_perf_node,
-                         const char *title, const char *desc_fmt, ...)
+                         ucp_proto_perf_node_t *perf_node,
+                         ucp_proto_perf_node_t *child_perf_node)
 {
     ucp_proto_perf_segment_t *seg, *new_seg;
-    ucp_proto_perf_node_t *perf_node;
     ucs_status_t status;
     size_t seg_end;
-    va_list ap;
 
     ucp_proto_perf_check(perf);
-
-    va_start(ap, desc_fmt);
-    perf_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_DATA, 0, title,
-                                        desc_fmt, ap);
-    va_end(ap);
-
     ucp_proto_perf_node_update_factors(perf_node, perf_factors);
     ucp_proto_perf_node_add_child(perf_node, child_perf_node);
 
@@ -430,6 +439,32 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
     return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
 }
 
+void ucp_proto_perf_apply_func(ucp_proto_perf_t *perf, ucs_linear_func_t func,
+                               const char *name, const char *desc_fmt, ...)
+{
+    ucp_proto_perf_segment_t *seg;
+    ucp_proto_perf_factor_id_t factor_id;
+    va_list ap;
+    ucp_proto_perf_node_t *func_node;
+
+    ucp_proto_perf_segment_foreach(seg, perf) {
+        for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
+             ++factor_id) {
+            ucp_proto_perf_segment_update_factor(
+                    seg, factor_id,
+                    ucs_linear_func_compose(func,
+                                            seg->perf_factors[factor_id]));
+        }
+
+        va_start(ap, desc_fmt);
+        func_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_DATA, 0,
+                                            name, desc_fmt, ap);
+        va_end(ap);
+
+        ucp_proto_perf_node_own_child(seg->node, &func_node);
+    }
+}
+
 /* TODO:
  * Reconsider correctness of PPLN perf estimation logic since in case of async
  * operations it seems wrong to choose the longest factor without paying
@@ -458,6 +493,7 @@ ucp_proto_perf_add_ppln(const ucp_proto_perf_t *perf,
     ucs_linear_func_t factor_func;
     ucs_status_t status;
     char frag_str[64];
+    ucp_proto_perf_node_t *perf_node;
 
     if (frag_size >= max_length) {
         return NULL;
@@ -483,10 +519,11 @@ ucp_proto_perf_add_ppln(const ucp_proto_perf_t *perf,
     factors[max_factor_id].m += factors[max_factor_id].c / frag_size;
 
     ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
-    status = ucp_proto_perf_add_funcs(ppln_perf, frag_size + 1, max_length,
-                                      factors,
-                                      ucp_proto_perf_segment_node(frag_seg),
-                                      "pipeline", "frag size: %s", frag_str);
+    perf_node = ucp_proto_perf_node_new_data("pipeline", "frag size: %s",
+                                             frag_str);
+    status    = ucp_proto_perf_add_funcs(ppln_perf, frag_size + 1, max_length,
+                                         factors, perf_node,
+                                         ucp_proto_perf_segment_node(frag_seg));
     if (status != UCS_OK) {
         return NULL;
     }
