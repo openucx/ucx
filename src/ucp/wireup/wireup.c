@@ -1370,6 +1370,14 @@ ucp_wireup_is_am_need_flush(ucp_ep_h ep, const ucp_lane_index_t *reuse_lane_map)
            !ucp_ep_is_lane_p2p(ep, am_lane);
 }
 
+static ucp_lane_index_t ucp_wireup_get_reconfig_lane(ucp_ep_h ep)
+{
+    /* EP reconfiguration can only occur after wireup
+     * request was sent and before reply was received
+     * (thus we use UCP_WIREUP_MSG_REQUEST) */
+    return ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
+}
+
 static int
 ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
                                    const ucp_ep_config_key_t *new_key,
@@ -1398,7 +1406,7 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
 
     ucp_ep_config_lanes_intersect(old_key, new_key, ep, remote_address,
                                   addr_indices, reuse_lane_map);
-    wireup_lane = ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
+    wireup_lane = ucp_wireup_get_reconfig_lane(ep);
 
     /* TODO: 2) Support reconfiguration for separated wireup and AM lanes
      *          during wireup process (request sent). */
@@ -1472,7 +1480,7 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     int is_p2p, is_wireup_ep;
     ucs_status_t status;
 
-    old_wireup_lane = ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
+    old_wireup_lane = ucp_wireup_get_reconfig_lane(ep);
     old_lane        = am_need_flush ? ucp_ep_get_am_lane(ep) : old_wireup_lane;
     old_wireup_ep   = ucp_ep_get_lane(ep, old_lane);
     old_ep_wrapper  = ucp_wireup_ep(old_wireup_ep);
@@ -1590,9 +1598,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
 
     am_need_flush = ucp_wireup_is_am_need_flush(ep, reuse_lane_map);
     wireup_lane   = am_need_flush ? ucp_ep_get_am_lane(ep) :
-                            /* EP reconfiguration can only occur after wireup
-                             * request was sent (thus UCP_WIREUP_MSG_REQUEST) */
-                            ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
+                                    ucp_wireup_get_reconfig_lane(ep);
 
     /* wireup lane has to be selected for the old configuration */
     ucs_assert(wireup_lane != UCP_NULL_LANE);
