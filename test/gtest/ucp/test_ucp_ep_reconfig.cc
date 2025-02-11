@@ -451,7 +451,7 @@ UCS_TEST_P(test_ucp_ep_reconfig, request_reset, "PROTO_REQUEST_RESET=y")
 UCS_TEST_P(test_ucp_ep_reconfig, resolve_remote_id)
 {
     if (has_transport("dc_x")) {
-        /* Avoid creating odd number of lanes due to AM lane separation */
+        /* RDMA_READ between CX7 and BF devices over DC fails due to HW bug */
         modify_config("MAX_RNDV_LANES", "0");
     }
 
