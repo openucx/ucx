@@ -117,3 +117,15 @@ services:
         CUDA_VERSION: 12.0.0
         NV_DRIVER_VERSION: 525
         ARCH: x86_64
+  ubuntu24.04-mofed5-cuda12:
+    image: ubuntu24.04-mofed24.10-cuda12.5:1
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 24.10-1.1.4.0
+        UBUNTU_VERSION: 24.04
+        CUDA_VERSION: 12.5.1
+        NV_DRIVER_VERSION: 555
+        ARCH: x86_64
