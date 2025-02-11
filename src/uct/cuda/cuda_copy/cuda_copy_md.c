@@ -627,7 +627,7 @@ uct_cuda_copy_md_get_address_range(const void *address, size_t length,
     } else {
         /* Use default values when cuMemGetAddressRange failed without pushing
          * non-NULL context */
-        *base_address_p = address;
+        *base_address_p = (void*)address;
         *alloc_length_p = length;
     }
 
