@@ -889,7 +889,7 @@ uct_ib_mlx5_devx_derived_mem_reg(uct_md_h uct_md, uct_ib_mlx5_devx_mem_t *base,
     memh->cross_mr          = NULL;
     memh->exported_umr_mkey = NULL;
     memh->smkey_mr          = NULL;
-    memh->dm_addr_dvmr      = NULL;
+    memh->dm_addr_dvmr      = base->dm_addr_dvmr;
 
     memh->dm                = base->dm;
 
