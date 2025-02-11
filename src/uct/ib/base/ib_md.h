@@ -73,6 +73,8 @@ enum {
 #endif
     UCT_IB_MEM_FLAG_GVA              = UCS_BIT(5), /**< The memory handle is a
                                                         GVA region */
+    UCT_IB_MEM_FLAG_DERIVED          = UCS_BIT(6), /**< The memory handle is a
+                                                        derived memh */
 };
 
 enum {
@@ -431,5 +433,14 @@ ucs_status_t uct_ib_fork_init(const uct_ib_md_config_t *md_config,
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
                                unsigned mem_flags, size_t memh_base_size,
                                size_t mr_size, uct_ib_mem_t **memh_p);
+
+static UCS_F_ALWAYS_INLINE size_t
+uct_ib_memh_alloc_size(uct_ib_md_t *md, size_t memh_base_size, size_t mr_size)
+{
+    int num_mrs = md->relaxed_order ?
+                          2 /* UCT_IB_MR_DEFAULT and UCT_IB_MR_STRICT_ORDER */ :
+                          1 /* UCT_IB_MR_DEFAULT */;
+    return memh_base_size + (mr_size * num_mrs);
+}
 
 #endif
