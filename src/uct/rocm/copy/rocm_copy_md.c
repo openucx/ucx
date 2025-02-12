@@ -240,7 +240,8 @@ static void uct_rocm_copy_md_close(uct_md_h uct_md) {
 static ucs_status_t
 uct_rocm_copy_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
                         ucs_memory_type_t mem_type, unsigned flags,
-                        const char *alloc_name, uct_mem_h *memh_p)
+                        const char *alloc_name, ucs_sys_device_t sys_dev,
+                        uct_mem_h *memh_p)
 {
     ucs_status_t status;
     hsa_status_t hsa_status;
