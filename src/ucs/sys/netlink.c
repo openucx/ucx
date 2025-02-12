@@ -36,6 +36,7 @@ typedef struct {
     struct sockaddr_storage destination;
     uint32_t                subnet_mask;
     int                     if_index;
+    int                     counter;
 } route_entry_t;
 
 /**
@@ -111,7 +112,7 @@ ucs_netlink_analyze_route_info(void *arg)
     int rule_index                 = 0;
 
     while ((rule_index < MAX_RULES_PER_IFACE) &&
-           (iface_rules[rule_index].if_index > 0)) {
+           (rule_index < iface_rules[0].counter)) {
         if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
                                  ucs_sockaddr_get_inet_addr((const struct sockaddr *)&iface_rules[rule_index].destination),
                                  iface_rules[rule_index].subnet_mask)) {
@@ -222,19 +223,6 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
     return UCS_OK;
 }
 
-static int get_next_empty_rule(route_entry_t *rule_list)
-{
-    int i;
-
-    for (i = 0; i < MAX_RULES_PER_IFACE; i++) {
-        if (rule_list[i].if_index == 0) {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
 static ucs_status_t
 ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
                               void *arg)
@@ -250,11 +238,12 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
         return UCS_INPROGRESS;
     }
 
-    rule_index = get_next_empty_rule(routing_table[rule_iface]);
-    curr_rule  = &(routing_table[rule_iface][rule_index]);
-    if (rule_index < 0) {
+    rule_index = routing_table[rule_iface][0].counter++;
+    if (rule_index >= MAX_RULES_PER_IFACE) {
         return UCS_INPROGRESS;
     }
+
+    curr_rule  = &(routing_table[rule_iface][rule_index]);
 
     ((struct sockaddr_in *)&curr_rule->destination)->sin_family = AF_INET;
     curr_rule->destination.ss_family = ((const struct rtmsg *)nl_msg)->rtm_family;
