@@ -63,6 +63,10 @@ public:
             ASSERT_UCS_OK(uct_ib_mlx5_devx_reg_exported_key(md(), memh));
             /* XGVMI capability might be dropped by this point! */
             destroy_memh(memh);
+
+            if (!(md()->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI)) {
+                UCS_TEST_ABORT("XGVMI capability is not supported");
+            }
         }
 
         return md()->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;

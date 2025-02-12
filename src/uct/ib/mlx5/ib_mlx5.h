@@ -320,7 +320,6 @@ typedef struct {
     void                        *address;
     struct mlx5dv_devx_obj      *atomic_dvmr;
     struct mlx5dv_devx_obj      *indirect_dvmr;
-    struct mlx5dv_devx_umem     *umem;
     struct mlx5dv_devx_obj      *cross_mr;
     uct_ib_mlx5_devx_umr_mkey_t *exported_umr_mkey;
     struct mlx5dv_devx_obj      *smkey_mr;
