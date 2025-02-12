@@ -306,7 +306,8 @@ static int client_create_eps(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count,
     ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
     ep_params.err_handler.cb   = err_cb;
     ep_params.err_handler.arg  = NULL;
-    ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
+    ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER |
+                                 UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID;
     ep_params.sockaddr.addr    = (struct sockaddr*)&connect_addr;
     ep_params.sockaddr.addrlen = sizeof(connect_addr);
 
@@ -814,7 +815,7 @@ static int client_server_communication(ucp_worker_h worker, ucp_ep_h ep,
 /**
  * Create a ucp worker on the given ucp context.
  */
-static int init_worker(ucp_context_h ucp_context, int client_id,
+static int init_worker(ucp_context_h ucp_context, uint64_t client_id,
                        ucp_worker_h *ucp_worker)
 {
     ucp_worker_params_t worker_params;
@@ -1156,13 +1157,12 @@ out:
 /**
  * Initialize the UCP context and worker.
  */
-static int init_context(dev_ucp_ctx_t *dev_ucp_ctx,
+static int init_context(dev_ucp_ctx_t *dev_ucp_ctx, uint64_t client_id,
                         send_recv_type_t send_recv_type, int dev_id)
 {
     /* UCP objects */
     ucp_params_t ucp_params;
     ucs_status_t status;
-    uint64_t client_id;
     int ret = 0;
 
     memset(&ucp_params, 0, sizeof(ucp_params));
@@ -1191,13 +1191,8 @@ static int init_context(dev_ucp_ctx_t *dev_ucp_ctx,
         goto err;
     }
 
-    /* Use the same client_id for all the workers. This is needed because with
-     * multiple GPUs, the server will receive multiple connection requests per
-     * client. Thus, we need a way to distinguish the requests that belong to
-     * different clients on the server side. */
-    client_id = ucs_get_system_id();
-    ret       = init_worker(dev_ucp_ctx->ucp_context, client_id,
-                            &dev_ucp_ctx->ucp_worker);
+    ret = init_worker(dev_ucp_ctx->ucp_context, client_id,
+                      &dev_ucp_ctx->ucp_worker);
     if (ret != 0) {
         goto err_cleanup;
     }
@@ -1227,6 +1222,7 @@ int main(int argc, char **argv)
     parse_cmd_status_t parse_cmd_status;
     int ret;
     int dev_id, dev_count;
+    uint64_t client_id;
     ucs_status_t status;
 
     /* GPU-specific UCP context */
@@ -1245,9 +1241,16 @@ int main(int argc, char **argv)
     CUDA_FUNC(cudaGetDeviceCount(&dev_count));
     printf("detected %d GPU devices\n", dev_count);
 
+    /* Use the same client_id for all the workers. This is needed because with
+     * multiple GPUs, the server will receive multiple connection requests per
+     * client. Thus, we need a way to distinguish the requests that belong to
+     * different clients on the server side. */
+    client_id = ucs_get_system_id();
+
     for (dev_id = 0; dev_id < dev_count; dev_id++) {
         /* Initialize the UCX required objects per GPU */
-        ret = init_context(&dev_ucp_contexts[dev_id], send_recv_type, dev_id);
+        ret = init_context(&dev_ucp_contexts[dev_id], client_id,
+                           send_recv_type, dev_id);
         if (ret != 0) {
             goto err;
         }
