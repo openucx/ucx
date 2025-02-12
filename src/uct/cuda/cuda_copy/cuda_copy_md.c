@@ -588,7 +588,7 @@ uct_cuda_copy_md_get_address_range(const void *address, size_t length,
                                    CUcontext ctx, void **base_address_p,
                                    size_t *alloc_length_p)
 {
-    ucs_log_level_t log_level = (ctx != NULL) ? UCS_LOG_LEVEL_DEBUG :
+    ucs_log_level_t log_level = (ctx == NULL) ? UCS_LOG_LEVEL_DEBUG :
                                                 UCS_LOG_LEVEL_ERROR;
     ucs_status_t status;
     CUdeviceptr base;
@@ -598,8 +598,7 @@ uct_cuda_copy_md_get_address_range(const void *address, size_t length,
 
     if (ctx != NULL) {
         /* GetAddressRange requires context to be set. On DGXA100 it takes
-         * 0.03us to push and pop the context associated with address (which
-         * should be non-NULL if we are at this point). */
+         * 0.03us to push and pop the context associated with address. */
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
         if (status != UCS_OK) {
             return status;
@@ -611,14 +610,14 @@ uct_cuda_copy_md_get_address_range(const void *address, size_t length,
                               log_level);
     if (ctx != NULL) {
         status_ctx_pop = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(&popped_ctx));
+        if (status != UCS_OK) {
+            /* cuMemGetAddressRange failed after pushing non-NULL context */
+            return UCS_ERR_INVALID_ADDR;
+        }
+
         if (status_ctx_pop != UCS_OK) {
             return status_ctx_pop;
         }
-    }
-
-    if ((status != UCS_OK) && (ctx != NULL)) {
-        /* cuMemGetAddressRange failed after pushing non-NULL context */
-        return UCS_ERR_INVALID_ADDR;
     }
 
     if (status == UCS_OK) {
