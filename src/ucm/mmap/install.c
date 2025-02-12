@@ -95,14 +95,13 @@ static ucm_mmap_func_t ucm_mmap_funcs[] = {
 static pthread_mutex_t ucm_mmap_install_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int ucm_mmap_installed_events = 0; /* events that were reported as installed */
 
-const char *ucm_mmap_hook_modes[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucm_mmap_hook_modes, {
     [UCM_MMAP_HOOK_NONE]   = "none",
     [UCM_MMAP_HOOK_RELOC]  = UCM_MMAP_HOOK_RELOC_STR,
 #if UCM_BISTRO_HOOKS
-    [UCM_MMAP_HOOK_BISTRO] = UCM_MMAP_HOOK_BISTRO_STR,
+    [UCM_MMAP_HOOK_BISTRO] = UCM_MMAP_HOOK_BISTRO_STR
 #endif
-    [UCM_MMAP_HOOK_LAST]   = NULL
-};
+});
 
 static const char *ucm_mmap_event_name[] = {
     /* Native events */
