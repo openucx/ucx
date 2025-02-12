@@ -289,4 +289,37 @@ ucp_ep_config_err_mode_eq(ucp_ep_h ep, ucp_err_handling_mode_t err_mode)
     return ucp_ep_config(ep)->key.err_mode == err_mode;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_mark_unflushed_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
+{
+    ep->ext->flush_state.unflushed_lanes |= UCS_BIT(lane_index);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_mark_flushed(ucp_ep_h ep)
+{
+    ep->ext->flush_state.unflushed_lanes = 0;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_is_strong_fence(ucp_ep_h ep)
+{
+    /* Strong fence is required if there is more than one unflushed lane */
+    return ep->ext->flush_state.unflushed_lanes &
+        (ep->ext->flush_state.unflushed_lanes - 1);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_is_fence_required(ucp_ep_h ep)
+{
+    return (ep->ext->flush_state.fence_seq < ep->worker->fence_seq) &&
+        (ep->worker->context->config.ext.fence_mode == UCP_FENCE_MODE_EP_BASED);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_update_fence_seq(ucp_ep_h ep)
+{
+    ep->ext->flush_state.fence_seq = ep->worker->fence_seq;
+}
+
 #endif
