@@ -22,8 +22,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define MAX_NETWORK_IFACES  32
-#define MAX_RULES_PER_IFACE 10
+#define MAX_NETWORK_IFACES  64
+#define MAX_RULES_PER_IFACE 16
 
 typedef struct {
     const struct sockaddr *sa_remote;
