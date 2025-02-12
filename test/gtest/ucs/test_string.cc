@@ -311,6 +311,20 @@ UCS_TEST_F(test_string_buffer, flags) {
     EXPECT_EQ(std::string("one|three"), ucs_string_buffer_cstr(&strb));
 }
 
+UCS_TEST_F(test_string_buffer, array) {
+    static const char *str_array[] = {"once", "upon", "a", "time"};
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_append_array(&strb, " ", "%s", str_array,
+                                   ucs_static_array_size(str_array));
+    EXPECT_EQ(std::string("once upon a time"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_reset(&strb);
+    static int num_array[] = {1, 2, 3, 4};
+    ucs_string_buffer_append_array(&strb, ",", "%d", num_array,
+                                   ucs_static_array_size(num_array));
+    EXPECT_EQ(std::string("1,2,3,4"), ucs_string_buffer_cstr(&strb));
+}
+
 UCS_TEST_F(test_string_buffer, dump) {
     UCS_STRING_BUFFER_ONSTACK(strb, 128);
     ucs_string_buffer_appendf(&strb, "hungry\n");
