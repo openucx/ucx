@@ -628,7 +628,7 @@ void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep)
 
 ucp_wireup_ep_t *ucp_wireup_ep(uct_ep_h uct_ep)
 {
-    return ucp_wireup_ep_test(uct_ep) ?
+    return ((uct_ep != NULL) && ucp_wireup_ep_test(uct_ep)) ?
            ucs_derived_of(uct_ep, ucp_wireup_ep_t) : NULL;
 }
 
@@ -661,7 +661,7 @@ void ucp_wireup_eps_pending_extract(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
     }
 
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(ucp_ep); ++lane_idx) {
-        uct_ep = ucp_ep_get_lane(ucp_ep, lane_idx);
+        uct_ep = ucp_ep_get_lane_raw(ucp_ep, lane_idx);
         /* When creating EP with remote worker address
          * EP is using transport lanes only, with no CM lane. */
         if ((uct_ep == NULL) || (ucp_wireup_ep(uct_ep) == NULL)) {

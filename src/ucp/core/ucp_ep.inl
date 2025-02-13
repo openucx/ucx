@@ -30,7 +30,7 @@ static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_fast_lane(ucp_ep_h ep,
 }
 
 static UCS_F_ALWAYS_INLINE uct_ep_h
-ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
+ucp_ep_get_lane_raw(ucp_ep_h ep, ucp_lane_index_t lane_index)
 {
     ucs_assertv(lane_index < UCP_MAX_LANES, "lane=%d", lane_index);
 
@@ -39,6 +39,26 @@ ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
     } else {
         return ep->ext->uct_eps[lane_index - UCP_MAX_FAST_PATH_LANES];
     }
+}
+
+static UCS_F_ALWAYS_INLINE uct_ep_h
+ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
+{
+    uct_ep_h lane;
+
+    /* fast-path lane must be initialized */
+    if (ucs_likely(lane_index < UCP_MAX_FAST_PATH_LANES)) {
+        lane = ep->uct_eps[lane_index];
+        ucs_assert(lane != NULL);
+        return lane;
+    }
+
+    lane = ucp_ep_get_lane_raw(ep, lane_index);
+    if (ucs_likely(lane != NULL)) {
+        return lane;
+    }
+
+    return ucp_wireup_init_slow_lane(ep, UCP_MAX_FAST_PATH_LANES - lane_index);
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,
