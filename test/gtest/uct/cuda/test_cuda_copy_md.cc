@@ -20,7 +20,7 @@ uct_allocated_memory_t test_cuda_copy_md_multi_gpu::mem_alloc(size_t size) const
 
     uct_mem_alloc_params_t params;
     params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
-                        UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                        UCT_MEM_ALLOC_PARAM_FIELD_MDS |
                         UCT_MEM_ALLOC_PARAM_FIELD_NAME;
     params.mem_type   = UCS_MEMORY_TYPE_CUDA;
     params.mds.mds    = &md;
@@ -50,7 +50,7 @@ UCS_TEST_P(test_cuda_copy_md_multi_gpu, mem_query) {
     EXPECT_EQ(cudaSetDevice(device), cudaSuccess);
 
     uct_md_mem_attr_t mem_attr = {};
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+    mem_attr.field_mask        = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
     EXPECT_EQ(uct_md_mem_query(m_md.get(), mem.address, size, &mem_attr),
               UCS_OK);
     EXPECT_EQ(mem_attr.mem_type, UCS_MEMORY_TYPE_CUDA);
