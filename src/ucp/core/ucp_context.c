@@ -359,6 +359,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, rndv_frag_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
+  {"MEMTYPE_AVOID_COPY", "n",
+   "Avoid memory type copies when activated.\n",
+   ucs_offsetof(ucp_context_config_t, avoid_copy_mem_types), UCS_CONFIG_TYPE_BOOL},
+
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type",
    ucs_offsetof(ucp_context_config_t, rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
@@ -1158,6 +1162,13 @@ static void ucp_add_tl_resource_if_enabled(
 
     if (ucp_is_resource_enabled(resource, config, aux_tls, &rsc_flags,
                                 dev_cfg_masks, tl_cfg_mask)) {
+        if (context->config.ext.avoid_copy_mem_types) {
+            if (!strcmp(resource->tl_name, "cuda_ipc")) {
+                ucs_debug("disabled cuda_ipc for memtype copy avoidance");
+                return;
+            }
+        }
+
         if ((resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
             (resource->sys_device >= UCP_MAX_SYS_DEVICES)) {
             ucs_diag(UCT_TL_RESOURCE_DESC_FMT

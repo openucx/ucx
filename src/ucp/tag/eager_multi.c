@@ -35,7 +35,8 @@ ucp_proto_eager_multi_probe_common(ucp_proto_multi_init_params_t *params,
 {
     ucp_context_config_t *context_config;
 
-    if (!ucp_tag_eager_check_op_id(&params->super.super, op_id, 0)) {
+    if (!ucp_tag_eager_check_op_id(&params->super.super, op_id, 0) ||
+        params->super.super.worker->context->config.ext.avoid_copy_mem_types) {
         return;
     }
 
