@@ -60,7 +60,6 @@ typedef struct {
     ucp_wireup_criteria_t criteria;
     uint64_t              local_dev_bitmap;
     uint64_t              remote_dev_bitmap;
-    ucp_md_map_t          md_map;
     unsigned              max_lanes;
 } ucp_wireup_select_bw_info_t;
 
@@ -1713,7 +1712,6 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     bw_info.local_dev_bitmap  = UINT64_MAX;
     bw_info.remote_dev_bitmap = UINT64_MAX;
-    bw_info.md_map            = 0;
     bw_info.max_lanes         = context->config.ext.max_eager_lanes - 1;
     /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
     if (context->config.ext.proto_enable) {
@@ -1858,7 +1856,6 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     bw_info.local_dev_bitmap  = UINT64_MAX;
     bw_info.remote_dev_bitmap = UINT64_MAX;
-    bw_info.md_map            = 0;
 
     /* check rkey_ptr */
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
