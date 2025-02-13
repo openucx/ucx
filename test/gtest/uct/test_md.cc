@@ -981,7 +981,8 @@ UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
     ASSERT_UCS_OK(status);
 }
 
-UCS_TEST_P(test_md, rkey_compare_params_check)
+UCS_TEST_SKIP_COND_P(test_md, rkey_compare_params_check,
+                     !check_caps(UCT_MD_FLAG_NEED_RKEY))
 {
     uct_rkey_compare_params_t params = {};
     ucs_status_t status;

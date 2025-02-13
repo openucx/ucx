@@ -35,7 +35,7 @@
 
 
 /* Maximal length of protocol description string */
-#define UCP_PROTO_DESC_STR_MAX      64
+#define UCP_PROTO_DESC_STR_MAX      128
 
 
 /* Maximal length of protocol configuration string */
