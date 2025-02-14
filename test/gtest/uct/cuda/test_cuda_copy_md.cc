@@ -44,8 +44,8 @@ UCS_TEST_P(test_cuda_copy_md_multi_gpu, mem_query) {
     ASSERT_EQ(cudaGetDevice(&device), cudaSuccess);
     ASSERT_EQ(cudaSetDevice((device + 1) % num_devices), cudaSuccess);
 
-    const int size = 16;
-    auto mem       = mem_alloc(size);
+    const size_t size = 16;
+    auto mem          = mem_alloc(size);
 
     EXPECT_EQ(cudaSetDevice(device), cudaSuccess);
 
