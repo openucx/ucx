@@ -232,12 +232,16 @@ ucp_worker_common_address_pack_flags(ucp_worker_h worker)
 static UCS_F_ALWAYS_INLINE unsigned
 ucp_worker_default_address_pack_flags(ucp_worker_h worker)
 {
-    return ucp_worker_common_address_pack_flags(worker) |
+    unsigned ep_addr_flag = worker->context->config.ext.on_demand_wireup
+                            ? UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST
+                            : UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL;
+
+    return ucp_worker_common_address_pack_flags(worker) | ep_addr_flag |
            UCP_ADDRESS_PACK_FLAG_WORKER_UUID |
            UCP_ADDRESS_PACK_FLAG_WORKER_NAME |
            UCP_ADDRESS_PACK_FLAG_RELEASE_VER_V1 |
            UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
-           UCP_ADDRESS_PACK_FLAG_IFACE_ADDR | UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+           UCP_ADDRESS_PACK_FLAG_IFACE_ADDR;
 }
 
 static UCS_F_ALWAYS_INLINE int
