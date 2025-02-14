@@ -1215,10 +1215,8 @@ uct_ib_mlx5_devx_umr_mkey_create(uct_ib_mlx5_md_t *md)
     umr_mkey->mkey->lkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
     umr_mkey->mkey->rkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
 
-    status = uct_ib_mlx5_devx_allow_xgvmi_access(md, umr_mkey->mkey->lkey, 1);
+    status = uct_ib_mlx5_devx_allow_xgvmi_access(md, umr_mkey->mkey->lkey, 0);
     if (status != UCS_OK) {
-        /* Reset XGVMI capability flag */
-        md->flags &= ~UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
         uct_ib_mlx5_devx_umr_mkey_destroy(md, umr_mkey);
         return NULL;
     }
@@ -1874,7 +1872,7 @@ ucs_status_t uct_ib_mlx5_devx_query_cap_2(struct ibv_context *ctx,
                                         "QUERY_HCA_CAP, CAP2", 1);
 }
 
-int uct_ib_mlx5_devx_check_xgvmi(void *cap_2, const char *dev_name)
+int uct_ib_mlx5_devx_check_xgvmi(void *cap_2)
 {
     uint64_t object_for_other_vhca;
     uint32_t object_to_object;
@@ -1888,12 +1886,11 @@ int uct_ib_mlx5_devx_check_xgvmi(void *cap_2, const char *dev_name)
          UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY) &&
         (object_for_other_vhca &
          UCT_IB_MLX5_HCA_CAPS_2_ALLOWED_OBJ_FOR_OTHER_VHCA_ACCESS_MKEY)) {
-        ucs_debug("%s: cross gvmi alias mkey is supported", dev_name);
+
         return 1;
-    } else {
-        ucs_debug("%s: crossing_vhca_mkey is not supported", dev_name);
-        return 0;
     }
+
+    return 0;
 }
 
 static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
@@ -2348,11 +2345,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     status = uct_ib_mlx5_devx_query_cap_2(ctx, cap_2_out, out_len);
     if (status == UCS_OK) {
         cap_2 = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, cap_2_out, capability);
-        if (uct_ib_mlx5_devx_check_xgvmi(cap_2, uct_ib_device_name(dev))) {
-            md->flags           |= UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
-            md->super.cap_flags |= UCT_MD_FLAG_EXPORTED_MKEY;
-        }
-
         uct_ib_mlx5_devx_check_mkey_by_name(md, cap_2, dev);
     } else {
         cap_2 = NULL;
@@ -2443,11 +2435,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     md->super.vhca_id    = vhca_id;
     md->super.uuid       = ucs_generate_uuid((uintptr_t)md);
 
-    if ((md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI) &&
-        (md_config->xgvmi_umr_enable == UCS_YES)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_XGVMI_UMR;
-    }
-
     /* Zero init UMR related fields, will lazy init on first use */
     md->umr.cq        = NULL;
     md->umr.qp        = NULL;
@@ -2472,6 +2459,27 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     uct_ib_md_parse_relaxed_order(&md->super, md_config, ksm_atomic);
 
     uct_ib_mlx5_devx_init_flush_mr(md);
+
+    /*
+     * Device capabilities do not allow to reliably check whether XGVMI for
+     * indirect mkeys is actually supported. Therefore we do this check by
+     * allowing XGVMI on indirect KSM flush_rkey
+     */
+    if ((cap_2 != NULL) && (md->flush_mr != NULL) &&
+        (md->super.flush_rkey != UCT_IB_MD_INVALID_FLUSH_RKEY) &&
+        uct_ib_mlx5_devx_check_xgvmi(cap_2)) {
+        status = uct_ib_mlx5_devx_allow_xgvmi_access(md, md->super.flush_rkey, 1);
+        if (status == UCS_OK) {
+            md->super.cap_flags |= UCT_MD_FLAG_EXPORTED_MKEY;
+
+            if (md_config->xgvmi_umr_enable == UCS_YES) {
+                md->flags |= UCT_IB_MLX5_MD_FLAG_XGVMI_UMR;
+            }
+        }
+    }
+
+    ucs_debug("%s: XGVMI is %ssupported", uct_ib_device_name(dev),
+              (md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY) ? "" : "not ");
 
     *p_md = &md->super;
     ucs_free(buf);
@@ -2681,10 +2689,8 @@ uct_ib_mlx5_devx_reg_xgvmi_ksm_mr(uct_ib_mlx5_md_t *md,
         return status;
     }
 
-    status = uct_ib_mlx5_devx_allow_xgvmi_access(md, exported_lkey, 1);
+    status = uct_ib_mlx5_devx_allow_xgvmi_access(md, exported_lkey, 0);
     if (status != UCS_OK) {
-        /* Reset XGVMI capability flag */
-        md->flags &= ~UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
         mlx5dv_devx_obj_destroy(cross_mr);
         return status;
     }
@@ -2716,7 +2722,8 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     size_t length = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->length;
     ucs_status_t status;
 
-    if (uct_ib_mlx5_devx_has_dm(memh)) {
+    if (uct_ib_mlx5_devx_has_dm(memh) ||
+        !(md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -2725,30 +2732,19 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
                 memh, memh->exported_umr_mkey, memh->cross_mr,
                 memh->exported_lkey);
 
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI) {
-        /* UMR bind impl (IBV_WR_BIND_MW) attaches a single KLM segment, so:
-        * - IBV_WR_BIND_MW supports the maximum region length of 2GB
-        * - IBV_WR_BIND_MW does not support multi-segment (multi-threaded) MRs
-        * For these use cases we fallback to KSM */
-        if (!(md->flags & UCT_IB_MLX5_MD_FLAG_XGVMI_UMR) ||
-            (length > UCT_IB_MD_MAX_MR_SIZE) ||
-            (memh->super.flags & UCT_IB_MEM_MULTITHREADED)) {
-            status = uct_ib_mlx5_devx_reg_xgvmi_ksm_mr(md, memh);
-        } else {
-            status = uct_ib_mlx5_devx_reg_xgvmi_umr_mr(md, memh);
-        }
-
-        /* If KSM or UMR implementation fail to enable XGVMI, this capability
-         * flag is removed by impl */
-        if (md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI) {
-            /* No XGVMI error, return impl status as is */
-            return status;
-        }
-
-        ucs_debug("%s: indirect xgvmi not supported", uct_ib_mlx5_dev_name(md));
+    /* UMR bind impl (IBV_WR_BIND_MW) attaches a single KLM segment, so:
+    * - IBV_WR_BIND_MW supports the maximum region length of 2GB
+    * - IBV_WR_BIND_MW does not support multi-segment (multi-threaded) MRs
+    * For these use cases we fallback to KSM */
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_XGVMI_UMR) ||
+        (length > UCT_IB_MD_MAX_MR_SIZE) ||
+        (memh->super.flags & UCT_IB_MEM_MULTITHREADED)) {
+        status = uct_ib_mlx5_devx_reg_xgvmi_ksm_mr(md, memh);
+    } else {
+        status = uct_ib_mlx5_devx_reg_xgvmi_umr_mr(md, memh);
     }
 
-    return UCS_ERR_UNSUPPORTED;
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE int
