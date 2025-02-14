@@ -48,9 +48,9 @@ ucp_am_eager_multi_bcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if (!ucp_am_check_init_params(init_params, UCP_PROTO_AM_OP_ID_MASK,
-                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
-        context->config.ext.avoid_copy_mem_types) {
+    if (!ucp_am_check_init_params_avoid_copy(init_params,
+                                         UCP_PROTO_AM_OP_ID_MASK,
+                                         UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return;
     }
 
@@ -221,9 +221,9 @@ ucp_am_eager_multi_zcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
-    if (!ucp_am_check_init_params(init_params, UCP_PROTO_AM_OP_ID_MASK,
-                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
-        context->config.ext.avoid_copy_mem_types) {
+    if (!ucp_am_check_init_params_avoid_copy(init_params,
+                                         UCP_PROTO_AM_OP_ID_MASK,
+                                         UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return;
     }
 

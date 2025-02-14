@@ -16,7 +16,8 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
     ucp_context_h context = params->super.super.worker->context;
 
     if (!ucp_proto_rndv_op_check(&params->super.super, UCP_OP_ID_RNDV_SEND,
-                                 0)) {
+                                 0) ||
+        context->config.ext.avoid_copy_mem_types) {
         return;
     }
 
@@ -119,10 +120,6 @@ static void ucp_rndv_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
-
-    if (init_params->worker->context->config.ext.avoid_copy_mem_types) {
-        return;
-    }
 
     ucp_rndv_am_probe_common(&params);
 }
