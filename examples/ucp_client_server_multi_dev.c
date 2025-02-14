@@ -219,7 +219,7 @@ static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
  * Set an address for the server to listen on - INADDR_ANY on a well known port.
  */
 void set_sock_addr(const char *address_str, struct sockaddr_storage *saddr,
-                   int dev_id)
+                   int port)
 {
     struct sockaddr_in *sa_in;
     struct sockaddr_in6 *sa_in6;
@@ -236,7 +236,7 @@ void set_sock_addr(const char *address_str, struct sockaddr_storage *saddr,
             sa_in->sin_addr.s_addr = INADDR_ANY;
         }
         sa_in->sin_family = AF_INET;
-        sa_in->sin_port   = htons(server_port + dev_id);
+        sa_in->sin_port   = htons(port);
         break;
     case AF_INET6:
         sa_in6 = (struct sockaddr_in6*)saddr;
@@ -246,7 +246,7 @@ void set_sock_addr(const char *address_str, struct sockaddr_storage *saddr,
             sa_in6->sin6_addr = in6addr_any;
         }
         sa_in6->sin6_family = AF_INET6;
-        sa_in6->sin6_port   = htons(server_port + dev_id);
+        sa_in6->sin6_port   = htons(port);
         break;
     default:
         fprintf(stderr, "Invalid address family");
@@ -270,19 +270,18 @@ static void close_eps(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count)
 }
 
 /**
- * Create an endpoint from each client GPU-specific
- * worker to each remote server GPU-specific worker (to the given IP).
+ * Initialize the client side. Create an endpoint from the client side to be
+ * connected to the remote server (to the given IP and port).
  */
-static int client_create_eps(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count,
-                             const char *address_str)
+static ucs_status_t start_client(ucp_worker_h ucp_worker,
+                                 const char *address_str, int s_port,
+                                 ucp_ep_h *client_ep)
 {
-    /* Client must send one separate connection request to the server for each
-     * clientGPU-ServerGPU pair of workers. The requests must be sent in the
-     * order of the client GPU ids so the server knows which clinet GPU the incoming
-     * connection request is for (see server_create_eps). */
     ucp_ep_params_t ep_params;
     struct sockaddr_storage connect_addr;
     ucs_status_t status;
+
+    set_sock_addr(address_str, &connect_addr, s_port);
 
     /*
      * Endpoint field mask bits:
@@ -307,30 +306,16 @@ static int client_create_eps(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count,
     ep_params.err_handler.arg  = NULL;
     ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER |
                                  UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID;
+    ep_params.sockaddr.addr    = (struct sockaddr*)&connect_addr;
+    ep_params.sockaddr.addrlen = sizeof(connect_addr);
 
-    for (int cdev = 0; cdev < dev_count; cdev++) {
-        for (int sdev = 0; sdev < dev_count; sdev++) {
-            // Set address with the correct port for each server device
-            set_sock_addr(address_str, &connect_addr, sdev);
-            ep_params.sockaddr.addr    = (struct sockaddr*)&connect_addr;
-            ep_params.sockaddr.addrlen = sizeof(connect_addr);
-            status = ucp_ep_create(dev_ucp_contexts[cdev].ucp_worker, &ep_params,
-                                   &dev_ucp_contexts[cdev].ucp_eps[sdev]);
-            if (status != UCS_OK) {
-                fprintf(stderr, "failed to connect to %s port %d (%s)\n",
-                        address_str, server_port + sdev,
-                        ucs_status_string(status));
-                close_eps(dev_ucp_contexts, dev_count);
-                return -1;
-            }
-
-            printf("Client created ep for sdev %d cdev %d\n", sdev, cdev);
-
-            dev_ucp_contexts[cdev].ep_count++;
-        }
+    status = ucp_ep_create(ucp_worker, &ep_params, client_ep);
+    if (status != UCS_OK) {
+        fprintf(stderr, "failed to connect to %s (%s)\n", address_str,
+                ucs_status_string(status));
     }
 
-    return 0;
+    return status;
 }
 
 static void print_iov(const ucp_dt_iov_t *iov)
@@ -357,16 +342,16 @@ void print_result(int is_server, const ucp_dt_iov_t *iov, int current_iter,
         printf("Server: iteration #%d, sdev %d, cdev %d\n",
                (current_iter + 1), sdev, cdev);
         printf("UCX data message was received\n");
-        printf("\n\n----- UCP TEST SUCCESS -------\n\n");
+        printf("\n----- UCP TEST SUCCESS -------\n\n");
     } else {
         printf("Client: iteration #%d, sdev %d, cdev %d\n",
                (current_iter + 1), sdev, cdev);
-        printf("\n\n------------------------------\n\n");
+        printf("\n------------------------------\n\n");
     }
 
     print_iov(iov);
 
-    printf("\n\n------------------------------\n\n");
+    printf("\n------------------------------\n\n");
 }
 
 /**
@@ -906,65 +891,12 @@ static ucs_status_t server_create_ep(ucp_worker_h ucp_worker,
     return status;
 }
 
-static ucs_status_t server_create_eps(dev_ucp_ctx_t *dev_ucp_contexts,
-                                      ucx_server_ctx_t *server_contexts,
-                                      int dev_count)
-{
-    /* Creating server-side eps. The eps are created upon receiving connection
-     * requests initiated by the client. The client must initiate one request
-     * from each of its own GPU-specific workers to each of the server's
-     * GPU-specific workers. As a result, we'll end up creating one ep for each
-     * serverGPU-clientGPU pair. The handles are stored in the ucp_eps array of
-     * each GPU-specific context.
-     * For each connection request, we need to know:
-     *  1. the client-side UCP worker GPU id associated with the request,
-     *  2. the server-side UCP worker GPU id that the request wants to target
-     * For 1, we rely on the fact that the client sends its requests in the
-     * order of its GPU ids. For 2, we already know it because we have a
-     * separate listener per server GPU. Note that we assume the client and
-     * server use the same number of GPUs. Otherwise, they need to exchange an
-     * initial message to let each other know about the number of GPUs they use.
-     */
-    ucs_status_t status;
-    for (int cdev = 0; cdev < dev_count; cdev++) { /* server GPUs */
-        for (int sdev = 0; sdev < dev_count; sdev++) { /* client GPUs */
-            /* Wait for the server to receive a connection request
-             * from the client. If there are multiple clients for
-             * which the server's connection request callback is invoked,
-             * i.e. several clients are trying to connect in parallel, the
-             * server will handle only the first one and reject the rest. */
-            while (server_contexts[sdev].conn_request == NULL) {
-                ucp_worker_progress(dev_ucp_contexts[sdev].ucp_worker);
-            }
-
-            status = server_create_ep(dev_ucp_contexts[sdev].ucp_worker,
-                                      server_contexts[sdev].conn_request,
-                                      &dev_ucp_contexts[sdev].ucp_eps[cdev]);
-            if (status != UCS_OK) {
-                close_eps(dev_ucp_contexts, dev_count);
-                return -1;
-            }
-
-            printf("Server created ep for sdev %d cdev %d\n", sdev, cdev);
-
-            dev_ucp_contexts[sdev].ep_count++;
-
-            /* Now we are ready to accept the next request, but only
-             * for the rest of the GPUs from the same client. So, do not
-             * reset client_id. */
-            server_contexts[sdev].conn_request = NULL;
-        }
-    }
-
-    return 0;
-}
-
 /**
  * Initialize the server side. The server starts listening on the set address.
  */
 static ucs_status_t
 start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
-             const char *address_str, int dev_id)
+             const char *address_str, int port)
 {
     struct sockaddr_storage listen_addr;
     ucp_listener_params_t params;
@@ -973,7 +905,7 @@ start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     char ip_str[IP_STRING_LEN];
     char port_str[PORT_STRING_LEN];
 
-    set_sock_addr(address_str, &listen_addr, dev_id);
+    set_sock_addr(address_str, &listen_addr, port);
 
     params.field_mask       = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
                               UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
@@ -986,7 +918,7 @@ start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     status = ucp_listener_create(ucp_worker, &params, &context->listener);
     if (status != UCS_OK) {
         fprintf(stderr, "failed to listen for device %d (%s)\n",
-                dev_id, ucs_status_string(status));
+                context->dev_id, ucs_status_string(status));
         goto out;
     }
 
@@ -995,7 +927,7 @@ start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     status = ucp_listener_query(context->listener, &attr);
     if (status != UCS_OK) {
         fprintf(stderr, "failed to query the listener for device %d (%s)\n",
-                dev_id, ucs_status_string(status));
+                context->dev_id, ucs_status_string(status));
         ucp_listener_destroy(context->listener);
         goto out;
     }
@@ -1003,9 +935,9 @@ start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     fprintf(stderr, "server is listening on IP %s port %s for device %d\n",
             sockaddr_get_ip_str(&attr.sockaddr, ip_str, IP_STRING_LEN),
             sockaddr_get_port_str(&attr.sockaddr, port_str, PORT_STRING_LEN),
-            dev_id);
+            context->dev_id);
 
-    printf("Waiting for connection for device %d...\n", dev_id);
+    printf("Waiting for connection for device %d...\n", context->dev_id);
 
 out:
     return status;
@@ -1025,57 +957,45 @@ ucs_status_t register_am_recv_callback(ucp_worker_h worker)
     return ucp_worker_set_am_recv_handler(worker, &param);
 }
 
-static int client_server_do_work(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count,
-                                 send_recv_type_t send_recv_type, int is_server)
+static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
+                                 send_recv_type_t send_recv_type, int is_server,
+                                 int sdev, int cdev)
 {
     int i, ret = 0;
-    ucp_worker_h ucp_worker;
-    ucp_ep_h     ucp_ep;
+    ucs_status_t status;
 
     connection_closed = 0;
 
-    for (int cdev = 0; cdev < dev_count; cdev++) {
-        for (int sdev = 0; sdev < dev_count; sdev++) {
-            int ldev   = is_server ? sdev : cdev;
-            int rdev   = is_server ? cdev : sdev;
-            ucp_worker = dev_ucp_contexts[ldev].ucp_worker;
-            ucp_ep     = dev_ucp_contexts[ldev].ucp_eps[rdev];
-            /* Push the right GPU context */
-            cudaSetDevice(ldev);
-            cudaFree(0);
-            for (i = 0; i < num_iterations; i++) {
-                ret = client_server_communication(ucp_worker, ucp_ep,
-                                                  send_recv_type, is_server, i,
-                                                  sdev, cdev);
-                if (ret != 0) {
-                    fprintf(stderr, "%s failed on iteration #%d ldev %d rdev %d\n",
-                            (is_server ? "server": "client"), i + 1, ldev, rdev);
-                    goto out;
-                }
-            }
-
-            /* FIN message in reverse direction to acknowledge delivery */
-            ret = client_server_communication(ucp_worker, ucp_ep,
-                                              send_recv_type, !is_server, i + 1,
-                                              sdev, cdev);
-            if (ret != 0) {
-                fprintf(stderr, "%s failed on FIN message ldev %d rdev %d\n",
-                        (is_server ? "server": "client"), ldev, rdev);
-                goto out;
-            }
-
-            printf("%s FIN message local_dev %d remote_dev %d\n",
-                   is_server ? "sent" : "received", ldev, rdev);
+    for (i = 0; i < num_iterations; i++) {
+        ret = client_server_communication(ucp_worker, ep, send_recv_type,
+                                          is_server, i, sdev, cdev);
+        if (ret != 0) {
+            fprintf(stderr, "%s failed on iteration #%d\n",
+                    (is_server ? "server": "client"), i + 1);
+            goto out;
         }
     }
 
-    /* Server waits until the client closed all
-     * the connections after receiving all FIN */
-    while (is_server && connection_closed < dev_count * dev_count) {
-        for (int sdev = 0; sdev < dev_count; sdev++) {
-            ucp_worker_progress(dev_ucp_contexts[sdev].ucp_worker);
+    /* Register recv callback on the client side to receive FIN message */
+    if (!is_server && (send_recv_type == CLIENT_SERVER_SEND_RECV_AM)) {
+        status = register_am_recv_callback(ucp_worker);
+        if (status != UCS_OK) {
+            ret = -1;
+            goto out;
         }
     }
+
+    /* FIN message in reverse direction to acknowledge delivery */
+    ret = client_server_communication(ucp_worker, ep, send_recv_type,
+                                      !is_server, i + 1, sdev, cdev);
+    if (ret != 0) {
+        fprintf(stderr, "%s failed on FIN message\n",
+                (is_server ? "server": "client"));
+        goto out;
+    }
+
+    printf("----------------- %s FIN message -----------------\n\n\n\n",
+           is_server ? "sent" : "received");
 
 out:
     return ret;
@@ -1087,7 +1007,6 @@ static int run_server(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count,
     ucx_server_ctx_t server_contexts[dev_count];
     ucs_status_t     status;
     int              ret;
-
 
     /* Create a listener for connection establishment between client and server.
      * This listener will stay open for listening to incoming connection
@@ -1102,9 +1021,13 @@ static int run_server(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count,
         server_contexts[dev_id].client_id    = 0;
         server_contexts[dev_id].dev_id       = dev_id;
 
+        /* Push the right GPU context */
+        cudaSetDevice(dev_id);
+        cudaFree(0);
+
         status = start_server(dev_ucp_contexts[dev_id].ucp_worker,
                               &server_contexts[dev_id],
-                              listen_addr, dev_id);
+                              listen_addr, server_port + dev_id);
         if (status != UCS_OK) {
             ret = -1;
             goto err_listener;
@@ -1113,18 +1036,72 @@ static int run_server(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count,
 
     /* Servers are always up listening */
     while (1) {
-        ret = server_create_eps(dev_ucp_contexts, server_contexts, dev_count);
+        for (int cdev = 0; cdev < dev_count; cdev++) { /* client GPUs */
+            for (int sdev = 0; sdev < dev_count; sdev++) { /* server GPUs */
+                /* Push the right GPU context */
+                cudaSetDevice(sdev);
+                cudaFree(0);
+                /* Create server-side eps. The eps are created upon receiving
+                * connection requests initiated by the client. The client must
+                * initiate one request from each of its own GPU-specific workers
+                * to each of the server's GPU-specific workers. As a result,
+                * we'll end up creating one ep for each serverGPU-clientGPU pair.
+                * The handles are stored in the ucp_eps array of each GPU-specific
+                * context.
+                * For each connection request, we need to know:
+                *  1. the client-side UCP worker GPU id associated with the request,
+                *  2. the server-side UCP worker GPU id that the request wants to target
+                * For 1, we rely on the fact that the client sends its requests in
+                * the order of its GPU ids. For 2, we already know it because we
+                * have a separate listener per server GPU. Note that we assume the
+                * client and server use the same number of GPUs. Otherwise, they
+                * need to exchange an initial message to let each other know
+                * about the number of GPUs they use.
+                */
+                /* Wait for the server to receive a connection request
+                * from the client. If there are multiple clients for
+                * which the server's connection request callback is invoked,
+                * i.e. several clients are trying to connect in parallel, the
+                * server will handle only the first one and reject the rest. */
+                while (server_contexts[sdev].conn_request == NULL) {
+                    ucp_worker_progress(dev_ucp_contexts[sdev].ucp_worker);
+                }
 
-        if (ret != 0) {
-            goto err_listener;
+                status = server_create_ep(dev_ucp_contexts[sdev].ucp_worker,
+                                          server_contexts[sdev].conn_request,
+                                          &dev_ucp_contexts[sdev].ucp_eps[cdev]);
+                if (status != UCS_OK) {
+                    close_eps(dev_ucp_contexts, dev_count);
+                    return -1;
+                }
+
+                printf("Server created ep for sdev %d cdev %d\n", sdev, cdev);
+
+                dev_ucp_contexts[sdev].ep_count++;
+
+                /* Now we are ready to accept the next request, but only
+                * for the rest of the GPUs from the same client. So, do not
+                * reset client_id. */
+                server_contexts[sdev].conn_request = NULL;
+
+                /* The server waits for all the iterations to complete
+                * before moving on to the next pair of GPUs */
+                ret = client_server_do_work(dev_ucp_contexts[sdev].ucp_worker,
+                                            dev_ucp_contexts[sdev].ucp_eps[cdev],
+                                            send_recv_type, 1, sdev, cdev);
+                if (ret != 0) {
+                    goto err_ep;
+                }
+
+            }
         }
 
-        /* The server waits for all the iterations and all GPU pairs to complete
-         * before moving on to the next client */
-        ret = client_server_do_work(dev_ucp_contexts, dev_count,
-                                    send_recv_type, 1);
-        if (ret != 0) {
-            goto err_ep;
+        /* Server waits until the client closed the connection after
+        * all receiving FINs. */
+        while (connection_closed < dev_count * dev_count) {
+            for (int dev_id = 0; dev_id < dev_count; dev_id++) {
+                ucp_worker_progress(dev_ucp_contexts[dev_id].ucp_worker);
+            }
         }
 
         /* Close all the endpoints to the client */
@@ -1153,13 +1130,40 @@ err_listener:
 static int run_client(dev_ucp_ctx_t *dev_ucp_contexts, int dev_count,
                       char *server_addr, send_recv_type_t send_recv_type)
 {
-    int ret = client_create_eps(dev_ucp_contexts, dev_count, server_addr);
-    if (ret != 0) {
-        fprintf(stderr, "failed to create client eps\n");
-        goto ep_close;
-    }
+    ucs_status_t status;
+    int ret;
 
-    ret = client_server_do_work(dev_ucp_contexts, dev_count, send_recv_type, 0);
+    for (int cdev = 0; cdev < dev_count; cdev++) { /* client GPUs */
+        for (int sdev = 0; sdev < dev_count; sdev++) { /* server GPUs */
+            /* Push the right GPU context */
+            cudaSetDevice(cdev);
+            cudaFree(0);
+            /* Client must send one separate connection request to the server for
+            * each clientGPU-ServerGPU pair of workers. The requests must be sent
+            * in the order of the client GPU ids so the server knows which clinet
+            * GPU the incoming connection request is for (see server_create_eps).
+            */
+            status = start_client(dev_ucp_contexts[cdev].ucp_worker,
+                                server_addr, server_port + sdev,
+                                &dev_ucp_contexts[cdev].ucp_eps[sdev]);
+            if (status != UCS_OK) {
+                fprintf(stderr, "failed to start client (%s)\n",
+                        ucs_status_string(status));
+                ret = -1;
+                goto out;
+            }
+
+            ret = client_server_do_work(dev_ucp_contexts[cdev].ucp_worker,
+                                        dev_ucp_contexts[cdev].ucp_eps[sdev],
+                                        send_recv_type, 0, sdev, cdev);
+            if (ret != 0) {
+                fprintf(stderr, "client_server_do_work failed for cdev %d sdev %d\n",
+                        cdev, sdev);
+                ret = -1;
+                goto ep_close;
+            }
+        }
+    }
 
 ep_close:
     /* Close all the endpoints to the server */
@@ -1174,7 +1178,6 @@ out:
 static int init_context(dev_ucp_ctx_t *dev_ucp_ctx, uint64_t client_id,
                         send_recv_type_t send_recv_type, int dev_id)
 {
-    /* UCP objects */
     ucp_params_t ucp_params;
     ucs_status_t status;
     int ret = 0;
@@ -1192,10 +1195,6 @@ static int init_context(dev_ucp_ctx_t *dev_ucp_ctx, uint64_t client_id,
     } else {
         ucp_params.features = UCP_FEATURE_AM;
     }
-
-    /* Make sure the GPU context is pushed on the stack before ucp_init */
-    cudaSetDevice(dev_id);
-    cudaFree(0);
 
     status = ucp_init(&ucp_params, NULL, &dev_ucp_ctx->ucp_context);
     if (status != UCS_OK) {
@@ -1263,6 +1262,10 @@ int main(int argc, char **argv)
 
     for (dev_id = 0; dev_id < dev_count; dev_id++) {
         /* Initialize the UCX required objects per GPU */
+        /* Push the right GPU context */
+        cudaSetDevice(dev_id);
+        cudaFree(0);
+
         ret = init_context(&dev_ucp_contexts[dev_id], client_id,
                            send_recv_type, dev_id);
         if (ret != 0) {
