@@ -2504,7 +2504,7 @@ typedef enum {
     /** Enables @ref uct_mem_alloc_params_t::name */
     UCT_MEM_ALLOC_PARAM_FIELD_NAME           = UCS_BIT(4),
 
-    /** Enables @ref uct_mem_alloc_params_t::sys_device */
+    /** Enables @ref uct_mem_alloc_params_t::sys_dev */
     UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEV        = UCS_BIT(5)
 } uct_mem_alloc_params_field_t;
 
