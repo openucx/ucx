@@ -848,11 +848,12 @@ static uct_md_ops_t uct_mlx5_gga_md_ops = {
     .query              = uct_ib_mlx5_gga_md_query,
     .mem_alloc          = uct_ib_mlx5_devx_device_mem_alloc,
     .mem_free           = uct_ib_mlx5_devx_device_mem_free,
+    .mem_advise         = uct_ib_mem_advise,
     .mem_reg            = uct_ib_mlx5_devx_mem_reg,
     .mem_dereg          = uct_ib_mlx5_devx_mem_dereg,
-    .mem_attach         = uct_ib_mlx5_devx_mem_attach,
-    .mem_advise         = uct_ib_mem_advise,
+    .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
     .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
+    .mem_attach         = uct_ib_mlx5_devx_mem_attach,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
 };
 

@@ -159,7 +159,6 @@ class test_ucp_proto_mock : public ucp_test, public mock_iface {
 public:
     const static size_t INF                               = UCS_MEMUNITS_INF;
     const static uint16_t AM_ID                           = 123;
-    const static ucp_worker_cfg_index_t EP_CONFIG_INDEX   = 0;
     const static ucp_worker_cfg_index_t RKEY_CONFIG_INDEX = 0;
 
     struct proto_select_data {
@@ -209,12 +208,6 @@ public:
         }
     };
 
-    struct worker_config {
-        ucp_worker_h           worker;
-        ucp_worker_cfg_index_t ep_cfg_index;
-        ucp_worker_cfg_index_t rkey_cfg_index;
-    };
-
     using proto_select_data_vec_t = std::vector<proto_select_data>;
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -251,26 +244,21 @@ public:
         ucs_sys_topo_reset_provider();
     }
 
-    static void check_ep_config(entity &e,
+    static void check_ep_config(const entity &e,
                                 const proto_select_data_vec_t &data_vec,
                                 ucp_proto_select_key_t key)
     {
-        worker_config worker_cfg = {e.worker(), EP_CONFIG_INDEX,
-                                    UCP_WORKER_CFG_INDEX_NULL};
-        ucp_ep_config_t *config  = ucp_worker_ep_config(e.worker(),
-                                                        worker_cfg.ep_cfg_index);
-        check_proto_select(worker_cfg, config->proto_select, data_vec, key);
+        ucp_ep_config_t *config = ucp_worker_ep_config(e.worker(),
+                                                       ep_config_index(e));
+        check_proto_select(e, config->proto_select, data_vec, key);
     }
 
-    static void check_rkey_config(entity &e,
+    static void check_rkey_config(const entity &e,
                                   const proto_select_data_vec_t &data_vec,
                                   ucp_proto_select_key_t key)
     {
-        worker_config worker_cfg = {e.worker(), EP_CONFIG_INDEX,
-                                    RKEY_CONFIG_INDEX};
-        ucp_rkey_config_t *config =
-                &e.worker()->rkey_config[worker_cfg.rkey_cfg_index];
-        check_proto_select(worker_cfg, config->proto_select, data_vec, key);
+        ucp_rkey_config_t *config = &e.worker()->rkey_config[RKEY_CONFIG_INDEX];
+        check_proto_select(e, config->proto_select, data_vec, key);
     }
 
     /*
@@ -290,15 +278,7 @@ public:
     void connect()
     {
         sender().connect(&receiver(), get_ep_params());
-        wait_for_cond(
-                [this] {
-                    return (sender().worker()->ep_config.length >
-                            EP_CONFIG_INDEX);
-                },
-                [this] { progress(); });
-
-        EXPECT_EQ(1, sender().worker()->ep_config.length);
-        EXPECT_EQ(1, sender().worker()->rkey_config_count);
+        send_recv_am(1); /* Wait for connection establishment */
     }
 
 protected:
@@ -329,13 +309,13 @@ protected:
         return proto_select_data();
     }
 
-    static void dump_select_info(const worker_config &worker_cfg,
+    static void dump_select_info(const entity &e,
                                  const ucp_proto_select_param_t &select_param,
                                  const ucp_proto_select_elem_t &select_elem)
     {
         ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-        ucp_proto_select_elem_info(worker_cfg.worker, worker_cfg.ep_cfg_index,
-                                   worker_cfg.rkey_cfg_index, &select_param,
+        ucp_proto_select_elem_info(e.worker(), ep_config_index(e),
+                                   RKEY_CONFIG_INDEX, &select_param,
                                    &select_elem, 1, &strb);
 
         char *line;
@@ -346,7 +326,7 @@ protected:
     }
 
     static void
-    check_proto_select_elem(const worker_config &worker_cfg,
+    check_proto_select_elem(const entity &e,
                             const ucp_proto_select_param_t &select_param,
                             const ucp_proto_select_elem_t &select_elem,
                             const proto_select_data_vec_t &data_vec)
@@ -355,8 +335,8 @@ protected:
         unsigned range_idx = 0;
         for (auto &expected_data : data_vec) {
             size_t range_start = expected_data.range_start;
-            auto actual_data   = select_data_for_range(worker_cfg.worker,
-                                                       select_elem, range_start);
+            auto actual_data   = select_data_for_range(e.worker(), select_elem,
+                                                       range_start);
             EXPECT_EQ(expected_data, actual_data)
                     << "unexpected difference at range["
                     << (failed = true, range_idx) << "]";
@@ -364,7 +344,7 @@ protected:
             /* As we cannot get range_start directly, we assert that protocol
              * is different at that range */
             if (range_start > 0) {
-                auto prev_actual_data = select_data_for_range(worker_cfg.worker,
+                auto prev_actual_data = select_data_for_range(e.worker(),
                                                               select_elem,
                                                               range_start - 1);
                 EXPECT_NE(expected_data, prev_actual_data)
@@ -374,11 +354,11 @@ protected:
             ++range_idx;
         }
         if (failed) {
-            dump_select_info(worker_cfg, select_param, select_elem);
+            dump_select_info(e, select_param, select_elem);
         }
     }
 
-    static void check_proto_select(const worker_config &worker_cfg,
+    static void check_proto_select(const entity &e,
                                    const ucp_proto_select_t &proto_select,
                                    const proto_select_data_vec_t &data_vec,
                                    const ucp_proto_select_key_t &key)
@@ -386,12 +366,17 @@ protected:
         ucp_proto_select_elem_t select_elem;
         ucp_proto_select_key_t select_key;
 
+        bool found = false;
         kh_foreach(proto_select.hash, select_key.u64, select_elem, {
             if (key_match(key, select_key)) {
-                check_proto_select_elem(worker_cfg, select_key.param,
-                                        select_elem, data_vec);
+                check_proto_select_elem(e, select_key.param, select_elem,
+                                        data_vec);
+                found = true;
             }
         })
+        if (!found) {
+            FAIL() << "Did not find matching protocol selection keys";
+        }
     }
 
     static bool
@@ -415,10 +400,11 @@ protected:
         return true;
     }
 
-    void send_recv_am(size_t size)
+    void
+    send_recv_am(size_t size, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
         /* Prepare receiver data handler */
-        mem_buffer recv_buf(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer recv_buf(size, mem_type);
         struct ctx_t {
             mem_buffer                     *buf;
             bool                            received;
@@ -467,7 +453,7 @@ protected:
         ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(ctx.worker, &am_param));
 
         /* Send data */
-        mem_buffer buf(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer buf(size, mem_type);
         ucp_request_param_t param = {};
         auto sptr = ucp_am_send_nbx(sender().ep(), AM_ID, NULL, 0ul, buf.ptr(),
                                     buf.size(), &param);
@@ -477,6 +463,11 @@ protected:
         EXPECT_EQ(UCS_OK, request_wait(sptr));
         wait_for_flag(&ctx.received);
         EXPECT_TRUE(ctx.received);
+    }
+
+    static ucp_worker_cfg_index_t ep_config_index(const entity &e)
+    {
+        return e.ep()->cfg_index;
     }
 };
 
@@ -628,8 +619,8 @@ UCS_TEST_P(test_ucp_proto_mock_tcp, am_send_1_lane)
     check_ep_config(sender(), {
         {0,      8184,   "short",                                       "tcp/mock"},
         {8185,   65528,  "zero-copy",                                   "tcp/mock"},
-        {65529,  366985, "multi-frag zero-copy",                        "tcp/mock"},
-        {366986, INF,    "rendezvous zero-copy fenced write to remote", "tcp/mock"},
+        {65529,  366864, "multi-frag zero-copy",                        "tcp/mock"},
+        {366865, INF,    "rendezvous zero-copy fenced write to remote", "tcp/mock"},
     }, key);
 }
 
@@ -662,3 +653,48 @@ UCS_TEST_P(test_ucp_proto_mock_self, rkey_ptr)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_self, self, "self")
+
+class test_ucp_proto_mock_gpu : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_gpu()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 2000;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.cap.get.max_zcopy = 16384;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
+           "RNDV_FRAG_MEM_TYPES=host", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
+{
+    send_recv_am(1024, UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+    key.param.mem_type         = UCS_MEMORY_TYPE_CUDA_MANAGED;
+
+    check_ep_config(sender(), {
+        {0, 0,    "short",   "rc_mlx5/mock"},
+        {1, 8246, "copy-in", "rc_mlx5/mock"},
+        {8247, 512 * UCS_KBYTE,
+         "rendezvous cuda_copy, fenced write to remote, frag host, cuda_copy, frag host",
+         "rc_mlx5/mock"},
+        {(512 * UCS_KBYTE) + 1, INF,
+         "rendezvous pipeline cuda_copy, fenced write to remote, frag host, cuda_copy, frag host",
+         "rc_mlx5/mock"},
+        }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
+                              "rc_x,cuda,rocm")

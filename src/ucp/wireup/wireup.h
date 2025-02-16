@@ -79,9 +79,6 @@ typedef struct {
     /* Mandatory memory types for allocation */
     uint64_t                    alloc_mem_types;
 
-    /* Mandatory memory types for registration */
-    uint64_t                    reg_mem_types;
-
     /* Required support of keepalive mechanism */
     int                         is_keepalive;
 
