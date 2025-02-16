@@ -125,15 +125,17 @@ void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
 
 #if HAVE_DEVX
 
-static void uct_ib_mlx5_devx_set_smbrwq_attr(const uct_ib_mlx5_md_t *md, char *create_qp_in)
+static void uct_ib_mlx5_devx_set_smbrwq_attr(uct_ib_iface_t *iface, const uct_ib_mlx5_md_t *md, char *create_qp_in)
 {
     void *qpce = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, create_qp_in, qpc_data_extension);
+    int seg_size = 1 << ((ucs_ilog2(iface->config.seg_size) - 6) & 0xf); 
+    int stride_size = 32;
 
     UCT_IB_MLX5DV_SET(create_qp_in, create_qp_in, qpc_ext, 1);
     UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
                       UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
     UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size,
-                      UCT_IB_MLX5_DEVX_SMBRWQ_MAX_SEND_RECEIVE_MESSAGE_SIZE);
+                      seg_size / stride_size);
 }
 
 static int uct_ib_mlx5_devx_is_smbrwq_enabled(uct_ib_mlx5_md_t *md,
@@ -217,7 +219,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_RC);
 
         if (uct_ib_mlx5_devx_is_smbrwq_enabled(md, attr)) {
-            uct_ib_mlx5_devx_set_smbrwq_attr(md, in);
+            uct_ib_mlx5_devx_set_smbrwq_attr(iface, md, in);
         }
     } else {
         ucs_error("create qp failed: unknown type %d", attr->super.qp_type);

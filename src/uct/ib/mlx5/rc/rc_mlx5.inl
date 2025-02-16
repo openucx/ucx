@@ -77,13 +77,14 @@ static UCS_F_NOINLINE void
 uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
                                 uct_ib_mlx5_srq_seg_t *seg,
                                 struct mlx5_cqe64 *cqe, uint16_t wqe_ctr,
-                                unsigned offset, uct_recv_desc_t *release_desc)
+                                unsigned offset, uct_recv_desc_t *release_desc,
+                                int poll_flags)
 {
     void *udesc;
     int stride_idx;
     int desc_offset;
 
-    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+    if (UCT_RC_MLX5_MP_ENABLED(iface) || (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ)) {
         /* stride_idx is valid in non inline CQEs only.
          * We can assume that stride_idx is correct here, because CQE
          * with data would always force upper layer to save the data and
@@ -124,7 +125,7 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
 
     if (ucs_unlikely(status == UCS_INPROGRESS)) {
         uct_rc_mlx5_iface_hold_srq_desc(iface, seg, cqe, wqe_ctr, offset,
-                                        release_desc);
+                                        release_desc, poll_flags);
     }
 
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
@@ -1431,10 +1432,11 @@ static UCS_F_NOINLINE void
 uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
                                     struct mlx5_cqe64 *cqe, int poll_flags)
 {
+
     uct_ib_mlx5_srq_seg_t *seg;
 
     /* filler CQE is relevant for MP XRQ only */
-    ucs_assert_always(UCT_RC_MLX5_MP_ENABLED(iface));
+    ucs_assert_always(UCT_RC_MLX5_MP_ENABLED(iface) || (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ));
 
     seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, ntohs(cqe->wqe_counter));
 
@@ -1446,9 +1448,37 @@ uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
 #endif /* IBV_HW_TM */
 
 
-static UCS_F_ALWAYS_INLINE void uct_rc_mlx5_iface_common_handle_message(uct_rc_mlx5_iface_common_t *iface) {
+#define UCT_IB_MLX5_NUM_OF_STRIDES_CONSUMED_MASk 0x1FFF0000
 
-}
+// static void *uct_rc_mlx5_iface_striding_data(uct_rc_mlx5_iface_common_t *iface,
+//                                              struct mlx5_cqe64 *cqe,
+//                                              unsigned byte_len, unsigned *flags)
+// {
+//     uct_ib_mlx5_srq_seg_t *seg;
+//     uct_ib_iface_recv_desc_t *desc;
+//     void *hdr;
+
+//     seg  = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, ntohs(cqe->wqe_counter));
+//     desc = seg->srq.desc;
+
+//     // ucs_info("seg: ptr_mask=%x next_wqe_index=%x signature=%x strides=%x",
+//     //          seg->srq.ptr_mask, seg->srq.next_wqe_index, seg->srq.signature,
+//     //          seg->srq.strides);
+
+//     if (cqe->op_own & (MLX5_INLINE_SCATTER_32 | MLX5_INLINE_SCATTER_64)) {
+//         return uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, flags);
+//     }
+
+//     hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+//     VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
+//     *flags = UCT_CB_PARAM_FLAG_DESC;
+//     /* Assuming that next packet likely will be non-inline,
+//          * setup the next prefetch pointer
+//          */
+//     uct_rc_mlx5_srq_prefetch_setup(iface);
+
+//     return hdr;
+// }
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
@@ -1460,6 +1490,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     unsigned count;
     void *rc_hdr;
     unsigned flags;
+    int strides_consumed;
 #if IBV_HW_TM
     uct_ib_mlx5_srq_seg_t *seg;
     struct ibv_tmh *tmh;
@@ -1489,26 +1520,38 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
                              UCT_IB_IFACE_STAT_RX_COMPLETION, 1);
 
-    byte_len = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
-    count    = 1;
 
-    ucs_info("byte_cnt: %x", ntohl(cqe->byte_cnt));
-    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
-        if (byte_len & UCT_IB_MLX5_MP_RQ_FILLER_FLAG) {
-            ucs_warn("Filler CQE arrived");
-            uct_rc_mlx5_iface_handle_filler_cqe(iface, cqe, poll_flags);
-            count = 0;
-            goto out_update_db;
-        }
+    strides_consumed = (ntohl(cqe->byte_cnt) &
+                        UCT_IB_MLX5_NUM_OF_STRIDES_CONSUMED_MASk) >>
+                       16;
+    byte_len         = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
+    count            = 1; //strides_consumed;
+             
 
-        uct_rc_mlx5_iface_common_handle_message(iface);
+    if (ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_FILLER_FLAG) {
+        ucs_warn("Filler CQE arrived");
+        uct_rc_mlx5_iface_handle_filler_cqe(iface, cqe, poll_flags);
+        count = 0;
         goto out_update_db;
     }
 
+    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
+        if (byte_len == 0) {
+            byte_len = (strides_consumed > 0) ? 1 << 16 : 0;
+            ucs_info("Byte len modified to: %d", byte_len);
+        }
+    }
+
+    // if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
+    //     rc_hdr = uct_rc_mlx5_iface_striding_data(iface, cqe, byte_len, &flags);
+    //     uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags, byte_len,
+    //                                         poll_flags);
+    //     goto out_update_db;
+    // } else 
     if (!(poll_flags & UCT_IB_MLX5_POLL_FLAG_TM)) {
         rc_hdr = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
-        uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags,
-                                            byte_len, poll_flags);
+        uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags, byte_len,
+                                            poll_flags);
         goto out_update_db;
     }
 

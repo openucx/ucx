@@ -263,6 +263,11 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET64(wq, wq, dbr_addr,      iface->rx.srq.devx.dbrec->offset);
     UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem.mem->umem_id);
 
+
+    ucs_info("stride %d max %d len %d seg_size: %d log_wqe_stride_size: %d", stride, max, len,
+             iface->super.super.config.seg_size,
+             (ucs_ilog2(iface->super.super.config.seg_size) - 6) & 0xf);
+
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* Normalize to device's interface values (range of (-6) - 7) */
         /* cppcheck-suppress internalAstError */

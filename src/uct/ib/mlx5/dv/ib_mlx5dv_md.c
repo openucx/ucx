@@ -2185,6 +2185,13 @@ ucs_status_t uct_ib_mlx5_devx_query_adv_rdma_cap(uct_ib_mlx5_md_t *md, struct ib
             adv_rdma_cap, cap, max_receive_send_message_size_stride);
     md->smbrwq.max_message_size_bytes  = UCT_IB_MLX5DV_GET(
             adv_rdma_cap, cap, max_receive_send_message_size_byte);
+    
+    ucs_info("%s: adv_rdma_cap: message_based_qp_and_striding_wq=%d, "
+             "max_receive_send_message_size_stride=%d, "
+             "max_receive_send_message_size_byte=%d",
+             uct_ib_device_name(&md->super.dev),
+             md->smbrwq.supported_tls, md->smbrwq.max_message_size_stride,
+             md->smbrwq.max_message_size_bytes);
 
     return status;
 }
@@ -2347,6 +2354,10 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_rmp) > 0) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_RMP;
     }
+
+    ucs_info("RQ stride min size: %d, max_size: %d",
+             1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_min_stride_sz_rq),
+             1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_stride_sz_rq));
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ooo_sl_mask)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK;
