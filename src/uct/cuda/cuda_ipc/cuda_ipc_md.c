@@ -41,7 +41,6 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_devices));
     if (UCS_OK != status) {
-        ucs_error("cuDeviceGetCount() failed: %s", ucs_status_string(status));
         return NULL;
     }
 
