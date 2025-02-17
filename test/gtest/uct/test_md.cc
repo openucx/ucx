@@ -69,10 +69,9 @@ ucs_status_t test_md::reg_mem(unsigned flags, void *address, size_t length,
     /* Register memory respecting MD reg_alignment */
     ucs_align_ptr_range(&address, &length, md_attr().reg_alignment);
 
-    uct_md_mem_reg_params_t reg_params;
-
-    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-    reg_params.flags      = flags;
+    uct_md_mem_reg_params_t reg_params = {0};
+    reg_params.field_mask              = UCT_MD_MEM_REG_FIELD_FLAGS;
+    reg_params.flags                   = flags;
 
     return uct_md_mem_reg_v2(md(), address, length, &reg_params, memh_p);
 }
