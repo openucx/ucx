@@ -1410,12 +1410,22 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
                                   addr_indices, reuse_lane_map);
     wireup_lane = ucp_wireup_get_reconfig_msg_lane(ep);
 
-    /* TODO: 2) Support reconfiguration for separated wireup and AM lanes
-     *          during wireup process (request sent). */
-    return !(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
-           (ucp_ep_get_am_lane(ep) == wireup_lane) ||
-           !ucp_wireup_is_am_need_flush(ep, reuse_lane_map) ||
-           ucp_ep_is_lane_p2p(ep, wireup_lane);
+    /* TODO: 2) Support reconfiguration for multiple lanes that require flush.
+     *          The following conditions describe the cases where flush is
+     *          only required for a single lane, thus we can perform
+     *          reconfiguration: */
+
+           /* Wireup process is finished - wireup lane doesn't have any
+            * outstanding messages */
+    return (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
+            /* AM and wireup lanes are the same lane */
+            (ucp_ep_get_am_lane(ep) == wireup_lane) ||
+            /* AM lane doesn't require flush */
+            !ucp_wireup_is_am_need_flush(ep, reuse_lane_map) ||
+            /* p2p lanes are not valid during wireup process */
+            ucp_ep_is_lane_p2p(ep, wireup_lane)) &&
+           /* No HW tag matching lane exists */
+           (ucp_ep_get_tag_lane(ep) == UCP_NULL_LANE);
 }
 
 static int ucp_wireup_should_reconfigure(ucp_ep_h ep,
@@ -1429,10 +1439,13 @@ static int ucp_wireup_should_reconfigure(ucp_ep_h ep,
     }
 
     /* Check whether all lanes are reused */
-    for (lane = 0; (lane < ucp_ep_num_lanes(ep)) &&
-                   (reuse_lane_map[lane] != UCP_NULL_LANE); ++lane);
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (reuse_lane_map[lane] == UCP_NULL_LANE) {
+            return 1;
+        }
+    }
 
-    return lane != ucp_ep_num_lanes(ep);
+    return 0;
 }
 
 static ucp_lane_index_t
@@ -1694,8 +1707,8 @@ ucp_wireup_try_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 }
 
 static void
-ucp_wireup_gather_pending_reqs(ucp_ep_h ep,
-                               ucs_queue_head_t *replay_pending_queue)
+ucp_wireup_gather_pending_requests(ucp_ep_h ep,
+                                   ucs_queue_head_t *replay_pending_queue)
 {
     ucp_request_t *req;
     ucp_lane_index_t lane;
@@ -1761,7 +1774,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ucs_queue_head_init(&replay_pending_queue);
-    ucp_wireup_gather_pending_reqs(ep, &replay_pending_queue);
+    ucp_wireup_gather_pending_requests(ep, &replay_pending_queue);
 
     status = ucp_wireup_try_select_lanes(ep, ep_init_flags, &tl_bitmap,
                                          remote_address, addr_indices, &key,
