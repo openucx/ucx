@@ -2109,6 +2109,9 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
 
 ucp_mem_h ucp_memh_derived_get(ucp_mem_h memh)
 {
+    /* TODO: disable invalidation for user memh? */
+    /* TODO: Check if any of the requested MDs supports invalidation? */
+    /* TODO: Assert that context->mt_lock is acquired? */
     if ((memh->derived != NULL) &&
         !(memh->derived->flags & UCP_MEMH_FLAG_INVALIDATED)) {
         ++memh->derived->super.refcount;
@@ -2118,24 +2121,33 @@ ucp_mem_h ucp_memh_derived_get(ucp_mem_h memh)
     return ucp_memh_derived_create(memh);
 }
 
-ucp_mem_h ucp_memh_derived_reset(ucp_mem_h memh)
+static UCS_F_ALWAYS_INLINE void
+ucp_memh_derived_pending_destroy(ucp_mem_h derived)
 {
-    ucp_mem_h orig_memh = ucp_memh_is_derived_memh(memh) ? memh->parent : memh;
-    ucp_mem_h derived   = ucp_memh_is_derived_memh(memh) ? memh : memh->derived;
-
-    if (derived != NULL) {
-        derived->flags |= UCP_MEMH_FLAG_INVALIDATED;
-        if (derived->super.refcount == 0) {
-            ucp_memh_derived_destroy(derived);
-        }
+    if (ucs_unlikely(derived->flags & UCP_MEMH_FLAG_INVALIDATED) &&
+        (derived->super.refcount == 0)) {
+        ucp_memh_derived_destroy(derived);
     }
-    return orig_memh;
 }
 
-void ucp_memh_invalidate(ucp_mem_h derived, ucp_memh_invalidate_comp_t *comp)
+void ucp_memh_derived_put(ucp_mem_h derived)
+{
+    if (derived == NULL) {
+        return;
+    }
+
+    /* TODO: Assert that context->mt_lock is acquired? */
+    ucs_assert(ucp_memh_is_derived_memh(derived));
+    ucs_assert(derived->super.refcount > 0);
+    --derived->super.refcount;
+    ucp_memh_derived_pending_destroy(derived);
+}
+
+void ucp_memh_derived_invalidate(ucp_mem_h derived,
+                                 ucp_memh_invalidate_comp_t *comp)
 {
     ucp_context_h context = derived->context;
-    ucp_mem_h orig_memh;
+    ucp_mem_h orig_memh   = derived->parent;
 
     ucs_assert(ucp_memh_is_derived_memh(derived));
 
@@ -2146,9 +2158,31 @@ void ucp_memh_invalidate(ucp_mem_h derived, ucp_memh_invalidate_comp_t *comp)
         ucs_list_add_tail(&derived->comp_list, &comp->list);
     }
 
-    --derived->super.refcount;
-    orig_memh = ucp_memh_derived_reset(derived);
+    derived->flags |= UCP_MEMH_FLAG_INVALIDATED;
+    ucp_memh_derived_put(derived);
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 
     ucp_memh_put(orig_memh);
+}
+
+ucp_mem_h ucp_memh_derived_reset(ucp_mem_h memh)
+{
+    ucp_mem_h orig_memh;
+    ucp_mem_h derived;
+
+    if (ucp_memh_is_derived_memh(memh)) {
+        orig_memh       = memh->parent;
+        derived         = memh;
+        derived->flags |= UCP_MEMH_FLAG_INVALIDATED;
+        ucp_memh_derived_put(derived);
+    } else {
+        orig_memh = memh;
+        derived   = memh->derived;
+        if (derived != NULL) {
+            derived->flags |= UCP_MEMH_FLAG_INVALIDATED;
+            ucp_memh_derived_pending_destroy(derived);
+        }
+    }
+
+    return orig_memh;
 }

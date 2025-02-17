@@ -409,7 +409,7 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
     req->status                    = status;
     req->flags                    |= UCP_REQUEST_FLAG_INVALIDATED;
 
-    ucp_memh_invalidate(*memh_p, &req->send.invalidate.comp);
+    ucp_memh_derived_invalidate(*memh_p, &req->send.invalidate.comp);
     *memh_p = NULL;
     return 1;
 }
