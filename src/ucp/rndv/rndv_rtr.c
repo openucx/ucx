@@ -269,8 +269,11 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     ucs_assert(ucs_test_all_flags(mdesc->memh->md_map, md_map));
 
     /* Pack remote key for the fragment */
-    memh             = &req->send.state.dt_iter.type.contig.memh;
-    *memh            = mdesc->memh;
+    memh = &req->send.state.dt_iter.type.contig.memh;
+    if (*memh == NULL) {
+        *memh = mdesc->memh;
+    }
+
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     pack_flags       = ucp_ep_config(req->send.ep)->uct_rkey_pack_flags;
