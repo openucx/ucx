@@ -110,7 +110,7 @@ not_found:
  * If the memory handle @a memh is zero-length or created by @ref ucp_mem_map(),
  * do nothing and return 0. Otherwise, release the memory handle and return 1.
  */
-static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
+static UCS_F_ALWAYS_INLINE ucp_mem_h ucp_memh_put(ucp_mem_h memh)
 {
     ucp_context_h context = memh->context;
     ucp_mem_h derived;
@@ -129,7 +129,7 @@ static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
     /* user memh or zero length memh */
     if (memh->parent != NULL) {
         ucp_memh_derived_put(derived);
-        return 0;
+        return memh;
     }
 
     if (ucs_likely(context->rcache != NULL)) {
@@ -141,7 +141,7 @@ static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
         ucp_memh_derived_put(derived);
         ucp_memh_put_slow(context, memh);
     }
-    return 1;
+    return NULL;
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)

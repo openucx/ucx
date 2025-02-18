@@ -290,12 +290,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_mem_dereg_single(ucp_mem_h *memh_p)
 {
-    if (*memh_p == NULL) {
-        return;
-    }
-
-    if (ucp_memh_put(*memh_p)) {
-        *memh_p = NULL;
+    if (*memh_p != NULL) {
+        *memh_p = ucp_memh_put(*memh_p);
     }
 }
 
