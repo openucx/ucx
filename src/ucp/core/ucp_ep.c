@@ -158,6 +158,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].path_index   = 0;
         key->lanes[i].lane_types   = 0;
         key->lanes[i].seg_size     = 0;
+        key->lanes[i].addr_index   = UINT_MAX;
     }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_msg_lane  = UCP_NULL_LANE;
@@ -1947,7 +1948,8 @@ static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->dst_md_index == config_lane2->dst_md_index) &&
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types) &&
-           (config_lane1->seg_size == config_lane2->seg_size);
+           (config_lane1->seg_size == config_lane2->seg_size) &&
+           (config_lane1->addr_index == config_lane2->addr_index);
 }
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,

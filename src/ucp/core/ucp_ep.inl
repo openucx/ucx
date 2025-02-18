@@ -58,7 +58,7 @@ ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
         return lane;
     }
 
-    return ucp_wireup_init_slow_lane(ep, UCP_MAX_FAST_PATH_LANES - lane_index);
+    return ucp_wireup_init_slow_lane(ep, lane_index - UCP_MAX_FAST_PATH_LANES);
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,

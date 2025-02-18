@@ -206,6 +206,10 @@ typedef struct ucp_ep_config_key_lane {
                                         was selected for */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
+    unsigned             addr_index; /* Address index in the remote address,
+                                        NOTE: can be removed if remote side
+                                        sends only requested address for on
+                                        demand wireup request */
 } ucp_ep_config_key_lane_t;
 
 
