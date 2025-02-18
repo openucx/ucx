@@ -208,7 +208,9 @@ ucp_memh_get_or_update(ucp_context_h context, void *address, size_t length,
     ucs_assert((context->rcache == NULL) ||
                ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
 
-    *memh_p = ucp_memh_derived_reset(*memh_p);
+    if (ucp_memh_is_derived_memh(*memh_p)) {
+        *memh_p = ucp_memh_derived_put(*memh_p);
+    }
     status  = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
 out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);

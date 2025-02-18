@@ -398,7 +398,6 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
     ucs_trace("memh %p: cleanup", memh);
 
     ucs_assert(ucp_memh_is_user_memh(memh));
-    ucs_assert(!ucp_memh_is_derived_memh(memh));
 
     mem.address = ucp_memh_address(memh);
     mem.length  = ucp_memh_length(memh);
@@ -505,6 +504,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     void *reg_address;
     size_t reg_length;
     size_t reg_align;
+
+    ucp_memh_derived_reset(memh);
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
@@ -2114,6 +2115,10 @@ ucp_mem_h ucp_memh_derived_get(ucp_mem_h memh)
     /* TODO: Assert that context->mt_lock is acquired? */
     if ((memh->derived != NULL) &&
         !(memh->derived->flags & UCP_MEMH_FLAG_INVALIDATED)) {
+        ucs_assertv(memh->md_map == memh->derived->md_map,
+                    "memh md_map=0x%" PRIx64 " derived md_map=0x%" PRIx64,
+                    memh->md_map, memh->derived->md_map);
+
         ++memh->derived->super.refcount;
         return memh->derived;
     }
@@ -2130,17 +2135,21 @@ ucp_memh_derived_pending_destroy(ucp_mem_h derived)
     }
 }
 
-void ucp_memh_derived_put(ucp_mem_h derived)
+ucp_mem_h ucp_memh_derived_put(ucp_mem_h derived)
 {
+    ucp_mem_h orig_memh;
+
     if (derived == NULL) {
-        return;
+        return NULL;
     }
 
     /* TODO: Assert that context->mt_lock is acquired? */
     ucs_assert(ucp_memh_is_derived_memh(derived));
     ucs_assert(derived->super.refcount > 0);
     --derived->super.refcount;
+    orig_memh = derived->parent;
     ucp_memh_derived_pending_destroy(derived);
+    return orig_memh;
 }
 
 void ucp_memh_derived_invalidate(ucp_mem_h derived,
@@ -2165,24 +2174,15 @@ void ucp_memh_derived_invalidate(ucp_mem_h derived,
     ucp_memh_put(orig_memh);
 }
 
-ucp_mem_h ucp_memh_derived_reset(ucp_mem_h memh)
+void ucp_memh_derived_reset(ucp_mem_h memh)
 {
-    ucp_mem_h orig_memh;
     ucp_mem_h derived;
 
-    if (ucp_memh_is_derived_memh(memh)) {
-        orig_memh       = memh->parent;
-        derived         = memh;
-        derived->flags |= UCP_MEMH_FLAG_INVALIDATED;
-        ucp_memh_derived_put(derived);
-    } else {
-        orig_memh = memh;
-        derived   = memh->derived;
-        if (derived != NULL) {
-            derived->flags |= UCP_MEMH_FLAG_INVALIDATED;
-            ucp_memh_derived_pending_destroy(derived);
-        }
-    }
+    ucs_assert(!ucp_memh_is_derived_memh(memh));
 
-    return orig_memh;
+    derived = memh->derived;
+    if (derived != NULL) {
+        derived->flags |= UCP_MEMH_FLAG_INVALIDATED;
+        ucp_memh_derived_pending_destroy(derived);
+    }
 }

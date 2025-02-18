@@ -231,7 +231,7 @@ ucp_mem_h ucp_memh_derived_get(ucp_mem_h memh);
 /**
  * TODO
  */
-void ucp_memh_derived_put(ucp_mem_h derived);
+ucp_mem_h ucp_memh_derived_put(ucp_mem_h derived);
 
 /**
  * TODO
@@ -242,7 +242,7 @@ void ucp_memh_derived_invalidate(ucp_mem_h derived,
 /**
  * TODO
  */
-ucp_mem_h ucp_memh_derived_reset(ucp_mem_h memh);
+void ucp_memh_derived_reset(ucp_mem_h memh);
 
 /**
  * Get memory domain index that is used to allocate certain memory type.
