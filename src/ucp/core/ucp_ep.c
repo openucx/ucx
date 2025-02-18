@@ -1271,7 +1271,7 @@ ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((lane == ucp_ep_get_cm_lane(ep)) || (uct_ep == NULL)) {
             continue;
         }
@@ -1298,7 +1298,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep)) {
             num_failed_tl_ep++;
         }
@@ -1321,7 +1321,7 @@ ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps, uct_ep_h failed_ep)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep        = ucp_ep_get_lane(ep, lane);
+        uct_ep        = ucp_ep_get_lane_raw(ep, lane);
         uct_eps[lane] = uct_ep;
 
         /* Set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed

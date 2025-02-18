@@ -1953,6 +1953,7 @@ protected:
 
 UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
            "IB_NUM_PATHS?=6", "MAX_RMA_LANES?=6") {
+    size_t max_rma_lanes = 6;
     ucp_request_param_t params = { 0 };
     const size_t msg_size = 1 * UCS_GBYTE;
     mem_buffer sbuf(msg_size, UCS_MEMORY_TYPE_HOST, 0);
@@ -2006,13 +2007,13 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
     check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, ep_cfg_key(ep).num_lanes,
                           "rma_bw", false);
 
-    ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
     // do RMA, then all rma_bw lanes must be initialized
-    req = ucp_put_nbx(ep, sbuf.ptr(), sbuf.size(), (uintptr_t)rbuf.ptr(), rkey.get(),
-                      &params);
+    ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+    req = ucp_put_nbx(ep, sbuf.ptr(), sbuf.size(), (uintptr_t)rbuf.ptr(),
+                      rkey.get(), &params);
     ASSERT_UCS_OK(request_wait(req));
-    check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, ep_cfg_key(ep).num_lanes,
-                          "rma_bw", true);
+    check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, max_rma_lanes, "rma_bw",
+                          true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_ondemand);
