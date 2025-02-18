@@ -818,7 +818,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     /* Connect p2p addresses to remote endpoint */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) ||
         ucp_ep_has_cm_lane(ep) ||
-        1 /* TODO: worker->context->config.ext.ondemand_wireup */) {
+        worker->context->config.ext.on_demand_wireup) {
 
         /*
          * In the wireup reply message, the lane indexes specify which
@@ -834,6 +834,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
         if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
             ack = 1;
         } else {
+            ucs_assert(worker->context->config.ext.on_demand_wireup);
             ucp_wireup_eps_progress(ep);
             ack = 0;
         }
@@ -960,6 +961,8 @@ ucp_wireup_process_addr_request(ucp_worker_h worker, ucp_ep_h ep,
 {
     ucp_ep_h reply_ep;
     ucs_status_t status;
+
+    ucs_assert(worker->context->config.ext.on_demand_wireup);
 
     if (ep == NULL) {
         status = ucp_wireup_create_onetime_reply_ep(worker, remote_address,
@@ -1101,13 +1104,10 @@ void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
                                         ucs_queue_head_t *tmp_pending_queue)
 {
     uct_pending_req_t *uct_req;
-    ucp_request_t *req;
 
     ucp_ep->flags |= UCP_EP_FLAG_BLOCK_FLUSH;
     /* Replay pending requests */
     ucs_queue_for_each_extract(uct_req, tmp_pending_queue, priv, 1) {
-        req = ucs_container_of(uct_req, ucp_request_t, send.uct);
-        ucs_assert(req != NULL);
         ucp_wireup_replay_pending_request(uct_req, ucp_ep);
     }
     ucp_ep->flags &= ~UCP_EP_FLAG_BLOCK_FLUSH;
@@ -1875,26 +1875,21 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, str,
                             addr_indices, cm_idx, UCS_LOG_LEVEL_DEBUG);
 
-    connect_lane_bitmap &= (ucp_ep_config(ep)->p2p_lanes |
-                            UCS_MASK(UCP_MAX_FAST_PATH_LANES) |
-                            UCS_BIT(ucp_ep_get_wireup_msg_lane(ep)));
-    /* establish connections on all underlying endpoints */
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ucp_ep_get_cm_lane(ep) == lane) {
-            continue;
-        }
+    if (worker->context->config.ext.on_demand_wireup) {
+        /* alsways connect p2p, fast and wireup lanes */
+        connect_lane_bitmap &= (ucp_ep_config(ep)->p2p_lanes |
+                                UCS_MASK(UCP_MAX_FAST_PATH_LANES) |
+                                UCS_BIT(ucp_ep_get_wireup_msg_lane(ep)));
+    }
 
-        if (connect_lane_bitmap & UCS_BIT(lane)) {
-            status = ucp_wireup_connect_lane(ep, ep_init_flags, lane,
-                                             key.lanes[lane].path_index,
-                                             remote_address, addr_indices[lane]);
-            if (status != UCS_OK) {
-                goto out;
-            }
-        }
-
-        if (lane < UCP_MAX_FAST_PATH_LANES) {
-            ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
+    /* establish connections on all underlying endpoints, skipping CM lane */
+    connect_lane_bitmap &= ~UCS_BIT(ucp_ep_get_cm_lane(ep));
+    ucs_for_each_bit(lane, connect_lane_bitmap) {
+        status = ucp_wireup_connect_lane(ep, ep_init_flags, lane,
+                                         key.lanes[lane].path_index,
+                                         remote_address, addr_indices[lane]);
+        if (status != UCS_OK) {
+            goto out;
         }
     }
 
@@ -2230,9 +2225,8 @@ static ucs_status_t ucp_wireup_send_addr_request(ucp_ep_h ep)
     ucp_rsc_index_t rsc_index;
     ucp_tl_bitmap_t tl_bitmap;
 
+    ucs_assert(ep->worker->context->config.ext.on_demand_wireup);
     tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, UCS_MASK(ucp_ep_num_lanes(ep)));
-
-    /* TODO make sure such lane would exist */
     rsc_index = ucp_wireup_ep_get_aux_rsc_index(
             ucp_ep_get_lane_raw(ep, ucp_ep_get_wireup_msg_lane(ep)));
     if (rsc_index != UCP_NULL_RESOURCE) {
@@ -2240,7 +2234,6 @@ static ucs_status_t ucp_wireup_send_addr_request(ucp_ep_h ep)
     }
 
     ucs_info("ep %p: send wireup address request (flags=0x%x)", ep, ep->flags);
-//    return ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ADDR_REQUEST, &tl_bitmap, NULL);
     return ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ADDR_REQUEST,
                                &ucp_tl_bitmap_max, NULL);
 }
@@ -2250,6 +2243,7 @@ uct_ep_h ucp_wireup_init_slow_lane(ucp_ep_h ep, ucp_lane_index_t slow_lane_idx)
     ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status;
 
+    ucs_assert(ep->worker->context->config.ext.on_demand_wireup);
     ucs_assert(ep->ext->uct_eps[slow_lane_idx] == NULL);
 
     status = ucp_wireup_ep_create(ep, (uct_ep_h*)&wireup_ep);
