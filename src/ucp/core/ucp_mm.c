@@ -1988,9 +1988,9 @@ out:
 }
 
 static UCS_F_ALWAYS_INLINE int
-ucp_memh_is_invalidate_cap(const ucp_mem_h memh, ucp_md_index_t md_idx)
+ucp_memh_is_derived_cap(const ucp_mem_h memh, ucp_md_index_t md_idx)
 {
-    return ucp_is_invalidate_cap(memh->context->tl_mds[md_idx].pack_flags_mask);
+    return memh->context->tl_mds[md_idx].attr.flags & UCT_MD_FLAG_REG_DERIVED;
 }
 
 static void ucp_memh_derived_remove_from_list(ucp_mem_h memh, ucp_mem_h derived)
@@ -2034,7 +2034,7 @@ void ucp_memh_derived_destroy(ucp_mem_h derived)
 
     ucs_trace("destroying derived memh=%p", derived);
     ucs_for_each_bit(md_index, derived->md_map) {
-        if (ucp_memh_is_invalidate_cap(derived, md_index)) {
+        if (ucp_memh_is_derived_cap(derived, md_index)) {
             params.memh = derived->uct[md_index];
             ucs_trace("de-registering derived memh[%d]=%p", md_index,
                       derived->uct[md_index]);
@@ -2077,24 +2077,19 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
 
     /* Now copy all the UCT memory handles from the original UCP memh */
     ucs_for_each_bit(md_index, derived->md_map) {
-        if (ucp_memh_is_invalidate_cap(memh, md_index)) {
-            /* Invalidation is supported: create derived UCT memh */
+        if (ucp_memh_is_derived_cap(memh, md_index)) {
+            /* Derived is supported: create derived UCT memh */
             params.memh = memh->uct[md_index];
 
             ucs_trace("registering derived memh[%d]=%p", md_index, params.memh);
             status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, NULL, 1ul,
                                        &params, &derived->uct[md_index]);
-            if (status == UCS_ERR_UNSUPPORTED) {
-                /* Invalidation is declared but not supported: shallow copy */
-                ucs_trace("unsupported derived memh[%d]=%p, shallow copy",
-                          md_index, params.memh);
-                derived->uct[md_index] = memh->uct[md_index];
-            } else if (status != UCS_OK) {
+            if (status != UCS_OK) {
                 ucp_memh_derived_destroy(derived);
                 return NULL;
             }
         } else {
-            /* Invalidation is not supported: do shallow copy */
+            /* Derived is not supported: do shallow copy */
             ucs_trace("shallow copy memh[%d]=%p", md_index, params.memh);
             derived->uct[md_index] = memh->uct[md_index];
         }
