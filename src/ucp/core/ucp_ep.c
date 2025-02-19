@@ -227,6 +227,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 #endif
     ep->ext->peer_mem                     = NULL;
     ep->ext->unflushed_lanes              = 0;
+    ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
 
     memset(&ep->ext->ep_match, 0, sizeof(ep->ext->ep_match));
@@ -537,7 +538,6 @@ void ucp_ep_flush_state_reset(ucp_ep_h ep)
 
     flush_state->send_sn = 0;
     flush_state->cmpl_sn = 0;
-    flush_state->fence_seq = 0;
     ucs_hlist_head_init(&flush_state->reqs);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
 }
