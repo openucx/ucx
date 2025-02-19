@@ -133,7 +133,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     char *recv_msg      = NULL;
     size_t recv_msg_len = 0;
     int netlink_fd      = -1;
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
     struct iovec iov[2];
     size_t bytes_sent;
 
@@ -264,23 +264,15 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
     return UCS_INPROGRESS;
 }
 
-int ucs_netlink_route_exists(const char *if_name,
-                             const struct sockaddr *sa_remote)
+int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
 {
     ucs_netlink_route_info_t info = {0};
     struct rtmsg rtm              = {0};
-    int iface_index;
-
-    iface_index = if_nametoindex(if_name);
-    if (iface_index == 0) {
-        ucs_error("failed to get interface index (errno %d)", errno);
-        goto out;
-    }
 
     rtm.rtm_family = sa_remote->sa_family;
     rtm.rtm_table  = RT_TABLE_MAIN;
 
-    info.if_index  = iface_index;
+    info.if_index  = if_index;
     info.sa_remote = sa_remote;
 
     ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
