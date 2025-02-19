@@ -501,7 +501,6 @@ typedef struct {
                               are waiting for remote completion */
     uint32_t         send_sn; /* Sequence number of sent operations */
     uint32_t         cmpl_sn; /* Sequence number of completions */
-    uint32_t         fence_seq; /* Sequence number for fence detection */
 } ucp_ep_flush_state_t;
 
 
@@ -548,6 +547,7 @@ typedef struct ucp_ep_ext {
 
     ucp_lane_map_t   unflushed_lanes; /* Bitmap of lanes which have unflushed
                                          operations */
+    uint32_t         fence_seq;       /* Sequence number for fence detection */
 
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint

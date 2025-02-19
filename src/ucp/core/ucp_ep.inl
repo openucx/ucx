@@ -312,14 +312,14 @@ ucp_ep_is_strong_fence(ucp_ep_h ep)
 static UCS_F_ALWAYS_INLINE int
 ucp_ep_is_fence_required(ucp_ep_h ep)
 {
-    return (ep->ext->flush_state.fence_seq < ep->worker->fence_seq) &&
+    return (ep->ext->fence_seq < ep->worker->fence_seq) &&
         (ep->worker->context->config.ext.fence_mode == UCP_FENCE_MODE_EP_BASED);
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_ep_update_fence_seq(ucp_ep_h ep)
 {
-    ep->ext->flush_state.fence_seq = ep->worker->fence_seq;
+    ep->ext->fence_seq = ep->worker->fence_seq;
 }
 
 #endif
