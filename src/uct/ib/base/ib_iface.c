@@ -663,6 +663,86 @@ static void uct_ib_iface_log_subnet_info(const struct sockaddr *sa1,
     ucs_debug("%s", ucs_string_buffer_cstr(&info));
 }
 
+typedef struct uct_ib_device_to_ndev_key {
+    uct_ib_device_t *dev;
+    uint8_t          port_num;
+    int              gid_index;
+} uct_ib_device_to_ndev_key_t;
+
+typedef struct uct_ib_device_to_ndev_val {
+    char ndev_name[IFNAMSIZ];
+    int  if_index;
+} uct_ib_device_to_ndev_val_t;
+
+static UCS_F_ALWAYS_INLINE khint32_t
+uct_ib_device_to_ndev_cache_hash_func(uct_ib_device_to_ndev_key_t key)
+{
+    return kh_int_hash_func((uint64_t)key.dev | (key.port_num << 8) | (key.gid_index << 16));
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_device_to_ndev_cache_hash_equal(uct_ib_device_to_ndev_key_t key1,
+                                       uct_ib_device_to_ndev_key_t key2)
+{
+    return (key1.dev == key2.dev) && (key1.port_num == key2.port_num) &&
+           (key1.gid_index == key2.gid_index);
+}
+
+KHASH_INIT(uct_ib_device_to_ndev, uct_ib_device_to_ndev_key_t,
+           uct_ib_device_to_ndev_val_t, 1,
+           uct_ib_device_to_ndev_cache_hash_func,
+           uct_ib_device_to_ndev_cache_hash_equal);
+
+static khash_t(uct_ib_device_to_ndev) ib_dev_to_ndev_map;
+
+int uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
+                                      int gid_index)
+{
+    uct_ib_device_to_ndev_key_t  ib_dev = {.dev = dev,
+                                           .port_num = port_num,
+                                           .gid_index = gid_index};
+    uct_ib_device_to_ndev_val_t *ndev_p;
+    khiter_t iter;
+    int ret;
+    ucs_status_t status;
+
+    /* get value for ib_dev */
+    iter = kh_get(uct_ib_device_to_ndev, &ib_dev_to_ndev_map,
+                  ib_dev);
+
+    /* if exists return if_index */
+    if (ucs_likely(iter != kh_end(&ib_dev_to_ndev_map))) {
+        ndev_p = &kh_val(&ib_dev_to_ndev_map, iter);
+        return ndev_p->if_index;
+    }
+
+    iter = kh_put(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev, &ret);
+    ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
+
+    if (ret == UCS_KH_PUT_FAILED) {
+        return -1;
+    }
+
+    ndev_p = &kh_val(&ib_dev_to_ndev_map, iter);
+    status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
+                                              ndev_p->ndev_name,
+                                              sizeof(ndev_p->ndev_name));
+    if (status != UCS_OK) {
+        // uct_iface_fill_info_str_buf(params,
+        //                             "couldn't get network interface name");
+        return -1;
+    }
+
+    ndev_p->if_index = if_nametoindex(ndev_p->ndev_name);
+    if (ndev_p->if_index == 0) {
+        ucs_error("failed to get interface index for %s (errno %d)",
+                  ndev_p->ndev_name, errno);
+        return -1;
+    }
+
+    return ndev_p->if_index;
+}
+
 static int
 uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, int gid_index,
                               struct sockaddr *sa_remote,
@@ -670,19 +750,14 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, int gid_index,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
-    char ndev_name[IFNAMSIZ];
     char remote_str[128];
-    ucs_status_t status;
+    int iface_index;
+    // ucs_status_t status;
 
-    status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
-                                              ndev_name, sizeof(ndev_name));
-    if (status != UCS_OK) {
-        uct_iface_fill_info_str_buf(params,
-                                    "couldn't get network interface name");
-        return 0;
-    }
+    iface_index = uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index);
+    if (iface_index <= 0) {/* ucs_error(); return...*/}
 
-    if (!ucs_netlink_route_exists(ndev_name, sa_remote)) {
+    if (!ucs_netlink_route_exists(iface_index, sa_remote)) {
         uct_iface_fill_info_str_buf(params, "remote address %s is not routable",
                                     ucs_sockaddr_str(sa_remote, remote_str, 128));
         return 0;
