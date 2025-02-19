@@ -754,7 +754,7 @@ ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep)
     ucs_status_t status;
     ucp_lane_index_t lane;
 
-    lane = ucs_ffs64_safe(ep->ext->flush_state.unflushed_lanes);
+    lane = ucs_ffs64_safe(ep->ext->unflushed_lanes);
     status = uct_ep_fence(ucp_ep_get_lane(ep, lane), 0);
     if (status != UCS_OK) {
         return status;

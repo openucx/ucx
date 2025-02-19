@@ -358,7 +358,7 @@ ucp_proto_am_zcopy_multi_common_send_func(
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_multi_rma_init_func(ucp_request_t *req)
 {
-    req->send.ep->ext->flush_state.unflushed_lanes |=
+    req->send.ep->ext->unflushed_lanes |=
             ((ucp_proto_multi_priv_t*)req->send.proto_config->priv)->lane_map;
 }
 
