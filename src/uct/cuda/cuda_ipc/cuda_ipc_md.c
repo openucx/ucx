@@ -116,7 +116,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
 #if HAVE_CUDA_FABRIC
-#define UCT_CUDA_IPC_QUERY_NUM_ATTRS 2
+#define UCT_CUDA_IPC_QUERY_NUM_ATTRS 3
     CUmemGenericAllocationHandle handle;
     CUmemoryPool mempool;
     CUpointer_attribute attr_type[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
@@ -134,6 +134,16 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
                 (CUdeviceptr)addr));
 
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&key->buffer_id,
+                                      CU_POINTER_ATTRIBUTE_BUFFER_ID,
+                                      (CUdeviceptr)addr));
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    ucs_trace("exporting handle for %p: base %p b_len %lu buffer_id %llu", addr,
+              (void*)key->d_bptr, key->b_len, key->buffer_id);
+
 #if HAVE_CUDA_FABRIC
     /* cuda_ipc can handle VMM, mallocasync, and legacy pinned device so need to
      * pack appropriate handle */
@@ -142,6 +152,8 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     attr_data[0] = &legacy_capable;
     attr_type[1] = CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES;
     attr_data[1] = &allowed_handle_types;
+    attr_type[2] = CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE;
+    attr_data[2] = &mempool;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
@@ -149,6 +161,8 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     if (status != UCS_OK) {
         goto err;
     }
+
+    key->ph.buffer_id = key->buffer_id;
 
     if (legacy_capable) {
         key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
@@ -184,9 +198,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto common_path;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&mempool,
-                CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE, (CUdeviceptr)addr));
-    if ((status != UCS_OK) || (mempool == 0)) {
+    if (mempool == 0) {
         /* cuda_ipc can only handle UCS_MEMORY_TYPE_CUDA, which has to be either
          * legacy type, or VMM type, or mempool type. Return error if memory
          * does not belong to any of the three types */
@@ -244,14 +256,39 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
     uct_cuda_ipc_memh_t *memh   = tl_memh;
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
+    unsigned long long buffer_id;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&buffer_id,
+                                      CU_POINTER_ATTRIBUTE_BUFFER_ID,
+                                      (CUdeviceptr)address));
+    if (status != UCS_OK) {
+        return status;
+    }
 
     ucs_list_for_each(key, &memh->list, link) {
         if (((uintptr_t)address >= key->d_bptr) &&
             ((uintptr_t)address < (key->d_bptr + key->b_len))) {
-            goto found;
+            ucs_trace("found range (%p ... %p) in local cache", address,
+                      address + length);
+            if (buffer_id == key->buffer_id) {
+                ucs_trace("buffer_id(%llu) match found", buffer_id);
+                goto found;
+            } else {
+                /* VA recycling case. Remove entry. A given pointer should only
+                 * belong to one region so need to look through rest of the
+                 * items in the linked list. Skip to export phase. */
+                ucs_trace("VA recycling detected for (%p ... %p) (%llu, %llu)",
+                          address, address + length, buffer_id, key->buffer_id);
+                ucs_list_del(&key->link);
+                goto not_found;
+            }
         }
     }
 
+    ucs_trace("export handle for (%p ... %p) not found in local cache", address,
+              address + length);
+
+not_found:
     status = uct_cuda_ipc_mem_add_reg(address, memh, &key);
     if (status != UCS_OK) {
         return status;
