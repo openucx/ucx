@@ -902,13 +902,6 @@ uct_ib_mlx5_gga_md_open(uct_component_t *component, const char *md_name,
         goto out_free_dev_list;
     }
 
-    if (!(md->cap_flags & UCT_MD_FLAG_EXPORTED_MKEY)) {
-        ucs_debug("%s: GGA device does not support exported mkey", md_name);
-        uct_ib_mlx5_devx_md_close(&md->super);
-        status = UCS_ERR_UNSUPPORTED;
-        goto out_free_dev_list;
-    }
-
     md->super.component = &uct_gga_component;
     md->super.ops       = &uct_mlx5_gga_md_ops;
     md->name            = UCT_IB_MD_NAME(gga);

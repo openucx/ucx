@@ -1882,15 +1882,10 @@ int uct_ib_mlx5_devx_check_xgvmi(void *cap_2)
     object_for_other_vhca = UCT_IB_MLX5DV_GET64(
             cmd_hca_cap_2, cap_2, allowed_object_for_other_vhca_access);
 
-    if ((object_to_object &
-         UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY) &&
-        (object_for_other_vhca &
-         UCT_IB_MLX5_HCA_CAPS_2_ALLOWED_OBJ_FOR_OTHER_VHCA_ACCESS_MKEY)) {
-
-        return 1;
-    }
-
-    return 0;
+    return ((object_to_object &
+             UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY) &&
+            (object_for_other_vhca &
+             UCT_IB_MLX5_HCA_CAPS_2_ALLOWED_OBJ_FOR_OTHER_VHCA_ACCESS_MKEY));
 }
 
 static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
@@ -2461,9 +2456,9 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     uct_ib_mlx5_devx_init_flush_mr(md);
 
     /*
-     * Device capabilities do not allow to reliably check whether XGVMI for
+     * Device capabilities do not allow reliable check whether XGVMI for
      * indirect mkeys is actually supported. Therefore we do this check by
-     * allowing XGVMI on indirect KSM flush_rkey
+     * allowing XGVMI on indirect KSM flush_rkey.
      */
     if ((cap_2 != NULL) && (md->flush_mr != NULL) &&
         (md->super.flush_rkey != UCT_IB_MD_INVALID_FLUSH_RKEY) &&
@@ -2720,7 +2715,6 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
                         uct_ib_mlx5_devx_mem_t *memh)
 {
     size_t length = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->length;
-    ucs_status_t status;
 
     if (uct_ib_mlx5_devx_has_dm(memh) ||
         !(md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY)) {
@@ -2739,12 +2733,10 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_XGVMI_UMR) ||
         (length > UCT_IB_MD_MAX_MR_SIZE) ||
         (memh->super.flags & UCT_IB_MEM_MULTITHREADED)) {
-        status = uct_ib_mlx5_devx_reg_xgvmi_ksm_mr(md, memh);
+        return uct_ib_mlx5_devx_reg_xgvmi_ksm_mr(md, memh);
     } else {
-        status = uct_ib_mlx5_devx_reg_xgvmi_umr_mr(md, memh);
+        return uct_ib_mlx5_devx_reg_xgvmi_umr_mr(md, memh);
     }
-
-    return status;
 }
 
 static UCS_F_ALWAYS_INLINE int
