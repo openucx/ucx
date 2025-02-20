@@ -11,6 +11,9 @@
 #include <ucs/datastruct/frag_list.h>
 
 
+typedef ucs_frag_list_sn_t uct_srd_psn_t;
+
+
 typedef struct uct_srd_neth {
     uint32_t             packet_type;
 } UCS_S_PACKED uct_srd_neth_t;
@@ -25,5 +28,11 @@ typedef struct uct_srd_ep_addr {
     uct_srd_iface_addr_t iface_addr;
     uct_ib_uint24_t      ep_id;
 } uct_srd_ep_addr_t;
+
+
+typedef struct uct_srd_ep_peer_address {
+    struct ibv_ah        *ah;
+    uint32_t             dest_qpn;
+} uct_srd_ep_peer_address_t;
 
 #endif
