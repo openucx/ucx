@@ -147,8 +147,7 @@ typedef struct uct_rc_pending_req {
 typedef enum uct_rc_fence_mode {
     UCT_RC_FENCE_MODE_NONE,
     UCT_RC_FENCE_MODE_WEAK,
-    UCT_RC_FENCE_MODE_AUTO,
-    UCT_RC_FENCE_MODE_LAST
+    UCT_RC_FENCE_MODE_AUTO
 } uct_rc_fence_mode_t;
 
 
