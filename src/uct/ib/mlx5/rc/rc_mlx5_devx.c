@@ -264,14 +264,20 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem.mem->umem_id);
 
 
-    ucs_info("stride %d max %d len %d seg_size: %d log_wqe_stride_size: %d", stride, max, len,
-             iface->super.super.config.seg_size,
-             (ucs_ilog2(iface->super.super.config.seg_size) - 6) & 0xf);
-
-    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+    if (UCT_RC_MLX5_MP_ENABLED(iface) ||
+        (iface->config.srq_topo ==
+         UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST)) {
         /* Normalize to device's interface values (range of (-6) - 7) */
         /* cppcheck-suppress internalAstError */
         log_num_of_strides = ucs_ilog2(iface->tm.mp.num_strides) - 9;
+        ucs_assertv_always(md->smbrwq.max_message_size_bytes
+                           >= iface->super.super.config.seg_size,
+                           "max_message_size_bytes %d, seg_size %d",
+                           md->smbrwq.max_message_size_bytes,
+                           iface->super.super.config.seg_size);
+
+        ucs_info("stride: %d seg_size (also stride size): %d, wqe size in strides: %d",
+                 stride, iface->super.super.config.seg_size, iface->tm.mp.num_strides);
 
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,
                           log_num_of_strides & 0xF);

@@ -128,14 +128,20 @@ void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
 static void uct_ib_mlx5_devx_set_smbrwq_attr(uct_ib_iface_t *iface, const uct_ib_mlx5_md_t *md, char *create_qp_in)
 {
     void *qpce = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, create_qp_in, qpc_data_extension);
-    int seg_size = 1 << ((ucs_ilog2(iface->config.seg_size) - 6) & 0xf); 
+    int seg_size = iface->config.seg_size;
     int stride_size = 32;
+    int max_strides = 256 + 64;
+    //ucs_min(md->smbrwq.max_message_size_stride, md->smbrwq.max_message_size_bytes / stride_size) / 2;
+
+    ucs_info("Setting SM-BRWQ attributes for QP: seg_size %d, stride_size %d "
+             "max number of strides: %d",
+             seg_size, stride_size, max_strides);
 
     UCT_IB_MLX5DV_SET(create_qp_in, create_qp_in, qpc_ext, 1);
     UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
                       UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
     UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size,
-                      seg_size / stride_size);
+                      max_strides);
 }
 
 static int uct_ib_mlx5_devx_is_smbrwq_enabled(uct_ib_mlx5_md_t *md,

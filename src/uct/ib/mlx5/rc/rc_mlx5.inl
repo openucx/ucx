@@ -1450,36 +1450,6 @@ uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
 
 #define UCT_IB_MLX5_NUM_OF_STRIDES_CONSUMED_MASk 0x1FFF0000
 
-// static void *uct_rc_mlx5_iface_striding_data(uct_rc_mlx5_iface_common_t *iface,
-//                                              struct mlx5_cqe64 *cqe,
-//                                              unsigned byte_len, unsigned *flags)
-// {
-//     uct_ib_mlx5_srq_seg_t *seg;
-//     uct_ib_iface_recv_desc_t *desc;
-//     void *hdr;
-
-//     seg  = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, ntohs(cqe->wqe_counter));
-//     desc = seg->srq.desc;
-
-//     // ucs_info("seg: ptr_mask=%x next_wqe_index=%x signature=%x strides=%x",
-//     //          seg->srq.ptr_mask, seg->srq.next_wqe_index, seg->srq.signature,
-//     //          seg->srq.strides);
-
-//     if (cqe->op_own & (MLX5_INLINE_SCATTER_32 | MLX5_INLINE_SCATTER_64)) {
-//         return uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, flags);
-//     }
-
-//     hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-//     VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
-//     *flags = UCT_CB_PARAM_FLAG_DESC;
-//     /* Assuming that next packet likely will be non-inline,
-//          * setup the next prefetch pointer
-//          */
-//     uct_rc_mlx5_srq_prefetch_setup(iface);
-
-//     return hdr;
-// }
-
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
                                  int poll_flags)
@@ -1525,8 +1495,10 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
                         UCT_IB_MLX5_NUM_OF_STRIDES_CONSUMED_MASk) >>
                        16;
     byte_len         = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
-    count            = 1; //strides_consumed;
-             
+    count            = 1;
+
+    // ucs_assertv_always(byte_len <= (strides_consumed * 64), "byte_len=%u, "
+    //                    "strides_consumed=%d", byte_len, strides_consumed);
 
     if (ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_FILLER_FLAG) {
         ucs_warn("Filler CQE arrived");

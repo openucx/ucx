@@ -42,6 +42,12 @@ uct_ib_mlx5_cqe_is_hw_owned(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe,
     }
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_cqe_is_64k_striding(struct mlx5_cqe64 *cqe)
+{
+    uint32_t byte_cnt = htonl(cqe->byte_cnt);
+    return (!(byte_cnt & 0xFFFF)) && (((byte_cnt & 0x1FFF000) >> 16) > 0);
+}
 
 /**
  * Checks that cqe_format is equal to 3 (cqe is a part of compression block)
@@ -193,7 +199,9 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
 
     uct_ib_mlx5_dump_cqe(cqe);
 
-    if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(cqe->op_own))) {
+    if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(cqe->op_own))
+        // && !uct_ib_mlx5_cqe_is_64k_striding(cqe)
+        ) {
         return check_cqe_cb(iface, cq, cqe, poll_flags);
     }
 
