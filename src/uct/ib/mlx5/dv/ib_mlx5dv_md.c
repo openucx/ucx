@@ -2068,6 +2068,13 @@ uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
     *length_p     = dm_attr.length;
     *address_p    = address;
     *memh_p       = memh;
+
+    ucs_debug("%s: allocated device memory (%s) %p..%p length %zu, dm %p, mkey "
+              "0x%x",
+              uct_ib_device_name(&md->dev), alloc_name, address,
+              UCS_PTR_BYTE_OFFSET(address, dm_attr.length), dm_attr.length, dm,
+              mkey);
+
     return UCS_OK;
 
 err_dereg_dm:
@@ -2138,6 +2145,8 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
     ucs_status_t status;
 
     if (md->super.dev.dev_attr.max_dm_size == 0) {
+        ucs_debug("%s: device memory is not supported - max_dm_size is 0",
+                  uct_ib_device_name(&md->super.dev));
         return;
     }
 
@@ -2164,6 +2173,12 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
                  ucs_status_string(status));
         return;
     }
+
+    ucs_debug("%s: KSM over device memory is supported",
+              uct_ib_device_name(&md->super.dev));
+
+#else
+    ucs_debug("UCX was compiled without --with-dm configuration");
 #endif
 }
 
