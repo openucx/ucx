@@ -279,7 +279,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
     }
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
-    status = ucp_memh_register(context, memh, md_map, uct_flags, alloc_name);
+    if (ucp_memh_is_derived_memh(*memh_p)) {
+        *memh_p = ucp_memh_derived_put(*memh_p);
+    }
+    status = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }
@@ -287,12 +290,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_mem_dereg_single(ucp_mem_h *memh_p)
 {
-    if (*memh_p == NULL) {
-        return;
-    }
-
-    if (ucp_memh_put(*memh_p)) {
-        *memh_p = NULL;
+    if (*memh_p != NULL) {
+        *memh_p = ucp_memh_put(*memh_p);
     }
 }
 

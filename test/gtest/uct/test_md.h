@@ -64,6 +64,21 @@ protected:
         return m_md_attr;
     }
 
+    std::vector<uint8_t>
+    mkey_pack(uct_mem_h memh, unsigned flags = 0, void *ptr = NULL,
+              size_t size = SIZE_MAX) const {
+        size_t rkey_size = flags & UCT_MD_MKEY_PACK_FLAG_EXPORT ?
+                                md_attr().exported_mkey_packed_size :
+                                md_attr().rkey_packed_size;
+        std::vector<uint8_t> rkey(rkey_size, 0);
+        uct_md_mkey_pack_params_t pack_params;
+        pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
+        pack_params.flags      = flags;
+        EXPECT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, ptr, size, &pack_params,
+                                          rkey.data()));
+        return rkey;
+    }
+
     typedef struct {
         test_md          *self;
         uct_completion_t comp;
