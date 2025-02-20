@@ -873,7 +873,7 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
         status = uct_ib_mlx5_devx_reg_mr(md, memh, address, length, params,
                                          UCT_IB_MR_STRICT_ORDER,
                                          ~IBV_ACCESS_RELAXED_ORDERING,
-                                         &dummy_mkey, &memh->atomic_rkey);
+                                         &dummy_mkey, &dummy_mkey);
         if (status != UCS_OK) {
             goto err_dereg_default;
         }
@@ -2868,6 +2868,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 {
     uct_ib_mlx5_md_t *md         = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     uct_ib_mlx5_devx_mem_t *memh = uct_memh;
+    uint32_t atomic_rkey;
     ucs_status_t status;
     unsigned flags;
     uint32_t rkey;
@@ -2930,6 +2931,11 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         } else if (status != UCS_ERR_UNSUPPORTED) {
             return status;
         }
+        atomic_rkey = memh->atomic_rkey;
+    } else if (uct_ib_mlx5_devx_memh_has_ro(md, memh)) {
+        atomic_rkey = memh->mrs[UCT_IB_MR_STRICT_ORDER].super.ib->rkey;
+    } else {
+        atomic_rkey = memh->atomic_rkey;
     }
 
     if (ENABLE_PARAMS_CHECK && (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO) &&
@@ -2952,7 +2958,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         rkey = memh->super.rkey;
     }
 
-    uct_ib_md_pack_rkey(rkey, memh->atomic_rkey, mkey_buffer);
+    uct_ib_md_pack_rkey(rkey, atomic_rkey, mkey_buffer);
     return UCS_OK;
 }
 
