@@ -10,6 +10,7 @@
 #include "ucp_mm.h"
 
 #include <ucs/memory/rcache.inl>
+#include <ucs/datastruct/mpool.inl>
 
 
 static UCS_F_ALWAYS_INLINE int
@@ -46,6 +47,14 @@ ucp_memh_get_pack_memh(ucp_mem_h memh, unsigned uct_flags)
     }
 
     return ucp_memh_derived_get(memh);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_mem_desc_put(ucp_mem_desc_t *mdesc)
+{
+    if (ucp_memh_is_derived_memh(mdesc->memh)) {
+        mdesc->memh = ucp_memh_derived_put(mdesc->memh);
+    }
+    ucs_mpool_put_inline(mdesc);
 }
 
 static UCS_F_ALWAYS_INLINE void

@@ -1004,7 +1004,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
     ucp_request_t *rndv_req;
 
     /* release memory descriptor */
-    ucs_mpool_put_inline((void*)freq->send.rndv.mdesc);
+    ucp_mem_desc_put((void*)freq->send.rndv.mdesc);
 
     /* rndv_req is NULL in case of put protocol */
     if (!is_put_proto) {
@@ -1949,7 +1949,7 @@ ucp_rndv_send_frag_completion_common(uct_completion_t *comp, int is_rkey_ptr)
     }
 
     if (freq->send.rndv.mdesc != NULL) {
-        ucs_mpool_put_inline((void*)freq->send.rndv.mdesc);
+        ucp_mem_desc_put((void*)freq->send.rndv.mdesc);
     }
 
     fsreq                        = ucp_request_get_super(freq);

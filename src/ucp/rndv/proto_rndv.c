@@ -575,7 +575,7 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_am_release_user_header(req);
 
-    if (ucp_request_memh_invalidate(req, status)) {
+    if (ucp_request_memh_invalidate(req, status, 0)) {
         ucp_proto_rndv_rts_reset(req);
         return;
     }

@@ -371,7 +371,8 @@ ucp_request_dt_dereg(ucp_mem_h *memhs, size_t count, ucp_request_t *req_dbg)
     }
 }
 
-int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
+int
+ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status, int mdesc)
 {
     ucp_ep_h ep                      = req->send.ep;
     ucp_err_handling_mode_t err_mode = ucp_ep_config(ep)->key.err_mode;
@@ -385,7 +386,9 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
     }
 
     /* Get the contig memh from the request basing on the proto version */
-    if (context->config.ext.proto_enable) {
+    if (mdesc) {
+        memh_p = &req->send.rndv.mdesc->memh;
+    } else if (context->config.ext.proto_enable) {
         ucs_assertv(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG,
                     "dt_class=%s",
                     ucp_datatype_class_names[req->send.state.dt_iter.dt_class]);
@@ -403,14 +406,16 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
     ucs_assert(status != UCS_OK);
     ucs_assert(!ucp_request_is_invalidated(req));
 
+    if (mdesc) {
+        req->send.invalidate.mdesc = req->send.rndv.mdesc;
+    }
     req->send.invalidate.worker    = worker;
     req->send.invalidate.comp.func = ucp_request_mem_invalidate_completion;
     req->send.invalidate.comp.arg  = req;
     req->status                    = status;
     req->flags                    |= UCP_REQUEST_FLAG_INVALIDATED;
 
-    ucp_memh_derived_invalidate(*memh_p, &req->send.invalidate.comp);
-    *memh_p = NULL;
+    *memh_p = ucp_memh_derived_invalidate(*memh_p, &req->send.invalidate.comp);
     return 1;
 }
 

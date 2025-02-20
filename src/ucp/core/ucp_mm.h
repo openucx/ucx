@@ -224,23 +224,40 @@ void ucp_mem_rcache_cleanup(ucp_context_h context);
 void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
 
 /**
- * TODO
+ * Return existing derived memh from the direct memh, with incremented reference
+ * count. If no valid derived memh exists, create a new one with reference count
+ * set to 1.
+ * @param [in] memh Direct memory handle to get derived from.
+ * @return Derived memory handle.
  */
 ucp_mem_h ucp_memh_derived_get(ucp_mem_h memh);
 
 /**
- * TODO
+ * Put derived memh, decrementing its reference count. If the reference count
+ * reaches 0 and derived memh is marked as invalid, then derived memh is
+ * destroyed and detached from the parent.
+ * @param [in] derived Derived memory handle to put.
+ * @return Parent memory handle.
  */
 ucp_mem_h ucp_memh_derived_put(ucp_mem_h derived);
 
 /**
- * TODO
+ * Invalidate derived memory handle, marking it as invalid and decrementing its
+ * reference count. If the reference count reaches 0, then derived memh is
+ * destroyed and detached from the parent.
+ * @param [in] derived Derived memory handle to invalidate.
+ * @param [in] comp    Completion to add to the list of completions to be called
+ *                     when derived memh is destroyed.
+ * @return Parent memory handle, or NULL if parent is from rcache.
  */
-void ucp_memh_derived_invalidate(ucp_mem_h derived,
-                                 ucp_memh_invalidate_comp_t *comp);
+ucp_mem_h ucp_memh_derived_invalidate(ucp_mem_h derived,
+                                      ucp_memh_invalidate_comp_t *comp);
 
 /**
- * TODO
+ * Reset potentially existing derived memory handle of some direct original memh
+ * by marking it as invalid to prevent future usage. It does not decrement the
+ * reference count of the derived memh.
+ * @param [in] memh Direct memory handle to reset derived from.
  */
 void ucp_memh_derived_reset(ucp_mem_h memh);
 

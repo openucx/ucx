@@ -231,7 +231,7 @@ static void ucp_proto_rndv_rtr_abort(ucp_request_t *req, ucs_status_t status)
         ucp_proto_rndv_rkey_destroy(req);
     }
 
-    if (ucp_request_memh_invalidate(req, status)) {
+    if (ucp_request_memh_invalidate(req, status, 0)) {
         ucp_proto_request_zcopy_id_reset(req);
         return;
     }
@@ -258,7 +258,6 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
     ucp_md_map_t md_map                    = rpriv->super.md_map;
     ucp_mem_desc_t *mdesc                  = req->send.rndv.mdesc;
-    ucp_mem_h *memh;
     unsigned pack_flags;
     ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
@@ -269,17 +268,13 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     ucs_assert(ucs_test_all_flags(mdesc->memh->md_map, md_map));
 
     /* Pack remote key for the fragment */
-    memh = &req->send.state.dt_iter.type.contig.memh;
-    if (*memh == NULL) {
-        *memh = mdesc->memh;
-    }
-
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     pack_flags       = ucp_ep_config(req->send.ep)->uct_rkey_pack_flags;
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
-    packed_rkey_size = ucp_rkey_pack_memh(context, md_map, memh, mdesc->ptr,
+    packed_rkey_size = ucp_rkey_pack_memh(context, md_map, &mdesc->memh,
+                                          mdesc->ptr,
                                           req->send.state.dt_iter.length,
                                           &mem_info, 0, NULL, pack_flags,
                                           rtr + 1);
@@ -301,7 +296,7 @@ ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
 {
     if (!abort ||
         ((req->send.rndv.mdesc != NULL) && !ucp_request_is_invalidated(req))) {
-        ucs_mpool_put_inline(req->send.rndv.mdesc);
+        ucp_mem_desc_put(req->send.rndv.mdesc);
     }
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
         ucp_proto_rndv_ppln_recv_frag_complete(req, 0, abort);
@@ -317,7 +312,7 @@ static void ucp_proto_rndv_rtr_mtype_complete_abort(void *request,
     ucp_request_t *req = (ucp_request_t*)request - 1;
 
     if (req->send.invalidate.mdesc != NULL) {
-        ucs_mpool_put_inline(req->send.invalidate.mdesc);
+        ucp_mem_desc_put(req->send.invalidate.mdesc);
     }
     ucp_proto_rndv_rtr_mtype_complete(req, 1);
 }
@@ -326,7 +321,6 @@ static void
 ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_request_t *super_req = ucp_request_get_super(req);
-    ucp_mem_desc_t *mdesc    = req->send.rndv.mdesc;
 
     super_req->status = status;
 
@@ -343,8 +337,7 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
         ucp_proto_rndv_rkey_destroy(req);
     }
 
-    if (ucp_request_memh_invalidate(req, status)) {
-        req->send.invalidate.mdesc = mdesc;
+    if (ucp_request_memh_invalidate(req, status, 1)) {
         return;
     }
 
@@ -354,7 +347,7 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 static ucs_status_t ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
 {
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
-        ucs_mpool_put_inline(req->send.rndv.mdesc);
+        ucp_mem_desc_put(req->send.rndv.mdesc);
         req->send.rndv.mdesc = NULL;
     }
 

@@ -2024,15 +2024,16 @@ void ucp_memh_derived_destroy(ucp_mem_h derived)
     ucs_status_t status;
 
     ucs_assert(ucp_memh_is_derived_memh(derived));
-    ucs_assertv(derived->super.refcount == 0, "derived memh %p refcount=%d",
+    ucs_assertv(derived->super.refcount == 0, "derived memh=%p refcount=%d",
                 derived, derived->super.refcount);
 
+    ucs_debug("destroying derived memh=%p from memh=%p", derived,
+              derived->parent);
     ucp_memh_derived_remove_from_list(derived->parent, derived);
     ucp_memh_derived_completion(derived);
 
     params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
 
-    ucs_trace("destroying derived memh=%p", derived);
     ucs_for_each_bit(md_index, derived->md_map) {
         if (ucp_memh_is_derived_cap(derived, md_index)) {
             params.memh = derived->uct[md_index];
@@ -2059,7 +2060,7 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
     uct_md_mem_reg_params_t params;
 
     /* TODO: use memory pool for derived handles? */
-    ucs_trace("creating derived memh from %p", memh);
+    ucs_debug("creating derived memh from %p", memh);
     derived = ucs_calloc(1, ucp_memh_size(context), "ucp_memh_derived");
     if (derived == NULL) {
         ucs_error("failed to allocate memory for derived memh");
@@ -2099,7 +2100,7 @@ static ucp_mem_h ucp_memh_derived_create(ucp_mem_h memh)
     derived->derived        = memh->derived;
     memh->derived           = derived;
 
-    ucs_trace("created derived memh=%p from memh=%p", derived, memh);
+    ucs_debug("created derived memh=%p from memh=%p", derived, memh);
     return derived;
 }
 
@@ -2108,6 +2109,7 @@ ucp_mem_h ucp_memh_derived_get(ucp_mem_h memh)
     /* TODO: disable invalidation for user memh? */
     /* TODO: Check if any of the requested MDs supports invalidation? */
     /* TODO: Assert that context->mt_lock is acquired? */
+    /* TODO: move into ucp_mm.inl? */
     if ((memh->derived != NULL) &&
         !(memh->derived->flags & UCP_MEMH_FLAG_INVALIDATED)) {
         ucs_assertv(memh->md_map == memh->derived->md_map,
@@ -2139,16 +2141,16 @@ ucp_mem_h ucp_memh_derived_put(ucp_mem_h derived)
     }
 
     /* TODO: Assert that context->mt_lock is acquired? */
+    orig_memh = derived->parent;
     ucs_assert(ucp_memh_is_derived_memh(derived));
     ucs_assert(derived->super.refcount > 0);
     --derived->super.refcount;
-    orig_memh = derived->parent;
     ucp_memh_derived_pending_destroy(derived);
     return orig_memh;
 }
 
-void ucp_memh_derived_invalidate(ucp_mem_h derived,
-                                 ucp_memh_invalidate_comp_t *comp)
+ucp_mem_h ucp_memh_derived_invalidate(ucp_mem_h derived,
+                                      ucp_memh_invalidate_comp_t *comp)
 {
     ucp_context_h context = derived->context;
     ucp_mem_h orig_memh   = derived->parent;
@@ -2156,6 +2158,8 @@ void ucp_memh_derived_invalidate(ucp_mem_h derived,
     ucs_assert(ucp_memh_is_derived_memh(derived));
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
+    ucs_debug("invalidate derived memh=%p from memh=%p, refcount=%u", derived,
+              orig_memh, derived->super.refcount);
     ucs_assert(derived->super.refcount > 0);
 
     if (comp != NULL) {
@@ -2166,7 +2170,7 @@ void ucp_memh_derived_invalidate(ucp_mem_h derived,
     ucp_memh_derived_put(derived);
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 
-    ucp_memh_put(orig_memh);
+    return ucp_memh_put(orig_memh);
 }
 
 void ucp_memh_derived_reset(ucp_mem_h memh)
@@ -2177,6 +2181,8 @@ void ucp_memh_derived_reset(ucp_mem_h memh)
 
     derived = memh->derived;
     if (derived != NULL) {
+        ucs_debug("reset derived memh=%p from memh=%p, refcount=%u", derived,
+                  memh, derived->super.refcount);
         derived->flags |= UCP_MEMH_FLAG_INVALIDATED;
         ucp_memh_derived_pending_destroy(derived);
     }
