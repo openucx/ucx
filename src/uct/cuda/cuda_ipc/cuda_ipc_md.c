@@ -374,6 +374,8 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
     uct_cuda_ipc_memh_t *memh;
     CUdevice cu_device;
 
+    UCT_CHECK_NOT_DERIVED_MEMH(params, "cuda_ipc_md");
+
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
     memh = ucs_malloc(sizeof(*memh), "uct_cuda_ipc_memh_t");
