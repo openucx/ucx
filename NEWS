@@ -11,6 +11,14 @@
 ### Features:
 ### Bugfixes:
 
+## 1.18.1-rc1 (February 20, 2025)
+### Features:
+#### AZP
+ * Added Ubuntu 24.04 to build and release pipeline
+### Bugfixes:
+#### UCP
+ * Fixed potential active message user header use after free with protocol reconfiguration
+
 ## 1.18.0 (January 17, 2025)
 ### Features:
 #### UCP
