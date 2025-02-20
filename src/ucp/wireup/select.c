@@ -1614,7 +1614,8 @@ static unsigned
 ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                             ucp_wireup_select_bw_info_t *bw_info,
                             ucp_tl_bitmap_t tl_bitmap, ucp_lane_index_t excl_lane,
-                            ucp_wireup_select_context_t *select_ctx)
+                            ucp_wireup_select_context_t *select_ctx,
+                            unsigned allow_extra_path)
 {
     ucp_proto_select_info_array_t sinfo_array    = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucp_ep_h ep                                  = select_params->ep;
@@ -1679,7 +1680,8 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                 if (num_paths_limit == 0) {
                     num_paths_limit = ucs_min(iface_attr->dev_num_paths,
                                               ae->dev_num_paths) +
-                                      ((skip_local == local_dev_index) &&
+                                      (allow_extra_path &&
+                                       (skip_local == local_dev_index) &&
                                        (skip_remote == remote_dev_index));
                 }
 
@@ -1815,9 +1817,10 @@ ucp_wireup_add_bw_lanes_d2d(const ucp_wireup_select_params_t *select_params,
         /* Account for possible path override */
         local_num_paths  = iface_attr->dev_num_paths;
         remote_num_paths = ae->dev_num_paths;
-        if (allow_extra_path &&
-            ((skip_dev_index != UCP_NULL_RESOURCE) && /* clang sanitizer */
-             (skip_dev_index == dev_index))) {
+        if (allow_extra_path && (skip_dev_index == dev_index)) {
+            /* clang sanitizer */
+            ucs_assert(skip_dev_index != UCP_NULL_RESOURCE);
+
             /* Allow path since we skipped one */
             local_num_paths++;
             remote_num_paths++;
@@ -1858,7 +1861,8 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
 {
     if (select_params->ep->worker->context->config.ext.ep_allow_all_to_all) {
         return ucp_wireup_add_bw_lanes_a2a(select_params, bw_info, tl_bitmap,
-                                           excl_lane, select_ctx);
+                                           excl_lane, select_ctx,
+                                           allow_extra_path);
     } else {
         return ucp_wireup_add_bw_lanes_d2d(select_params, bw_info, tl_bitmap,
                                            excl_lane, select_ctx,
