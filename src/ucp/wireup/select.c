@@ -1568,6 +1568,7 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
         sinfo_sort_elem->sinfo   = sinfo;
         sinfo_sort_elem->lane_bw = ucp_wireup_get_lane_bw(
                 worker, sinfo, select_params->address);
+        /* TODO: filter out extra lanes without reg-mem-types support */
     }
 
     qsort(sinfo_array_sorted.buffer,
@@ -1621,8 +1622,8 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_dev_usage_count dev_count         = {};
     uint64_t local_dev_bitmap                    = bw_info->local_dev_bitmap;
     uint64_t remote_dev_bitmap                   = bw_info->remote_dev_bitmap;
-    uint16_t num_paths_limits[UCP_MAX_RESOURCES];
-    uint16_t num_paths_count[UCP_MAX_RESOURCES];
+    uint16_t num_paths_limit;
+    uint16_t num_paths_count;
     const uct_iface_attr_t *iface_attr;
     const ucp_address_entry_t *ae;
     ucp_rsc_index_t skip_local;
@@ -1649,10 +1650,9 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
     }
 
     ucs_for_each_bit(local_dev_index, local_dev_bitmap) {
-        memset(num_paths_count,  0, sizeof(num_paths_count));
-        memset(num_paths_limits, 0, sizeof(num_paths_limits));
-
         ucs_for_each_bit(remote_dev_index, remote_dev_bitmap) {
+            num_paths_count = 0;
+            num_paths_limit = 0;
             do {
                 sinfo  = ucs_array_append(&sinfo_array, break);
                 status = ucp_wireup_select_transport(
@@ -1676,19 +1676,17 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                 dev_count.remote_skip[remote_dev_index] = (remote_dev_index ==
                                                            skip_remote);
 
-                if (num_paths_limits[remote_dev_index] == 0) {
-                    num_paths_limits[remote_dev_index] =
-                            ucs_min(iface_attr->dev_num_paths,
-                                    ae->dev_num_paths) +
-                            ((skip_local == local_dev_index) &&
-                             (skip_remote == remote_dev_index));
+                if (num_paths_limit == 0) {
+                    num_paths_limit = ucs_min(iface_attr->dev_num_paths,
+                                              ae->dev_num_paths) +
+                                      ((skip_local == local_dev_index) &&
+                                       (skip_remote == remote_dev_index));
                 }
 
-                ucs_assert(num_paths_limits[remote_dev_index] > 0);
+                ucs_assert(num_paths_limit > 0);
 
-                sinfo->path_index = num_paths_count[remote_dev_index]++;
-            } while (num_paths_count[remote_dev_index] <
-                     num_paths_limits[remote_dev_index]);
+                sinfo->path_index = num_paths_count++;
+            } while (num_paths_count < num_paths_limit);
         }
     }
 
@@ -1858,8 +1856,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_context_t *select_ctx,
                         unsigned allow_extra_path)
 {
-    if (select_params->ep->worker->context->config.ext.ep_allow_all_to_all &&
-        allow_extra_path) {
+    if (select_params->ep->worker->context->config.ext.ep_allow_all_to_all) {
         return ucp_wireup_add_bw_lanes_a2a(select_params, bw_info, tl_bitmap,
                                            excl_lane, select_ctx);
     } else {
