@@ -1,0 +1,12 @@
+[package]
+name = "ucx-sys"
+version = "0.1.0"
+edition = "2021"
+description = "Low level Rust bindings"
+license = "BSD"
+
+[build-dependencies]
+bindgen = "0.70.1"
+
+[dependencies.bitflags]
+version = "2.6.0"
