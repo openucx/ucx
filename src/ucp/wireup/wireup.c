@@ -1362,12 +1362,13 @@ ucp_wireup_is_am_need_flush(ucp_ep_h ep, const ucp_lane_index_t *reuse_lane_map)
     /* If CM lane exists, no AM messages were sent through AM lane, thus flush
      * is not required */
     return !ucp_ep_has_cm_lane(ep) &&
-           /* Verify AM lane exists */
+           /* AM lane exists */
            (am_lane != UCP_NULL_LANE) &&
            /* Lane is not being reused */
            (reuse_lane_map[am_lane] == UCP_NULL_LANE) &&
-           /* Lane is not yet operational */
-           !ucp_ep_is_lane_p2p(ep, am_lane);
+           /* Lane is operational */
+           (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
+            !ucp_ep_is_lane_p2p(ep, am_lane));
 }
 
 static ucp_lane_index_t ucp_wireup_get_reconfig_msg_lane(ucp_ep_h ep)
@@ -1384,7 +1385,8 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
                                    const ucp_unpacked_address_t *remote_address,
                                    const unsigned *addr_indices)
 {
-    ucp_lane_index_t lane, wireup_lane, reuse_lane_map[UCP_MAX_LANES];
+    ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES];
+    ucp_lane_index_t old_lane, new_lane, wireup_lane;
     const ucp_ep_config_key_t *old_key;
 
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
@@ -1396,14 +1398,16 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
 
     /* TODO: 1) Support lanes which are connected to the same remote MD, but
      *          different remote sys_dev (eg. TCP). */
-    for (lane = 0; lane < old_key->num_lanes; ++lane) {
-        if (ucp_ep_config_lane_is_equal(old_key, new_key, lane) ||
-            (ucp_ep_config_find_match_lane(old_key, lane, new_key) ==
-             UCP_NULL_LANE)) {
-            continue;
-        }
+    for (old_lane = 0; old_lane < old_key->num_lanes; ++old_lane) {
+        new_lane = ucp_ep_config_find_match_lane(old_key, old_lane, new_key);
 
-        return 0;
+        /* Old config has a lane with same remote MD as new config */
+        if ((new_lane != UCP_NULL_LANE) &&
+            /* The mathing lanes have different remote sys_dev values */
+            (old_key->lanes[old_lane].dst_sys_dev !=
+             new_key->lanes[new_lane].dst_sys_dev)) {
+            return 0;
+        }
     }
 
     ucp_ep_config_lanes_intersect(old_key, new_key, ep, remote_address,

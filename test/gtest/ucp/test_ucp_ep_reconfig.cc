@@ -342,11 +342,13 @@ void test_ucp_ep_reconfig::entity::verify_configuration(
         UCS_STATIC_BITMAP_SET(&reused_rscs, ucp_ep_get_rsc_index(ep(), lane));
     }
 
-    if (is_reconfigured()) {
-        EXPECT_EQ(expected_reused_rscs,
-                  UCS_STATIC_BITMAP_POPCOUNT(reused_rscs));
-    } else {
+    auto test = static_cast<const test_ucp_ep_reconfig*>(m_test);
+
+    if (!is_reconfigured()) {
         EXPECT_EQ(num_lanes, reused_lanes);
+    } else if (test->reuse_lanes()) {
+        EXPECT_EQ(expected_reused_rscs,
+                           UCS_STATIC_BITMAP_POPCOUNT(reused_rscs));
     }
 }
 
