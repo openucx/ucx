@@ -111,6 +111,11 @@ ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
     memcpy(dst, src, len);
 }
 
+static UCS_F_ALWAYS_INLINE void ucs_cpu_relax()
+{
+    asm volatile ("" ::: "memory");
+}
+
 END_C_DECLS
 
 #endif
