@@ -365,7 +365,8 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
         num_channels = iface->tx.num_dci_channels;
     }
 
-    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, 1, num_channels);
+    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, 1, num_channels,
+                                          pool_index);
     if (status != UCS_OK) {
         ucs_error("iface %p: failed to create dci %u at pool %u", iface,
                   dci_index, pool_index);
