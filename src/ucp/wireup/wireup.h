@@ -139,6 +139,12 @@ typedef struct {
 } ucp_wireup_select_info_t;
 
 
+typedef struct {
+    const ucp_wireup_select_info_t *sinfo;
+    double                         lane_bw;
+} ucp_wireup_select_info_sort_lane_bw_t;
+
+
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);

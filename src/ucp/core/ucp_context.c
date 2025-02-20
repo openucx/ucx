@@ -554,6 +554,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, max_priority_eps),
    UCS_CONFIG_TYPE_UINT},
 
+   {"EP_ALLOW_ALL_TO_ALL", "y", /* TODO: disable by default */
+    "Change lanes selection logic to allow connect each local device to all "
+    "remote devices.\nTakes effect only if PROTO_ENABLE is enabled.",
+    ucs_offsetof(ucp_context_config_t, ep_allow_all_to_all),
+    UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -2233,6 +2239,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.progress_wrapper_enabled =
             ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
             ucp_context_usage_tracker_enabled(context);
+
+    /* allow all to all connectivity only for protov2 */
+    context->config.ext.ep_allow_all_to_all =
+            context->config.ext.ep_allow_all_to_all &&
+            context->config.ext.proto_enable;
+
     return UCS_OK;
 
 err_free_key_list:
