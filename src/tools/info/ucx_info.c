@@ -58,6 +58,8 @@ static void usage()
     printf("  -s                   Show system information\n");
     printf("  -c                   Show UCX configuration\n");
     printf("  -C                   Comment-out default configuration values\n");
+    printf("  -F <string>          Only show configuration values whose name "
+           "contains 'string'\n");
     printf("  -a                   Show also hidden configuration\n");
     printf("  -f                   Display fully decorated output\n");
     printf("\nUCP information (-u is required):\n");
@@ -122,6 +124,7 @@ int main(int argc, char **argv)
     size_t ucp_num_ppn;
     unsigned print_opts;
     char *tl_name, *mem_spec;
+    const char *cfg_filter;
     const char *f;
     int c;
 
@@ -132,12 +135,14 @@ int main(int argc, char **argv)
     ucp_num_eps              = 1;
     ucp_num_ppn              = 1;
     mem_spec                 = NULL;
+    cfg_filter               = NULL;
     dev_type_bitmap          = UINT_MAX;
     proc_placement           = PROCESS_PLACEMENT_SELF;
     ucp_ep_params.field_mask = 0;
     ip_addr_family           = AF_INET;
 
-    while ((c = getopt(argc, argv, "fahvc6ydbswpeCt:n:u:D:P:m:N:A:TM")) != -1) {
+    while ((c = getopt(argc, argv, "fahvc6ydbswpeCF:t:n:u:D:P:m:N:A:TM")) !=
+           -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -150,6 +155,9 @@ int main(int argc, char **argv)
             break;
         case 'C':
             print_flags |= UCS_CONFIG_PRINT_COMMENT_DEFAULT;
+            break;
+        case 'F':
+            cfg_filter = optarg;
             break;
         case 'v':
             print_opts |= PRINT_VERSION;
@@ -304,7 +312,8 @@ int main(int argc, char **argv)
 
     if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
         ucs_config_parser_print_all_opts(stdout, UCS_DEFAULT_ENV_PREFIX,
-                                         print_flags, &ucs_config_global_list);
+                                         print_flags, &ucs_config_global_list,
+                                         cfg_filter);
     }
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP|PRINT_MEM_MAP)) {
