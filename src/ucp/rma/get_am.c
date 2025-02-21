@@ -100,8 +100,8 @@ ucp_proto_get_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET)) ||
-        init_params->worker->context->config.ext.avoid_copy_mem_types) {
+    if (!ucp_proto_init_check_op_without_bounce(init_params,
+                                                UCS_BIT(UCP_OP_ID_GET))) {
         return;
     }
 

@@ -321,8 +321,8 @@ static size_t ucp_proto_rndv_ppln_pack_ack(void *dest, void *arg)
 static void
 ucp_proto_rndv_send_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_SEND)) ||
-        init_params->worker->context->config.ext.avoid_copy_mem_types) {
+    if (!ucp_proto_init_check_op_without_bounce(init_params,
+                                                UCS_BIT(UCP_OP_ID_RNDV_SEND))) {
         return;
     }
 
@@ -357,8 +357,8 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
 static void
 ucp_proto_rndv_recv_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV)) ||
-        init_params->worker->context->config.ext.avoid_copy_mem_types) {
+    if (!ucp_proto_init_check_op_without_bounce(init_params,
+                                                UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
         return;
     }
 

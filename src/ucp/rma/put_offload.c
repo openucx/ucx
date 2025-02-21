@@ -75,9 +75,9 @@ ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
         .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        !ucp_proto_is_short_supported(init_params->select_param) ||
-        init_params->worker->context->config.ext.avoid_copy_mem_types) {
+    if (!ucp_proto_init_check_op_without_bounce(init_params,
+                                                UCS_BIT(UCP_OP_ID_PUT)) ||
+        !ucp_proto_is_short_supported(init_params->select_param)) {
         return;
     }
 
@@ -179,8 +179,8 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        context->config.ext.avoid_copy_mem_types) {
+    if (!ucp_proto_init_check_op_without_bounce(init_params,
+                                                UCS_BIT(UCP_OP_ID_PUT))) {
         return;
     }
 
