@@ -486,11 +486,10 @@ static ucs_status_t ucp_proto_amo_sw_progress_fetch(uct_pending_req_t *self)
 static void
 ucp_proto_amo_sw_fetch_probe(const ucp_proto_init_params_t *init_params)
 {
-    if (!ucp_proto_init_check_op(init_params,
-                                 UCS_BIT(UCP_OP_ID_AMO_FETCH) |
-                                 UCS_BIT(UCP_OP_ID_AMO_CSWAP)) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        init_params->worker->context->config.ext.avoid_copy_mem_types) {
+    if (!ucp_proto_init_check_op_without_bounce(init_params,
+                                                UCS_BIT(UCP_OP_ID_AMO_FETCH) |
+                                                UCS_BIT(UCP_OP_ID_AMO_CSWAP)) ||
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return;
     }
 
