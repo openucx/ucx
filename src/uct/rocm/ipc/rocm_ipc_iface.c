@@ -203,8 +203,8 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_IPC_TL_NAME));
 
-    self->config.min_zcopy = config->min_zcopy;
-    self->config.latency   = config->latency;
+    self->config.min_zcopy               = config->min_zcopy;
+    self->config.latency                 = config->latency;
     self->config.enable_ipc_handle_cache = config->enable_ipc_handle_cache;
 
     ucs_mpool_params_reset(&mp_params);
