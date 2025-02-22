@@ -1469,6 +1469,8 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
 void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
                         FILE *stream)
 {
+    const ucs_config_allowed_values_t *type_names =
+        UCS_CONFIG_GET_ALLOWED_VALUES(ucs_memory_type_names);
     UCS_STRING_BUFFER_ONSTACK(strb, 128);
     size_t min_page_size, max_page_size;
     ucp_mem_map_params_t mem_params;
@@ -1498,14 +1500,15 @@ void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
     mem_type_str = ucs_string_buffer_next_token(&strb, mem_size_str, ",");
     if (mem_type_str != NULL) {
         mem_type_value = ucs_string_find_in_list(mem_type_str,
-                                                 ucs_memory_type_names, 0);
+                                                 type_names->values,
+                                                 type_names->count);
         if ((mem_type_value < 0) ||
             !(UCS_BIT(mem_type_value) & context->mem_type_mask)) {
             printf("<Invalid memory type '%s', supported types: %s>\n",
                    mem_type_str,
                    ucs_flags_str(mem_types_buf, sizeof(mem_types_buf),
                                  context->mem_type_mask,
-                                 ucs_memory_type_names));
+                                 type_names->values, type_names->count));
             return;
         }
     } else {

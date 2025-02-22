@@ -62,8 +62,7 @@ const char *ucs_async_mode_names[] = {
     [UCS_ASYNC_MODE_SIGNAL]          = "signal",
     [UCS_ASYNC_MODE_THREAD_SPINLOCK] = "thread_spinlock",
     [UCS_ASYNC_MODE_THREAD_MUTEX]    = "thread_mutex",
-    [UCS_ASYNC_MODE_POLL]            = "poll",
-    [UCS_ASYNC_MODE_LAST]            = NULL
+    [UCS_ASYNC_MODE_POLL]            = "poll"
 };
 
 UCS_CONFIG_DEFINE_ARRAY(string, sizeof(char*), UCS_CONFIG_TYPE_STRING);
@@ -341,9 +340,10 @@ int ucs_config_sprintf_on_off_auto(char *buf, size_t max,
 
 int ucs_config_sscanf_enum(const char *buf, void *dest, const void *arg)
 {
-    int i;
-
-    i = ucs_string_find_in_list(buf, (const char**)arg, 0);
+    ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
+                                                      arg;
+    ssize_t i = ucs_string_find_in_list(buf, allowed_values->values,
+                                        allowed_values->count);
     if (i < 0) {
         return 0;
     }
@@ -355,16 +355,21 @@ int ucs_config_sscanf_enum(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_enum(char *buf, size_t max,
                             const void *src, const void *arg)
 {
-    char * const *table = arg;
+    ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
+                                                      arg;
+    const char **table = allowed_values->values;
     strncpy(buf, table[*(unsigned*)src], max);
     return 1;
 }
 
 int ucs_config_sscanf_uint_enum(const char *buf, void *dest, const void *arg)
 {
-    int i;
+    ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
+                                                      arg;
 
-    i = ucs_string_find_in_list(buf, (const char**)arg, 0);
+    ssize_t i = ucs_string_find_in_list(buf,
+                                        allowed_values->values,
+                                        allowed_values->count);
     if (i >= 0) {
         *(unsigned*)dest = UCS_CONFIG_UINT_ENUM_INDEX(i);
         return 1;
@@ -376,49 +381,69 @@ int ucs_config_sscanf_uint_enum(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_uint_enum(char *buf, size_t max,
                                  const void *src, const void *arg)
 {
-   char* const *table = arg;
-   unsigned value, table_size;
+    ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
+                                                      arg;
+    const char **table = allowed_values->values;
+    unsigned value     = *(unsigned*)src;
 
-   for (table_size = 0; table[table_size] != NULL; table_size++) {
-       continue;
-   }
-
-   value = *(unsigned*)src;
-   if (UCS_CONFIG_UINT_ENUM_INDEX(table_size) < value) {
+    if (UCS_CONFIG_UINT_ENUM_INDEX(allowed_values->count) < value) {
         strncpy(buf, table[UCS_CONFIG_UINT_ENUM_INDEX(value)], max);
         return 1;
-   }
-
-   return snprintf(buf, max, "%u", value);
-}
-
-static void __print_table_values(char * const *table, char *buf, size_t max)
-{
-    char *ptr = buf, *end = buf + max;
-
-    for (; *table; ++table) {
-        snprintf(ptr, end - ptr, "|%s", *table);
-        ptr += strlen(ptr);
     }
 
-    snprintf(ptr, end - ptr, "]");
+    return snprintf(buf, max, "%u", value);
+}
 
-    *buf = '[';
+static void __print_table_values(const char **table, unsigned int table_size,
+                                 char *buf, size_t max)
+{
+    char *ptr = buf;
+    char *end = buf + max - 1;
+    size_t i;
+
+    if (ptr < end) {
+        *ptr++ = '[';
+    }
+
+    /* Ignores NULL entries */
+    for (i = 0; (i < table_size) && (ptr < end); ++i) {
+        if (table[i] == NULL) {
+            continue;
+        }
+
+        if ((ptr > (buf + 1)) && (ptr < end)) {
+            *ptr++ = '|';
+        }
+
+        ptr += snprintf(ptr, end - ptr, "%s", table[i]);
+    }
+
+    if (ptr < end) {
+        *ptr++ = ']';
+    }
+
+    *ptr = '\0';
 }
 
 void ucs_config_help_enum(char *buf, size_t max, const void *arg)
 {
-    __print_table_values(arg, buf, max);
+    ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
+                                                      arg;
+    __print_table_values(allowed_values->values, allowed_values->count, buf,
+                         max);
 }
 
 void ucs_config_help_uint_enum(char *buf, size_t max, const void *arg)
 {
+    ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
+                                                      arg;
     size_t len;
 
     snprintf(buf, max, "a numerical value, or:");
 
     len = strlen(buf);
-    __print_table_values(arg, buf + len, max - len);
+    __print_table_values(allowed_values->values, allowed_values->count,
+                         buf + len, max - len);
 }
 
 ucs_status_t ucs_config_clone_log_comp(const void *src, void *dst, const void *arg)
@@ -434,6 +459,8 @@ ucs_status_t ucs_config_clone_log_comp(const void *src, void *dst, const void *a
 
 int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 {
+    ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
+                                                      arg;
     char *str = ucs_strdup(buf, "config_sscanf_bitmap_str");
     char *p, *saveptr;
     int ret, i;
@@ -446,7 +473,8 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
     *((uint64_t*)dest) = 0;
     p = strtok_r(str, ",", &saveptr);
     while (p != NULL) {
-        i = ucs_string_find_in_list(p, (const char**)arg, 0);
+        i = ucs_string_find_in_list(p, allowed_values->values,
+                                    allowed_values->count);
         if (i < 0) {
             ret = 0;
             break;
@@ -465,14 +493,23 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_bitmap(char *buf, size_t max,
                               const void *src, const void *arg)
 {
-    ucs_flags_str(buf, max, *((uint64_t*)src), (const char**)arg);
+    ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
+                                                      arg;
+
+    ucs_flags_str(buf, max, *((uint64_t*)src), allowed_values->values,
+                  allowed_values->count);
     return 1;
 }
 
 void ucs_config_help_bitmap(char *buf, size_t max, const void *arg)
 {
+    ucs_config_allowed_values_t *allowed_values = (ucs_config_allowed_values_t*)
+                                                      arg;
+
     snprintf(buf, max, "comma-separated list of: ");
-    __print_table_values(arg, buf + strlen(buf), max - strlen(buf));
+    __print_table_values(allowed_values->values,
+                         allowed_values->count, buf + strlen(buf),
+                         max - strlen(buf));
 }
 
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg)
@@ -692,8 +729,11 @@ void ucs_config_release_bw_spec(void *ptr, const void *arg)
 
 int ucs_config_sscanf_signo(const char *buf, void *dest, const void *arg)
 {
+    const ucs_config_allowed_values_t *signal_names =
+        UCS_CONFIG_GET_ALLOWED_VALUES(ucs_signal_names);
     char *endptr;
     int signo;
+    ssize_t i;
 
     signo = strtol(buf, &endptr, 10);
     if (*endptr == '\0') {
@@ -705,13 +745,23 @@ int ucs_config_sscanf_signo(const char *buf, void *dest, const void *arg)
         buf += 3;
     }
 
-    return ucs_config_sscanf_enum(buf, dest, ucs_signal_names);
+    i = ucs_string_find_in_list(buf, signal_names->values,signal_names->count);
+    if (i < 0) {
+        return 0;
+    }
+
+    *(int*)dest = i;
+    return 1;
 }
 
 int ucs_config_sprintf_signo(char *buf, size_t max,
                              const void *src, const void *arg)
 {
-    return ucs_config_sprintf_enum(buf, max, src, ucs_signal_names);
+    const ucs_config_allowed_values_t *signal_names =
+        UCS_CONFIG_GET_ALLOWED_VALUES(ucs_signal_names);
+    const char **table = signal_names->values;
+    strncpy(buf, table[*(unsigned*)src], max);
+    return 1;
 }
 
 int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)

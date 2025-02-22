@@ -147,8 +147,7 @@ typedef enum {
     /* Policies with shared DCI */
     UCT_DC_TX_POLICY_SHARED_FIRST,
     UCT_DC_TX_POLICY_RAND = UCT_DC_TX_POLICY_SHARED_FIRST,
-    UCT_DC_TX_POLICY_HW_DCS,
-    UCT_DC_TX_POLICY_LAST
+    UCT_DC_TX_POLICY_HW_DCS
 } uct_dc_tx_policy_t;
 
 
@@ -161,7 +160,6 @@ typedef enum {
 typedef enum {
     UCT_DC_MLX5_DCT_AFFINITY_DEFAULT,
     UCT_DC_MLX5_DCT_AFFINITY_RANDOM,
-    UCT_DC_MLX5_DCT_AFFINITY_LAST
 } uct_dc_mlx5_dct_affinity_t;
 
 

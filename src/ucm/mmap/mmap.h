@@ -9,6 +9,7 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/sys.h>
+#include <ucs/config/types.h>
 #include <ucs/sys/checker.h>
 
 #define UCM_MMAP_HOOK_RELOC_STR  "reloc"
@@ -44,8 +45,7 @@ void ucm_mmap_init();
 /**
  * Memory hooks mode names.
  */
-extern const char *ucm_mmap_hook_modes[];
-
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(ucm_mmap_hook_modes);
 
 static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t ucm_mmap_hook_mode(void)
 {
