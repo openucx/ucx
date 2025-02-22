@@ -96,4 +96,17 @@ ucp_tag_eager_check_op_id(const ucp_proto_init_params_t *init_params,
             ucp_ep_config_key_has_tag_lane(init_params->ep_config_key));
 }
 
+/*
+ * Eager needs to be disabled because it could also remotely trigger copies
+ * using bounce buffers.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_tag_eager_check_op_id_without_bounce(
+                          const ucp_proto_init_params_t *init_params,
+                          ucp_operation_id_t op_id, int offload_enabled)
+{
+    return ucp_tag_eager_check_op_id(init_params, op_id, offload_enabled) &&
+        !init_params->worker->context->config.ext.avoid_copy_mem_types;
+}
+
 #endif

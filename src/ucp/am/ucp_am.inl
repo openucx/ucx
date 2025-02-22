@@ -33,6 +33,19 @@ ucp_am_check_init_params(const ucp_proto_init_params_t *init_params,
              exclude_flags);
 }
 
+/*
+ * To ensure that no memory type copy is triggered, it is necessary to disable
+ * all protocols that may utilize local or remote bounce buffers.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_am_check_init_params_without_bounce_buffer(
+                                   const ucp_proto_init_params_t *init_params,
+                                   uint64_t op_id_mask, uint16_t exclude_flags)
+{
+    return ucp_am_check_init_params(init_params, op_id_mask, exclude_flags) &&
+           !init_params->worker->context->config.ext.avoid_copy_mem_types;
+}
+
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_config_is_am(const ucp_proto_config_t *proto_config)
 {
