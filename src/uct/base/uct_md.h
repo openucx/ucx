@@ -58,6 +58,11 @@
         } \
     }
 
+#define UCT_CHECK_NOT_DERIVED_MEMH(_params, _name) \
+    UCT_CHECK_PARAM( \
+        UCT_MD_MEM_REG_FIELD_VALUE(_params, memh, FIELD_MEMH, NULL) == NULL, \
+        _name " does not support derived memory handles");
+
 
 extern const char *uct_device_type_names[];
 

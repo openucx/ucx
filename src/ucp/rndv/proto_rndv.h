@@ -221,6 +221,6 @@ void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
                                             int abort);
 
 
-void ucp_proto_rndv_stub_abort(ucp_request_t *req, ucs_status_t status);
+void ucp_proto_rndv_common_abort(ucp_request_t *req, ucs_status_t status);
 
 #endif

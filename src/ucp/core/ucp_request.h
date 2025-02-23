@@ -54,10 +54,11 @@ enum {
     UCP_REQUEST_FLAG_RKEY_INUSE            = UCS_BIT(18),
     UCP_REQUEST_FLAG_USER_HEADER_COPIED    = UCS_BIT(19),
     UCP_REQUEST_FLAG_USAGE_TRACKED         = UCS_BIT(20),
+    UCP_REQUEST_FLAG_INVALIDATED           = UCS_BIT(21),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(21),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(22),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(23),
+    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(22),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(23),
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(24),
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
@@ -337,7 +338,9 @@ struct ucp_request {
                 } flush;
 
                 struct {
-                    ucp_worker_h       worker;
+                    ucp_worker_h               worker;
+                    ucp_memh_invalidate_comp_t comp;
+                    ucp_mem_desc_t             *mdesc;
                 } invalidate;
 
                 struct {
@@ -544,10 +547,12 @@ void ucp_request_memory_dereg(ucp_datatype_t datatype, ucp_dt_state_t *state,
  *
  * @param [in] req           Request that contains memh
  * @param [in] status        Status of the error which caused abortion
+ * @param [in] mdesc         Indicates that memh is stored in mdesc
  *
  * @return 1 if invalidation happened, 0 if invalidation isn't required/supported
  */
-int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status);
+int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status,
+                                int mdesc);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,
