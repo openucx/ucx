@@ -873,7 +873,7 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
         status = uct_ib_mlx5_devx_reg_mr(md, memh, address, length, params,
                                          UCT_IB_MR_STRICT_ORDER,
                                          ~IBV_ACCESS_RELAXED_ORDERING,
-                                         &dummy_mkey, &dummy_mkey);
+                                         &dummy_mkey, &memh->atomic_rkey);
         if (status != UCS_OK) {
             goto err_dereg_default;
         }
@@ -898,6 +898,7 @@ err:
 static ucs_status_t
 uct_ib_devx_dereg_invalidate_rkey_check(uct_ib_mlx5_md_t *md,
                                         uct_ib_mlx5_devx_mem_t *memh,
+                                        struct mlx5dv_devx_obj *dvmr,
                                         uint32_t rkey, unsigned flags_mask,
                                         uint64_t cap_mask, const char *name)
 {
@@ -911,7 +912,7 @@ uct_ib_devx_dereg_invalidate_rkey_check(uct_ib_mlx5_md_t *md,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (rkey == UCT_IB_INVALID_MKEY) {
+    if (dvmr == NULL) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -932,15 +933,15 @@ static ucs_status_t uct_ib_devx_dereg_invalidate_params_check(
 
     memh   = UCT_MD_MEM_DEREG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL);
     status = uct_ib_devx_dereg_invalidate_rkey_check(
-            md, memh, memh->indirect_rkey, UCT_IB_MEM_ACCESS_REMOTE_RMA,
-            UCT_MD_FLAG_INVALIDATE_RMA, "RMA");
+            md, memh, memh->indirect_dvmr, memh->indirect_rkey,
+            UCT_IB_MEM_ACCESS_REMOTE_RMA, UCT_MD_FLAG_INVALIDATE_RMA, "RMA");
     if (status != UCS_OK) {
         return status;
     }
 
     return uct_ib_devx_dereg_invalidate_rkey_check(
-            md, memh, memh->atomic_rkey, UCT_IB_MEM_ACCESS_REMOTE_ATOMIC,
-            UCT_MD_FLAG_INVALIDATE_AMO, "AMO");
+            md, memh, memh->atomic_dvmr, memh->atomic_rkey,
+            UCT_IB_MEM_ACCESS_REMOTE_ATOMIC, UCT_MD_FLAG_INVALIDATE_AMO, "AMO");
 }
 
 static ucs_status_t
@@ -2868,7 +2869,6 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 {
     uct_ib_mlx5_md_t *md         = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
     uct_ib_mlx5_devx_mem_t *memh = uct_memh;
-    uint32_t atomic_rkey;
     ucs_status_t status;
     unsigned flags;
     uint32_t rkey;
@@ -2931,11 +2931,6 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         } else if (status != UCS_ERR_UNSUPPORTED) {
             return status;
         }
-        atomic_rkey = memh->atomic_rkey;
-    } else if (uct_ib_mlx5_devx_memh_has_ro(md, memh)) {
-        atomic_rkey = memh->mrs[UCT_IB_MR_STRICT_ORDER].super.ib->rkey;
-    } else {
-        atomic_rkey = memh->atomic_rkey;
     }
 
     if (ENABLE_PARAMS_CHECK && (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO) &&
@@ -2958,7 +2953,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         rkey = memh->super.rkey;
     }
 
-    uct_ib_md_pack_rkey(rkey, atomic_rkey, mkey_buffer);
+    uct_ib_md_pack_rkey(rkey, memh->atomic_rkey, mkey_buffer);
     return UCS_OK;
 }
 
