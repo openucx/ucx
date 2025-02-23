@@ -368,7 +368,8 @@ static void uct_ib_mlx5dv_dci_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
 
 ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
                                           uct_dci_index_t dci_index,
-                                          int connect, uint8_t num_dci_channels)
+                                          int connect, uint8_t num_dci_channels,
+                                          uint8_t pool_index)
 {
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
     uct_ib_mlx5_qp_attr_t attr = {};
@@ -461,7 +462,7 @@ init_qp:
     ucs_array_elem(&iface->tx.dcis, dci_index) = dci;
 
     if (connect) {
-        status = uct_dc_mlx5_iface_dci_connect(iface, dci);
+        status = uct_dc_mlx5_iface_dci_connect(iface, dci, pool_index);
         if (status != UCS_OK) {
             goto err;
         }
@@ -502,14 +503,14 @@ err_free_dci:
 }
 
 #if HAVE_DC_DV
-ucs_status_t
-uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
+ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
+                                           uct_dc_dci_t *dci,
+                                           uint8_t pool_index)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                           uct_ib_mlx5_md_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
-    uct_dc_mlx5_dci_config_t *config =
-            &iface->tx.dci_pool[dci->pool_index].config;
+    uct_dc_mlx5_dci_config_t *config = &iface->tx.dci_pool[pool_index].config;
     struct ibv_qp_attr attr;
     long attr_mask;
     ucs_status_t status;
@@ -901,7 +902,7 @@ uct_dc_mlx5_iface_init_dcis_array(uct_dc_mlx5_iface_t *iface,
 
     ucs_array_length(&iface->tx.dcis) = 0;
 
-    status = uct_dc_mlx5_iface_create_dci(iface, 0, 0, 1);
+    status = uct_dc_mlx5_iface_create_dci(iface, 0, 0, 1, 0);
     if (status != UCS_OK) {
         return status;
     }
@@ -1829,6 +1830,7 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
                                  uct_dci_index_t dci_index)
 {
     uct_dc_dci_t *dci        = uct_dc_mlx5_iface_dci(iface, dci_index);
+    uint8_t pool_index       = dci->pool_index;
     uct_ib_mlx5_txwq_t *txwq = &dci->txwq;
     ucs_status_t status;
 
@@ -1851,7 +1853,7 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
                   ucs_status_string(status));
     }
 
-    status = uct_dc_mlx5_iface_dci_connect(iface, dci);
+    status = uct_dc_mlx5_iface_dci_connect(iface, dci, pool_index);
     if (status != UCS_OK) {
         ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
                   iface, dci_index, txwq->super.qp_num,
