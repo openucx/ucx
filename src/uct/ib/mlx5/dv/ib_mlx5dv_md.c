@@ -899,16 +899,16 @@ static ucs_status_t
 uct_ib_devx_dereg_invalidate_rkey_check(uct_ib_mlx5_md_t *md,
                                         uct_ib_mlx5_devx_mem_t *memh,
                                         struct mlx5dv_devx_obj *dvmr,
-                                        uint32_t rkey, unsigned flags_mask,
-                                        uint64_t cap_mask, const char *name)
+                                        unsigned flags_mask, uint64_t cap_mask,
+                                        const char *name)
 {
     if (!(memh->super.flags & flags_mask)) {
         return UCS_OK;
     }
 
     if (!(md->super.cap_flags & cap_mask)) {
-        ucs_debug("%s: invalidate %s is not supported (rkey=0x%x)",
-                  uct_ib_device_name(&md->super.dev), name, rkey);
+        ucs_debug("%s: invalidate %s is not supported (dvmr=%p)",
+                  uct_ib_device_name(&md->super.dev), name, dvmr);
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -933,15 +933,15 @@ static ucs_status_t uct_ib_devx_dereg_invalidate_params_check(
 
     memh   = UCT_MD_MEM_DEREG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL);
     status = uct_ib_devx_dereg_invalidate_rkey_check(
-            md, memh, memh->indirect_dvmr, memh->indirect_rkey,
-            UCT_IB_MEM_ACCESS_REMOTE_RMA, UCT_MD_FLAG_INVALIDATE_RMA, "RMA");
+            md, memh, memh->indirect_dvmr, UCT_IB_MEM_ACCESS_REMOTE_RMA,
+            UCT_MD_FLAG_INVALIDATE_RMA, "RMA");
     if (status != UCS_OK) {
         return status;
     }
 
     return uct_ib_devx_dereg_invalidate_rkey_check(
-            md, memh, memh->atomic_dvmr, memh->atomic_rkey,
-            UCT_IB_MEM_ACCESS_REMOTE_ATOMIC, UCT_MD_FLAG_INVALIDATE_AMO, "AMO");
+            md, memh, memh->atomic_dvmr, UCT_IB_MEM_ACCESS_REMOTE_ATOMIC,
+            UCT_MD_FLAG_INVALIDATE_AMO, "AMO");
 }
 
 static ucs_status_t
