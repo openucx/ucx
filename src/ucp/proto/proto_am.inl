@@ -130,7 +130,6 @@ ucp_proto_am_req_copy_header(ucp_request_t *req)
            req->send.msg_proto.am.header.length);
     req->flags                       |= UCP_REQUEST_FLAG_USER_HEADER_COPIED;
     req->send.msg_proto.am.header.ptr = user_header;
-
     return UCS_OK;
 }
 
@@ -150,7 +149,7 @@ ucp_am_handle_user_header_send_status_or_abort(ucp_request_t *req,
         return UCS_OK;
     }
 
-    return status;
+    return UCS_ERR_NO_RESOURCE;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -169,7 +168,7 @@ ucp_am_handle_user_header_send_status_or_release(ucp_request_t *req,
         return copy_status;
     }
 
-    return status;
+    return UCS_ERR_NO_RESOURCE;
 }
 
 static UCS_F_ALWAYS_INLINE
