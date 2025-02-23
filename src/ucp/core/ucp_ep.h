@@ -545,6 +545,10 @@ typedef struct ucp_ep_ext {
                                                      arrived before the first one */
     } am;
 
+    ucp_lane_map_t   unflushed_lanes; /* Bitmap of lanes which have unflushed
+                                         operations */
+    uint32_t         fence_seq;       /* Sequence number for fence detection */
+
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
      * structure. TODO allocate this array dynamically.
