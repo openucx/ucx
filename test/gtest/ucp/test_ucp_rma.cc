@@ -485,3 +485,125 @@ UCS_TEST_P(test_ucp_rma_order, put_ordering) {
 // TODO: Strong fence hangs with SW RMA emulation, because it requires progress
 // on both peers. Add other tls, when fence implementation revised
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_order, shm_rc_dc, "self,shm,rc,dc")
+
+class test_ucp_ep_based_fence : public test_ucp_rma {
+public:
+    static constexpr uint64_t TEST_BUF_SIZE = 1000000;
+    static constexpr uint64_t ATOMIC_SIZE = sizeof(uint64_t);
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64);
+    }
+
+    virtual void init() {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("Proto v2 is disabled");
+        }
+
+        modify_config("FENCE_MODE", "ep_based");
+        modify_config("MAX_RMA_LANES", "2");
+        test_ucp_memheap::init();
+    }
+
+    void do_fence() {
+        uint32_t worker_fence_seq_before = sender().ep()->worker->fence_seq;
+        sender().fence();
+        uint32_t worker_fence_seq_after = sender().ep()->worker->fence_seq;
+
+        ASSERT_EQ(worker_fence_seq_before + 1, worker_fence_seq_after);
+        ASSERT_GT(worker_fence_seq_after, sender().ep()->ext->fence_seq);
+    }
+
+    enum op_type_t { OP_PUT, OP_GET, OP_ATOMIC };
+
+    void perform_nbx(op_type_t op, void *sbuf, size_t size, uint64_t target,
+                     ucp_rkey_h rkey) {
+        ucp_request_param_t param = {0};
+        ucs_status_ptr_t sptr;
+
+        if (op == OP_ATOMIC) {
+            param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+            param.datatype = ucp_dt_make_contig(size);
+            sptr = ucp_atomic_op_nbx(sender().ep(), UCP_ATOMIC_OP_ADD, sbuf, 1,
+                                     target, rkey, &param);
+        } else if (op == OP_PUT) {
+            sptr = ucp_put_nbx(sender().ep(), sbuf, size, target, rkey, &param);
+        } else {
+            sptr = ucp_get_nbx(sender().ep(), sbuf, size, target, rkey, &param);
+        }
+
+        ASSERT_FALSE(UCS_PTR_IS_ERR(sptr));
+        ASSERT_NE(sender().ep()->ext->unflushed_lanes, 0);
+        request_release(sptr);
+    }
+
+    void test_ep_based_fence_put_get(op_type_t op) {
+        mem_buffer sbuf(TEST_BUF_SIZE, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(TEST_BUF_SIZE, receiver());
+        rbuf.memset(0);
+        sbuf.memset(CHAR_MAX);
+
+        ucs::handle<ucp_rkey_h> rkey;
+        rbuf.rkey(sender(), rkey);
+
+        for (uint64_t size = 1; size <= TEST_BUF_SIZE; size *= 10) {
+            perform_nbx(op, sbuf.ptr(), size, (uint64_t)rbuf.ptr(), rkey);
+            do_fence();
+            bool is_fence_required = ucp_ep_is_fence_required(sender().ep()) &&
+                                     ucp_ep_is_strong_fence(sender().ep());
+            perform_nbx(op, sbuf.ptr(), size, (uint64_t)rbuf.ptr(), rkey);
+
+            if (is_fence_required) {
+                ASSERT_EQ(sender().ep()->worker->fence_seq,
+                          sender().ep()->ext->fence_seq);
+            } else {
+                ASSERT_NE(sender().ep()->worker->fence_seq,
+                          sender().ep()->ext->fence_seq);
+            }
+        }
+
+        flush_workers();
+    }
+
+    void test_ep_based_fence_atomic() {
+        mem_buffer sbuf(ATOMIC_SIZE, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(ATOMIC_SIZE, receiver());
+        rbuf.memset(0);
+        sbuf.memset(CHAR_MAX);
+
+        ucs::handle<ucp_rkey_h> rkey;
+        rbuf.rkey(sender(), rkey);
+
+        perform_nbx(OP_ATOMIC, sbuf.ptr(), ATOMIC_SIZE, (uint64_t)rbuf.ptr(),
+                    rkey);
+        do_fence();
+        bool is_fence_required = ucp_ep_is_fence_required(sender().ep()) &&
+                                 ucp_ep_is_strong_fence(sender().ep());
+        perform_nbx(OP_ATOMIC, sbuf.ptr(), ATOMIC_SIZE, (uint64_t)rbuf.ptr(),
+                    rkey);
+
+        if (is_fence_required) {
+            ASSERT_EQ(sender().ep()->worker->fence_seq,
+                      sender().ep()->ext->fence_seq);
+        } else {
+            ASSERT_NE(sender().ep()->worker->fence_seq,
+                      sender().ep()->ext->fence_seq);
+        }
+
+        flush_workers();
+    }
+};
+
+UCS_TEST_P(test_ucp_ep_based_fence, ep_based_fence_put) {
+    test_ep_based_fence_put_get(test_ucp_ep_based_fence::OP_PUT);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, ep_based_fence_get) {
+    test_ep_based_fence_put_get(test_ucp_ep_based_fence::OP_GET);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, ep_based_fence_atomic) {
+    test_ep_based_fence_atomic();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
