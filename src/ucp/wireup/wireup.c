@@ -1403,7 +1403,7 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
 
         /* Old config has a lane with same remote MD as new config */
         if ((new_lane != UCP_NULL_LANE) &&
-            /* The mathing lanes have different remote sys_dev values */
+            /* The matching lanes have different remote sys_dev values */
             (old_key->lanes[old_lane].dst_sys_dev !=
              new_key->lanes[new_lane].dst_sys_dev)) {
             return 0;
