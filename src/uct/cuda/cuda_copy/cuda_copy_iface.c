@@ -21,7 +21,6 @@
 
 #define UCT_CUDA_COPY_IFACE_OVERHEAD 0
 #define UCT_CUDA_COPY_IFACE_LATENCY  ucs_linear_func_make(8e-6, 0)
-#define UCT_CUDA_COPY_IFACE_BW       (10000 * UCS_MBYTE)
 
 
 static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
@@ -38,8 +37,9 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      "Max number of cuda events. -1 is infinite",
      ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events), UCS_CONFIG_TYPE_UINT},
 
-    /* TODO: Add separate keys for shared and dedicated bandwidth */
-    {"BW", "h2d:8300MBs,d2h:11660MBs,d2d:320GBs",
+    /* TODO: 1. Add separate keys for shared and dedicated bandwidth
+             2. Remove the "other" key (use pref_loc for managed memory) */
+    {"BW", "10000MBs,h2d:8300MBs,d2h:11660MBs,d2d:320GBs",
      "Effective memory bandwidth", 0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
          {"h2d", "host to device bandwidth",
@@ -48,11 +48,12 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
           ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2h)},
          {"d2d", "device to device bandwidth",
           ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2d)},
+         {"other", "any other memory types combinations bandwidth",
+          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.other)},
          {NULL})},
 
     {NULL}
 };
-
 
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t)(uct_iface_t*);
@@ -143,7 +144,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency                 = UCT_CUDA_COPY_IFACE_LATENCY;
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = UCT_CUDA_COPY_IFACE_BW;
+    iface_attr->bandwidth.shared        = iface->config.bw.other;
     iface_attr->overhead                = UCT_CUDA_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
@@ -426,7 +427,7 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
                    (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
             perf_attr->bandwidth.shared = iface->config.bw.d2d;
         } else {
-            perf_attr->bandwidth.shared = UCT_CUDA_COPY_IFACE_BW;
+            perf_attr->bandwidth.shared = iface->config.bw.other;
         }
     }
 
@@ -504,6 +505,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->config.bw.h2d          = config->bw.h2d;
     self->config.bw.d2h          = config->bw.d2h;
     self->config.bw.d2d          = config->bw.d2d;
+    self->config.bw.other        = config->bw.other;
     UCS_STATIC_BITMAP_RESET_ALL(&self->streams_to_sync);
 
     ucs_mpool_params_reset(&mp_params);

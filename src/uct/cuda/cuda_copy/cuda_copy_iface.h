@@ -53,6 +53,7 @@ typedef struct uct_cuda_copy_bw {
     double            h2d;
     double            d2h;
     double            d2d;
+    double            other;
 } uct_cuda_copy_bw_t;
 
 
