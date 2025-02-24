@@ -307,7 +307,7 @@ AS_IF([test "x$with_ib" = "xyes"],
                             [[#include <rdma/rdma_netlink.h>]])
               AC_CHECK_DECL(RDMA_DEVICE_TYPE_SMI, [],
                             [AC_DEFINE([RDMA_DEVICE_TYPE_SMI], 1,
-                                       [RDMA netlink SMI device type])]
+                                       [RDMA netlink SMI device type])],
                             [[#include <rdma/rdma_netlink.h>]])
              ])
 
