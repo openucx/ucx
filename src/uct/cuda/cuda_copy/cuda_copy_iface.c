@@ -407,6 +407,8 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     int zcopy                      = uct_ep_op_is_zcopy(op);
     const double latency           = 1.8e-6;
     const double overhead          = 4.0e-6;
+    /* stream synchronization factor */
+    const double ss_factor         = zcopy ? 1 : 0.95;
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         if (uct_ep_op_is_fetch(op)) {
@@ -416,12 +418,10 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
         perf_attr->bandwidth.dedicated = 0;
         if ((src_mem_type == UCS_MEMORY_TYPE_HOST) &&
             (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
-            perf_attr->bandwidth.shared = zcopy ? iface->config.bw.h2d :
-                                          iface->config.bw.h2d * 0.95;
+            perf_attr->bandwidth.shared = iface->config.bw.h2d * ss_factor;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
-            perf_attr->bandwidth.shared = zcopy ? iface->config.bw.d2h :
-                                          iface->config.bw.d2h * 0.95;
+            perf_attr->bandwidth.shared = iface->config.bw.d2h * ss_factor;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
             perf_attr->bandwidth.shared = iface->config.bw.d2d;
