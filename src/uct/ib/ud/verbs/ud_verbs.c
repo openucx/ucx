@@ -790,6 +790,25 @@ ucs_status_t uct_ud_verbs_qp_max_send_sge(uct_ud_verbs_iface_t *iface,
     return UCS_OK;
 }
 
+void uct_ud_send_wr_init(struct ibv_send_wr *wr, struct ibv_sge *sge,
+                         int is_inline)
+{
+    memset(wr, 0, sizeof(*wr));
+
+    wr->opcode            = IBV_WR_SEND;
+    wr->wr.ud.remote_qkey = UCT_IB_KEY;
+    wr->imm_data          = 0;
+    wr->next              = 0;
+    wr->sg_list           = sge;
+
+    if (is_inline) {
+        wr->wr_id   = 0xBEEBBEEB;
+    } else {
+        wr->wr_id   = 0xFAAFFAAF;
+        wr->num_sge = 1;
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -810,22 +829,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->super.super.config.sl = uct_ib_iface_config_select_sl(&config->super);
     uct_ib_iface_set_reverse_sl(&self->super.super, &config->super);
 
-    memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
-    self->tx.wr_inl.opcode            = IBV_WR_SEND;
-    self->tx.wr_inl.wr_id             = 0xBEEBBEEB;
-    self->tx.wr_inl.wr.ud.remote_qkey = UCT_IB_KEY;
-    self->tx.wr_inl.imm_data          = 0;
-    self->tx.wr_inl.next              = 0;
-    self->tx.wr_inl.sg_list           = self->tx.sge;
-
-    memset(&self->tx.wr_skb, 0, sizeof(self->tx.wr_skb));
-    self->tx.wr_skb.opcode            = IBV_WR_SEND;
-    self->tx.wr_skb.wr_id             = 0xFAAFFAAF;
-    self->tx.wr_skb.wr.ud.remote_qkey = UCT_IB_KEY;
-    self->tx.wr_skb.imm_data          = 0;
-    self->tx.wr_skb.next              = 0;
-    self->tx.wr_skb.sg_list           = self->tx.sge;
-    self->tx.wr_skb.num_sge           = 1;
+    uct_ud_send_wr_init(&self->tx.wr_inl, self->tx.sge, 1);
+    uct_ud_send_wr_init(&self->tx.wr_skb, self->tx.sge, 0);
 
     self->tx.send_sn                  = 0;
     self->tx.comp_sn                  = 0;

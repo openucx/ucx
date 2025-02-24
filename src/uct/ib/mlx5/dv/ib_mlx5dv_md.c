@@ -2939,8 +2939,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA) ||
-        uct_ib_mlx5_devx_has_dm(memh)) {
+    if (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA) {
         if (ucs_unlikely(memh->indirect_dvmr == NULL)) {
             status = uct_ib_mlx5_devx_reg_indirect_key(md, memh);
             if (status != UCS_OK) {
@@ -3115,12 +3114,13 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
         .query              = uct_ib_mlx5_devx_md_query,
         .mem_alloc          = uct_ib_mlx5_devx_device_mem_alloc,
         .mem_free           = uct_ib_mlx5_devx_device_mem_free,
+        .mem_advise         = uct_ib_mem_advise,
         .mem_reg            = uct_ib_mlx5_devx_mem_reg,
         .mem_dereg          = uct_ib_mlx5_devx_mem_dereg,
-        .mem_attach         = uct_ib_mlx5_devx_mem_attach,
-        .mem_advise         = uct_ib_mem_advise,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_ib_mlx5_devx_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .mem_attach         = uct_ib_mlx5_devx_mem_attach,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_mlx5_devx_md_open,
 };
@@ -3335,12 +3335,15 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
     .super = {
         .close              = uct_ib_md_close,
         .query              = uct_ib_md_query,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = uct_ib_mem_advise,
         .mem_reg            = uct_ib_verbs_mem_reg,
         .mem_dereg          = uct_ib_verbs_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
-        .mem_advise         = uct_ib_mem_advise,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_ib_verbs_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_mlx5dv_md_open,
 };

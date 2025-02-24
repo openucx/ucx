@@ -704,7 +704,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+    if (md_attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) {
         memset(rkey_buffer, 0, info.rkey_size);
         status = uct_md_mkey_pack_v2(perf->uct.md, perf->uct.recv_mem.memh,
                                      perf->uct.recv_mem.address,
@@ -783,7 +783,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
             goto err_destroy_eps;
         }
 
-        if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+        if (md_attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) {
             status = uct_rkey_unpack(perf->uct.cmpt, rkey_buffer,
                                      &perf->uct.peers[i].rkey);
             if (status != UCS_OK) {
@@ -1717,7 +1717,7 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
     return UCS_OK;
 }
 
-static void uct_perf_log_avaiable_resources(ucs_string_set_t *available_resources, 
+static void uct_perf_log_avaiable_resources(ucs_string_set_t *available_resources,
                                             const char* requested_resource,
                                             const char* resource_type)
 {
@@ -1731,7 +1731,7 @@ static void uct_perf_log_avaiable_resources(ucs_string_set_t *available_resource
     ucs_string_buffer_cleanup(&strb);
 }
 
-static int 
+static int
 uct_perf_collect_available_devices(unsigned num_tl_resources,
                                    const uct_tl_resource_desc_t *tl_resources,
                                    const ucx_perf_context_t *perf,
@@ -2164,18 +2164,20 @@ ucs_status_t ucx_perf_allocators_init(ucx_perf_context_t *perf,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (perf->send_allocator->mem_type != UCS_MEMORY_TYPE_HOST) {
-        ucs_diag("UCT tests also copy one-byte value from %s memory to "
-                 "%s send memory, which may impact performance results",
-                 ucs_memory_type_names[UCS_MEMORY_TYPE_HOST],
-                 ucs_memory_type_names[perf->send_allocator->mem_type]);
-    }
+    if (perf->params.api == UCX_PERF_API_UCT) {
+        if (perf->send_allocator->mem_type != UCS_MEMORY_TYPE_HOST) {
+            ucs_diag("UCT tests also copy one-byte value from %s memory to "
+                     "%s send memory, which may impact performance results",
+                     ucs_memory_type_names[UCS_MEMORY_TYPE_HOST],
+                     ucs_memory_type_names[perf->send_allocator->mem_type]);
+        }
 
-    if (perf->recv_allocator->mem_type != UCS_MEMORY_TYPE_HOST) {
-        ucs_diag("UCT tests also copy one-byte value from %s recv memory "
-                 "to %s memory, which may impact performance results",
-                 ucs_memory_type_names[perf->recv_allocator->mem_type],
-                 ucs_memory_type_names[UCS_MEMORY_TYPE_HOST]);
+        if (perf->recv_allocator->mem_type != UCS_MEMORY_TYPE_HOST) {
+            ucs_diag("UCT tests also copy one-byte value from %s recv memory "
+                     "to %s memory, which may impact performance results",
+                     ucs_memory_type_names[perf->recv_allocator->mem_type],
+                     ucs_memory_type_names[UCS_MEMORY_TYPE_HOST]);
+        }
     }
 
     return ucx_perf_allocators_init_thread(perf);

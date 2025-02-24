@@ -107,6 +107,18 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
 };
 
+
+/**
+ * Reachability mode.
+ */
+typedef enum {
+    UCT_IB_REACHABILITY_MODE_ROUTE        = 0,
+    UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET = 1,
+    UCT_IB_REACHABILITY_MODE_ALL          = 2,
+    UCT_IB_REACHABILITY_MODE_LAST
+} uct_ib_iface_reachability_mode_t;
+
+
 enum {
     UCT_IB_IFACE_STAT_RX_COMPLETION,
     UCT_IB_IFACE_STAT_TX_COMPLETION,
@@ -175,60 +187,63 @@ struct uct_ib_iface_config {
     } rx;
 
     /* Inline space to reserve in CQ */
-    size_t                  inl[UCT_IB_DIR_LAST];
+    size_t                           inl[UCT_IB_DIR_LAST];
 
     /* Change the address type */
-    int                     addr_type;
+    int                              addr_type;
 
     /* Force global routing */
-    int                     is_global;
+    int                              is_global;
 
     /* Use FLID based routing */
-    int                     flid_enabled;
+    int                              flid_enabled;
 
     /* IB SL to use (default: AUTO) */
-    unsigned long           sl;
+    unsigned long                    sl;
 
     /* IB Traffic Class to use */
-    unsigned long           traffic_class;
+    unsigned long                    traffic_class;
 
     /* IB hop limit / TTL */
-    unsigned                hop_limit;
+    unsigned                         hop_limit;
 
     /* Number of paths to expose for the interface  */
-    unsigned long           num_paths;
+    unsigned long                    num_paths;
 
     /* Whether to check RoCEv2 reachability by IP address and local subnet */
-    int                     rocev2_local_subnet;
+    int                              rocev2_local_subnet;
 
     /* Length of subnet prefix for reachability check */
-    unsigned long           rocev2_subnet_pfx_len;
+    unsigned long                    rocev2_subnet_pfx_len;
+
+    /* Mode used for performing reachability check */
+    uct_ib_iface_reachability_mode_t reachability_mode;
 
     /* List of included/excluded subnets to filter RoCE GID entries by */
-    ucs_config_allow_list_t rocev2_subnet_filter;
+    ucs_config_allow_list_t          rocev2_subnet_filter;
 
     /* Multiplier for RoCE LAG UDP source port calculation */
-    unsigned                roce_path_factor;
+    unsigned                         roce_path_factor;
 
     /* Ranges of path bits */
     UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
 
     /* IB PKEY to use */
-    unsigned                     pkey;
+    unsigned                         pkey;
 
     /* Path MTU size */
-    uct_ib_mtu_t                 path_mtu;
+    uct_ib_mtu_t                     path_mtu;
 
     /* QP counter set ID */
-    unsigned long                counter_set_id;
+    unsigned long                    counter_set_id;
 
     /* IB reverse SL (default: AUTO - same value as sl) */
-    unsigned long                reverse_sl;
+    unsigned long                    reverse_sl;
 
     /**
      * Estimated overhead of preparing a work request and posting it to the NIC
      */
-    uct_ib_iface_send_overhead_t send_overhead;
+    uct_ib_iface_send_overhead_t     send_overhead;
 };
 
 
@@ -325,28 +340,29 @@ struct uct_ib_iface {
 
     struct {
         /* offset from desc to payload */
-        unsigned                     rx_payload_offset;
+        unsigned                         rx_payload_offset;
         /* offset from desc to network header */
-        unsigned                     rx_hdr_offset;
+        unsigned                         rx_hdr_offset;
         /* offset from desc to user headroom */
-        unsigned                     rx_headroom_offset;
-        unsigned                     rx_max_batch;
-        unsigned                     rx_max_poll;
-        unsigned                     tx_max_poll;
-        unsigned                     seg_size;
-        unsigned                     roce_path_factor;
-        uint8_t                      max_inl_cqe[UCT_IB_DIR_LAST];
-        uint8_t                      port_num;
-        uint8_t                      sl;
-        uint8_t                      reverse_sl;
-        uint8_t                      traffic_class;
-        uint8_t                      hop_limit;
-        uint8_t                      qp_type;
-        uint8_t                      force_global_addr;
-        uint8_t                      flid_enabled;
-        enum ibv_mtu                 path_mtu;
-        uint8_t                      counter_set_id;
-        uct_ib_iface_send_overhead_t send_overhead;
+        unsigned                         rx_headroom_offset;
+        unsigned                         rx_max_batch;
+        unsigned                         rx_max_poll;
+        unsigned                         tx_max_poll;
+        unsigned                         seg_size;
+        unsigned                         roce_path_factor;
+        uint8_t                          max_inl_cqe[UCT_IB_DIR_LAST];
+        uint8_t                          port_num;
+        uint8_t                          sl;
+        uint8_t                          reverse_sl;
+        uint8_t                          traffic_class;
+        uint8_t                          hop_limit;
+        uint8_t                          qp_type;
+        uint8_t                          force_global_addr;
+        uint8_t                          flid_enabled;
+        enum ibv_mtu                     path_mtu;
+        uint8_t                          counter_set_id;
+        uct_ib_iface_send_overhead_t     send_overhead;
+        uct_ib_iface_reachability_mode_t reachability_mode;
     } config;
 
     uct_ib_iface_ops_t        *ops;
