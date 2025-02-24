@@ -1660,7 +1660,8 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                 capability.odp_cap.memory_page_fault_scheme_cap);
         version = 2;
     } else {
-        if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_RCQP)) {
+        if (md_config->devx_objs &
+            (UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) | UCS_BIT(UCT_IB_DEVX_OBJ_DCI))) {
             reason = "version 1 is not supported for DevX QP";
             goto no_odp;
         }
