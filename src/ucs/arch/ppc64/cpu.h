@@ -99,6 +99,13 @@ static inline ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
     return UCS_ERR_UNSUPPORTED;
 }
 
+static UCS_F_ALWAYS_INLINE void ucs_cpu_relax()
+{
+    asm volatile ("or 1, 1, 1 \n");  /* hw threading low priority */
+    asm volatile ("or 2, 2, 2 \n");  /* hw threading normal priority */
+    asm volatile ("" ::: "memory");
+}
+
 END_C_DECLS
 
 #endif
