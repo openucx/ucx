@@ -2167,9 +2167,10 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
-ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
-                                      const uct_ib_md_config_t *md_config,
-                                      uct_ib_md_t **p_md)
+ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
+                                             struct ibv_device *ibv_device,
+                                             const uct_ib_md_config_t *md_config,
+                                             uct_ib_md_t **p_md)
 {
     uint8_t lag_state = 0;
     size_t out_len    = UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out);
@@ -2217,8 +2218,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    md = ucs_derived_of(uct_ib_md_alloc(sizeof(*md), "ib_mlx5_devx_md", ctx),
-                        uct_ib_mlx5_md_t);
+    md = ucs_derived_of(uct_ib_md_alloc(size, name, ctx), uct_ib_mlx5_md_t);
     if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_context;
@@ -3096,6 +3096,16 @@ uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 #endif
 
     return UCS_OK;
+}
+
+static ucs_status_t
+uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
+                         const uct_ib_md_config_t *md_config,
+                         uct_ib_md_t **p_md)
+{
+    return uct_ib_mlx5_devx_md_open_common("ib_mlx5_devx_md",
+                                           sizeof(uct_ib_mlx5_md_t),
+                                           ibv_device, md_config, p_md);
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
