@@ -124,7 +124,7 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
                         (CUdeviceptr)region->mapped_addr, region->key.b_len));
         }
     } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
-        return UCT_CUDADRV_FUNC_LOG_WARN(cuMemPoolDestroy(region->key.ph.pool));
+        return UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)region->mapped_addr));
     } else
 #endif
     {
@@ -480,13 +480,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
     int ret;
+    const void *arg1, *arg2;
     size_t cmp_size;
-
-#if HAVE_CUDA_FABRIC
-    cmp_size = sizeof(key->ph.handle);
-#else
-    cmp_size = sizeof(key->ph);
-#endif
 
     status = uct_cuda_ipc_get_remote_cache(key->pid, &cache);
     if (status != UCS_OK) {
@@ -497,9 +492,17 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup,
                                   &cache->pgtable, key->d_bptr);
     if (ucs_likely(pgt_region != NULL)) {
-        region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
-        if (memcmp((const void *)&key->ph, (const void *)&region->key.ph,
-                   cmp_size) == 0) {
+        region   = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+#if HAVE_CUDA_FABRIC
+        cmp_size = sizeof(key->ph.buffer_id);
+        arg1     = (const void*)&key->ph.buffer_id;
+        arg2     = (const void*)&region->key.ph.buffer_id;
+#else
+        cmp_size = sizeof(key->ph);
+        arg1     = (const void*)&key->ph;
+        arg2     = (const void*)&region->key.ph;
+#endif
+        if (memcmp(arg1, arg2, cmp_size) == 0) {
             /*cache hit */
             ucs_trace("%s: cuda_ipc cache hit addr:%p size:%lu region:"
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,
