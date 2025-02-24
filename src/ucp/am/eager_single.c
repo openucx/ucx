@@ -116,7 +116,7 @@ ucp_am_eager_short_probe_common(const ucp_proto_init_params_t *init_params,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_SHORT
     };
 
-    if (!ucp_am_check_init_params_without_bounce_buffer(
+    if (!ucp_eager_am_check_init_params(
                                          init_params, UCS_BIT(op_id),
                                          UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
         !ucp_proto_is_short_supported(select_param)) {
@@ -247,7 +247,7 @@ static void ucp_am_eager_single_bcopy_probe_common(
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
 
-    if (!ucp_am_check_init_params_without_bounce_buffer(
+    if (!ucp_eager_am_check_init_params(
                                          init_params, UCS_BIT(op_id),
                                          UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return;
@@ -340,7 +340,7 @@ static void ucp_am_eager_single_zcopy_probe_common(
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
-    if (!ucp_am_check_init_params_without_bounce_buffer(
+    if (!ucp_eager_am_check_init_params(
                                          init_params, UCS_BIT(op_id),
                                          UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {

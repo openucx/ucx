@@ -38,7 +38,7 @@ ucp_am_check_init_params(const ucp_proto_init_params_t *init_params,
  * all protocols that may utilize local or remote bounce buffers.
  */
 static UCS_F_ALWAYS_INLINE int
-ucp_am_check_init_params_without_bounce_buffer(
+ucp_eager_am_check_init_params(
                                    const ucp_proto_init_params_t *init_params,
                                    uint64_t op_id_mask, uint16_t exclude_flags)
 {
