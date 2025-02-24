@@ -20,6 +20,7 @@ typedef struct uct_rocm_ipc_iface {
     struct {
         size_t min_zcopy;
         double latency;
+        int    enable_ipc_handle_cache;
     } config;
 
 } uct_rocm_ipc_iface_t;
@@ -28,6 +29,7 @@ typedef struct uct_rocm_ipc_iface_config {
     uct_iface_config_t super;
     size_t             min_zcopy;
     double             latency;
+    int                enable_ipc_handle_cache;
 } uct_rocm_ipc_iface_config_t;
 
 #endif
