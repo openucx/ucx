@@ -570,8 +570,7 @@ int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
 }
 
 int ucp_proto_init_check_op_without_bounce(
-                                    const ucp_proto_init_params_t *init_params,
-                                    uint64_t op_id_mask)
+        const ucp_proto_init_params_t *init_params, uint64_t op_id_mask)
 {
     return ucp_proto_init_check_op(init_params, op_id_mask) &&
            !init_params->worker->context->config.ext.avoid_copy_mem_types;

@@ -90,7 +90,6 @@ int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
  * locally or remotely.
  */
 int ucp_proto_init_check_op_without_bounce(
-                                    const ucp_proto_init_params_t *init_params,
-                                    uint64_t op_id_mask);
+        const ucp_proto_init_params_t *init_params, uint64_t op_id_mask);
 
 #endif
