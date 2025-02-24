@@ -12,6 +12,7 @@
 %bcond_with    mad
 %bcond_with    ze
 %bcond_without mlx5
+%bcond_with    efa
 
 Name: ucx
 Version: @VERSION@
@@ -44,6 +45,9 @@ BuildRequires: gdrcopy
 BuildRequires: libibverbs-devel
 %endif
 %if %{with mlx5}
+BuildRequires: rdma-core-devel
+%endif
+%if %{with efa}
 BuildRequires: rdma-core-devel
 %endif
 %if %{with knem}
@@ -119,6 +123,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg gdrcopy gdrcopy \
            %_with_arg ib verbs \
            %_with_arg mlx5 mlx5 \
+           %_with_arg efa efa \
            %_with_arg knem knem \
            %_with_arg rdmacm rdmacm \
            %_with_arg rocm rocm \
@@ -193,6 +198,9 @@ Provides static libraries required for developing with UCX.
 %endif
 %if %{with mlx5}
 %{_libdir}/pkgconfig/ucx-ib-mlx5.pc
+%endif
+%if %{with efa}
+%{_libdir}/pkgconfig/ucx-ib-efa.pc
 %endif
 %if %{with rdmacm}
 %{_libdir}/pkgconfig/ucx-rdmacm.pc
@@ -275,6 +283,19 @@ devices.
 
 %files ib-mlx5
 %{_libdir}/ucx/libuct_ib_mlx5.so.*
+%endif
+
+%if %{with efa}
+%package ib-efa
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX EFA device RDMA support
+Group: System Environment/Libraries
+
+%description ib-efa
+Provides support for EFA device as an IBTA transport for UCX.
+
+%files ib-efa
+%{_libdir}/ucx/libuct_ib_efa.so.*
 %endif
 
 %if %{with mad}

@@ -18,6 +18,9 @@
 #include <ctype.h>
 
 
+/* Maximal length of perf node name */
+#define UCP_PROTO_PERF_NAME_MAX 32
+
 /* Performance node data entry */
 typedef struct {
     const char        *name;
@@ -33,7 +36,7 @@ struct ucp_proto_perf_node {
     ucp_proto_perf_node_type_t                    type;
 
     /* Name of the range */
-    char                                          name[UCP_PROTO_DESC_STR_MAX];
+    char                                          name[UCP_PROTO_PERF_NAME_MAX];
 
     /* Description of the range */
     char                                          desc[UCP_PROTO_DESC_STR_MAX];
@@ -165,13 +168,12 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
     return fnmatch(proto_info_config, select_param_str, FNM_CASEFOLD) == 0;
 }
 
-static void
-ucp_proto_select_elem_info(ucp_worker_h worker,
-                           ucp_worker_cfg_index_t ep_cfg_index,
-                           ucp_worker_cfg_index_t rkey_cfg_index,
-                           const ucp_proto_select_param_t *select_param,
-                           ucp_proto_select_elem_t *select_elem, int show_all,
-                           ucs_string_buffer_t *strb)
+void ucp_proto_select_elem_info(ucp_worker_h worker,
+                                ucp_worker_cfg_index_t ep_cfg_index,
+                                ucp_worker_cfg_index_t rkey_cfg_index,
+                                const ucp_proto_select_param_t *select_param,
+                                const ucp_proto_select_elem_t *select_elem,
+                                int show_all, ucs_string_buffer_t *strb)
 {
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);

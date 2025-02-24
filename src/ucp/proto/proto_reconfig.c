@@ -10,8 +10,10 @@
 
 #include "proto_debug.h"
 #include "proto_select.h"
+#include "proto_am.inl"
 #include "proto_common.inl"
 
+#include <ucp/am/ucp_am.inl>
 #include <ucp/core/ucp_worker.inl>
 
 
@@ -30,11 +32,21 @@ static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
     return req->send.uct.func(&req->send.uct);
 }
 
+static void ucp_proto_reconfig_abort(ucp_request_t *req, ucs_status_t status)
+{
+    if (ucp_proto_config_is_am(req->send.proto_config)) {
+        ucp_am_release_user_header(req);
+    }
+
+    ucp_request_complete_send(req, status);
+}
+
 static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep        = req->send.ep;
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    ucs_status_t status;
 
     /* This protocol should not be selected for valid and connected endpoint */
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
@@ -47,8 +59,17 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
                                   ucp_operation_names, &strb);
         ucs_error("cannot find remote protocol for: %s",
                   ucs_string_buffer_cstr(&strb));
-        ucp_request_complete_send(req, UCS_ERR_CANCELED);
+        ucp_proto_request_abort(req, UCS_ERR_CANCELED);
         return UCS_OK;
+    }
+
+    if (ucp_proto_config_is_am(req->send.proto_config) &&
+        (req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER)) {
+        status = ucp_proto_am_req_copy_header(req);
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
     }
 
     if (ep->cfg_index != req->send.proto_config->ep_cfg_index) {
@@ -83,9 +104,8 @@ static void ucp_proto_reconfig_probe(const ucp_proto_init_params_t *init_params)
 
     perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL] =
             ucs_linear_func_make(INFINITY, 0);
-    ucp_proto_perf_add_funcs(perf, 0, SIZE_MAX, perf_factors, NULL, "dummy",
-                             "");
-
+    ucp_proto_perf_add_funcs(perf, 0, SIZE_MAX, perf_factors,
+                             ucp_proto_perf_node_new_data("dummy", ""), NULL);
     ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_INF, 0, perf, NULL, 0);
 }
 
@@ -96,6 +116,6 @@ ucp_proto_t ucp_reconfig_proto = {
     .probe    = ucp_proto_reconfig_probe,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_reconfig_progress},
-    .abort    = ucp_request_complete_send,
+    .abort    = ucp_proto_reconfig_abort,
     .reset    = (ucp_request_reset_func_t)ucs_empty_function_return_success
 };

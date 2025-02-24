@@ -216,13 +216,31 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ud_ctl_desc_t *cdesc;
     ucs_queue_iter_t iter;
+    khint_t khiter;
 
     ucs_trace_func("ep=%p", ep);
 
-    ucs_queue_for_each_safe(cdesc, iter, &iface->tx.outstanding_q, queue) {
-        if (cdesc->ep == ep) {
-            ucs_queue_del_iter(&iface->tx.outstanding_q, iter);
-            uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
+    if (uct_ib_iface_device(&iface->super)->ordered_send_comp) {
+        ucs_queue_for_each_safe(cdesc, iter, &iface->tx.outstanding.queue,
+                                queue) {
+            if (cdesc->ep == ep) {
+                ucs_queue_del_iter(&iface->tx.outstanding.queue, iter);
+                uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
+            }
+        }
+    } else {
+        for (khiter = kh_begin(&iface->tx.outstanding.map);
+             khiter != kh_end(&iface->tx.outstanding.map); ++khiter) {
+            if (!kh_exist(&iface->tx.outstanding.map, khiter)) {
+                continue;
+            }
+
+            cdesc = kh_value(&iface->tx.outstanding.map, khiter);
+            if (cdesc->ep == ep) {
+                kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map,
+                       khiter);
+                uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
+            }
         }
     }
 

@@ -278,20 +278,13 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
  * @param _new_length      New size for the array.
  * @param _init_value      Initialize new elements to this value.
  * @param _failed_actions  Actions to perform if the append operation failed.
- * @param _old_buffer_p    If the array was reallocated, and this parameter is
- *                         non-NULL, the previous buffer will not be released,
- *                         instead it will be returned in *_old_buffer_p,
- *                         and the caller should copy the contents of the previous buffer 
- *                         to the new array buffer.
  */
-#define ucs_array_resize_safe(_array, _new_length, _init_value, \
-                              _failed_actions, _old_buffer_p) \
+#define ucs_array_resize(_array, _new_length, _init_value, _failed_actions) \
     { \
         ucs_typeof((_array)->length) _extend_index; \
         ucs_status_t _extend_status; \
         \
-        _extend_status = ucs_array_reserve_safe(_array, _new_length, \
-                                                _old_buffer_p); \
+        _extend_status = ucs_array_reserve(_array, _new_length); \
         if (_extend_status == UCS_OK) { \
             for (_extend_index = (_array)->length; \
                  _extend_index < (_new_length); ++_extend_index) { \
@@ -302,19 +295,6 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
             _failed_actions; \
         } \
     }
-
-
-/*
- * Change the size of the array and initialize new elements.
- *
- * @param _array           Array to resize.
- * @param _new_length      New size for the array.
- * @param _init_value      Initialize new elements to this value.
- * @param _failed_actions  Actions to perform if the append operation failed.
- */
-#define ucs_array_resize(_array, _new_length, _init_value, _failed_actions) \
-    ucs_array_resize_safe(_array, _new_length, _init_value, _failed_actions, \
-                          NULL)
 
 
 /**

@@ -595,6 +595,9 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
         rc_addr->super.flags  |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
         rc_addr->atomic_mr_id  = uct_ib_md_get_atomic_mr_id(md);
         rc_addr->flush_rkey_hi = md->flush_rkey >> 16;
+        if (!md->config.enable_indirect_atomic) {
+            rc_addr->super.flags |= UCT_RC_VERBS_ADDR_NO_ATOMIC_OFFSET;
+        }
     }
     return UCS_OK;
 }
@@ -652,9 +655,14 @@ uct_rc_verbs_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     }
 
     if (rc_addr->super.flags & UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR) {
-        ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
-        ep->super.flush_rkey       = ((uint32_t)rc_addr->flush_rkey_hi << 16) +
-                                     ((uint32_t)rc_addr->atomic_mr_id << 8);
+        if (rc_addr->super.flags & UCT_RC_VERBS_ADDR_NO_ATOMIC_OFFSET) {
+            ep->super.atomic_mr_offset = 0;
+        } else {
+            ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(
+                    rc_addr->atomic_mr_id);
+        }
+        ep->super.flush_rkey = ((uint32_t)rc_addr->flush_rkey_hi << 16) +
+                               ((uint32_t)rc_addr->atomic_mr_id << 8);
     } else {
         ep->super.atomic_mr_offset = 0;
         ep->super.flush_rkey       = UCT_IB_MD_INVALID_FLUSH_RKEY;

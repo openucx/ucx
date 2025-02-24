@@ -569,7 +569,7 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface, int is_async)
     hw_ci                     = ntohs(cqe->wqe_counter);
     iface->super.tx.available = uct_ib_mlx5_txwq_update_bb(&iface->tx.wq, hw_ci);
 
-    uct_ud_iface_send_completion(&iface->super, hw_ci, is_async);
+    uct_ud_iface_send_completion_ordered(&iface->super, hw_ci, is_async);
     uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
 
     return 1;

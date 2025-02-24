@@ -530,6 +530,10 @@ static std::map<std::string, std::string> get_all_rdmacm_net_devices()
     ssize_t nread;
     int port_num;
 
+    if (ucs::is_aws()) {
+        return devices;
+    }
+
     std::vector<std::string> ndevs = read_dir(sysfs_net_dir);
 
     /* Enumerate IPoIB and RoCE devices which have direct mapping to an RDMA
@@ -602,6 +606,19 @@ bool is_rdmacm_netdev(const char *ifa_name)
     return !get_rdmacm_netdev(ifa_name).empty();
 }
 
+bool is_aws()
+{
+    static bool result, initialized = false;
+
+    if (!initialized) {
+        const char *str = getenv("CLOUD_TYPE");
+        result          = (str != NULL) && !strcmp(str, "aws");
+        initialized     = true;
+    }
+
+    return result;
+}
+
 uint16_t get_port() {
     int sock_fd, ret;
     ucs_status_t status;
@@ -609,7 +626,7 @@ uint16_t get_port() {
     socklen_t len = sizeof(ret_addr);
     uint16_t port;
 
-    status = ucs_socket_create(AF_INET, SOCK_STREAM, &sock_fd);
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, 0, &sock_fd);
     EXPECT_EQ(status, UCS_OK);
 
     memset(&addr_in, 0, sizeof(struct sockaddr_in));

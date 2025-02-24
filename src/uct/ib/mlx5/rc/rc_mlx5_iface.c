@@ -378,27 +378,38 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
                                  const uct_ib_iface_init_attr_t *init_attr)
 
 {
+    int ddp_enabled           = (init_attr->flags & UCT_IB_DDP_SUPPORTED) &&
+                                (config->ddp_enable != UCS_NO);
+    unsigned cyclic_srq_flags = UCT_IB_MLX5_MD_FLAG_RMP |
+                                ((init_attr->qp_type == UCT_IB_QPT_DCI) ?
+                                         UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ :
+                                         UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ);
+    ucs_string_buffer_t strb  = UCS_STRING_BUFFER_INITIALIZER;
     int i;
 
     for (i = 0; i < config->srq_topo.count; ++i) {
         if (!strcasecmp(config->srq_topo.types[i], "list")) {
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_LIST;
             return UCS_OK;
-        } else if (!strcasecmp(config->srq_topo.types[i], "cyclic")) {
+        } else if (!strcasecmp(config->srq_topo.types[i], "cyclic") &&
+                   ucs_test_all_flags(md->flags, cyclic_srq_flags) &&
+                   !ddp_enabled) {
             /* real cyclic list requires DevX support, and ddp to be disabled */
-            if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ) ||
-                ((init_attr->flags & UCT_IB_DDP_SUPPORTED) &&
-                 (config->ddp_enable != UCS_NO))) {
-                continue;
-            }
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC;
             return UCS_OK;
-        } else if (!strcasecmp(config->srq_topo.types[i], "cyclic_emulated")) {
+        } else if (!strcasecmp(config->srq_topo.types[i], "cyclic_emulated") &&
+                   !ddp_enabled) {
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED;
             return UCS_OK;
         }
     }
 
+    ucs_string_buffer_append_array(&strb, ",", "%s", config->srq_topo.types,
+                                   config->srq_topo.count);
+    ucs_error("%s: none of the provided SRQ topology modes %s is supported",
+              uct_ib_device_name(&md->super.dev),
+              ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -925,18 +936,18 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
-                              tl_md, worker, params, &config->super.super,
-                              &config->rc_mlx5_common, &init_attr);
-
-    status = uct_rc_mlx5_dp_ordering_ooo_init(&self->super,
+    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap.rc,
                                               &config->rc_mlx5_common,
                                               "rc_mlx5");
     if (status != UCS_OK) {
         return status;
     }
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
+                              tl_md, worker, params, &config->super.super,
+                              &config->rc_mlx5_common, &init_attr);
 
     status = uct_rc_init_fc_thresh(&config->super, &self->super.super);
     if (status != UCS_OK) {

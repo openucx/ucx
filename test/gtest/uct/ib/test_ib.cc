@@ -161,7 +161,8 @@ public:
         struct ibv_ah_attr ah_attr;
 
         ASSERT_EQ(iface->config.force_global_addr,
-                  config_is_global || uct_ib_iface_is_roce(iface));
+                  config_is_global || uct_ib_iface_is_roce(iface) ||
+                          ucs::is_aws());
 
         gid.global.subnet_prefix = subnet_prefix ?: iface->gid_info.gid.global.subnet_prefix;
         gid.global.interface_id  = 0xdeadbeef;
@@ -178,7 +179,7 @@ public:
             EXPECT_TRUE(ah_attr.is_global);
         } else if (iface->gid_info.gid.global.subnet_prefix == gid.global.subnet_prefix) {
             /* in case of subnets are same - ah_attr depend from forced/nonforced GRH */
-            EXPECT_FALSE(ah_attr.is_global);
+            EXPECT_EQ(ucs::is_aws(), ah_attr.is_global);
         } else if (iface->gid_info.gid.global.subnet_prefix != gid.global.subnet_prefix) {
             /* in case of subnets are different - ah_attr should use GRH */
             EXPECT_TRUE(ah_attr.is_global);
@@ -304,7 +305,8 @@ void test_uct_ib_with_specific_port::cleanup() {
 class test_uct_ib_roce : public test_uct_ib {
 };
 
-UCS_TEST_P(test_uct_ib_roce, local_subnet_only, "IB_ROCE_LOCAL_SUBNET=y")
+UCS_TEST_P(test_uct_ib_roce, local_subnet_only,
+           "IB_ROCE_REACHABILITY_MODE=local_subnet")
 {
     send_recv_short();
 }
