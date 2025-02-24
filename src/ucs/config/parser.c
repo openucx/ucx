@@ -2012,11 +2012,21 @@ static int ucs_config_parser_is_default(const char *env_prefix,
            (getenv(var_name) == NULL);
 }
 
+static void ucs_config_parser_print_header(FILE *stream, const char *title,
+                                           ucs_config_print_flags_t *flags_p)
+{
+    fprintf(stream, "#\n");
+    fprintf(stream, "# %s\n", title);
+    fprintf(stream, "#\n");
+    fprintf(stream, "\n");
+    *flags_p &= ~UCS_CONFIG_PRINT_HEADER;
+}
+
 static void ucs_config_parser_print_field(
         FILE *stream, const void *opts, const char *env_prefix,
         ucs_list_link_t *prefix_list, const char *name,
-        const ucs_config_field_t *field, unsigned long flags, const char *title,
-        size_t *printed, const char *filter, const char *docstr, ...)
+        const ucs_config_field_t *field, ucs_config_print_flags_t *flags_p,
+        const char *title, const char *filter, const char *docstr, ...)
 {
     char name_buf[128]   = {0};
     char value_buf[128]  = {0};
@@ -2031,15 +2041,13 @@ static void ucs_config_parser_print_field(
     snprintf(name_buf, sizeof(name_buf), "%s%s%s", env_prefix, head->prefix,
              name);
 
+    /* Apply optional filter from -F command line argument. */
     if ((filter != NULL) && (strstr(name_buf, filter) == NULL)) {
         return;
     }
 
-    if ((flags & UCS_CONFIG_PRINT_HEADER) && (*printed == 0)) {
-        fprintf(stream, "#\n");
-        fprintf(stream, "# %s\n", title);
-        fprintf(stream, "#\n");
-        fprintf(stream, "\n");
+    if (*flags_p & UCS_CONFIG_PRINT_HEADER) {
+        ucs_config_parser_print_header(stream, title, flags_p);
     }
 
     if (ucs_config_is_deprecated_field(field)) {
@@ -2053,14 +2061,14 @@ static void ucs_config_parser_print_field(
         field->parser.help(syntax_buf, sizeof(syntax_buf) - 1, field->parser.arg);
     }
 
-    if ((flags & UCS_CONFIG_PRINT_COMMENT_DEFAULT) &&
+    if ((*flags_p & UCS_CONFIG_PRINT_COMMENT_DEFAULT) &&
         ucs_config_parser_is_default(env_prefix, head->prefix, name)) {
         default_config_prefix = "# ";
     } else {
         default_config_prefix = "";
     }
 
-    if (flags & UCS_CONFIG_PRINT_DOC) {
+    if (*flags_p & UCS_CONFIG_PRINT_DOC) {
         fprintf(stream, "#\n");
         ucs_config_print_doc_line_by_line(field, __print_stream_cb, stream);
         fprintf(stream, "#\n");
@@ -2097,17 +2105,15 @@ static void ucs_config_parser_print_field(
 
     fprintf(stream, "%s%s%s\n", default_config_prefix, name_buf, value_buf);
 
-    if (flags & UCS_CONFIG_PRINT_DOC) {
+    if (*flags_p & UCS_CONFIG_PRINT_DOC) {
         fprintf(stream, "\n");
     }
-
-    ++*printed;
 }
 
 static void ucs_config_parser_print_opts_recurs(
         FILE *stream, const void *opts, const ucs_config_field_t *fields,
-        unsigned flags, const char *prefix, ucs_list_link_t *prefix_list,
-        const char *title, size_t *printed, const char *filter)
+        ucs_config_print_flags_t *flags_p, const char *prefix,
+        ucs_list_link_t *prefix_list, const char *title, const char *filter)
 {
     const ucs_config_field_t *field, *aliased_field;
     ucs_config_parser_prefix_t *head;
@@ -2136,14 +2142,14 @@ static void ucs_config_parser_print_opts_recurs(
 
             ucs_config_parser_print_opts_recurs(
                     stream, UCS_PTR_BYTE_OFFSET(opts, field->offset),
-                    field->parser.arg, flags, prefix, prefix_list, title,
-                    printed, filter);
+                    field->parser.arg, flags_p, prefix, prefix_list, title,
+                    filter);
 
             if (inner_prefix.prefix != NULL) {
                 ucs_list_del(&inner_prefix.list);
             }
         } else if (ucs_config_is_alias_field(field)) {
-            if (flags & UCS_CONFIG_PRINT_HIDDEN) {
+            if (*flags_p & UCS_CONFIG_PRINT_HIDDEN) {
                 aliased_field =
                     ucs_config_find_aliased_field(fields, field,
                                                   &alias_table_offset);
@@ -2155,19 +2161,19 @@ static void ucs_config_parser_print_opts_recurs(
 
                 ucs_config_parser_print_field(
                         stream, UCS_PTR_BYTE_OFFSET(opts, alias_table_offset),
-                        prefix, prefix_list, field->name, aliased_field, flags,
-                        title, printed, filter, "%-*s %s%s%s",
+                        prefix, prefix_list, field->name, aliased_field,
+                        flags_p, title, filter, "%-*s %s%s%s",
                         UCS_CONFIG_PARSER_DOCSTR_WIDTH, "alias of:", prefix,
                         head->prefix, aliased_field->name);
             }
         } else {
             if (ucs_config_is_deprecated_field(field) &&
-                !(flags & UCS_CONFIG_PRINT_HIDDEN)) {
+                !(*flags_p & UCS_CONFIG_PRINT_HIDDEN)) {
                 continue;
             }
             ucs_config_parser_print_field(stream, opts, prefix, prefix_list,
-                                          field->name, field, flags, title,
-                                          printed, filter, NULL);
+                                          field->name, field, flags_p, title,
+                                          filter, NULL);
         }
     }
 }
@@ -2175,27 +2181,21 @@ static void ucs_config_parser_print_opts_recurs(
 void ucs_config_parser_print_opts(FILE *stream, const char *title,
                                   const void *opts, ucs_config_field_t *fields,
                                   const char *table_prefix, const char *prefix,
-                                  ucs_config_print_flags_t flags,
+                                  const ucs_config_print_flags_t flags,
                                   const char *filter)
 {
-    size_t printed = 0;
+    ucs_config_print_flags_t flags_copy = flags;
     ucs_config_parser_prefix_t table_prefix_elem;
     UCS_LIST_HEAD(prefix_list);
-
-    if ((flags & UCS_CONFIG_PRINT_HEADER) &&
-        !(flags & UCS_CONFIG_PRINT_CONFIG)) {
-        fprintf(stream, "#\n");
-        fprintf(stream, "# %s\n", title);
-        fprintf(stream, "#\n");
-        fprintf(stream, "\n");
-    }
 
     if (flags & UCS_CONFIG_PRINT_CONFIG) {
         table_prefix_elem.prefix = table_prefix ? table_prefix : "";
         ucs_list_add_tail(&prefix_list, &table_prefix_elem.list);
-        ucs_config_parser_print_opts_recurs(stream, opts, fields, flags, prefix,
-                                            &prefix_list, title, &printed,
+        ucs_config_parser_print_opts_recurs(stream, opts, fields, &flags_copy,
+                                            prefix, &prefix_list, title,
                                             filter);
+    } else if (flags & UCS_CONFIG_PRINT_HEADER) {
+        ucs_config_parser_print_header(stream, title, &flags_copy);
     }
 }
 
