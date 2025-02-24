@@ -25,7 +25,7 @@
 #include <libgen.h>
 #include <sched.h>
 
-#ifdef HAVE_DECL_RDMA_NL_NLDEV
+#ifdef HAVE_NETLINK_RDMA
 #include <rdma/rdma_netlink.h>
 #endif
 
@@ -1523,7 +1523,7 @@ const char* uct_ib_ah_attr_str(char *buf, size_t max,
     return buf;
 }
 
-#ifdef HAVE_DECL_RDMA_NL_NLDEV
+#ifdef HAVE_NETLINK_RDMA
 static ucs_status_t
 uct_ib_device_is_smi_cb(const struct nlmsghdr *nlh, void *arg)
 {
@@ -1559,6 +1559,11 @@ int uct_ib_device_is_smi(struct ibv_device *ibv_device)
     attr->nla_type  = RDMA_NLDEV_ATTR_DEV_INDEX;
     attr->nla_len   = header_length;
     *dev_index_attr = ibv_get_device_index(ibv_device);
+    if (*dev_index_attr == -1) {
+        ucs_debug("%s: failed to get device index",
+                  ibv_get_device_name(ibv_device));
+        return 0;
+    }
 
     is_smi = 0;
     status = ucs_netlink_send_request(
