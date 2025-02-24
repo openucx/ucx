@@ -49,6 +49,13 @@ typedef struct uct_cuda_copy_queue_desc {
 } uct_cuda_copy_queue_desc_t;
 
 
+typedef struct uct_cuda_copy_bw {
+    double            h2d;
+    double            d2h;
+    double            d2d;
+} uct_cuda_copy_bw_t;
+
+
 typedef struct uct_cuda_copy_iface {
     uct_cuda_iface_t            super;
     /* used to store uuid and check iface reachability */
@@ -69,7 +76,7 @@ typedef struct uct_cuda_copy_iface {
     struct {
         unsigned                max_poll;
         unsigned                max_cuda_events;
-        double                  bandwidth;
+        uct_cuda_copy_bw_t      bw;
     } config;
     /* handler to support arm/wakeup feature */
     struct {
@@ -87,7 +94,7 @@ typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
     unsigned                max_cuda_events;
-    double                  bandwidth;
+    uct_cuda_copy_bw_t      bw;
 } uct_cuda_copy_iface_config_t;
 
 
