@@ -1162,13 +1162,6 @@ static void ucp_add_tl_resource_if_enabled(
 
     if (ucp_is_resource_enabled(resource, config, aux_tls, &rsc_flags,
                                 dev_cfg_masks, tl_cfg_mask)) {
-        if (context->config.ext.avoid_copy_mem_types) {
-            if (!strcmp(resource->tl_name, "cuda_ipc")) {
-                ucs_debug("disabled cuda_ipc for memtype copy avoidance");
-                return;
-            }
-        }
-
         if ((resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
             (resource->sys_device >= UCP_MAX_SYS_DEVICES)) {
             ucs_diag(UCT_TL_RESOURCE_DESC_FMT
