@@ -546,7 +546,7 @@ static std::map<std::string, std::string> get_all_rdmacm_net_devices()
 
         if (!ib_devices.empty()) {
             std::string ib_device = ib_devices.front();
-            if (ib_device.compare(0, 3, "smi") == 0) {
+            if (ib_device.rfind("smi", 0) == 0) {
                 /* Skip SMI device */
                 continue;
             }
