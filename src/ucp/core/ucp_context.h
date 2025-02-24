@@ -90,6 +90,8 @@ typedef struct ucp_context_config {
     size_t                                 rndv_num_frags[UCS_MEMORY_TYPE_LAST];
     /** Memory types of fragments used for RNDV pipeline protocol */
     uint64_t                               rndv_frag_mem_types;
+    /** Avoid memtype copies that use bounce buffers, when set to true */
+    int                                    avoid_copy_mem_types;
     /** RNDV pipeline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Enabling 2-stage pipeline rndv protocol */
