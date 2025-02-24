@@ -49,6 +49,7 @@ bench: $(GOTMPDIR)
 
 goperftest: $(GOTMPDIR)
 	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
+	$(GO) mod tidy ;\
 	$(GO) build --tags=$(GOTAGS) -o ${GOTMPDIR}/goperftest
 
 run-perftest: goperftest
