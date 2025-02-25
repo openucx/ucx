@@ -19,7 +19,6 @@
 
 #if ENABLE_ASSERT
 #define UCT_GGA_MLX5_MD_CAPS        (UCT_IB_MLX5_MD_FLAG_DEVX | \
-                                     UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI | \
                                      UCT_IB_MLX5_MD_FLAG_MMO_DMA)
 #endif /* ENABLE_ASSERT */
 
@@ -204,7 +203,11 @@ static int uct_ib_mlx5_gga_check_device(struct ibv_device *device)
         goto out_close_ctx;
     }
 
-    result = uct_ib_mlx5_devx_check_xgvmi(cap, ibv_get_device_name(device));
+    /*
+     * This check does not guarantee that XGVMI works with indirect mkeys.
+     * We can filter out devices that do not support XGVMI at all.
+     */
+    result = uct_ib_mlx5_devx_check_xgvmi(cap);
 
 out_close_ctx:
     uct_ib_md_device_context_close(ctx);
@@ -824,6 +827,10 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
     if (strcmp(mlx5_md->super.name, UCT_IB_MD_NAME(gga))) {
         return UCS_ERR_NO_DEVICE;
     }
+
+    ucs_assertv(mlx5_md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY,
+                "md %p: cap_flags=0x%" PRIx64 " do not have EXPORTED_MKEY flag",
+                mlx5_md, mlx5_md->super.cap_flags);
 
     ucs_assertv(ucs_test_all_flags(mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS),
                 "md %p: flags=0x%x do not have mandatory capabilities 0x%x",
