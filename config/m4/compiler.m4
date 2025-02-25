@@ -599,6 +599,24 @@ if $CC --version 2>&1 | grep -q Intel; then
                                      [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 fi
 
+#
+# Check actual lzcnt support (at least nvc 24.9 fails to link, even if it defines __LZCNT__)
+#
+SAVE_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -mlzcnt"
+AC_MSG_CHECKING([if lzcnt is supported])
+AC_LINK_IFELSE([AC_LANG_SOURCE([[
+    #include <x86intrin.h>
+    int main(void) {
+        return (int)_lzcnt_u32(1) | (int)_lzcnt_u64(2);
+    }
+    ]])],
+    [AC_MSG_RESULT([yes])
+     BASE_CFLAGS="-mlzcnt $BASE_CFLAGS"
+     AC_DEFINE([HAVE_LZCNT], 1, [LZCNT Intrinsic support])],
+    [AC_MSG_RESULT([no])])
+CFLAGS="$SAVE_CFLAGS"
+
 
 #
 # Set C++ optimization/debug flags to be the same as for C
