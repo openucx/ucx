@@ -220,6 +220,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
 {
     const ucp_rkey_config_t *rkey_config;
     uct_rkey_t tl_rkey;
+    ucs_status_t status;
 
     if (ucs_unlikely(param->op_attr_mask & (UCP_OP_ATTR_FIELD_DATATYPE |
                                             UCP_OP_ATTR_FLAG_NO_IMM_CMPL))) {
@@ -233,10 +234,17 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     tl_rkey = ucp_rkey_get_tl_rkey(rkey, rkey_config->put_short.rkey_index);
-    return UCS_PROFILE_CALL(uct_ep_put_short,
-                            ucp_ep_get_fast_lane(ep,
-                                                 rkey_config->put_short.lane),
-                            buffer, length, remote_addr, tl_rkey);
+
+    status = UCS_PROFILE_CALL(uct_ep_put_short,
+                              ucp_ep_get_fast_lane(ep,
+                                                   rkey_config->put_short.lane),
+                              buffer, length, remote_addr, tl_rkey);
+
+    if (status != UCS_ERR_NO_RESOURCE) {
+        ucp_ep_mark_unflushed_lane(ep, rkey_config->put_short.lane);
+    }
+
+    return status;
 }
 
 ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
@@ -281,6 +289,14 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
             }
         } else {
             contig_length = count;
+        }
+
+        if (ucp_ep_is_fence_required(ep)) {
+            status = ucp_ep_handle_fence(ep);
+            if (status != UCS_OK) {
+                ret = UCS_STATUS_PTR(status);
+                goto out_unlock;
+            }
         }
 
         ret = ucp_proto_request_send_op(
@@ -387,6 +403,14 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
         req->send.state.completed_size = 0;
         if (UCP_DT_IS_CONTIG(datatype)) {
             contig_length = ucp_contig_dt_length(datatype, count);
+        }
+
+        if (ucp_ep_is_fence_required(ep)) {
+            status = ucp_ep_handle_fence(ep);
+            if (status != UCS_OK) {
+                ret = UCS_STATUS_PTR(status);
+                goto out_unlock;
+            }
         }
 
         ret = ucp_proto_request_send_op(
