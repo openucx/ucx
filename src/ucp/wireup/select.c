@@ -2192,8 +2192,7 @@ ucp_wireup_select_context_init(ucp_wireup_select_context_t *select_ctx)
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_err_handling_mode_t err_mode,
-                        ucp_wireup_select_context_t *select_ctx,
-                        char *info_string, size_t info_string_length)
+                        ucp_wireup_select_context_t *select_ctx)
 {
     ucp_wireup_select_info_t am_info;
     ucs_status_t status;
@@ -2478,7 +2477,6 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_tl_bitmap_t scalable_tl_bitmap = worker->scalable_tl_bitmap;
     /* TODO: remove initialization after all ucp_wireup_add_X_lanes functions
        will support specifying a reason */
-    char wireup_info[256]              = {0};
     ucp_wireup_select_context_t select_ctx;
     ucp_wireup_select_params_t select_params;
     ucs_status_t status;
@@ -2489,8 +2487,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                       remote_address, scalable_tl_bitmap, 0);
         status = ucp_wireup_search_lanes(&select_params, key->err_mode,
-                                         &select_ctx, wireup_info,
-                                         sizeof(wireup_info));
+                                         &select_ctx);
         if (status == UCS_OK) {
             goto out;
         }
@@ -2503,8 +2500,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                   remote_address, tl_bitmap, show_error);
     status = ucp_wireup_search_lanes(&select_params, key->err_mode,
-                                     &select_ctx, wireup_info,
-                                     sizeof(wireup_info));
+                                     &select_ctx);
     if (status != UCS_OK) {
         return status;
     }
