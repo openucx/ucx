@@ -109,7 +109,7 @@ public:
         uct_ib_address_pack(&pack_params, ib_addr);
 
         uct_ib_address_pack_params_t unpack_params;
-        uct_ib_address_unpack(ib_addr, &unpack_params);
+        ASSERT_UCS_OK(uct_ib_address_unpack(ib_addr, &unpack_params));
 
         if (uct_ib_iface_is_roce(iface)) {
             EXPECT_TRUE(iface->config.force_global_addr);
@@ -202,7 +202,7 @@ UCS_TEST_P(test_uct_ib_addr, address_pack_path_mtu, "IB_PATH_MTU=2048")
     uct_ib_address_t *addr = (uct_ib_address_t*)&buffer[0];
     uct_ib_iface_address_pack(iface, addr);
     uct_ib_address_pack_params_t params;
-    uct_ib_address_unpack(addr, &params);
+    ASSERT_UCS_OK(uct_ib_address_unpack(addr, &params));
     EXPECT_TRUE(params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
     EXPECT_EQ(IBV_MTU_2048, params.path_mtu);
 }
@@ -464,7 +464,7 @@ public:
                                    UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
         return rc_has_ddp || dc_has_ddp;
     }
-    
+
     void test_check_ib_sl_config() {
         const char *max_avail_sl_str = getenv("GTEST_MAX_IB_SL");
         uint8_t sl, max_avail_sl;
