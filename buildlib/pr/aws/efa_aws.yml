@@ -1,0 +1,55 @@
+parameters:
+  container: aws_tools
+
+jobs:
+  - job: tests_${{ parameters.name }}
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    displayName: AWS EFA Test
+    container: aws_tools
+    timeoutInMinutes: 360
+    workspace:
+      clean: outputs
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+      - bash: ./buildlib/pr/aws/efa_aws_test.sh
+        displayName: EFA test in AWS
+        env:
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          BUILD_NUMBER: $(Build.BuildId)
+          EXECUTOR_NUMBER: $(AZP_AGENT_ID)
+          PR_ID: $(System.PullRequest.PullRequestNumber)
+          JOB_URL: $(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)
+          nworkers: 4
+          worker: $(worker_id)
+          ASAN_CHECK: no
+          PROTO_ENABLE: yes
+          RUN_TESTS: yes
+          TEST_PERF: 0
+          VALGRIND_CHECK: no
+          CMD: "yum groupinstall 'Development Tools' 'C Development Tools and Libraries' -y && yum install -y iproute hostname strace git wget environment-modules autoconf libtool python3 python3-pip pkg-config libnl3-devel curl valgrind valgrind-devel rdma-core-devel libibverbs libibverbs-utils librdmacm librdmacm-utils  && git clone https://github.com/openucx/ucx.git && cd ucx && git fetch origin pull/${PR_ID}/head:pr && git checkout pr && ./contrib/test_jenkins.sh"
+
+  - job: Cleanup
+    dependsOn: tests_${{ parameters.name }}
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    displayName: AWS resources cleanup
+    container: aws_tools
+    timeoutInMinutes: 15
+    steps:
+      - checkout: none
+        clean: true
+      - bash: |
+          set -x
+          aws batch terminate-job --job-id $(JOB_ID) --reason 'Terminated by Azure'
+        continueOnError: true
+        displayName: AWS resources cleanup
+        env:
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY
