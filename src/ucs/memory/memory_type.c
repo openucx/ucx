@@ -14,7 +14,7 @@
 #include <stddef.h>
 
 
-const char *ucs_memory_type_names[] = {
+UCS_CONFIG_DEFINE_ALLOWED_VALUES(ucs_memory_type_names, {
     [UCS_MEMORY_TYPE_HOST]         = "host",
     [UCS_MEMORY_TYPE_CUDA]         = "cuda",
     [UCS_MEMORY_TYPE_CUDA_MANAGED] = "cuda-managed",
@@ -24,9 +24,8 @@ const char *ucs_memory_type_names[] = {
     [UCS_MEMORY_TYPE_ZE_HOST]      = "ze-host",
     [UCS_MEMORY_TYPE_ZE_DEVICE]    = "ze-device",
     [UCS_MEMORY_TYPE_ZE_MANAGED]   = "ze-managed",
-    [UCS_MEMORY_TYPE_LAST]         = "unknown",
-    [UCS_MEMORY_TYPE_LAST + 1]     = NULL
-};
+    [UCS_MEMORY_TYPE_LAST]         = "unknown"
+});
 
 const char *ucs_memory_type_descs[] = {
     [UCS_MEMORY_TYPE_HOST]         = "System memory",

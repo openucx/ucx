@@ -17,6 +17,7 @@
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/callbackq_compat.h>
 #include <ucs/datastruct/linear_func.h>
+#include <ucs/config/types.h>
 #include <ucs/memory/memory_type.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
@@ -480,8 +481,7 @@ typedef enum {
     UCT_ALLOC_METHOD_HEAP, /**< Allocate from heap using libc allocator */
     UCT_ALLOC_METHOD_MMAP, /**< Allocate from OS using mmap() syscall */
     UCT_ALLOC_METHOD_HUGE, /**< Allocate huge pages */
-    UCT_ALLOC_METHOD_LAST,
-    UCT_ALLOC_METHOD_DEFAULT = UCT_ALLOC_METHOD_LAST /**< Use default method */
+    UCT_ALLOC_METHOD_LAST
 } uct_alloc_method_t;
 
 
@@ -1837,7 +1837,7 @@ enum {
 };
 
 
-extern const char *uct_alloc_method_names[];
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(uct_alloc_method_names);
 extern const char *uct_device_type_names[];
 
 
