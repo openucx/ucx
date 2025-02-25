@@ -101,6 +101,9 @@ typedef struct {
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_select_info_array_t, unsigned,
                        ucp_wireup_select_info_t);
 
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_select_info_sort_lane_bw_array_t, unsigned,
+                       ucp_wireup_select_info_sort_lane_bw_t);
+ 
 static const char *ucp_wireup_cmpt_flags[] = {
     [ucs_ilog2(UCT_COMPONENT_FLAG_RKEY_PTR)]     = "obtain remote memory pointer",
 };
@@ -1532,12 +1535,179 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
     return ucs_min(bw_local, bw_remote);
 }
 
+static int
+ucp_proto_select_info_extra_rcompare(const void *e1, const void *e2)
+{
+    const ucp_wireup_select_info_sort_lane_bw_t *info1 = e1;
+    const ucp_wireup_select_info_sort_lane_bw_t *info2 = e2;
+
+    return info1->lane_bw < info2->lane_bw;
+}
+
 static unsigned
-ucp_wireup_add_fast_lanes(ucp_worker_h worker,
-                          const ucp_wireup_select_params_t *select_params,
-                          const ucp_proto_select_info_array_t *sinfo_array,
-                          ucp_lane_type_t lane_type,
-                          ucp_wireup_select_context_t *select_ctx)
+ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
+                              const ucp_wireup_select_params_t *select_params,
+                              const ucp_proto_select_info_array_t *sinfo_array,
+                              ucp_lane_type_t lane_type, unsigned max_lanes,
+                              ucp_wireup_select_context_t *select_ctx)
+{
+    UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_select_info_sort_lane_bw_array_t,
+                             sinfo_array_sorted,
+                             ucs_array_length(sinfo_array));
+    ucp_lane_index_t num_lanes = 0;
+    double max_bw              = 0;
+    ucp_context_h context      = worker->context;
+    const double max_ratio     = 1. / context->config.ext.multi_lane_max_ratio;
+    ucs_status_t status;
+    const ucp_wireup_select_info_t *sinfo;
+    ucp_wireup_select_info_sort_lane_bw_t *sinfo_sort_elem;
+
+    ucs_array_for_each(sinfo, sinfo_array) {
+        sinfo_sort_elem = ucs_array_append(&sinfo_array_sorted,
+                                       ucs_fatal("failed to append"));
+        sinfo_sort_elem->sinfo   = sinfo;
+        sinfo_sort_elem->lane_bw = ucp_wireup_get_lane_bw(
+                worker, sinfo, select_params->address);
+        /* TODO: filter out extra lanes without reg-mem-types support */
+    }
+
+    qsort(sinfo_array_sorted.buffer,
+          sinfo_array_sorted.length,
+          sizeof(ucp_wireup_select_info_sort_lane_bw_t),
+          ucp_proto_select_info_extra_rcompare);
+
+    if (!ucs_array_is_empty(&sinfo_array_sorted)) {
+        max_bw = ucs_array_begin(&sinfo_array_sorted)->lane_bw;
+    }
+
+    ucs_array_set_length(&sinfo_array_sorted,
+                         ucs_min(max_lanes, ucs_array_length(sinfo_array)));
+    /* Compare each element to max BW and filter only fast lanes */
+    ucs_array_for_each(sinfo_sort_elem, &sinfo_array_sorted) {
+        if (sinfo_sort_elem->lane_bw < (max_bw * max_ratio)) {
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      " : bandwidth %.2f lower than %.2f x %.2f, dropping lane",
+                      UCT_TL_RESOURCE_DESC_ARG(
+                              &context->tl_rscs[sinfo->rsc_index].tl_rsc),
+                      sinfo_sort_elem->lane_bw, max_ratio, max_bw);
+            if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
+                /* All the rest will won't be added but continue for logging */
+                continue;
+            } else {
+                break;
+            }
+        }
+
+        status = ucp_wireup_add_lane(select_params, sinfo_sort_elem->sinfo,
+                                     lane_type, num_lanes == 0, select_ctx);
+        if (status != UCS_OK) {
+            break;
+        }
+
+        ++num_lanes;
+    }
+
+    return num_lanes;
+}
+
+static unsigned
+ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
+                            ucp_wireup_select_bw_info_t *bw_info,
+                            ucp_tl_bitmap_t tl_bitmap, ucp_lane_index_t excl_lane,
+                            ucp_wireup_select_context_t *select_ctx,
+                            unsigned allow_extra_path)
+{
+    ucp_proto_select_info_array_t sinfo_array    = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_ep_h ep                                  = select_params->ep;
+    ucp_context_h context                        = ep->worker->context;
+    ucp_wireup_dev_usage_count dev_count         = {};
+    uint64_t local_dev_bitmap                    = bw_info->local_dev_bitmap;
+    uint64_t remote_dev_bitmap                   = bw_info->remote_dev_bitmap;
+    uint16_t num_paths_limit;
+    uint16_t num_paths_count;
+    const uct_iface_attr_t *iface_attr;
+    const ucp_address_entry_t *ae;
+    ucp_rsc_index_t skip_local;
+    ucp_rsc_index_t skip_remote;
+    ucp_rsc_index_t rsc_index;
+    unsigned addr_index;
+    ucp_wireup_select_info_t *sinfo;
+    unsigned num_lanes;
+    ucs_status_t status;
+
+    ucp_rsc_index_t local_dev_index, remote_dev_index;
+    
+    bw_info->criteria.arg = &dev_count;
+
+    if (excl_lane == UCP_NULL_LANE) {
+        skip_local  = UCP_NULL_RESOURCE;
+        skip_remote = UCP_NULL_RESOURCE;
+    } else {
+        rsc_index   = select_ctx->lane_descs[excl_lane].rsc_index;
+        addr_index  = select_ctx->lane_descs[excl_lane].addr_index;
+
+        skip_local  = context->tl_rscs[rsc_index].dev_index;
+        skip_remote = select_params->address->address_list[addr_index].dev_index;
+    }
+
+    ucs_for_each_bit(local_dev_index, local_dev_bitmap) {
+        ucs_for_each_bit(remote_dev_index, remote_dev_bitmap) {
+            num_paths_count = 0;
+            num_paths_limit = 0;
+            do {
+                sinfo  = ucs_array_append(&sinfo_array, break);
+                status = ucp_wireup_select_transport(
+                        select_ctx, select_params, &bw_info->criteria,
+                        tl_bitmap, UINT64_MAX, UCS_BIT(local_dev_index),
+                        UCS_BIT(remote_dev_index), 0, sinfo, NULL, 0);
+                if (status != UCS_OK) {
+                    ucs_array_pop_back(&sinfo_array);
+                    break;
+                }
+
+                rsc_index  = sinfo->rsc_index;
+                iface_attr = ucp_worker_iface_get_attr(ep->worker, rsc_index);
+                addr_index = sinfo->addr_index;
+                ae         = &select_params->address->address_list[addr_index];
+
+                dev_count.local[local_dev_index]++;
+                dev_count.remote[remote_dev_index]++;
+                dev_count.local_skip[local_dev_index]   = (local_dev_index ==
+                                                           skip_local);
+                dev_count.remote_skip[remote_dev_index] = (remote_dev_index ==
+                                                           skip_remote);
+
+                if (num_paths_limit == 0) {
+                    num_paths_limit = ucs_min(iface_attr->dev_num_paths,
+                                              ae->dev_num_paths) +
+                                      (allow_extra_path &&
+                                       (skip_local == local_dev_index) &&
+                                       (skip_remote == remote_dev_index));
+                }
+
+                ucs_assert(num_paths_limit > 0);
+
+                sinfo->path_index = num_paths_count++;
+            } while (num_paths_count < num_paths_limit);
+        }
+    }
+
+    bw_info->criteria.arg = NULL; /* To suppress compiler warning */
+    num_lanes = ucp_wireup_add_fast_lanes_a2a(ep->worker, select_params,
+                                              &sinfo_array,
+                                              bw_info->criteria.lane_type,
+                                              bw_info->max_lanes,
+                                              select_ctx);
+    ucs_array_cleanup_dynamic(&sinfo_array);
+    return num_lanes;
+}
+
+static unsigned
+ucp_wireup_add_fast_lanes_d2d(ucp_worker_h worker,
+                              const ucp_wireup_select_params_t *select_params,
+                              const ucp_proto_select_info_array_t *sinfo_array,
+                              ucp_lane_type_t lane_type,
+                              ucp_wireup_select_context_t *select_ctx)
 {
     ucp_lane_index_t num_lanes = 0;
     double max_bw              = 0;
@@ -1579,11 +1749,11 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
 }
 
 static unsigned
-ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
-                        ucp_wireup_select_bw_info_t *bw_info,
-                        ucp_tl_bitmap_t tl_bitmap, ucp_lane_index_t excl_lane,
-                        ucp_wireup_select_context_t *select_ctx,
-                        unsigned allow_extra_path)
+ucp_wireup_add_bw_lanes_d2d(const ucp_wireup_select_params_t *select_params,
+                            ucp_wireup_select_bw_info_t *bw_info,
+                            ucp_tl_bitmap_t tl_bitmap, ucp_lane_index_t excl_lane,
+                            ucp_wireup_select_context_t *select_ctx,
+                            unsigned allow_extra_path)
 {
     ucp_proto_select_info_array_t sinfo_array = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucp_rsc_index_t skip_dev_index            = UCP_NULL_RESOURCE;
@@ -1647,9 +1817,10 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
         /* Account for possible path override */
         local_num_paths  = iface_attr->dev_num_paths;
         remote_num_paths = ae->dev_num_paths;
-        if (allow_extra_path &&
-            ((skip_dev_index != UCP_NULL_RESOURCE) && /* clang sanitizer */
-             (skip_dev_index == dev_index))) {
+        if (allow_extra_path && (skip_dev_index == dev_index)) {
+            /* clang sanitizer */
+            ucs_assert(skip_dev_index != UCP_NULL_RESOURCE);
+
             /* Allow path since we skipped one */
             local_num_paths++;
             remote_num_paths++;
@@ -1672,13 +1843,31 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     bw_info->criteria.arg = NULL; /* To suppress compiler warning */
-    num_lanes = ucp_wireup_add_fast_lanes(ep->worker, select_params,
-                                          &sinfo_array,
-                                          bw_info->criteria.lane_type,
-                                          select_ctx);
+    num_lanes = ucp_wireup_add_fast_lanes_d2d(ep->worker, select_params,
+                                             &sinfo_array,
+                                             bw_info->criteria.lane_type,
+                                             select_ctx);
 
     ucs_array_cleanup_dynamic(&sinfo_array);
     return num_lanes;
+}
+
+static unsigned
+ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
+                        ucp_wireup_select_bw_info_t *bw_info,
+                        ucp_tl_bitmap_t tl_bitmap, ucp_lane_index_t excl_lane,
+                        ucp_wireup_select_context_t *select_ctx,
+                        unsigned allow_extra_path)
+{
+    if (select_params->ep->worker->context->config.ext.ep_allow_all_to_all) {
+        return ucp_wireup_add_bw_lanes_a2a(select_params, bw_info, tl_bitmap,
+                                           excl_lane, select_ctx,
+                                           allow_extra_path);
+    } else {
+        return ucp_wireup_add_bw_lanes_d2d(select_params, bw_info, tl_bitmap,
+                                           excl_lane, select_ctx,
+                                           allow_extra_path);
+    }
 }
 
 static ucs_status_t
