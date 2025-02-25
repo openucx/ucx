@@ -1,9 +1,12 @@
+parameters:
+  container: aws_tools
+
 jobs:
   - job: tests_${{ parameters.name }}
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
-    displayName: ${{ parameters.name }}
+    displayName: AWS EFA Test
     container: aws_tools
     timeoutInMinutes: 360
     workspace:
@@ -13,56 +16,18 @@ jobs:
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
-      - bash: |
-          set -exE
-          source ./buildlib/az-helpers.sh
-
-          # Generate properties json from template
-          envsubst < buildlib/pr/aws/efa_vars.template > efa_vars.json
-          jq '.' efa_vars.json
-
-          # Submit AWS batch job and capture job ID
-          aws eks update-kubeconfig --name ucx-ci
-          JOB_ID=$(aws batch submit-job \
-              --job-name UCX_CI_$(Build.BuildId) \
-              --job-definition UCX-CI-JD \
-              --job-queue ucx-ci-JQ \
-              --eks-properties-override file://./efa_vars.json \
-              --tags "PR_ID=${PR_ID},\
-                  Azure_Pipeline_Name=$(Build.DefinitionName),\
-                  Azure_Pipeline_Stage=$(System.StageDisplayName),\
-                  Azure_Build_Number=$(Build.BuildNumber)" \
-              --query 'jobId' --output text)
-
-          # Wait for job to start running
-          STATUS_CHECK="aws batch describe-jobs --jobs $JOB_ID --query 'jobs[0].status' --output text"
-          until eval "$STATUS_CHECK" | grep -q RUNNING; do
-              sleep 20
-          done
-
-          # Get pod name and stream logs
-          POD=$(aws batch describe-jobs --jobs "$JOB_ID" --query jobs[0].eksProperties.podProperties.podName --output text)
-          kubectl -n ucx-ci-batch-nodes logs -f "$POD"
-
-          # Propagate exit status
-          if eval "$STATUS_CHECK" | grep -q FAILED; then  
-            msg="Failure running EFA test in AWS"  
-            azure_log_error "$msg"
-            azure_complete_with_issues "$msg" 
-          fi
-
-          # Ensure AWS resources cleanup
-          aws batch terminate-job --job-id "$JOB_ID" --reason 'Terminated by Azure' || true
-
+      - bash: ./buildlib/pr/aws/efa_aws_test.sh
         displayName: EFA test in AWS
+        name: testStep
         env:
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          BUILD_NUMBER: $(Build.BuildId)-$(Build.BuildNumber)
+          BUILD_NUMBER: $(Build.BuildId)
           EXECUTOR_NUMBER: $(AZP_AGENT_ID)
           PR_ID: $(System.PullRequest.PullRequestNumber)
+          PIPE_NAME: $(Build.DefinitionName)
+          PIPE_STAGE: $(System.StageDisplayName)
           JOB_URL: $(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)
-          RUNNING_IN_AZURE: yes
           nworkers: 4
           worker: $(worker_id)
           ASAN_CHECK: no
@@ -70,4 +35,28 @@ jobs:
           RUN_TESTS: yes
           TEST_PERF: 0
           VALGRIND_CHECK: no
-          CMD: "yum groupinstall 'Development Tools' 'C Development Tools and Libraries' -y ; yum install -y iproute hostname strace git wget environment-modules autoconf libtool python3 python3-pip pkg-config libnl3-devel curl valgrind valgrind-devel rdma-core-devel libibverbs libibverbs-utils librdmacm librdmacm-utils ; git clone https://github.com/openucx/ucx.git; cd ucx; git fetch origin pull/${PR_ID}/head:pr; git checkout pr; ./contrib/test_jenkins.sh"
+          CMD: "yum groupinstall -y 'Development Tools' && yum install -y fuse-devel iproute hostname strace git wget environment-modules autoconf libtool python3 python3-pip pkg-config libnl3-devel curl valgrind valgrind-devel rdma-core-devel libibverbs libibverbs-utils librdmacm librdmacm-utils  && git clone https://github.com/openucx/ucx.git && cd ucx && git fetch origin pull/${PR_ID}/head:pr && git checkout pr && ./contrib/test_jenkins.sh"
+
+  - job: Cleanup
+    dependsOn: tests_${{ parameters.name }}
+    condition: always()
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    displayName: AWS resources cleanup
+    container: aws_tools
+    timeoutInMinutes: 15
+    variables:
+      JOB_ID: $[ dependencies.tests_${{ parameters.name }}.outputs['testStep.JOB_ID'] ]
+    steps:
+      - checkout: none
+        clean: true
+      - bash: |
+          set -x
+          aws eks update-kubeconfig --name ucx-ci
+          aws batch terminate-job --job-id $(JOB_ID) --reason 'Terminated by Azure'
+        continueOnError: true
+        displayName: AWS resources cleanup
+        env:
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
