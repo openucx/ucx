@@ -171,6 +171,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_SENT, 0);
         break;
     case UCP_WIREUP_MSG_REPLY:
+    case UCP_WIREUP_MSG_REPLY_RECONFIG:
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REP_SENT, 0);
         break;
     case UCP_WIREUP_MSG_ACK:
@@ -732,7 +733,10 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
     if (send_reply) {
         ucs_trace("ep %p: sending wireup reply", ep);
-        ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY, &tl_bitmap, lanes2remote);
+        ucp_wireup_msg_send(ep,
+                            am_need_flush ? UCP_WIREUP_MSG_REPLY_RECONFIG :
+                                            UCP_WIREUP_MSG_REPLY,
+                            &tl_bitmap, lanes2remote);
     }
 
     return;
@@ -759,14 +763,14 @@ int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg)
     return ((elem->arg == arg) && (elem->cb == ucp_wireup_send_msg_ack));
 }
 
-static UCS_F_NOINLINE void
-ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
-                         const ucp_wireup_msg_t *msg,
-                         const ucp_unpacked_address_t *remote_address)
+static void
+ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
+                                const ucp_wireup_msg_t *msg,
+                                const ucp_unpacked_address_t *remote_address)
 {
     ucs_status_t status;
+    int ack;
 
-    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REPLY);
     ucs_trace("ep %p: got wireup reply src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" sn %d", ep, msg->src_ep_id,
               msg->dst_ep_id, msg->conn_sn);
@@ -790,14 +794,37 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
         }
 
         ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
+        ack = 1;
+    } else {
+        ack = 0;
     }
 
     ucp_wireup_remote_connected(ep);
 
-    /* Send `UCP_WIREUP_MSG_ACK` from progress function
+    if (ack || (msg->type == UCP_WIREUP_MSG_REPLY_RECONFIG)) {
+        /* Send `UCP_WIREUP_MSG_ACK` from progress function
      * to avoid calling UCT routines from an async thread */
-    ucs_callbackq_add_oneshot(&worker->uct->progress_q, ep,
-                              ucp_wireup_send_msg_ack, ep);
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, ep,
+                                  ucp_wireup_send_msg_ack, ep);
+    }
+}
+
+static UCS_F_NOINLINE void
+ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
+                         const ucp_wireup_msg_t *msg,
+                         const ucp_unpacked_address_t *remote_address)
+{
+    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REPLY);
+    ucp_wireup_process_reply_common(worker, ep, msg, remote_address);
+}
+
+static UCS_F_NOINLINE void
+ucp_wireup_process_reply_reconfig(ucp_worker_h worker, ucp_ep_h ep,
+                                  const ucp_wireup_msg_t *msg,
+                                  const ucp_unpacked_address_t *remote_address)
+{
+    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REPLY_RECONFIG);
+    ucp_wireup_process_reply_common(worker, ep, msg, remote_address);
 }
 
 static void ucp_ep_removed_flush_completion(ucp_request_t *req)
@@ -936,6 +963,8 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_process_request(worker, ep, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_REPLY) {
         ucp_wireup_process_reply(worker, ep, msg, &remote_address);
+    } else if (msg->type == UCP_WIREUP_MSG_REPLY_RECONFIG) {
+        ucp_wireup_process_reply_reconfig(worker, ep, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_CHECK) {
         ucs_assert((msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID) && (ep == NULL));
         ucp_wireup_send_ep_removed(worker, msg, &remote_address);
@@ -1354,18 +1383,18 @@ static void ucp_wireup_discard_uct_eps(ucp_ep_h ep, uct_ep_h *uct_eps,
 
 /* Check if AM lane should be flushed after being operational (wireup process
  * completed) */
-static int
-ucp_wireup_is_am_need_flush(ucp_ep_h ep, const ucp_lane_index_t *reuse_lane_map)
+static int ucp_wireup_is_am_need_flush(ucp_ep_h ep,
+                                       const ucp_ep_config_key_t *key,
+                                       const ucp_lane_index_t *reuse_lane_map)
 {
     ucp_lane_index_t am_lane = ucp_ep_get_am_lane(ep);
 
-    /* If CM lane exists, no AM messages were sent through AM lane, thus flush
-     * is not required */
+    /* In CM mode, messages are not sent before wireup is completed */
     return !ucp_ep_has_cm_lane(ep) &&
            /* AM lane exists */
-           (am_lane != UCP_NULL_LANE) &&
-           /* Lane is not being reused */
-           (reuse_lane_map[am_lane] == UCP_NULL_LANE) &&
+           (am_lane != UCP_NULL_LANE) && (key->am_lane != UCP_NULL_LANE) &&
+           /* Lane is not being reused by new AM lane */
+           (reuse_lane_map[am_lane] != key->am_lane) &&
            /* Lane is operational */
            (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
             !ucp_ep_is_lane_p2p(ep, am_lane));
@@ -1377,6 +1406,19 @@ static ucp_lane_index_t ucp_wireup_get_reconfig_msg_lane(ucp_ep_h ep)
      * request was sent and before reply was received
      * (thus we use UCP_WIREUP_MSG_REQUEST) */
     return ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_REQUEST);
+}
+
+static int ucp_wireup_am_flush_supported(ucp_ep_h ep,
+                                         const ucp_ep_config_key_t *key,
+                                         const ucp_lane_index_t *reuse_lane_map)
+{
+    ucp_lane_index_t am_lane = ucp_ep_get_am_lane(ep);
+
+    /* Flush is supported only if lane is reused by new AM lane (or not reused
+     * at all) */
+    return (am_lane != UCP_NULL_LANE) &&
+           ((reuse_lane_map[am_lane] == UCP_NULL_LANE) ||
+            (reuse_lane_map[am_lane] == key->am_lane));
 }
 
 static int
@@ -1419,17 +1461,18 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
      *          only required for a single lane, thus we can perform
      *          reconfiguration: */
 
-           /* Wireup process is finished - wireup lane doesn't have any
-            * outstanding messages */
-    return (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
-            /* AM and wireup lanes are the same lane */
-            (ucp_ep_get_am_lane(ep) == wireup_lane) ||
-            /* AM lane doesn't require flush */
-            !ucp_wireup_is_am_need_flush(ep, reuse_lane_map) ||
-            /* p2p lanes are not valid during wireup process */
-            ucp_ep_is_lane_p2p(ep, wireup_lane)) &&
+    /* AM flush is not needed */
+    return (!ucp_wireup_is_am_need_flush(ep, new_key, reuse_lane_map) ||
+            /* Wireup lane doesn't have any outstanding messages */
+            ((!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
+              /* AM and wireup lanes are the same lane */
+              (ucp_ep_get_am_lane(ep) == wireup_lane)) &&
+             /* AM flush supported */
+             ucp_wireup_am_flush_supported(ep, new_key, reuse_lane_map))) &&
            /* No HW tag matching lane exists */
-           (ucp_ep_get_tag_lane(ep) == UCP_NULL_LANE);
+           (ucp_ep_get_tag_lane(ep) == UCP_NULL_LANE) &&
+           /* Weak fence requires flushing RMA lanes */
+           ep->worker->context->config.worker_strong_fence;
 }
 
 static int ucp_wireup_should_reconfigure(ucp_ep_h ep,
@@ -1491,7 +1534,7 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
                                    const ucp_lane_index_t *reuse_lane_map)
 {
     uct_ep_h uct_ep   = NULL;
-    int am_need_flush = ucp_wireup_is_am_need_flush(ep, reuse_lane_map);
+    int am_need_flush = ucp_wireup_is_am_need_flush(ep, key, reuse_lane_map);
     ucp_lane_index_t old_lane, new_wireup_lane, old_wireup_lane;
     ucp_wireup_ep_t *new_wireup_ep, *old_ep_wrapper;
     uct_ep_h old_wireup_ep, new_aux_ep;
@@ -1518,7 +1561,7 @@ ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
         new_wireup_ep   = ucp_ep_get_cm_wireup_ep(ep);
         new_wireup_lane = key->cm_lane;
     } else {
-        new_wireup_lane = am_need_flush ? ucp_ep_get_am_lane(ep) :
+        new_wireup_lane = am_need_flush ? key->am_lane :
                                           ucp_wireup_find_non_reused_lane(
                                                   ep, key, reuse_lane_map);
 
@@ -1615,7 +1658,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                     "new_key->wireup_msg_lane=%u", new_key->wireup_msg_lane);
     }
 
-    am_need_flush = ucp_wireup_is_am_need_flush(ep, reuse_lane_map);
+    am_need_flush = ucp_wireup_is_am_need_flush(ep, new_key, reuse_lane_map);
     wireup_lane   = am_need_flush ? ucp_ep_get_am_lane(ep) :
                                     ucp_wireup_get_reconfig_msg_lane(ep);
 
@@ -1717,10 +1760,6 @@ ucp_wireup_gather_pending_requests(ucp_ep_h ep,
     ucp_request_t *req;
     ucp_lane_index_t lane;
 
-    if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
-        return;
-    }
-
     /* Handle wireup EPs */
     ucp_wireup_eps_pending_extract(ep, replay_pending_queue);
 
@@ -1731,6 +1770,10 @@ ucp_wireup_gather_pending_requests(ucp_ep_h ep,
             ucs_queue_push(replay_pending_queue,
                            (ucs_queue_elem_t*)&req->send.uct.priv);
         }
+    }
+
+    if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        return;
     }
 
     /* Fully connected lanes */

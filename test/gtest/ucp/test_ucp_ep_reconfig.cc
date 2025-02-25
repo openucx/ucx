@@ -130,6 +130,7 @@ public:
 
     void run(bool bidirectional = false);
     virtual ucp_tl_bitmap_t tl_bitmap();
+    void skip_not_supported() const;
 
     bool reuse_lanes() const
     {
@@ -346,7 +347,7 @@ void test_ucp_ep_reconfig::entity::verify_configuration(
 
     if (!is_reconfigured()) {
         EXPECT_EQ(num_lanes, reused_lanes);
-    } else if (test->reuse_lanes()) {
+    } else if (test->reuse_lanes() && (expected_reused_rscs > 0)) {
         EXPECT_EQ(expected_reused_rscs,
                            UCS_STATIC_BITMAP_POPCOUNT(reused_rscs));
     }
@@ -435,23 +436,30 @@ void test_ucp_ep_reconfig::run(bool bidirectional)
     r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
 }
 
-UCS_TEST_P(test_ucp_ep_reconfig, basic)
+void test_ucp_ep_reconfig::skip_not_supported() const
 {
     if (has_transport("shm")) {
         UCS_TEST_SKIP_R("TODO: add support for reconfiguration of separate "
                         "wireup and AM lanes");
     }
+}
 
+UCS_TEST_P(test_ucp_ep_reconfig, basic)
+{
+    skip_not_supported();
     run();
 }
 
 UCS_TEST_P(test_ucp_ep_reconfig, request_reset, "PROTO_REQUEST_RESET=y")
 {
+    skip_not_supported();
     run();
 }
 
 UCS_TEST_P(test_ucp_ep_reconfig, resolve_remote_id)
 {
+    skip_not_supported();
+
     if (has_transport("dc_x")) {
         /* RDMA_READ between CX7 and BF devices over DC fails due to HW bug */
         modify_config("MAX_RNDV_LANES", "0");
