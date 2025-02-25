@@ -28,6 +28,11 @@ BEGIN_C_DECLS
 #endif
 
 
+#if defined(HAVE_LZCNT)
+#  include <x86intrin.h>
+#endif
+
+
 #define ucs_ilog2(_n)                   \
 (                                       \
     __builtin_constant_p(_n) ? (        \
@@ -121,10 +126,16 @@ BEGIN_C_DECLS
     ((sizeof(_n) <= 4) ? __builtin_ctz((uint32_t)(_n)) : __builtin_ctzl(_n))
 
 /* Returns the number of leading 0-bits in _n.
- * If _n is 0, the result is undefined
  */
+#if defined(HAVE_LZCNT)
 #define ucs_count_leading_zero_bits(_n) \
-    ((sizeof(_n) <= 4) ? __builtin_clz((uint32_t)(_n)) : __builtin_clzl(_n))
+    ((sizeof(_n) <= 4) ? _lzcnt_u32((uint32_t)(_n)) : _lzcnt_u64(_n))
+#else
+#define ucs_count_leading_zero_bits(_n) \
+    ((_n) ?  ((sizeof(_n) <= 4) ? __builtin_clz((uint32_t)(_n)) : \
+                                  __builtin_clzl(_n)) : \
+     (sizeof(_n) * 8))
+#endif
 
 /* Returns the number of bits lower than 'bit_index' that are set in 'mask'
  * For example: ucs_bitmap2idx(mask=0xF0, idx=6) returns 2
