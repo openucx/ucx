@@ -841,12 +841,6 @@ static int uct_ib_iface_gid_extract_flid(const union ibv_gid *gid)
     return ntohs(*((uint16_t*)UCS_PTR_BYTE_OFFSET(gid->raw, 4)));
 }
 
-static int uct_ib_iface_is_flid_enabled(uct_ib_iface_t *iface)
-{
-    return iface->config.flid_enabled &&
-           (uct_ib_iface_gid_extract_flid(&iface->gid_info.gid) != 0);
-}
-
 static int uct_ib_iface_dev_addr_is_reachable(
                                   uct_ib_iface_t *iface,
                                   const uct_ib_address_t *ib_addr,
@@ -854,6 +848,7 @@ static int uct_ib_iface_dev_addr_is_reachable(
 {
     int is_local_eth                = uct_ib_iface_is_roce(iface);
     uct_ib_address_pack_params_t params;
+    const char *flid_info_str;
 
     uct_ib_address_unpack(ib_addr, &params);
 
@@ -883,22 +878,22 @@ static int uct_ib_iface_dev_addr_is_reachable(
         }
 
         /* Check FLID route: is enabled locally, and remote GID has it */
-        if (!uct_ib_iface_is_flid_enabled(iface)) {
-            uct_iface_fill_info_str_buf(is_reachable_params,
-                                        "FLID routing is disabled");
-            return 0;
+        if (!iface->config.flid_enabled) {
+            flid_info_str = "disabled";
+        } else if ((uct_ib_iface_gid_extract_flid(&iface->gid_info.gid) == 0) ||
+                   (uct_ib_iface_gid_extract_flid(&params.gid) == 0)) {
+            flid_info_str = "not available";
+        } else {
+            return 1;
         }
 
-        if (uct_ib_iface_gid_extract_flid(&params.gid) == 0) {
-            uct_iface_fill_info_str_buf(
-                    is_reachable_params,
-                    "IB subnet prefix differs 0x%"PRIx64" vs 0x%"PRIx64"",
-                    be64toh(iface->gid_info.gid.global.subnet_prefix),
-                    be64toh(params.gid.global.subnet_prefix));
-            return 0;
-        }
-
-        return 1;
+        uct_iface_fill_info_str_buf(
+                is_reachable_params,
+                "different subnet prefix 0x%" PRIx64 "/0x%" PRIx64
+                " and FLID is %s",
+                be64toh(iface->gid_info.gid.global.subnet_prefix),
+                be64toh(params.gid.global.subnet_prefix), flid_info_str);
+        return 0;
     } else if (is_local_eth && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* there shouldn't be a lid and the UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH
          * flag should be on. If reachable, the remote and local RoCE versions
@@ -938,7 +933,6 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (!uct_ib_iface_dev_addr_is_reachable(iface, device_addr, params)) {
-        uct_iface_fill_info_str_buf(params, "unreachable IB device address");
         return 0;
     }
 
@@ -1020,7 +1014,7 @@ static uint16_t uct_ib_gid_site_local_subnet_prefix(const union ibv_gid *gid)
 uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
                                           const union ibv_gid *gid)
 {
-    if (!uct_ib_iface_is_flid_enabled(iface)) {
+    if (!iface->config.flid_enabled) {
         return 0;
     }
 
