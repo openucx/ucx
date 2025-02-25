@@ -1014,13 +1014,14 @@ static uint16_t uct_ib_gid_site_local_subnet_prefix(const union ibv_gid *gid)
 uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
                                           const union ibv_gid *gid)
 {
-    if (!iface->config.flid_enabled) {
+    if (uct_ib_gid_site_local_subnet_prefix(gid) ==
+        uct_ib_gid_site_local_subnet_prefix(&iface->gid_info.gid)) {
+        /* On the same subnet, no need to use FLID */
         return 0;
     }
 
-    if (uct_ib_gid_site_local_subnet_prefix(gid) ==
-        uct_ib_gid_site_local_subnet_prefix(&iface->gid_info.gid)) {
-        /* On the same subnet, no need to use FLID*/
+    if (!iface->config.flid_enabled ||
+        (uct_ib_iface_gid_extract_flid(&iface->gid_info.gid) == 0)) {
         return 0;
     }
 
