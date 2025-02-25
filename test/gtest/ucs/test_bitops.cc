@@ -38,13 +38,31 @@ UCS_TEST_F(test_bitops, ffs64) {
     EXPECT_EQ(41u, ucs_ffs64(1ull << 41));
 }
 
-UCS_TEST_F(test_bitops, ilog2) {
+UCS_TEST_F(test_bitops, ilog2_constant) {
     EXPECT_EQ(0u, ucs_ilog2(1));
     EXPECT_EQ(2u, ucs_ilog2(4));
     EXPECT_EQ(2u, ucs_ilog2(5));
     EXPECT_EQ(2u, ucs_ilog2(7));
     EXPECT_EQ(14u, ucs_ilog2(17000));
     EXPECT_EQ(40u, ucs_ilog2(1ull << 40));
+}
+
+template<typename T>
+void test_ilog2()
+{
+    constexpr T bit = 1;
+
+    for (auto i = 1; i < sizeof(T) * 8; ++i) {
+        auto value = (bit << i);
+        ASSERT_EQ(i, ucs_ilog2(value));
+        value--;
+        ASSERT_EQ(i - 1, ucs_ilog2(value));
+    }
+}
+
+UCS_TEST_F(test_bitops, ilog2) {
+    test_ilog2<uint32_t>();
+    test_ilog2<uint64_t>();
 }
 
 UCS_TEST_F(test_bitops, popcount) {
