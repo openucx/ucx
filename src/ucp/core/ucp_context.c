@@ -1971,34 +1971,6 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
     }
 }
 
-void ucp_context_set_worker_async(ucp_context_h context,
-                                  ucs_async_context_t *async)
-{
-    if (async != NULL) {
-        /* Setting new worker async mutex */
-        if (context->mt_lock.mt_type == UCP_MT_TYPE_WORKER_ASYNC) {
-            ucs_error("worker async %p is already set for context %p",
-                      context->mt_lock.lock.mt_worker_async, context);
-        } else if (context->mt_lock.mt_type != UCP_MT_TYPE_NONE) {
-            ucs_debug("context %p is already set with mutex mt_type %d",
-                      context, context->mt_lock.mt_type);
-        } else {
-            context->mt_lock.mt_type              = UCP_MT_TYPE_WORKER_ASYNC;
-            context->mt_lock.lock.mt_worker_async = async;
-        }
-    } else {
-        /* Resetting existing worker async mutex */
-        if (context->mt_lock.mt_type == UCP_MT_TYPE_WORKER_ASYNC) {
-            if (context->mt_lock.lock.mt_worker_async != NULL) {
-                context->mt_lock.mt_type              = UCP_MT_TYPE_NONE;
-                context->mt_lock.lock.mt_worker_async = NULL;
-            } else {
-                ucs_error("worker async is not set for context %p", context);
-            }
-        }
-    }
-}
-
 static ucs_status_t
 ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
                           const size_t *default_sizes, size_t *sizes)

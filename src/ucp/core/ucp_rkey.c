@@ -642,7 +642,7 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
         return UCS_OK;
     }
 
-    UCP_THREAD_CS_ASYNC_ENTER(&context->mt_lock);
+    UCP_THREAD_CS_ENTER(&context->mt_lock); // TODO
 
     size = ucp_memh_packed_size(memh, flags, rkey_compat);
 
@@ -677,7 +677,7 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
 err_destroy:
     ucs_free(memh_buffer);
 out:
-    UCP_THREAD_CS_ASYNC_EXIT(&context->mt_lock);
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }
 

@@ -2570,10 +2570,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_free_tm_offload_stats;
     }
 
-    if (worker->flags & UCP_WORKER_FLAG_THREAD_MULTI) {
-        ucp_context_set_worker_async(context, &worker->async);
-    }
-
     /* Create the underlying UCT worker */
     status = uct_worker_create(&worker->async, uct_thread_mode, &worker->uct);
     if (status != UCS_OK) {
@@ -2673,9 +2669,6 @@ err_conn_match_cleanup:
 err_destroy_uct_worker:
     uct_worker_destroy(worker->uct);
 err_destroy_async:
-    if (worker->flags & UCP_WORKER_FLAG_THREAD_MULTI) {
-        ucp_context_set_worker_async(context, NULL);
-    }
     ucs_async_context_cleanup(&worker->async);
 err_free_tm_offload_stats:
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
@@ -2931,9 +2924,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
-    if (worker->flags & UCP_WORKER_FLAG_THREAD_MULTI) {
-        ucp_context_set_worker_async(worker->context, NULL);
-    }
     ucs_async_context_cleanup(&worker->async);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
