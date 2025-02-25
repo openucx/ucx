@@ -531,8 +531,8 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
     uct_ib_address_pack(&params, ib_addr);
 }
 
-void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
-                           uct_ib_address_pack_params_t *params_p)
+ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
+                                   uct_ib_address_pack_params_t *params_p)
 {
     const void *ptr                     = ib_addr + 1;
     /* silence cppcheck warning */
@@ -569,14 +569,15 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
             params.flags |= UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
         }
 
-        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
+        if (ucs_test_all_flags(ib_addr->flags,
+                               UCT_IB_ADDRESS_FLAG_SUBNET16 |
+                               UCT_IB_ADDRESS_FLAG_SUBNET64)) {
+            return UCS_ERR_INVALID_PARAM;
+        } else if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
             site_local_subnet = *ucs_serialize_next(&ptr, const uint16_t);
             params.gid.global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
                                               (site_local_subnet << 48);
-            ucs_assert(!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64));
-        }
-
-        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
+        } else if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
             params.gid.global.subnet_prefix =
                     *ucs_serialize_next(&ptr, const uint64_t);
             params.flags |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
@@ -601,15 +602,20 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
     params.flags |= UCT_IB_ADDRESS_PACK_FLAG_PKEY;
 
     *params_p = params;
+    return UCS_OK;
 }
 
 const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
                                size_t max)
 {
     uct_ib_address_pack_params_t params;
+    ucs_status_t status;
     char *p, *endp;
 
-    uct_ib_address_unpack(ib_addr, &params);
+    status = uct_ib_address_unpack(ib_addr, &params);
+    if (status != UCS_OK) {
+        return "<invalid address>";
+    }
 
     p    = buf;
     endp = buf + max;
@@ -763,15 +769,15 @@ uct_ib_iface_roce_is_reachable(uct_ib_iface_t *iface,
 
     if (local_roce_ver != remote_roce_ver) {
         uct_iface_fill_info_str_buf(
-                        params,
-                        "different RoCE versions detected. local %s (gid=%s)"
-                        "remote %s (gid=%s)",
-                        uct_ib_roce_version_str(local_roce_ver),
-                        uct_ib_gid_str(&local_gid_info.gid, local_str,
-                                       sizeof(local_str)),
-                        uct_ib_roce_version_str(remote_roce_ver),
-                        uct_ib_gid_str((union ibv_gid*)(remote_ib_addr + 1),
-                                       remote_str, sizeof(remote_str)));
+                params,
+                "different RoCE versions detected. local %s (gid=%s) "
+                "remote %s (gid=%s)",
+                uct_ib_roce_version_str(local_roce_ver),
+                uct_ib_gid_str(&local_gid_info.gid, local_str,
+                               sizeof(local_str)),
+                uct_ib_roce_version_str(remote_roce_ver),
+                uct_ib_gid_str((union ibv_gid*)(remote_ib_addr + 1), remote_str,
+                               sizeof(remote_str)));
         return 0;
     }
 
@@ -822,8 +828,12 @@ int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
                                 const union ibv_gid *dgid)
 {
     uct_ib_address_pack_params_t params;
+    ucs_status_t status;
 
-    uct_ib_address_unpack(ib_addr, &params);
+    status = uct_ib_address_unpack(ib_addr, &params);
+    if (status != UCS_OK) {
+        return 0;
+    }
 
     if (!(params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) &&
         (dlid != params.lid)) {
@@ -853,12 +863,6 @@ static int uct_ib_iface_gid_extract_flid(const union ibv_gid *gid)
     return ntohs(*((uint16_t*)UCS_PTR_BYTE_OFFSET(gid->raw, 4)));
 }
 
-static int uct_ib_iface_is_flid_enabled(uct_ib_iface_t *iface)
-{
-    return iface->config.flid_enabled &&
-           (uct_ib_iface_gid_extract_flid(&iface->gid_info.gid) != 0);
-}
-
 static int uct_ib_iface_dev_addr_is_reachable(
                                   uct_ib_iface_t *iface,
                                   const uct_ib_address_t *ib_addr,
@@ -866,8 +870,15 @@ static int uct_ib_iface_dev_addr_is_reachable(
 {
     int is_local_eth                = uct_ib_iface_is_roce(iface);
     uct_ib_address_pack_params_t params;
+    const char *flid_info_str;
+    ucs_status_t status;
 
-    uct_ib_address_unpack(ib_addr, &params);
+    status = uct_ib_address_unpack(ib_addr, &params);
+    if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(is_reachable_params,
+                                    "invalid remote address");
+        return 0;
+    }
 
     /* at least one PKEY has to be with full membership */
     if (!((params.pkey | iface->pkey) & UCT_IB_PKEY_MEMBERSHIP_MASK)) {
@@ -895,22 +906,22 @@ static int uct_ib_iface_dev_addr_is_reachable(
         }
 
         /* Check FLID route: is enabled locally, and remote GID has it */
-        if (!uct_ib_iface_is_flid_enabled(iface)) {
-            uct_iface_fill_info_str_buf(is_reachable_params,
-                                        "FLID routing is disabled");
-            return 0;
+        if (!iface->config.flid_enabled) {
+            flid_info_str = "disabled";
+        } else if ((uct_ib_iface_gid_extract_flid(&iface->gid_info.gid) == 0) ||
+                   (uct_ib_iface_gid_extract_flid(&params.gid) == 0)) {
+            flid_info_str = "not available";
+        } else {
+            return 1;
         }
 
-        if (uct_ib_iface_gid_extract_flid(&params.gid) == 0) {
-            uct_iface_fill_info_str_buf(
-                    is_reachable_params,
-                    "IB subnet prefix differs 0x%"PRIx64" vs 0x%"PRIx64"",
-                    be64toh(iface->gid_info.gid.global.subnet_prefix),
-                    be64toh(params.gid.global.subnet_prefix));
-            return 0;
-        }
-
-        return 1;
+        uct_iface_fill_info_str_buf(
+                is_reachable_params,
+                "different subnet prefix 0x%" PRIx64 "/0x%" PRIx64
+                " and FLID is %s",
+                be64toh(iface->gid_info.gid.global.subnet_prefix),
+                be64toh(params.gid.global.subnet_prefix), flid_info_str);
+        return 0;
     } else if (is_local_eth && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* there shouldn't be a lid and the UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH
          * flag should be on. If reachable, the remote and local RoCE versions
@@ -950,7 +961,6 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (!uct_ib_iface_dev_addr_is_reachable(iface, device_addr, params)) {
-        uct_iface_fill_info_str_buf(params, "unreachable IB device address");
         return 0;
     }
 
@@ -1032,33 +1042,39 @@ static uint16_t uct_ib_gid_site_local_subnet_prefix(const union ibv_gid *gid)
 uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
                                           const union ibv_gid *gid)
 {
-    if (!uct_ib_iface_is_flid_enabled(iface)) {
+    if (uct_ib_gid_site_local_subnet_prefix(gid) ==
+        uct_ib_gid_site_local_subnet_prefix(&iface->gid_info.gid)) {
+        /* On the same subnet, no need to use FLID */
         return 0;
     }
 
-    if (uct_ib_gid_site_local_subnet_prefix(gid) ==
-        uct_ib_gid_site_local_subnet_prefix(&iface->gid_info.gid)) {
-        /* On the same subnet, no need to use FLID*/
+    if (!iface->config.flid_enabled ||
+        (uct_ib_iface_gid_extract_flid(&iface->gid_info.gid) == 0)) {
         return 0;
     }
 
     return uct_ib_iface_gid_extract_flid(gid);
 }
 
-void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
-                                         const uct_ib_address_t *ib_addr,
-                                         unsigned path_index,
-                                         struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu *path_mtu)
+ucs_status_t
+uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
+                                    const uct_ib_address_t *ib_addr,
+                                    unsigned path_index,
+                                    struct ibv_ah_attr *ah_attr,
+                                    enum ibv_mtu *path_mtu)
 {
     union ibv_gid *gid = NULL;
     uint16_t lid, flid = 0;
     uct_ib_address_pack_params_t params;
+    ucs_status_t status;
 
     ucs_assert(!uct_ib_iface_is_roce(iface) ==
                !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH));
 
-    uct_ib_address_unpack(ib_addr, &params);
+    status = uct_ib_address_unpack(ib_addr, &params);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
         ucs_assert(params.path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
@@ -1084,6 +1100,7 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
     lid = (flid == 0) ? params.lid : flid;
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, gid, params.gid_index,
                                            path_index, ah_attr);
+    return UCS_OK;
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
@@ -2114,8 +2131,11 @@ int uct_ib_iface_is_connected(uct_ib_iface_t *ib_iface,
     struct ibv_ah_attr ah_attr;
     struct ibv_ah *ah;
 
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
-                                        &ah_attr, &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
+                                                 &ah_attr, &path_mtu);
+    if (status != UCS_OK) {
+        return 0;
+    }
 
     status = uct_ib_device_get_ah_cached(uct_ib_iface_device(ib_iface),
                                          &ah_attr, &ah);

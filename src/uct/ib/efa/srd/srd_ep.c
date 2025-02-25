@@ -62,8 +62,13 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     ucs_arbiter_group_init(&self->pending_group);
     ucs_list_head_init(&self->outstanding_list);
 
-    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
-                                        self->path_index, &ah_attr, &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
+                                                 self->path_index, &ah_attr,
+                                                 &path_mtu);
+    if (status != UCS_OK) {
+        goto err_arb_cleanup;
+    }
+
     status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH",
                                     &self->ah);
     if (status != UCS_OK) {
