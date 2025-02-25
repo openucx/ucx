@@ -20,25 +20,224 @@
 #include <ucs/debug/log.h>
 
 
+typedef struct {
+    ucp_lane_index_t           lane;
+    ucp_proto_common_tl_perf_t perf;
+    ucp_proto_perf_node_t      *perf_node;
+} ucp_proto_lane_perf_t;
+
+typedef struct {
+    ucp_worker_h               worker;
+    ucp_proto_lane_perf_t      lanes_perf[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t           length;
+    int                        fixed_first_lane;
+} ucp_proto_lane_storage_t;
+
+typedef struct {
+    ucp_lane_index_t           lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t           length;
+    ucp_proto_perf_node_t      *root_node;
+    ucp_proto_lane_storage_t   *storage;
+} ucp_proto_lane_selection_t;
+
+
+static void ucp_proto_storage_destroy(ucp_proto_lane_storage_t *storage)
+{
+    ucp_lane_index_t i;
+
+    for (i = 0; i < storage->length; ++i) {
+        ucp_proto_perf_node_deref(&storage->lanes_perf[i].perf_node);
+    }
+
+    ucs_free(storage);
+}
+
+static ucs_status_t
+ucp_proto_storage_create(const ucp_proto_common_init_params_t *params,
+                         const ucp_proto_lane_desc_t *lane_desc,
+                         const ucp_proto_lane_desc_t *first_lane_desc,
+                         ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
+                         ucp_proto_lane_storage_t **storage)
+{
+    int has_first_lane = (first_lane_desc != NULL) &&
+                         (first_lane_desc->lane_type != lane_desc->lane_type);
+    ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t length, i;
+    ucp_proto_lane_perf_t *lane_iter;
+    ucs_status_t status;
+
+    /* Find first lane */
+    length = 0;
+    if (has_first_lane) {
+        length = ucp_proto_common_find_lanes_with_min_frag(
+                    params, first_lane_desc->lane_type,
+                    first_lane_desc->tl_cap_flags, 1, 0, lanes);
+        if (length == 0) {
+            ucs_trace("no lanes for %s",
+                      ucp_proto_id_field(params->super.proto_id, name));
+            return UCS_ERR_NO_ELEM;
+        }
+
+        exclude_map |= UCS_BIT(lanes[0]);
+    }
+
+    /* Find rest of the lanes */
+    length += ucp_proto_common_find_lanes_with_min_frag(
+                params, lane_desc->lane_type, lane_desc->tl_cap_flags,
+                UCP_PROTO_MAX_LANES - length, exclude_map, lanes + length);
+
+    /* Allocate and initialize storage */
+    *storage = ucs_calloc(1, sizeof(ucp_proto_lane_storage_t),
+                          "ucp_proto_lane_storage_t");
+    if (*storage == NULL) {
+        ucs_error("failed to allocate proto lane storage");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    (*storage)->worker           = params->super.worker;
+    (*storage)->length           = length;
+    (*storage)->fixed_first_lane = has_first_lane;
+
+    /* Evaluate individual lane performance */
+    for (i = 0; i < length; ++i) {
+        lane_iter       = &(*storage)->lanes_perf[i];
+        lane_iter->lane = lanes[i];
+
+        status = ucp_proto_common_get_lane_perf(params, lane_iter->lane,
+                                                &lane_iter->perf,
+                                                &lane_iter->perf_node);
+        if (status != UCS_OK) {
+            goto err;
+        }
+    }
+
+    return UCS_OK;
+
+err:
+    ucp_proto_storage_destroy(*storage);
+    *storage = NULL;
+    return status;
+}
+
+static void
+ucp_proto_storage_remove_slow_lanes(ucp_proto_lane_storage_t *storage)
+{
+    ucp_context_h context     = storage->worker->context;
+    const double max_bw_ratio = context->config.ext.multi_lane_max_ratio;
+    double max_bandwidth      = 0;
+    ucp_proto_lane_perf_t *lane_iter;
+    ucp_lane_index_t i, num_fast_lanes;
+
+    for (i = 0; i < storage->length; ++i) {
+        /* Calculate maximal bandwidth of all lanes, to skip slow lanes */
+        lane_iter = &storage->lanes_perf[i];
+        max_bandwidth = ucs_max(max_bandwidth, lane_iter->perf.bandwidth);
+    }
+
+    i = storage->fixed_first_lane ? 1 : 0;
+    for (num_fast_lanes = i; i < storage->length; ++i) {
+        lane_iter = &storage->lanes_perf[i];
+        if ((lane_iter->perf.bandwidth * max_bw_ratio) < max_bandwidth) {
+            /* Bandwidth on this lane is too low compared to the fastest
+             * available lane, so it's not worth using it */
+            ucp_proto_perf_node_deref(&lane_iter->perf_node);
+            continue;
+        }
+
+        if (num_fast_lanes != i) {
+            storage->lanes_perf[num_fast_lanes] = *lane_iter;
+        }
+
+        ++num_fast_lanes;
+    }
+
+    storage->length = num_fast_lanes;
+}
+
+static UCS_F_ALWAYS_INLINE const ucp_proto_lane_perf_t *
+ucp_proto_select_get_lane_perf(ucp_proto_lane_selection_t *selection,
+                               ucp_lane_index_t lane)
+{
+    return &selection->storage->lanes_perf[selection->lanes[lane]];
+}
+
+static void ucp_proto_select_destroy(ucp_proto_lane_selection_t *selection)
+{
+    ucp_proto_perf_node_deref(&selection->root_node);
+    ucp_proto_storage_destroy(selection->storage);
+    selection->storage = NULL;
+}
+
+static void
+ucp_proto_select_bw_lanes(ucp_proto_lane_storage_t *storage,
+                          ucp_proto_lane_selection_t *selection,
+                          ucp_lane_index_t max_lanes)
+{
+    ucp_lane_index_t i;
+
+    selection->storage   = storage;
+    selection->length    = ucs_min(storage->length, max_lanes);
+    selection->root_node = NULL;
+
+    for (i = 0; i < selection->length; ++i) {
+        selection->lanes[i] = i;
+    }
+}
+
+static ucs_status_t
+ucp_proto_select_lanes(const ucp_proto_common_init_params_t *params,
+                       const ucp_proto_lane_desc_t *lane_desc,
+                       const ucp_proto_lane_desc_t *first_lane_desc,
+                       ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
+                       ucp_proto_lane_selection_t *selection)
+{
+    ucp_proto_lane_storage_t *storage;
+    const ucp_proto_lane_perf_t *lane_iter;
+    ucp_lane_index_t i;
+    ucs_status_t status;
+
+    status = ucp_proto_storage_create(params, lane_desc, first_lane_desc,
+                                      max_lanes, exclude_map, &storage);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_proto_storage_remove_slow_lanes(storage);
+    ucp_proto_select_bw_lanes(storage, selection, max_lanes);
+
+    if (selection->length == 1) {
+        lane_iter = ucp_proto_select_get_lane_perf(selection, 0);
+        ucp_proto_perf_node_ref(lane_iter->perf_node);
+        selection->root_node = lane_iter->perf_node;
+    } else {
+        selection->root_node = ucp_proto_perf_node_new_data("multi", "%u lanes",
+                                                            selection->length);
+        for (i = 0; i < selection->length; ++i) {
+            lane_iter = ucp_proto_select_get_lane_perf(selection, i);
+            ucp_proto_perf_node_add_child(selection->root_node,
+                                          lane_iter->perf_node);
+        }
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   const char *perf_name,
                                   ucp_proto_perf_t **perf_p,
                                   ucp_proto_multi_priv_t *mpriv)
 {
-    ucp_context_h context         = params->super.super.worker->context;
-    const double max_bw_ratio     = context->config.ext.multi_lane_max_ratio;
-    ucp_proto_perf_node_t *lanes_perf_nodes[UCP_PROTO_MAX_LANES];
-    ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
-    ucp_proto_common_tl_perf_t *lane_perf, perf;
-    ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
-    double max_bandwidth, max_frag_ratio, min_bandwidth;
-    ucp_lane_index_t i, lane, num_lanes;
-    ucp_proto_multi_lane_priv_t *lpriv;
-    ucp_proto_perf_node_t *perf_node;
-    size_t max_frag, min_length, min_end_offset, min_chunk;
+    ucp_proto_lane_selection_t selection;
+    const ucp_proto_lane_perf_t *lane_iter;
+    const ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_proto_common_tl_perf_t perf;
+    double max_frag_ratio, min_bandwidth;
     ucp_lane_map_t lane_map;
+    ucp_proto_multi_lane_priv_t *lpriv;
+    size_t max_frag, min_length, min_end_offset, min_chunk;
     ucp_md_map_t reg_md_map;
     uint32_t weight_sum;
+    ucp_lane_index_t i, lane;
     ucs_status_t status;
 
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
@@ -54,39 +253,14 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    /* Find first lane */
-    num_lanes = ucp_proto_common_find_lanes_with_min_frag(
-            &params->super, params->first.lane_type, params->first.tl_cap_flags,
-            1, 0, lanes);
-    if (num_lanes == 0) {
-        ucs_trace("no lanes for %s",
-                  ucp_proto_id_field(params->super.super.proto_id, name));
-        return UCS_ERR_NO_ELEM;
+    status = ucp_proto_select_lanes(&params->super, &params->middle,
+                                    &params->first, params->max_lanes, 0,
+                                    &selection);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    /* Find rest of the lanes */
-    num_lanes += ucp_proto_common_find_lanes_with_min_frag(
-            &params->super, params->middle.lane_type,
-            params->middle.tl_cap_flags, UCP_PROTO_MAX_LANES - 1,
-            UCS_BIT(lanes[0]), lanes + 1);
-
-    /* Get bandwidth of all lanes and max_bandwidth */
-    max_bandwidth = 0;
-    for (i = 0; i < num_lanes; ++i) {
-        lane      = lanes[i];
-        lane_perf = &lanes_perf[lane];
-
-        status = ucp_proto_common_get_lane_perf(&params->super, lane, lane_perf,
-                                                &lanes_perf_nodes[lane]);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        /* Calculate maximal bandwidth of all lanes, to skip slow lanes */
-        max_bandwidth = ucs_max(max_bandwidth, lane_perf->bandwidth);
-    }
-
-    /* Select the lanes to use, and calculate their aggregate performance */
+    /* Calculate lanes aggregate performance */
     perf.bandwidth          = 0;
     perf.send_pre_overhead  = 0;
     perf.send_post_overhead = 0;
@@ -97,21 +271,15 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     max_frag_ratio          = 0;
     min_bandwidth           = DBL_MAX;
 
-    for (i = 0; (i < num_lanes) && (ucs_popcount(lane_map) < params->max_lanes);
-         ++i) {
-        lane      = lanes[i];
-        lane_perf = &lanes_perf[lane];
-        if ((lane_perf->bandwidth * max_bw_ratio) < max_bandwidth) {
-            /* Bandwidth on this lane is too low compared to the fastest
-               available lane, so it's not worth using it */
-            continue;
-        }
+    for (i = 0; i < selection.length; ++i) {
+        lane_iter = ucp_proto_select_get_lane_perf(&selection, i);
+        lane_perf = &lane_iter->perf;
 
         ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(send_pre_overhead)
                   UCP_PROTO_TIME_FMT(send_post_overhead)
                   UCP_PROTO_TIME_FMT(recv_overhead)
                   " bw " UCP_PROTO_PERF_FUNC_BW_FMT
-                  UCP_PROTO_TIME_FMT(latency), lane,
+                  UCP_PROTO_TIME_FMT(latency), lane_iter->lane,
                   UCP_PROTO_TIME_ARG(lane_perf->send_pre_overhead),
                   UCP_PROTO_TIME_ARG(lane_perf->send_post_overhead),
                   UCP_PROTO_TIME_ARG(lane_perf->recv_overhead),
@@ -134,7 +302,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         perf.latency             = ucs_max(perf.latency, lane_perf->latency);
         perf.sys_latency         = ucs_max(perf.sys_latency,
                                            lane_perf->sys_latency);
-        lane_map                |= UCS_BIT(lane);
+        lane_map                |= UCS_BIT(lane_iter->lane);
     }
 
     /* Initialize multi-lane private data and relative weights */
@@ -150,11 +318,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     weight_sum          = 0;
     min_end_offset      = 0;
 
-    ucs_for_each_bit(lane, lane_map) {
+    for (i = 0; i < selection.length; ++i) {
+        lane_iter = ucp_proto_select_get_lane_perf(&selection, i);
+        lane      = lane_iter->lane;
         ucs_assert(lane < UCP_MAX_LANES);
 
         lpriv     = &mpriv->lanes[mpriv->num_lanes++];
-        lane_perf = &lanes_perf[lane];
+        lane_perf = &lane_iter->perf;
 
         ucp_proto_common_lane_priv_init(&params->super, mpriv->reg_md_map, lane,
                                         &lpriv->super);
@@ -230,28 +400,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(lane_map));
 
-    /* After this block, 'perf_node' and 'lane_perf_nodes[]' have extra ref */
-    if (mpriv->num_lanes == 1) {
-        perf_node = lanes_perf_nodes[ucs_ffs64(lane_map)];
-        ucp_proto_perf_node_ref(perf_node);
-    } else {
-        perf_node = ucp_proto_perf_node_new_data("multi", "%u lanes",
-                                                 mpriv->num_lanes);
-        ucs_for_each_bit(lane, lane_map) {
-            ucs_assert(lane < UCP_MAX_LANES);
-            ucp_proto_perf_node_add_child(perf_node, lanes_perf_nodes[lane]);
-        }
-    }
-
-    status = ucp_proto_init_perf(&params->super, &perf, perf_node, reg_md_map,
-                                 perf_name, perf_p);
-
-    /* Deref unused nodes */
-    for (i = 0; i < num_lanes; ++i) {
-        ucp_proto_perf_node_deref(&lanes_perf_nodes[lanes[i]]);
-    }
-    ucp_proto_perf_node_deref(&perf_node);
-
+    status = ucp_proto_init_perf(&params->super, &perf, selection.root_node,
+                                 reg_md_map, perf_name, perf_p);
+    ucp_proto_select_destroy(&selection);
     return status;
 }
 
