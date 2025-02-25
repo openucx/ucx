@@ -269,7 +269,7 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
                 goto found;
             } else {
                 /* VA recycling case. Remove entry. A given pointer should only
-                 * belong to one region so need to look through rest of the
+                 * belong to one region so no need to look through rest of the
                  * items in the linked list. Skip to export phase. */
                 ucs_trace("VA recycling detected for (%p ... %p) (%llu, %llu)",
                           address, address + length, buffer_id, key->ph.buffer_id);
