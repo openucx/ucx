@@ -787,17 +787,21 @@ static const char *uct_ib_device_transport_type_name(struct ibv_device *device)
 static int uct_ib_device_is_supported(struct ibv_device *device)
 {
     /* TODO: enable additional transport types when ready */
-    int ret =
-#if HAVE_DECL_IBV_TRANSPORT_UNSPECIFIED
-            (device->transport_type == IBV_TRANSPORT_UNSPECIFIED) ||
-#endif
-            (device->transport_type == IBV_TRANSPORT_IB);
-    if (!ret) {
-        ucs_debug("device %s of type %s is not supported",
-                  device->dev_name, uct_ib_device_transport_type_name(device));
+    if (!IBV_DEVICE_TRANSPORT_UNSPECIFIED(device) &&
+        (device->transport_type != IBV_TRANSPORT_IB)) {
+        ucs_debug("%s: unsupported transport type %s",
+                  ibv_get_device_name(device),
+                  uct_ib_device_transport_type_name(device));
+        return 0;
     }
 
-    return ret;
+    if (uct_ib_device_is_smi(device)) {
+        ucs_debug("%s: smi device is not supported",
+                  ibv_get_device_name(device));
+        return 0;
+    }
+
+    return 1;
 }
 
 int uct_ib_device_is_accessible(struct ibv_device *device)
@@ -1315,7 +1319,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     /* Check for GPU-direct support */
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
-        /* Check peer memory driver is loaded, different driver versions use 
+        /* Check peer memory driver is loaded, different driver versions use
          * different paths */
         uct_ib_check_gpudirect_driver(
                 md, "/sys/kernel/mm/memory_peers/nv_mem/version",
@@ -1326,7 +1330,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         uct_ib_check_gpudirect_driver(
                 md, "/sys/module/nv_peer_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
-                
+
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
