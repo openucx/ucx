@@ -134,7 +134,7 @@ uct_iface_vfs_init_cap_limits(uct_iface_h iface, uint64_t iface_cap_flags)
     }
 }
 
-void uct_iface_vfs_refresh(void *obj)
+static void uct_iface_vfs_refresh(void *obj)
 {
     uct_base_iface_t *iface = obj;
     uct_iface_attr_t iface_attr;
@@ -149,4 +149,9 @@ void uct_iface_vfs_refresh(void *obj)
     }
 
     iface->internal_ops->iface_vfs_refresh(&iface->super);
+}
+
+void uct_iface_vfs_set_dirty(uct_iface_h iface)
+{
+    ucs_vfs_obj_set_dirty(iface, uct_iface_vfs_refresh);
 }
