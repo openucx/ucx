@@ -803,7 +803,7 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
 
     if (ack || (msg->type == UCP_WIREUP_MSG_REPLY_RECONFIG)) {
         /* Send `UCP_WIREUP_MSG_ACK` from progress function
-     * to avoid calling UCT routines from an async thread */
+         * to avoid calling UCT routines from an async thread */
         ucs_callbackq_add_oneshot(&worker->uct->progress_q, ep,
                                   ucp_wireup_send_msg_ack, ep);
     }
