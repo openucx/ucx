@@ -245,7 +245,7 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
  *
  * @return Number of system devices.
  */
-unsigned ucs_topo_num_devices();
+unsigned ucs_topo_num_devices(void);
 
 
 /**
@@ -258,13 +258,13 @@ void ucs_topo_print_info(FILE *stream);
 /**
  * Initialize UCS topology subsystem.
  */
-void ucs_topo_init();
+void ucs_topo_init(void);
 
 
 /**
  * Cleanup UCS topology subsystem.
  */
-void ucs_topo_cleanup();
+void ucs_topo_cleanup(void);
 
 END_C_DECLS
 

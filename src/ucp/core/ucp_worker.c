@@ -42,7 +42,6 @@
 
 #define UCP_WORKER_MAX_DEBUG_STRING_SIZE 200
 
-#define UCP_WORKER_USAGE_TRACKER_PROMOTE_CAPACITY     20
 #define UCP_WORKER_USAGE_TRACKER_PROMOTE_THRESHOLD    10
 #define UCP_WORKER_USAGE_TRACKER_REMOVE_THRESHOLD     0.2
 #define UCP_WORKER_USAGE_TRACKER_EXP_DECAY_MULTIPLIER 0.8
@@ -109,8 +108,8 @@ static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
 ucs_mpool_ops_t ucp_am_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
-    .obj_init      = ucs_empty_function,
-    .obj_cleanup   = ucs_empty_function,
+    .obj_init      = (ucs_mpool_obj_init_func_t)ucs_empty_function,
+    .obj_cleanup   = (ucs_mpool_obj_cleanup_func_t)ucs_empty_function,
     .obj_str       = ucp_am_mpool_obj_str
 };
 
@@ -118,7 +117,7 @@ ucs_mpool_ops_t ucp_reg_mpool_ops = {
     .chunk_alloc   = ucp_reg_mpool_malloc,
     .chunk_release = ucp_reg_mpool_free,
     .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function,
+    .obj_cleanup   = (ucs_mpool_obj_cleanup_func_t)ucs_empty_function,
     .obj_str       = NULL
 };
 
@@ -1699,10 +1698,11 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
         UCS_STATIC_BITMAP_SET(&supp_tls, rsc_index);
         priority                    = iface_attr->priority;
-        dummy_ae.iface_attr.lat_ovh = ucp_wireup_iface_lat_distance_v2(wiface);
+        dummy_ae.iface_attr.lat_ovh = ucp_wireup_iface_lat_distance_v2(wiface,
+                                                                       0);
 
         score = ucp_wireup_amo_score_func(wiface, md_attr, &dummy_addr,
-                                          &dummy_ae, NULL);
+                                          &dummy_ae, 0, NULL);
 
         ucs_trace(UCT_TL_RESOURCE_DESC_FMT " atomic score %.2f priority %d",
                   UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc), score, priority);
@@ -2402,14 +2402,15 @@ void ucp_worker_track_ep_usage_always(ucp_request_t *req)
 static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
 {
     ucs_usage_tracker_params_t params = {0};
+    ucp_context_h context             = worker->context;
     ucs_status_t status;
     ucs_usage_tracker_h handle;
 
-    if (!ucp_context_usage_tracker_enabled(worker->context)) {
+    if (!ucp_context_usage_tracker_enabled(context)) {
         return UCS_OK;
     }
 
-    params.promote_capacity = UCP_WORKER_USAGE_TRACKER_PROMOTE_CAPACITY;
+    params.promote_capacity = context->config.ext.max_priority_eps;
     params.promote_thresh   = UCP_WORKER_USAGE_TRACKER_PROMOTE_THRESHOLD;
     params.remove_thresh    = UCP_WORKER_USAGE_TRACKER_REMOVE_THRESHOLD;
     params.exp_decay.m      = UCP_WORKER_USAGE_TRACKER_EXP_DECAY_MULTIPLIER;

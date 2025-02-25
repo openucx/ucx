@@ -1401,7 +1401,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
             .iface_vfs_refresh     = uct_dc_mlx5_iface_vfs_refresh,
             .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate         = uct_dc_mlx5_ep_invalidate,
-            .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+            .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
             .iface_is_reachable_v2 = uct_dc_mlx5_iface_is_reachable_v2,
             .ep_is_connected       = uct_dc_mlx5_ep_is_connected
         },
@@ -1632,18 +1632,18 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * self->tx.ndci;
 
-    /* TODO check caps instead */
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,
-                              tl_md, worker, params, &config->super,
-                              &config->rc_mlx5_common, &init_attr);
-
-    status = uct_rc_mlx5_dp_ordering_ooo_init(&self->super,
+    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap.dc,
                                               &config->rc_mlx5_common, "dc");
     if (status != UCS_OK) {
         return status;
     }
+
+    /* TODO check caps instead */
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,
+                              tl_md, worker, params, &config->super,
+                              &config->rc_mlx5_common, &init_attr);
 
     tx_cq_size = uct_ib_cq_size(&self->super.super.super, &init_attr,
                                 UCT_IB_DIR_TX);

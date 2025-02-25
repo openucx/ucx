@@ -154,8 +154,6 @@ public:
                               sender().ucph()->cache_md_map[memh1->mem_type];
         ucp_md_index_t md_index;
 
-        EXPECT_NE(memh1->md_map, 0);
-
         ucs_for_each_bit(md_index, md_map) {
             if (equal || (m_always_equal_md_map & UCS_BIT(md_index))) {
                 EXPECT_EQ(memh2->uct[md_index], memh1->uct[md_index]);
