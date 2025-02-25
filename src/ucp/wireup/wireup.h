@@ -44,6 +44,7 @@ enum {
     UCP_WIREUP_MSG_PRE_REQUEST,
     UCP_WIREUP_MSG_REQUEST,
     UCP_WIREUP_MSG_REPLY,
+    UCP_WIREUP_MSG_REPLY_RECONFIG,
     UCP_WIREUP_MSG_ACK,
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
@@ -180,7 +181,8 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_tl_bitmap_t *local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
-                                   unsigned *addr_indices);
+                                   unsigned *addr_indices,
+                                   int *am_need_flush_p);
 
 ucs_status_t
 ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
