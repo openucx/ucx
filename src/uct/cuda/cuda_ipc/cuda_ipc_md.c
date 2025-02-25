@@ -71,11 +71,7 @@ uct_cuda_ipc_get_dev_cache(uct_cuda_ipc_component_t *component,
     int ret;
 
     key.uuid = rkey->uuid;
-#if HAVE_CUDA_FABRIC
     key.type = rkey->ph.handle_type;
-#else
-    key.type = 0;
-#endif
 
     iter = kh_put(cuda_ipc_uuid_hash, hash, key, &ret);
     if (ret == UCS_KH_PUT_KEY_PRESENT) {
@@ -113,7 +109,6 @@ static ucs_status_t
 uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
                          uct_cuda_ipc_lkey_t **key_p)
 {
-    CUipcMemHandle *legacy_handle;
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
 #if HAVE_CUDA_FABRIC
@@ -131,19 +126,20 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         return UCS_ERR_NO_MEMORY;
     }
 
-    legacy_handle = (CUipcMemHandle*)&key->ph;
     UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
                 (CUdeviceptr)addr));
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&key->buffer_id,
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&key->ph.buffer_id,
                                       CU_POINTER_ATTRIBUTE_BUFFER_ID,
                                       (CUdeviceptr)addr));
     if (status != UCS_OK) {
         goto err;
     }
 
+    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR;
+
     ucs_trace("exporting handle for %p: base %p b_len %lu buffer_id %llu", addr,
-              (void*)key->d_bptr, key->b_len, key->buffer_id);
+              (void*)key->d_bptr, key->b_len, key->ph.buffer_id);
 
 #if HAVE_CUDA_FABRIC
     /* cuda_ipc can handle VMM, mallocasync, and legacy pinned device so need to
@@ -163,11 +159,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto err;
     }
 
-    key->ph.buffer_id = key->buffer_id;
-
     if (legacy_capable) {
-        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
-        legacy_handle       = &key->ph.handle.legacy;
         goto legacy_path;
     }
 
@@ -229,8 +221,9 @@ non_ipc:
     goto common_path;
 #endif
 legacy_path:
-    status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(legacy_handle, (CUdeviceptr)addr),
-                              UCS_LOG_LEVEL_ERROR);
+    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
+    status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph.handle.legacy,
+                (CUdeviceptr)addr), UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         goto err;
     }
@@ -271,7 +264,7 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
             ((uintptr_t)address < (key->d_bptr + key->b_len))) {
             ucs_trace("found range (%p ... %p) in local cache", address,
                       address + length);
-            if (buffer_id == key->buffer_id) {
+            if (buffer_id == key->ph.buffer_id) {
                 ucs_trace("buffer_id(%llu) match found", buffer_id);
                 goto found;
             } else {
@@ -279,7 +272,7 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
                  * belong to one region so need to look through rest of the
                  * items in the linked list. Skip to export phase. */
                 ucs_trace("VA recycling detected for (%p ... %p) (%llu, %llu)",
-                          address, address + length, buffer_id, key->buffer_id);
+                          address, address + length, buffer_id, key->ph.buffer_id);
                 ucs_list_del(&key->link);
                 goto not_found;
             }

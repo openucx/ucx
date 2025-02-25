@@ -14,7 +14,6 @@
 #include <ucs/config/types.h>
 
 
-#if HAVE_CUDA_FABRIC
 typedef enum uct_cuda_ipc_key_handle {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR = 0,
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
@@ -22,21 +21,20 @@ typedef enum uct_cuda_ipc_key_handle {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL /* cudaMallocAsync memory */
 } uct_cuda_ipc_key_handle_t;
 
-
 typedef struct uct_cuda_ipc_md_handle {
     uct_cuda_ipc_key_handle_t handle_type;
     union {
         CUipcMemHandle        legacy;        /* Legacy IPC handle */
+#if HAVE_CUDA_FABRIC
         CUmemFabricHandle     fabric_handle; /* VMM/Mallocasync export handle */
+#endif
     } handle;
+#if HAVE_CUDA_FABRIC
     CUmemPoolPtrExportData    ptr;
     CUmemoryPool              pool;
+#endif
     unsigned long long        buffer_id;
 } uct_cuda_ipc_md_handle_t;
-#else
-typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
-#endif
-
 
 /**
  * @brief cuda ipc MD descriptor
@@ -122,7 +120,6 @@ typedef struct {
     uct_cuda_ipc_md_handle_t  ph;     /* Memory handle of GPU memory */
     CUdeviceptr               d_bptr; /* Allocation base address */
     size_t                    b_len;  /* Allocation size */
-    unsigned long long        buffer_id; /* Buffer ID for the allocation */
     ucs_list_link_t           link;
 } uct_cuda_ipc_lkey_t;
 

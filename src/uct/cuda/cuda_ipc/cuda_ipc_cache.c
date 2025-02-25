@@ -338,19 +338,18 @@ static ucs_status_t uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key,
 #if HAVE_CUDA_FABRIC
     ucs_trace("key handle type %u", key->ph.handle_type);
 
-    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
-        return uct_cuda_ipc_open_memhandle_legacy(key->ph.handle.legacy,
-                                                  mapped_addr);
-    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
         return uct_cuda_ipc_open_memhandle_vmm(key, mapped_addr);
     } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
         return uct_cuda_ipc_open_memhandle_mempool(key, mapped_addr);
+    } else
+#endif
+    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+        return uct_cuda_ipc_open_memhandle_legacy(key->ph.handle.legacy,
+                                                  mapped_addr);
     } else {
         return UCS_ERR_INVALID_PARAM;
     }
-#else
-    return uct_cuda_ipc_open_memhandle_legacy(key->ph, mapped_addr);
-#endif
 }
 
 static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
@@ -480,8 +479,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
     int ret;
-    const void *arg1, *arg2;
-    size_t cmp_size;
 
     status = uct_cuda_ipc_get_remote_cache(key->pid, &cache);
     if (status != UCS_OK) {
@@ -492,17 +489,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup,
                                   &cache->pgtable, key->d_bptr);
     if (ucs_likely(pgt_region != NULL)) {
-        region   = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
-#if HAVE_CUDA_FABRIC
-        cmp_size = sizeof(key->ph.buffer_id);
-        arg1     = (const void*)&key->ph.buffer_id;
-        arg2     = (const void*)&region->key.ph.buffer_id;
-#else
-        cmp_size = sizeof(key->ph);
-        arg1     = (const void*)&key->ph;
-        arg2     = (const void*)&region->key.ph;
-#endif
-        if (memcmp(arg1, arg2, cmp_size) == 0) {
+        region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+
+        if (memcmp((const void*)&key->ph.buffer_id,
+                   (const void*)&region->key.ph.buffer_id,
+                   sizeof(key->ph.buffer_id)) == 0) {
             /*cache hit */
             ucs_trace("%s: cuda_ipc cache hit addr:%p size:%lu region:"
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,
