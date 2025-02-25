@@ -592,7 +592,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         }
 
         is_reachable = 0;
-
+        ucs_snprintf_safe(info_str, info_str_size, "unreachable");
         UCS_STATIC_BITMAP_FOR_EACH_BIT(addr_index, &rsc_addr_index_map) {
             ae = &address->address_list[addr_index];
             if (!ucp_wireup_is_reachable(ep, select_params->ep_init_flags,
@@ -623,9 +623,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         /* If a local resource cannot reach any of the remote addresses,
          * generate debug message. */
         if (!is_reachable) {
-            snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - %s, ",
-                     UCT_TL_RESOURCE_DESC_ARG(resource),
-                     ucs_status_string(UCS_ERR_UNREACHABLE));
+            snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT " - %s, ",
+                     UCT_TL_RESOURCE_DESC_ARG(resource), info_str);
             p += strlen(p);
         }
     }
