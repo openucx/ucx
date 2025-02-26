@@ -368,7 +368,7 @@ static void uct_ib_mlx5dv_dci_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
 
 ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
                                           uct_dci_index_t dci_index,
-                                          int connect, uint8_t num_dci_channels)
+                                          uint8_t num_dci_channels)
 {
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
     uct_ib_mlx5_qp_attr_t attr = {};
@@ -459,13 +459,6 @@ init_qp:
                                uct_dc_mlx5_iface_dci(iface, dci_index)),
                        "iface=%p dci_index=%d", iface, dci_index);
     ucs_array_elem(&iface->tx.dcis, dci_index) = dci;
-
-    if (connect) {
-        status = uct_dc_mlx5_iface_dci_connect(iface, dci);
-        if (status != UCS_OK) {
-            goto err;
-        }
-    }
 
     if (uct_dc_mlx5_iface_is_policy_shared(iface)) {
         ucs_arbiter_group_init(&dci->arb_group);
@@ -766,8 +759,7 @@ static void uct_dc_mlx5_iface_dci_pool_destroy(uct_dc_mlx5_dci_pool_t *dci_pool)
     ucs_array_cleanup_dynamic(&dci_pool->stack);
 }
 
-static void
-uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uint16_t dci_index)
+void uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uint16_t dci_index)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                           uct_ib_mlx5_md_t);
@@ -901,7 +893,7 @@ uct_dc_mlx5_iface_init_dcis_array(uct_dc_mlx5_iface_t *iface,
 
     ucs_array_length(&iface->tx.dcis) = 0;
 
-    status = uct_dc_mlx5_iface_create_dci(iface, 0, 0, 1);
+    status = uct_dc_mlx5_iface_create_dci(iface, 0, 1);
     if (status != UCS_OK) {
         return status;
     }
@@ -1632,18 +1624,18 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * self->tx.ndci;
 
-    /* TODO check caps instead */
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,
-                              tl_md, worker, params, &config->super,
-                              &config->rc_mlx5_common, &init_attr);
-
-    status = uct_rc_mlx5_dp_ordering_ooo_init(&self->super,
+    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap.dc,
                                               &config->rc_mlx5_common, "dc");
     if (status != UCS_OK) {
         return status;
     }
+
+    /* TODO check caps instead */
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,
+                              tl_md, worker, params, &config->super,
+                              &config->rc_mlx5_common, &init_attr);
 
     tx_cq_size = uct_ib_cq_size(&self->super.super.super, &init_attr,
                                 UCT_IB_DIR_TX);

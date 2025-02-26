@@ -530,6 +530,10 @@ static std::map<std::string, std::string> get_all_rdmacm_net_devices()
     ssize_t nread;
     int port_num;
 
+    if (ucs::is_aws()) {
+        return devices;
+    }
+
     std::vector<std::string> ndevs = read_dir(sysfs_net_dir);
 
     /* Enumerate IPoIB and RoCE devices which have direct mapping to an RDMA

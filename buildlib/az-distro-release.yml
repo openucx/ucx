@@ -34,6 +34,9 @@ jobs:
         ubuntu22_cuda12_${{ parameters.arch }}:
           build_container: ubuntu22_cuda12_${{ parameters.arch }}
           artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+        ubuntu24_cuda12_${{ parameters.arch }}:
+          build_container: ubuntu24_cuda12_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-ubuntu24.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
         # x86 only
         ${{ if eq(parameters.arch, 'x86_64') }}:
           centos7_cuda11_${{ parameters.arch }}:

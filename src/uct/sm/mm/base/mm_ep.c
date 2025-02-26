@@ -2,7 +2,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
-* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2025. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -29,11 +29,15 @@ typedef enum {
  * i.e. check if the remote receive FIFO has room in it.
  * return 1 if can send.
  * return 0 if can't send.
- * We compare after casting to int32 in order to ignore the event arm bit.
+ * Ignore the event arm bit after the subtraction to accommodate
+ * a) A head ARMED with UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED bit
+ * b) head wrapping around after 0x7fff ffff ffff ffff and
+ *    tail going beyond 0x7fff ffff ffff ffff, in this case the subtraction
+ *    will wrap around, this scenario is highly unlikely.
  */
 #define UCT_MM_EP_IS_ABLE_TO_SEND(_head, _tail, _fifo_size) \
-    ucs_likely((int32_t)((_head) - (_tail)) < (int32_t)(_fifo_size))
-
+    ucs_likely((((_head) - (_tail)) & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED) \
+                 < (uint64_t)(_fifo_size))
 
 static UCS_F_NOINLINE ucs_status_t
 uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
