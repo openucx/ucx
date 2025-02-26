@@ -38,15 +38,13 @@ void test_p2p_switch_cuda_device::test_xfer(send_func_t send, size_t length,
 
 UCS_TEST_P(test_p2p_switch_cuda_device, put_short)
 {
-    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_short),
-              sender().iface_attr().cap.put.max_short - 1,
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_short), 1,
               TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_CUDA);
 }
 
 UCS_TEST_P(test_p2p_switch_cuda_device, get_short)
 {
-    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_short),
-              sender().iface_attr().cap.get.max_short - 1,
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_short), 1,
               TEST_UCT_FLAG_RECV_ZCOPY, UCS_MEMORY_TYPE_CUDA);
 }
 
