@@ -46,7 +46,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
 
 ucs_status_t uct_cuda_copy_init_stream(CUstream *stream)
 {
-    if (*stream != 0) {
+    if (*stream != NULL) {
         return UCS_OK;
     }
 

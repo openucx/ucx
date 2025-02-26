@@ -423,7 +423,7 @@ static ucs_status_t uct_cuda_copy_init_ctx_rsc(unsigned int max_cuda_events,
     mp_params.priv_size       = sizeof(CUcontext);
     mp_params.max_elems       = max_cuda_events;
     mp_params.ops             = &uct_cuda_copy_event_desc_mpool_ops;
-    mp_params.name            = "CUDA EVENT objects";
+    mp_params.name            = "cuda_copy_event_descriptors";
     status = ucs_mpool_init(&mp_params, &ctx_rsc->cuda_event_desc);
     if (UCS_OK != status) {
         ucs_error("mpool creation failed");
@@ -432,12 +432,12 @@ static ucs_status_t uct_cuda_copy_init_ctx_rsc(unsigned int max_cuda_events,
 
     ucs_memory_type_for_each(src) {
         ucs_memory_type_for_each(dst) {
-            ctx_rsc->queue_desc[src][dst].stream = 0;
+            ctx_rsc->queue_desc[src][dst].stream = NULL;
             ucs_queue_head_init(&ctx_rsc->queue_desc[src][dst].event_queue);
         }
     }
 
-    ctx_rsc->short_stream = 0;
+    ctx_rsc->short_stream = NULL;
 
     return UCS_OK;
 }
