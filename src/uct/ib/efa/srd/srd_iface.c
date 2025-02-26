@@ -24,9 +24,6 @@ void uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 
 void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 {
-    ucs_assertv(ep->ep_id != UCT_UD_EP_NULL_ID, "iface=%p ep=%p ep_id=%d",
-                iface, ep, ep->ep_id);
-
     ucs_ptr_array_remove(&iface->eps, ep->ep_id);
     ucs_trace("iface(%p) removed ep=%p ep_id=%d", iface, ep, ep->ep_id);
 }
@@ -35,28 +32,25 @@ ucs_status_t
 uct_srd_iface_unpack_peer_address(uct_srd_iface_t *iface,
                                   const uct_ib_address_t *ib_addr,
                                   const uct_srd_iface_addr_t *if_addr,
-                                  int path_index, void *address_p)
+                                  int path_index,
+                                  uct_srd_ep_peer_address_t *address)
 {
-    uct_ib_iface_t *ib_iface                = &iface->super;
-    uct_srd_ep_peer_address_t *peer_address = (uct_srd_ep_peer_address_t*)
-            address_p;
+    uct_ib_iface_t *ib_iface = &iface->super;
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
     ucs_status_t status;
 
-    memset(peer_address, 0, sizeof(*peer_address));
+    memset(address, 0, sizeof(*address));
 
     uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index, &ah_attr,
                                         &path_mtu);
-    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "SRD connect",
-                                    &peer_address->ah);
-    if (status != UCS_OK) {
-        return status;
+    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "SRD AH",
+                                    &address->ah);
+    if (status == UCS_OK) {
+        address->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
     }
 
-    peer_address->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
-
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t
@@ -79,7 +73,8 @@ static uct_ib_iface_ops_t uct_srd_iface_ops = {
             ucs_empty_function_return_unsupported,
         .ep_invalidate         = (uct_ep_invalidate_func_t)
             ucs_empty_function_return_unsupported,
-        .ep_connect_to_ep_v2   = uct_srd_ep_connect_to_ep_v2,
+        .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)
+            ucs_empty_function_return_unsupported,
         .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
     },
     .create_cq      = uct_ib_verbs_create_cq,
@@ -311,7 +306,7 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                             UCT_IFACE_FLAG_CB_SYNC |
                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
     iface_attr->iface_addr_len = sizeof(uct_srd_iface_addr_t);
-    iface_attr->ep_addr_len    = sizeof(uct_srd_ep_addr_t);
+    iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
 
     iface_attr->latency.c += 30e-9;
@@ -380,8 +375,6 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .ep_fence                 = (uct_ep_fence_func_t)
         ucs_empty_function_return_unsupported,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_srd_ep_t),
-    .ep_get_address           = uct_srd_ep_get_address,
-    .ep_connect_to_ep         = uct_base_ep_connect_to_ep,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_srd_ep_t),
     .ep_am_bcopy              = (uct_ep_am_bcopy_func_t)
         ucs_empty_function_return_unsupported,

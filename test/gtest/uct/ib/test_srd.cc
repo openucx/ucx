@@ -6,13 +6,6 @@
 
 #include <uct/uct_test.h>
 
-extern "C" {
-#include <ucs/time/time.h>
-#include <ucs/datastruct/queue.h>
-#include <ucs/arch/atomic.h>
-#include <ucs/arch/bitops.h>
-}
-
 
 // FIXME: Add SRD transport to UCT_TEST_IB_TLS when possible
 class test_srd : public uct_test {
@@ -33,21 +26,9 @@ void test_srd::init()
     m_entities.push_back(m_e2);
 }
 
-UCS_TEST_P(test_srd, ep_creations)
-{
-    for (int i = 0; i < 4; ++i) {
-        m_e1->create_ep(i, 0);
-    }
-}
-
 UCS_TEST_P(test_srd, ep_connect_to_iface)
 {
     m_e1->connect_to_iface(0, *m_e2);
-}
-
-UCS_TEST_P(test_srd, ep_connect_to_ep)
-{
-    m_e1->connect_to_ep(0, *m_e2, 0, 0);
 }
 
 UCT_INSTANTIATE_SRD_TEST_CASE(test_srd)
