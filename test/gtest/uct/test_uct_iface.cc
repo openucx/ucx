@@ -29,9 +29,6 @@ protected:
     {
         return true;
     }
-
-private:
-    entity *m_entity{nullptr};
 };
 
 void test_uct_iface::test_is_reachable()
