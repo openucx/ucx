@@ -491,9 +491,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
 
-        if (memcmp((const void*)&key->ph.buffer_id,
-                   (const void*)&region->key.ph.buffer_id,
-                   sizeof(key->ph.buffer_id)) == 0) {
+        if (key->ph.buffer_id == region->key.ph.buffer_id) {
             /*cache hit */
             ucs_trace("%s: cuda_ipc cache hit addr:%p size:%lu region:"
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,

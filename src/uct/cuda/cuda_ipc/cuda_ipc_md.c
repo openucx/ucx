@@ -222,8 +222,8 @@ non_ipc:
 #endif
 legacy_path:
     key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
-    status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph.handle.legacy,
-                (CUdeviceptr)addr), UCS_LOG_LEVEL_ERROR);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuIpcGetMemHandle(&key->ph.handle.legacy,
+                (CUdeviceptr)addr));
     if (status != UCS_OK) {
         goto err;
     }
@@ -248,7 +248,7 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
 {
     uct_cuda_ipc_rkey_t *packed = mkey_buffer;
     uct_cuda_ipc_memh_t *memh   = tl_memh;
-    uct_cuda_ipc_lkey_t *key;
+    uct_cuda_ipc_lkey_t *key, *tmp;
     ucs_status_t status;
     unsigned long long buffer_id;
 
@@ -259,7 +259,7 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
         return status;
     }
 
-    ucs_list_for_each(key, &memh->list, link) {
+    ucs_list_for_each_safe(key, tmp, &memh->list, link) {
         if (((uintptr_t)address >= key->d_bptr) &&
             ((uintptr_t)address < (key->d_bptr + key->b_len))) {
             ucs_trace("found range (%p ... %p) in local cache", address,

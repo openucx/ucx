@@ -21,6 +21,7 @@ typedef enum uct_cuda_ipc_key_handle {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL /* cudaMallocAsync memory */
 } uct_cuda_ipc_key_handle_t;
 
+
 typedef struct uct_cuda_ipc_md_handle {
     uct_cuda_ipc_key_handle_t handle_type;
     union {
