@@ -1061,7 +1061,7 @@ size_t ucs_x86_nt_src_buffer_transfer(void *dst, const void *src, size_t len)
 }
 
 static UCS_F_ALWAYS_INLINE
-void ucs_x86_copy_bytes_le_128(void *dst, const void *src, size_t len)
+void ucs_x86_copy_bytes_le_128(void *dst, const void *src, uint32_t len)
 {
     __m256i y0, y1, y2, y3;
     /* Handle lengths that fall usually within eager short range */
