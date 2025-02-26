@@ -126,6 +126,8 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         return UCS_ERR_NO_MEMORY;
     }
 
+    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR;
+
     UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
                 (CUdeviceptr)addr));
 
@@ -135,11 +137,6 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     if (status != UCS_OK) {
         goto err;
     }
-
-    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR;
-
-    ucs_trace("exporting handle for %p: base %p b_len %lu buffer_id %llu", addr,
-              (void*)key->d_bptr, key->b_len, key->ph.buffer_id);
 
 #if HAVE_CUDA_FABRIC
     /* cuda_ipc can handle VMM, mallocasync, and legacy pinned device so need to
@@ -230,8 +227,9 @@ legacy_path:
 
 common_path:
     ucs_list_add_tail(&memh->list, &key->link);
-    ucs_trace("registered addr:%p/%p length:%zd dev_num:%d",
-              addr, (void *)key->d_bptr, key->b_len, (int)memh->dev_num);
+    ucs_trace("registered addr:%p/%p length:%zd dev_num:%d buffer_id:%llu",
+              addr, (void *)key->d_bptr, key->b_len, (int)memh->dev_num,
+              key->ph.buffer_id);
 
     *key_p = key;
     return UCS_OK;
@@ -248,41 +246,16 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
 {
     uct_cuda_ipc_rkey_t *packed = mkey_buffer;
     uct_cuda_ipc_memh_t *memh   = tl_memh;
-    uct_cuda_ipc_lkey_t *key, *tmp;
+    uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
-    unsigned long long buffer_id;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&buffer_id,
-                                      CU_POINTER_ATTRIBUTE_BUFFER_ID,
-                                      (CUdeviceptr)address));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucs_list_for_each_safe(key, tmp, &memh->list, link) {
+    ucs_list_for_each(key, &memh->list, link) {
         if (((uintptr_t)address >= key->d_bptr) &&
             ((uintptr_t)address < (key->d_bptr + key->b_len))) {
-            ucs_trace("found range (%p ... %p) in local cache", address,
-                      address + length);
-            if (buffer_id == key->ph.buffer_id) {
-                ucs_trace("buffer_id(%llu) match found", buffer_id);
-                goto found;
-            } else {
-                /* VA recycling case. Remove entry. A given pointer should only
-                 * belong to one region so no need to look through rest of the
-                 * items in the linked list. Skip to export phase. */
-                ucs_trace("VA recycling detected for (%p ... %p) (%llu, %llu)",
-                          address, address + length, buffer_id, key->ph.buffer_id);
-                ucs_list_del(&key->link);
-                goto not_found;
-            }
+            goto found;
         }
     }
 
-    ucs_trace("export handle for (%p ... %p) not found in local cache", address,
-              address + length);
-
-not_found:
     status = uct_cuda_ipc_mem_add_reg(address, memh, &key);
     if (status != UCS_OK) {
         return status;
