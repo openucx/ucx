@@ -510,7 +510,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->config.bandwidth       = config->bandwidth;
     UCS_STATIC_BITMAP_RESET_ALL(&self->streams_to_sync);
 
-
     kh_init_inplace(cuda_copy_ctx_rscs, &self->ctx_rscs);
 
     ucs_queue_head_init(&self->active_queue);
