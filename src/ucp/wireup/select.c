@@ -1549,62 +1549,49 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
 static int
 ucp_proto_select_info_bw_rcompare(const void *e1, const void *e2)
 {
-    const ucp_wireup_select_info_sort_lane_bw_t *info1 = e1;
-    const ucp_wireup_select_info_sort_lane_bw_t *info2 = e2;
+    const ucp_wireup_select_info_t *info1 = e1;
+    const ucp_wireup_select_info_t *info2 = e2;
 
-    return -ucp_score_prio_cmp(info1->sinfo->score, info1->sinfo->priority,
-                               info2->sinfo->score, info2->sinfo->priority);
+    return -ucp_score_prio_cmp(info1->score, info1->priority,
+                               info2->score, info2->priority);
 }
 
 static unsigned
 ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
+                              ucp_proto_select_info_array_t *sinfo_array,
                               const ucp_wireup_select_params_t *select_params,
-                              const ucp_proto_select_info_array_t *sinfo_array,
                               ucp_lane_type_t lane_type, unsigned max_lanes,
                               ucp_wireup_select_context_t *select_ctx)
 {
-    UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_select_info_sort_lane_bw_array_t,
-                             sinfo_array_sorted,
-                             ucs_array_length(sinfo_array));
     ucp_lane_index_t num_lanes = 0;
     double max_bw              = 0;
+    double lane_bw             = 0;
     ucp_context_h context      = worker->context;
     const double max_ratio     = 1. / context->config.ext.multi_lane_max_ratio;
     ucs_status_t status;
     const ucp_wireup_select_info_t *sinfo;
-    ucp_wireup_select_info_sort_lane_bw_t *sinfo_sort_elem;
 
-    ucs_array_for_each(sinfo, sinfo_array) {
-        sinfo_sort_elem = ucs_array_append(&sinfo_array_sorted,
-                                       ucs_fatal("failed to append"));
-        sinfo_sort_elem->sinfo   = sinfo;
-        sinfo_sort_elem->lane_bw = ucp_wireup_get_lane_bw(
-                worker, sinfo, select_params->address);
-        /* TODO: filter out extra lanes without reg-mem-types support */
-    }
+    qsort(sinfo_array->buffer, sinfo_array->length,
+          sizeof(ucp_wireup_select_info_t), ucp_proto_select_info_bw_rcompare);
 
-    qsort(sinfo_array_sorted.buffer,
-          sinfo_array_sorted.length,
-          sizeof(ucp_wireup_select_info_sort_lane_bw_t),
-          ucp_proto_select_info_bw_rcompare);
-
-    if (!ucs_array_is_empty(&sinfo_array_sorted)) {
+    if (!ucs_array_is_empty(sinfo_array)) {
         /* The fastest lane by score must have (close to) maximal BW */
-        max_bw = ucs_array_begin(&sinfo_array_sorted)->lane_bw;
+        max_bw = ucp_wireup_get_lane_bw(worker, ucs_array_begin(sinfo_array),
+                                        select_params->address);
     }
 
-    ucs_array_set_length(&sinfo_array_sorted,
-                         ucs_min(max_lanes, ucs_array_length(sinfo_array)));
+    ucs_array_set_length(sinfo_array, ucs_min(max_lanes,
+                                               ucs_array_length(sinfo_array)));
     /* Compare each element to max BW and filter only fast lanes */
     num_lanes = 0;
-    ucs_array_for_each(sinfo_sort_elem, &sinfo_array_sorted) {
-        if (sinfo_sort_elem->lane_bw < (max_bw * max_ratio)) {
+    ucs_array_for_each(sinfo, sinfo_array) {
+        lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, select_params->address);
+        if (lane_bw < (max_bw * max_ratio)) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : bandwidth %.2f lower than %.2f x %.2f, dropping lane",
                       UCT_TL_RESOURCE_DESC_ARG(
-                            &context->tl_rscs[
-                                    sinfo_sort_elem->sinfo->rsc_index].tl_rsc),
-                      sinfo_sort_elem->lane_bw, max_ratio, max_bw);
+                            &context->tl_rscs[sinfo->rsc_index].tl_rsc),
+                      lane_bw, max_ratio, max_bw);
             if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
                 /* All the rest will won't be added but continue for logging */
                 continue;
@@ -1613,8 +1600,8 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
             }
         }
 
-        status = ucp_wireup_add_lane(select_params, sinfo_sort_elem->sinfo,
-                                     lane_type, num_lanes == 0, select_ctx);
+        status = ucp_wireup_add_lane(select_params, sinfo, lane_type,
+                                     num_lanes == 0, select_ctx);
         if (status != UCS_OK) {
             break;
         }
@@ -1665,6 +1652,7 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
         skip_remote = select_params->address->address_list[addr_index].dev_index;
     }
 
+    /* TODO: filter out extra lanes without reg-mem-types support */
     ucs_for_each_bit(local_dev_index, local_dev_bitmap) {
         ucs_for_each_bit(remote_dev_index, remote_dev_bitmap) {
             num_paths_count = 0;
@@ -1708,11 +1696,10 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
     }
 
     bw_info->criteria.arg = NULL; /* To suppress compiler warning */
-    num_lanes = ucp_wireup_add_fast_lanes_a2a(ep->worker, select_params,
-                                              &sinfo_array,
+    num_lanes = ucp_wireup_add_fast_lanes_a2a(ep->worker, &sinfo_array,
+                                              select_params,
                                               bw_info->criteria.lane_type,
-                                              bw_info->max_lanes,
-                                              select_ctx);
+                                              bw_info->max_lanes, select_ctx);
     ucs_array_cleanup_dynamic(&sinfo_array);
     return num_lanes;
 }
