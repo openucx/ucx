@@ -1283,6 +1283,18 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
     double local_bw, remote_bw;
     unsigned path_index;
 
+    ucs_assertv(dev_count->local[dev_index] >= dev_count->local_skip[dev_index],
+        "dev_count->local[%u]=%u dev_count->local_skip[%u]=%u",
+        dev_index, dev_count->local[dev_index], dev_index,
+        dev_count->local_skip[dev_index]);
+    ucs_assertv(dev_count->remote[remote_addr->dev_index] >=
+                dev_count->remote_skip[remote_addr->dev_index],
+        "dev_count->remote[%u]=%u dev_count->remote_skip[%u]=%u",
+        remote_addr->dev_index,
+        dev_count->remote[remote_addr->dev_index],
+        remote_addr->dev_index,
+        dev_count->remote_skip[remote_addr->dev_index]);
+
     local_bw = ucp_wireup_iface_bw_distance(wiface);
 
     if (unpacked_addr->addr_version == UCP_OBJECT_VERSION_V2) {
@@ -1291,30 +1303,29 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
         local_bw = UCS_FP8_PACK_UNPACK(BANDWIDTH, local_bw);
     }
 
-    ucs_assertv(dev_count->local[dev_index] >= dev_count->local_skip[dev_index],
-                "dev_count->local[%u]=%u dev_count->local_skip[%u]=%u",
-                dev_index, dev_count->local[dev_index], dev_index,
-                dev_count->local_skip[dev_index]);
-    ucs_assertv(dev_count->remote[remote_addr->dev_index] >=
-                        dev_count->remote_skip[remote_addr->dev_index],
-                "dev_count->remote[%u]=%u dev_count->remote_skip[%u]=%u",
-                remote_addr->dev_index,
-                dev_count->remote[remote_addr->dev_index],
-                remote_addr->dev_index,
-                dev_count->remote_skip[remote_addr->dev_index]);
-
     /* Apply dev num paths ratio after fp8 pack/unpack to make sure it is not
-     * neglected because of fp8 inaccuracy
-     */
-    path_index = dev_count->local[dev_index] - dev_count->local_skip[dev_index];
-    local_bw  *= ucp_tl_iface_bandwidth_ratio(context, path_index,
-                                              wiface->attr.dev_num_paths);
+     * neglected because of fp8 inaccuracy */
+    if (context->config.ext.ep_allow_all_to_all) {
+        /* Assume fully connected device-to-device paths but ignore paths
+         * connected to/from other devices */
+        path_index = ucs_min(wiface->attr.dev_num_paths,
+                             remote_addr->dev_num_paths) - 1;
+        local_bw  *= ucp_tl_iface_bandwidth_ratio(context, path_index,
+                                                  wiface->attr.dev_num_paths);
+        remote_bw  = remote_addr->iface_attr.bandwidth *
+                    ucp_tl_iface_bandwidth_ratio(context, path_index,
+                                                 remote_addr->dev_num_paths);
+    } else {
+        path_index = dev_count->local[dev_index] - dev_count->local_skip[dev_index];
+        local_bw  *= ucp_tl_iface_bandwidth_ratio(context, path_index,
+                                                  wiface->attr.dev_num_paths);
 
-    path_index = dev_count->remote[remote_addr->dev_index] -
-                 dev_count->remote_skip[remote_addr->dev_index];
-    remote_bw  = remote_addr->iface_attr.bandwidth *
-                 ucp_tl_iface_bandwidth_ratio(context, path_index,
-                                              remote_addr->dev_num_paths);
+        path_index = dev_count->remote[remote_addr->dev_index] -
+                    dev_count->remote_skip[remote_addr->dev_index];
+        remote_bw  = remote_addr->iface_attr.bandwidth *
+                    ucp_tl_iface_bandwidth_ratio(context, path_index,
+                                                remote_addr->dev_num_paths);
+    }
 
     return ucs_min(local_bw, remote_bw) + (eps * (local_bw + remote_bw));
 }
@@ -1541,7 +1552,8 @@ ucp_proto_select_info_extra_rcompare(const void *e1, const void *e2)
     const ucp_wireup_select_info_sort_lane_bw_t *info1 = e1;
     const ucp_wireup_select_info_sort_lane_bw_t *info2 = e2;
 
-    return info1->lane_bw < info2->lane_bw;
+    return -ucp_score_prio_cmp(info1->sinfo->score, info1->sinfo->priority,
+                               info2->sinfo->score, info2->sinfo->priority);
 }
 
 static unsigned
@@ -1577,18 +1589,21 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
           ucp_proto_select_info_extra_rcompare);
 
     if (!ucs_array_is_empty(&sinfo_array_sorted)) {
+        /* The fastest lane by score must have (close to) maximal BW */
         max_bw = ucs_array_begin(&sinfo_array_sorted)->lane_bw;
     }
 
     ucs_array_set_length(&sinfo_array_sorted,
                          ucs_min(max_lanes, ucs_array_length(sinfo_array)));
     /* Compare each element to max BW and filter only fast lanes */
+    num_lanes = 0;
     ucs_array_for_each(sinfo_sort_elem, &sinfo_array_sorted) {
         if (sinfo_sort_elem->lane_bw < (max_bw * max_ratio)) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : bandwidth %.2f lower than %.2f x %.2f, dropping lane",
                       UCT_TL_RESOURCE_DESC_ARG(
-                              &context->tl_rscs[sinfo->rsc_index].tl_rsc),
+                            &context->tl_rscs[
+                                    sinfo_sort_elem->sinfo->rsc_index].tl_rsc),
                       sinfo_sort_elem->lane_bw, max_ratio, max_bw);
             if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
                 /* All the rest will won't be added but continue for logging */
@@ -2566,6 +2581,9 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         key->lanes[lane].seg_size     = select_ctx->lane_descs[lane].seg_size;
         key->lanes[lane].path_index   = ucp_wireup_default_path_index(
                                        select_ctx->lane_descs[lane].path_index);
+
+        ucs_trace("ep %p: construct lane %d to addr_index %d", ep, lane,
+                 select_ctx->lane_descs[lane].addr_index);
 
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_CM)) {
             ucs_assert(key->cm_lane == UCP_NULL_LANE);
