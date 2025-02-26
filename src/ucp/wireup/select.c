@@ -1547,7 +1547,7 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
 }
 
 static int
-ucp_proto_select_info_extra_rcompare(const void *e1, const void *e2)
+ucp_proto_select_info_bw_rcompare(const void *e1, const void *e2)
 {
     const ucp_wireup_select_info_sort_lane_bw_t *info1 = e1;
     const ucp_wireup_select_info_sort_lane_bw_t *info2 = e2;
@@ -1586,7 +1586,7 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
     qsort(sinfo_array_sorted.buffer,
           sinfo_array_sorted.length,
           sizeof(ucp_wireup_select_info_sort_lane_bw_t),
-          ucp_proto_select_info_extra_rcompare);
+          ucp_proto_select_info_bw_rcompare);
 
     if (!ucs_array_is_empty(&sinfo_array_sorted)) {
         /* The fastest lane by score must have (close to) maximal BW */
