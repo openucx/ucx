@@ -14,6 +14,7 @@
 #include "verbs.h"
 #include "config.h"
 
+
 int efadv_query_device(struct ibv_context *context,
                        struct efadv_device_attr *attr, uint32_t inlen)
 {
@@ -31,19 +32,11 @@ int efadv_query_device(struct ibv_context *context,
 }
 
 struct ibv_qp *efadv_create_driver_qp_impl(struct ibv_pd           *pd,
-                                           struct ibv_qp_init_attr *attr,
-                                           uint32_t driver_qp_type)
+                                           struct ibv_qp_init_attr *attr)
 {
     struct fake_qp *fqp;
-    struct ibv_qp *qp;
 
-
-    fqp = calloc(1, sizeof(*fqp));
-    if (fqp == NULL) {
-        return NULL;
-    }
-
-    fqp->fpd = (struct fake_pd*)pd;
+    fqp           = create_fqp(pd, attr);
 
     fqp->qp_ex.wr_start        = dev_qp_wr_start;
     fqp->qp_ex.wr_rdma_read    = dev_qp_wr_rdma_read;
@@ -51,22 +44,7 @@ struct ibv_qp *efadv_create_driver_qp_impl(struct ibv_pd           *pd,
     fqp->qp_ex.wr_set_ud_addr  = dev_qp_wr_set_ud_addr;
     fqp->qp_ex.wr_complete     = dev_qp_wr_complete;
 
-    list_init(&fqp->recv_reqs);
-
-    qp             = &fqp->qp_ex.qp_base;
-    qp->qp_context = pd->context;
-    qp->context    = pd->context;
-    qp->qp_type    = driver_qp_type;
-    qp->send_cq    = attr->send_cq;
-    qp->recv_cq    = attr->recv_cq;
-    qp->pd         = pd;
-    qp->state      = IBV_QPS_RESET;
-
-    lock();
-    qp->qp_num = ++fake_qpn;
-    array_append(&fake_qps, &fqp, sizeof(fqp));
-    unlock();
-    return qp;
+    return &fqp->qp_ex.qp_base;
 }
 
 struct ibv_qp *efadv_create_driver_qp(struct ibv_pd           *pd,
@@ -78,7 +56,7 @@ struct ibv_qp *efadv_create_driver_qp(struct ibv_pd           *pd,
         return NULL;
     }
 
-    return efadv_create_driver_qp_impl(pd, attr, driver_qp_type);
+    return efadv_create_driver_qp_impl(pd, attr);
 }
 
 struct ibv_qp *efadv_create_qp_ex(struct ibv_context         *context,
@@ -97,6 +75,5 @@ struct ibv_qp *efadv_create_qp_ex(struct ibv_context         *context,
         return NULL;
     }
 
-    return efadv_create_driver_qp_impl(attr_ex->pd, &attr,
-                                       efa_attr->driver_qp_type);
+    return efadv_create_driver_qp_impl(attr_ex->pd, &attr);
 }
