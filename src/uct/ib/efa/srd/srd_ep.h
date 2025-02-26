@@ -19,7 +19,7 @@ typedef struct uct_srd_ep {
     uint64_t                  ep_uuid;        /* Random EP identifier */
     uint32_t                  ep_id;          /* Local interface EP index */
     uint8_t                   path_index;
-    uct_srd_ep_peer_address_t peer_address;   /* Remote IFACE informations */
+    uct_srd_ep_peer_address_t peer_address;   /* Remote IFACE information */
 
     struct {
         uct_srd_psn_t         psn;            /* Next PSN to send */

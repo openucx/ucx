@@ -375,6 +375,10 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .ep_fence                 = (uct_ep_fence_func_t)
         ucs_empty_function_return_unsupported,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_srd_ep_t),
+    .ep_get_address           = (uct_ep_get_address_func_t)
+        ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep         = (uct_ep_connect_to_ep_func_t)
+        ucs_empty_function_return_unsupported,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_srd_ep_t),
     .ep_am_bcopy              = (uct_ep_am_bcopy_func_t)
         ucs_empty_function_return_unsupported,
