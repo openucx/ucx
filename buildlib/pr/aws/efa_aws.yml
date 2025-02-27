@@ -35,7 +35,7 @@ jobs:
           RUN_TESTS: yes
           TEST_PERF: 0
           VALGRIND_CHECK: no
-          CMD: "yum groupinstall -y 'Development Tools' && yum install -y fuse-devel iproute hostname strace git wget environment-modules autoconf libtool python3 python3-pip pkg-config libnl3-devel curl valgrind valgrind-devel rdma-core-devel libibverbs libibverbs-utils librdmacm librdmacm-utils  && git clone https://github.com/openucx/ucx.git && cd ucx && git fetch origin pull/${PR_ID}/head:pr && git checkout pr && ./contrib/test_jenkins.sh"
+          CMD: "yum groupinstall -y 'Development Tools' && yum install -y fuse-devel iproute hostname strace git wget environment-modules autoconf libtool python3 python3-pip pkg-config libnl3-devel curl valgrind valgrind-devel rdma-core-devel libibverbs libibverbs-utils librdmacm librdmacm-utils  && git clone --depth 100 https://github.com/openucx/ucx.git && cd ucx && git fetch origin pull/${PR_ID}/head:pr && git checkout pr && ./contrib/test_jenkins.sh"
 
   - job: Cleanup
     dependsOn: tests_${{ parameters.name }}
