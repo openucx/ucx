@@ -174,6 +174,15 @@ typedef struct {
 } ucp_proto_common_lane_priv_t;
 
 
+typedef struct {
+    /* Required iface capabilities */
+    uint64_t        tl_cap_flags;
+
+    /* Required lane type */
+    ucp_lane_type_t lane_type;
+} ucp_proto_lane_desc_t;
+
+
 /**
  * Called the first time the protocol starts sending a request, and only once
  * per request.
