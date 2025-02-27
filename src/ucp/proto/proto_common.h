@@ -159,6 +159,9 @@ typedef struct {
 
     /* Maximum single message length */
     size_t max_frag;
+
+    /* Performance selection tree node */
+    ucp_proto_perf_node_t *node;
 } ucp_proto_common_tl_perf_t;
 
 
@@ -257,8 +260,7 @@ void ucp_proto_common_lane_perf_node(ucp_context_h context,
 ucs_status_t
 ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
-                               ucp_proto_common_tl_perf_t *perf,
-                               ucp_proto_perf_node_t **perf_node_p);
+                               ucp_proto_common_tl_perf_t *perf);
 
 
 /* @return number of lanes found */
