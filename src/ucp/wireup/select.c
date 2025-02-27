@@ -1682,10 +1682,17 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
 
                 if (num_paths_limit == 0) {
                     num_paths_limit = ucs_min(iface_attr->dev_num_paths,
-                                              ae->dev_num_paths) +
-                                      (allow_extra_path &&
-                                       (skip_local == local_dev_index) &&
-                                       (skip_remote == remote_dev_index));
+                                              ae->dev_num_paths);
+                    if ((skip_local  == local_dev_index) &&
+                        (skip_remote == remote_dev_index)) {
+                        num_paths_limit += !!allow_extra_path;
+                        num_paths_count++;
+                        if (num_paths_limit == 1) {
+                            /* we have single path and it should be skipped */
+                            ucs_array_pop_back(&sinfo_array);
+                            break;
+                        }
+                    }
                 }
 
                 ucs_assert(num_paths_limit > 0);
