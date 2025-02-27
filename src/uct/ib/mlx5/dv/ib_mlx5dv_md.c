@@ -898,20 +898,21 @@ err:
 static ucs_status_t
 uct_ib_devx_dereg_invalidate_rkey_check(uct_ib_mlx5_md_t *md,
                                         uct_ib_mlx5_devx_mem_t *memh,
-                                        uint32_t rkey, unsigned flags_mask,
-                                        uint64_t cap_mask, const char *name)
+                                        struct mlx5dv_devx_obj *dvmr,
+                                        unsigned flags_mask, uint64_t cap_mask,
+                                        const char *name)
 {
     if (!(memh->super.flags & flags_mask)) {
         return UCS_OK;
     }
 
     if (!(md->super.cap_flags & cap_mask)) {
-        ucs_debug("%s: invalidate %s is not supported (rkey=0x%x)",
-                  uct_ib_device_name(&md->super.dev), name, rkey);
+        ucs_debug("%s: invalidate %s is not supported (dvmr=%p)",
+                  uct_ib_device_name(&md->super.dev), name, dvmr);
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (rkey == UCT_IB_INVALID_MKEY) {
+    if (dvmr == NULL) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -932,14 +933,14 @@ static ucs_status_t uct_ib_devx_dereg_invalidate_params_check(
 
     memh   = UCT_MD_MEM_DEREG_FIELD_VALUE(params, memh, FIELD_MEMH, NULL);
     status = uct_ib_devx_dereg_invalidate_rkey_check(
-            md, memh, memh->indirect_rkey, UCT_IB_MEM_ACCESS_REMOTE_RMA,
+            md, memh, memh->indirect_dvmr, UCT_IB_MEM_ACCESS_REMOTE_RMA,
             UCT_MD_FLAG_INVALIDATE_RMA, "RMA");
     if (status != UCS_OK) {
         return status;
     }
 
     return uct_ib_devx_dereg_invalidate_rkey_check(
-            md, memh, memh->atomic_rkey, UCT_IB_MEM_ACCESS_REMOTE_ATOMIC,
+            md, memh, memh->atomic_dvmr, UCT_IB_MEM_ACCESS_REMOTE_ATOMIC,
             UCT_MD_FLAG_INVALIDATE_AMO, "AMO");
 }
 
@@ -2167,9 +2168,10 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
-ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
-                                      const uct_ib_md_config_t *md_config,
-                                      uct_ib_md_t **p_md)
+ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
+                                             struct ibv_device *ibv_device,
+                                             const uct_ib_md_config_t *md_config,
+                                             uct_ib_md_t **p_md)
 {
     uint8_t lag_state = 0;
     size_t out_len    = UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out);
@@ -2217,8 +2219,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    md = ucs_derived_of(uct_ib_md_alloc(sizeof(*md), "ib_mlx5_devx_md", ctx),
-                        uct_ib_mlx5_md_t);
+    md = ucs_derived_of(uct_ib_md_alloc(size, name, ctx), uct_ib_mlx5_md_t);
     if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_context;
@@ -2939,8 +2940,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA) ||
-        uct_ib_mlx5_devx_has_dm(memh)) {
+    if (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA) {
         if (ucs_unlikely(memh->indirect_dvmr == NULL)) {
             status = uct_ib_mlx5_devx_reg_indirect_key(md, memh);
             if (status != UCS_OK) {
@@ -3099,18 +3099,29 @@ uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
+                         const uct_ib_md_config_t *md_config,
+                         uct_ib_md_t **p_md)
+{
+    return uct_ib_mlx5_devx_md_open_common("ib_mlx5_devx_md",
+                                           sizeof(uct_ib_mlx5_md_t),
+                                           ibv_device, md_config, p_md);
+}
+
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
     .super = {
         .close              = uct_ib_mlx5_devx_md_close,
         .query              = uct_ib_mlx5_devx_md_query,
         .mem_alloc          = uct_ib_mlx5_devx_device_mem_alloc,
         .mem_free           = uct_ib_mlx5_devx_device_mem_free,
+        .mem_advise         = uct_ib_mem_advise,
         .mem_reg            = uct_ib_mlx5_devx_mem_reg,
         .mem_dereg          = uct_ib_mlx5_devx_mem_dereg,
-        .mem_attach         = uct_ib_mlx5_devx_mem_attach,
-        .mem_advise         = uct_ib_mem_advise,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_ib_mlx5_devx_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .mem_attach         = uct_ib_mlx5_devx_mem_attach,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_mlx5_devx_md_open,
 };
@@ -3325,12 +3336,15 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
     .super = {
         .close              = uct_ib_md_close,
         .query              = uct_ib_md_query,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = uct_ib_mem_advise,
         .mem_reg            = uct_ib_verbs_mem_reg,
         .mem_dereg          = uct_ib_verbs_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
-        .mem_advise         = uct_ib_mem_advise,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_ib_verbs_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_mlx5dv_md_open,
 };

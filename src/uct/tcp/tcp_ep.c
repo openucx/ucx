@@ -376,8 +376,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
     uct_tcp_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                             uct_tcp_iface_t);
 
-    uct_ep_pending_purge(&self->super.super, ucs_empty_function_do_assert_void,
-                         NULL);
+    uct_ep_pending_purge(
+            &self->super.super,
+            (uct_pending_purge_callback_t)ucs_empty_function_do_assert_void,
+            NULL);
 
     if (self->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX) {
         uct_tcp_cm_remove_ep(iface, self);
@@ -677,7 +679,7 @@ static ucs_status_t uct_tcp_ep_create_socket_and_connect(uct_tcp_ep_t *ep)
     struct sockaddr *saddr = (struct sockaddr*)ep->peer_addr;
     ucs_status_t status;
 
-    status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, &ep->fd);
+    status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, 0, &ep->fd);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1289,7 +1291,7 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
     }
 
     status = ucs_socket_recv_nb(ep->fd, UCS_PTR_BYTE_OFFSET(ep->rx.buf,
-                                                            ep->rx.length),
+                                                            ep->rx.length), 0,
                                 &recv_length);
     if (ucs_unlikely(status != UCS_OK)) {
         uct_tcp_ep_handle_recv_err(ep, status);
@@ -1585,7 +1587,7 @@ static unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
     put_req     = (uct_tcp_ep_put_req_hdr_t*)ep->rx.buf;
     recv_length = put_req->length;
     status      = ucs_socket_recv_nb(ep->fd, (void*)(uintptr_t)put_req->addr,
-                                     &recv_length);
+                                     0, &recv_length);
     if (ucs_unlikely(status != UCS_OK)) {
         uct_tcp_ep_handle_recv_err(ep, status);
         return 0;

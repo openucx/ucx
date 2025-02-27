@@ -23,7 +23,11 @@
 
 
 #define UCT_DC_MLX5_IFACE_TXQP_GET(_iface, _ep, _txqp, _txwq) \
-    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, (_ep)->dci, _txqp, _txwq)
+    { \
+        ucs_assert((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI); \
+        _txqp = &uct_dc_mlx5_iface_dci(_iface, (_ep)->dci)->txqp; \
+        _txwq = &uct_dc_mlx5_iface_dci(_iface, (_ep)->dci)->txwq; \
+    }
 
 
 enum uct_dc_mlx5_ep_flags {
@@ -349,8 +353,8 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
                               uct_dci_index_t dci_index)
 {
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
-    uct_dc_dci_t *dci            = uct_dc_mlx5_iface_dci(iface, dci_index);
     uint8_t num_channels         = 1;
+    uct_dc_dci_t *dci;
     ucs_status_t status;
 
     ucs_assertv(ucs_array_length(&pool->stack) < iface->tx.ndci,
@@ -361,15 +365,23 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
         num_channels = iface->tx.num_dci_channels;
     }
 
-    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, 1, num_channels);
+    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, num_channels);
     if (status != UCS_OK) {
         ucs_error("iface %p: failed to create dci %u at pool %u", iface,
                   dci_index, pool_index);
-        return status;
+        goto err;
     }
 
+    dci             = uct_dc_mlx5_iface_dci(iface, dci_index);
     dci->path_index = pool->config.path_index;
     dci->pool_index = pool_index;
+
+    status = uct_dc_mlx5_iface_dci_connect(iface, dci);
+    if (status != UCS_OK) {
+        ucs_error("iface %p: failed to connect dci %u at pool %u", iface,
+                  dci_index, pool_index);
+        goto err_destroy;
+    }
 
     if (uct_dc_mlx5_iface_is_policy_shared(iface) ||
         uct_dc_mlx5_is_hw_dci(iface, dci_index)) {
@@ -377,6 +389,11 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
     }
 
     return UCS_OK;
+
+err_destroy:
+    uct_dc_mlx5_destroy_dci(iface, dci_index);
+err:
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
