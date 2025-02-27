@@ -10,24 +10,48 @@
 #include "srd_def.h"
 
 
-#define UCT_SRD_INITIAL_PSN 1
-#define UCT_SRD_EP_NULL_ID  UCS_MASK(24)
+#define UCT_SRD_INITIAL_PSN   1
+#define UCT_SRD_EP_NULL_ID    UCS_MASK(24)
+#define UCT_SRD_SEND_OP_ALIGN UCS_SYS_CACHE_LINE_SIZE
+
+
+typedef struct uct_srd_send_op      uct_srd_send_op_t;
 
 
 typedef struct uct_srd_ep {
     uct_base_ep_t             super;
-    uint64_t                  ep_uuid;        /* Random EP identifier */
-    uint32_t                  ep_id;          /* Local interface EP index */
+    uint64_t                  ep_uuid;          /* Random EP identifier */
+    uint32_t                  ep_id;            /* Local interface EP index */
     uint8_t                   path_index;
-    uct_srd_ep_peer_address_t peer_address;   /* Remote IFACE information */
+    uct_srd_ep_peer_address_t peer_address;     /* Remote IFACE information */
 
     struct {
-        uct_srd_psn_t         psn;            /* Next PSN to send */
+        uct_srd_psn_t         psn;              /* Next PSN to send */
+        ucs_list_link_t       outstanding_list; /* Ordered list of outstanding send ops */
     } tx;
 } uct_srd_ep_t;
 
 
+typedef void (*uct_srd_send_op_comp_handler_t)(uct_srd_send_op_t *send_op);
+
+
+/*
+ * Send descriptor used when receiving TX CQE.
+ */
+struct uct_srd_send_op {
+    ucs_list_link_t                  list;         /* Link in ep outstanding send list */
+    uct_srd_ep_t                     *ep;          /* Sender EP */
+    uct_srd_send_op_comp_handler_t   comp_handler; /* Called when send is completed */
+} UCS_V_ALIGNED(UCT_SRD_SEND_OP_ALIGN);
+
+
 UCS_CLASS_DECLARE_NEW_FUNC(uct_srd_ep_t, uct_ep_t, const uct_ep_params_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_srd_ep_t, uct_ep_t);
+
+
+ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
+                                 const void *buffer, unsigned length);
+
+void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op);
 
 #endif

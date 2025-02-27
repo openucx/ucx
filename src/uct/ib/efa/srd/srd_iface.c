@@ -195,6 +195,43 @@ err_destroy_qp:
     return UCS_ERR_INVALID_PARAM;
 }
 
+static ucs_mpool_ops_t uct_srd_send_op_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL
+};
+
+static UCS_F_NOINLINE void
+uct_srd_iface_post_recv_always(uct_srd_iface_t *iface, int max)
+{
+    struct ibv_recv_wr *bad_wr;
+    uct_ib_recv_wr_t *wrs;
+    unsigned count;
+    int ret;
+
+    wrs   = ucs_alloca(sizeof(*wrs) * max);
+    count = uct_ib_iface_prepare_rx_wrs(&iface->super, &iface->rx.mp, wrs, max);
+    if (count != 0) {
+        ret = ibv_post_recv(iface->qp, &wrs[0].ibwr, &bad_wr);
+        if (ret != 0) {
+            ucs_fatal("ibv_post_recv() returned %d: %m", ret);
+        }
+
+        iface->rx.available -= count;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_srd_iface_post_recv(uct_srd_iface_t *iface)
+{
+    unsigned batch = iface->super.config.rx_max_batch;
+
+    if (iface->rx.available >= batch) {
+        uct_srd_iface_post_recv_always(iface, batch);
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -203,6 +240,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
                                                         uct_srd_iface_config_t);
     uct_ib_md_t *ib_md                 = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_iface_init_attr_t init_attr = {0};
+    ucs_mpool_params_t mp_params;
     struct efadv_device_attr efa_attr;
     ucs_status_t status;
     int mtu, ret;
@@ -239,9 +277,28 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_arbiter_init(&self->tx.pending_q);
     ucs_ptr_array_init(&self->eps, "srd_eps");
 
-    status = uct_srd_iface_create_qp(self, config, &efa_attr);
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.name            = "srd_send_op";
+    mp_params.elem_size       = sizeof(uct_srd_send_op_t);
+    mp_params.align_offset    = 0;
+    mp_params.alignment       = UCT_SRD_SEND_OP_ALIGN;
+    mp_params.elems_per_chunk = 256;
+    mp_params.ops             = &uct_srd_send_op_mpool_ops;
+
+    status = ucs_mpool_init(&mp_params, &self->tx.send_op_mp);
     if (status != UCS_OK) {
         return status;
+    }
+
+    status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
+                                          "srd_recv_desc", &self->rx.mp);
+    if (status != UCS_OK) {
+        goto err_rx_mp;
+    }
+
+    status = uct_srd_iface_create_qp(self, config, &efa_attr);
+    if (status != UCS_OK) {
+        goto err_qp;
     }
 
     uct_ud_send_wr_init(&self->tx.wr_inl, self->tx.sge, 1);
@@ -251,14 +308,26 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_send_sge  = efa_attr.max_sq_sge;
     self->config.max_get_zcopy = efa_attr.max_rdma_size;
 
+    uct_srd_iface_post_recv(self);
+
     return UCS_OK;
+
+err_qp:
+    ucs_mpool_cleanup(&self->rx.mp, 1);
+err_rx_mp:
+    ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_srd_iface_t)
 {
+    uct_base_iface_progress_disable(&self->super.super.super,
+                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     ucs_ptr_array_cleanup(&self->eps, 1);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     uct_ib_destroy_qp(self->qp);
+    ucs_mpool_cleanup(&self->rx.mp, 0);
+    ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
 }
 
 UCS_CLASS_DEFINE(uct_srd_iface_t, uct_ib_iface_t);
@@ -280,6 +349,39 @@ ucs_config_field_t uct_srd_iface_config_table[] = {
     {NULL}
 };
 
+static UCS_F_ALWAYS_INLINE unsigned
+uct_srd_iface_poll_tx(uct_srd_iface_t *iface)
+{
+    unsigned num_wcs = iface->super.config.tx_max_poll;
+    struct ibv_wc wc[num_wcs];
+    ucs_status_t status;
+    int i;
+
+    status = uct_ib_poll_cq(iface->super.cq[UCT_IB_DIR_TX], &num_wcs, wc);
+    if (status != UCS_OK) {
+        num_wcs = 0;
+    }
+
+    for (i = 0; i < num_wcs; i++) {
+        if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
+            UCT_IB_IFACE_VERBS_COMPLETION_ERR("send", &iface->super, i, wc);
+            continue;
+        }
+
+        uct_srd_ep_send_op_completion((uct_srd_send_op_t *)wc[i].wr_id);
+    }
+
+    iface->tx.available += num_wcs;
+    return num_wcs;
+}
+
+static unsigned uct_srd_iface_progress(uct_iface_h tl_iface)
+{
+    uct_srd_iface_t *iface = ucs_derived_of(tl_iface, uct_srd_iface_t);
+
+    return uct_srd_iface_poll_tx(iface);
+}
+
 ucs_status_t
 uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
@@ -300,7 +402,6 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
 
     iface_attr->cap.flags = UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_AM_ZCOPY |
-                            UCT_IFACE_FLAG_CONNECT_TO_EP |
                             UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                             UCT_IFACE_FLAG_PENDING | UCT_IFACE_FLAG_EP_CHECK |
                             UCT_IFACE_FLAG_CB_SYNC |
@@ -386,8 +487,7 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
         ucs_empty_function_return_unsupported,
     .ep_get_zcopy             = (uct_ep_get_zcopy_func_t)
         ucs_empty_function_return_unsupported,
-    .ep_am_short              = (uct_ep_am_short_func_t)
-        ucs_empty_function_return_unsupported,
+    .ep_am_short              = uct_srd_ep_am_short,
     .ep_am_short_iov          = (uct_ep_am_short_iov_func_t)
         ucs_empty_function_return_unsupported,
     .ep_pending_add           = (uct_ep_pending_add_func_t)
@@ -397,12 +497,9 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = (uct_iface_fence_func_t)
         ucs_empty_function_return_unsupported,
-    .iface_progress_enable    = (uct_iface_progress_enable_func_t)
-        ucs_empty_function_return_unsupported,
-    .iface_progress_disable   = (uct_iface_progress_disable_func_t)
-        ucs_empty_function_return_unsupported,
-    .iface_progress           = (uct_iface_progress_func_t)
-        ucs_empty_function_return_unsupported,
+    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_disable   = uct_base_iface_progress_disable,
+    .iface_progress           = uct_srd_iface_progress,
     .iface_query              = uct_srd_iface_query,
     .iface_get_address        = uct_srd_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
