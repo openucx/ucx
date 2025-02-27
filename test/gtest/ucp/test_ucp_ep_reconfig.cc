@@ -120,6 +120,12 @@ public:
             UCS_TEST_SKIP_R("TODO: revert this after replacing "
                             "'is_lane_connected' with protocols check");
         }
+
+        /* TODO: replace with more specific 'fence mode' check after Michal's
+         * PR is merged */
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1 use weak fence by default");
+        }
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -130,7 +136,7 @@ public:
 
     void run(bool bidirectional = false);
     virtual ucp_tl_bitmap_t tl_bitmap();
-    void skip_not_supported() const;
+    void check_single_flush();
 
     bool reuse_lanes() const
     {
@@ -436,35 +442,30 @@ void test_ucp_ep_reconfig::run(bool bidirectional)
     r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
 }
 
-void test_ucp_ep_reconfig::skip_not_supported() const
+void test_ucp_ep_reconfig::check_single_flush()
 {
     if (has_transport("shm")) {
-        UCS_TEST_SKIP_R("TODO: add support for reconfiguration of separate "
-                        "wireup and AM lanes");
+        /* TODO: add support for reconfiguration of separate wireup and AM
+         * lanes */
+        modify_config("WIREUP_VIA_AM_LANE", "y");
     }
 }
 
 UCS_TEST_P(test_ucp_ep_reconfig, basic)
 {
-    skip_not_supported();
+    check_single_flush();
     run();
 }
 
 UCS_TEST_P(test_ucp_ep_reconfig, request_reset, "PROTO_REQUEST_RESET=y")
 {
-    skip_not_supported();
+    check_single_flush();
     run();
 }
 
 UCS_TEST_P(test_ucp_ep_reconfig, resolve_remote_id)
 {
-    skip_not_supported();
-
-    if (has_transport("dc_x")) {
-        /* RDMA_READ between CX7 and BF devices over DC fails due to HW bug */
-        modify_config("MAX_RNDV_LANES", "0");
-    }
-
+    check_single_flush();
     run(true);
 }
 
