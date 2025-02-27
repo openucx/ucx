@@ -158,14 +158,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 {
     ucp_context_h context         = params->super.super.worker->context;
     const double max_bw_ratio     = context->config.ext.multi_lane_max_ratio;
-    ucp_proto_perf_node_t *lanes_perf_nodes[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t *lane_perf, perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     double max_bandwidth, max_frag_ratio, min_bandwidth;
     ucp_lane_index_t i, lane, num_lanes, num_fast_lanes;
     ucp_proto_multi_lane_priv_t *lpriv;
-    ucp_proto_perf_node_t *perf_node;
     size_t max_frag, min_length, min_end_offset, min_chunk;
     ucp_proto_lane_selection_t selection;
     ucp_md_map_t reg_md_map;
@@ -213,8 +211,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         lane      = lanes[i];
         lane_perf = &lanes_perf[lane];
 
-        status = ucp_proto_common_get_lane_perf(&params->super, lane, lane_perf,
-                                                &lanes_perf_nodes[lane]);
+        status = ucp_proto_common_get_lane_perf(&params->super, lane, lane_perf);
         if (status != UCS_OK) {
             return status;
         }
@@ -389,27 +386,26 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
 
-    /* After this block, 'perf_node' and 'lane_perf_nodes[]' have extra ref */
     if (mpriv->num_lanes == 1) {
-        perf_node = lanes_perf_nodes[ucs_ffs64(selection.lane_map)];
-        ucp_proto_perf_node_ref(perf_node);
+        perf.node = lanes_perf[ucs_ffs64(selection.lane_map)].node;
+        ucp_proto_perf_node_ref(perf.node);
     } else {
-        perf_node = ucp_proto_perf_node_new_data("multi", "%u lanes",
+        perf.node = ucp_proto_perf_node_new_data("multi", "%u lanes",
                                                  mpriv->num_lanes);
         ucs_for_each_bit(lane, selection.lane_map) {
             ucs_assert(lane < UCP_MAX_LANES);
-            ucp_proto_perf_node_add_child(perf_node, lanes_perf_nodes[lane]);
+            ucp_proto_perf_node_add_child(perf.node, lanes_perf[lane].node);
         }
     }
 
-    status = ucp_proto_init_perf(&params->super, &perf, perf_node, reg_md_map,
-                                 perf_name, perf_p);
+    status = ucp_proto_init_perf(&params->super, &perf, reg_md_map, perf_name,
+                                 perf_p);
 
     /* Deref unused nodes */
     for (i = 0; i < num_lanes; ++i) {
-        ucp_proto_perf_node_deref(&lanes_perf_nodes[lanes[i]]);
+        ucp_proto_perf_node_deref(&lanes_perf[lanes[i]].node);
     }
-    ucp_proto_perf_node_deref(&perf_node);
+    ucp_proto_perf_node_deref(&perf.node);
 
     return status;
 }
