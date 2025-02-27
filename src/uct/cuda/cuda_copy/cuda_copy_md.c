@@ -571,6 +571,67 @@ err:
     return 1; /* return 1 byte to avoid division by zero */
 }
 
+/**
+ * Get information on memory allocations.
+ *
+ * @param [in]  address        Pointer to the memory allocation to query
+ * @param [in]  length         Size of the allocation
+ * @param [in]  ctx            CUDA context on which a pointer was allocated.
+ *                             NULL in case of VMM
+ * @param [out] base_address_p Returned base address
+ * @param [out] alloc_length_p Returned size of the memory allocation
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+static ucs_status_t
+uct_cuda_copy_md_get_address_range(const void *address, size_t length,
+                                   CUcontext ctx, void **base_address_p,
+                                   size_t *alloc_length_p)
+{
+    ucs_status_t status;
+    CUdeviceptr base;
+    size_t alloc_length;
+    ucs_status_t status_ctx_pop;
+    CUcontext popped_ctx;
+
+    if (ctx != NULL) {
+        /* GetAddressRange requires context to be set. On DGXA100 it takes
+         * 0.03us to push and pop the context associated with address. */
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuMemGetAddressRange(&base, &alloc_length, (CUdeviceptr)address));
+    if (ctx != NULL) {
+        status_ctx_pop = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(&popped_ctx));
+        if (status != UCS_OK) {
+            /* cuMemGetAddressRange failed after pushing non-NULL context */
+            return UCS_ERR_INVALID_ADDR;
+        }
+
+        if (status_ctx_pop != UCS_OK) {
+            /* Failed to set the context that was current before the other
+             * context was pushed. */
+            return status_ctx_pop;
+        }
+    }
+
+    if (status == UCS_OK) {
+        *base_address_p = (void*)base;
+        *alloc_length_p = alloc_length;
+    } else {
+        /* Use default values when cuMemGetAddressRange failed without pushing
+         * non-NULL context */
+        *base_address_p = (void*)address;
+        *alloc_length_p = length;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t
 uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
                                   size_t length, ucs_memory_info_t *mem_info)
@@ -582,11 +643,11 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     CUcontext cuda_mem_ctx     = NULL;
     CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
-    CUdeviceptr base_address;
+    void *base_address;
     size_t alloc_length;
     size_t total_bytes;
     int32_t pref_loc;
-    unsigned is_vmm;
+    int is_vmm;
     CUresult cu_err;
     ucs_status_t status;
 
@@ -681,16 +742,14 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         goto out_default_range;
     }
 
-    cu_err = cuMemGetAddressRange(&base_address, &alloc_length,
-                                  (CUdeviceptr)address);
-    if (cu_err != CUDA_SUCCESS) {
-        ucs_error("cuMemGetAddressRange(%p) error: %s", address,
-                  uct_cuda_base_cu_get_error_string(cu_err));
-        return UCS_ERR_INVALID_ADDR;
+    status = uct_cuda_copy_md_get_address_range(address, length, cuda_mem_ctx,
+                                                &base_address, &alloc_length);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    ucs_trace("query address %p: 0x%llx..0x%llx length %zu", address,
-              base_address, base_address + alloc_length, alloc_length);
+    ucs_trace("query address %p: %p..%p length %zu", address, base_address,
+              UCS_PTR_BYTE_OFFSET(base_address, alloc_length), alloc_length);
 
     if (md->config.alloc_whole_reg == UCS_CONFIG_AUTO) {
         total_bytes = uct_cuda_copy_md_get_total_device_mem(cuda_device);
@@ -701,7 +760,7 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         ucs_assert(md->config.alloc_whole_reg == UCS_CONFIG_ON);
     }
 
-    mem_info->base_address = (void*)base_address;
+    mem_info->base_address = base_address;
     mem_info->alloc_length = alloc_length;
     return UCS_OK;
 
