@@ -24,10 +24,7 @@ void test_srd::init()
     m_e2 = uct_test::create_entity(0, NULL);
     m_entities.push_back(m_e1);
     m_entities.push_back(m_e2);
-}
 
-UCS_TEST_P(test_srd, ep_connect_to_iface)
-{
     m_e1->connect_to_iface(0, *m_e2);
 }
 
@@ -38,10 +35,8 @@ UCS_TEST_P(test_srd, am_short)
     char payload[]  = "the payload";
     int count       = 10;
 
-    m_e1->connect_to_iface(0, *m_e2);
-
     /* Test will fail if TX send_op is not returned to memory pool */
-    status = uct_ep_am_short(m_e1->ep(0), 13, header++, payload, sizeof(payload));
+    status = uct_ep_am_short(m_e1->ep(0), 31, header++, payload, sizeof(payload));
     ASSERT_UCS_OK(status);
     status = uct_ep_am_short(m_e1->ep(0), 14, header, payload, sizeof(payload));
     ASSERT_UCS_OK(status);
@@ -49,6 +44,19 @@ UCS_TEST_P(test_srd, am_short)
     while (count-- > 0) {
         short_progress_loop();
     }
+}
+
+UCS_TEST_P(test_srd, am_short_failure)
+{
+    scoped_log_handler slh(wrap_errors_logger);
+    uint64_t header = 0x1234567843210987;
+    char payload[4096];
+    ucs_status_t status;
+
+    status = uct_ep_am_short(m_e1->ep(0), 32, header, payload, 32);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
+    status = uct_ep_am_short(m_e1->ep(0), 14, header, payload, sizeof(payload));
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
 UCT_INSTANTIATE_SRD_TEST_CASE(test_srd)

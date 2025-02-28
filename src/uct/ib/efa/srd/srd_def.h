@@ -14,11 +14,6 @@
 typedef ucs_frag_list_sn_t uct_srd_psn_t;
 
 
-enum {
-    UCT_SRD_PACKET_FLAG_AM = UCS_BIT(UCT_AM_ID_BITS),
-};
-
-
 typedef struct uct_srd_neth {
     uint64_t        ep_uuid; /* Sender EP's random identifier */
     uct_srd_psn_t   psn;     /* Sender EP's packet sequence number */

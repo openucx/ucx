@@ -109,7 +109,7 @@ uct_srd_iface_get_send_op(uct_srd_iface_t *iface)
     }
 
     send_op = ucs_mpool_get(&iface->tx.send_op_mp);
-    if (send_op == NULL) {
+    if (ucs_unlikely(send_op == NULL)) {
         ucs_trace_data("iface=%p out of tx send_op descs", iface);
         UCT_TL_IFACE_STAT_TX_NO_DESC(&iface->super.super);
     }

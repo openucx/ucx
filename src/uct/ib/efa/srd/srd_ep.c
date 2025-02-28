@@ -100,7 +100,7 @@ uct_srd_ep_get_send_op(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 {
     uct_srd_send_op_t *send_op = uct_srd_iface_get_send_op(iface);
 
-    if (send_op == NULL) {
+    if (ucs_unlikely(send_op == NULL)) {
         ucs_trace_poll("iface=%p ep=%p has no send_op resource (psn=%u)",
                        iface, ep, ep->tx.psn);
         UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
@@ -147,7 +147,7 @@ ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    uct_srd_neth_set(ep, &am->neth, id | UCT_SRD_PACKET_FLAG_AM);
+    uct_srd_neth_set(ep, &am->neth, id);
     am->hdr = hdr;
 
     send_op->comp_handler = uct_srd_iface_send_op_release;
