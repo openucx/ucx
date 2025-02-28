@@ -1868,15 +1868,29 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_context_t *select_ctx,
                         unsigned allow_extra_path)
 {
-    if (select_params->ep->worker->context->config.ext.ep_allow_all_to_all) {
-        return ucp_wireup_add_bw_lanes_a2a(select_params, bw_info, tl_bitmap,
-                                           excl_lane, select_ctx,
-                                           allow_extra_path);
-    } else {
-        return ucp_wireup_add_bw_lanes_d2d(select_params, bw_info, tl_bitmap,
-                                           excl_lane, select_ctx,
-                                           allow_extra_path);
+    unsigned num_lanes, mem_type_num_lanes;
+    ucp_tl_bitmap_t mem_type_tl_bitmap;
+
+    num_lanes = ucp_wireup_add_bw_lanes_d2d(select_params, bw_info, tl_bitmap,
+                                            excl_lane, select_ctx,
+                                            allow_extra_path);
+    if (select_params->ep->worker->context->config.ext.ep_allow_all_to_all &&
+        (select_params->ep->worker->uuid != select_params->address->uuid)) {
+        ucp_wireup_memaccess_bitmap(select_params->ep->worker->context,
+                                    UCS_MEMORY_TYPE_CUDA, &mem_type_tl_bitmap);
+        UCS_STATIC_BITMAP_AND_INPLACE(&mem_type_tl_bitmap, tl_bitmap);
+        if (!UCS_STATIC_BITMAP_IS_ZERO(mem_type_tl_bitmap)) {
+            mem_type_num_lanes = ucp_wireup_add_bw_lanes_a2a(
+                    select_params, bw_info, mem_type_tl_bitmap, excl_lane,
+                    select_ctx, allow_extra_path);
+            ucs_debug("%p: bw memtype lanes are extended %u -> %u, "
+                      "reused %u lanes", select_params->ep, num_lanes,
+                      select_ctx->num_lanes, (num_lanes + mem_type_num_lanes) -
+                                             select_ctx->num_lanes);
+        }
     }
+
+    return select_ctx->num_lanes;
 }
 
 static ucs_status_t
@@ -1938,9 +1952,9 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    num_am_bw_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                              ucp_tl_bitmap_max, am_lane,
-                                              select_ctx, 0);
+    num_am_bw_lanes = ucp_wireup_add_bw_lanes_d2d(select_params, &bw_info,
+                                                  ucp_tl_bitmap_max, am_lane,
+                                                  select_ctx, 0);
     return ((am_lane != UCP_NULL_LANE) || (num_am_bw_lanes > 0)) ? UCS_OK :
            UCS_ERR_UNREACHABLE;
 }
