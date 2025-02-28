@@ -238,7 +238,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         if ((lane_perf->bandwidth * max_bw_ratio) < max_bandwidth) {
             /* Bandwidth on this lane is too low compared to the fastest
                available lane, so it's not worth using it */
-            ucp_proto_perf_node_deref(&lanes_perf_nodes[lane]);
+            ucp_proto_perf_node_deref(&lanes_perf[lane].node);
             ucs_trace("drop " UCP_PROTO_LANE_FMT,
                       UCP_PROTO_LANE_ARG(&params->super.super, lane, lane_perf));
         } else {
