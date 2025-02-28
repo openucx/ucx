@@ -2012,14 +2012,12 @@ static int ucs_config_parser_is_default(const char *env_prefix,
            (getenv(var_name) == NULL);
 }
 
-static void ucs_config_parser_print_header(FILE *stream, const char *title,
-                                           ucs_config_print_flags_t *flags_p)
+static void ucs_config_parser_print_header(FILE *stream, const char *title)
 {
     fprintf(stream, "#\n");
     fprintf(stream, "# %s\n", title);
     fprintf(stream, "#\n");
     fprintf(stream, "\n");
-    *flags_p &= ~UCS_CONFIG_PRINT_HEADER;
 }
 
 static void ucs_config_parser_print_field(
@@ -2047,7 +2045,8 @@ static void ucs_config_parser_print_field(
     }
 
     if (*flags_p & UCS_CONFIG_PRINT_HEADER) {
-        ucs_config_parser_print_header(stream, title, flags_p);
+        *flags_p &= ~UCS_CONFIG_PRINT_HEADER;
+        ucs_config_parser_print_header(stream, title);
     }
 
     if (ucs_config_is_deprecated_field(field)) {
@@ -2195,7 +2194,7 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title,
                                             prefix, &prefix_list, title,
                                             filter);
     } else if (flags & UCS_CONFIG_PRINT_HEADER) {
-        ucs_config_parser_print_header(stream, title, &flags_copy);
+        ucs_config_parser_print_header(stream, title);
     }
 }
 
