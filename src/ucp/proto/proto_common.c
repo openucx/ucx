@@ -338,7 +338,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     ucp_rsc_index_t rsc_index  = ucp_proto_common_get_rsc_index(&params->super,
                                                                 lane);
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
-    ucp_proto_perf_node_t *perf_node, *lane_perf_node;
+    ucp_proto_perf_node_t *lane_perf_node;
     const ucp_rkey_config_t *rkey_config;
     ucs_sys_dev_distance_t distance;
     size_t tl_min_frag, tl_max_frag;
@@ -362,9 +362,9 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    perf_node = ucp_proto_perf_node_new_data("lane", "%u ppn %u eps",
-                                             context->config.est_num_ppn,
-                                             context->config.est_num_eps);
+    tl_perf->node = ucp_proto_perf_node_new_data("lane", "%u ppn %u eps",
+                                                 context->config.est_num_ppn,
+                                                 context->config.est_num_eps);
 
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
                            UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
@@ -393,7 +393,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
     ucp_proto_common_lane_perf_node(context, rsc_index, &perf_attr,
                                     &lane_perf_node);
-    ucp_proto_perf_node_own_child(perf_node, &lane_perf_node);
+    ucp_proto_perf_node_own_child(tl_perf->node, &lane_perf_node);
 
     /* If reg_mem_info type is not unknown we assume the protocol is going to
      * send that mem type in a zero copy fashion. So, need to consider the
@@ -438,20 +438,18 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                 params->hdr_size);
     ucs_assert(tl_perf->sys_latency >= 0);
 
-    ucp_proto_perf_node_add_bandwidth(perf_node, "bw", tl_perf->bandwidth);
-    ucp_proto_perf_node_add_scalar(perf_node, "lat", tl_perf->latency);
-    ucp_proto_perf_node_add_scalar(perf_node, "sys-lat", tl_perf->sys_latency);
-    ucp_proto_perf_node_add_scalar(perf_node, "send-pre",
+    ucp_proto_perf_node_add_bandwidth(tl_perf->node, "bw", tl_perf->bandwidth);
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "lat", tl_perf->latency);
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "sys-lat", tl_perf->sys_latency);
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "send-pre",
                                    tl_perf->send_pre_overhead);
-    ucp_proto_perf_node_add_scalar(perf_node, "send-post",
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "send-post",
                                    tl_perf->send_post_overhead);
-    ucp_proto_perf_node_add_scalar(perf_node, "recv", tl_perf->recv_overhead);
-
-    tl_perf->node = perf_node;
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "recv", tl_perf->recv_overhead);
     return UCS_OK;
 
 err_deref_perf_node:
-    ucp_proto_perf_node_deref(&perf_node);
+    ucp_proto_perf_node_deref(&tl_perf->node);
     return status;
 }
 
