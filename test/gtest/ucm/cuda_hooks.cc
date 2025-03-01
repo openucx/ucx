@@ -233,11 +233,11 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocPitch) {
 
     ret = cuMemAllocPitch(&dptr, &pitch, width, height, element_size);
     ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_alloc_events((void *)dptr, width * height);
+    check_mem_alloc_events((void*)dptr, pitch * height);
 
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_free_events((void*)dptr, width * height);
+    check_mem_free_events((void*)dptr, pitch * height);
 }
 
 UCS_TEST_F(cuda_hooks, test_cuMemMapUnmap) {
@@ -361,17 +361,38 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocManaged) {
 }
 
 UCS_TEST_F(cuda_hooks, test_cudaMallocPitch) {
+    const size_t width  = 4;
+    const size_t height = 8;
     cudaError_t ret;
     void *devPtr;
     size_t pitch;
 
-    ret = cudaMallocPitch(&devPtr, &pitch, 4, 8);
+    ret = cudaMallocPitch(&devPtr, &pitch, width, height);
     ASSERT_EQ(ret, cudaSuccess);
-    check_mem_alloc_events(devPtr, (4 * 8));
+    check_mem_alloc_events(devPtr, pitch * height);
 
     ret = cudaFree(devPtr);
     ASSERT_EQ(ret, cudaSuccess);
-    check_mem_free_events(devPtr, (4 * 8));
+    check_mem_free_events(devPtr, pitch * height);
+}
+
+UCS_TEST_F(cuda_hooks, test_cudaMalloc3D) {
+    const size_t width  = 16;
+    const size_t height = 20;
+    const size_t depth  = 30;
+    cudaError_t ret;
+    cudaPitchedPtr devPtr;
+    cudaExtent extent;
+
+    extent = make_cudaExtent(width, height, depth);
+
+    ret = cudaMalloc3D(&devPtr, extent);
+    ASSERT_EQ(ret, cudaSuccess);
+    check_mem_alloc_events(devPtr.ptr, devPtr.pitch * devPtr.ysize * depth);
+
+    ret = cudaFree(devPtr.ptr);
+    ASSERT_EQ(ret, cudaSuccess);
+    check_mem_free_events(devPtr.ptr, devPtr.pitch * devPtr.ysize * depth);
 }
 
 #if CUDART_VERSION >= 11020
