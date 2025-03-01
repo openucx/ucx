@@ -1256,7 +1256,8 @@ int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
     return 1;
 }
 
-void uct_ib_md_check_odp(uct_ib_md_t *md)
+static void
+uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
     const char *device_name = uct_ib_device_name(&md->dev);
     const char *reason;
@@ -1266,8 +1267,8 @@ void uct_ib_md_check_odp(uct_ib_md_t *md)
         return;
     }
 
-    md->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    ucs_debug("%s: ODP is supported, version 1", device_name);
+    md->reg_nonblock_mem_types = md_config->ext.odp.mem_types;
+    ucs_debug("%s: ODP is supported", device_name);
 }
 
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
@@ -1535,7 +1536,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 
     uct_ib_md_ece_check(md);
     uct_ib_md_parse_relaxed_order(md, md_config, 0);
-    uct_ib_md_check_odp(md);
+    uct_ib_md_check_odp(md, md_config);
 
     *p_md = md;
     return UCS_OK;
@@ -1564,11 +1565,14 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .super = {
         .close              = uct_ib_md_close,
         .query              = uct_ib_md_query,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = uct_ib_mem_advise,
         .mem_reg            = uct_ib_verbs_mem_reg,
         .mem_dereg          = uct_ib_verbs_mem_dereg,
-        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
-        .mem_advise         = uct_ib_mem_advise,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_ib_verbs_mkey_pack,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_verbs_md_open,

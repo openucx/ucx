@@ -490,6 +490,7 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr)
 
 void uct_md_base_md_query(uct_md_attr_v2_t *md_attr)
 {
+    md_attr->flags                     = 0;
     md_attr->reg_mem_types             = 0;
     md_attr->reg_nonblock_mem_types    = 0;
     md_attr->cache_mem_types           = 0;

@@ -41,7 +41,6 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_devices));
     if (UCS_OK != status) {
-        ucs_error("cuDeviceGetCount() failed: %s", ucs_status_string(status));
         return NULL;
     }
 
@@ -484,9 +483,13 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     static uct_md_ops_t md_ops = {
         .close              = uct_cuda_ipc_md_close,
         .query              = uct_cuda_ipc_md_query,
-        .mkey_pack          = uct_cuda_ipc_mkey_pack,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg            = uct_cuda_ipc_mem_reg,
         .mem_dereg          = uct_cuda_ipc_mem_dereg,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+        .mkey_pack          = uct_cuda_ipc_mkey_pack,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     };

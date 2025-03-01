@@ -1,0 +1,31 @@
+parameters:
+  demands: []
+  container: rhel90_ib
+
+jobs:
+  - job: tests_${{ parameters.name }}
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    displayName: ${{ parameters.name }} on ${{ parameters.container }}
+    container: ${{ parameters.container }}
+    timeoutInMinutes: 90
+    workspace:
+      clean: outputs
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+      - bash: |
+          ./contrib/test_efa.sh build_efa
+        displayName: Build rdma-core and ibmock
+      - bash: |
+          ./contrib/test_efa.sh gtest_efa
+        displayName: Run gtests
+      - bash: |
+          ./contrib/test_efa.sh install_rdma_core_efa
+        displayName: Setup rmda-core
+      - bash: |
+          ./contrib/test_efa.sh test_rpm_efa
+        displayName: RPM test

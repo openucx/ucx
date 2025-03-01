@@ -947,6 +947,16 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
                  UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA);
 }
 
+UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg_with_ro,
+                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST) ||
+                     !ENABLE_PARAMS_CHECK,
+                     "IB_PCI_RELAXED_ORDERING?=try")
+{
+    test_reg_mem(md_flags_remote_rma, UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA);
+    test_reg_mem(UCT_MD_MEM_ACCESS_REMOTE_ATOMIC,
+                 UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA);
+}
+
 UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
                      !check_caps(UCT_MD_FLAG_EXPORTED_MKEY))
 {
@@ -981,7 +991,8 @@ UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
     ASSERT_UCS_OK(status);
 }
 
-UCS_TEST_P(test_md, rkey_compare_params_check)
+UCS_TEST_SKIP_COND_P(test_md, rkey_compare_params_check,
+                     !check_caps(UCT_MD_FLAG_NEED_RKEY))
 {
     uct_rkey_compare_params_t params = {};
     ucs_status_t status;
