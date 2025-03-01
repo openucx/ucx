@@ -197,12 +197,6 @@ try_load_cuda_env() {
     then
         az_module_load dev/gdrcopy2.4.1_cuda12.5.1 && have_gdrcopy=yes
     fi
-
-    # Set CUDA_VISIBLE_DEVICES
-    if [ -n "${worker}" ]
-    then
-        export CUDA_VISIBLE_DEVICES=$((worker % num_gpus))
-    fi
 }
 
 load_cuda_env() {
