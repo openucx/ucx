@@ -29,6 +29,10 @@ void test_switch_cuda_device::detect_mem_type(ucs_memory_type_t mem_type) const
         UCS_TEST_SKIP_R("less than two cuda devices available");
     }
 
+    int current_device;
+    ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+    ASSERT_EQ(cudaSetDevice((current_device + 1) % num_devices), cudaSuccess);
+
     const size_t size = 16;
     T buffer(size, mem_type);
 
