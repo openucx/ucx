@@ -2224,10 +2224,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     memcpy(context->config.am_mpools.sizes, config->mpool_sizes.memunits,
            config->mpool_sizes.count * sizeof(size_t));
 
-    context->config.worker_strong_fence =
-            (context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) &&
-            ((context->config.ext.max_rma_lanes > 1) ||
-             context->config.ext.proto_enable);
+    if ((context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) &&
+        ((context->config.ext.max_rma_lanes == 1) ||
+         !(context->config.ext.proto_enable))) {
+        context->config.worker_fence_mode = UCP_FENCE_MODE_WEAK;
+    } else {
+        context->config.worker_fence_mode = context->config.ext.fence_mode;
+    }
 
     context->config.progress_wrapper_enabled =
             ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
