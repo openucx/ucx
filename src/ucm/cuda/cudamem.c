@@ -123,6 +123,8 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocManaged, cudaError_t, -1, void**,
                                   size_t, unsigned int)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocPitch, cudaError_t, -1, void**,
                                   size_t*, size_t, size_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMalloc3D, cudaError_t, -1,
+                                  struct cudaPitchedPtr*, struct cudaExtent)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaGetSymbolAddress, cudaError_t, -1, void**,
                                   const void*)
 
@@ -295,6 +297,27 @@ UCM_CUDA_FREE_FUNC(cudaFreeAsync, UCS_MEMORY_TYPE_CUDA, cudaError_t, arg0, 0,
                    "devPtr=%p, stream=%p", void*, cudaStream_t)
 #endif
 
+cudaError_t ucm_cudaMalloc3D(struct cudaPitchedPtr* pitchedDevPtr,
+                             struct cudaExtent extent)
+{
+    void* ptr;
+    cudaError_t ret;
+    size_t size;
+
+    ucm_event_enter();
+    ret = ucm_orig_cudaMalloc3D(pitchedDevPtr, extent);
+    if (ret == cudaSuccess) {
+        ptr = pitchedDevPtr->ptr;
+        ucm_trace("%s(pitchedDevPtr=%p, extent=(width=%zu, height=%zu, "
+                  "depth=%zu)) allocated %p", __func__, pitchedDevPtr,
+                  extent.width, extent.height, extent.depth, (void*)ptr);
+        size = pitchedDevPtr->pitch * extent.height * extent.depth;
+        ucm_cuda_dispatch_mem_alloc((CUdeviceptr)ptr, size);
+    }
+    ucm_event_leave();
+    return ret;
+}
+
 static ucm_cuda_func_t ucm_cuda_runtime_funcs[] = {
     UCM_CUDA_FUNC_ENTRY(cudaFree),
 #if CUDART_VERSION >= 11020
@@ -308,6 +331,7 @@ static ucm_cuda_func_t ucm_cuda_runtime_funcs[] = {
 #endif
     UCM_CUDA_FUNC_ENTRY(cudaMallocManaged),
     UCM_CUDA_FUNC_ENTRY(cudaMallocPitch),
+    UCM_CUDA_FUNC_ENTRY(cudaMalloc3D),
     UCM_CUDA_FUNC_ENTRY(cudaGetSymbolAddress),
     {{NULL}, NULL}
 };
