@@ -52,8 +52,8 @@ typedef struct {
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
                                                const void *nl_msg, void *arg);
 
-route_entry_t routing_table[MAX_NETWORK_IFACES][MAX_RULES_PER_IFACE] = {0};
-int route_data_exists                                                =  0;
+static route_entry_t routing_table[MAX_NETWORK_IFACES][MAX_RULES_PER_IFACE] = {0};
+static int route_data_exists                                                =  0;
 
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
@@ -104,26 +104,6 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
     return UCS_OK;
 }
 
-static void
-ucs_netlink_analyze_route_info(void *arg)
-{
-    ucs_netlink_route_info_t *info = (ucs_netlink_route_info_t *)arg;
-    route_entry_t *iface_rules     = routing_table[info->if_index];
-    int rule_index                 = 0;
-
-    while ((rule_index < MAX_RULES_PER_IFACE) &&
-           (rule_index < iface_rules[0].counter)) {
-        if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
-                                 ucs_sockaddr_get_inet_addr((const struct sockaddr *)&iface_rules[rule_index].destination),
-                                 iface_rules[rule_index].subnet_mask)) {
-            info->found = 1;
-            return;
-        }
-
-        rule_index++;
-    }
-}
-
 static ucs_status_t
 ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                          const void *protocol_header, size_t header_length,
@@ -136,10 +116,6 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     ucs_status_t status = UCS_OK;
     struct iovec iov[2];
     size_t bytes_sent;
-
-    if (route_data_exists) {
-        goto analyze;
-    }
 
     status = ucs_netlink_socket_init(&netlink_fd, protocol);
     if (status != UCS_OK) {
@@ -188,13 +164,9 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     }
 
     status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
-    route_data_exists = 1;
 
     ucs_close_fd(&netlink_fd);
     ucs_free(recv_msg);
-
-analyze:
-    ucs_netlink_analyze_route_info(arg);
 
 out:
     return status;
@@ -216,7 +188,6 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
     }
 
     if ((*if_index_p == -1) || (*dst_in_addr == NULL)) {
-        ucs_diag("invalid routing table entry");
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -264,20 +235,45 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
     return UCS_INPROGRESS;
 }
 
+static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
+{
+    route_entry_t *iface_rules = routing_table[info->if_index];
+    int rule_index             = 0;
+
+    while ((rule_index < MAX_RULES_PER_IFACE) &&
+           (rule_index < iface_rules[0].counter)) {
+        if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
+                                 ucs_sockaddr_get_inet_addr((const struct sockaddr *)&iface_rules[rule_index].destination),
+                                 iface_rules[rule_index].subnet_mask)) {
+            info->found = 1;
+            return;
+        }
+
+        rule_index++;
+    }
+}
+
 int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
 {
     ucs_netlink_route_info_t info = {0};
     struct rtmsg rtm              = {0};
 
+    if (route_data_exists) {
+        goto lookup;
+    }
+
     rtm.rtm_family = sa_remote->sa_family;
     rtm.rtm_table  = RT_TABLE_MAIN;
 
+    ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
+                             ucs_netlink_parse_rt_entry_cb, &info);
+    route_data_exists = 1;
+
+lookup:
     info.if_index  = if_index;
     info.sa_remote = sa_remote;
 
-    ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
-                             ucs_netlink_parse_rt_entry_cb, &info);
-
+    ucs_netlink_lookup_route(&info);
 out:
     return info.found;
 }
