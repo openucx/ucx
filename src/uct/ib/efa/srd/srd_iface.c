@@ -359,7 +359,7 @@ uct_srd_iface_poll_tx(uct_srd_iface_t *iface)
 
     status = uct_ib_poll_cq(iface->super.cq[UCT_IB_DIR_TX], &num_wcs, wc);
     if (status != UCS_OK) {
-        num_wcs = 0;
+        return 0;
     }
 
     for (i = 0; i < num_wcs; i++) {
