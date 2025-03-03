@@ -15,9 +15,11 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#define NUM_DEVS   2
-#define SYS_PATH   "/tmp/ibmock"
-#define DUMMY_PKEY 65535         /* Dummy pkey with full membership for now */
+#define NUM_DEVS    2
+#define SYS_PATH    "/tmp/ibmock"
+#define DUMMY_PKEY  65535 /* Dummy pkey with full membership for now */
+#define ONE_MILLION 1000000
+
 
 static pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -220,7 +222,7 @@ rx_send(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
         return (fqp->qp_ex.qp_base.qp_type == IBV_QPT_UD) ? 0 : -ENOENT;
     }
 
-    if (fqp->rx_drop && (((unsigned)rand() % 1000000) < fqp->rx_drop)) {
+    if (fqp->rx_drop && (((unsigned)rand() % ONE_MILLION) < fqp->rx_drop)) {
         return 0; /* Operation is dropped, TX CQE will be called */
     }
 

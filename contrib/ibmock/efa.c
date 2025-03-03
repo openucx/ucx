@@ -36,7 +36,10 @@ struct ibv_qp *efadv_create_driver_qp_impl(struct ibv_pd           *pd,
 {
     struct fake_qp *fqp;
 
-    fqp           = create_fqp(pd, attr);
+    fqp = create_fqp(pd, attr);
+    if (fqp == NULL) {
+        return NULL;
+    }
 
     fqp->qp_ex.wr_start        = dev_qp_wr_start;
     fqp->qp_ex.wr_rdma_read    = dev_qp_wr_rdma_read;
