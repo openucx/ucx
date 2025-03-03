@@ -1141,7 +1141,6 @@ static void ucp_proto_select_bw_lanes(ucp_proto_lane_selection_t *selection,
         index = ucp_proto_select_find_bw_lane(selection, index_map);
         ucp_proto_select_add_lane(selection, index);
         index_map &= ~UCS_BIT(index);
-        index++;
     }
 }
 
