@@ -54,9 +54,9 @@ void test_ilog2()
 
     for (auto i = 1; i < sizeof(T) * 8; ++i) {
         auto value = (bit << i);
-        ASSERT_EQ(i, ucs_ilog2(value));
+        EXPECT_EQ(i, ucs_ilog2(value));
         value--;
-        ASSERT_EQ(i - 1, ucs_ilog2(value));
+        EXPECT_EQ(i - 1, ucs_ilog2(value));
     }
 }
 
