@@ -827,7 +827,7 @@ static int ucp_wireup_compare_score(const void *elem1, const void *elem2,
     score1 = (*lane1 == UCP_NULL_LANE) ? 0.0 : lanes[*lane1].score[lane_type];
     score2 = (*lane2 == UCP_NULL_LANE) ? 0.0 : lanes[*lane2].score[lane_type];
 
-    /* sort from highest score to lowest */
+    /* reverse the value of ucp_score_cmp to sort scores in descending order */
     return -ucp_score_cmp(score1, score2);
 }
 
