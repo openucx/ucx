@@ -4,7 +4,7 @@
  */
 #include "ucs_constants.h"
 
-#include <ucs/config/parser.h>
+#include <ucs/config/types.h>
 #include <ucs/sys/string.h>
 #include <stdlib.h>
 

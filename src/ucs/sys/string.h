@@ -237,7 +237,7 @@ const char *ucs_str_dump_hex(const void* data, size_t length, char *buf,
 /**
  * Convert the given flags to a string that represents them.
  *
- * @param  str            String to hold the flags string values.
+ * @param  buf            String to hold the flags string values.
  * @param  max            Size of the string.
  * @param  flags          Flags to be converted.
  * @param  str_table      Conversion table - from flag value to a string.
