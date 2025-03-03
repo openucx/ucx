@@ -291,13 +291,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
             contig_length = count;
         }
 
-        if (ucp_ep_is_fence_required(ep)) {
-            status = ucp_ep_handle_fence(ep);
-            if (status != UCS_OK) {
-                ret = UCS_STATUS_PTR(status);
-                goto out_unlock;
-            }
-        }
+        ucp_handle_fence_if_required(ep, status, ret, out_unlock);
 
         ret = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(worker, rkey)->proto_select,
@@ -405,13 +399,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
             contig_length = ucp_contig_dt_length(datatype, count);
         }
 
-        if (ucp_ep_is_fence_required(ep)) {
-            status = ucp_ep_handle_fence(ep);
-            if (status != UCS_OK) {
-                ret = UCS_STATUS_PTR(status);
-                goto out_unlock;
-            }
-        }
+        ucp_handle_fence_if_required(ep, status, ret, out_unlock);
 
         ret = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(worker, rkey)->proto_select,

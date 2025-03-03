@@ -221,8 +221,8 @@ typedef enum {
  * Fence mode.
  */
 typedef enum {
-    UCP_FENCE_MODE_WEAK,   /* Use weak fence mode */
-    UCP_FENCE_MODE_STRONG, /* Use strong fence mode */
+    UCP_FENCE_MODE_WEAK,     /* Use weak fence mode */
+    UCP_FENCE_MODE_STRONG,   /* Use strong fence mode */
     UCP_FENCE_MODE_EP_BASED, /* Use EP-based fence mode */
     UCP_FENCE_MODE_LAST
 } ucp_fence_mode_t;

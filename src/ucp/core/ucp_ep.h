@@ -81,6 +81,16 @@ typedef uint16_t                   ucp_ep_flags_t;
 #define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
     ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
 
+#define ucp_handle_fence_if_required(_ep, _status, _ret, _err_label) \
+{ \
+    if (ucp_ep_is_fence_required(_ep)) { \
+        _status = ucp_ep_handle_fence(_ep); \
+        if (_status != UCS_OK) { \
+            _ret = UCS_STATUS_PTR(_status); \
+            goto _err_label; \
+        } \
+    } \
+}
 
 #define UCP_SA_DATA_HEADER_VERSION_SHIFT 5
 

@@ -505,13 +505,22 @@ public:
         test_ucp_memheap::init();
     }
 
+    uint32_t get_worker_fence_seq() {
+        return sender().ep()->worker->fence_seq;
+    }
+
+    uint32_t get_ep_fence_seq() {
+        return sender().ep()->ext->fence_seq;
+    }
+
     void do_fence() {
-        uint32_t worker_fence_seq_before = sender().ep()->worker->fence_seq;
+        uint32_t worker_fence_seq_before = get_worker_fence_seq();
         sender().fence();
-        uint32_t worker_fence_seq_after = sender().ep()->worker->fence_seq;
+        uint32_t worker_fence_seq_after = get_worker_fence_seq();
+        uint32_t ep_fence_seq_after = get_ep_fence_seq();
 
         ASSERT_EQ(worker_fence_seq_before + 1, worker_fence_seq_after);
-        ASSERT_GT(worker_fence_seq_after, sender().ep()->ext->fence_seq);
+        ASSERT_GT(worker_fence_seq_after, ep_fence_seq_after);
     }
 
     enum op_type_t { OP_PUT, OP_GET, OP_ATOMIC };
@@ -521,15 +530,21 @@ public:
         ucp_request_param_t param = {0};
         ucs_status_ptr_t sptr;
 
-        if (op == OP_ATOMIC) {
+        switch (op) {
+        case OP_PUT:
+            sptr = ucp_put_nbx(sender().ep(), sbuf, size, target, rkey, &param);
+            break;
+        case OP_GET:
+            sptr = ucp_get_nbx(sender().ep(), sbuf, size, target, rkey, &param);
+            break;
+        case OP_ATOMIC:
             param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
             param.datatype = ucp_dt_make_contig(size);
             sptr = ucp_atomic_op_nbx(sender().ep(), UCP_ATOMIC_OP_ADD, sbuf, 1,
                                      target, rkey, &param);
-        } else if (op == OP_PUT) {
-            sptr = ucp_put_nbx(sender().ep(), sbuf, size, target, rkey, &param);
-        } else {
-            sptr = ucp_get_nbx(sender().ep(), sbuf, size, target, rkey, &param);
+            break;
+        default:
+            UCS_TEST_ABORT("Invalid operation type");
         }
 
         ASSERT_FALSE(UCS_PTR_IS_ERR(sptr));
@@ -554,11 +569,9 @@ public:
             perform_nbx(op, sbuf.ptr(), size, (uint64_t)rbuf.ptr(), rkey);
 
             if (is_fence_required) {
-                ASSERT_EQ(sender().ep()->worker->fence_seq,
-                          sender().ep()->ext->fence_seq);
+                ASSERT_EQ(get_worker_fence_seq(), get_ep_fence_seq());
             } else {
-                ASSERT_NE(sender().ep()->worker->fence_seq,
-                          sender().ep()->ext->fence_seq);
+                ASSERT_NE(get_worker_fence_seq(), get_ep_fence_seq());
             }
         }
 
@@ -583,11 +596,9 @@ public:
                     rkey);
 
         if (is_fence_required) {
-            ASSERT_EQ(sender().ep()->worker->fence_seq,
-                      sender().ep()->ext->fence_seq);
+            ASSERT_EQ(get_worker_fence_seq(), get_ep_fence_seq());
         } else {
-            ASSERT_NE(sender().ep()->worker->fence_seq,
-                      sender().ep()->ext->fence_seq);
+            ASSERT_NE(get_worker_fence_seq(), get_ep_fence_seq());
         }
 
         flush_workers();

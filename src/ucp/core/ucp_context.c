@@ -93,10 +93,10 @@ static const char *ucp_atomic_modes[] = {
 };
 
 static const char *ucp_fence_modes[] = {
-    [UCP_FENCE_MODE_WEAK]   = "weak",
-    [UCP_FENCE_MODE_STRONG] = "strong",
+    [UCP_FENCE_MODE_WEAK]     = "weak",
+    [UCP_FENCE_MODE_STRONG]   = "strong",
     [UCP_FENCE_MODE_EP_BASED] = "ep_based",
-    [UCP_FENCE_MODE_LAST]   = NULL
+    [UCP_FENCE_MODE_LAST]     = NULL
 };
 
 static const char *ucp_rndv_modes[] = {
@@ -2223,6 +2223,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     memcpy(context->config.am_mpools.sizes, config->mpool_sizes.memunits,
            config->mpool_sizes.count * sizeof(size_t));
+
+    if ((context->config.ext.fence_mode == UCP_FENCE_MODE_EP_BASED) &&
+        !(context->config.ext.proto_enable)) {
+        ucs_error("UCX_FENCE_MODE=ep_based requires UCX_PROTO_ENABLE=y");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_key_list;
+    }
 
     if ((context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) &&
         ((context->config.ext.max_rma_lanes == 1) ||

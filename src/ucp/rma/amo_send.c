@@ -216,13 +216,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
         ucp_amo_init_proto(req, ucp_uct_atomic_op_table[opcode], remote_addr,
                            rkey);
 
-        if (ucp_ep_is_fence_required(ep)) {
-            status = ucp_ep_handle_fence(ep);
-            if (status != UCS_OK) {
-                status_p = UCS_STATUS_PTR(status);
-                goto out;
-            }
-        }
+        ucp_handle_fence_if_required(ep, status, status_p, out);
 
         if (param->op_attr_mask & UCP_OP_ATTR_FIELD_REPLY_BUFFER) {
             req->send.amo.reply_buffer = param->reply_buffer;
