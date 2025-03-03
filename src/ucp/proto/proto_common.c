@@ -1086,6 +1086,7 @@ ucp_proto_select_find_bw_lane(ucp_proto_lane_selection_t *selection,
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t lane, index, max_index;
 
+    max_index = ucs_ffs64(index_map);
     ucs_for_each_bit(index, index_map) {
         lane_perf = ucp_proto_select_get_perf_index(selection, index, &lane);
         if (lane_perf->bandwidth < max_avail_bw) {
