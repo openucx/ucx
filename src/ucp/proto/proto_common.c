@@ -974,8 +974,9 @@ ucp_proto_storage_create(const ucp_proto_common_init_params_t *params,
 
     /* Evaluate individual lane performance */
     for (i = 0; i < storage->length; ++i) {
-        lane      = storage->lanes[i];
-        lane_perf = &storage->lanes_perf[lane];
+        lane = storage->lanes[i];
+        ucs_assert(lane < UCP_PROTO_MAX_LANES);
+        lane_perf = storage->lanes_perf + lane;
         status    = ucp_proto_common_get_lane_perf(params, lane, lane_perf);
         if (status != UCS_OK) {
             goto err;
