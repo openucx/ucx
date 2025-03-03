@@ -996,9 +996,9 @@ err:
 }
 
 static void
-ucp_proto_storage_remove_slow_lanes(ucp_context_h context,
-                                    ucp_proto_lane_storage_t *storage)
+ucp_proto_storage_remove_slow_lanes(ucp_proto_lane_storage_t *storage)
 {
+    ucp_context_h context     = storage->params->worker->context;
     const double max_bw_ratio = context->config.ext.multi_lane_max_ratio;
     ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t i, num_fast_lanes;
@@ -1161,7 +1161,7 @@ ucp_proto_select_aggregate_perf(ucp_proto_lane_selection_t *selection)
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t lane;
 
-    /* TODO: Adjust performance estimation based on actual resource usage,
+    /* TODO: Adjust performance estimation based on the actual resource usage,
      * i.e. split the overall iface BW between all selected paths. */
 
     ucs_for_each_bit(lane, selection->lane_map) {
@@ -1207,7 +1207,7 @@ ucp_proto_select_lanes(const ucp_proto_common_init_params_t *params,
         return status;
     }
 
-    ucp_proto_storage_remove_slow_lanes(params->super.worker->context, storage);
+    ucp_proto_storage_remove_slow_lanes(storage);
 
     memset(selection, 0, sizeof(*selection));
     selection->storage = storage;
