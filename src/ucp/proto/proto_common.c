@@ -1052,8 +1052,12 @@ ucp_proto_select_bw_ratio(double multi_path_ratio, uint8_t path_index)
     double ratio;
 
     if (UCS_CONFIG_DBL_IS_AUTO(multi_path_ratio)) {
-        /* path0=100%, path1=25%, path2=6.25% path3=1.5% path4+=1% */
-        ratio = 1.0 / (double)ucs_min(100, (1 << (path_index * 2)));
+        /* When path_index is less than 4, the ratio is: 1 / 2**(2x), which is
+         * path0=100%, path1=25%, path2=6.25%, path3=1.5%.
+         * Subsequent paths have ratio 1 / (20x):
+         * path4=1.25%, path5=1% etc */
+        ratio = 1.0 / (double)(path_index < 4 ? (1 << path_index * 2) :
+                                                (20 * path_index));
     } else {
         ratio = 1.0 - (multi_path_ratio * path_index);
     }
@@ -1157,6 +1161,9 @@ ucp_proto_select_aggregate_perf(ucp_proto_lane_selection_t *selection)
     ucp_proto_common_tl_perf_t *perf = &selection->perf;
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t lane;
+
+    /* TODO: Adjust performance estimation based on actual resource usage,
+     * i.e. split the overall iface BW between all selected paths. */
 
     ucs_for_each_bit(lane, selection->lane_map) {
         lane_perf = ucp_proto_select_get_perf_lane(selection, lane);
