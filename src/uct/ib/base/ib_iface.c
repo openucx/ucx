@@ -707,8 +707,7 @@ int uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
     ucs_status_t status;
 
     /* get value for ib_dev */
-    iter = kh_get(uct_ib_device_to_ndev, &ib_dev_to_ndev_map,
-                  ib_dev);
+    iter = kh_get(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev);
 
     /* if exists return if_index */
     if (ucs_likely(iter != kh_end(&ib_dev_to_ndev_map))) {
@@ -752,7 +751,6 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, int gid_index,
     uint8_t port_num     = iface->config.port_num;
     char remote_str[128];
     int iface_index;
-    // ucs_status_t status;
 
     iface_index = uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index);
     if (iface_index <= 0) {/* ucs_error(); return...*/}

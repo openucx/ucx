@@ -10,6 +10,7 @@
 
 #include "netlink.h"
 
+#include <ucs/datastruct/khash.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sock.h>
@@ -32,12 +33,29 @@ typedef struct {
 } ucs_netlink_route_info_t;
 
 
-typedef struct {
+typedef struct route_entry {
+    ucs_list_link_t         list;
     struct sockaddr_storage destination;
     uint32_t                subnet_mask;
     int                     if_index;
-    int                     counter;
 } route_entry_t;
+
+static UCS_F_ALWAYS_INLINE khint32_t
+ucs_netlink_rt_cache_hash_func(khint32_t key)
+{
+    return kh_int_hash_func(key);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucs_netlink_rt_cache_hash_equal(khint32_t key1, khint32_t key2)
+{
+    return (key1 == key2);
+}
+
+KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_list_link_t, 1,
+           ucs_netlink_rt_cache_hash_func, ucs_netlink_rt_cache_hash_equal);
+
+static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
 
 /**
  * Callback function for parsing individual netlink messages.
@@ -52,8 +70,7 @@ typedef struct {
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
                                                const void *nl_msg, void *arg);
 
-static route_entry_t routing_table[MAX_NETWORK_IFACES][MAX_RULES_PER_IFACE] = {0};
-static int route_data_exists                                                =  0;
+static int route_data_exists = 0;
 
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
@@ -198,59 +215,79 @@ static ucs_status_t
 ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
                               void *arg)
 {
-    int rule_iface;
+    int iface_index;
     const void *dst_in_addr;
-    int rule_index;
-    route_entry_t *curr_rule;
+    route_entry_t *new_rule;
+    ucs_list_link_t *iface_rules;
+    khiter_t iter;
+    int ret;
 
     if (ucs_netlink_get_route_info(RTM_RTA((const struct rtmsg *)nl_msg),
-                                   RTM_PAYLOAD(nlh), &rule_iface,
+                                   RTM_PAYLOAD(nlh), &iface_index,
                                    &dst_in_addr) != UCS_OK) {
         return UCS_INPROGRESS;
     }
 
-    rule_index = routing_table[rule_iface][0].counter++;
-    if (rule_index >= MAX_RULES_PER_IFACE) {
-        return UCS_INPROGRESS;
+    iter = kh_put(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
+                  iface_index, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        return UCS_ERR_IO_ERROR;
     }
 
-    curr_rule  = &(routing_table[rule_iface][rule_index]);
+    iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
+    if (ret != UCS_KH_PUT_KEY_PRESENT) {
+        ucs_list_head_init(iface_rules);
+    }
 
-    ((struct sockaddr_in *)&curr_rule->destination)->sin_family = AF_INET;
-    curr_rule->destination.ss_family = ((const struct rtmsg *)nl_msg)->rtm_family;
+    new_rule = ucs_malloc(sizeof(route_entry_t), "route entry");
+    if (new_rule == NULL) {
+        ucs_error("could not allocate route entry");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    /* initialize a new rule element */
+    ((struct sockaddr_in *)&new_rule->destination)->sin_family = AF_INET;
+    new_rule->destination.ss_family = ((const struct rtmsg *)nl_msg)->rtm_family;
 
     if (((const struct rtmsg *)nl_msg)->rtm_family == AF_INET) {
-        memcpy(&((struct sockaddr_in *)&curr_rule->destination)->sin_addr,
-               dst_in_addr,
+        memcpy(&((struct sockaddr_in *)&new_rule->destination)->sin_addr, dst_in_addr,
                sizeof(struct in_addr));
     } else {
-        memcpy(&((struct sockaddr_in6 *)&curr_rule->destination)->sin6_addr,
-               dst_in_addr,
+        memcpy(&((struct sockaddr_in6 *)&new_rule->destination)->sin6_addr, dst_in_addr,
                sizeof(struct in6_addr));
     }
 
-    curr_rule->if_index    = rule_iface;
-    curr_rule->subnet_mask = ((const struct rtmsg *)nl_msg)->rtm_dst_len;
+    new_rule->if_index    = iface_index;
+    new_rule->subnet_mask = ((const struct rtmsg *)nl_msg)->rtm_dst_len;
+
+    /* add the new item to the list */
+    ucs_list_add_tail(iface_rules, &new_rule->list);
 
     return UCS_INPROGRESS;
 }
 
 static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 {
-    route_entry_t *iface_rules = routing_table[info->if_index];
-    int rule_index             = 0;
+    ucs_list_link_t *iface_rules;
+    route_entry_t *curr_entry;
+    khiter_t iter;
 
-    while ((rule_index < MAX_RULES_PER_IFACE) &&
-           (rule_index < iface_rules[0].counter)) {
+    iter = kh_get(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache, info->if_index);
+    if (iter == kh_end(&ucs_netlink_routing_table_cache)) {
+        return;
+    }
+
+    iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
+    ucs_list_for_each(curr_entry, iface_rules, list) {
         if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
-                                 ucs_sockaddr_get_inet_addr((const struct sockaddr *)&iface_rules[rule_index].destination),
-                                 iface_rules[rule_index].subnet_mask)) {
+                                 ucs_sockaddr_get_inet_addr((const struct sockaddr *)&curr_entry->destination),
+                                 curr_entry->subnet_mask)) {
             info->found = 1;
             return;
         }
-
-        rule_index++;
     }
+
+    return;
 }
 
 int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
