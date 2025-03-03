@@ -183,6 +183,50 @@ typedef struct {
 } ucp_proto_lane_desc_t;
 
 
+typedef struct {
+    const ucp_proto_init_params_t *params;
+    ucp_proto_common_tl_perf_t    lanes_perf[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t              lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t              length;
+    double                        max_bandwidth;
+    int                           fixed_first_lane;
+} ucp_proto_lane_storage_t;
+
+
+typedef struct {
+    ucp_lane_map_t                lane_map;
+    ucp_lane_index_t              lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t              length;
+    uint8_t                       local_rsc_count[UCP_MAX_RESOURCES];
+    ucp_proto_common_tl_perf_t    perf;
+    ucp_proto_lane_storage_t      *storage;
+} ucp_proto_lane_selection_t;
+
+
+ucs_status_t
+ucp_proto_select_lanes(const ucp_proto_common_init_params_t *params,
+                       const ucp_proto_lane_desc_t *lane_desc,
+                       const ucp_proto_lane_desc_t *first_lane_desc,
+                       ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
+                       ucp_proto_lane_selection_t *selection);
+
+void ucp_proto_select_destroy(ucp_proto_lane_selection_t *selection);
+
+static UCS_F_ALWAYS_INLINE const ucp_proto_common_tl_perf_t *
+ucp_proto_select_get_perf_lane(const ucp_proto_lane_selection_t *selection,
+                               ucp_lane_index_t lane)
+{
+    return &selection->storage->lanes_perf[lane];
+}
+
+static UCS_F_ALWAYS_INLINE const ucp_proto_common_tl_perf_t *
+ucp_proto_select_get_perf_index(const ucp_proto_lane_selection_t *selection,
+                                ucp_lane_index_t index, ucp_lane_index_t *lane_p)
+{
+    *lane_p = selection->storage->lanes[index];
+    return ucp_proto_select_get_perf_lane(selection, *lane_p);
+}
+
 /**
  * Called the first time the protocol starts sending a request, and only once
  * per request.
