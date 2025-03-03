@@ -1271,6 +1271,17 @@ static double ucp_tl_iface_bandwidth_ratio(ucp_context_h context,
     return ucs_max(1e-5, 1.0 - ratio);
 }
 
+static int
+ucp_wireup_allow_all_to_all(const ucp_worker_h worker,
+                            const ucp_unpacked_address_t *unpacked_addr)
+{
+    const ucp_context_h context = worker->context;
+
+    return context->config.ext.ep_allow_all_to_all &&
+           (unpacked_addr->dst_version >= 18) &&
+           (worker->uuid != unpacked_addr->uuid);
+}
+
 static double
 ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
                                  const ucp_unpacked_address_t *unpacked_addr,
@@ -1305,7 +1316,7 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
 
     /* Apply dev num paths ratio after fp8 pack/unpack to make sure it is not
      * neglected because of fp8 inaccuracy */
-    if (context->config.ext.ep_allow_all_to_all) {
+    if (ucp_wireup_allow_all_to_all(wiface->worker, unpacked_addr)) {
         /* Assume fully connected device-to-device paths but ignore paths
          * connected to/from other devices */
         path_index = ucs_min(wiface->attr.dev_num_paths,
@@ -1868,16 +1879,16 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_context_t *select_ctx,
                         unsigned allow_extra_path)
 {
+    ucp_worker_h worker = select_params->ep->worker;
     unsigned num_lanes, mem_type_num_lanes;
     ucp_tl_bitmap_t mem_type_tl_bitmap;
 
     num_lanes = ucp_wireup_add_bw_lanes_d2d(select_params, bw_info, tl_bitmap,
                                             excl_lane, select_ctx,
                                             allow_extra_path);
-    if (select_params->ep->worker->context->config.ext.ep_allow_all_to_all &&
-        (select_params->ep->worker->uuid != select_params->address->uuid)) {
-        ucp_wireup_memaccess_bitmap(select_params->ep->worker->context,
-                                    UCS_MEMORY_TYPE_CUDA, &mem_type_tl_bitmap);
+    if (ucp_wireup_allow_all_to_all(worker, select_params->address)) {
+        ucp_wireup_memaccess_bitmap(worker->context, UCS_MEMORY_TYPE_CUDA,
+                                    &mem_type_tl_bitmap);
         UCS_STATIC_BITMAP_AND_INPLACE(&mem_type_tl_bitmap, tl_bitmap);
         if (!UCS_STATIC_BITMAP_IS_ZERO(mem_type_tl_bitmap)) {
             mem_type_num_lanes = ucp_wireup_add_bw_lanes_a2a(
