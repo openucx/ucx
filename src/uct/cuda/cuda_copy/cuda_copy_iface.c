@@ -502,10 +502,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->id                     = ucs_generate_uuid((uintptr_t)self);
     self->config.max_poll        = config->max_poll;
     self->config.max_cuda_events = config->max_cuda_events;
-    self->config.bw.h2d          = config->bw.h2d;
-    self->config.bw.d2h          = config->bw.d2h;
-    self->config.bw.d2d          = config->bw.d2d;
-    self->config.bw.other        = config->bw.other;
+    self->config.bw              = config->bw;
     UCS_STATIC_BITMAP_RESET_ALL(&self->streams_to_sync);
 
     ucs_mpool_params_reset(&mp_params);
