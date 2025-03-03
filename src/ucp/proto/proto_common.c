@@ -982,8 +982,8 @@ ucp_proto_storage_create(const ucp_proto_common_init_params_t *params,
         }
 
         /* Calculate maximal bandwidth of all lanes, to skip slow lanes */
-        storage->max_bandwidth   = ucs_max(storage->max_bandwidth,
-                                           lane_perf->bandwidth);
+        storage->max_bandwidth = ucs_max(storage->max_bandwidth,
+                                         lane_perf->bandwidth);
     }
 
     *storage_p = storage;
@@ -1123,13 +1123,29 @@ static void ucp_proto_select_bw_lanes(ucp_proto_lane_selection_t *selection,
     ucp_lane_map_t index_map;
 
     ucp_proto_select_add_lane(selection, 0);
+    /* Select all indexes except the first one */
     index_map = UCS_BIT(selection->storage->length) - 2;
 
-    for (i = 1; i < ucs_min(max_lanes, selection->storage->length); ++i) {
+    ucs_assertv(max_lanes < selection->storage->length,
+                "max_lanes=%d, storage length=%d", max_lanes,
+                selection->storage->length);
+
+    for (i = 1; i < max_lanes; ++i) {
+        /* Greedy algorithm: find best option at every step */
         index = ucp_proto_select_find_bw_lane(selection, index_map);
         ucp_proto_select_add_lane(selection, index);
         index_map &= ~UCS_BIT(index);
         index++;
+    }
+}
+
+static void ucp_proto_select_copy_lanes(ucp_proto_lane_selection_t *selection,
+                                        ucp_lane_index_t max_lanes)
+{
+    ucp_lane_index_t i;
+
+    for (i = 0; i < ucs_min(max_lanes, selection->storage->length); ++i) {
+        ucp_proto_select_add_lane(selection, 0);
     }
 }
 
@@ -1184,12 +1200,17 @@ ucp_proto_select_lanes(const ucp_proto_common_init_params_t *params,
     }
 
     ucp_proto_storage_remove_slow_lanes(params->super.worker->context, storage);
-    ucp_proto_storage_sort_bw(storage);
 
     memset(selection, 0, sizeof(*selection));
     selection->storage = storage;
 
-    ucp_proto_select_bw_lanes(selection, max_lanes);
+    if (max_lanes >= storage->length) {
+        ucp_proto_select_copy_lanes(selection, max_lanes);
+    } else {
+        ucp_proto_storage_sort_bw(storage);
+        ucp_proto_select_bw_lanes(selection, max_lanes);
+    }
+
     ucp_proto_select_aggregate_perf(selection);
     return UCS_OK;
 }
