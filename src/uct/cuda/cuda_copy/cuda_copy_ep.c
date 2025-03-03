@@ -171,12 +171,15 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
 
     cuda_event = ucs_mpool_get(&ctx_rsc->cuda_event_desc);
     if (ucs_unlikely(cuda_event == NULL)) {
-        ucs_error("Failed to allocate cuda event object");
+        ucs_error("failed to allocate cuda event object");
         return UCS_ERR_NO_MEMORY;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, stream));
+    if (UCS_OK != status) {
+        return UCS_ERR_IO_ERROR;
+    }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_event->event, stream));
     if (UCS_OK != status) {
