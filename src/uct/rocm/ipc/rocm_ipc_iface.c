@@ -25,7 +25,8 @@ static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
      UCS_CONFIG_TYPE_MEMUNITS},
 
     {"LAT", "1e-7", "Latency",
-     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.latency), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.latency),
+     UCS_CONFIG_TYPE_TIME},
 
     {"CACHE_IPC_HANDLES", "y", "Enable caching IPC handles",
      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.enable_ipc_handle_cache),
