@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -52,9 +53,10 @@ ucs_netlink_rt_cache_hash_equal(khint32_t key1, khint32_t key2)
     return (key1 == key2);
 }
 
+static pthread_mutex_t ucs_netlink_rt_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+static int route_data_exists                     = 0;
 KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_list_link_t, 1,
            ucs_netlink_rt_cache_hash_func, ucs_netlink_rt_cache_hash_equal);
-
 static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
 
 /**
@@ -69,8 +71,6 @@ static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
  */
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
                                                const void *nl_msg, void *arg);
-
-static int route_data_exists = 0;
 
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
@@ -295,7 +295,9 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
     ucs_netlink_route_info_t info = {0};
     struct rtmsg rtm              = {0};
 
+    pthread_mutex_lock(&ucs_netlink_rt_cache_lock);
     if (route_data_exists) {
+        pthread_mutex_unlock(&ucs_netlink_rt_cache_lock);
         goto lookup;
     }
 
@@ -305,6 +307,7 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
     ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
                              ucs_netlink_parse_rt_entry_cb, &info);
     route_data_exists = 1;
+    pthread_mutex_unlock(&ucs_netlink_rt_cache_lock);
 
 lookup:
     info.if_index  = if_index;
