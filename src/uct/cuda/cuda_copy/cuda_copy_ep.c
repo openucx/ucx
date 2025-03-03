@@ -44,7 +44,8 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
     ucs_trace_data("%s [ptr %p len %zu] to 0x%" PRIx64, _name, (_iov)->buffer, \
                    (_iov)->length, (_remote_addr))
 
-ucs_status_t uct_cuda_copy_init_stream(CUstream *stream)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_copy_init_stream(CUstream *stream)
 {
     if (*stream != NULL) {
         return UCS_OK;
