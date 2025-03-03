@@ -55,7 +55,7 @@ typedef struct {
     uct_gga_mlx5_md_t          *md;
 } uct_gga_mlx5_rkey_hash_key_t;
 
-static const uct_gga_mlx5_rkey_bundle_t dummy_rkey_bundle = {
+static const uct_gga_mlx5_rkey_bundle_t uct_gga_dummy_rkey_bundle = {
     .memh = NULL,
     .rkey_ob = {
         .rkey   = UCT_INVALID_RKEY,
@@ -67,13 +67,14 @@ static const uct_gga_mlx5_rkey_bundle_t dummy_rkey_bundle = {
 static int
 uct_gga_mlx5_rkey_bundle_is_dummy(const uct_gga_mlx5_rkey_bundle_t *rkey_bundle)
 {
-    return memcmp(rkey_bundle, &dummy_rkey_bundle, sizeof(*rkey_bundle)) == 0;
+    return memcmp(rkey_bundle, &uct_gga_dummy_rkey_bundle,
+                  sizeof(*rkey_bundle)) == 0;
 }
 
 static UCS_F_ALWAYS_INLINE void
 uct_gga_mlx5_rkey_bundle_reset(uct_gga_mlx5_rkey_bundle_t *rkey_bundle)
 {
-    *rkey_bundle = dummy_rkey_bundle;
+    *rkey_bundle = uct_gga_dummy_rkey_bundle;
 }
 
 
@@ -226,7 +227,7 @@ uct_gga_mlx5_rkey_hash_put(const uct_gga_mlx5_rkey_hash_key_t *key,
         ucs_assert(ret == UCS_KH_PUT_KEY_PRESENT);
         ucs_assert(!uct_gga_mlx5_rkey_bundle_is_dummy(
                         &kh_val(&uct_gga_mlx5_rkey_cache, iter)));
-        kh_val(&uct_gga_mlx5_rkey_cache, iter) = dummy_rkey_bundle;
+        kh_val(&uct_gga_mlx5_rkey_cache, iter) = uct_gga_dummy_rkey_bundle;
     } else {
         /* add the new value by new or existing key */
         ucs_assert((ret != UCS_KH_PUT_KEY_PRESENT) ||
