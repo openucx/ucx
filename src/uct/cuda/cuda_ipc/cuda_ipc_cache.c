@@ -124,7 +124,8 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
                         (CUdeviceptr)region->mapped_addr, region->key.b_len));
         }
     } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
-        return UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)region->mapped_addr));
+        return UCT_CUDADRV_FUNC_LOG_WARN(
+                cuMemFree((CUdeviceptr)region->mapped_addr));
     } else
 #endif
     {
@@ -335,20 +336,21 @@ static ucs_status_t uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key,
                                                 CUdeviceptr *mapped_addr)
 {
 
-#if HAVE_CUDA_FABRIC
     ucs_trace("key handle type %u", key->ph.handle_type);
 
-    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
-        return uct_cuda_ipc_open_memhandle_vmm(key, mapped_addr);
-    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
-        return uct_cuda_ipc_open_memhandle_mempool(key, mapped_addr);
-    } else
+    switch(key->ph.handle_type) {
+        case UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY:
+            return uct_cuda_ipc_open_memhandle_legacy(key->ph.handle.legacy,
+                                                      mapped_addr);
+#if HAVE_CUDA_FABRIC
+        case UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM:
+            return uct_cuda_ipc_open_memhandle_vmm(key, mapped_addr);
+        case UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL:
+            return uct_cuda_ipc_open_memhandle_mempool(key, mapped_addr);
 #endif
-    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
-        return uct_cuda_ipc_open_memhandle_legacy(key->ph.handle.legacy,
-                                                  mapped_addr);
-    } else {
-        return UCS_ERR_INVALID_PARAM;
+        default:
+            ucs_error("unsupported key handle type");
+            return UCS_ERR_INVALID_PARAM;
     }
 }
 

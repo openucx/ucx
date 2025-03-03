@@ -219,8 +219,8 @@ non_ipc:
 #endif
 legacy_path:
     key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuIpcGetMemHandle(&key->ph.handle.legacy,
-                (CUdeviceptr)addr));
+    status              = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuIpcGetMemHandle(&key->ph.handle.legacy, (CUdeviceptr)addr));
     if (status != UCS_OK) {
         goto err;
     }
