@@ -1147,7 +1147,7 @@ static void ucp_proto_select_copy_lanes(ucp_proto_lane_selection_t *selection,
     ucp_lane_index_t i;
 
     for (i = 0; i < ucs_min(max_lanes, selection->storage->length); ++i) {
-        ucp_proto_select_add_lane(selection, 0);
+        ucp_proto_select_add_lane(selection, i);
     }
 }
 
