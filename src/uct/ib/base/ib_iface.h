@@ -13,6 +13,7 @@
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_iov.inl>
+#include <ucs/config/types.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
@@ -71,8 +72,7 @@ typedef enum uct_ib_mtu {
     UCT_IB_MTU_512     = 1,
     UCT_IB_MTU_1024    = 2,
     UCT_IB_MTU_2048    = 3,
-    UCT_IB_MTU_4096    = 4,
-    UCT_IB_MTU_LAST
+    UCT_IB_MTU_4096    = 4
 } uct_ib_mtu_t;
 
 
@@ -428,8 +428,7 @@ typedef struct uct_ib_iface_recv_desc {
 
 
 extern ucs_config_field_t uct_ib_iface_config_table[];
-extern const char *uct_ib_mtu_values[];
-
+UCS_CONFIG_DECLARE_ALLOWED_VALUES(uct_ib_mtu_values);
 
 /**
  * Create memory pool of receive descriptors.
