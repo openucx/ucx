@@ -601,7 +601,7 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
 
     if ((iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST)) {
         iface->super.progress = uct_rc_mlx5_iface_progress_ll;
-    } else if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST) {
+    } else if (uct_rc_mlx5_iface_is_srq_smbrwq(iface)) {
         iface->super.progress = uct_rc_mlx5_iface_progress_striding_ll;
     } else if (iface->cq[UCT_IB_DIR_RX].zip || iface->cq[UCT_IB_DIR_TX].zip) {
         iface->super.progress = uct_rc_mlx5_iface_progress_cyclic_zip;
@@ -775,6 +775,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     init_attr->flags |= UCT_IB_CQ_IGNORE_OVERRUN;
     uct_ib_mlx5_parse_cqe_zipping(md, &mlx5_config->super, init_attr);
 
+    self->super.super.config.max_send_message_size_strides =
+            mlx5_config->super.max_message_size_strides;
+
     status = uct_rc_mlx5_iface_preinit(self, tl_md, rc_config, mlx5_config,
                                        params, init_attr);
     if (status != UCS_OK) {
@@ -783,8 +786,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
-    init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
-                                       0 : sizeof(uct_rc_mlx5_hdr_t);
+    init_attr->rx_hdr_len            = (UCT_RC_MLX5_MP_ENABLED(self) 
+    || uct_rc_mlx5_iface_is_srq_smbrwq(self)
+    ) ?
+                                                          0 :
+                                                          sizeof(uct_rc_mlx5_hdr_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
                               params, rc_config, init_attr);
@@ -794,7 +800,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->tx.bb_max           = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
     self->tm.am_desc.super.cb = uct_rc_mlx5_release_desc;
 
-    if (!UCT_RC_MLX5_MP_ENABLED(self)) {
+    if (!UCT_RC_MLX5_MP_ENABLED(self) 
+    && !uct_rc_mlx5_iface_is_srq_smbrwq(self)
+        ) {
         self->tm.am_desc.offset = self->super.super.config.rx_headroom_offset;
     }
 

@@ -1930,6 +1930,10 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
         md->flags |= UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE;
     }
 
+    if ((cap_2 != NULL) && (UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2, enh_eth_striding_wq))) {
+        ucs_info("%s: enhanced striding WQ is supported", uct_ib_device_name(dev));
+    }
+
     ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
               uct_ib_device_name(dev),
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),

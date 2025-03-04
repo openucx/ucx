@@ -198,7 +198,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
     ucs_memory_cpu_load_fence();
 
     uct_ib_mlx5_dump_cqe(cqe);
-
+    
     if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(cqe->op_own))
         // && !uct_ib_mlx5_cqe_is_64k_striding(cqe)
         ) {

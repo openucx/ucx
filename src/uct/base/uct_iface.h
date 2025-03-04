@@ -943,6 +943,10 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM, 1);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
 
+    ucs_info("invoke_am data  (%p): data[0]: %x, data[1]: %x, data[2]: %x, "
+             "data[3]: %x",
+             data, ((uint32_t*)data)[0], ((uint32_t*)data)[1],
+             ((uint32_t*)data)[2], ((uint32_t*)data)[3]);
     handler = &iface->am[id];
     status = handler->cb(handler->arg, data, length, flags);
     ucs_assertv((status == UCS_OK) ||

@@ -81,6 +81,11 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zip_enable[UCT_IB_DIR_RX]),
      UCS_CONFIG_TYPE_BOOL},
 
+     {"MAX_MESSAGE_SIZE_STRIDES", "512",
+     "Max message size for striding message based SRQ in strides",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, max_message_size_strides),
+     UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 

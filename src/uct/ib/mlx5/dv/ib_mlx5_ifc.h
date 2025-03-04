@@ -525,7 +525,8 @@ struct uct_ib_mlx5_cmd_hca_cap_2_bits {
     uint8_t    reserved_at_80[0x3];
     uint8_t    max_num_prog_sample_field[0x5];
     uint8_t    dp_ordering_force[0x1];
-    uint8_t    reserved_at_89[0x2];
+    uint8_t    fw_cpu_monitoring[0x1];
+    uint8_t    enh_eth_striding_wq[0x1];
     uint8_t    log_max_num_reserved_qpn[0x5];
     uint8_t    atomic_rate_pa[0x1];
     uint8_t    introspection_mkey_access_allowed[0x1];
@@ -1138,7 +1139,9 @@ struct uct_ib_mlx5_wq_bits {
 
     uint8_t         wq_umem_id[0x20];
 
-    uint8_t         reserved_at_180[0x480];
+    uint8_t         reserved_at_180[0x90]; //0x480
+    uint8_t         enh_strwq_profile_id[0x10];
+    uint8_t         reserved_at_220[0x3e0];
 
     struct uct_ib_mlx5_cmd_pas_bits pas[0];
 };

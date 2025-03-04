@@ -176,6 +176,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
 
         wqe_index = next_index;
     }
+    ucs_info("SRQ stride: %d", srq->stride);
 
     count = wqe_index - srq->sw_pi;
     uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, wqe_index, count);
@@ -507,6 +508,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
     kh_destroy_inplace(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs);
 
     if (!UCT_RC_MLX5_MP_ENABLED(iface)) {
+        ucs_info("skipping common_tag_cleanup");
         return;
     }
 
@@ -598,9 +600,17 @@ void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 
 void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
 {
-    uct_rc_mlx5_release_desc_t *release = ucs_derived_of(self,
-                                                         uct_rc_mlx5_release_desc_t);
-    void *ib_desc = (char*)desc - release->offset;
+    uct_rc_mlx5_release_desc_t *release;
+    
+    void *ib_desc;
+
+    release = ucs_derived_of(self, uct_rc_mlx5_release_desc_t);
+
+    ucs_info("release desc %p release_offset: %d", desc, release->offset);
+
+    ib_desc = (char*)desc - release->offset;
+
+
     ucs_mpool_put_inline(ib_desc);
 }
 
@@ -867,7 +877,9 @@ void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
     iface->tm.eager_desc.super.cb = uct_rc_mlx5_release_desc;
     iface->tm.rndv_desc.super.cb  = uct_rc_mlx5_release_desc;
 
-    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+    if (UCT_RC_MLX5_MP_ENABLED(iface) 
+    || uct_rc_mlx5_iface_is_srq_smbrwq(iface)
+        ) {
         iface->tm.eager_desc.offset = sizeof(struct ibv_tmh) +
                                       iface->super.super.config.rx_headroom_offset;
         iface->tm.am_desc.offset    = sizeof(uct_rc_mlx5_hdr_t) +

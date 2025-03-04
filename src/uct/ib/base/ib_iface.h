@@ -347,6 +347,7 @@ struct uct_ib_iface {
         enum ibv_mtu                 path_mtu;
         uint8_t                      counter_set_id;
         uct_ib_iface_send_overhead_t send_overhead;
+        unsigned                     max_send_message_size_strides;
     } config;
 
     uct_ib_iface_ops_t        *ops;

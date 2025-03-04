@@ -248,8 +248,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                           UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ :
                           UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
     } else if (UCT_RC_MLX5_MP_ENABLED(iface) ||
-               (iface->config.srq_topo ==
-                UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST)) {
+               uct_rc_mlx5_iface_is_srq_smbrwq(iface)) {
         wq_type = UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ;
     } else {
         wq_type = UCT_IB_MLX5_SRQ_TOPO_LIST;
@@ -262,11 +261,10 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET  (wq, wq, dbr_umem_id,   iface->rx.srq.devx.dbrec->mem_id);
     UCT_IB_MLX5DV_SET64(wq, wq, dbr_addr,      iface->rx.srq.devx.dbrec->offset);
     UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem.mem->umem_id);
-
+    UCT_IB_MLX5DV_SET  (wq, wq, enh_strwq_profile_id, 0);
 
     if (UCT_RC_MLX5_MP_ENABLED(iface) ||
-        (iface->config.srq_topo ==
-         UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST)) {
+        uct_rc_mlx5_iface_is_srq_smbrwq(iface)) {
         /* Normalize to device's interface values (range of (-6) - 7) */
         /* cppcheck-suppress internalAstError */
         log_num_of_strides = ucs_ilog2(iface->tm.mp.num_strides) - 9;

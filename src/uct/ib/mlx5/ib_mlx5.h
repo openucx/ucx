@@ -168,7 +168,7 @@ struct mlx5_grh_av {
 
 #define UCT_IB_MLX5_DEVX_ECE_TRIG_RESP    0x10000000
 
-#define UCT_IB_MLX5_DEVX_SMBRWQ_MAX_SEND_RECEIVE_MESSAGE_SIZE 256
+#define UCT_IB_MLX5_DEVX_SMBRWQ_MAX_SEND_RECEIVE_MESSAGE_SIZE 512
 
 enum {
     /* Device supports KSM */
@@ -493,6 +493,7 @@ typedef struct uct_ib_mlx5_iface_config {
     uct_ib_mlx5_mmio_mode_t  mmio_mode;
     ucs_ternary_auto_value_t ar_enable;
     int                      cqe_zip_enable[UCT_IB_DIR_LAST];
+    unsigned                 max_message_size_strides;
 } uct_ib_mlx5_iface_config_t;
 
 
