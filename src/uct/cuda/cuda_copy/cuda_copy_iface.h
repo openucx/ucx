@@ -9,6 +9,7 @@
 
 #include <ucs/datastruct/static_bitmap.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/datastruct/khash.h>
 #include <uct/base/uct_iface.h>
 #include <uct/cuda/base/cuda_iface.h>
 
@@ -48,23 +49,31 @@ typedef struct uct_cuda_copy_queue_desc {
     ucs_queue_elem_t            queue;
 } uct_cuda_copy_queue_desc_t;
 
+typedef struct uct_cuda_copy_ctx_rsc {
+    /* pool of cuda events to check completion of memcpy operations */
+    ucs_mpool_t                cuda_event_desc;
+    /* stream used to issue short operations */
+    CUstream                   short_stream;
+    /* array of queue descriptors for each src/dst memory type combination */
+    uct_cuda_copy_queue_desc_t queue_desc[UCS_MEMORY_TYPE_LAST]
+                                         [UCS_MEMORY_TYPE_LAST];
+} uct_cuda_copy_ctx_rsc_t;
+
+
+/* Hash map for CUDA context resources. The key is the CUDA context Id. */
+KHASH_TYPE(cuda_copy_ctx_rscs, khint64_t, uct_cuda_copy_ctx_rsc_t);
+
 
 typedef struct uct_cuda_copy_iface {
     uct_cuda_iface_t            super;
     /* used to store uuid and check iface reachability */
     uct_cuda_copy_iface_addr_t  id;
-    /* pool of cuda events to check completion of memcpy operations */
-    ucs_mpool_t                 cuda_event_desc;
+    /* per context resources */
+    khash_t(cuda_copy_ctx_rscs) ctx_rscs;
     /* list of queues which require progress */
     ucs_queue_head_t            active_queue;
-    /* stream used to issue short operations */
-    CUstream                    short_stream;
     /* fd to get event notifications */
     int                         eventfd;
-    /* stream used to issue short operations */
-    CUcontext                   cuda_context;
-    /* array of queue descriptors for each src/dst memory type combination */
-    uct_cuda_copy_queue_desc_t  queue_desc[UCS_MEMORY_TYPE_LAST][UCS_MEMORY_TYPE_LAST];
     /* config parameters to control cuda copy transport */
     struct {
         unsigned                max_poll;
@@ -104,5 +113,20 @@ uct_cuda_copy_flush_bitmap_idx(ucs_memory_type_t src_mem_type,
 {
     return (src_mem_type * UCS_MEMORY_TYPE_LAST) + dst_mem_type;
 }
+
+
+/**
+ * Get the resources of the given CUDA context.
+ *
+ * @param [in]  iface     CUDA copy transport interface
+ * @param [in]  cuda_ctx  CUDA context
+ * @param [out] ctx_rsc_p Returned pointer to context resources
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t
+uct_cuda_copy_iface_get_ctx_rsc(uct_cuda_copy_iface_t *iface,
+                                CUcontext cuda_ctx,
+                                uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
 
 #endif
