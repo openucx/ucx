@@ -706,10 +706,7 @@ int uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
     int ret;
     ucs_status_t status;
 
-    /* get value for ib_dev */
     iter = kh_get(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev);
-
-    /* if exists return if_index */
     if (ucs_likely(iter != kh_end(&ib_dev_to_ndev_map))) {
         ndev_p = &kh_val(&ib_dev_to_ndev_map, iter);
         return ndev_p->if_index;
@@ -717,7 +714,6 @@ int uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
 
     iter = kh_put(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev, &ret);
     ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
-
     if (ret == UCS_KH_PUT_FAILED) {
         return -1;
     }
@@ -753,7 +749,10 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, int gid_index,
     int iface_index;
 
     iface_index = uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index);
-    if (iface_index <= 0) {/* ucs_error(); return...*/}
+    if (iface_index <= 0) {
+        uct_iface_fill_info_str_buf(params, "iface index is not found");
+        return 0;
+    }
 
     if (!ucs_netlink_route_exists(iface_index, sa_remote)) {
         uct_iface_fill_info_str_buf(params, "remote address %s is not routable",
