@@ -205,6 +205,8 @@ typedef struct ucp_context_config {
     uint64_t                               extra_op_attr_flags;
     /* Upper limit to the amount of prioritized endpoints */
     unsigned                               max_priority_eps;
+    /* Use AM lane to send wireup messages */
+    int                                    wireup_via_am_lane;
 } ucp_context_config_t;
 
 
