@@ -5,7 +5,7 @@
                 "command": [
                     "/bin/sh",
                     "-c",
-                    "${CMD}"
+                    "${AWS_CMD}"
                 ],
                 "env": [
                     {
