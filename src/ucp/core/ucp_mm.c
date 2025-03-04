@@ -1474,7 +1474,7 @@ void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
     ucp_mem_map_params_t mem_params;
     char mem_types_buf[128];
     ssize_t mem_type_value;
-    size_t mem_size_value;
+    ssize_t mem_size_value;
     char memunits_str[32];
     ucs_status_t status;
     char *mem_size_str;
@@ -1491,6 +1491,11 @@ void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
     status       = ucs_str_to_memunits(mem_size_str, &mem_size_value);
     if (status != UCS_OK) {
         printf("<Failed to convert a memunits string>\n");
+        return;
+    }
+
+    if (mem_size_value <= 0) {
+        printf("<Memory size must be greater than 0>\n");
         return;
     }
 
