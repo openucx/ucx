@@ -780,7 +780,7 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
         return status;
     }
 
-    ucp_ep_mark_flushed(ep);
+    ep->ext->unflushed_lanes = 0;
     ep->ext->fence_seq = ep->worker->fence_seq;
     return UCS_OK;
 }

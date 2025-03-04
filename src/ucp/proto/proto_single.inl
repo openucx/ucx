@@ -127,10 +127,9 @@ ucp_proto_zcopy_single_progress(ucp_request_t *req, unsigned uct_mem_flags,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_single_rma_init_func(ucp_request_t *req)
 {
-    ucp_proto_single_priv_t *spriv =
-            (ucp_proto_single_priv_t*)req->send.proto_config->priv;
+    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
 
-    ucp_ep_mark_unflushed_lane(req->send.ep, spriv->super.lane);
+    req->send.ep->ext->unflushed_lanes |= UCS_BIT(spriv->super.lane);
 }
 
 #endif

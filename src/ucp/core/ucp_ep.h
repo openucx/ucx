@@ -83,8 +83,13 @@ typedef uint16_t                   ucp_ep_flags_t;
 
 #define ucp_handle_fence_if_required(_ep, _status, _ret, _err_label) \
 { \
-    if (ucp_ep_is_fence_required(_ep)) { \
-        _status = ucp_ep_handle_fence(_ep); \
+    if ((_ep)->ext->fence_seq < (_ep)->worker->fence_seq) { \
+        if (!ucs_is_pow2_or_zero((_ep)->ext->unflushed_lanes)) { \
+            _status = ucp_ep_fence_strong(_ep); \
+        } else { \
+            _status = ucp_ep_fence_weak(_ep); \
+        } \
+        \
         if (_status != UCS_OK) { \
             _ret = UCS_STATUS_PTR(_status); \
             goto _err_label; \

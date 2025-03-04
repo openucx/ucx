@@ -241,7 +241,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
                               buffer, length, remote_addr, tl_rkey);
 
     if (status != UCS_ERR_NO_RESOURCE) {
-        ucp_ep_mark_unflushed_lane(ep, rkey_config->put_short.lane);
+        ep->ext->unflushed_lanes |= UCS_BIT(rkey_config->put_short.lane);
     }
 
     return status;
