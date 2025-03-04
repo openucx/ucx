@@ -59,7 +59,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     min_bandwidth  = DBL_MAX;
 
     ucs_for_each_bit(lane, selection.lane_map) {
-        lane_perf = ucp_proto_select_get_perf_lane(&selection, lane);
+        lane_perf = ucp_proto_select_get_lane_perf(&selection, lane);
 
         ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(send_pre_overhead)
                   UCP_PROTO_TIME_FMT(send_post_overhead)
@@ -97,7 +97,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         ucs_assert(lane < UCP_MAX_LANES);
 
         lpriv     = &mpriv->lanes[mpriv->num_lanes++];
-        lane_perf = ucp_proto_select_get_perf_lane(&selection, lane);
+        lane_perf = ucp_proto_select_get_lane_perf(&selection, lane);
 
         ucp_proto_common_lane_priv_init(&params->super, mpriv->reg_md_map, lane,
                                         &lpriv->super);

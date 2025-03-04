@@ -213,18 +213,10 @@ ucp_proto_select_lanes(const ucp_proto_common_init_params_t *params,
 void ucp_proto_select_destroy(ucp_proto_lane_selection_t *selection);
 
 static UCS_F_ALWAYS_INLINE const ucp_proto_common_tl_perf_t *
-ucp_proto_select_get_perf_lane(const ucp_proto_lane_selection_t *selection,
+ucp_proto_select_get_lane_perf(const ucp_proto_lane_selection_t *selection,
                                ucp_lane_index_t lane)
 {
     return &selection->storage->lanes_perf[lane];
-}
-
-static UCS_F_ALWAYS_INLINE const ucp_proto_common_tl_perf_t *
-ucp_proto_select_get_perf_index(const ucp_proto_lane_selection_t *selection,
-                                ucp_lane_index_t index, ucp_lane_index_t *lane_p)
-{
-    *lane_p = selection->storage->lanes[index];
-    return ucp_proto_select_get_perf_lane(selection, *lane_p);
 }
 
 /**

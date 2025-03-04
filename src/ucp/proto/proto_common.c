@@ -910,10 +910,11 @@ void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name)
 
 static void ucp_proto_storage_destroy(ucp_proto_lane_storage_t *storage)
 {
-    ucp_lane_index_t i;
+    ucp_lane_index_t lane, i;
 
     for (i = 0; i < storage->length; ++i) {
-        ucp_proto_perf_node_deref(&storage->lanes_perf[i].node);
+        lane = storage->lanes[i];
+        ucp_proto_perf_node_deref(&storage->lanes_perf[lane].node);
     }
 
     ucs_free(storage);
@@ -1067,38 +1068,37 @@ ucp_proto_select_bw_ratio(double multi_path_ratio, uint8_t path_index)
 
 static double
 ucp_proto_select_get_avail_bw(ucp_proto_lane_selection_t *selection,
-                              ucp_lane_index_t index)
+                              ucp_lane_index_t lane,
+                              const ucp_proto_common_tl_perf_t *lane_perf)
 {
     ucp_context_h context     = selection->storage->params->worker->context;
     double multi_path_ratio   = context->config.ext.multi_path_ratio;
-    ucp_lane_index_t lane     = selection->storage->lanes[index];
     ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(
                                     selection->storage->params, lane);
-    double avail_bw;
-
-    avail_bw  = ucp_proto_select_get_perf_lane(selection, lane)->bandwidth;
-    avail_bw *= ucp_proto_select_bw_ratio(multi_path_ratio,
-                                          selection->local_rsc_count[rsc_index]);
-    return avail_bw;
+    return lane_perf->bandwidth *
+           ucp_proto_select_bw_ratio(multi_path_ratio,
+                                     selection->local_rsc_count[rsc_index]);
 }
 
 static ucp_lane_index_t
 ucp_proto_select_find_bw_lane(ucp_proto_lane_selection_t *selection,
                               ucp_lane_map_t index_map)
 {
-    double max_avail_bw = 0;
+    ucp_proto_lane_storage_t *storage = selection->storage;
+    double max_avail_bw               = 0;
     double avail_bw;
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t lane, index, max_index;
 
     max_index = ucs_ffs64(index_map);
     ucs_for_each_bit(index, index_map) {
-        lane_perf = ucp_proto_select_get_perf_index(selection, index, &lane);
+        lane      = storage->lanes[index];
+        lane_perf = &storage->lanes_perf[lane];
         if (lane_perf->bandwidth < max_avail_bw) {
             break;
         }
 
-        avail_bw = ucp_proto_select_get_avail_bw(selection, index);
+        avail_bw = ucp_proto_select_get_avail_bw(selection, lane, lane_perf);
         if (avail_bw > max_avail_bw) {
             max_avail_bw = avail_bw;
             max_index    = index;
@@ -1165,7 +1165,7 @@ ucp_proto_select_aggregate_perf(ucp_proto_lane_selection_t *selection)
      * i.e. split the overall iface BW between all selected paths. */
 
     ucs_for_each_bit(lane, selection->lane_map) {
-        lane_perf = ucp_proto_select_get_perf_lane(selection, lane);
+        lane_perf = ucp_proto_select_get_lane_perf(selection, lane);
 
         /* Update aggregated performance metric */
         perf->bandwidth          += lane_perf->bandwidth;
@@ -1178,14 +1178,15 @@ ucp_proto_select_aggregate_perf(ucp_proto_lane_selection_t *selection)
     }
 
     if (selection->length == 1) {
-        lane_perf = ucp_proto_select_get_perf_index(selection, 0, &lane);
+        lane_perf = ucp_proto_select_get_lane_perf(selection,
+                                                   selection->lanes[0]);
         ucp_proto_perf_node_ref(lane_perf->node);
         selection->perf.node = lane_perf->node;
     } else {
         selection->perf.node = ucp_proto_perf_node_new_data("multi", "%u lanes",
                                                             selection->length);
         ucs_for_each_bit(lane, selection->lane_map) {
-            lane_perf = ucp_proto_select_get_perf_lane(selection, lane);
+            lane_perf = ucp_proto_select_get_lane_perf(selection, lane);
             ucp_proto_perf_node_add_child(selection->perf.node, lane_perf->node);
         }
     }
