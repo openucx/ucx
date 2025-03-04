@@ -18,11 +18,16 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
 #include <libgen.h>
 #include <sched.h>
+
+#ifdef HAVE_NETLINK_RDMA
+#include <rdma/rdma_netlink.h>
+#endif
 
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
@@ -1518,3 +1523,61 @@ const char* uct_ib_ah_attr_str(char *buf, size_t max,
     return buf;
 }
 
+#ifdef HAVE_NETLINK_RDMA
+static ucs_status_t
+uct_ib_device_is_smi_cb(const struct nlmsghdr *nlh, void *arg)
+{
+    int *is_smi_p = (int*)arg;
+    const struct nlattr *attr;
+    uint8_t dev_type;
+
+    for (attr = NLMSG_DATA(nlh); UCS_PTR_BYTE_DIFF(nlh, attr) < nlh->nlmsg_len;
+         attr = UCS_PTR_BYTE_OFFSET(attr, NLA_ALIGN(attr->nla_len))) {
+        if (attr->nla_type == RDMA_NLDEV_ATTR_DEV_TYPE /* 99 */) {
+            dev_type = *(const uint8_t*)UCS_PTR_BYTE_OFFSET(attr, NLA_HDRLEN);
+            if (dev_type == RDMA_DEVICE_TYPE_SMI /* 1 */) {
+                *is_smi_p = 1;
+                return UCS_OK;
+            }
+        }
+    }
+
+    return UCS_INPROGRESS;
+}
+
+int uct_ib_device_is_smi(struct ibv_device *ibv_device)
+{
+    struct nlattr *attr;
+    uint32_t *dev_index_attr;
+    size_t header_length;
+    ucs_status_t status;
+    int is_smi;
+
+    header_length   = NLA_HDRLEN + sizeof(*dev_index_attr);
+    attr            = ucs_alloca(header_length);
+    dev_index_attr  = (uint32_t*)UCS_PTR_BYTE_OFFSET(attr, NLA_HDRLEN);
+    attr->nla_type  = RDMA_NLDEV_ATTR_DEV_INDEX;
+    attr->nla_len   = header_length;
+    *dev_index_attr = ibv_get_device_index(ibv_device);
+    if (*dev_index_attr == -1) {
+        ucs_debug("%s: failed to get device index",
+                  ibv_get_device_name(ibv_device));
+        return 0;
+    }
+
+    is_smi = 0;
+    status = ucs_netlink_send_request(
+            NETLINK_RDMA, RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),
+            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return is_smi;
+}
+#else
+int uct_ib_device_is_smi(struct ibv_device *ibv_device)
+{
+    return 0;
+}
+#endif
