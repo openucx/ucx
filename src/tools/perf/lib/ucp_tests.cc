@@ -38,7 +38,6 @@ public:
         m_max_outstanding(m_perf.params.max_outstanding),
         m_am_rx_buffer(NULL),
         m_am_rx_length(0ul)
-
     {
         memset(&m_am_rx_params, 0, sizeof(m_am_rx_params));
         memset(&m_send_params, 0, sizeof(m_send_params));
@@ -275,11 +274,16 @@ public:
                               const ucp_am_recv_param_t *rx_params)
     {
         ucs_assert(!(rx_params->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA));
-        ucs_assert(length == ucx_perf_get_message_size(&m_perf.params));
+        /* Data length can be either 1 (on sender side when receive a final ack)
+         * or expected payload size on the receiver side. */
+        ucs_assertv((length == 1) ||
+                    (length == ucx_perf_get_message_size(&m_perf.params)),
+                     "length=%zu expected=%zu index=%u", length,
+                     ucx_perf_get_message_size(&m_perf.params),
+                     rte_call(&m_perf, group_index));
 
         ucs_status_ptr_t sp = ucp_am_recv_data_nbx(m_perf.ucp.worker, data,
-                                                   m_am_rx_buffer,
-                                                   m_am_rx_length,
+                                                   m_am_rx_buffer, length,
                                                    &m_am_rx_params);
         ucs_assert(UCS_PTR_IS_PTR(sp));
         ucp_request_release(sp);
