@@ -38,6 +38,9 @@ void test_uct_iface::test_is_reachable()
     uct_iface_is_reachable_params_t params;
     ucs_status_t status;
 
+    std::string dev_addr(ucs_max(iface_attr.device_addr_len, 4096), '\0');
+    std::string iface_addr(ucs_max(iface_attr.iface_addr_len, 4096), '\0');
+
     char info_str[256];
     params.field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
                                 UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
@@ -47,47 +50,46 @@ void test_uct_iface::test_is_reachable()
                                 UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH;
     params.info_string        = info_str;
     params.info_string_length = sizeof(info_str);
+    params.device_addr        = (uct_device_addr_t*)&dev_addr[0];
     params.device_addr_length = iface_attr.device_addr_len;
+    params.iface_addr         = (uct_iface_addr_t*)&iface_addr[0];
     params.iface_addr_length  = iface_attr.iface_addr_len;
 
-    auto dev_addr = (uct_device_addr_t*)malloc(iface_attr.device_addr_len);
-    status        = uct_iface_get_device_address(iface, dev_addr);
+    status = uct_iface_get_device_address(iface,
+                                          (uct_device_addr_t*)&dev_addr[0]);
     ASSERT_UCS_OK(status);
-    params.device_addr = dev_addr;
 
-    auto iface_addr = (uct_iface_addr_t*)malloc(iface_attr.iface_addr_len);
-    status          = uct_iface_get_address(iface, iface_addr);
+    status = uct_iface_get_address(iface, (uct_iface_addr_t*)&iface_addr[0]);
     ASSERT_UCS_OK(status);
-    params.iface_addr = iface_addr;
 
     bool is_reachable = uct_iface_is_reachable_v2(iface, &params);
     EXPECT_EQ(is_self_reachable(), is_reachable);
 
-    free(iface_addr);
-    free(dev_addr);
-
     // Allocate corrupted address buffers, make it larger than the correct
     // buffer size in case the corrupted data indicates a larger address length
+    // Some random buffers could still be reachable, so we fail if too many of
+    // them are reachable.
+    params.device_addr_length = dev_addr.size();
+    params.iface_addr_length  = iface_addr.size();
+    bool found_unreachable    = false;
+    for (int i = 0; i < 100; ++i) {
+        ucs::fill_random(dev_addr);
+        ucs::fill_random(iface_addr);
 
-    size_t invalid_dev_addr_len = ucs_min(4096, iface_attr.device_addr_len);
-    dev_addr = (uct_device_addr_t*)malloc(invalid_dev_addr_len);
-    ucs::fill_random((uint8_t*)dev_addr, invalid_dev_addr_len);
-    params.device_addr = dev_addr;
+        // Corrupted device and iface address should not be reachable, and should
+        // provide the reason in the info string
+        is_reachable = uct_iface_is_reachable_v2(iface, &params);
+        if (!is_reachable) {
+            if (i < 3) {
+                // Print only first 3 info strings to not flood the output
+                UCS_TEST_MESSAGE << info_str;
+            }
+            ASSERT_FALSE(std::string(info_str).empty());
+            found_unreachable = true;
+        }
+    }
 
-    size_t invalid_iface_addr_len = ucs_min(4096, iface_attr.iface_addr_len);
-    iface_addr = (uct_iface_addr_t*)malloc(invalid_iface_addr_len);
-    ucs::fill_random((uint8_t*)iface_addr, invalid_iface_addr_len);
-    params.iface_addr = iface_addr;
-
-    // Corrupted device and iface address should not be reachable, and should
-    // provide the reason in the info string
-    is_reachable = uct_iface_is_reachable_v2(iface, &params);
-    EXPECT_FALSE(is_reachable);
-    UCS_TEST_MESSAGE << info_str;
-    EXPECT_FALSE(std::string(info_str).empty());
-
-    free(iface_addr);
-    free(dev_addr);
+    EXPECT_TRUE(found_unreachable);
 }
 
 UCS_TEST_P(test_uct_iface, is_reachable)
