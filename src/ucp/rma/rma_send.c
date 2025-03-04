@@ -220,6 +220,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
 {
     const ucp_rkey_config_t *rkey_config;
     uct_rkey_t tl_rkey;
+    ucs_status_t status;
 
     if (ucs_unlikely(param->op_attr_mask & (UCP_OP_ATTR_FIELD_DATATYPE |
                                             UCP_OP_ATTR_FLAG_NO_IMM_CMPL))) {
@@ -233,10 +234,17 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     tl_rkey = ucp_rkey_get_tl_rkey(rkey, rkey_config->put_short.rkey_index);
-    return UCS_PROFILE_CALL(uct_ep_put_short,
-                            ucp_ep_get_fast_lane(ep,
-                                                 rkey_config->put_short.lane),
-                            buffer, length, remote_addr, tl_rkey);
+
+    status = UCS_PROFILE_CALL(uct_ep_put_short,
+                              ucp_ep_get_fast_lane(ep,
+                                                   rkey_config->put_short.lane),
+                              buffer, length, remote_addr, tl_rkey);
+
+    if (status != UCS_ERR_NO_RESOURCE) {
+        ep->ext->unflushed_lanes |= UCS_BIT(rkey_config->put_short.lane);
+    }
+
+    return status;
 }
 
 ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
@@ -282,6 +290,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         } else {
             contig_length = count;
         }
+
+        ucp_handle_fence_if_required(ep, status, ret, out_unlock);
 
         ret = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(worker, rkey)->proto_select,
@@ -388,6 +398,8 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
         if (UCP_DT_IS_CONTIG(datatype)) {
             contig_length = ucp_contig_dt_length(datatype, count);
         }
+
+        ucp_handle_fence_if_required(ep, status, ret, out_unlock);
 
         ret = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(worker, rkey)->proto_select,

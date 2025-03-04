@@ -733,17 +733,54 @@ static ucs_status_t ucp_worker_fence_strong(ucp_worker_h worker)
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 {
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    if (worker->context->config.worker_strong_fence) {
-        /* force using flush on EPs */
+    switch (worker->context->config.worker_fence_mode) {
+    case UCP_FENCE_MODE_EP_BASED:
+        worker->fence_seq++;
+        break;
+
+    case UCP_FENCE_MODE_STRONG:
         status = ucp_worker_fence_strong(worker);
-    } else {
+        break;
+
+    case UCP_FENCE_MODE_WEAK:
         status = ucp_worker_fence_weak(worker);
+        break;
+
+    default:
+        ucs_error("Invalid fence mode %d",
+                  worker->context->config.worker_fence_mode);
+        status = UCS_ERR_INVALID_PARAM;
     }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
+}
+
+ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane;
+
+    lane = ucs_ffs64_safe(ep->ext->unflushed_lanes);
+    return uct_ep_fence(ucp_ep_get_lane(ep, lane), 0);
+}
+
+ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
+{
+    ucs_status_t status;
+    void *request;
+
+    request = ucp_ep_flush_internal(ep, 0, &ucp_request_null_param, NULL,
+                                    ucp_ep_flushed_callback, "ep_fence_strong");
+    status = ucp_flush_wait(ep->worker, request);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ep->ext->unflushed_lanes = 0;
+    ep->ext->fence_seq = ep->worker->fence_seq;
+    return UCS_OK;
 }

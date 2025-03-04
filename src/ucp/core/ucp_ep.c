@@ -226,11 +226,12 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->ka_last_round                = 0;
 #endif
     ep->ext->peer_mem                     = NULL;
+    ep->ext->unflushed_lanes              = 0;
+    ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
 
-    UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
-                      sizeof(ep->ext->flush_state));
     memset(&ep->ext->ep_match, 0, sizeof(ep->ext->ep_match));
+    memset(&ep->ext->flush_state, 0, sizeof(ep->ext->flush_state));
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
 
