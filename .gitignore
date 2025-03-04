@@ -101,6 +101,7 @@ test/apps/test_init_mt
 test/apps/iodemo/io_demo
 test/apps/test_cuda_hook_dynamic
 test/apps/test_cuda_hook_static
+test/apps/test_cuda_ctx_memcpy
 test/apps/test_ucp_config
 test/apps/test_memtrack_limit
 test/apps/test_no_cuda_ctx
