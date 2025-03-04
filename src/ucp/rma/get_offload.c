@@ -108,7 +108,8 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
     };
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
+        !ucp_proto_init_check_op_without_bounce(init_params,
+                                                UCS_BIT(UCP_OP_ID_GET))) {
         return;
     }
 
