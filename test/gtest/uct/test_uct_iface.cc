@@ -73,8 +73,8 @@ void test_uct_iface::test_is_reachable()
     params.iface_addr_length  = iface_addr.size();
     bool found_unreachable    = false;
     for (int i = 0; i < 100; ++i) {
-        ucs::fill_random(dev_addr);
-        ucs::fill_random(iface_addr);
+        std::generate(dev_addr.begin(), dev_addr.end(), ucs::rand );
+        std::generate(iface_addr.begin(), iface_addr.end(), ucs::rand);
 
         // Corrupted device and iface address should not be reachable, and should
         // provide the reason in the info string
