@@ -1076,7 +1076,7 @@ public:
 
         for (ucp_lane_index_t lane = 0;
              lane < ucp_ep_num_lanes(sender().ep()); lane++) {
-            uct_ep_h uct_ep = ucp_ep_get_lane(sender().ep(), lane);
+            uct_ep_h uct_ep = ucp_ep_get_lane_raw(sender().ep(), lane);
             if (uct_ep == NULL) {
                 continue;
             }
@@ -1975,9 +1975,22 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
     // checks before wireup
     ucp_ep_h ep = sender().ep();
 
-    ASSERT_GT(ucp_ep_num_lanes(ep), UCP_MAX_FAST_PATH_LANES)
-            << "fast path lanes are only initialized,"
-               "need to increase number of lanes";
+    if (ucp_ep_num_lanes(ep) <= UCP_MAX_FAST_PATH_LANES) {
+        UCS_TEST_SKIP_R("slow path lanes are not initialized");
+    }
+
+    bool has_slow_lane_connected_to_iface = false;
+    for (ucp_lane_index_t lane = UCP_MAX_FAST_PATH_LANES;
+         lane < UCP_MAX_LANES; ++lane) {
+        if (!ucp_ep_is_lane_p2p(ep, ucp_ep_get_wireup_msg_lane(ep))) {
+            has_slow_lane_connected_to_iface = true;
+            break;
+        }
+    }
+
+    if (!has_slow_lane_connected_to_iface) {
+        UCS_TEST_SKIP_R("slow path lanes are not connected to iface");
+    }
 
     check_lane_value(ucp_ep_get_wireup_msg_lane(ep), "wireup_msg");
     UCS_TEST_MESSAGE << "add wireup lane " << ucp_ep_get_wireup_msg_lane(ep);
