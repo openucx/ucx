@@ -908,6 +908,39 @@ void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name)
               func_name);
 }
 
+static void
+ucp_proto_storage_trace_lanes(const ucp_proto_lane_storage_t *storage,
+                              ucp_lane_index_t *lanes,
+                              ucp_lane_index_t num_lanes,
+                              const char *desc)
+{
+    const ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_lane_index_t i, lane;
+
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
+        return;
+    }
+
+    ucs_trace("%s=%u, protocol=%s", desc, num_lanes,
+              ucp_proto_id_field(storage->params->proto_id, name));
+
+    for (i = 0; i < num_lanes; ++i) {
+        lane      = lanes[i];
+        lane_perf = &storage->lanes_perf[lane];
+
+        ucs_trace("lane[%d] bw " UCP_PROTO_PERF_FUNC_BW_FMT
+                  UCP_PROTO_TIME_FMT(latency)
+                  UCP_PROTO_TIME_FMT(send_pre_overhead)
+                  UCP_PROTO_TIME_FMT(send_post_overhead)
+                  UCP_PROTO_TIME_FMT(recv_overhead), lane,
+                  (lane_perf->bandwidth / UCS_MBYTE),
+                  UCP_PROTO_TIME_ARG(lane_perf->latency),
+                  UCP_PROTO_TIME_ARG(lane_perf->send_pre_overhead),
+                  UCP_PROTO_TIME_ARG(lane_perf->send_post_overhead),
+                  UCP_PROTO_TIME_ARG(lane_perf->recv_overhead));
+    }
+}
+
 static void ucp_proto_storage_destroy(ucp_proto_lane_storage_t *storage)
 {
     ucp_lane_index_t lane, i;
@@ -1209,6 +1242,8 @@ ucp_proto_select_lanes(const ucp_proto_common_init_params_t *params,
     }
 
     ucp_proto_storage_remove_slow_lanes(storage);
+    ucp_proto_storage_trace_lanes(storage, storage->lanes, storage->length,
+                                  "available lanes");
 
     memset(selection, 0, sizeof(*selection));
     selection->storage = storage;
@@ -1220,6 +1255,8 @@ ucp_proto_select_lanes(const ucp_proto_common_init_params_t *params,
         ucp_proto_select_bw_lanes(selection, max_lanes);
     }
 
+    ucp_proto_storage_trace_lanes(storage, selection->lanes, selection->length,
+                                  "selected lanes");
     ucp_proto_select_aggregate_perf(selection);
     return UCS_OK;
 }

@@ -61,17 +61,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucs_for_each_bit(lane, selection.lane_map) {
         lane_perf = ucp_proto_select_get_lane_perf(&selection, lane);
 
-        ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(send_pre_overhead)
-                  UCP_PROTO_TIME_FMT(send_post_overhead)
-                  UCP_PROTO_TIME_FMT(recv_overhead)
-                  " bw " UCP_PROTO_PERF_FUNC_BW_FMT
-                  UCP_PROTO_TIME_FMT(latency), lane,
-                  UCP_PROTO_TIME_ARG(lane_perf->send_pre_overhead),
-                  UCP_PROTO_TIME_ARG(lane_perf->send_post_overhead),
-                  UCP_PROTO_TIME_ARG(lane_perf->recv_overhead),
-                  (lane_perf->bandwidth / UCS_MBYTE),
-                  UCP_PROTO_TIME_ARG(lane_perf->latency));
-
         /* Calculate maximal bandwidth-to-fragment-size ratio, which is used to
            adjust fragment sizes so they are proportional to bandwidth ratio and
            also do not exceed maximal supported size */
