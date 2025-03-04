@@ -2,8 +2,39 @@
 
 source ./buildlib/az-helpers.sh
 
+export AWS_CMD="\
+    yum groupinstall -y 'Development Tools' \
+    && yum install -y \
+        autoconf \
+        curl \
+        environment-modules \
+        fuse-devel \
+        git \
+        hostname \
+        iproute \
+        libibverbs \
+        libibverbs-utils \
+        librdmacm \
+        librdmacm-utils \
+        libtool \
+        libnl3-devel \
+        pkg-config \
+        python3 \
+        python3-pip \
+        rdma-core-devel \
+        strace \
+        valgrind \
+        valgrind-devel \
+        wget \
+    && git clone --depth 100 https://github.com/openucx/ucx.git \
+    && cd ucx \
+    && git fetch origin pull/${PR_ID}/head:pr \
+    && git checkout pr \
+    && ./contrib/test_jenkins.sh\
+"
+
 # Generate properties json from template
-envsubst <buildlib/pr/aws/efa_vars.template >efa_vars.json
+envsubst < buildlib/pr/aws/efa_vars.template > efa_vars.json
 jq '.' efa_vars.json
 
 # Submit AWS batch job and capture job ID
