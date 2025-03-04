@@ -779,17 +779,11 @@ void uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uint16_t dci_index)
 
 static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface)
 {
-    uct_dci_index_t num_dcis = ucs_array_length(&iface->tx.dcis);
-    uct_dc_dci_t *dci;
-    uint8_t pool_index;
+    uct_dc_dci_t *dci UCS_V_UNUSED;
     uct_dci_index_t dci_index;
+    uint8_t pool_index;
 
-    for (dci_index = 0; dci_index < num_dcis; dci_index++) {
-        dci = uct_dc_mlx5_iface_dci(iface, dci_index);
-        if (!uct_dc_mlx5_is_dci_valid(dci)) {
-            continue;
-        }
-
+    uct_dc_iface_for_each_valid_dci(dci_index, dci, iface) {
         uct_dc_mlx5_destroy_dci(iface, dci_index);
     }
 
@@ -943,24 +937,43 @@ static ucs_status_t uct_dc_mlx5_iface_estimate_perf(uct_iface_h tl_iface,
 static void uct_dc_mlx5_iface_vfs_refresh(uct_iface_h tl_iface)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    uct_dci_index_t dci_index, *stack_elem;
     uct_dc_mlx5_dci_pool_t *dci_pool;
-    int i, pool_index, dci_index;
+    uint8_t pool_index;
     uct_dc_dci_t *dci;
 
     /* Add iface resources */
     uct_rc_iface_vfs_populate(&iface->super.super);
 
     /* Add objects for DCIs */
-    dci_index = 0;
+    uct_dc_iface_for_each_valid_dci(dci_index, dci, iface) {
+        ucs_vfs_obj_add_dir(iface, dci, "dci/%d", dci_index);
+        uct_ib_mlx5_txwq_vfs_populate(&dci->txwq, dci);
+        uct_rc_txqp_vfs_populate(&dci->txqp, dci);
+    }
+
+    /* Add objects for pools */
     for (pool_index = 0; pool_index < iface->tx.num_dci_pools; pool_index++) {
         dci_pool = &iface->tx.dci_pool[pool_index];
         ucs_vfs_obj_add_dir(iface, dci_pool, "dci_pool/%d", pool_index);
-        for (i = 0; i < iface->tx.ndci; ++i) {
+
+        /* Pool config */
+        ucs_vfs_obj_add_dir(dci_pool, &dci_pool->config, "config");
+        ucs_vfs_obj_add_ro_file(&dci_pool->config, ucs_vfs_show_primitive,
+                                &dci_pool->config.path_index, UCS_VFS_TYPE_U8,
+                                "path_index");
+        ucs_vfs_obj_add_ro_file(&dci_pool->config, ucs_vfs_show_primitive,
+                                &dci_pool->config.max_rd_atomic,
+                                UCS_VFS_TYPE_U8, "max_rd_atomic");
+
+        /* Pool stack */
+        ucs_vfs_obj_add_ro_file(dci_pool, ucs_vfs_show_primitive,
+                                &dci_pool->stack_top, UCS_VFS_TYPE_I8,
+                                "stack_top");
+        ucs_array_for_each(stack_elem, &dci_pool->stack) {
+            dci_index = *stack_elem;
             dci = uct_dc_mlx5_iface_dci(iface, dci_index);
-            ucs_vfs_obj_add_dir(dci_pool, dci, "%d", dci_index);
-            uct_ib_mlx5_txwq_vfs_populate(&dci->txwq, dci);
-            uct_rc_txqp_vfs_populate(&dci->txqp, dci);
-            ++dci_index;
+            ucs_vfs_obj_add_sym_link(dci_pool, dci, "%d", dci_index);
         }
     }
 
@@ -1062,8 +1075,8 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
 
 static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *iface)
 {
-    size_t num_dcis;
-    int i;
+    uct_dc_dci_t UCS_V_UNUSED *dci;
+    uct_dci_index_t dci_index;
 
     if (kh_size(&iface->tx.fc_hash) != 0) {
         /* If some ep is waiting for grant it may have some pending
@@ -1071,10 +1084,8 @@ static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *ifa
         return UCS_INPROGRESS;
     }
 
-    num_dcis = ucs_array_length(&iface->tx.dcis);
-    for (i = 0; i < num_dcis; i++) {
-        if (uct_dc_mlx5_is_dci_valid(uct_dc_mlx5_iface_dci(iface, i)) &&
-            uct_dc_mlx5_iface_flush_dci(iface, i) != UCS_OK) {
+    uct_dc_iface_for_each_valid_dci(dci_index, dci, iface) {
+        if (uct_dc_mlx5_iface_flush_dci(iface, dci_index) != UCS_OK) {
             return UCS_INPROGRESS;
         }
     }
