@@ -910,8 +910,7 @@ void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name)
 
 static void
 ucp_proto_storage_trace_lanes(const ucp_proto_lane_storage_t *storage,
-                              ucp_lane_index_t *lanes,
-                              ucp_lane_index_t num_lanes,
+                              ucp_lane_index_t *lanes, ucp_lane_index_t length,
                               const char *desc)
 {
     const ucp_proto_common_tl_perf_t *lane_perf;
@@ -921,10 +920,10 @@ ucp_proto_storage_trace_lanes(const ucp_proto_lane_storage_t *storage,
         return;
     }
 
-    ucs_trace("%s=%u, protocol=%s", desc, num_lanes,
+    ucs_trace("%s=%u, protocol=%s", desc, length,
               ucp_proto_id_field(storage->params->proto_id, name));
 
-    for (i = 0; i < num_lanes; ++i) {
+    for (i = 0; i < length; ++i) {
         lane      = lanes[i];
         lane_perf = &storage->lanes_perf[lane];
 
@@ -1207,7 +1206,7 @@ ucp_proto_select_aggregate_perf(ucp_proto_lane_selection_t *selection)
         perf->recv_overhead      += lane_perf->recv_overhead;
         perf->latency             = ucs_max(perf->latency, lane_perf->latency);
         perf->sys_latency         = ucs_max(perf->sys_latency,
-                                           lane_perf->sys_latency);
+                                            lane_perf->sys_latency);
     }
 
     if (selection->length == 1) {
