@@ -225,8 +225,6 @@ uct_gga_mlx5_rkey_hash_put(const uct_gga_mlx5_rkey_hash_key_t *key,
     if (rkey_bundle == NULL) {
         /* reset the existing key/value pair */
         ucs_assert(ret == UCS_KH_PUT_KEY_PRESENT);
-        ucs_assert(!uct_gga_mlx5_rkey_bundle_is_dummy(
-                        &kh_val(&uct_gga_mlx5_rkey_cache, iter)));
         kh_val(&uct_gga_mlx5_rkey_cache, iter) = uct_gga_dummy_rkey_bundle;
     } else {
         /* add the new value by new or existing key */
