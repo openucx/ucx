@@ -10,6 +10,7 @@
 
 #include "netlink.h"
 
+#include <ucs/datastruct/khash.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sock.h>
@@ -19,6 +20,7 @@
 #include <errno.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -29,6 +31,31 @@ typedef struct {
     int                    found;
 } ucs_netlink_route_info_t;
 
+
+typedef struct route_entry {
+    ucs_list_link_t         list;
+    struct sockaddr_storage dest;
+    uint32_t                subnet_mask;
+    int                     if_index;
+} route_entry_t;
+
+static UCS_F_ALWAYS_INLINE khint32_t
+ucs_netlink_rt_cache_hash_func(khint32_t key)
+{
+    return kh_int_hash_func(key);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucs_netlink_rt_cache_hash_equal(khint32_t key1, khint32_t key2)
+{
+    return (key1 == key2);
+}
+
+static pthread_mutex_t ucs_netlink_rt_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+static int route_data_exists                     = 0;
+KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_list_link_t, 1,
+           ucs_netlink_rt_cache_hash_func, ucs_netlink_rt_cache_hash_equal);
+static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
 
 /**
  * Callback function for parsing individual netlink messages.
@@ -175,7 +202,6 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
     }
 
     if ((*if_index_p == -1) || (*dst_in_addr == NULL)) {
-        ucs_diag("invalid routing table entry");
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -186,52 +212,108 @@ static ucs_status_t
 ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
                               void *arg)
 {
-    ucs_netlink_route_info_t *info = (ucs_netlink_route_info_t *)arg;
-    int rule_iface;
+    int iface_index;
     const void *dst_in_addr;
+    route_entry_t *new_rule;
+    ucs_list_link_t *iface_rules;
+    khiter_t iter;
+    int khret;
 
     if (ucs_netlink_get_route_info(RTM_RTA((const struct rtmsg *)nl_msg),
-                                   RTM_PAYLOAD(nlh), &rule_iface,
+                                   RTM_PAYLOAD(nlh), &iface_index,
                                    &dst_in_addr) != UCS_OK) {
         return UCS_INPROGRESS;
     }
 
-    if (rule_iface != info->if_index) {
-        return UCS_INPROGRESS;
+    iter = kh_put(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
+                  iface_index, &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        return UCS_ERR_IO_ERROR;
     }
 
-    if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
-                             dst_in_addr,
-                             ((const struct rtmsg *)nl_msg)->rtm_dst_len)) {
-        info->found = 1;
-        return UCS_OK;
+    /* get the pointer to the head of the rule list. If the iface was not
+       present in the hash table before, initialize the list */
+    iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
+    if (khret != UCS_KH_PUT_KEY_PRESENT) {
+        ucs_list_head_init(iface_rules);
     }
+
+    /* allocate and initialize a new rule element */
+    new_rule = ucs_malloc(sizeof(route_entry_t), "route entry");
+    if (new_rule == NULL) {
+        ucs_error("could not allocate route entry");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    new_rule->dest.ss_family = ((const struct rtmsg *)nl_msg)->rtm_family;
+    if (((const struct rtmsg *)nl_msg)->rtm_family == AF_INET) {
+        memcpy(&((struct sockaddr_in *)&new_rule->dest)->sin_addr,
+               dst_in_addr, sizeof(struct in_addr));
+    } else {
+        memcpy(&((struct sockaddr_in6 *)&new_rule->dest)->sin6_addr,
+               dst_in_addr, sizeof(struct in6_addr));
+    }
+
+    new_rule->if_index    = iface_index;
+    new_rule->subnet_mask = ((const struct rtmsg *)nl_msg)->rtm_dst_len;
+
+    /* add the new item to the list */
+    ucs_list_add_tail(iface_rules, &new_rule->list);
 
     return UCS_INPROGRESS;
 }
 
-int ucs_netlink_route_exists(const char *if_name,
-                             const struct sockaddr *sa_remote)
+static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 {
-    ucs_netlink_route_info_t info = {0};
-    struct rtmsg rtm              = {0};
-    int iface_index;
+    ucs_list_link_t *iface_rules;
+    route_entry_t *curr_entry;
+    khiter_t iter;
 
-    iface_index = if_nametoindex(if_name);
-    if (iface_index == 0) {
-        ucs_error("failed to get interface index (errno %d)", errno);
-        goto out;
+    iter = kh_get(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
+                  info->if_index);
+    if (iter == kh_end(&ucs_netlink_routing_table_cache)) {
+        return;
+    }
+
+    iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
+    ucs_list_for_each(curr_entry, iface_rules, list) {
+        if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
+                                 ucs_sockaddr_get_inet_addr(
+                                    (const struct sockaddr *)&curr_entry->dest),
+                                 curr_entry->subnet_mask)) {
+            info->found = 1;
+            return;
+        }
+    }
+
+    return;
+}
+
+int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
+{
+    struct rtmsg rtm = {0};
+    ucs_netlink_route_info_t info;
+
+    pthread_mutex_lock(&ucs_netlink_rt_cache_lock);
+    if (route_data_exists) {
+        pthread_mutex_unlock(&ucs_netlink_rt_cache_lock);
+        goto lookup;
     }
 
     rtm.rtm_family = sa_remote->sa_family;
     rtm.rtm_table  = RT_TABLE_MAIN;
 
-    info.if_index  = iface_index;
-    info.sa_remote = sa_remote;
-
     ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
                              ucs_netlink_parse_rt_entry_cb, &info);
+    route_data_exists = 1;
+    pthread_mutex_unlock(&ucs_netlink_rt_cache_lock);
 
+lookup:
+    info.if_index  = if_index;
+    info.sa_remote = sa_remote;
+    info.found     = 0;
+
+    ucs_netlink_lookup_route(&info);
 out:
     return info.found;
 }
