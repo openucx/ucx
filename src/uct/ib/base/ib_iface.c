@@ -758,7 +758,7 @@ uct_ib_iface_roce_is_reachable(uct_ib_iface_t *iface,
     if (local_roce_ver != remote_roce_ver) {
         uct_iface_fill_info_str_buf(
                         params,
-                        "different RoCE versions detected. local %s (gid=%s)"
+                        "different RoCE versions detected. local %s (gid=%s) "
                         "remote %s (gid=%s)",
                         uct_ib_roce_version_str(local_roce_ver),
                         uct_ib_gid_str(&local_gid_info.gid, local_str,
@@ -863,6 +863,8 @@ static int uct_ib_iface_dev_addr_is_reachable(
 
     status = uct_ib_address_unpack(ib_addr, &params);
     if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(is_reachable_params,
+                                    "invalid remote address");
         return 0;
     }
 
