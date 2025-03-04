@@ -305,19 +305,13 @@ static UCS_F_ALWAYS_INLINE int
 ucp_ep_is_strong_fence(ucp_ep_h ep)
 {
     /* Strong fence is required if there is more than one unflushed lane */
-    return ep->ext->unflushed_lanes & (ep->ext->unflushed_lanes - 1);
+    return !ucs_is_pow2_or_zero(ep->ext->unflushed_lanes);
 }
 
 static UCS_F_ALWAYS_INLINE int
 ucp_ep_is_fence_required(ucp_ep_h ep)
 {
     return (ep->ext->fence_seq < ep->worker->fence_seq);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_ep_update_fence_seq(ucp_ep_h ep)
-{
-    ep->ext->fence_seq = ep->worker->fence_seq;
 }
 
 #endif

@@ -781,6 +781,6 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
     }
 
     ucp_ep_mark_flushed(ep);
-    ucp_ep_update_fence_seq(ep);
+    ep->ext->fence_seq = ep->worker->fence_seq;
     return UCS_OK;
 }

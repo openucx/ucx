@@ -2232,7 +2232,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
 
     if ((context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) &&
-        ((context->config.ext.max_rma_lanes == 1) ||
+        ((context->config.ext.max_rma_lanes == 1) &&
          !(context->config.ext.proto_enable))) {
         context->config.worker_fence_mode = UCP_FENCE_MODE_WEAK;
     } else {
