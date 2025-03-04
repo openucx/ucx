@@ -1623,7 +1623,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        ucs_assert(ucp_ep_get_lane(ep, lane) != NULL);
+        ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
     }
 
     old_key = &ucp_ep_config(ep)->key;
@@ -1665,7 +1665,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
      * could be set in case of CM, we have to not reset them */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         reuse_lane = reuse_lane_map[lane];
-        uct_ep     = ucp_ep_get_lane(ep, lane);
+        uct_ep     = ucp_ep_get_lane_raw(ep, lane);
         if (reuse_lane == UCP_NULL_LANE) {
             if (uct_ep != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
@@ -1687,7 +1687,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
             ucp_ep_set_lane(ep, lane, NULL);
         }
 
-        ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
+        ucs_assert(ucp_ep_get_lane_raw(ep, lane) == NULL);
     }
 
     status = ucp_ep_realloc_lanes(ep, new_key->num_lanes);
@@ -1797,6 +1797,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     if (!is_reconfigurable &&
         !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key)) {
+        ucs_info("ep %p: not reconfigurable and config keys are different", ep);
         /* Allow to choose only the lanes that were already chosen for case
          * without CM to prevent reconfiguration error.
          */
@@ -1839,7 +1840,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     if (ep->cfg_index == new_cfg_index) {
 #if UCS_ENABLE_ASSERT
         for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            ucs_assert(ucp_ep_get_lane(ep, lane) != NULL);
+            ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
         }
 #endif
         status = UCS_OK; /* No change */
