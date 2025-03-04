@@ -221,7 +221,7 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         ret = UCS_OK;
     } else {
         rocm_copy_signal->comp        = comp;
-        rocm_copy_signal->mapped_addr = dst_addr;
+        rocm_copy_signal->mapped_addr = NULL;
         ucs_queue_push(&iface->signal_queue, &rocm_copy_signal->queue);
     }
 
