@@ -261,8 +261,7 @@ func (w *UcpWorker) NewListener(listenerParams *UcpListenerParams) (*UcpListener
 // received on this worker.
 func (w *UcpWorker) SetAmRecvHandler(id uint, flags UcpAmCbFlags, cb UcpAmRecvCallback) error {
 	var amHandlerParams C.ucp_am_handler_param_t
-	cbId := register(cb)
-	idToWorker[cbId] = w
+	cbId := register(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
 
 	amHandlerParams.field_mask = C.UCP_AM_HANDLER_PARAM_FIELD_ID |
 		C.UCP_AM_HANDLER_PARAM_FIELD_FLAGS |

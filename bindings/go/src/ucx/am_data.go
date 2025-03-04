@@ -20,9 +20,6 @@ type UcpAmData struct {
 	flags   UcpAmRecvAttrs
 }
 
-// To connect callback id with worker, to use in AmData.Receive()
-var idToWorker = make(map[uint64]*UcpWorker)
-
 // Whether actual data is received or need to call UcpAmData.Receive()
 func (d *UcpAmData) IsDataValid() bool {
 	return (d.flags & UCP_AM_RECV_ATTR_FLAG_RNDV) == 0
