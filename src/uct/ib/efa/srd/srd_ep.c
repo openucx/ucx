@@ -22,6 +22,8 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
                                                   params->iface_addr;
     char str[128], buf[128];
     ucs_status_t status;
+    enum ibv_mtu path_mtu;
+    struct ibv_ah_attr ah_attr;
 
     ucs_trace_func("");
 
@@ -36,10 +38,15 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
 
     uct_srd_iface_add_ep(iface, self);
 
-    status = uct_srd_iface_unpack_peer_address(iface, ib_addr, if_addr, self);
+    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
+                                        self->path_index, &ah_attr, &path_mtu);
+    status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH",
+                                    &self->ah);
     if (status != UCS_OK) {
         return status;
     }
+
+    self->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
 
     ucs_debug(UCT_IB_IFACE_FMT
               " ep=%p gid=%s qpn=0x%x ep_id=%u ep_uuid=0x%"PRIx64" connected "

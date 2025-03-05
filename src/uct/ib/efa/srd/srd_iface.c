@@ -29,30 +29,6 @@ void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 }
 
 ucs_status_t
-uct_srd_iface_unpack_peer_address(uct_srd_iface_t *iface,
-                                  const uct_ib_address_t *ib_addr,
-                                  const uct_srd_iface_addr_t *if_addr,
-                                  uct_srd_ep_t *ep)
-{
-    uct_ib_iface_t *ib_iface = &iface->super;
-    struct ibv_ah_attr ah_attr;
-    enum ibv_mtu path_mtu;
-    ucs_status_t status;
-
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ep->path_index,
-                                        &ah_attr, &path_mtu);
-    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "SRD AH",
-                                    &ep->ah);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ep->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
-
-    return UCS_OK;
-}
-
-ucs_status_t
 uct_srd_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 {
     uct_srd_iface_t *iface     = ucs_derived_of(tl_iface, uct_srd_iface_t);
