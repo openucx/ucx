@@ -128,10 +128,20 @@ static void setup_malloc(struct context *context, int tid, int count,
     }
 }
 
+static int get_gpu(int index)
+{
+    return index / (MAX_CTX * MAX_THREADS);
+}
+
+static int get_ctx(int index)
+{
+    return index % MAX_CTX;
+}
+
 static void test_copy(struct context *context, int tid, int count,
                       size_t size)
 {
-
+    static int done = 0;
     int i, j, k, l;
     void *ptr_a, *ptr_b, *ptr_a_managed;
     CUstream stream;
@@ -146,20 +156,34 @@ static void test_copy(struct context *context, int tid, int count,
     for (l = 0; l < MAX_CTX * MAX_THREADS * count; l++) {
         CHECK_D(cuCtxSetCurrent(context[i].ctx));
 
-        ptr_a  = context[j].mem;
-        ptr_b  = context[k].mem;
+        ptr_a         = context[j].mem;
         ptr_a_managed = context[j].mem_managed;
-        stream = context[l].stream;
+        ptr_b         = context[k].mem;
+        stream        = context[l].stream;
 
-#if 0
-        printf("#tid%d size=%zu set_ctx=%p ptr=%p/%p stream=%p\n",
-               tid, size, context[i].ctx, size, ptr_a, ptr_b, stream);
-#endif
+        if (!tid && !done) {
+            printf("size=%zu set_ctx=%p/GPU%d/%d a=%p/GPU%d/%d "
+                   "b=%p/GPU%d/%d a_managed=%p stream=%p/GPU%d/%d\n",
+                   size,
+                   context[i].ctx, get_gpu(i), get_ctx(i),
+                   ptr_a, get_gpu(j), get_ctx(j),
+                   ptr_b, get_gpu(k), get_ctx(k),
+                   ptr_a_managed,
+                   stream, get_gpu(l), get_ctx(l));
+        }
+
         CHECK(cudaMemcpyAsync(ptr_a, ptr_b, size, cudaMemcpyDeviceToDevice, stream));
+        CHECK(cudaMemcpy(ptr_a, ptr_b, size, cudaMemcpyDeviceToDevice));
         CHECK(cudaMemcpyAsync(ptr_a_managed, ptr_b, size, cudaMemcpyDeviceToDevice, stream));
+        CHECK(cudaMemcpy(ptr_a_managed, ptr_b, size, cudaMemcpyDeviceToDevice));
+
         CHECK_D(cuStreamSynchronize(stream));
 
     }}}}
+
+    if (!tid) {
+        done = 1;
+    }
 }
 
 static void wait(struct thread *t)
