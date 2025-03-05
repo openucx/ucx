@@ -21,11 +21,16 @@ static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"MIN_ZCOPY", "128", "Minimum data size for ROCm/IPC zcopy protocols",
-     ucs_offsetof(uct_rocm_ipc_iface_config_t, min_zcopy),
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.min_zcopy),
      UCS_CONFIG_TYPE_MEMUNITS},
 
     {"LAT", "1e-7", "Latency",
-     ucs_offsetof(uct_rocm_ipc_iface_config_t, latency), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.latency),
+     UCS_CONFIG_TYPE_TIME},
+
+    {"CACHE_IPC_HANDLES", "y", "Enable caching IPC handles",
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.enable_ipc_handle_cache),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -199,8 +204,7 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_IPC_TL_NAME));
 
-    self->config.min_zcopy = config->min_zcopy;
-    self->config.latency   = config->latency;
+    self->config = config->params;
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_rocm_base_signal_desc_t);
