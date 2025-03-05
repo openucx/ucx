@@ -2154,6 +2154,19 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     if (worker->rkey_config_count >= UCP_WORKER_MAX_RKEY_CONFIG) {
         ucs_error("too many rkey configurations: %d (max: %d)",
                   worker->rkey_config_count, UCP_WORKER_MAX_RKEY_CONFIG);
+
+        /* Dump all rkey configurations */
+        ucs_error("%5s | %16s | %12s | %12s | %12s | %18s",
+                  "index", "md_map", "ep_cfg_index", "sys_dev", "mem_type",
+                  "unreachable_md_map");
+        for (rkey_cfg_index = 0; rkey_cfg_index < worker->rkey_config_count;
+            ++rkey_cfg_index) {
+           rkey_config = &worker->rkey_config[rkey_cfg_index];
+           ucs_error("%5d | %016lx | %12d | %12d | %12d | %018lx",
+                     rkey_cfg_index, key->md_map, key->ep_cfg_index,
+                     key->sys_dev, key->mem_type, key->unreachable_md_map);
+        }
+
         status = UCS_ERR_EXCEEDS_LIMIT;
         goto err;
     }
