@@ -33,6 +33,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     self->ep_uuid    = ucs_generate_uuid((uintptr_t)self);
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->psn        = UCT_SRD_INITIAL_PSN;
+    self->inflight   = 0;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
                                         self->path_index, &ah_attr, &path_mtu);
@@ -63,10 +64,20 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
 
     ucs_trace_func("");
 
-    ucs_list_for_each_safe(send_op, next, &iface->tx.outstanding_list, list) {
-        if (send_op->ep == self) {
-            uct_srd_ep_send_op_completion(send_op);
+    if (self->inflight != 0) {
+        ucs_list_for_each_safe(send_op, next,
+                               &iface->tx.outstanding_list, list) {
+            if (send_op->ep == self) {
+                uct_srd_ep_send_op_completion(send_op);
+                if (self->inflight == 0) {
+                    break;
+                }
+            }
         }
+
+        ucs_assertv(self->inflight == 0,
+                    "ep=%p failed to complete %u send operations",
+                    self, self->inflight);
     }
 }
 
@@ -122,6 +133,7 @@ uct_srd_hdr_set(const uct_srd_ep_t *ep, uct_srd_hdr_t *neth, uint8_t id)
 void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
 {
     ucs_list_del(&send_op->list);
+    send_op->ep->inflight--;
     send_op->comp_handler(send_op);
 }
 
@@ -155,6 +167,7 @@ ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     uct_srd_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE, 2);
     ucs_list_add_tail(&iface->tx.outstanding_list, &send_op->list);
+    ep->inflight++;
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, sizeof(am->am_hdr) + length);
     return UCS_OK;
