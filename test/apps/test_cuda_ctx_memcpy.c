@@ -161,8 +161,8 @@ static void test_copy(context_t *context, int tid, int count,
         stream        = context[l].stream;
 
         if (!tid && !done) {
-            printf("size=%zu a=%p/GPU%d/%d "
-                   "b=%p/GPU%d/%d a_managed=%p stream=%p/GPU%d/%d\n",
+            printf("size=%zu a=%llu/GPU%d/%d "
+                   "b=%llu/GPU%d/%d a_managed=%llu stream=%p/GPU%d/%d\n",
                    size,
                    ptr_a, get_gpu(j), get_ctx(j),
                    ptr_b, get_gpu(k), get_ctx(k),
