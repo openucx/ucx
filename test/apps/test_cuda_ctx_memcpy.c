@@ -67,16 +67,18 @@ static void setup_contexts(context_t *context, int tid, int count)
     int i, j, active, index;
     unsigned int flags;
     CUcontext ctx;
+    CUdevice device;
 
     for (i = 0; i < count; i++) {
-        CHECK(cudaSetDevice(i));
-
         index = ((i * MAX_THREADS) + tid) * MAX_CTX;
-        CHECK_D(cuCtxGetCurrent(&context[index].ctx));
+
+        CHECK(cuDeviceGet(&device, i));
+        CHECK(cuCtxCreate(&context[index].ctx, 0, device));
         CHECK_D(cuStreamCreate(&context[index].stream, CU_STREAM_NON_BLOCKING));
 
         for (j = 1; j < MAX_CTX; j++) {
-            CHECK_D(cuCtxCreate(&context[index + j].ctx, 0, i));
+            CHECK(cuDeviceGet(&device, i));
+            CHECK_D(cuCtxCreate(&context[index + j].ctx, 0, device));
             CHECK_D(cuStreamCreate(&context[index + j].stream, CU_STREAM_NON_BLOCKING));
         }
     }
