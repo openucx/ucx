@@ -112,7 +112,7 @@ test_cuda_get_symbol_address_COMPILE  = \
 
 noinst_PROGRAMS              += test_cuda_ctx_memcpy
 test_cuda_ctx_memcpy_SOURCES  = test_cuda_ctx_memcpy.c
-test_cuda_ctx_memcpy_CPPFLAGS = $(BASE_CPPFLAGS)
+test_cuda_ctx_memcpy_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 test_cuda_ctx_memcpy_LDFLAGS  = $(CUDA_LDFLAGS)
 test_cuda_ctx_memcpy_LDADD    = $(CUDA_LIBS) $(CUDART_LIBS)
 test_cuda_ctx_memcpy_DEPBASE  = $(DEPDIR)/test_cuda_ctx_memcpy
