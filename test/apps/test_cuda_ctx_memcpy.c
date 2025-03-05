@@ -77,7 +77,6 @@ static void setup_contexts(context_t *context, int tid, int count)
 
         for (j = 1; j < MAX_CTX; j++) {
             CHECK_D(cuCtxCreate(&context[index + j].ctx, 0, i));
-            CHECK_D(cuCtxSetCurrent(context[index + j].ctx));
             CHECK_D(cuStreamCreate(&context[index + j].stream, CU_STREAM_NON_BLOCKING));
         }
     }
@@ -144,30 +143,25 @@ static void test_copy(context_t *context, int tid, int count,
                       size_t size)
 {
     static int done = 0;
-    int i, j, k, l;
+    int j, k, l;
     CUdeviceptr ptr_a, ptr_b, ptr_a_managed;
     CUstream stream;
 
-    /* each set context (every thread every device) */
-    for (i = 0; i < MAX_CTX * MAX_THREADS * count; i++) {
     /* each source context (every thread every device) */
     for (j = 0; j < MAX_CTX * MAX_THREADS * count; j++) {
     /* each destination context (every thread every device) */
     for (k = 0; k < MAX_CTX * MAX_THREADS * count; k++) {
     /* each stream (every thread every device) */
     for (l = 0; l < MAX_CTX * MAX_THREADS * count; l++) {
-        CHECK_D(cuCtxSetCurrent(context[i].ctx));
-
         ptr_a         = (CUdeviceptr)context[j].mem;
         ptr_a_managed = (CUdeviceptr)context[j].mem_managed;
         ptr_b         = (CUdeviceptr)context[k].mem;
         stream        = context[l].stream;
 
         if (!tid && !done) {
-            printf("size=%zu set_ctx=%p/GPU%d/%d a=%p/GPU%d/%d "
+            printf("size=%zu a=%p/GPU%d/%d "
                    "b=%p/GPU%d/%d a_managed=%p stream=%p/GPU%d/%d\n",
                    size,
-                   context[i].ctx, get_gpu(i), get_ctx(i),
                    ptr_a, get_gpu(j), get_ctx(j),
                    ptr_b, get_gpu(k), get_ctx(k),
                    ptr_a_managed,
@@ -181,7 +175,7 @@ static void test_copy(context_t *context, int tid, int count,
 
         CHECK_D(cuStreamSynchronize(stream));
 
-    }}}}
+    }}}
 
     if (!tid) {
         done = 1;
