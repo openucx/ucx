@@ -29,6 +29,7 @@ static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
         return UCS_ERR_NO_RESOURCE;
     }
 
+    /* coverity[address_free] */
     return req->send.uct.func(&req->send.uct);
 }
 
