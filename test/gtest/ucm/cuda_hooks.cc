@@ -388,11 +388,13 @@ UCS_TEST_F(cuda_hooks, test_cudaMalloc3D) {
 
     ret = cudaMalloc3D(&devPtr, extent);
     ASSERT_EQ(ret, cudaSuccess);
-    check_mem_alloc_events(devPtr.ptr, devPtr.pitch * devPtr.ysize * depth);
+    EXPECT_EQ(width, devPtr.xsize);
+    EXPECT_EQ(height, devPtr.ysize);
+    check_mem_alloc_events(devPtr.ptr, devPtr.pitch * height * depth);
 
     ret = cudaFree(devPtr.ptr);
     ASSERT_EQ(ret, cudaSuccess);
-    check_mem_free_events(devPtr.ptr, devPtr.pitch * devPtr.ysize * depth);
+    check_mem_free_events(devPtr.ptr, devPtr.pitch * height * depth);
 }
 
 #if CUDART_VERSION >= 11020
