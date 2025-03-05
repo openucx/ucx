@@ -180,11 +180,11 @@ UCM_CUDA_ALLOC_FUNC(cuMemAlloc_v2, CUresult, CUDA_SUCCESS, arg0, CUdeviceptr, *,
 UCM_CUDA_ALLOC_FUNC(cuMemAllocManaged, CUresult, CUDA_SUCCESS, arg0,
                     CUdeviceptr, *, "size=%zu flags=0x%x", size_t, unsigned)
 UCM_CUDA_ALLOC_FUNC(cuMemAllocPitch, CUresult, CUDA_SUCCESS,
-                    ((size_t)(*arg0)) * (arg2), CUdeviceptr, *,
+                    ((size_t)(*(arg0))) * (arg2), CUdeviceptr, *,
                     "pitch=%p width=%zu height=%zu elem=%u", size_t*, size_t,
                     size_t, unsigned)
 UCM_CUDA_ALLOC_FUNC(cuMemAllocPitch_v2, CUresult, CUDA_SUCCESS,
-                    ((size_t)(*arg0)) * (arg2), CUdeviceptr, *,
+                    ((size_t)(*(arg0))) * (arg2), CUdeviceptr, *,
                     "pitch=%p width=%zu height=%zu elem=%u", size_t*, size_t,
                     size_t, unsigned)
 UCM_CUDA_ALLOC_FUNC(cuMemMap, CUresult, CUDA_SUCCESS, arg0, CUdeviceptr, ,
@@ -276,7 +276,7 @@ UCM_CUDA_ALLOC_FUNC(cudaMalloc, cudaError_t, cudaSuccess, arg0, void*, *,
 UCM_CUDA_ALLOC_FUNC(cudaMallocManaged, cudaError_t, cudaSuccess, arg0, void*, *,
                     "size=%zu flags=0x%x", size_t, unsigned)
 UCM_CUDA_ALLOC_FUNC(cudaMallocPitch, cudaError_t, cudaSuccess,
-                    ((size_t)(*arg0)) * (arg2), void*, *,
+                    ((size_t)(*(arg0))) * (arg2), void*, *,
                     "pitch=%p width=%zu height=%zu", size_t*, size_t, size_t)
 #if CUDART_VERSION >= 11020
 UCM_CUDA_ALLOC_FUNC(cudaMallocAsync, cudaError_t, cudaSuccess, arg0, void*, *,
