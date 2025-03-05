@@ -63,6 +63,16 @@ function azure_complete_with_issues() {
     echo "##vso[task.complete result=SucceededWithIssues;]DONE${msg}"
 }
 
+# Trap function to handle errors
+function error_handler() {
+    local exit_code=$?
+    local cmd="$BASH_COMMAND"
+    local line="${BASH_LINENO[0]}"
+
+    azure_log_error "Error occurred on line $line: Command '$cmd' exited with code $exit_code"
+    exit $exit_code
+}
+
 # Get IPv4 address of an interface
 function get_ip() {
     iface=$1
