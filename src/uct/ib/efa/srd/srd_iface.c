@@ -399,21 +399,10 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
             iface->super.config.seg_size, sizeof(uct_srd_hdr_t));
     iface_attr->cap.am.max_short = uct_ib_iface_hdr_size(
             iface->config.max_inline, sizeof(uct_srd_hdr_t));
-    if (iface_attr->cap.am.max_short) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;
-    }
 
     /* GET */
     iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
-    if (iface_attr->cap.get.max_bcopy) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_GET_BCOPY;
-    }
-
     iface_attr->cap.get.max_zcopy = iface->config.max_get_zcopy;
-    if (iface_attr->cap.get.max_zcopy) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_GET_ZCOPY;
-    }
-
     iface_attr->cap.get.max_iov   = iface->config.max_send_sge;
     iface_attr->cap.get.min_zcopy =
             iface->super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1;
