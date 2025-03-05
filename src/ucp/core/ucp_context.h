@@ -426,7 +426,7 @@ typedef struct ucp_context {
         char                      *env_prefix;
 
         /* worker_fence implementation method */
-        unsigned                  worker_strong_fence;
+        ucp_fence_mode_t          worker_fence_mode;
 
         /* Progress wrapper enabled */
         int                       progress_wrapper_enabled;

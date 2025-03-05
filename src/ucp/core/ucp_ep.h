@@ -81,6 +81,21 @@ typedef uint16_t                   ucp_ep_flags_t;
 #define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
     ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
 
+#define ucp_handle_fence_if_required(_ep, _status, _ret, _err_label) \
+{ \
+    if ((_ep)->ext->fence_seq < (_ep)->worker->fence_seq) { \
+        if (!ucs_is_pow2_or_zero((_ep)->ext->unflushed_lanes)) { \
+            _status = ucp_ep_fence_strong(_ep); \
+        } else { \
+            _status = ucp_ep_fence_weak(_ep); \
+        } \
+        \
+        if (_status != UCS_OK) { \
+            _ret = UCS_STATUS_PTR(_status); \
+            goto _err_label; \
+        } \
+    } \
+}
 
 #define UCP_SA_DATA_HEADER_VERSION_SHIFT 5
 
@@ -545,6 +560,10 @@ typedef struct ucp_ep_ext {
                                                      arrived before the first one */
     } am;
 
+    ucp_lane_map_t   unflushed_lanes; /* Bitmap of lanes which have unflushed
+                                         operations */
+    uint32_t         fence_seq;       /* Sequence number for fence detection */
+
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
      * structure. TODO allocate this array dynamically.
@@ -712,7 +731,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const ucp_request_param_t *param,
                                        ucp_request_t *worker_req,
                                        ucp_request_callback_t flushed_cb,
-                                       const char *debug_name);
+                                       const char *debug_name,
+                                       unsigned uct_flags);
 
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);

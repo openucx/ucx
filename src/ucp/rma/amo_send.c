@@ -215,6 +215,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
     if (context->config.ext.proto_enable) {
         ucp_amo_init_proto(req, ucp_uct_atomic_op_table[opcode], remote_addr,
                            rkey);
+
+        ucp_handle_fence_if_required(ep, status, status_p, out);
+
         if (param->op_attr_mask & UCP_OP_ATTR_FIELD_REPLY_BUFFER) {
             req->send.amo.reply_buffer = param->reply_buffer;
             op_id    = (opcode == UCP_ATOMIC_OP_CSWAP) ? UCP_OP_ID_AMO_CSWAP :
