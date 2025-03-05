@@ -19,16 +19,15 @@ typedef struct uct_srd_send_op      uct_srd_send_op_t;
 
 
 typedef struct uct_srd_ep {
-    uct_base_ep_t             super;
-    uint64_t                  ep_uuid;          /* Random EP identifier */
-    uint32_t                  ep_id;            /* Local interface EP index */
-    uint8_t                   path_index;
-    uct_srd_ep_peer_address_t peer_address;     /* Remote IFACE information */
+    uct_base_ep_t   super;
+    uint64_t        ep_uuid;          /* Random EP identifier */
+    uint32_t        ep_id;            /* Local interface EP index */
+    uint8_t         path_index;
+    struct ibv_ah   *ah;              /* Remote peer */
+    uint32_t        dest_qpn;         /* Remote QP */
 
-    struct {
-        uct_srd_psn_t         psn;              /* Next PSN to send */
-        ucs_list_link_t       outstanding_list; /* Ordered list of outstanding send ops */
-    } tx;
+    uct_srd_psn_t   psn;              /* Next PSN to send */
+    ucs_list_link_t outstanding_list; /* Ordered list of outstanding send ops */
 } uct_srd_ep_t;
 
 

@@ -47,7 +47,6 @@ typedef struct uct_srd_iface {
         struct ibv_send_wr     wr_inl;
         struct ibv_send_wr     wr_desc;
         ucs_mpool_t            send_op_mp;
-
         uct_srd_am_short_hdr_t am_inl_hdr;
     } tx;
 
@@ -66,8 +65,7 @@ void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
 ucs_status_t uct_srd_iface_unpack_peer_address(uct_srd_iface_t *iface,
                                                const uct_ib_address_t *ib_addr,
                                                const uct_srd_iface_addr_t *if_addr,
-                                               int path_index,
-                                               uct_srd_ep_peer_address_t *address);
+                                               uct_srd_ep_t *ep);
 
 
 #if ENABLE_PARAMS_CHECK
@@ -83,8 +81,8 @@ ucs_status_t uct_srd_iface_unpack_peer_address(uct_srd_iface_t *iface,
 #endif
 
 #define UCT_SRD_CHECK_AM_LEN(_iface, _id, _data_len, _max_len, _msg) \
-    UCT_CHECK_LENGTH(sizeof(uct_srd_neth_t) + (_data_len), 0, _max_len, _msg); \
-    UCT_SRD_CHECK_LENGTH_MTU(_iface, sizeof(uct_srd_neth_t) + (_data_len), _msg"_mtu");
+    UCT_CHECK_LENGTH(sizeof(uct_srd_hdr_t) + (_data_len), 0, _max_len, _msg); \
+    UCT_SRD_CHECK_LENGTH_MTU(_iface, sizeof(uct_srd_hdr_t) + (_data_len), _msg"_mtu");
 
 #define UCT_SRD_CHECK_AM_SHORT(_iface, _id, _hdr_len, _data_len) \
     UCT_CHECK_AM_ID(_id); \

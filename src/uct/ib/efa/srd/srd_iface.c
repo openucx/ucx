@@ -32,25 +32,24 @@ ucs_status_t
 uct_srd_iface_unpack_peer_address(uct_srd_iface_t *iface,
                                   const uct_ib_address_t *ib_addr,
                                   const uct_srd_iface_addr_t *if_addr,
-                                  int path_index,
-                                  uct_srd_ep_peer_address_t *address)
+                                  uct_srd_ep_t *ep)
 {
     uct_ib_iface_t *ib_iface = &iface->super;
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
     ucs_status_t status;
 
-    memset(address, 0, sizeof(*address));
-
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index, &ah_attr,
-                                        &path_mtu);
+    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ep->path_index,
+                                        &ah_attr, &path_mtu);
     status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "SRD AH",
-                                    &address->ah);
-    if (status == UCS_OK) {
-        address->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
+                                    &ep->ah);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    return status;
+    ep->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
+
+    return UCS_OK;
 }
 
 ucs_status_t
@@ -259,7 +258,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
 
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx.queue_len;
     init_attr.cq_len[UCT_IB_DIR_RX] = config->super.rx.queue_len;
-    init_attr.rx_hdr_len            = sizeof(uct_srd_neth_t);
+    init_attr.rx_hdr_len            = sizeof(uct_srd_hdr_t);
     init_attr.seg_size              = ucs_min(mtu, config->super.seg_size);
     init_attr.qp_type               = IBV_QPT_DRIVER;
 
@@ -293,12 +292,12 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "srd_recv_desc", &self->rx.mp);
     if (status != UCS_OK) {
-        goto err_rx_mp;
+        goto err_cleanup_send_op_mp;
     }
 
     status = uct_srd_iface_create_qp(self, config, &efa_attr);
     if (status != UCS_OK) {
-        goto err_qp;
+        goto err_cleanup_rx_mp;
     }
 
     uct_ud_send_wr_init(&self->tx.wr_inl, self->tx.sge, 1);
@@ -312,9 +311,9 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
 
     return UCS_OK;
 
-err_qp:
+err_cleanup_rx_mp:
     ucs_mpool_cleanup(&self->rx.mp, 1);
-err_rx_mp:
+err_cleanup_send_op_mp:
     ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
     return status;
 }
@@ -368,7 +367,7 @@ uct_srd_iface_poll_tx(uct_srd_iface_t *iface)
             continue;
         }
 
-        uct_srd_ep_send_op_completion((uct_srd_send_op_t *)wc[i].wr_id);
+        uct_srd_ep_send_op_completion((uct_srd_send_op_t*)wc[i].wr_id);
     }
 
     iface->tx.available += num_wcs;
@@ -392,7 +391,7 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
     /* Common parameters */
     status = uct_ib_iface_query(&iface->super,
-                                UCT_IB_DETH_LEN + sizeof(uct_srd_neth_t),
+                                UCT_IB_DETH_LEN + sizeof(uct_srd_hdr_t),
                                 iface_attr);
 
     /* General attributes */
@@ -415,15 +414,15 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
     /* AM */
     iface_attr->cap.am.max_bcopy = iface->super.config.seg_size -
-                                   sizeof(uct_srd_neth_t);
+                                   sizeof(uct_srd_hdr_t);
     iface_attr->cap.am.min_zcopy = 0;
     iface_attr->cap.am.max_zcopy = iface->super.config.seg_size -
-                                   sizeof(uct_srd_neth_t);
+                                   sizeof(uct_srd_hdr_t);
     iface_attr->cap.am.max_iov   = iface->config.max_send_sge - 1;
     iface_attr->cap.am.max_hdr   = uct_ib_iface_hdr_size(
-            iface->super.config.seg_size, sizeof(uct_srd_neth_t));
+            iface->super.config.seg_size, sizeof(uct_srd_hdr_t));
     iface_attr->cap.am.max_short = uct_ib_iface_hdr_size(
-            iface->config.max_inline, sizeof(uct_srd_neth_t));
+            iface->config.max_inline, sizeof(uct_srd_hdr_t));
     if (iface_attr->cap.am.max_short) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;
     }
