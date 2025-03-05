@@ -269,6 +269,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                   ucp_request_param_send_callback(param));
 
     if (worker->context->config.ext.proto_enable) {
+        ucp_handle_fence_if_required(ep, status, ret, out_unlock);
+
         status = ucp_put_send_short(ep, buffer, count, remote_addr, rkey, param);
         if (ucs_likely(status != UCS_ERR_NO_RESOURCE) ||
             ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
@@ -290,8 +292,6 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         } else {
             contig_length = count;
         }
-
-        ucp_handle_fence_if_required(ep, status, ret, out_unlock);
 
         ret = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(worker, rkey)->proto_select,

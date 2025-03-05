@@ -430,10 +430,18 @@ UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma_reg)
 class test_ucp_rma_order : public test_ucp_rma {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_RMA);
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, FENCE_MODE, "ep_based");
     }
 
     virtual void init() {
+        if (get_variant_value() & FENCE_MODE) {
+            if (!is_proto_enabled()) {
+                UCS_TEST_SKIP_R("Proto v2 is disabled");
+            }
+            modify_config("FENCE_MODE", "ep_based");
+        }
+
         test_ucp_memheap::init();
     }
 
@@ -472,6 +480,10 @@ public:
             EXPECT_EQ(*last, iter) << "size is " << size;
         }
     }
+private:
+    enum {
+        FENCE_MODE = UCS_BIT(0)
+    };
 };
 
 UCS_TEST_P(test_ucp_rma_order, put_ordering) {
