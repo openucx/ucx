@@ -1877,10 +1877,11 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                             addr_indices, cm_idx, UCS_LOG_LEVEL_DEBUG);
 
     if (worker->context->config.ext.on_demand_wireup) {
-        /* always connect p2p, fast and wireup lanes */
+        /* always connect p2p, fast, wireup and keepalive lanes */
         connect_lane_bitmap &= (ucp_ep_config(ep)->p2p_lanes |
                                 UCS_MASK(UCP_MAX_FAST_PATH_LANES) |
-                                UCS_BIT(ucp_ep_get_wireup_msg_lane(ep)));
+                                UCS_BIT(ucp_ep_get_wireup_msg_lane(ep)) |
+                                UCS_BIT(ucp_ep_config(ep)->key.keepalive_lane));
     }
 
     /* establish connections on all underlying endpoints, skipping CM lane */
