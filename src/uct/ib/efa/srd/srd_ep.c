@@ -115,12 +115,6 @@ uct_srd_hdr_set(const uct_srd_ep_t *ep, uct_srd_hdr_t *neth, uint8_t id)
     neth->id      = id;
 }
 
-static void
-uct_srd_iface_send_op_release(uct_srd_send_op_t *send_op)
-{
-    ucs_mpool_put(send_op);
-}
-
 void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
 {
     ucs_list_del(&send_op->list);
@@ -146,7 +140,7 @@ ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_srd_hdr_set(ep, &am->srd_hdr, id);
     am->am_hdr = hdr;
 
-    send_op->comp_handler = uct_srd_iface_send_op_release;
+    send_op->comp_handler = (uct_srd_send_op_comp_handler_t)ucs_mpool_put;
 
     iface->tx.sge[0].addr    = (uintptr_t)am;
     iface->tx.sge[0].length  = sizeof(*am);
