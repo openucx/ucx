@@ -731,7 +731,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const ucp_request_param_t *param,
                                        ucp_request_t *worker_req,
                                        ucp_request_callback_t flushed_cb,
-                                       const char *debug_name);
+                                       const char *debug_name,
+                                       unsigned uct_flags);
 
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);

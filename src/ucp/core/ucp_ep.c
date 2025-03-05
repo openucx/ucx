@@ -1766,7 +1766,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
         ucp_ep_disconnected(ep, 1);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,
-                                        ucp_ep_close_flushed_callback, "close");
+                                        ucp_ep_close_flushed_callback, "close",
+                                        UCT_FLUSH_FLAG_LOCAL);
         if (!UCS_PTR_IS_PTR(request)) {
             if (ucp_ep_is_cm_local_connected(ep)) {
                 /* lanes already flushed, start disconnect on CM lane */

@@ -489,10 +489,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_order, shm_rc_dc, "self,shm,rc,dc")
 class test_ucp_ep_based_fence : public test_ucp_rma {
 public:
     static constexpr uint64_t TEST_BUF_SIZE = 1000000;
-    static constexpr uint64_t ATOMIC_SIZE = sizeof(uint64_t);
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64);
+        add_variant(variants,
+                    UCP_FEATURE_RMA | UCP_FEATURE_AMO64 | UCP_FEATURE_AMO32);
     }
 
     virtual void init() {
@@ -587,7 +587,9 @@ public:
         rbuf.rkey(sender(), rkey);
 
         if (op == OP_ATOMIC) {
-            perform_nbx_with_fence(op, sbuf.ptr(), ATOMIC_SIZE,
+            perform_nbx_with_fence(op, sbuf.ptr(), sizeof(uint32_t),
+                                   (uint64_t)rbuf.ptr(), rkey);
+            perform_nbx_with_fence(op, sbuf.ptr(), sizeof(uint64_t),
                                    (uint64_t)rbuf.ptr(), rkey);
         } else {
             for (size_t size = 1; size <= TEST_BUF_SIZE; size *= 10) {
