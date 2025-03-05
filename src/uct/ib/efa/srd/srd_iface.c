@@ -16,18 +16,6 @@
 
 static uct_iface_ops_t uct_srd_iface_tl_ops;
 
-void uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
-{
-    ep->ep_id = ucs_ptr_array_insert(&iface->eps, ep);
-    ucs_trace("iface(%p) added ep=%p ep_id=%d", iface, ep, ep->ep_id);
-}
-
-void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
-{
-    ucs_ptr_array_remove(&iface->eps, ep->ep_id);
-    ucs_trace("iface(%p) removed ep=%p ep_id=%d", iface, ep, ep->ep_id);
-}
-
 ucs_status_t
 uct_srd_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 {
@@ -250,7 +238,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     ucs_arbiter_init(&self->tx.pending_q);
-    ucs_ptr_array_init(&self->eps, "srd_eps");
+    ucs_list_head_init(&self->tx.outstanding_list);
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.name            = "srd_send_op";
@@ -298,11 +286,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    ucs_ptr_array_cleanup(&self->eps, 1);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     uct_ib_destroy_qp(self->qp);
     ucs_mpool_cleanup(&self->rx.mp, 0);
     ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
+    ucs_assertv(ucs_list_is_empty(&self->tx.outstanding_list),
+                "iface=%p tx outstanding list is not empty", self);
 }
 
 UCS_CLASS_DEFINE(uct_srd_iface_t, uct_ib_iface_t);

@@ -33,7 +33,6 @@ typedef struct uct_srd_iface {
 #ifdef HAVE_DECL_EFA_DV_RDMA_READ
     struct ibv_qp_ex           *qp_ex;
 #endif
-    ucs_ptr_array_t            eps;
 
     struct {
         unsigned               available;
@@ -48,6 +47,7 @@ typedef struct uct_srd_iface {
         struct ibv_send_wr     wr_desc;
         ucs_mpool_t            send_op_mp;
         uct_srd_am_short_hdr_t am_inl_hdr;
+        ucs_list_link_t        outstanding_list;
     } tx;
 
     struct {
@@ -57,10 +57,6 @@ typedef struct uct_srd_iface {
         size_t                 max_get_zcopy;
     } config;
 } uct_srd_iface_t;
-
-
-void uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
-void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
 
 
 #if ENABLE_PARAMS_CHECK

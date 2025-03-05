@@ -31,12 +31,8 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     self->ep_uuid    = ucs_generate_uuid((uintptr_t)self);
-    self->ep_id      = UCT_SRD_EP_NULL_ID;
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->psn        = UCT_SRD_INITIAL_PSN;
-    ucs_list_head_init(&self->outstanding_list);
-
-    uct_srd_iface_add_ep(iface, self);
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
                                         self->path_index, &ah_attr, &path_mtu);
@@ -49,11 +45,11 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     self->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
 
     ucs_debug(UCT_IB_IFACE_FMT
-              " ep=%p gid=%s qpn=0x%x ep_id=%u ep_uuid=0x%"PRIx64" connected "
+              " ep=%p gid=%s qpn=0x%x ep_uuid=0x%"PRIx64" connected "
               "to iface %s qpn=0x%x",
               UCT_IB_IFACE_ARG(&iface->super),
               self, uct_ib_gid_str(&iface->super.gid_info.gid, str, sizeof(str)),
-              iface->qp->qp_num, self->ep_id, self->ep_uuid,
+              iface->qp->qp_num, self->ep_uuid,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(if_addr->qp_num));
     return UCS_OK;
@@ -67,10 +63,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
 
     ucs_trace_func("");
 
-    ucs_list_for_each_safe(send_op, next, &self->outstanding_list, list) {
-        uct_srd_ep_send_op_completion(send_op);
+    ucs_list_for_each_safe(send_op, next, &iface->tx.outstanding_list, list) {
+        if (send_op->ep == self) {
+            uct_srd_ep_send_op_completion(send_op);
+        }
     }
-    uct_srd_iface_remove_ep(iface, self);
 }
 
 UCS_CLASS_DEFINE(uct_srd_ep_t, uct_base_ep_t);
@@ -157,7 +154,7 @@ ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     iface->tx.wr_inl.wr_id   = (uintptr_t)send_op;
 
     uct_srd_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE, 2);
-    ucs_list_add_tail(&ep->outstanding_list, &send_op->list);
+    ucs_list_add_tail(&iface->tx.outstanding_list, &send_op->list);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, sizeof(am->am_hdr) + length);
     return UCS_OK;
