@@ -21,23 +21,25 @@
 
 
 /* Context and associated resources */
-struct context {
+typedef struct {
     CUcontext ctx;
     CUstream  stream;
     void      *mem;
     void      *mem_managed;
-};
+} context_t;
 
-struct context context[MAX_CTX * MAX_THREADS * MAX_DEV];
+context_t context[MAX_CTX * MAX_THREADS * MAX_DEV];
 
-static struct thread {
+typedef struct thread {
     int             tid;
     int             signal;
     struct thread   *base;
     pthread_t       thread;
     pthread_cond_t  cond;
     pthread_mutex_t mutex;
-} thread[MAX_THREADS];
+} thread_t;
+
+static thread_t thread[MAX_THREADS];
 
 static int device_count;
 
@@ -60,7 +62,7 @@ static int device_count;
 
 
 /* Initialize all contexts and their streams */
-static void setup_contexts(struct context *context, int tid, int count)
+static void setup_contexts(context_t *context, int tid, int count)
 {
     int i, j, active, index;
     unsigned int flags;
@@ -104,7 +106,7 @@ static size_t sizes[] = {
     32, 64, 65, 512*KB, 10*MB, 0
 };
 
-static void setup_malloc(struct context *context, int tid, int count,
+static void setup_malloc(context_t *context, int tid, int count,
                          size_t size)
 {
     int i, j, index;
@@ -138,12 +140,12 @@ static int get_ctx(int index)
     return index % MAX_CTX;
 }
 
-static void test_copy(struct context *context, int tid, int count,
+static void test_copy(context_t *context, int tid, int count,
                       size_t size)
 {
     static int done = 0;
     int i, j, k, l;
-    void *ptr_a, *ptr_b, *ptr_a_managed;
+    CUdeviceptr ptr_a, ptr_b, ptr_a_managed;
     CUstream stream;
 
     /* each set context (every thread every device) */
@@ -156,9 +158,9 @@ static void test_copy(struct context *context, int tid, int count,
     for (l = 0; l < MAX_CTX * MAX_THREADS * count; l++) {
         CHECK_D(cuCtxSetCurrent(context[i].ctx));
 
-        ptr_a         = context[j].mem;
-        ptr_a_managed = context[j].mem_managed;
-        ptr_b         = context[k].mem;
+        ptr_a         = (CUdeviceptr)context[j].mem;
+        ptr_a_managed = (CUdeviceptr)context[j].mem_managed;
+        ptr_b         = (CUdeviceptr)context[k].mem;
         stream        = context[l].stream;
 
         if (!tid && !done) {
@@ -172,10 +174,10 @@ static void test_copy(struct context *context, int tid, int count,
                    stream, get_gpu(l), get_ctx(l));
         }
 
-        CHECK(cudaMemcpyAsync(ptr_a, ptr_b, size, cudaMemcpyDeviceToDevice, stream));
-        CHECK(cudaMemcpy(ptr_a, ptr_b, size, cudaMemcpyDeviceToDevice));
-        CHECK(cudaMemcpyAsync(ptr_a_managed, ptr_b, size, cudaMemcpyDeviceToDevice, stream));
-        CHECK(cudaMemcpy(ptr_a_managed, ptr_b, size, cudaMemcpyDeviceToDevice));
+        CHECK_D(cuMemcpyAsync(ptr_a, ptr_b, size, stream));
+        CHECK_D(cuMemcpy(ptr_a, ptr_b, size));
+        CHECK_D(cuMemcpyAsync(ptr_a_managed, ptr_b, size, stream));
+        CHECK_D(cuMemcpy(ptr_a_managed, ptr_b, size));
 
         CHECK_D(cuStreamSynchronize(stream));
 
@@ -186,7 +188,7 @@ static void test_copy(struct context *context, int tid, int count,
     }
 }
 
-static void wait(struct thread *t)
+static void wait(thread_t *t)
 {
     pthread_mutex_lock(&t->mutex);
     while (t->signal == 0) {
@@ -196,7 +198,7 @@ static void wait(struct thread *t)
     pthread_mutex_unlock(&t->mutex);
 }
 
-static void signal(struct thread *t)
+static void signal(thread_t *t)
 {
     pthread_mutex_lock(&t->mutex);
     t->signal = 1;
@@ -204,14 +206,14 @@ static void signal(struct thread *t)
     pthread_mutex_unlock(&t->mutex);
 }
 
-static void signal_next(struct thread *t)
+static void signal_next(thread_t *t)
 {
     signal(&t->base[(t->tid + 1) % MAX_THREADS]);
 }
 
 static void *worker_cb(void *arg)
 {
-    struct thread *t = (struct thread *)arg;
+    thread_t *t = (thread_t *)arg;
     size_t *s;
 
     wait(t);
@@ -248,8 +250,8 @@ int main(int argc, char *argv[])
     printf("Using %d CUDA device(s)\n", device_count);
 
     for (i = 0; i < MAX_THREADS; i++) {
-        thread[i].tid    = i;
-        thread[i].base   = thread;
+        thread[i].tid  = i;
+        thread[i].base = thread;
 
         pthread_mutex_init(&thread[i].mutex, NULL);
         pthread_cond_init(&thread[i].cond, NULL);
