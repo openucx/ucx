@@ -38,7 +38,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
 
     status = uct_srd_iface_unpack_peer_address(iface, ib_addr, if_addr, self);
     if (status != UCS_OK) {
-        goto err_ep_destroy;
+        return status;
     }
 
     ucs_debug(UCT_IB_IFACE_FMT
@@ -49,20 +49,20 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
               iface->qp->qp_num, self->ep_id, self->ep_uuid,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(if_addr->qp_num));
-
     return UCS_OK;
-
-err_ep_destroy:
-    UCS_CLASS_DELETE_FUNC_NAME(uct_srd_ep_t)(&self->super.super);
-    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
 {
     uct_srd_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                             uct_srd_iface_t);
+    uct_srd_send_op_t *send_op, *next;
 
     ucs_trace_func("");
+
+    ucs_list_for_each_safe(send_op, next, &self->outstanding_list, list) {
+        uct_srd_ep_send_op_completion(send_op);
+    }
     uct_srd_iface_remove_ep(iface, self);
 }
 
