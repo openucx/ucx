@@ -98,9 +98,8 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
     return mem_info.type;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface,
-                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
+        uct_cuda_copy_iface_t *iface, uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
     CUcontext ctx;
     ucs_status_t status;
@@ -130,8 +129,8 @@ uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface,
                 "cuCtxGetId failed %s",
                 uct_cuda_base_cu_get_error_string(result));
     ucs_assertv(ctx_id == (*ctx_rsc_p)->ctx_id,
-                "context id %llu does not match the cached value %llu",
-                ctx_id, (*ctx_rsc_p)->ctx_id);
+                "context id %llu does not match the cached value %llu", ctx_id,
+                (*ctx_rsc_p)->ctx_id);
 #endif
 
     return UCS_OK;
@@ -185,8 +184,8 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         return status;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_event->event,
-                                                    *stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuEventRecord(cuda_event->event, *stream));
     if (ucs_unlikely(UCS_OK != status)) {
         return status;
     }
@@ -249,9 +248,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_zcopy,
 
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_copy_ep_rma_short(uct_ep_h tl_ep, CUdeviceptr dst, CUdeviceptr src,
-                           unsigned length)
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
+        uct_ep_h tl_ep, CUdeviceptr dst, CUdeviceptr src, unsigned length)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                   uct_cuda_copy_iface_t);
@@ -279,9 +277,9 @@ uct_cuda_copy_ep_rma_short(uct_ep_h tl_ep, CUdeviceptr dst, CUdeviceptr src,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
-                 (tl_ep, buffer, length, remote_addr, rkey),
-                 uct_ep_h tl_ep, const void *buffer, unsigned length,
-                 uint64_t remote_addr, uct_rkey_t rkey)
+                 (tl_ep, buffer, length, remote_addr, rkey), uct_ep_h tl_ep,
+                 const void *buffer, unsigned length, uint64_t remote_addr,
+                 uct_rkey_t rkey)
 {
     ucs_status_t status;
 

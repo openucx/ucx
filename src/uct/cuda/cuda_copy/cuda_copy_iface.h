@@ -52,9 +52,9 @@ typedef struct uct_cuda_copy_queue_desc {
 
 
 #if CUDA_VERSION >= 12000
-    typedef CUcontext uct_cuda_copy_ctx_validator_t;
+typedef CUcontext uct_cuda_copy_ctx_validator_t;
 #else
-    typedef CUdeviceptr uct_cuda_copy_ctx_validator_t;
+typedef CUdeviceptr uct_cuda_copy_ctx_validator_t;
 #endif
 
 
@@ -140,8 +140,8 @@ uct_cuda_copy_flush_bitmap_idx(ucs_memory_type_t src_mem_type,
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t
-uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface, CUcontext ctx,
-                             uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
+ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
+                                          CUcontext ctx,
+                                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
 
 #endif

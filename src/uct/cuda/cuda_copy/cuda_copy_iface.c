@@ -312,11 +312,11 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
 static void
 uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t*) obj;
+    uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t*)obj;
 
     memset(base, 0 , sizeof(*base));
-    UCT_CUDADRV_FUNC_LOG_ERR(cuEventCreate(&base->event,
-                                           CU_EVENT_DISABLE_TIMING));
+    UCT_CUDADRV_FUNC_LOG_ERR(
+            cuEventCreate(&base->event, CU_EVENT_DISABLE_TIMING));
 }
 
 static int uct_cuda_copy_ctx_rsc_valid(uct_cuda_copy_ctx_validator_t validator)
@@ -353,13 +353,13 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_copy_iface_mpool_priv_t *mpool_priv;
     uct_cuda_copy_event_desc_t *base;
-    
+
     mpool_priv = ucs_mpool_priv(mp);
     if (!uct_cuda_copy_ctx_rsc_valid(mpool_priv->validator)) {
         return;
     }
 
-    base = (uct_cuda_copy_event_desc_t*) obj;
+    base = (uct_cuda_copy_event_desc_t*)obj;
     UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(base->event));
 }
 
@@ -472,9 +472,9 @@ uct_cuda_copy_ctx_destroy_validator(uct_cuda_copy_ctx_validator_t validator)
 #endif
 }
 
-static ucs_status_t
-uct_cuda_copy_ctx_rsc_init(CUcontext ctx, unsigned int max_cuda_events,
-                           uct_cuda_copy_ctx_rsc_t *ctx_rsc)
+static ucs_status_t uct_cuda_copy_ctx_rsc_init(CUcontext ctx,
+                                               unsigned int max_cuda_events,
+                                               uct_cuda_copy_ctx_rsc_t *ctx_rsc)
 {
     ucs_mpool_params_t mp_params;
     ucs_status_t status;
@@ -500,8 +500,8 @@ uct_cuda_copy_ctx_rsc_init(CUcontext ctx, unsigned int max_cuda_events,
     mp_params.max_elems       = max_cuda_events;
     mp_params.ops             = &uct_cuda_copy_event_desc_mpool_ops;
     mp_params.name            = "cuda_copy_event_descriptors";
-    status                    = ucs_mpool_init(&mp_params,
-                                               &ctx_rsc->cuda_event_desc);
+
+    status = ucs_mpool_init(&mp_params, &ctx_rsc->cuda_event_desc);
     if (status != UCS_OK) {
         ucs_error("mpool creation failed");
         uct_cuda_copy_ctx_destroy_validator(ctx_rsc->validator);
@@ -523,9 +523,9 @@ uct_cuda_copy_ctx_rsc_init(CUcontext ctx, unsigned int max_cuda_events,
     return UCS_OK;
 }
 
-ucs_status_t
-uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface, CUcontext ctx,
-                             uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
+ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
+                                          CUcontext ctx,
+                                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
     ucs_kh_put_t ret;
     khiter_t iter;
@@ -583,8 +583,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     return UCS_OK;
 }
 
-static void
-uct_cuda_copy_stream_destroy(CUstream *stream, int valid_ctx)
+static void uct_cuda_copy_stream_destroy(CUstream *stream, int valid_ctx)
 {
     if ((*stream == NULL) || (!valid_ctx)) {
         return;
