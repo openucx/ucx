@@ -105,6 +105,10 @@ uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface,
     CUcontext ctx;
     ucs_status_t status;
     khiter_t iter;
+#if CUDA_VERSION >= 12000
+    unsigned long long ctx_id;
+    CUresult result;
+#endif
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&ctx));
     if (ucs_unlikely(status != UCS_OK)) {
@@ -115,12 +119,22 @@ uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface,
     }
 
     iter = kh_get(cuda_copy_ctx_rscs, &iface->ctx_rscs, (khint64_t)ctx);
-    if (ucs_likely(iter != kh_end(&iface->ctx_rscs))) {
-        *ctx_rsc_p = &kh_value(&iface->ctx_rscs, iter);
-        return UCS_OK;
+    if (ucs_unlikely(iter == kh_end(&iface->ctx_rscs))) {
+        return uct_cuda_copy_ctx_rsc_create(iface, ctx, ctx_rsc_p);
     }
 
-    return uct_cuda_copy_ctx_rsc_create(iface, ctx, ctx_rsc_p);
+    *ctx_rsc_p = &kh_value(&iface->ctx_rscs, iter);
+
+#if CUDA_VERSION >= 12000
+    ucs_assertv((result = cuCtxGetId(ctx, &ctx_id)) == CUDA_SUCCESS,
+                "cuCtxGetId failed %s",
+                uct_cuda_base_cu_get_error_string(result));
+    ucs_assertv(ctx_id == (*ctx_rsc_p)->ctx_id,
+                "context id %llu does not match the cached value %llu",
+                ctx_id, (*ctx_rsc_p)->ctx_id);
+#endif
+
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
