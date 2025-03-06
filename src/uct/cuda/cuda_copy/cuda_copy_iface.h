@@ -66,7 +66,7 @@ typedef struct uct_cuda_copy_ctx_rsc {
     /* array of queue descriptors for each src/dst memory type combination */
     uct_cuda_copy_queue_desc_t   queue_desc[UCS_MEMORY_TYPE_LAST]
                                            [UCS_MEMORY_TYPE_LAST];
-    /* Field to verify that the context has not been destoryed */
+    /* Field to verify that the context has not been destroyed */
     uct_cuda_copy_ctx_validator_t validator;
 #if CUDA_VERSION >= 12000
     /* CUDA context id */
