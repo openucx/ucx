@@ -56,10 +56,9 @@ uct_cuda_copy_init_stream(CUstream *stream)
             cuStreamCreate(stream, CU_STREAM_NON_BLOCKING));
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE CUstream *
 uct_cuda_copy_get_stream(uct_cuda_copy_ctx_rsc_t *ctx_rsc,
-                         ucs_memory_type_t src_type, ucs_memory_type_t dst_type,
-                         CUstream *stream_p)
+                         ucs_memory_type_t src_type, ucs_memory_type_t dst_type)
 {
     CUstream *stream;
     ucs_status_t status;
@@ -70,14 +69,10 @@ uct_cuda_copy_get_stream(uct_cuda_copy_ctx_rsc_t *ctx_rsc,
     stream = &ctx_rsc->queue_desc[src_type][dst_type].stream;
     status = uct_cuda_copy_init_stream(stream);
     if (ucs_unlikely(status != UCS_OK)) {
-        ucs_error("stream for src %s dst %s not available",
-                   ucs_memory_type_names[src_type],
-                   ucs_memory_type_names[dst_type]);
-        return status;
+        return NULL;
     }
 
-    *stream_p = *stream;
-    return UCS_OK;
+    return stream;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
@@ -139,7 +134,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     ucs_status_t status;
     ucs_memory_type_t src_type;
     ucs_memory_type_t dst_type;
-    CUstream stream;
+    CUstream *stream;
     ucs_queue_head_t *event_q;
     uct_cuda_copy_ctx_rsc_t *ctx_rsc;
 
@@ -154,13 +149,18 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
 
     src_type = uct_cuda_copy_get_mem_type(base_iface->md, src, length);
     dst_type = uct_cuda_copy_get_mem_type(base_iface->md, dst, length);
-    status   = uct_cuda_copy_get_stream(ctx_rsc, src_type, dst_type, &stream);
-    if (ucs_unlikely(status != UCS_OK)) {
-        return status;
+    q_desc   = &ctx_rsc->queue_desc[src_type][dst_type];
+    event_q  = &q_desc->event_queue;
+    stream   = uct_cuda_copy_get_stream(ctx_rsc, src_type, dst_type);
+    if (ucs_unlikely(stream == NULL)) {
+        ucs_error("stream for src %s dst %s not available",
+                   ucs_memory_type_names[src_type],
+                   ucs_memory_type_names[dst_type]);
+        return UCS_ERR_IO_ERROR;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, stream));
+            cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, *stream));
     if (ucs_unlikely(UCS_OK != status)) {
         return status;
     }
@@ -171,13 +171,12 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_event->event, stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_event->event,
+                                                    *stream));
     if (ucs_unlikely(UCS_OK != status)) {
         return status;
     }
 
-    q_desc  = &ctx_rsc->queue_desc[src_type][dst_type];
-    event_q = &q_desc->event_queue;
     if (ucs_queue_is_empty(event_q)) {
         ucs_queue_push(&iface->active_queue, &q_desc->queue);
     }
