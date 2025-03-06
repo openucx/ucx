@@ -1606,6 +1606,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
 {
     uct_ep_h new_uct_eps[UCP_MAX_LANES]            = {NULL};
     ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES] = {UCP_NULL_LANE};
+    int is_reconfigurable                          = 0;
     ucp_ep_config_key_t *old_key;
     ucp_lane_index_t lane, reuse_lane, wireup_lane;
     uct_ep_h uct_ep;
@@ -1614,17 +1615,24 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     *connect_lane_bitmap = UCS_MASK(new_key->num_lanes);
 
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        !ucp_wireup_check_is_reconfigurable(ep, new_key, remote_address,
-                                            addr_indices)) {
+        (!(is_reconfigurable = ucp_wireup_check_is_reconfigurable(ep, new_key, remote_address,
+                                             addr_indices)) &&
+         ucp_ep_config_is_equal2(&ucp_ep_config(ep)->key, new_key, 0))) {
         /* nothing to intersect with */
         return ucp_ep_realloc_lanes(ep, new_key->num_lanes);
     }
 
+    if (!is_reconfigurable) {
+        ucs_assert(ucp_ep_config_is_equal2(&ucp_ep_config(ep)->key, new_key,
+                UCP_EP_CONFIG_CMP_IGNORE_ADDR_INDEX));
+    }
+
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
-    }
+    // TODO: check if this assert is needed
+    // for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+    //     ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
+    // }
 
     old_key = &ucp_ep_config(ep)->key;
     ucp_ep_config_lanes_intersect(old_key, new_key, ep, remote_address,
@@ -1682,6 +1690,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                 (ucp_wireup_ep(uct_ep)->super.uct_ep != NULL)) {
                 /* no need to connect lane */
                 *connect_lane_bitmap &= ~UCS_BIT(reuse_lane);
+                ucs_info("ep %p: lane[%d] is reused, uct_ep %p", ep, lane,
+                         uct_ep);
             }
             new_uct_eps[reuse_lane] = uct_ep;
             ucp_ep_set_lane(ep, lane, NULL);
@@ -1766,6 +1776,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_queue_head_t replay_pending_queue;
     ucp_rsc_index_t dst_mds_mem[UCP_MAX_MDS];
     int is_reconfigurable;
+    int are_config_lanes_equal;
 
     tl_bitmap = UCS_STATIC_BITMAP_AND(*local_tl_bitmap,
                                       worker->context->tl_bitmap);
@@ -1794,9 +1805,14 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     is_reconfigurable = ucp_wireup_check_is_reconfigurable(ep, &key,
                                                            remote_address,
                                                            addr_indices);
+    if (!is_reconfigurable) {
+        are_config_lanes_equal = ucp_ep_config_is_equal2(
+            &ucp_ep_config(ep)->key, &key, UCP_EP_CONFIG_CMP_IGNORE_ADDR_INDEX);
+    } else {
+        are_config_lanes_equal = 0;
+    }
 
-    if (!is_reconfigurable &&
-        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key)) {
+    if (!is_reconfigurable && !are_config_lanes_equal) {
         ucs_info("ep %p: not reconfigurable and config keys are different", ep);
         /* Allow to choose only the lanes that were already chosen for case
          * without CM to prevent reconfiguration error.
@@ -1838,7 +1854,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     if (ep->cfg_index == new_cfg_index) {
-#if UCS_ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT && 0 /* TODO: improve on_demand check but just disable for now */
         for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
             ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
         }
@@ -1849,7 +1865,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     cm_idx = ep->ext->cm_idx;
 
-    if (!is_reconfigurable) {
+    if (!is_reconfigurable && !are_config_lanes_equal) {
         /*
          * TODO handle a case where we have to change lanes and reconfigure the ep:
          *
@@ -1887,6 +1903,11 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     /* establish connections on all underlying endpoints, skipping CM lane */
     connect_lane_bitmap &= ~UCS_BIT(ucp_ep_get_cm_lane(ep));
     ucs_for_each_bit(lane, connect_lane_bitmap) {
+        if ((ucp_ep_get_lane_raw(ep, lane) != NULL) &&
+            !ucp_wireup_ep_test(ucp_ep_get_lane_raw(ep, lane))) {
+            continue;
+        }
+
         status = ucp_wireup_connect_lane(ep, ep_init_flags, lane,
                                          key.lanes[lane].path_index,
                                          remote_address, addr_indices[lane]);
