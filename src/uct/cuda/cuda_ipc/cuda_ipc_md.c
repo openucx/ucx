@@ -126,8 +126,6 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         return UCS_ERR_NO_MEMORY;
     }
 
-    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR;
-
     UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
                 (CUdeviceptr)addr));
 
