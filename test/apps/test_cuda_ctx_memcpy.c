@@ -8,6 +8,7 @@
 #include "config.h"
 #endif
 
+#include <time.h>
 #include <stdio.h>
 #include <cuda.h>
 #include <pthread.h>
@@ -17,7 +18,7 @@
 
 #define MAX_THREADS 2
 #define MAX_CTX     2
-#define MAX_DEV     4
+#define MAX_DEV     8
 
 
 /* Context and associated resources */
@@ -26,7 +27,11 @@ typedef struct {
     CUstream  stream;
     void      *mem;
     void      *mem_managed;
+    clock_t   dur;
+    clock_t   dur_managed;
 } context_t;
+
+unsigned long long duration[MAX_DEV][MAX_DEV][MAX_DEV];
 
 context_t context[MAX_CTX * MAX_THREADS * MAX_DEV];
 
@@ -72,12 +77,12 @@ static void setup_contexts(context_t *context, int tid, int count)
     for (i = 0; i < count; i++) {
         index = ((i * MAX_THREADS) + tid) * MAX_CTX;
 
-        CHECK(cuDeviceGet(&device, i));
-        CHECK(cuCtxCreate(&context[index].ctx, 0, device));
+        CHECK_D(cuDeviceGet(&device, i));
+        CHECK_D(cuCtxCreate(&context[index].ctx, 0, device));
         CHECK_D(cuStreamCreate(&context[index].stream, CU_STREAM_NON_BLOCKING));
 
         for (j = 1; j < MAX_CTX; j++) {
-            CHECK(cuDeviceGet(&device, i));
+            CHECK_D(cuDeviceGet(&device, i));
             CHECK_D(cuCtxCreate(&context[index + j].ctx, 0, device));
             CHECK_D(cuStreamCreate(&context[index + j].stream, CU_STREAM_NON_BLOCKING));
         }
@@ -104,7 +109,7 @@ static void setup_contexts(context_t *context, int tid, int count)
 #define MB (KB * 1024)
 
 static size_t sizes[] = {
-    32, 64, 65, 512*KB, 10*MB, 0
+    32, 64, 65, 512*KB, 10*MB, 128*MB, 0
 };
 
 static void setup_malloc(context_t *context, int tid, int count,
@@ -148,6 +153,11 @@ static void test_copy(context_t *context, int tid, int count,
     int j, k, l;
     CUdeviceptr ptr_a, ptr_b, ptr_a_managed;
     CUstream stream;
+    clock_t start, end;
+
+    if (!tid) {
+        memset(duration, 0, sizeof(duration));
+    }
 
     /* each source context (every thread every device) */
     for (j = 0; j < MAX_CTX * MAX_THREADS * count; j++) {
@@ -160,26 +170,51 @@ static void test_copy(context_t *context, int tid, int count,
         ptr_b         = (CUdeviceptr)context[k].mem;
         stream        = context[l].stream;
 
-        if (!tid && !done) {
-            printf("size=%zu a=%llu/GPU%d/%d "
-                   "b=%llu/GPU%d/%d a_managed=%llu stream=%p/GPU%d/%d\n",
-                   size,
-                   ptr_a, get_gpu(j), get_ctx(j),
-                   ptr_b, get_gpu(k), get_ctx(k),
-                   ptr_a_managed,
-                   stream, get_gpu(l), get_ctx(l));
-        }
+        start = clock();
+        CHECK_D(cuMemcpy(ptr_a_managed, ptr_b, size));
 
         CHECK_D(cuMemcpyAsync(ptr_a, ptr_b, size, stream));
         CHECK_D(cuMemcpy(ptr_a, ptr_b, size));
         CHECK_D(cuMemcpyAsync(ptr_a_managed, ptr_b, size, stream));
-        CHECK_D(cuMemcpy(ptr_a_managed, ptr_b, size));
 
         CHECK_D(cuStreamSynchronize(stream));
+        end   = clock();
 
+        if (0&&!tid && !done) {
+            printf("size=%zu a=%llu/GPU%d/%d "
+                   "b=%llu/GPU%d/%d a_managed=%llu stream=%p/GPU%d/%d "
+                   "duration=%lu\n",
+                   size,
+                   ptr_a, get_gpu(j), get_ctx(j),
+                   ptr_b, get_gpu(k), get_ctx(k),
+                   ptr_a_managed,
+                   stream, get_gpu(l), get_ctx(l),
+                   end - start);
+        }
+
+        if (!tid) {
+            duration[get_gpu(j)][get_gpu(k)][get_gpu(l)] += end - start;
+        }
     }}}
 
     if (!tid) {
+        for (l = 0; l < count; l++) {
+            printf("Size %zu Stream GPU%d:\n", size, l);
+            printf("        ");
+            for (k = 0; k < count; k++) {
+                printf("GPU%d      ", k);
+            }
+            printf("\n");
+
+            for (j = 0; j < count; j++) {
+                printf("GPU%d:   ", j);
+                for (k = 0; k < count; k++) {
+                    printf("%-8llu  ", duration[j][k][l]);
+                }
+                printf("\n");
+            }
+        }
+
         done = 1;
     }
 }
