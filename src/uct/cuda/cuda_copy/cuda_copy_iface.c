@@ -584,14 +584,18 @@ uct_cuda_copy_iface_ctx_rsc_destroy(uct_cuda_copy_iface_ctx_rsc_t *ctx_rsc)
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
-    uct_cuda_copy_iface_ctx_rsc_t ctx_rsc;
+    unsigned long long ctx_id;
+    khiter_t iter;
+    uct_cuda_copy_iface_ctx_rsc_t *ctx_rsc;
 
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
-    kh_foreach_value(&self->ctx_rscs, ctx_rsc, {
-        ucs_mpool_cleanup(&ctx_rsc.cuda_event_desc, 1);
-        uct_cuda_copy_iface_ctx_rsc_destroy(&ctx_rsc);
+    kh_foreach_key(&self->ctx_rscs, ctx_id, {
+        iter    = kh_get(cuda_copy_iface_ctx_rscs, &self->ctx_rscs, ctx_id);
+        ctx_rsc = &kh_value(&self->ctx_rscs, iter);
+        ucs_mpool_cleanup(&ctx_rsc->cuda_event_desc, 1);
+        uct_cuda_copy_iface_ctx_rsc_destroy(ctx_rsc);
     });
 
     kh_destroy_inplace(cuda_copy_iface_ctx_rscs, &self->ctx_rscs);
