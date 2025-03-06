@@ -145,58 +145,67 @@ UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_fabric)
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_switch_cuda_device, cuda_cpy);
 
-class test_p2p_switch_cuda_device : public uct_p2p_rma_test {
+class test_p2p_create_destroy_ctx : public uct_p2p_rma_test {
 public:
     void test_xfer(send_func_t send, size_t length, unsigned flags,
                    ucs_memory_type_t mem_type) override;
 };
 
-void test_p2p_switch_cuda_device::test_xfer(send_func_t send, size_t length,
+void test_p2p_create_destroy_ctx::test_xfer(send_func_t send, size_t length,
                                             unsigned flags,
                                             ucs_memory_type_t mem_type)
 {
     int num_devices;
-    ASSERT_EQ(cudaGetDeviceCount(&num_devices), cudaSuccess);
+    ASSERT_EQ(cuDeviceGetCount(&num_devices), CUDA_SUCCESS);
 
-    if (num_devices < 2) {
-        UCS_TEST_SKIP_R("less than two cuda devices available");
+    if (num_devices < 1) {
+        UCS_TEST_SKIP_R("no cuda devices available");
     }
 
+    CUcontext current_ctx;
+    ASSERT_EQ(cuCtxGetCurrent(&current_ctx), CUDA_SUCCESS);
+
+    CUdevice device;
+    if (current_ctx != NULL) {
+        ASSERT_EQ(cuCtxGetDevice(&device), CUDA_SUCCESS);
+    } else {
+        ASSERT_EQ(cuDeviceGet(&device, 0), CUDA_SUCCESS);
+    }
+
+    CUcontext new_ctx;
+    ASSERT_EQ(cuCtxCreate(&new_ctx, 0, device), CUDA_SUCCESS);
     uct_p2p_rma_test::test_xfer(send, length, flags, mem_type);
+    ASSERT_EQ(cuCtxDestroy(new_ctx), CUDA_SUCCESS);
 
-    int current_device;
-    ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
-    ASSERT_EQ(cudaSetDevice((current_device + 1) % num_devices), cudaSuccess);
-
-    uct_p2p_rma_test::test_xfer(send, length, flags, mem_type);
-
-    EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
+    if (current_ctx != NULL) {
+        EXPECT_EQ(cuCtxPushCurrent(current_ctx), CUDA_SUCCESS);
+    }
 }
 
-UCS_TEST_P(test_p2p_switch_cuda_device, put_short)
+UCS_TEST_P(test_p2p_create_destroy_ctx, put_short)
 {
     test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_short), 1,
               TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_CUDA);
 }
 
-UCS_TEST_P(test_p2p_switch_cuda_device, get_short)
+UCS_TEST_P(test_p2p_create_destroy_ctx, get_short)
 {
     test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_short), 1,
               TEST_UCT_FLAG_RECV_ZCOPY, UCS_MEMORY_TYPE_CUDA);
 }
 
-UCS_TEST_P(test_p2p_switch_cuda_device, put_zcopy)
+UCS_TEST_P(test_p2p_create_destroy_ctx, put_zcopy)
 {
     test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
               sender().iface_attr().cap.put.min_zcopy + 1,
               TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_CUDA);
 }
 
-UCS_TEST_P(test_p2p_switch_cuda_device, get_zcopy)
+UCS_TEST_P(test_p2p_create_destroy_ctx, get_zcopy)
 {
     test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
               sender().iface_attr().cap.get.min_zcopy + 1,
               TEST_UCT_FLAG_RECV_ZCOPY, UCS_MEMORY_TYPE_CUDA);
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_p2p_switch_cuda_device, cuda_copy)
+_UCT_INSTANTIATE_TEST_CASE(test_p2p_create_destroy_ctx, cuda_copy)

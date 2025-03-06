@@ -326,8 +326,8 @@ static int uct_cuda_copy_ctx_rsc_valid(CUdeviceptr dptr)
 
     result = cuPointerGetAttribute((void*)&ctx, CU_POINTER_ATTRIBUTE_CONTEXT,
                                    dptr);
-
-    if (result == CUDA_ERROR_CONTEXT_IS_DESTROYED) {
+    if ((result == CUDA_ERROR_CONTEXT_IS_DESTROYED) ||
+        (result == CUDA_ERROR_INVALID_VALUE)) {
         return 0;
     } else if (result != CUDA_SUCCESS) {
         UCT_CUDADRV_LOG(cuPointerGetAttribute, UCS_LOG_LEVEL_WARN, result);
@@ -450,7 +450,7 @@ uct_cuda_copy_ctx_rsc_init(unsigned int max_cuda_events,
     uct_cuda_copy_iface_mpool_priv_t *mpool_priv;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc(&ctx_rsc->dptr, 1));
-    if (UCS_OK != status) {
+    if (status != UCS_OK) {
         return status;
     }
 
@@ -463,8 +463,9 @@ uct_cuda_copy_ctx_rsc_init(unsigned int max_cuda_events,
     mp_params.name            = "cuda_copy_event_descriptors";
     status                    = ucs_mpool_init(&mp_params,
                                                &ctx_rsc->cuda_event_desc);
-    if (UCS_OK != status) {
+    if (status != UCS_OK) {
         ucs_error("mpool creation failed");
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(ctx_rsc->dptr));
         return UCS_ERR_IO_ERROR;
     }
 
@@ -576,7 +577,9 @@ static void uct_cuda_copy_ctx_rsc_destroy(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
 
     uct_cuda_copy_stream_destroy(&ctx_rsc->short_stream, valid_ctx);
 
-    UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(ctx_rsc->dptr));
+    if (valid_ctx) {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(ctx_rsc->dptr));
+    }
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
