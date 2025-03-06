@@ -81,7 +81,7 @@ typedef uint16_t                   ucp_ep_flags_t;
 #define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
     ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
 
-#define ucp_handle_fence_if_required(_ep, _status, _ret, _err_label) \
+#define ucp_ep_handle_fence_if_required(_ep, _status, _ret, _err_label) \
 { \
     if ((_ep)->ext->fence_seq < (_ep)->worker->fence_seq) { \
         if (!ucs_is_pow2_or_zero((_ep)->ext->unflushed_lanes)) { \
@@ -562,7 +562,7 @@ typedef struct ucp_ep_ext {
 
     ucp_lane_map_t   unflushed_lanes; /* Bitmap of lanes which have unflushed
                                          operations */
-    uint32_t         fence_seq;       /* Sequence number for fence detection */
+    uint64_t         fence_seq;       /* Sequence number for fence detection */
 
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint

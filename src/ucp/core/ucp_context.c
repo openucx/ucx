@@ -2233,12 +2233,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         goto err_free_key_list;
     }
 
-    if ((context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) &&
-        ((context->config.ext.max_rma_lanes > 1) ||
-         (context->config.ext.proto_enable))) {
-        context->config.worker_fence_mode = UCP_FENCE_MODE_STRONG;
-    } else {
-        context->config.worker_fence_mode = context->config.ext.fence_mode;
+    if (context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) {
+        if ((context->config.ext.max_rma_lanes > 1) ||
+            (context->config.ext.proto_enable)) {
+            context->config.worker_fence_mode = UCP_FENCE_MODE_STRONG;
+        } else {
+            context->config.worker_fence_mode = UCP_FENCE_MODE_WEAK;
+        }
     }
 
     context->config.progress_wrapper_enabled =

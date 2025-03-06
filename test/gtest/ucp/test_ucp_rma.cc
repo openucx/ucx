@@ -500,8 +500,6 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_order, shm_rc_dc, "self,shm,rc,dc")
 
 class test_ucp_ep_based_fence : public test_ucp_rma {
 public:
-    static constexpr uint64_t TEST_BUF_SIZE = 1000000;
-
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant(variants,
                     UCP_FEATURE_RMA | UCP_FEATURE_AMO64 | UCP_FEATURE_AMO32);
@@ -517,16 +515,16 @@ public:
         test_ucp_memheap::init();
     }
 
-    uint32_t get_worker_fence_seq() {
+    uint64_t worker_fence_seq() {
         return sender().ep()->worker->fence_seq;
     }
 
-    uint32_t get_ep_fence_seq() {
+    uint64_t ep_fence_seq() {
         return sender().ep()->ext->fence_seq;
     }
 
     int is_fence_required() {
-        return sender().ep()->ext->fence_seq < sender().ep()->worker->fence_seq;
+        return ep_fence_seq() < worker_fence_seq();
     }
 
     int is_strong_fence() {
@@ -535,13 +533,11 @@ public:
     }
 
     void do_fence() {
-        uint32_t worker_fence_seq_before = get_worker_fence_seq();
+        uint32_t worker_fence_seq_before = worker_fence_seq();
         sender().fence();
-        uint32_t worker_fence_seq_after = get_worker_fence_seq();
-        uint32_t ep_fence_seq_after = get_ep_fence_seq();
 
-        ASSERT_EQ(worker_fence_seq_before + 1, worker_fence_seq_after);
-        ASSERT_GT(worker_fence_seq_after, ep_fence_seq_after);
+        EXPECT_EQ(worker_fence_seq_before + 1, worker_fence_seq());
+        EXPECT_GT(worker_fence_seq(), ep_fence_seq());
     }
 
     enum op_type_t { OP_PUT, OP_GET, OP_ATOMIC };
@@ -578,14 +574,14 @@ public:
         perform_nbx(op, sbuf, size, target, rkey);
         do_fence();
 
-        bool strong_fence_happened = is_fence_required() && is_strong_fence();
+        bool strong_fence_expected = is_fence_required() && is_strong_fence();
 
         perform_nbx(op, sbuf, size, target, rkey);
 
-        if (strong_fence_happened) {
-            ASSERT_EQ(get_worker_fence_seq(), get_ep_fence_seq());
+        if (strong_fence_expected) {
+            EXPECT_EQ(worker_fence_seq(), ep_fence_seq());
         } else {
-            ASSERT_NE(get_worker_fence_seq(), get_ep_fence_seq());
+            EXPECT_NE(worker_fence_seq(), ep_fence_seq());
         }
     }
 
@@ -612,6 +608,8 @@ public:
 
         flush_workers();
     }
+private:
+    static constexpr uint64_t TEST_BUF_SIZE = 1000000;
 };
 
 UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_put) {
