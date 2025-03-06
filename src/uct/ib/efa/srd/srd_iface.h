@@ -106,6 +106,9 @@ uct_srd_iface_get_send_op(uct_srd_iface_t *iface)
     return send_op;
 }
 
+void uct_srd_ep_send_op_purge(uct_srd_iface_t *iface,
+                              uct_srd_ep_t *ep);
+
 
 END_C_DECLS
 

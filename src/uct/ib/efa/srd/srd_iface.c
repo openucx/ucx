@@ -165,6 +165,22 @@ static ucs_mpool_ops_t uct_srd_send_op_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+void uct_srd_ep_send_op_purge(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
+{
+    int release = (ep == NULL);
+    uct_srd_send_op_t *send_op, *next;
+
+    ucs_list_for_each_safe(send_op, next,
+                           &iface->tx.outstanding_list, list) {
+        if (release || (send_op->ep == ep)) {
+            uct_srd_ep_send_op_completion(send_op, release);
+            if (!release && (ep->inflight == 0)) {
+                break;
+            }
+        }
+    }
+}
+
 static UCS_F_NOINLINE void
 uct_srd_iface_post_recv_always(uct_srd_iface_t *iface, int max)
 {
@@ -286,6 +302,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    uct_srd_ep_send_op_purge(self, NULL);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     uct_ib_destroy_qp(self->qp);
     ucs_mpool_cleanup(&self->rx.mp, 0);
@@ -332,7 +349,7 @@ uct_srd_iface_poll_tx(uct_srd_iface_t *iface)
             continue;
         }
 
-        uct_srd_ep_send_op_completion((uct_srd_send_op_t*)wc[i].wr_id);
+        uct_srd_ep_send_op_completion((uct_srd_send_op_t*)wc[i].wr_id, 1);
     }
 
     iface->tx.available += num_wcs;

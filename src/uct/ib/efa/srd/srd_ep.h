@@ -29,16 +29,12 @@ typedef struct uct_srd_ep {
 } uct_srd_ep_t;
 
 
-typedef void (*uct_srd_send_op_comp_handler_t)(uct_srd_send_op_t *send_op);
-
-
 /*
  * Send descriptor used when receiving TX CQE.
  */
 struct uct_srd_send_op {
     ucs_list_link_t                  list;         /* Link in ep outstanding send list */
     uct_srd_ep_t                     *ep;          /* Sender EP */
-    uct_srd_send_op_comp_handler_t   comp_handler; /* Called when send is completed */
 } UCS_V_ALIGNED(UCT_SRD_SEND_OP_ALIGN);
 
 
@@ -49,6 +45,6 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_srd_ep_t, uct_ep_t);
 ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  const void *buffer, unsigned length);
 
-void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op);
+void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op, int release);
 
 #endif

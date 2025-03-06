@@ -60,21 +60,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
 {
     uct_srd_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                             uct_srd_iface_t);
-    uct_srd_send_op_t *send_op, *next;
 
     ucs_trace_func("");
 
     if (self->inflight != 0) {
-        ucs_list_for_each_safe(send_op, next,
-                               &iface->tx.outstanding_list, list) {
-            if (send_op->ep == self) {
-                uct_srd_ep_send_op_completion(send_op);
-                if (self->inflight == 0) {
-                    break;
-                }
-            }
-        }
-
+        uct_srd_ep_send_op_purge(iface, self);
         ucs_assertv(self->inflight == 0,
                     "ep=%p failed to complete %u send operations",
                     self, self->inflight);
@@ -130,11 +120,18 @@ uct_srd_hdr_set(const uct_srd_ep_t *ep, uct_srd_hdr_t *neth, uint8_t id)
     neth->id      = id;
 }
 
-void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
+void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op, int release)
 {
-    ucs_list_del(&send_op->list);
-    send_op->ep->inflight--;
-    send_op->comp_handler(send_op);
+    if (send_op->ep != NULL) {
+        send_op->ep->inflight--;
+    }
+
+    if (release) {
+        ucs_list_del(&send_op->list);
+        ucs_mpool_put(send_op);
+    } else {
+        send_op->ep = NULL;
+    }
 }
 
 ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
@@ -155,8 +152,6 @@ ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     uct_srd_hdr_set(ep, &am->srd_hdr, id);
     am->am_hdr = hdr;
-
-    send_op->comp_handler = (uct_srd_send_op_comp_handler_t)ucs_mpool_put;
 
     iface->tx.sge[0].addr    = (uintptr_t)am;
     iface->tx.sge[0].length  = sizeof(*am);
