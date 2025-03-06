@@ -81,13 +81,13 @@ typedef struct uct_ib_device_subnet {
 UCS_ARRAY_DECLARE_TYPE(uct_ib_device_subnet_array_t, unsigned,
                        uct_ib_device_subnet_t);
 
-typedef struct uct_ib_device_to_ndev_key {
+typedef struct {
     uct_ib_device_t *dev;
     uint8_t          port_num;
     int              gid_index;
 } uct_ib_device_to_ndev_key_t;
 
-typedef struct uct_ib_device_to_ndev_val {
+typedef struct {
     char ndev_name[IFNAMSIZ];
     int  if_index;
 } uct_ib_device_to_ndev_val_t;
@@ -95,7 +95,9 @@ typedef struct uct_ib_device_to_ndev_val {
 static UCS_F_ALWAYS_INLINE khint32_t
 uct_ib_device_to_ndev_cache_hash_func(uct_ib_device_to_ndev_key_t key)
 {
-    return kh_int_hash_func((uint64_t)key.dev | (key.port_num << 8) | (key.gid_index << 16));
+    return kh_int_hash_func((uint64_t)key.dev |
+                            (key.port_num << 8) |
+                            (key.gid_index << 16));
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -1513,12 +1515,12 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
 
 ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
-                                  int gid_index, int *iface_index_p)
+                                  int gid_index, int *ndev_index_p)
 {
     uct_ib_device_to_ndev_key_t ib_dev = {.dev = dev,
                                           .port_num = port_num,
                                           .gid_index = gid_index};
-    ucs_status_t status                = UCS_OK;
+    ucs_status_t status;
     uct_ib_device_to_ndev_val_t *ndev_p;
     khiter_t iter;
     int khret;
@@ -1526,8 +1528,9 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
     pthread_mutex_lock(&uct_ib_device_to_ndev_cache_lock);
     iter = kh_get(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev);
     if (ucs_likely(iter != kh_end(&ib_dev_to_ndev_map))) {
-        ndev_p = &kh_val(&ib_dev_to_ndev_map, iter);
-        *iface_index_p = ndev_p->if_index;
+        ndev_p         = &kh_val(&ib_dev_to_ndev_map, iter);
+        *ndev_index_p  = ndev_p->if_index;
+        status         = UCS_OK;
         goto out_unlock;
     }
 
@@ -1554,7 +1557,8 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
         goto out_unlock;
     }
 
-    *iface_index_p = ndev_p->if_index;
+    *ndev_index_p = ndev_p->if_index;
+    status        = UCS_OK;
 
 out_unlock:
     pthread_mutex_unlock(&uct_ib_device_to_ndev_cache_lock);
