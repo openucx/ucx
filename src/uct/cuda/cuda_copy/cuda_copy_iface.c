@@ -7,7 +7,7 @@
 #  include "config.h"
 #endif
 
-#include "cuda_copy_iface.inl"
+#include "cuda_copy_iface.h"
 #include "cuda_copy_md.h"
 #include "cuda_copy_ep.h"
 
@@ -319,8 +319,7 @@ uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
                                            CU_EVENT_DISABLE_TIMING));
 }
 
-static int
-uct_cuda_copy_iface_ctx_rsc_valid_ctx(CUdeviceptr dptr)
+static int uct_cuda_copy_ctx_rsc_valid(CUdeviceptr dptr)
 {
     CUcontext ctx;
     CUresult result;
@@ -344,7 +343,7 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     uct_cuda_copy_event_desc_t *base;
     
     mpool_priv = ucs_mpool_priv(mp);
-    if (!uct_cuda_copy_iface_ctx_rsc_valid_ctx(mpool_priv->dptr)) {
+    if (!uct_cuda_copy_ctx_rsc_valid(mpool_priv->dptr)) {
         return;
     }
 
@@ -442,8 +441,8 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
 };
 
 static ucs_status_t
-uct_cuda_copy_iface_ctx_rsc_init(unsigned int max_cuda_events,
-                                 uct_cuda_copy_iface_ctx_rsc_t *ctx_rsc)
+uct_cuda_copy_ctx_rsc_init(unsigned int max_cuda_events,
+                           uct_cuda_copy_ctx_rsc_t *ctx_rsc)
 {
     ucs_mpool_params_t mp_params;
     ucs_status_t status;
@@ -485,29 +484,28 @@ uct_cuda_copy_iface_ctx_rsc_init(unsigned int max_cuda_events,
 }
 
 ucs_status_t
-uct_cuda_copy_iface_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
-                                   unsigned long long ctx_id,
-                                   uct_cuda_copy_iface_ctx_rsc_t **ctx_rsc_p)
+uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface, CUcontext ctx,
+                             uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
     ucs_kh_put_t ret;
     khiter_t iter;
-    uct_cuda_copy_iface_ctx_rsc_t *ctx_rsc;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
     ucs_status_t status;
 
-    iter = kh_put(cuda_copy_iface_ctx_rscs, &iface->ctx_rscs, ctx_id, &ret);
+    iter = kh_put(cuda_copy_ctx_rscs, &iface->ctx_rscs, (khint64_t)ctx, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
         ucs_error("cannot allocate hash entry");
         return UCS_ERR_NO_MEMORY;
     }
 
     ucs_assertv_always(ret != UCS_KH_PUT_KEY_PRESENT,
-                       "the key %llu has already been added", ctx_id);
+                       "the key %lu has already been added", (uintptr_t)ctx);
 
     ctx_rsc = &kh_value(&iface->ctx_rscs, iter);
-    status  = uct_cuda_copy_iface_ctx_rsc_init(iface->config.max_cuda_events,
-                                               ctx_rsc);
+    status  = uct_cuda_copy_ctx_rsc_init(iface->config.max_cuda_events,
+                                         ctx_rsc);
     if (status != UCS_OK) {
-        kh_del(cuda_copy_iface_ctx_rscs, &iface->ctx_rscs, iter);
+        kh_del(cuda_copy_ctx_rscs, &iface->ctx_rscs, iter);
         return status;
     }
 
@@ -538,7 +536,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->config.bandwidth       = config->bandwidth;
     UCS_STATIC_BITMAP_RESET_ALL(&self->streams_to_sync);
 
-    kh_init_inplace(cuda_copy_iface_ctx_rscs, &self->ctx_rscs);
+    kh_init_inplace(cuda_copy_ctx_rscs, &self->ctx_rscs);
 
     ucs_queue_head_init(&self->active_queue);
 
@@ -546,7 +544,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 }
 
 static void
-uct_cuda_copy_iface_stream_destroy(CUstream *stream, int valid_ctx)
+uct_cuda_copy_stream_destroy(CUstream *stream, int valid_ctx)
 {
     if ((*stream == NULL) || (!valid_ctx)) {
         return;
@@ -556,14 +554,13 @@ uct_cuda_copy_iface_stream_destroy(CUstream *stream, int valid_ctx)
     *stream = NULL;
 }
 
-static void
-uct_cuda_copy_iface_ctx_rsc_destroy(uct_cuda_copy_iface_ctx_rsc_t *ctx_rsc)
+static void uct_cuda_copy_ctx_rsc_destroy(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
 {
     int valid_ctx;
     ucs_memory_type_t src, dst;
     ucs_queue_head_t *event_q;
 
-    valid_ctx = uct_cuda_copy_iface_ctx_rsc_valid_ctx(ctx_rsc->dptr);
+    valid_ctx = uct_cuda_copy_ctx_rsc_valid(ctx_rsc->dptr);
 
     ucs_memory_type_for_each(src) {
         ucs_memory_type_for_each(dst) {
@@ -572,12 +569,12 @@ uct_cuda_copy_iface_ctx_rsc_destroy(uct_cuda_copy_iface_ctx_rsc_t *ctx_rsc)
                 ucs_warn("stream destroyed but queue not empty");
             }
 
-            uct_cuda_copy_iface_stream_destroy(
-                    &ctx_rsc->queue_desc[src][dst].stream, valid_ctx);
+            uct_cuda_copy_stream_destroy(&ctx_rsc->queue_desc[src][dst].stream,
+                                         valid_ctx);
         }
     }
 
-    uct_cuda_copy_iface_stream_destroy(&ctx_rsc->short_stream, valid_ctx);
+    uct_cuda_copy_stream_destroy(&ctx_rsc->short_stream, valid_ctx);
 
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(ctx_rsc->dptr));
 }
@@ -586,19 +583,19 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
     unsigned long long ctx_id;
     khiter_t iter;
-    uct_cuda_copy_iface_ctx_rsc_t *ctx_rsc;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
 
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     kh_foreach_key(&self->ctx_rscs, ctx_id, {
-        iter    = kh_get(cuda_copy_iface_ctx_rscs, &self->ctx_rscs, ctx_id);
+        iter    = kh_get(cuda_copy_ctx_rscs, &self->ctx_rscs, ctx_id);
         ctx_rsc = &kh_value(&self->ctx_rscs, iter);
         ucs_mpool_cleanup(&ctx_rsc->cuda_event_desc, 1);
-        uct_cuda_copy_iface_ctx_rsc_destroy(ctx_rsc);
+        uct_cuda_copy_ctx_rsc_destroy(ctx_rsc);
     });
 
-    kh_destroy_inplace(cuda_copy_iface_ctx_rscs, &self->ctx_rscs);
+    kh_destroy_inplace(cuda_copy_ctx_rscs, &self->ctx_rscs);
 }
 
 UCS_CLASS_DEFINE(uct_cuda_copy_iface_t, uct_cuda_iface_t);

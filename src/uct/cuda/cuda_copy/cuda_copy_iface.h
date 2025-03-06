@@ -51,7 +51,7 @@ typedef struct uct_cuda_copy_queue_desc {
 } uct_cuda_copy_queue_desc_t;
 
 
-typedef struct uct_cuda_copy_iface_ctx_rsc {
+typedef struct uct_cuda_copy_ctx_rsc {
     /* pool of cuda events to check completion of memcpy operations */
     ucs_mpool_t                cuda_event_desc;
     /* stream used to issue short operations */
@@ -59,21 +59,22 @@ typedef struct uct_cuda_copy_iface_ctx_rsc {
     /* array of queue descriptors for each src/dst memory type combination */
     uct_cuda_copy_queue_desc_t queue_desc[UCS_MEMORY_TYPE_LAST]
                                          [UCS_MEMORY_TYPE_LAST];
-    /* device pointer to check the context */
+    /* device pointer to verify that the context has not been destoryed */
     CUdeviceptr                dptr;
-} uct_cuda_copy_iface_ctx_rsc_t;
+} uct_cuda_copy_ctx_rsc_t;
 
 
-/* Hash map for CUDA context resources. The key is the CUDA context Id. */
-KHASH_TYPE(cuda_copy_iface_ctx_rscs, khint64_t, uct_cuda_copy_iface_ctx_rsc_t);
+/* Hash map for CUDA context resources. The key is the CUDA context handle. */
+KHASH_INIT(cuda_copy_ctx_rscs, khint64_t, uct_cuda_copy_ctx_rsc_t, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
 
 
 typedef struct uct_cuda_copy_iface {
     uct_cuda_iface_t            super;
     /* used to store uuid and check iface reachability */
     uct_cuda_copy_iface_addr_t  id;
-    /* context resources */
-    khash_t(cuda_copy_iface_ctx_rscs) ctx_rscs;
+    /* CUDA context resources */
+    khash_t(cuda_copy_ctx_rscs) ctx_rscs;
     /* list of queues which require progress */
     ucs_queue_head_t            active_queue;
     /* fd to get event notifications */
@@ -119,14 +120,17 @@ uct_cuda_copy_flush_bitmap_idx(ucs_memory_type_t src_mem_type,
 }
 
 
+/**
+ * Create the resources of the given CUDA context.
+ *
+ * @param [in]  iface     CUDA copy transport interface
+ * @param [in]  ctx       CUDA context
+ * @param [out] ctx_rsc_p Returned pointer to context resources
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
 ucs_status_t
-uct_cuda_copy_iface_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
-                                   unsigned long long ctx_id,
-                                   uct_cuda_copy_iface_ctx_rsc_t **ctx_rsc_p);
-
-
-ucs_status_t
-uct_cuda_copy_iface_short_stream_create(uct_cuda_copy_iface_t *iface,
-                                        CUstream *stream);
+uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface, CUcontext ctx,
+                             uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
 
 #endif
