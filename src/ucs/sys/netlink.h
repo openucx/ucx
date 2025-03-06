@@ -18,7 +18,9 @@ BEGIN_C_DECLS
  * Check whether a routing table rule exists for a given network
  * interface name and a destination address.
  *
- * @param [in]  if_index   An index representing the network interface.
+ * @param [in]  ndev_index A global index representing the network interface, 
+                           as assigned by the system (e.g., obtained via
+                           if_nametoindex()).
  * @param [in]  sa_remote  Pointer to the destination address.
  *
  * @return 1 if rule exists, or 0 otherwise.

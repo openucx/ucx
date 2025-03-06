@@ -33,11 +33,13 @@ typedef struct {
 
 
 typedef struct {
-    ucs_list_link_t         list;
     struct sockaddr_storage dest;
     uint32_t                subnet_prefix_len;
     int                     if_index;
 } ucs_netlink_route_entry_t;
+
+UCS_ARRAY_DECLARE_TYPE(ucs_netlink_rt_rules_t, unsigned, 
+                       ucs_netlink_route_entry_t);
 
 static UCS_F_ALWAYS_INLINE khint32_t
 ucs_netlink_rt_cache_hash_func(khint32_t key)
@@ -53,7 +55,7 @@ ucs_netlink_rt_cache_hash_equal(khint32_t key1, khint32_t key2)
 
 static pthread_mutex_t ucs_netlink_rt_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 static int route_data_exists                     = 0;
-KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_list_link_t, 1,
+KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_netlink_rt_rules_t, 1,
            ucs_netlink_rt_cache_hash_func, ucs_netlink_rt_cache_hash_equal);
 static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
 
@@ -215,7 +217,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
     int iface_index;
     const void *dst_in_addr;
     ucs_netlink_route_entry_t *new_rule;
-    ucs_list_link_t *iface_rules;
+    ucs_netlink_rt_rules_t *iface_rules;
     khiter_t iter;
     int khret;
 
@@ -235,15 +237,12 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
        present in the hash table before, initialize the list */
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     if (khret != UCS_KH_PUT_KEY_PRESENT) {
-        ucs_list_head_init(iface_rules);
+        ucs_array_init_dynamic(iface_rules);
     }
 
-    /* allocate and initialize a new rule element */
-    new_rule = ucs_malloc(sizeof(ucs_netlink_route_entry_t), "route entry");
-    if (new_rule == NULL) {
-        ucs_error("could not allocate route entry");
-        return UCS_ERR_NO_MEMORY;
-    }
+    new_rule = ucs_array_append(iface_rules,
+                                ucs_error("could not allocate route entry");
+                                return UCS_ERR_NO_MEMORY);
 
     new_rule->dest.ss_family = ((const struct rtmsg *)nl_msg)->rtm_family;
     if (((const struct rtmsg *)nl_msg)->rtm_family == AF_INET) {
@@ -257,15 +256,12 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
     new_rule->if_index          = iface_index;
     new_rule->subnet_prefix_len = ((const struct rtmsg *)nl_msg)->rtm_dst_len;
 
-    /* add the new item to the list */
-    ucs_list_add_tail(iface_rules, &new_rule->list);
-
     return UCS_INPROGRESS;
 }
 
 static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 {
-    ucs_list_link_t *iface_rules;
+    ucs_netlink_rt_rules_t *iface_rules;
     ucs_netlink_route_entry_t *curr_entry;
     khiter_t iter;
 
@@ -277,7 +273,7 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
     }
 
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
-    ucs_list_for_each(curr_entry, iface_rules, list) {
+    ucs_array_for_each(curr_entry, iface_rules) {
         if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
                                  ucs_sockaddr_get_inet_addr(
                                     (const struct sockaddr *)&curr_entry->dest),
@@ -302,7 +298,7 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
     rtm.rtm_table  = RT_TABLE_MAIN;
 
     ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
-                             ucs_netlink_parse_rt_entry_cb, &info);
+                             ucs_netlink_parse_rt_entry_cb, NULL);
     route_data_exists = 1;
 
 lookup:
