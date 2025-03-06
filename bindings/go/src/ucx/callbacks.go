@@ -23,6 +23,11 @@ type UcpAmDataRecvCallback = func(request *UcpRequest, status UcsStatus, length 
 type UcpAmRecvCallback = func(header unsafe.Pointer, headerSize uint64,
 	data *UcpAmData, replyEp *UcpEp) UcsStatus
 
+type UcpAmRecvCallbackBundle struct {
+	cb     UcpAmRecvCallback
+	worker *UcpWorker
+}	
+
 // This callback routine is invoked on the server side to handle incoming
 // connections from remote clients.
 type UcpListenerConnectionHandler = func(connRequest *UcpConnectionRequest)
@@ -88,17 +93,18 @@ func ucxgo_amRecvCallback(calbackId unsafe.Pointer, header unsafe.Pointer, heade
 	data unsafe.Pointer, dataSize C.size_t, params *C.ucp_am_recv_param_t) C.ucs_status_t {
 	cbId := uint64(uintptr(calbackId))
 	if callback, found := getCallback(cbId); found {
+		bundle := callback.(*UcpAmRecvCallbackBundle)
 		var replyEp *UcpEp
 		if (params.recv_attr & C.UCP_AM_RECV_ATTR_FIELD_REPLY_EP) != 0 {
 			replyEp = &UcpEp{ep: params.reply_ep}
 		}
 		amData := &UcpAmData{
-			worker:  idToWorker[cbId],
+			worker:  bundle.worker,
 			flags:   UcpAmRecvAttrs(params.recv_attr),
 			dataPtr: data,
 			length:  uint64(dataSize),
 		}
-		return C.ucs_status_t(callback.(UcpAmRecvCallback)(header, uint64(headerSize), amData, replyEp))
+		return C.ucs_status_t(bundle.cb(header, uint64(headerSize), amData, replyEp))
 	}
 	return C.UCS_OK
 }
