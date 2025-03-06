@@ -297,10 +297,10 @@ UCM_CUDA_FREE_FUNC(cudaFreeAsync, UCS_MEMORY_TYPE_CUDA, cudaError_t, arg0, 0,
                    "devPtr=%p, stream=%p", void*, cudaStream_t)
 #endif
 
-cudaError_t ucm_cudaMalloc3D(struct cudaPitchedPtr* pitchedDevPtr,
-                             struct cudaExtent extent)
+cudaError_t
+ucm_cudaMalloc3D(struct cudaPitchedPtr *pitchedDevPtr, struct cudaExtent extent)
 {
-    void* ptr;
+    void *ptr;
     cudaError_t ret;
     size_t size;
 
