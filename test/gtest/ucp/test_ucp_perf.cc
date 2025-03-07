@@ -350,7 +350,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
     ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
     const char* atomic_mode_str     = "guess";
     const char* ep_allow_all_to_all = "n";
-    const char* dc_max_rd_atomic    = "auto";
 
     if (get_variant_value(VARIANT_ATOMIC_MODE) == ATOMIC_CPU) {
         atomic_mode_str = "cpu";
@@ -363,13 +362,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
 
     if (get_variant_value(VARIANT_WIREUP_MODE) == WIREUP_ALL_TO_ALL) {
         ep_allow_all_to_all = "y";
-        dc_max_rd_atomic    = "16"; /* we may have different NICs */
     }
 
     ucs::scoped_setenv wireup_ep_allow_all_to_all_env(
             "UCX_EP_ALLOW_ALL_TO_ALL", ep_allow_all_to_all);
-    ucs::scoped_setenv dc_max_rd_atomic_env("UCX_DC_MLX5_MAX_RD_ATOMIC",
-                                            dc_max_rd_atomic);
 
     test.iters         = ucs_min(test.iters, max_iter);
     test.send_mem_type = UCS_MEMORY_TYPE_HOST;
