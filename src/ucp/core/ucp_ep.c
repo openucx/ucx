@@ -158,6 +158,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].path_index   = 0;
         key->lanes[i].lane_types   = 0;
         key->lanes[i].seg_size     = 0;
+        key->lanes[i].addr_index   = UINT_MAX;
     }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_msg_lane  = UCP_NULL_LANE;
@@ -1270,7 +1271,7 @@ ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((lane == ucp_ep_get_cm_lane(ep)) || (uct_ep == NULL)) {
             continue;
         }
@@ -1297,7 +1298,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep)) {
             num_failed_tl_ep++;
         }
@@ -1320,7 +1321,7 @@ ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps, uct_ep_h failed_ep)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep        = ucp_ep_get_lane(ep, lane);
+        uct_ep        = ucp_ep_get_lane_raw(ep, lane);
         uct_eps[lane] = uct_ep;
 
         /* Set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
@@ -1932,12 +1933,14 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
                                                                remote_address,
                                                                addr_indices,
                                                                lane1_idx);
+        ucs_info("ep %p: lane[%d] %d -> %d", ep, lane1_idx, lane1_idx, lane_map[lane1_idx]);
     }
 }
 
 static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
                                        const ucp_ep_config_key_t *key2,
-                                       ucp_lane_index_t lane)
+                                       ucp_lane_index_t lane,
+                                       unsigned flags)
 {
     const ucp_ep_config_key_lane_t *config_lane1 = &key1->lanes[lane];
     const ucp_ep_config_key_lane_t *config_lane2 = &key2->lanes[lane];
@@ -1947,11 +1950,13 @@ static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->dst_md_index == config_lane2->dst_md_index) &&
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types) &&
-           (config_lane1->seg_size == config_lane2->seg_size);
+           (config_lane1->seg_size == config_lane2->seg_size) &&
+           ((flags & UCP_EP_CONFIG_CMP_IGNORE_ADDR_INDEX) ||
+            (config_lane1->addr_index == config_lane2->addr_index));
 }
 
-int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
-                           const ucp_ep_config_key_t *key2)
+int ucp_ep_config_is_equal2(const ucp_ep_config_key_t *key1,
+                            const ucp_ep_config_key_t *key2, unsigned flags)
 {
     ucp_lane_index_t lane;
     int i;
@@ -1979,7 +1984,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     }
 
     for (lane = 0; lane < key1->num_lanes; ++lane) {
-        if (!ucp_ep_config_lane_is_equal(key1, key2, lane)) {
+        if (!ucp_ep_config_lane_is_equal(key1, key2, lane, flags)) {
             return 0;
         }
     }
@@ -1992,6 +1997,13 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
 
     return 1;
 }
+
+int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
+                           const ucp_ep_config_key_t *key2)
+{
+    return ucp_ep_config_is_equal2(key1, key2, 0);
+}
+
 
 void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
                         ucs_string_buffer_t *strb)

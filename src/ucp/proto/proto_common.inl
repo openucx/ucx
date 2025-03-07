@@ -216,7 +216,11 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
     }
 
     /* Set pointer to request's protocol configuration */
-    ucs_assert(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index);
+    ucs_assert(ucp_ep_config_is_equal2(
+            &ucp_ep_config(ep)->key,
+            &ucp_worker_ep_config(ep->worker,
+                                  thresh_elem->proto_config.ep_cfg_index)->key,
+            UCP_EP_CONFIG_CMP_IGNORE_ADDR_INDEX));
     ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
     ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
     return UCS_OK;
