@@ -570,8 +570,9 @@ uct_cuda_ipc_queue_desc_cleanup(uct_cuda_queue_desc_t *q_desc)
     UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(q_desc->stream));
 }
 
-ucs_status_t uct_cuda_ipc_get_queue_desc(uct_cuda_ipc_iface_t *iface, int index,
-                                         uct_cuda_queue_desc_t **q_desc_p)
+ucs_status_t
+uct_cuda_ipc_create_queue_desc(uct_cuda_ipc_iface_t *iface, int index,
+                               uct_cuda_queue_desc_t **q_desc_p)
 {
     uct_cuda_queue_desc_t *q_desc;
     ucs_status_t status;
@@ -579,15 +580,15 @@ ucs_status_t uct_cuda_ipc_get_queue_desc(uct_cuda_ipc_iface_t *iface, int index,
     int ret;
 
     iter = kh_put(cuda_ipc_queue_desc, &iface->queue_desc_map, index, &ret);
-    if (ret == UCS_KH_PUT_FAILED) {
+    if (ucs_unlikely(ret == UCS_KH_PUT_FAILED)) {
         ucs_error("cannot allocate hash entry");
         return UCS_ERR_NO_MEMORY;
     }
 
     q_desc = &kh_value(&iface->queue_desc_map, iter);
-    if (ret != UCS_KH_PUT_KEY_PRESENT) {
+    if (ucs_likely(ret != UCS_KH_PUT_KEY_PRESENT)) {
         status = uct_cuda_ipc_queue_desc_init(q_desc);
-        if (status != UCS_OK) {
+        if (ucs_unlikely(status != UCS_OK)) {
             kh_del(cuda_ipc_queue_desc, &iface->queue_desc_map, iter);
             return status;
         }

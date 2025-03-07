@@ -74,20 +74,20 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     uct_cuda_queue_desc_t *q_desc;
     ucs_queue_head_t *event_q;
 
-    if (0 == iov[0].length) {
+    if (ucs_unlikely(0 == iov[0].length)) {
         ucs_trace_data("Zero length request: skip it");
         return UCS_OK;
     }
 
     status = uct_cuda_ipc_map_memhandle(key, &mapped_addr);
-    if (status != UCS_OK) {
+    if (ucs_unlikely(status != UCS_OK)) {
         return UCS_ERR_IO_ERROR;
     }
 
     /* ensure context is set before creating events/streams */
     if (iface->cuda_context == NULL) {
         UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&iface->cuda_context));
-        if (iface->cuda_context == NULL) {
+        if (ucs_unlikely(iface->cuda_context == NULL)) {
             ucs_error("attempt to perform cuda memcpy without active context");
             return UCS_ERR_IO_ERROR;
         }
@@ -98,7 +98,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     ucs_assert(offset <= key->b_len);
 
     status = uct_cuda_ipc_get_queue_desc(iface, key->dev_num, &q_desc);
-    if (status != UCS_OK) {
+    if (ucs_unlikely(status != UCS_OK)) {
         return UCS_ERR_IO_ERROR;
     }
 
@@ -118,14 +118,14 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyDtoDAsync(dst, src, iov[0].length,
                                                         stream));
-    if (UCS_OK != status) {
+    if (ucs_unlikely(UCS_OK != status)) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_ipc_event->event,
                                                     stream));
-    if (UCS_OK != status) {
+    if (ucs_unlikely(UCS_OK != status)) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
     }
