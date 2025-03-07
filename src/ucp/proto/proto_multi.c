@@ -19,6 +19,117 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 
+#include <ucs/algorithm/qsort_r.h>
+
+
+static inline double
+ucp_proto_milti_bw_ratio(double multi_path_ratio, uint8_t path_index)
+{
+    double ratio;
+
+    if (UCS_CONFIG_DBL_IS_AUTO(multi_path_ratio)) {
+        /* When path_index is less than 4, the ratio is: 1 / 2**(2x), which is
+         * path0=100%, path1=25%, path2=6.25%, path3=1.5%.
+         * Subsequent paths have ratio 1 / (20x):
+         * path4=1.25%, path5=1% etc */
+        ratio = 1.0 / (double)(path_index < 4 ? (1 << path_index * 2) :
+                                                (20 * path_index));
+    } else {
+        ratio = 1.0 - (multi_path_ratio * path_index);
+    }
+
+    return ucs_max(1e-5, ratio);
+}
+
+static ucp_lane_index_t
+ucp_proto_multi_find_bw_lane(const ucp_proto_init_params_t *params,
+                             const ucp_lane_index_t *lanes,
+                             const ucp_proto_common_tl_perf_t *lanes_perf,
+                             const uint8_t *rsc_count, ucp_lane_map_t index_map)
+{
+    ucp_context_h context   = params->worker->context;
+    double multi_path_ratio = context->config.ext.multi_path_ratio;
+    ucp_rsc_index_t rsc_index;
+    double max_avail_bw = 0;
+    double avail_bw;
+    const ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_lane_index_t lane, index, max_index;
+
+    max_index = ucs_ffs64(index_map);
+    ucs_for_each_bit(index, index_map) {
+        lane      = lanes[index];
+        lane_perf = &lanes_perf[lane];
+        if (lane_perf->bandwidth < max_avail_bw) {
+            break;
+        }
+
+        rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+        avail_bw  = lane_perf->bandwidth *
+                    ucp_proto_milti_bw_ratio(multi_path_ratio,
+                                             rsc_count[rsc_index]);
+        if (avail_bw > max_avail_bw) {
+            max_avail_bw = avail_bw;
+            max_index    = index;
+        }
+    }
+
+    return max_index;
+}
+
+static void
+ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
+                                ucp_lane_index_t *lanes,
+                                ucp_lane_index_t num_lanes,
+                                ucp_lane_index_t max_lanes,
+                                const ucp_proto_common_tl_perf_t *lanes_perf)
+{
+    uint8_t local_rsc_count[UCP_MAX_RESOURCES] = {0};
+    ucp_lane_index_t selection[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t i, index;
+    ucp_lane_map_t index_map;
+    ucp_rsc_index_t rsc_index;
+
+    selection[0] = lanes[0];
+    rsc_index    = ucp_proto_common_get_rsc_index(params, lanes[0]);
+    local_rsc_count[rsc_index]++;
+
+    /* Select all indexes except the first one */
+    index_map = UCS_BIT(num_lanes) - 2;
+
+    ucs_assertv(max_lanes < num_lanes, "max_lanes=%d num_lanes=%d", max_lanes,
+                num_lanes);
+
+    for (i = 1; i < max_lanes; ++i) {
+        /* Greedy algorithm: find best option at every step */
+        index = ucp_proto_multi_find_bw_lane(params, lanes, lanes_perf,
+                                             local_rsc_count, index_map);
+
+        selection[i] = lanes[index];
+        index_map   &= ~UCS_BIT(index);
+        rsc_index    = ucp_proto_common_get_rsc_index(params, lanes[index]);
+        local_rsc_count[rsc_index]++;
+    }
+
+    /* Add the rest of the lanes to selection */
+    ucs_assert(ucs_popcount(index_map) == num_lanes - max_lanes);
+    ucs_for_each_bit(index, index_map) {
+        selection[i++] = lanes[index];
+    }
+
+    memcpy(lanes, selection, sizeof(ucp_lane_index_t) * num_lanes);
+}
+
+static int
+ucp_proto_multi_compare_bw(const void *elem1, const void *elem2, void *arg)
+{
+    const ucp_lane_index_t *lane1                = elem1;
+    const ucp_lane_index_t *lane2                = elem2;
+    const ucp_proto_common_tl_perf_t *lanes_perf = arg;
+
+    /* If bandwidths are equal, prefer to maintain the original ordering */
+    return ucp_score_prio_cmp(lanes_perf[*lane2].bandwidth, (intptr_t)elem1,
+                              lanes_perf[*lane1].bandwidth, (intptr_t)elem2);
+}
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   const char *perf_name,
@@ -32,7 +143,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_proto_common_tl_perf_t *lane_perf, perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     double max_bandwidth, max_frag_ratio, min_bandwidth;
-    ucp_lane_index_t i, lane, num_lanes;
+    ucp_lane_index_t i, lane, num_lanes, num_fast_lanes;
     ucp_proto_multi_lane_priv_t *lpriv;
     ucp_proto_perf_node_t *perf_node;
     size_t max_frag, min_length, min_end_offset, min_chunk;
@@ -40,6 +151,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_md_map_t reg_md_map;
     uint32_t weight_sum;
     ucs_status_t status;
+    int fixed_first_lane;
 
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
@@ -97,16 +209,35 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     max_frag_ratio          = 0;
     min_bandwidth           = DBL_MAX;
 
-    for (i = 0; (i < num_lanes) && (ucs_popcount(lane_map) < params->max_lanes);
-         ++i) {
-        lane      = lanes[i];
-        lane_perf = &lanes_perf[lane];
-        if ((lane_perf->bandwidth * max_bw_ratio) < max_bandwidth) {
+    /* Filter out slow lanes */
+    fixed_first_lane = params->first.lane_type != params->middle.lane_type;
+    for (i = fixed_first_lane ? 1 : 0, num_fast_lanes = i; i < num_lanes; ++i) {
+        lane = lanes[i];
+        if ((lanes_perf[lane].bandwidth * max_bw_ratio) < max_bandwidth) {
             /* Bandwidth on this lane is too low compared to the fastest
                available lane, so it's not worth using it */
-            continue;
+            ucp_proto_perf_node_deref(&lanes_perf_nodes[lane]);
+        } else {
+            lanes[num_fast_lanes++] = lane;
         }
+    }
 
+    num_lanes = num_fast_lanes;
+    lane      = fixed_first_lane ? 1 : 0;
+
+    /* Sort lanes by bandwidth and greedy select only when needed */
+    if (num_lanes > ucs_max(params->max_lanes, lane + 1)) {
+        /* When the first lane is different from the middle one, then we should
+         * preserve the ordering with eager protocols for TAG and AM APIs */
+        ucs_qsort_r(lanes + lane, num_lanes - lane, sizeof(ucp_lane_index_t),
+                    ucp_proto_multi_compare_bw, lanes_perf);
+        ucp_proto_multi_select_bw_lanes(&params->super.super, lanes, num_lanes,
+                                        params->max_lanes, lanes_perf);
+    }
+
+    for (i = 0; i < ucs_min(num_lanes, params->max_lanes); ++i) {
+        lane      = lanes[i];
+        lane_perf = &lanes_perf[lane];
         ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(send_pre_overhead)
                   UCP_PROTO_TIME_FMT(send_post_overhead)
                   UCP_PROTO_TIME_FMT(recv_overhead)
