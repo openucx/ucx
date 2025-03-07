@@ -425,9 +425,12 @@ ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_memory_info_t reg_mem_info = {
         .type    = init_params->select_param->mem_type,
-        .sys_dev = init_params->select_param->sys_dev
+        .sys_dev = init_params->select_param->sys_dev,
+        .flags   = init_params->select_param->op.mem_flags
     };
 
+    ucs_print("PUT-ZCOPY enter, memtype %s, flags 0x%x", ucs_memory_type_names[init_params->select_param->mem_type],
+            init_params->select_param->op.mem_flags);
     ucp_proto_rndv_put_common_probe(
             init_params, UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY), SIZE_MAX,
             UCT_EP_OP_LAST,
@@ -435,6 +438,7 @@ ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
             UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
             0, ucp_proto_rndv_put_zcopy_completion, 0,
             UCP_WORKER_STAT_RNDV_PUT_ZCOPY, &reg_mem_info);
+    ucs_print("PUT-ZCOPY exit");
 }
 
 static void
@@ -622,10 +626,14 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 
     status = ucp_mm_get_alloc_md_index(context, frag_mem_info.type,
                                        &dummy_md_id,
-                                       &frag_mem_info.sys_dev);
+                                       &frag_mem_info.sys_dev,
+                                       &frag_mem_info.flags);
     if (status != UCS_OK) {
         return;
     }
+    ucs_print("mprobe flags: basic 0x%x, rkey 0x%x frag type %s",
+            frag_mem_info.flags, init_params->rkey_config_key->mem_flags,
+            ucs_memory_type_names[frag_mem_info.type]);
 
     flags = context->config.ext.rndv_errh_ppln_enable ?
             UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING : 0;
@@ -636,10 +644,13 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
         comp_cb = ucp_proto_rndv_put_mtype_completion;
     }
 
+    ucs_print("PUT_MTYPE probe enter, frag type %s, flags 0x%x",
+              ucs_memory_type_names[frag_mem_info.type], frag_mem_info.flags);
     ucp_proto_rndv_put_common_probe(
             init_params, UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE), frag_size,
             UCT_EP_OP_GET_ZCOPY, flags, mdesc_md_map, comp_cb, 1,
             UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, &frag_mem_info);
+    ucs_print("PUT_MTYPE probe exit");
 }
 
 static void

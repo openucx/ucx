@@ -1608,7 +1608,9 @@ typedef enum uct_md_mem_attr_field {
      * Request the offset of the provided virtual address relative to the
      * beginning of its backing dmabuf region.
      */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5)
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5),
+
+    UCT_MD_MEM_ATTR_FIELD_FLAGS         = UCS_BIT(6)
 } uct_md_mem_attr_field_t;
 
 
@@ -1670,6 +1672,8 @@ typedef struct uct_md_mem_attr {
      * (identified by dmabuf_fd) backing the memory region being queried.
      */
     size_t            dmabuf_offset;
+
+    uint8_t           flags;
 } uct_md_mem_attr_t;
 
 

@@ -2544,7 +2544,8 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
     mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
                           UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
                           UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
-                          UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+                          UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
+                          UCT_MD_MEM_ATTR_FIELD_FLAGS;
 
     for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
         tl_md  = &context->tl_mds[context->mem_type_detect_mds[i]];
@@ -2561,6 +2562,7 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
         mem_info->sys_dev      = mem_attr.sys_dev;
         mem_info->base_address = mem_attr.base_address;
         mem_info->alloc_length = mem_attr.alloc_length;
+        mem_info->flags        = mem_attr.flags;
         return;
     }
 

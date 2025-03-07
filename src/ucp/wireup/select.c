@@ -52,6 +52,7 @@ typedef struct {
     ucs_sys_device_t     dst_sys_dev;
     ucp_lane_type_mask_t lane_types;
     size_t               seg_size;
+    uint16_t             distance;
     double               score[UCP_LANE_TYPE_LAST];
 } ucp_wireup_lane_desc_t;
 
@@ -347,7 +348,7 @@ ucp_wireup_check_keepalive(const ucp_wireup_select_params_t *select_params,
 static void
 ucp_wireup_init_select_info(double score, unsigned addr_index,
                             ucp_rsc_index_t rsc_index,
-                            uint8_t priority,
+                            uint8_t priority, uint16_t distance,
                             ucp_wireup_select_info_t *select_info)
 {
     /* score == 0.0 could be specified only when initializing a selection info
@@ -359,6 +360,7 @@ ucp_wireup_init_select_info(double score, unsigned addr_index,
     select_info->path_index = UCP_WIREUP_PATH_INDEX_UNDEFINED;
     select_info->rsc_index  = rsc_index;
     select_info->priority   = priority;
+    select_info->distance   = distance;
 }
 
 static size_t
@@ -417,6 +419,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     int is_reachable;
     double score;
     uint8_t priority;
+    uint16_t distance;
     ucp_md_index_t md_index;
 
     p            = tls_info;
@@ -597,7 +600,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             ae = &address->address_list[addr_index];
             if (!ucp_wireup_is_reachable(ep, select_params->ep_init_flags,
                                          rsc_index, ae, info_str,
-                                         info_str_size)) {
+                                         info_str_size, &distance)) {
                 /* Must be reachable device address, on same transport */
                 continue;
             }
@@ -615,7 +618,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             if (!found || (ucp_score_prio_cmp(score, priority, sinfo.score,
                                               sinfo.priority) > 0)) {
                 ucp_wireup_init_select_info(score, addr_index, rsc_index,
-                                            priority, &sinfo);
+                                            priority, distance, &sinfo);
                 found = 1;
             }
         }
@@ -778,6 +781,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
     lane_desc->dst_sys_dev  = dst_sys_dev;
     lane_desc->lane_types   = UCS_BIT(lane_type);
     lane_desc->seg_size     = seg_size;
+    lane_desc->distance     = select_info->distance;
     for (lane_type_iter = UCP_LANE_TYPE_FIRST;
          lane_type_iter < UCP_LANE_TYPE_LAST;
          ++lane_type_iter) {
@@ -1118,7 +1122,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_init_select_info(0., UINT_MAX, UCP_NULL_RESOURCE, 0,
+    ucp_wireup_init_select_info(0., UINT_MAX, UCP_NULL_RESOURCE, 0, 0,
                                 &select_info);
 
     /* server is not a proxy because it can create all lanes connected */
@@ -2375,6 +2379,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         key->lanes[lane].dst_sys_dev  = select_ctx->lane_descs[lane].dst_sys_dev;
         key->lanes[lane].lane_types   = select_ctx->lane_descs[lane].lane_types;
         key->lanes[lane].seg_size     = select_ctx->lane_descs[lane].seg_size;
+        key->lanes[lane].distance     = select_ctx->lane_descs[lane].distance;
         key->lanes[lane].path_index   = ucp_wireup_default_path_index(
                                        select_ctx->lane_descs[lane].path_index);
 
