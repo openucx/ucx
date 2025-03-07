@@ -17,7 +17,7 @@
 #include "cuda_ipc_cache.h"
 
 
-KHASH_MAP_INIT_INT(cuda_ipc_queue_desc, uct_cuda_queue_desc_t*);
+KHASH_MAP_INIT_INT(cuda_ipc_queue_desc, uct_cuda_queue_desc_t);
 
 
 typedef struct uct_cuda_ipc_iface_config_params {
