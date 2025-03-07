@@ -38,7 +38,6 @@ public:
         m_max_outstanding(m_perf.params.max_outstanding),
         m_am_rx_buffer(NULL),
         m_am_rx_length(0ul)
-
     {
         memset(&m_am_rx_params, 0, sizeof(m_am_rx_params));
         memset(&m_send_params, 0, sizeof(m_send_params));
@@ -275,11 +274,12 @@ public:
                               const ucp_am_recv_param_t *rx_params)
     {
         ucs_assert(!(rx_params->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA));
-        ucs_assert(length == ucx_perf_get_message_size(&m_perf.params));
+        ucs_assertv(length == m_am_rx_length,
+                    "length=%zu expected=%zu index=%u", length, m_am_rx_length,
+                    rte_call(&m_perf, group_index));
 
         ucs_status_ptr_t sp = ucp_am_recv_data_nbx(m_perf.ucp.worker, data,
-                                                   m_am_rx_buffer,
-                                                   m_am_rx_length,
+                                                   m_am_rx_buffer, length,
                                                    &m_am_rx_params);
         ucs_assert(UCS_PTR_IS_PTR(sp));
         ucp_request_release(sp);
@@ -330,7 +330,7 @@ public:
             ucs_assertv(length == test->m_am_rx_length,
                         "wrong buffer length %ld != %ld",
                         length, test->m_am_rx_length);
-            memcpy(test->m_am_rx_buffer, data, test->m_am_rx_length);
+            memcpy(test->m_am_rx_buffer, data, length);
         }
 
         test->recv_completed();
@@ -909,6 +909,8 @@ public:
             wait_recv_window(m_max_outstanding);
             send_ack(send_buffer, send_datatype);
         } else if (my_index == 1) {
+            /* Sender may only receive final ack */
+            m_am_rx_length = 1;
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype, sn,
                      remote_addr, rkey, m_perf.current.iters == 0);
