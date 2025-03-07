@@ -392,7 +392,7 @@ static unsigned uct_cuda_ipc_iface_progress(uct_iface_h tl_iface)
     return count;
 }
 
-static UCS_F_ALWAYS_INLINE unsigned
+static UCS_F_ALWAYS_INLINE int
 uct_cuda_ipc_queue_head_ready(ucs_queue_head_t *queue_head)
 {
     uct_cuda_event_desc_t *cuda_event;
@@ -564,10 +564,10 @@ static ucs_status_t uct_cuda_ipc_queue_desc_init(uct_cuda_queue_desc_t *q_desc)
                                                    CU_STREAM_NON_BLOCKING));
 }
 
-static ucs_status_t
+static void
 uct_cuda_ipc_queue_desc_cleanup(uct_cuda_queue_desc_t *q_desc)
 {
-    return UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(q_desc->stream));
+    UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(q_desc->stream));
 }
 
 ucs_status_t uct_cuda_ipc_get_queue_desc(uct_cuda_ipc_iface_t *iface, int index,
