@@ -51,13 +51,6 @@ typedef struct uct_cuda_copy_queue_desc {
 } uct_cuda_copy_queue_desc_t;
 
 
-#if CUDA_VERSION >= 12000
-typedef CUcontext uct_cuda_copy_ctx_validator_t;
-#else
-typedef CUdeviceptr uct_cuda_copy_ctx_validator_t;
-#endif
-
-
 typedef struct uct_cuda_copy_ctx_rsc {
     /* pool of cuda events to check completion of memcpy operations */
     ucs_mpool_t                  cuda_event_desc;
@@ -66,8 +59,6 @@ typedef struct uct_cuda_copy_ctx_rsc {
     /* array of queue descriptors for each src/dst memory type combination */
     uct_cuda_copy_queue_desc_t   queue_desc[UCS_MEMORY_TYPE_LAST]
                                            [UCS_MEMORY_TYPE_LAST];
-    /* Field to verify that the context has not been destroyed */
-    uct_cuda_copy_ctx_validator_t validator;
 #if CUDA_VERSION >= 12000
     /* CUDA context id */
     unsigned long long            ctx_id;
