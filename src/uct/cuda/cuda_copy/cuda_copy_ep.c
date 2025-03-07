@@ -105,8 +105,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
     ucs_status_t status;
     khiter_t iter;
 #if CUDA_VERSION >= 12000
-    unsigned long long ctx_id;
-    CUresult result;
+    unsigned long long UCS_V_UNUSED ctx_id;
+    CUresult UCS_V_UNUSED result;
 #endif
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&ctx));
