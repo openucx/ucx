@@ -1674,10 +1674,10 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                     break;
                 }
 
-                iface_attr = ucp_worker_iface_get_attr(ep->worker,
-                                                       sinfo->rsc_index);
-                ae         = &select_params->address->address_list[
-                                                            sinfo->addr_index];
+                rsc_index  = sinfo->rsc_index;
+                iface_attr = ucp_worker_iface_get_attr(ep->worker, rsc_index);
+                addr_index = sinfo->addr_index;
+                ae         = &select_params->address->address_list[addr_index];
 
                 dev_count.local[local_dev_index]++;
                 dev_count.remote[remote_dev_index]++;
