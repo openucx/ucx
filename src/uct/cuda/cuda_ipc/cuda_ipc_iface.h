@@ -8,6 +8,7 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/arch/cpu.h>
 #include <cuda.h>
 
@@ -16,7 +17,7 @@
 #include "cuda_ipc_cache.h"
 
 
-#define UCT_CUDA_IPC_MAX_PEERS 128
+KHASH_MAP_INIT_INT(cuda_ipc_queue_desc, uct_cuda_queue_desc_t*);
 
 
 typedef struct uct_cuda_ipc_iface_config_params {
@@ -33,14 +34,10 @@ typedef struct uct_cuda_ipc_iface_config_params {
 typedef struct uct_cuda_ipc_iface {
     uct_cuda_iface_t                   super;
     ucs_mpool_t                        event_desc;              /* cuda event desc */
-    ucs_queue_head_t                   outstanding_d2d_event_q; /* stream for outstanding d2d */
     int                                eventfd;                 /* get event notifications */
-    int                                streams_initialized;     /* indicates if stream created */
     CUcontext                          cuda_context;
-    CUstream                           stream_d2d[UCT_CUDA_IPC_MAX_PEERS];
-                                                                /* per-peer stream */
-    unsigned long                      stream_refcount[UCT_CUDA_IPC_MAX_PEERS];
-                                                                /* per stream outstanding ops */
+    ucs_queue_head_t                   active_queue;
+    khash_t(cuda_ipc_queue_desc)       queue_desc_map;
     uct_cuda_ipc_iface_config_params_t config;                  /* configurable iface parameters */
 } uct_cuda_ipc_iface_t;
 
@@ -54,7 +51,6 @@ typedef struct uct_cuda_ipc_iface_config {
 typedef struct uct_cuda_ipc_event_desc {
     CUevent           event;
     void              *mapped_addr;
-    unsigned          stream_id;
     uct_completion_t  *comp;
     ucs_queue_elem_t  queue;
     uct_cuda_ipc_ep_t *ep;
@@ -64,4 +60,6 @@ typedef struct uct_cuda_ipc_event_desc {
 
 
 ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface);
+ucs_status_t uct_cuda_ipc_get_queue_desc(uct_cuda_ipc_iface_t *iface, int index,
+                                         uct_cuda_queue_desc_t **q_desc_p);
 #endif

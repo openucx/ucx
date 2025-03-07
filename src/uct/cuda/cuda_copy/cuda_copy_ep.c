@@ -103,8 +103,8 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     uct_base_iface_t *base_iface = ucs_derived_of(tl_ep->iface, uct_base_iface_t);
-    uct_cuda_copy_event_desc_t *cuda_event;
-    uct_cuda_copy_queue_desc_t *q_desc;
+    uct_cuda_event_desc_t *cuda_event;
+    uct_cuda_queue_desc_t *q_desc;
     ucs_status_t status;
     ucs_memory_type_t src_type;
     ucs_memory_type_t dst_type;
