@@ -10,7 +10,7 @@
 class test_ucp_fence : public ucp_test {
 public:
     virtual void init() {
-        if (get_variant_value() & FENCE_MODE) {
+        if (get_variant_value() & EP_BASED_FENCE) {
             if (!is_proto_enabled()) {
                 UCS_TEST_SKIP_R("Proto v2 is disabled");
             }
@@ -162,7 +162,7 @@ protected:
     }
 
     enum {
-        FENCE_MODE = UCS_BIT(0)
+        EP_BASED_FENCE = UCS_BIT(0)
     };
 };
 
@@ -170,7 +170,8 @@ class test_ucp_fence32 : public test_ucp_fence {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_with_value(variants, UCP_FEATURE_AMO32, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_AMO32, FENCE_MODE, "ep_based");
+        add_variant_with_value(variants, UCP_FEATURE_AMO32, EP_BASED_FENCE,
+                               "ep_based");
     }
 };
 
@@ -185,7 +186,8 @@ class test_ucp_fence64 : public test_ucp_fence {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_with_value(variants, UCP_FEATURE_AMO64, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_AMO64, FENCE_MODE, "ep_based");
+        add_variant_with_value(variants, UCP_FEATURE_AMO64, EP_BASED_FENCE,
+                               "ep_based");
     }
 };
 
@@ -194,7 +196,7 @@ UCS_TEST_P(test_ucp_fence64, atomic_add_fadd) {
                    &test_ucp_fence64::blocking_fadd<uint64_t>);
 }
 
-UCS_TEST_P(test_ucp_fence64, atomic_add_fadd_strong) {
+UCS_TEST_P(test_ucp_fence64, atomic_add_fadd_strong, "FENCE_MODE=strong") {
     test<uint64_t>(&test_ucp_fence64::blocking_add<uint64_t>,
                    &test_ucp_fence64::blocking_fadd<uint64_t>);
 }

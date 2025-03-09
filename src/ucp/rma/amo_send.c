@@ -216,7 +216,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
         ucp_amo_init_proto(req, ucp_uct_atomic_op_table[opcode], remote_addr,
                            rkey);
 
-        status = ucp_ep_handle_fence_if_required(ep);
+        status = ucp_ep_check_fence(ep);
         if (status != UCS_OK) {
             status_p = UCS_STATUS_PTR(status);
             goto out;

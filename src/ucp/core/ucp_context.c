@@ -2227,13 +2227,11 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
            config->mpool_sizes.count * sizeof(size_t));
 
     if ((context->config.ext.fence_mode == UCP_FENCE_MODE_EP_BASED) &&
-        !(context->config.ext.proto_enable)) {
+        !context->config.ext.proto_enable) {
         ucs_error("UCX_FENCE_MODE=ep_based requires UCX_PROTO_ENABLE=y");
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_key_list;
-    }
-
-    if (context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) {
+    } else if (context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) {
         context->config.worker_fence_mode =
             ((context->config.ext.max_rma_lanes > 1) ||
              (context->config.ext.proto_enable)) ?

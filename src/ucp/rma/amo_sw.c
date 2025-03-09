@@ -17,7 +17,6 @@
 #include <ucs/profile/profile.h>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
-#include <ucp/proto/proto_single.h>
 #include <ucp/proto/proto_single.inl>
 
 

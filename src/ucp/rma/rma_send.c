@@ -239,8 +239,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
                               ucp_ep_get_fast_lane(ep,
                                                    rkey_config->put_short.lane),
                               buffer, length, remote_addr, tl_rkey);
-
-    if (status != UCS_ERR_NO_RESOURCE) {
+    if (status == UCS_OK) {
         ep->ext->unflushed_lanes |= UCS_BIT(rkey_config->put_short.lane);
     }
 
@@ -269,7 +268,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                   ucp_request_param_send_callback(param));
 
     if (worker->context->config.ext.proto_enable) {
-        status = ucp_ep_handle_fence_if_required(ep);
+        status = ucp_ep_check_fence(ep);
         if (status != UCS_OK) {
             ret = UCS_STATUS_PTR(status);
             goto out_unlock;
@@ -403,7 +402,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
             contig_length = ucp_contig_dt_length(datatype, count);
         }
 
-        status = ucp_ep_handle_fence_if_required(ep);
+        status = ucp_ep_check_fence(ep);
         if (status != UCS_OK) {
             ret = UCS_STATUS_PTR(status);
             goto out_unlock;

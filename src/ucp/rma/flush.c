@@ -743,17 +743,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
     case UCP_FENCE_MODE_EP_BASED:
         worker->fence_seq++;
         break;
-
     case UCP_FENCE_MODE_STRONG:
         status = ucp_worker_fence_strong(worker);
         break;
-
     case UCP_FENCE_MODE_WEAK:
         status = ucp_worker_fence_weak(worker);
         break;
-
     default:
-        ucs_error("Invalid fence mode %d",
+        ucs_error("invalid fence mode %d",
                   worker->context->config.worker_fence_mode);
         status = UCS_ERR_INVALID_PARAM;
     }
@@ -765,6 +762,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
+
+    /* TODO: Handle unflushed_lanes == 0 before reaching this function
+     *       as part of optimizing flush */
+    ucs_assertv(ep->ext->unflushed_lanes != 0,
+                "ep=%p unexpected unflushed_lanes=0x%" PRIx64, ep,
+                ep->ext->unflushed_lanes);
+
+    ucs_assertv(ucs_is_pow2(ep->ext->unflushed_lanes),
+                "ep=%p unexpected unflushed_lanes=0x%" PRIx64, ep,
+                ep->ext->unflushed_lanes);
 
     lane = ucs_ffs64_safe(ep->ext->unflushed_lanes);
     return uct_ep_fence(ucp_ep_get_lane(ep, lane), 0);

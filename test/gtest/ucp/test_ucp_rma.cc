@@ -431,11 +431,12 @@ class test_ucp_rma_order : public test_ucp_rma {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_RMA, FENCE_MODE, "ep_based");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, EP_BASED_FENCE,
+                               "ep_based");
     }
 
     virtual void init() {
-        if (get_variant_value() & FENCE_MODE) {
+        if (get_variant_value() & EP_BASED_FENCE) {
             if (!is_proto_enabled()) {
                 UCS_TEST_SKIP_R("Proto v2 is disabled");
             }
@@ -482,7 +483,7 @@ public:
     }
 private:
     enum {
-        FENCE_MODE = UCS_BIT(0)
+        EP_BASED_FENCE = UCS_BIT(0)
     };
 };
 
@@ -609,7 +610,7 @@ public:
         flush_workers();
     }
 private:
-    static constexpr uint64_t TEST_BUF_SIZE = 1000000;
+    static constexpr size_t TEST_BUF_SIZE = 1000000;
 };
 
 UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_put) {
