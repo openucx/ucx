@@ -377,12 +377,26 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t num_devices;
     ucp_rsc_index_t rsc_index;
-    ucp_lane_index_t lane;
+    ucp_lane_index_t lane, num_lanes;
     ssize_t length_size;
 
     devices = ucs_calloc(context->num_tls, sizeof(*devices), "packed_devices");
     if (devices == NULL) {
         return UCS_ERR_NO_MEMORY;
+    }
+
+    // if (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST) {
+    //     num_lanes = ucs_min(UCP_MAX_FAST_PATH_LANES, key->num_lanes);
+    // } else if (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL) {
+    //    num_lanes = key->num_lanes;
+    //}
+
+    if (flags & (UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL |
+                 UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST)) {
+        num_lanes = key->num_lanes;
+    } else if (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_SLOW) {
+        num_lanes = key->num_lanes;
+        /* but in fact here should be packed only one requested lane */
     }
 
     num_devices = 0;
@@ -395,16 +409,22 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 
         dev = ucp_address_get_device(context, rsc_index, devices, &num_devices);
 
-        if (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) {
+        if (flags & (UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL |
+                     UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST|
+                     UCP_ADDRESS_PACK_FLAG_EP_ADDR_SLOW)) {
             ucs_assert(key != NULL);
             /* Each lane which matches the resource index adds an ep address
              * entry. The length and flags is packed in non-unified mode only.
              */
-            for (lane = 0; lane < key->num_lanes; ++lane) {
+            for (lane = 0; lane < num_lanes; ++lane) {
                 if ((key->lanes[lane].rsc_index == rsc_index) &&
                     ucp_ep_config_connect_p2p(worker, key, rsc_index)) {
                     dev->tl_addrs_size += !ucp_worker_is_unified_mode(worker);
-                    dev->tl_addrs_size += iface_attr->ep_addr_len;
+                    if (!(flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST) ||
+                         (lane < UCP_MAX_FAST_PATH_LANES) ||
+                         (lane == key->wireup_msg_lane)) {
+                        dev->tl_addrs_size += iface_attr->ep_addr_len;
+                    }
                     dev->tl_addrs_size += sizeof(uint8_t); /* lane index */
                 }
             }
@@ -1281,8 +1301,14 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         if (dev->num_paths > 1) {
             ucs_assert(dev->num_paths <= UINT8_MAX);
             *(uint8_t*)dev_flags_ptr |= UCP_ADDRESS_FLAG_NUM_PATHS;
-            *(uint8_t*)ptr            = dev->num_paths;
-            ptr                       = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+
+            if (pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_SLOW) {
+                *(uint8_t*)ptr = 1; /* TODO: calculate by lanes2remote */
+            } else {
+                *(uint8_t*)ptr = dev->num_paths;
+            }
+
+            ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
         }
 
         /* System device */
@@ -1376,9 +1402,10 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
              * one is marked with UCP_ADDRESS_FLAG_LAST in its length field.
              */
             num_ep_addrs = 0;
-            if (pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) {
+            if (pack_flags & (UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL |
+                              UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST|
+                              UCP_ADDRESS_PACK_FLAG_EP_ADDR_SLOW)) {
                 ucs_assert(ep != NULL);
-                ep_addr_len = iface_attr->ep_addr_len;
                 ep_lane_ptr = NULL;
 
                 ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
@@ -1387,22 +1414,40 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                         continue;
                     }
 
+                    if ((pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST) &&
+                        ((lane >= UCP_MAX_FAST_PATH_LANES) &&
+                         (lane != ucp_ep_get_wireup_msg_lane(ep)))) {
+                        ucs_assert(context->config.ext.on_demand_wireup);
+                        ep_addr_len = 0;
+                    } else if ((pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_SLOW) &&
+                               (lanes2remote[lane] == UCP_NULL_LANE)) {
+                        ucs_assert(context->config.ext.on_demand_wireup);
+                        ep_addr_len = 0;
+                    } else {
+                        ep_addr_len = iface_attr->ep_addr_len;
+                    }
+
+
                     /* pack ep address length */
                     ptr = ucp_address_pack_tl_length(worker, ptr, UINT8_MAX,
                                                      ep_addr_len, addr_version,
                                                      0);
 
                     /* pack ep address */
-                    status = uct_ep_get_address(ucp_ep_get_lane(ep, lane), ptr);
-                    if (status != UCS_OK) {
-                        ucp_address_error(
-                                pack_flags,
-                                UCT_TL_RESOURCE_DESC_FMT
-                                " failed to get ep address %s",
-                                UCT_TL_RESOURCE_DESC_ARG(
-                                        &context->tl_rscs[rsc_index].tl_rsc),
-                                ucs_status_string(status));
-                        return status;
+                    if (ep_addr_len > 0) {
+                        status = uct_ep_get_address(ucp_ep_get_lane_raw(ep,
+                                                                        lane),
+                                                    ptr);
+                        if (status != UCS_OK) {
+                            ucp_address_error(
+                                    pack_flags,
+                                    UCT_TL_RESOURCE_DESC_FMT
+                                    " failed to get ep address %s",
+                                    UCT_TL_RESOURCE_DESC_ARG(
+                                            &context->tl_rscs[rsc_index].tl_rsc),
+                                    ucs_status_string(status));
+                            return status;
+                        }
                     }
 
                     ucp_address_memcheck(context, ptr, ep_addr_len, rsc_index);
@@ -1411,8 +1456,13 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                     /* pack ep lane index, and save the pointer for lane index
                      * of last ep in 'ep_last_ptr' to set UCP_ADDRESS_FLAG_LAST.
                      */
-                    remote_lane  = (lanes2remote == NULL) ? lane :
-                                   lanes2remote[lane];
+                    remote_lane =
+                        ((lanes2remote == NULL) ||
+                         /* for slow lane request lanes2remote contains path
+                            index, not the lane index
+                         */
+                         (pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_SLOW)) ?
+                        lane : lanes2remote[lane];
                     ucs_assertv(remote_lane <= UCP_ADDRESS_IFACE_LEN_MASK,
                                 "remote_lane=%d", remote_lane);
                     ep_lane_ptr  = ptr;
@@ -1549,10 +1599,20 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
     ssize_t size;
 
     if (ep == NULL) {
-        pack_flags &= ~UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+        pack_flags &= ~(UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL |
+                        UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST);
         key         = NULL;
     } else {
-        key         = &ucp_ep_config(ep)->key;
+        if (worker->context->config.ext.on_demand_wireup) {
+            if (pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_SLOW) {
+                /* NOOP */
+            } else if (pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL) {
+                pack_flags &= ~UCP_ADDRESS_PACK_FLAG_EP_ADDR_ALL;
+                pack_flags |= UCP_ADDRESS_PACK_FLAG_EP_ADDR_FAST;
+            }
+        }
+
+        key = &ucp_ep_config(ep)->key;
     }
 
     /* Collect all devices we want to pack */
