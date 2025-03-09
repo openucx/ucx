@@ -2458,6 +2458,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->context              = context;
     worker->uuid                 = ucs_generate_uuid((uintptr_t)worker);
     worker->flush_ops_count      = 0;
+    worker->fence_seq            = 0;
     worker->inprogress           = 0;
     worker->rkey_config_count    = 0;
     worker->num_active_ifaces    = 0;

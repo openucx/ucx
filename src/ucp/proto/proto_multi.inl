@@ -355,4 +355,12 @@ ucp_proto_am_zcopy_multi_common_send_func(
                            &req->send.state.uct_comp);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_multi_rma_init_func(ucp_request_t *req)
+{
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+
+    req->send.ep->ext->unflushed_lanes |= mpriv->lane_map;
+}
+
 #endif
