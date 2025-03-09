@@ -76,6 +76,12 @@ protected:
         test_window_size = 8 * 1024;
         hole_size        = 2 * align;
 
+        auto msg = [&]() {
+            std::stringstream ss;
+            ss << "using length=" << len << " src_align=" << i << " dst_align=" << j;
+            return ss.str();
+        };
+
         /*
          * Allocate a hole above and below the test_window_size
          * to check for writes beyond the designated area.
@@ -113,14 +119,20 @@ protected:
                     /* Perform the transfer */
                     ucs_x86_nt_buffer_transfer(dst + i, src + j, len, hint, len);
                     result = memcmp(src + j, dst + i, len);
-                    EXPECT_EQ(0, result);
+                    EXPECT_EQ(0, result) << msg();
+                    if (result) {
+                        goto terminate;
+                    }
 
                     /* reset the copied region back to zero */
                     memset(dst + i, 0x0, len);
 
                     /* check for any modifications in the holes */
                     result = memcmp(test_window_dst, dup, total_size);
-                    EXPECT_EQ(0, result);
+                    EXPECT_EQ(0, result) << msg();
+                    if (result) {
+                        goto terminate;
+                    }
                 }
             }
             /* Check for each len for less than 1k sizes
@@ -133,6 +145,7 @@ protected:
             }
         }
 
+    terminate:
         free(dup);
 
     dup_fail:
