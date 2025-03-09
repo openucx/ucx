@@ -533,7 +533,7 @@ public:
     }
 
     void do_fence() {
-        uint32_t worker_fence_seq_before = worker_fence_seq();
+        uint64_t worker_fence_seq_before = worker_fence_seq();
         sender().fence();
 
         EXPECT_EQ(worker_fence_seq_before + 1, worker_fence_seq());
