@@ -12,10 +12,11 @@
 
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sock.h>
 #include <ucs/type/status.h>
-#include <ucs/debug/memtrack_int.h>
+#include <ucs/type/init_once.h>
 
 #include <errno.h>
 #include <linux/netlink.h>
@@ -34,7 +35,7 @@ typedef struct {
 
 typedef struct {
     struct sockaddr_storage dest;
-    uint32_t                subnet_prefix_len;
+    unsigned char           subnet_prefix_len;
     int                     if_index;
 } ucs_netlink_route_entry_t;
 
@@ -53,8 +54,7 @@ ucs_netlink_rt_cache_hash_equal(khint32_t key1, khint32_t key2)
     return key1 == key2;
 }
 
-static pthread_mutex_t ucs_netlink_rt_cache_lock = PTHREAD_MUTEX_INITIALIZER;
-static int route_data_exists                     = 0;
+static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
 KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_netlink_rt_rules_t, 1,
            ucs_netlink_rt_cache_hash_func, ucs_netlink_rt_cache_hash_equal);
 static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
@@ -244,6 +244,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
                                 ucs_error("could not allocate route entry");
                                 return UCS_ERR_NO_MEMORY);
 
+    memset(&new_rule->dest, 0, sizeof(struct sockaddr_storage));
     new_rule->dest.ss_family = ((const struct rtmsg *)nl_msg)->rtm_family;
     if (((const struct rtmsg *)nl_msg)->rtm_family == AF_INET) {
         memcpy(&((struct sockaddr_in *)&new_rule->dest)->sin_addr,
@@ -289,20 +290,14 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
     struct rtmsg rtm = {0};
     ucs_netlink_route_info_t info;
 
-    pthread_mutex_lock(&ucs_netlink_rt_cache_lock);
-    if (route_data_exists) {
-        goto lookup;
+    UCS_INIT_ONCE(&init_once) {
+        rtm.rtm_family = sa_remote->sa_family;
+        rtm.rtm_table  = RT_TABLE_MAIN;
+
+        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
+                                ucs_netlink_parse_rt_entry_cb, NULL);
     }
 
-    rtm.rtm_family = sa_remote->sa_family;
-    rtm.rtm_table  = RT_TABLE_MAIN;
-
-    ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
-                             ucs_netlink_parse_rt_entry_cb, NULL);
-    route_data_exists = 1;
-
-lookup:
-    pthread_mutex_unlock(&ucs_netlink_rt_cache_lock);
     info.if_index  = if_index;
     info.sa_remote = sa_remote;
     info.found     = 0;

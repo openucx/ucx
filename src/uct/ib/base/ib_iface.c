@@ -664,7 +664,7 @@ static void uct_ib_iface_log_subnet_info(const struct sockaddr *sa1,
 }
 
 static int
-uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, int gid_index,
+uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
                               struct sockaddr *sa_remote,
                               const uct_iface_is_reachable_params_t *params)
 {
