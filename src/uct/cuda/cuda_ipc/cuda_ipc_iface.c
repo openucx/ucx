@@ -580,18 +580,17 @@ uct_cuda_ipc_create_queue_desc(uct_cuda_ipc_iface_t *iface, int index,
     int ret;
 
     iter = kh_put(cuda_ipc_queue_desc, &iface->queue_desc_map, index, &ret);
-    if (ucs_unlikely(ret == UCS_KH_PUT_FAILED)) {
+    if (ret == UCS_KH_PUT_FAILED) {
         ucs_error("cannot allocate hash entry");
         return UCS_ERR_NO_MEMORY;
     }
 
+    ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
     q_desc = &kh_value(&iface->queue_desc_map, iter);
-    if (ucs_likely(ret != UCS_KH_PUT_KEY_PRESENT)) {
-        status = uct_cuda_ipc_queue_desc_init(q_desc);
-        if (ucs_unlikely(status != UCS_OK)) {
-            kh_del(cuda_ipc_queue_desc, &iface->queue_desc_map, iter);
-            return status;
-        }
+    status = uct_cuda_ipc_queue_desc_init(q_desc);
+    if (status != UCS_OK) {
+        kh_del(cuda_ipc_queue_desc, &iface->queue_desc_map, iter);
+        return status;
     }
 
     *q_desc_p = q_desc;
