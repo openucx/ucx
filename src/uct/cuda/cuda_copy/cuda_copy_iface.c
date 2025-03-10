@@ -611,6 +611,8 @@ static void uct_cuda_copy_ctx_rsc_destroy(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
         UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(mpool_priv->validator));
     }
 #endif
+
+    ucs_mpool_cleanup(&ctx_rsc->cuda_event_desc, 1);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
@@ -625,7 +627,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
     kh_foreach_key(&self->ctx_rscs, ctx_id, {
         iter    = kh_get(cuda_copy_ctx_rscs, &self->ctx_rscs, ctx_id);
         ctx_rsc = &kh_value(&self->ctx_rscs, iter);
-        ucs_mpool_cleanup(&ctx_rsc->cuda_event_desc, 1);
         uct_cuda_copy_ctx_rsc_destroy(ctx_rsc);
     });
 
