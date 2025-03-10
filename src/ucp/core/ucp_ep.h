@@ -206,6 +206,8 @@ typedef struct ucp_ep_config_key_lane {
                                         was selected for */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
+    uint16_t             distance; /* Distance to the peer obtained during
+                                      reachability check */
 } ucp_ep_config_key_lane_t;
 
 

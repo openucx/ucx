@@ -279,7 +279,7 @@ protected:
         }
 
         ucs_memtype_cache_update(ptr, size, mem_type,
-                                 UCS_SYS_DEVICE_ID_UNKNOWN);
+                                 UCS_SYS_DEVICE_ID_UNKNOWN, 0);
     }
 
     void memtype_cache_update(const mem_buffer &b) {

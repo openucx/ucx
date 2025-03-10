@@ -43,6 +43,7 @@ struct ucs_memtype_cache_region {
     ucs_list_link_t   list;     /**< List element */
     ucs_memory_type_t mem_type; /**< Memory type, use uint8 for compact size */
     ucs_sys_device_t  sys_dev;  /**< System device index */
+    uint8_t           mem_flags;
  };
 
 
@@ -98,6 +99,7 @@ ucs_memory_info_set_unknown(ucs_memory_info_t *mem_info)
     mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
     mem_info->base_address = NULL;
     mem_info->alloc_length = -1;
+    mem_info->flags        = 0;
 }
 
 static ucs_pgt_dir_t *ucs_memtype_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
@@ -124,7 +126,7 @@ static void ucs_memtype_cache_pgt_dir_release(const ucs_pgtable_t *pgtable,
 static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
                                      ucs_pgt_addr_t start, ucs_pgt_addr_t end,
                                      ucs_memory_type_t mem_type,
-                                     ucs_sys_device_t sys_dev)
+                                     ucs_sys_device_t sys_dev, uint8_t mem_flags)
 {
     ucs_memtype_cache_region_t *region;
     ucs_status_t status;
@@ -147,6 +149,7 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
     region->super.end   = end;
     region->mem_type    = mem_type;
     region->sys_dev     = sys_dev;
+    region->mem_flags   = mem_flags;
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert, &memtype_cache->pgtable,
                               &region->super);
@@ -173,10 +176,10 @@ static void ucs_memtype_cache_region_collect_callback(const ucs_pgtable_t *pgtab
 }
 
 UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
-                      (memtype_cache, address, size, mem_type, sys_dev, action),
+                      (memtype_cache, address, size, mem_type, sys_dev, mem_flags, action),
                       ucs_memtype_cache_t *memtype_cache, const void *address,
                       size_t size, ucs_memory_type_t mem_type,
-                      ucs_sys_device_t sys_dev,
+                      ucs_sys_device_t sys_dev, uint8_t mem_flags,
                       ucs_memtype_cache_action_t action)
 {
     ucs_pgt_addr_t start, end, search_start, search_end;
@@ -238,7 +241,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     }
 
     if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
-        ucs_memtype_cache_insert(memtype_cache, start, end, mem_type, sys_dev);
+        ucs_memtype_cache_insert(memtype_cache, start, end, mem_type, sys_dev, mem_flags);
     }
 
     /* slice old regions by the new region, to preserve the previous memory type
@@ -248,12 +251,12 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
         if (start > region->super.start) {
             /* create previous region */
             ucs_memtype_cache_insert(memtype_cache, region->super.start, start,
-                                     region->mem_type, region->sys_dev);
+                                     region->mem_type, region->sys_dev, mem_flags);
         }
         if (end < region->super.end) {
             /* create next region */
             ucs_memtype_cache_insert(memtype_cache, end, region->super.end,
-                                     region->mem_type, region->sys_dev);
+                                     region->mem_type, region->sys_dev, mem_flags);
         }
 
         ucs_free(region);
@@ -265,14 +268,14 @@ out_unlock:
 
 void ucs_memtype_cache_update(const void *address, size_t size,
                               ucs_memory_type_t mem_type,
-                              ucs_sys_device_t sys_dev)
+                              ucs_sys_device_t sys_dev, uint8_t flags)
 {
     if (ucs_memtype_cache_global_instance == NULL) {
         return;
     }
 
     ucs_memtype_cache_update_internal(ucs_memtype_cache_global_instance,
-                                      address, size, mem_type, sys_dev,
+                                      address, size, mem_type, sys_dev, flags,
                                       UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE);
 }
 
@@ -280,7 +283,7 @@ void ucs_memtype_cache_remove(const void *address, size_t size)
 {
     ucs_memtype_cache_update_internal(ucs_memtype_cache_global_instance,
                                       address, size, UCS_MEMORY_TYPE_UNKNOWN,
-                                      UCS_SYS_DEVICE_ID_UNKNOWN,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN, 0,
                                       UCS_MEMTYPE_CACHE_ACTION_REMOVE);
 }
 
@@ -304,7 +307,7 @@ static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
     ucs_memtype_cache_update_internal(arg, event->mem_type.address,
                                       event->mem_type.size,
                                       event->mem_type.mem_type,
-                                      UCS_SYS_DEVICE_ID_UNKNOWN, action);
+                                      UCS_SYS_DEVICE_ID_UNKNOWN, 0, action);
 }
 
 static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)
@@ -351,6 +354,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
         mem_info->alloc_length = region->super.end - region->super.start;
         mem_info->type         = region->mem_type;
         mem_info->sys_dev      = region->sys_dev;
+        mem_info->flags        = region->mem_flags;
+        ucs_print("found in memcache flags 0x%x", region->mem_flags);
         ucs_trace_data("0x%lx..0x%lx found in " UCS_MEMTYPE_CACHE_REGION_FMT,
                        start, start + size,
                        UCS_MEMTYPE_CACHE_REGION_ARG(region));

@@ -46,6 +46,7 @@ ucp_datatype_iter_init_mem_info_from_user_memh(ucp_datatype_iter_t *dt_iter,
 
     dt_iter->mem_info.type    = memh->mem_type;
     dt_iter->mem_info.sys_dev = memh->sys_dev;
+    dt_iter->mem_info.flags   = 0; // TBD
     return UCS_OK;
 }
 

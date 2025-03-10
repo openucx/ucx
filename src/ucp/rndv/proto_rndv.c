@@ -153,6 +153,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     rkey_config_key.ep_cfg_index = ep_cfg_index;
     rkey_config_key.sys_dev      = params->super.reg_mem_info.sys_dev;
     rkey_config_key.mem_type     = params->super.reg_mem_info.type;
+    rkey_config_key.mem_flags    = params->super.reg_mem_info.flags;
 
     rkey_config_key.unreachable_md_map = 0;
 
@@ -217,8 +218,10 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_common_init_params_t *init_params,
                            UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_LATENCY;
+                           UCT_PERF_ATTR_FIELD_LATENCY |
+                           UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_FLAGS;
     perf_attr.operation  = UCT_EP_OP_AM_BCOPY;
+    perf_attr.local_memory_flags = init_params->super.select_param->op.mem_flags;
 
     rsc_index = init_params->super.ep_config_key->lanes[lane].rsc_index;
     wiface    = ucp_worker_iface(worker, rsc_index);
@@ -283,6 +286,11 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
                                     op_attr_mask, 0, UCP_DATATYPE_CONTIG,
                                     &mem_info, 1);
     }
+    remote_select_param.op.mem_flags = params->super.reg_mem_info.flags;
+//    ucs_print("remote select param for %s, regmemtype %s flags 0x%x",
+  //            ucs_memory_type_names[select_param->mem_type],
+    //          ucs_memory_type_names[ params->super.reg_mem_info.type],
+      //         remote_select_param.op.mem_flags);
 
     return remote_select_param;
 }
@@ -460,6 +468,18 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
             UCP_PROTO_FLAG_INVALID) {
             continue;
         }
+
+        ucs_print("variants for [%zu...%zu] proto %s, remote_proto %s, flags 0x%x, rkey flags 0x%x"
+                  " rkey_config mt %s, rem_sel_param mt %s, op_attr 0x%x opidflags 0x%x",
+                  params->super.min_length, params->super.max_length,
+                   ucp_proto_id_field(params->super.super.proto_id, name),
+                  ucp_proto_id_field(remote_proto->proto_id, name),
+                   remote_select_param.op.mem_flags, params->super.reg_mem_info.flags,
+                   ucs_memory_type_names[params->super.reg_mem_info.type],
+                   ucs_memory_type_names[remote_select_param.mem_type],
+                   params->super.super.select_param->op_attr,
+                   params->super.super.select_param->op_id_flags);
+
 
         remote_priv = &ucs_array_elem(&remote_proto_init->priv_buf,
                                       remote_proto->priv_offset);
@@ -721,6 +741,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
     ucp_proto_select_t *proto_select;
     ucs_status_t status;
     ucp_rkey_h rkey;
+    int unpack_mem_flags;
 
     ucs_assert((op_id >= UCP_OP_ID_RNDV_FIRST) &&
                (op_id < UCP_OP_ID_RNDV_LAST));
@@ -732,15 +753,20 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
          * are unpacked only once and cached in the peer_mem hash on ep. It is
          * done by the specific protocols (if selected) which use them.
          */
+
+        unpack_mem_flags = (ep_config->key.dst_version >= 19);
         status = ucp_ep_rkey_unpack_internal(
                   ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
-                  ep_config->rndv.proto_rndv_rkey_skip_mds, &rkey);
+                  ep_config->rndv.proto_rndv_rkey_skip_mds, unpack_mem_flags,
+                  &rkey);
         if (status != UCS_OK) {
             goto err;
         }
 
         proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
         rkey_cfg_index = rkey->cfg_index;
+    ucs_print("select reply: DT mem flags 0x%x, rkey->key.mem_flags 0x%x",
+            sel_param.op.mem_flags, worker->rkey_config[rkey_cfg_index].key.mem_flags);
     } else {
         /* No remote key, use endpoint protocols */
         proto_select   = &ep_config->proto_select;
@@ -751,6 +777,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
     ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, 0,
                                 req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
+    sel_param.op.mem_flags = req->send.state.dt_iter.mem_info.flags;
 
     status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
                               proto_select, rkey_cfg_index, &sel_param, length);
@@ -836,6 +863,7 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
         ucp_datatype_iter_init_null(&req->send.state.dt_iter, rts->size,
                                     &sg_count);
     }
+    ucs_print("RX RTS, rts len %zu, rx len %zu", rts->size, recv_req->recv.dt_iter.length);
 
     status = ucp_proto_rndv_send_reply(worker, req, op_id,
                                        recv_req->recv.op_attr, rts->size,
@@ -872,6 +900,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_start,
     req->send.rndv.offset         = rtr->offset;
 
     ucs_assert(rtr->size == req->send.state.dt_iter.length);
+    ucs_print("RX RTR, rtr len %zu, rx len %zu", rtr->size, req->send.state.dt_iter.length);
     status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_SEND,
                                        op_attr_mask, rtr->size, rtr + 1,
                                        rkey_length, sg_count);

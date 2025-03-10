@@ -21,6 +21,7 @@
 #include <ucs/type/serialize.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/topo/base/topo.h>
+#include <ucs/debug/log.h>
 #include <inttypes.h>
 
 
@@ -127,13 +128,13 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
 
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                  (context, md_map, memh, address, length, mem_info, sys_dev_map,
-                  sys_distance, uct_flags, buffer),
+                  sys_distance, uct_flags, pack_mem_flags, buffer),
                  ucp_context_h context, ucp_md_map_t md_map,
                  const ucp_mem_h memh, void *address, size_t length,
                  const ucp_memory_info_t *mem_info,
                  ucp_sys_dev_map_t sys_dev_map,
                  const ucs_sys_dev_distance_t *sys_distance, unsigned uct_flags,
-                 void *buffer)
+                 int pack_mem_flags, void *buffer)
 {
     void *p = buffer;
     uct_md_mkey_pack_params_t params;
@@ -155,6 +156,10 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
     UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_LAST <= 255);
     *ucs_serialize_next(&p, ucp_md_map_t) = md_map;
     *ucs_serialize_next(&p, uint8_t)      = mem_info->type;
+    if (pack_mem_flags) {
+        ucs_print("rkey_pack - pack mem_flags 0x%x",  mem_info->flags);
+        *ucs_serialize_next(&p, uint8_t) = mem_info->flags;
+    }
 
     params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
     /* Write both size and rkey_buffer for each UCT rkey */
@@ -599,7 +604,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
         mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
                                   ucp_memh_address(memh), ucp_memh_length(memh),
-                                  &mem_info, 0, NULL, 0, memh_buffer);
+                                  &mem_info, 0, NULL, 0, 0, memh_buffer);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
@@ -745,9 +750,10 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
-                 (rkey, ep, buffer, buffer_end, unreachable_md_map),
+                 (rkey, ep, buffer, buffer_end, unreachable_md_map, mem_flags),
                  ucp_rkey_h rkey, ucp_ep_h ep, const void *buffer,
-                 const void *buffer_end, ucp_md_map_t unreachable_md_map)
+                 const void *buffer_end, ucp_md_map_t unreachable_md_map,
+                 uint8_t mem_flags)
 {
     ucp_worker_h worker = ep->worker;
     const void *p       = buffer;
@@ -765,6 +771,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.ep_cfg_index       = ep->cfg_index;
     rkey_config_key.md_map             = rkey->md_map;
     rkey_config_key.mem_type           = rkey->mem_type;
+    rkey_config_key.mem_flags          = mem_flags;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
     if (buffer < buffer_end) {
@@ -789,10 +796,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
-                 (ep, buffer, length, unpack_md_map, skip_md_map, rkey_p),
+                 (ep, buffer, length, unpack_md_map, skip_md_map, unpack_mem_flags,
+                  rkey_p),
                  ucp_ep_h ep, const void *buffer, size_t length,
                  ucp_md_map_t unpack_md_map, ucp_md_map_t skip_md_map,
-                 ucp_rkey_h *rkey_p)
+                 int unpack_mem_flags, ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -806,7 +814,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     unsigned rkey_index;
     ucs_status_t status;
     ucp_rkey_h rkey;
-    uint8_t flags;
+    uint8_t flags, mem_flags;
     int md_count;
 
     UCS_STATIC_ASSERT(ucs_offsetof(ucp_rkey_t, mem_type) ==
@@ -847,6 +855,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
 #if ENABLE_PARAMS_CHECK
     rkey->ep       = ep;
 #endif
+    if (unpack_mem_flags) {
+        mem_flags = *ucs_serialize_next(&p, const uint8_t);
+        ucs_print("rkey_unpack, mem_flags packed 0x%x", mem_flags);
+    } else {
+        mem_flags = 0;
+        ucs_print("rkey_unpack, mem_flags default 0x0");
+    }
 
     /* Go over remote MD indices and unpack rkey of each UCT MD */
     rkey_index = 0; /* Index of the rkey in the array */
@@ -905,7 +920,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     if (worker->context->config.ext.proto_enable) {
         status = ucp_rkey_proto_resolve(rkey, ep, p,
                                         UCS_PTR_BYTE_OFFSET(buffer, length),
-                                        unreachable_md_map);
+                                        unreachable_md_map, mem_flags);
         if (status != UCS_OK) {
             goto err_destroy;
         }
