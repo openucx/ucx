@@ -15,6 +15,10 @@
 #include <cuda.h>
 
 
+UCS_ARRAY_DECLARE_TYPE(uct_cuda_retained_devices_t, unsigned, CUdevice);
+uct_cuda_retained_devices_t uct_cuda_retained_devices;
+
+
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                                ucs_sys_device_t *sys_dev_p)
 {
@@ -101,13 +105,40 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                            num_resources_p);
 }
 
+ucs_status_t
+uct_cuda_primary_ctx_retain(CUdevice cuda_device, CUcontext *cuda_ctx_p)
+{
+    CUcontext cuda_ctx;
+    ucs_status_t status;
+    CUdevice *cuda_device_retained;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&cuda_ctx,
+                                                               cuda_device));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    cuda_device_retained  = ucs_array_append(&uct_cuda_retained_devices,
+                                             return UCS_ERR_NO_MEMORY);
+    *cuda_device_retained = cuda_device;
+    *cuda_ctx_p           = cuda_ctx;
+    return UCS_OK;
+}
+
 UCS_STATIC_INIT
 {
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+    ucs_array_init_dynamic(&uct_cuda_retained_devices);
 }
 
 UCS_STATIC_CLEANUP
 {
+    CUdevice *device;
+
+    ucs_array_for_each(device, &uct_cuda_retained_devices) {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(*device));
+    }
+    ucs_array_cleanup_dynamic(&uct_cuda_retained_devices);
 }
 
 UCS_MODULE_INIT() {

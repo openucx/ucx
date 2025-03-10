@@ -13,6 +13,8 @@ extern "C" {
 #include <cuda.h>
 #include <cuda_runtime.h>
 
+#include <thread>
+
 class test_switch_cuda_device : public test_md {
 public:
     template<class T> void detect_mem_type(ucs_memory_type_t mem_type) const;
@@ -143,3 +145,47 @@ UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_fabric)
 #endif
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_switch_cuda_device, cuda_cpy);
+
+
+class test_another_thread : public test_md {
+public:
+    template<class T> void detect_mem_type(ucs_memory_type_t mem_type) const;
+};
+
+template<class T>
+void test_another_thread::detect_mem_type(ucs_memory_type_t mem_type) const
+{
+    const size_t size = 16;
+    T buffer(size, mem_type);
+
+    auto& md = m_md;
+    ucs_memory_type_t detected_mem_type;
+    ucs_status_t status;
+    std::thread t([&md, &buffer, &size, &detected_mem_type, &status]() {
+        status = uct_md_detect_memory_type(md, buffer.ptr(), size,
+                                           &detected_mem_type);
+    });
+    t.join();
+
+    ASSERT_EQ(status, UCS_OK);
+    EXPECT_EQ(detected_mem_type, mem_type);
+}
+
+UCS_TEST_P(test_another_thread, detect_mem_type_cuda)
+{
+    detect_mem_type<mem_buffer>(UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_another_thread, detect_mem_type_cuda_managed)
+{
+    detect_mem_type<mem_buffer>(UCS_MEMORY_TYPE_CUDA_MANAGED);
+}
+
+#if HAVE_CUDA_FABRIC
+UCS_TEST_P(test_another_thread, detect_mem_type_cuda_fabric)
+{
+    detect_mem_type<cuda_fabric_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
+}
+#endif
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_another_thread, cuda_cpy);
