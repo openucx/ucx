@@ -1905,7 +1905,10 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     /* establish connections on all underlying endpoints, skipping CM lane */
-    connect_lane_bitmap &= ~UCS_BIT(ucp_ep_get_cm_lane(ep));
+    if (ucp_ep_has_cm_lane(ep)) {
+        connect_lane_bitmap &= ~UCS_BIT(ucp_ep_get_cm_lane(ep));
+    }
+
     ucs_for_each_bit(lane, connect_lane_bitmap) {
         if ((ucp_ep_get_lane_raw(ep, lane) != NULL) &&
             !ucp_wireup_ep_test(ucp_ep_get_lane_raw(ep, lane))) {
