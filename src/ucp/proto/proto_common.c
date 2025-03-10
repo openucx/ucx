@@ -913,7 +913,7 @@ ucp_proto_storage_trace_lanes(const ucp_proto_lane_storage_t *storage,
                               ucp_lane_index_t *lanes, ucp_lane_index_t length,
                               const char *desc)
 {
-    ucp_context_h context = storage->params->worker->context;
+    ucp_context_h UCS_V_UNUSED context = storage->params->worker->context;
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t i, lane;
     ucp_rsc_index_t rsc_index;
