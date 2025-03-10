@@ -25,8 +25,8 @@
 static void
 ucp_stream_multi_common_probe(const ucp_proto_multi_init_params_t *params)
 {
-    if (!ucp_proto_init_check_op(
-                &params->super.super, UCS_BIT(UCP_OP_ID_STREAM_SEND))) {
+    if (!ucp_proto_init_check_op(&params->super.super,
+                                 UCS_BIT(UCP_OP_ID_STREAM_SEND))) {
         return;
     }
 

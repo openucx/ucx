@@ -149,7 +149,6 @@ static void ucp_proto_amo_probe(const ucp_proto_init_params_t *init_params,
                                 int is_memtype)
 {
     ucp_worker_h worker              = init_params->worker;
-    ucs_memory_type_t send_mem_type  = init_params->select_param->mem_type;
     ucs_memory_type_t reply_mem_type =
             init_params->select_param->op.reply.mem_type;
     ucp_proto_single_init_params_t params = {
@@ -179,12 +178,6 @@ static void ucp_proto_amo_probe(const ucp_proto_init_params_t *init_params,
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
-        return;
-    }
-
-    if ((!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(send_mem_type) ||
-         !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(reply_mem_type)) &&
-        init_params->worker->context->config.ext.avoid_copy_mem_types) {
         return;
     }
 

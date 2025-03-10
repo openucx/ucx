@@ -500,7 +500,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             continue;
         }
 
-        if (context->config.ext.avoid_copy_mem_types &&
+        if (!context->config.ext.memtype_copy_enable &&
             (iface_attr->cap.flags & UCT_IFACE_FLAG_MEM_TYPE_COPY)) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : disabled to avoid memory type copies",

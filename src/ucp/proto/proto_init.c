@@ -566,7 +566,7 @@ err_cleanup_perf:
 int ucp_proto_common_check_memtype_copy(
     const ucp_proto_common_init_params_t *params)
 {
-    if (!params->super.worker->context->config.ext.avoid_copy_mem_types) {
+    if (params->super.worker->context->config.ext.memtype_copy_enable) {
         return 1;
     }
 

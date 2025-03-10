@@ -508,9 +508,9 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_rcx, avoid_memtype_copy,
+UCS_TEST_P(test_ucp_proto_mock_rcx, memtype_copy_enable,
            "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1",
-           "MEMTYPE_AVOID_COPY=y")
+           "MEMTYPE_COPY_ENABLE=n")
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
