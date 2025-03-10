@@ -1443,8 +1443,8 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
      * HW tag matching requires flush and thus not supported for reconfig */
     if ((ucp_ep_get_tag_lane(ep) != UCP_NULL_LANE) ||
         /* Weak fence requires flushing RMA lanes
-     * TODO: replace with more specific 'fence mode' check after
-     * Michal's PR is merged */
+         * TODO: replace with more specific 'fence mode' check after
+         * Michal's PR is merged */
         !ep->worker->context->config.worker_strong_fence) {
         return 0;
     }
@@ -1553,6 +1553,11 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
         new_wireup_lane = key->cm_lane;
     } else {
         if (am_need_flush) {
+            /* Send wireup reply through old AM lane:
+             * 1) If AM is reused, old lane is taken from reuse map.
+             * 2) Otherwise, old lane is accessed through new AM lane (used
+             * as auxilary).
+             * */
             new_wireup_lane = (reuse_lane_map[old_lane] != UCP_NULL_LANE) ?
                                       reuse_lane_map[old_lane] :
                                       key->am_lane;
@@ -1589,12 +1594,12 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
 
     /* Auxiliary is not required when AM flush is done by reused lane */
     if (!am_need_flush || (reuse_lane_map[old_lane] == UCP_NULL_LANE)) {
-        new_aux_ep = old_wireup_ep;
-
         if (is_wireup_ep) {
             new_aux_ep = ucp_wireup_ep_extract_msg_ep(old_ep_wrapper);
             /* Remove old wireup_ep as it's not needed anymore. */
             uct_ep_destroy(old_wireup_ep);
+        } else {
+            new_aux_ep = old_wireup_ep;
         }
 
         /* Move aux EP to new wireup lane */
@@ -1675,10 +1680,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     if (should_reuse) {
         /* previous wireup lane is part of the new configuration, so reuse it */
         new_key->wireup_msg_lane = reuse_lane_map[wireup_lane];
-    } else /* old wireup lane won't be reused */ {
-        /* previous wireup lane is not part of new configuration, so add it as
-         * auxiliary endpoint inside CM/non-reused lane, to be able to
-         * continue wireup messages exchange */
+    } else {
+        /* Wireup/AM lane needs to be flushed to maintain message ordering */
         status = ucp_wireup_replace_ordered_lane(ep, new_key, new_uct_eps,
                                                  reuse_lane_map);
         if (status != UCS_OK) {
