@@ -913,8 +913,10 @@ ucp_proto_storage_trace_lanes(const ucp_proto_lane_storage_t *storage,
                               ucp_lane_index_t *lanes, ucp_lane_index_t length,
                               const char *desc)
 {
+    ucp_context_h context = storage->params->worker->context;
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t i, lane;
+    ucp_rsc_index_t rsc_index;
 
     if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
         return;
@@ -922,22 +924,27 @@ ucp_proto_storage_trace_lanes(const ucp_proto_lane_storage_t *storage,
 
     ucs_trace("%s=%u, protocol=%s", desc, length,
               ucp_proto_id_field(storage->params->proto_id, name));
+    ucs_log_indent(1);
 
     for (i = 0; i < length; ++i) {
         lane      = lanes[i];
         lane_perf = &storage->lanes_perf[lane];
+        rsc_index = ucp_proto_common_get_rsc_index(storage->params, lane);
 
-        ucs_trace("lane[%d] bw " UCP_PROTO_PERF_FUNC_BW_FMT
-                  UCP_PROTO_TIME_FMT(latency)
+        ucs_trace("lane[%d] " UCT_TL_RESOURCE_DESC_FMT " bw "
+                  UCP_PROTO_PERF_FUNC_BW_FMT UCP_PROTO_TIME_FMT(latency)
                   UCP_PROTO_TIME_FMT(send_pre_overhead)
                   UCP_PROTO_TIME_FMT(send_post_overhead)
                   UCP_PROTO_TIME_FMT(recv_overhead), lane,
+                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
                   (lane_perf->bandwidth / UCS_MBYTE),
                   UCP_PROTO_TIME_ARG(lane_perf->latency),
                   UCP_PROTO_TIME_ARG(lane_perf->send_pre_overhead),
                   UCP_PROTO_TIME_ARG(lane_perf->send_post_overhead),
                   UCP_PROTO_TIME_ARG(lane_perf->recv_overhead));
     }
+
+    ucs_log_indent(-1);
 }
 
 static void ucp_proto_storage_destroy(ucp_proto_lane_storage_t *storage)
@@ -1031,22 +1038,31 @@ err:
 static void
 ucp_proto_storage_remove_slow_lanes(ucp_proto_lane_storage_t *storage)
 {
-    ucp_context_h context     = storage->params->worker->context;
-    const double max_bw_ratio = context->config.ext.multi_lane_max_ratio;
+    ucp_context_h context = storage->params->worker->context;
+    double max_bw_ratio   = context->config.ext.multi_lane_max_ratio;
+    double min_bw         = storage->max_bandwidth / max_bw_ratio;
+    ucp_lane_index_t removed_lanes[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t *lane_perf;
-    ucp_lane_index_t i, num_fast_lanes;
+    ucp_lane_index_t i, lane, num_fast_lanes;
 
     i = storage->fixed_first_lane ? 1 : 0;
     for (num_fast_lanes = i; i < storage->length; ++i) {
-        lane_perf = &storage->lanes_perf[storage->lanes[i]];
-        if ((lane_perf->bandwidth * max_bw_ratio) < storage->max_bandwidth) {
+        lane      = storage->lanes[i];
+        lane_perf = &storage->lanes_perf[lane];
+        if (lane_perf->bandwidth < min_bw) {
             /* Bandwidth on this lane is too low compared to the fastest
              * available lane, so it's not worth using it */
             ucp_proto_perf_node_deref(&lane_perf->node);
+            removed_lanes[i - num_fast_lanes] = lane;
             continue;
         }
 
         storage->lanes[num_fast_lanes++] = storage->lanes[i];
+    }
+
+    if (storage->length != num_fast_lanes) {
+        ucp_proto_storage_trace_lanes(storage, removed_lanes,
+                                      i - num_fast_lanes, "removed lanes");
     }
 
     storage->length = num_fast_lanes;
