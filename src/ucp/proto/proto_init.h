@@ -87,4 +87,5 @@ int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
 
 int ucp_proto_common_check_memtype_copy(
     const ucp_proto_common_init_params_t *params);
+
 #endif
