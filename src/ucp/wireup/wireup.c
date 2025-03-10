@@ -1767,7 +1767,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_rsc_index_t cm_idx = UCP_NULL_RESOURCE;
     ucp_tl_bitmap_t tl_bitmap, current_tl_bitmap;
     ucp_rsc_index_t rsc_idx;
-    ucp_lane_map_t connect_lane_bitmap;
+    ucp_lane_map_t connect_lane_bitmap, connect_lane_mask;
     ucp_ep_config_key_t key;
     ucp_worker_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
@@ -1894,10 +1894,14 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     if (worker->context->config.ext.on_demand_wireup) {
         /* always connect p2p, fast, wireup and keepalive lanes */
-        connect_lane_bitmap &= (ucp_ep_config(ep)->p2p_lanes |
-                                UCS_MASK(UCP_MAX_FAST_PATH_LANES) |
-                                UCS_BIT(ucp_ep_get_wireup_msg_lane(ep)) |
-                                UCS_BIT(ucp_ep_config(ep)->key.keepalive_lane));
+        connect_lane_mask = (ucp_ep_config(ep)->p2p_lanes |
+                             UCS_MASK(UCP_MAX_FAST_PATH_LANES) |
+                             UCS_BIT(ucp_ep_get_wireup_msg_lane(ep)));
+        if (ucp_ep_config(ep)->key.keepalive_lane != UCP_NULL_LANE) {
+            connect_lane_mask |= UCS_BIT(ucp_ep_config(ep)->key.keepalive_lane);
+        }
+
+        connect_lane_bitmap &= connect_lane_mask;
     }
 
     /* establish connections on all underlying endpoints, skipping CM lane */
