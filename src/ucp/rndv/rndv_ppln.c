@@ -77,7 +77,8 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
         !ucp_proto_common_init_check_err_handling(&ack_params) ||
-        ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
+        ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
+        !ucp_proto_common_check_memtype_copy(&ack_params)) {
         return;
     }
 
@@ -321,8 +322,7 @@ static size_t ucp_proto_rndv_ppln_pack_ack(void *dest, void *arg)
 static void
 ucp_proto_rndv_send_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
-    if (!ucp_proto_init_check_op_without_bounce(init_params,
-                                                UCS_BIT(UCP_OP_ID_RNDV_SEND))) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_SEND))) {
         return;
     }
 
@@ -357,8 +357,7 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
 static void
 ucp_proto_rndv_recv_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
-    if (!ucp_proto_init_check_op_without_bounce(init_params,
-                                                UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
         return;
     }
 

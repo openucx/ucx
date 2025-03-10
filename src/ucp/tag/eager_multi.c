@@ -35,8 +35,7 @@ ucp_proto_eager_multi_probe_common(ucp_proto_multi_init_params_t *params,
 {
     ucp_context_config_t *context_config;
 
-    if (!ucp_tag_eager_check_op_id_without_bounce(&params->super.super, op_id,
-                                                  0)) {
+    if (!ucp_tag_eager_check_op_id(&params->super.super, op_id, 0)) {
         return;
     }
 
