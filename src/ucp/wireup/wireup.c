@@ -1389,8 +1389,10 @@ static int ucp_wireup_is_am_need_flush(ucp_ep_h ep,
 {
     ucp_lane_index_t am_lane = ucp_ep_get_am_lane(ep);
 
+           /* In CM mode, messages are not sent before wireup is completed */
+    return !ucp_ep_has_cm_lane(ep) &&
            /* AM lane exists */
-    return (am_lane != UCP_NULL_LANE) && (key->am_lane != UCP_NULL_LANE) &&
+           (am_lane != UCP_NULL_LANE) && (key->am_lane != UCP_NULL_LANE) &&
            /* Lane is not being reused by new AM lane */
            (reuse_lane_map[am_lane] != key->am_lane) &&
            /* Lane is operational */
@@ -1539,34 +1541,40 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
 
     /* If wireup lane is required for new configuration, select it according
      * to the following priority:
-     * 1) If old AM lane is replaced, use new AM lane or old reused lane.
-     * 2) If a non-reused lane exists, select it and wrap with a new wireup_ep
+     * 1) If CM lane exists, use it.
+     * 2) If old AM lane is replaced, use new AM lane or old reused lane.
+     * 3) If a non-reused lane exists, select it and wrap with a new wireup_ep
      *    wrapper.
-     * 3) Otherwise select a reused wireup_ep lane (which must exist).
+     * 4) Otherwise select a reused wireup_ep lane (which must exist).
      * The actual wireup messages will be sent from old wireup lane (used as
      * aux), which is guaranteed to support AM. */
-    if (am_need_flush) {
-        new_wireup_lane = (reuse_lane_map[old_lane] != UCP_NULL_LANE) ?
-                                  reuse_lane_map[old_lane] :
-                                  key->am_lane;
+    if (ucp_ep_has_cm_lane(ep)) {
+        new_wireup_ep   = ucp_ep_get_cm_wireup_ep(ep);
+        new_wireup_lane = key->cm_lane;
     } else {
-        new_wireup_lane = ucp_wireup_find_non_reused_lane(ep, key,
-                                                          reuse_lane_map);
-    }
-
-    if (new_wireup_lane != UCP_NULL_LANE) {
-        status = ucp_wireup_ep_create(ep, &uct_ep);
-        if (status != UCS_OK) {
-            return status;
+        if (am_need_flush) {
+            new_wireup_lane = (reuse_lane_map[old_lane] != UCP_NULL_LANE) ?
+                                      reuse_lane_map[old_lane] :
+                                      key->am_lane;
+        } else {
+            new_wireup_lane = ucp_wireup_find_non_reused_lane(ep, key,
+                                                              reuse_lane_map);
         }
-    } else {
-        new_wireup_lane = ucp_wireup_find_reused_wireup_ep_lane(ep,
-                                                                reuse_lane_map);
-        ucs_assert(new_wireup_lane != UCP_NULL_LANE);
-        uct_ep = ucp_ep_get_lane(ep, new_wireup_lane);
+
+        if (new_wireup_lane != UCP_NULL_LANE) {
+            status = ucp_wireup_ep_create(ep, &uct_ep);
+            if (status != UCS_OK) {
+                return status;
+            }
+        } else {
+            new_wireup_lane =
+                    ucp_wireup_find_reused_wireup_ep_lane(ep, reuse_lane_map);
+            ucs_assert(new_wireup_lane != UCP_NULL_LANE);
+            uct_ep = ucp_ep_get_lane(ep, new_wireup_lane);
+        }
+        new_wireup_ep = ucp_wireup_ep(uct_ep);
     }
 
-    new_wireup_ep = ucp_wireup_ep(uct_ep);
     ucs_assert(new_wireup_ep != NULL);
 
     /* Get correct aux_rsc_index either from next_ep or aux_ep */
