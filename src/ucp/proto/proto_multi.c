@@ -54,6 +54,10 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if (!ucp_proto_common_check_memtype_copy(&params->super)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     /* Find first lane */
     num_lanes = ucp_proto_common_find_lanes_with_min_frag(
             &params->super, params->first.lane_type, params->first.tl_cap_flags,
