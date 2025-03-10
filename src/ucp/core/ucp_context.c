@@ -869,8 +869,8 @@ void ucp_config_print_cached_uct(const ucp_config_t *config, FILE *stream,
 void ucp_config_print(const ucp_config_t *config, FILE *stream,
                       const char *title, ucs_config_print_flags_t print_flags)
 {
-    ucs_config_parser_print_opts(stream, title, config, ucp_config_table,
-                                 NULL, UCS_DEFAULT_ENV_PREFIX, print_flags);
+    ucs_config_parser_print_opts(stream, title, config, ucp_config_table, NULL,
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags, NULL);
     ucp_config_print_cached_uct(config, stream, title, print_flags);
 }
 

@@ -19,7 +19,6 @@
 #include <ucs/type/init_once.h>
 
 #include <errno.h>
-#include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <pthread.h>
 #include <sys/socket.h>
@@ -58,19 +57,6 @@ static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
 KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_netlink_rt_rules_t, 1,
            ucs_netlink_rt_cache_hash_func, ucs_netlink_rt_cache_hash_equal);
 static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
-
-/**
- * Callback function for parsing individual netlink messages.
- *
- * @param [in] nlh    Pointer to the netlink message header.
- * @param [in] nl_msg Pointer to the netlink message payload.
- * @param [in] arg    User-provided argument passed through from the caller.
- *
- * @return UCS_OK if parsing is complete, UCS_INPROGRESS if there are more
- *         messages to be parsed, or error code otherwise.
- */
-typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
-                                               const void *nl_msg, void *arg);
 
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
@@ -114,15 +100,16 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
             return UCS_ERR_IO_ERROR;
         }
 
-        status = parse_cb(nlh, NLMSG_DATA(nlh), arg);
+        status = parse_cb(nlh, arg);
         nlh    = NLMSG_NEXT(nlh, msg_len);
     }
 
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
+                         unsigned short nlmsg_flags,
                          const void *protocol_header, size_t header_length,
                          ucs_netlink_parse_cb_t parse_cb, void *arg)
 {
@@ -141,7 +128,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
 
     nlh.nlmsg_len   = NLMSG_LENGTH(header_length);
     nlh.nlmsg_type  = nlmsg_type;
-    nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    nlh.nlmsg_flags = NLM_F_REQUEST | nlmsg_flags;
     iov[0].iov_base = &nlh;
     iov[0].iov_len  = sizeof(nlh);
     iov[1].iov_base = (void *)protocol_header;
@@ -211,19 +198,18 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
 }
 
 static ucs_status_t
-ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
-                              void *arg)
+ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 {
-    int iface_index;
+    const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
     const void *dst_in_addr;
     ucs_netlink_route_entry_t *new_rule;
     ucs_netlink_rt_rules_t *iface_rules;
+    int iface_index;
     khiter_t iter;
     int khret;
 
-    if (ucs_netlink_get_route_info(RTM_RTA((const struct rtmsg *)nl_msg),
-                                   RTM_PAYLOAD(nlh), &iface_index,
-                                   &dst_in_addr) != UCS_OK) {
+    if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
+                                   &iface_index, &dst_in_addr) != UCS_OK) {
         return UCS_INPROGRESS;
     }
 
@@ -233,8 +219,8 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
         return UCS_ERR_IO_ERROR;
     }
 
-    /* get the pointer to the head of the rule list. If the iface was not
-       present in the hash table before, initialize the list */
+    /* if the iface was not present in the hash table before, initialize the
+       array of rules */
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     if (khret != UCS_KH_PUT_KEY_PRESENT) {
         ucs_array_init_dynamic(iface_rules);
@@ -245,8 +231,8 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
                                 return UCS_ERR_NO_MEMORY);
 
     memset(&new_rule->dest, 0, sizeof(struct sockaddr_storage));
-    new_rule->dest.ss_family = ((const struct rtmsg *)nl_msg)->rtm_family;
-    if (((const struct rtmsg *)nl_msg)->rtm_family == AF_INET) {
+    new_rule->dest.ss_family = rt_msg->rtm_family;
+    if (rt_msg->rtm_family == AF_INET) {
         memcpy(&((struct sockaddr_in *)&new_rule->dest)->sin_addr,
                dst_in_addr, sizeof(struct in_addr));
     } else {
@@ -255,7 +241,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
     }
 
     new_rule->if_index          = iface_index;
-    new_rule->subnet_prefix_len = ((const struct rtmsg *)nl_msg)->rtm_dst_len;
+    new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
 
     return UCS_INPROGRESS;
 }
@@ -294,8 +280,8 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
         rtm.rtm_family = sa_remote->sa_family;
         rtm.rtm_table  = RT_TABLE_MAIN;
 
-        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
-                                ucs_netlink_parse_rt_entry_cb, NULL);
+        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
+                                sizeof(rtm), ucs_netlink_parse_rt_entry_cb, NULL);
     }
 
     info.if_index  = if_index;
