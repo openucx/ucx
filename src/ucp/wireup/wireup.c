@@ -214,6 +214,7 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     }
 
     /* pack all addresses */
+    ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(*tl_bitmap));
     status = ucp_address_pack(ep->worker, ep, tl_bitmap, pack_flags,
         context->config.ext.worker_addr_version,
         lanes2remote, UINT_MAX, address_length_p,
@@ -762,6 +763,11 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         ucs_assert(send_reply);
     }
 
+    if (worker->context->config.ext.on_demand_wireup &&
+        UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap)) {
+        tl_bitmap = ucp_tl_bitmap_max;
+    }
+
     /* don't mark as connected to remote now in case of CM, since it destroys
      * CM wireup EP (if it is hidden in the CM lane) that is used for sending
      * WIREUP MSGs */
@@ -772,6 +778,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
     if (send_reply) {
         ucs_trace("ep %p: sending wireup reply", ep);
+        ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
         ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY, &tl_bitmap, lanes2remote);
     }
 
@@ -1149,6 +1156,12 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
     ucs_assertv_always((uct_ep == NULL) || ucp_wireup_ep_test(uct_ep),
                        "ep %p: lane %u (uct_ep=%p is_wireup=%d) exists", ep,
                        lane, uct_ep, ucp_wireup_ep_test(uct_ep));
+
+    if ((uct_ep != NULL) &&
+        ucp_wireup_ep_test(uct_ep) &&
+        ucp_wireup_ep_has_next_ep((ucp_wireup_ep_t*)ucp_ep_get_lane_raw(ep, lane))) {
+        return UCS_OK;
+    }
 
     /* create an endpoint connected to the remote interface */
     ucs_trace("ep %p: connect uct_ep[%d] to addr %p", ep, lane,
