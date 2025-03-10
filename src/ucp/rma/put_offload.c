@@ -27,12 +27,7 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     ucs_status_t status;
     uct_rkey_t tl_rkey;
 
-    /* Use a signed boolean mask (-!!) to update unflushed lanes branchlessly.
-     * Evaluates to 0xFFFFFFFFFFFFFFFF if initialized, 0 otherwise. */
-    req->send.ep->ext->unflushed_lanes |=
-            UCS_BIT(spriv->super.lane) &
-            -!!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED);
-    req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    ucp_proto_single_rma_init_func(req);
 
     tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, spriv->super.rkey_index);
     status  = uct_ep_put_short(ucp_ep_get_fast_lane(ep, spriv->super.lane),
