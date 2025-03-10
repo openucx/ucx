@@ -1041,7 +1041,7 @@ ucp_proto_storage_remove_slow_lanes(ucp_proto_lane_storage_t *storage)
     ucp_context_h context = storage->params->worker->context;
     double max_bw_ratio   = context->config.ext.multi_lane_max_ratio;
     double min_bw         = storage->max_bandwidth / max_bw_ratio;
-    ucp_lane_index_t removed_lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t removed_lanes[UCP_PROTO_MAX_LANES] = {};
     ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t i, lane, num_fast_lanes;
 
