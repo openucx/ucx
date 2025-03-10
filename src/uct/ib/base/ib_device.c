@@ -1534,7 +1534,7 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
 
     if (khret != UCS_KH_PUT_KEY_PRESENT) {
         status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
-                                                ndev_name, sizeof(ndev_name));
+                                                  ndev_name, sizeof(ndev_name));
         if (status != UCS_OK) {
             goto out_unlock;
         }
@@ -1542,7 +1542,7 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
         ndev_index = if_nametoindex(ndev_name);
         if (ndev_index == 0) {
             ucs_error("failed to get interface index for %s (errno %d)",
-                    ndev_name, errno);
+                      ndev_name, errno);
             status = UCS_ERR_IO_ERROR;
             goto out_unlock;
         }

@@ -281,7 +281,8 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
         rtm.rtm_table  = RT_TABLE_MAIN;
 
         ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
-                                sizeof(rtm), ucs_netlink_parse_rt_entry_cb, NULL);
+                                 sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
+                                 NULL);
     }
 
     info.if_index  = if_index;
