@@ -214,7 +214,6 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     }
 
     /* pack all addresses */
-    ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(*tl_bitmap));
     status = ucp_address_pack(ep->worker, ep, tl_bitmap, pack_flags,
         context->config.ext.worker_addr_version,
         lanes2remote, UINT_MAX, address_length_p,
