@@ -1031,7 +1031,7 @@ void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 
 ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface);
 
-void uct_iface_vfs_refresh(void *obj);
+void uct_iface_vfs_set_dirty(uct_iface_h iface);
 
 ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags);
 

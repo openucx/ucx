@@ -99,7 +99,8 @@ typedef enum uct_cuda_base_gen {
     UCT_CUDA_BASE_GEN_P100 = 6,
     UCT_CUDA_BASE_GEN_V100 = 7,
     UCT_CUDA_BASE_GEN_A100 = 8,
-    UCT_CUDA_BASE_GEN_H100 = 9
+    UCT_CUDA_BASE_GEN_H100 = 9,
+    UCT_CUDA_BASE_GEN_B100 = 10
 } uct_cuda_base_gen_t;
 
 

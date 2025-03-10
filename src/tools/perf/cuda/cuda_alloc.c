@@ -15,27 +15,33 @@
 #include <ucs/sys/ptr_arith.h>
 #include <uct/api/v2/uct_v2.h>
 
+#define CUDA_CALL(_ret_code, _func, ...) \
+    { \
+        cudaError_t _cerr = _func(__VA_ARGS__); \
+        if (_cerr != cudaSuccess) { \
+            ucs_error("%s() failed: %d (%s)", UCS_PP_MAKE_STRING(_func), \
+                      _cerr, cudaGetErrorString(_cerr)); \
+            return _ret_code; \
+        } \
+    }
 
 static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
 {
-    cudaError_t cerr;
     unsigned group_index;
     int num_gpus;
     int gpu_index;
 
     group_index = rte_call(perf, group_index);
 
-    cerr = cudaGetDeviceCount(&num_gpus);
-    if (cerr != cudaSuccess) {
+    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetDeviceCount, &num_gpus)
+    if (num_gpus == 0) {
+        ucs_error("no cuda devices available");
         return UCS_ERR_NO_DEVICE;
     }
 
     gpu_index = group_index % num_gpus;
 
-    cerr = cudaSetDevice(gpu_index);
-    if (cerr != cudaSuccess) {
-        return UCS_ERR_NO_DEVICE;
-    }
+    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, gpu_index);
 
     /* actually set device context as calling cudaSetDevice may result in
      * context being initialized lazily */
@@ -48,17 +54,15 @@ static inline ucs_status_t ucx_perf_cuda_alloc(size_t length,
                                                ucs_memory_type_t mem_type,
                                                void **address_p)
 {
-    cudaError_t cerr;
-
-    ucs_assert((mem_type == UCS_MEMORY_TYPE_CUDA) ||
-               (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED));
-
-    cerr = ((mem_type == UCS_MEMORY_TYPE_CUDA) ?
-            cudaMalloc(address_p, length) :
-            cudaMallocManaged(address_p, length, cudaMemAttachGlobal));
-    if (cerr != cudaSuccess) {
-        ucs_error("failed to allocate memory");
-        return UCS_ERR_NO_MEMORY;
+    if (mem_type == UCS_MEMORY_TYPE_CUDA) {
+        CUDA_CALL(UCS_ERR_NO_MEMORY, cudaMalloc, address_p, length);
+    } else if (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        CUDA_CALL(UCS_ERR_NO_MEMORY, cudaMallocManaged, address_p, length,
+                  cudaMemAttachGlobal);
+    } else {
+        ucs_error("invalid memory type %s (%d)",
+                  ucs_memory_type_names[mem_type], mem_type);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
@@ -139,28 +143,13 @@ static void ucx_perf_cuda_memcpy(void *dst, ucs_memory_type_t dst_mem_type,
                                  const void *src, ucs_memory_type_t src_mem_type,
                                  size_t count)
 {
-    cudaError_t cerr;
-
-    cerr = cudaMemcpy(dst, src, count, cudaMemcpyDefault);
-    if (cerr != cudaSuccess) {
-        ucs_error("failed to copy memory: %s", cudaGetErrorString(cerr));
-    }
-
-    cerr = cudaDeviceSynchronize();
-    if (cerr != cudaSuccess) {
-        ucs_error("failed to sync device: %s", cudaGetErrorString(cerr));
-    }
+    CUDA_CALL(, cudaMemcpy, dst, src, count, cudaMemcpyDefault);
+    CUDA_CALL(, cudaDeviceSynchronize);
 }
 
 static void* ucx_perf_cuda_memset(void *dst, int value, size_t count)
 {
-    cudaError_t cerr;
-
-    cerr = cudaMemset(dst, value, count);
-    if (cerr != cudaSuccess) {
-        ucs_error("failed to set memory: %s", cudaGetErrorString(cerr));
-    }
-
+    CUDA_CALL(dst, cudaMemset, dst, value, count);
     return dst;
 }
 

@@ -254,22 +254,14 @@ const char *ucp_proto_perf_name(const ucp_proto_perf_t *perf)
 ucs_status_t
 ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
                          const ucp_proto_perf_factors_t perf_factors,
-                         ucp_proto_perf_node_t *child_perf_node,
-                         const char *title, const char *desc_fmt, ...)
+                         ucp_proto_perf_node_t *perf_node,
+                         ucp_proto_perf_node_t *child_perf_node)
 {
     ucp_proto_perf_segment_t *seg, *new_seg;
-    ucp_proto_perf_node_t *perf_node;
     ucs_status_t status;
     size_t seg_end;
-    va_list ap;
 
     ucp_proto_perf_check(perf);
-
-    va_start(ap, desc_fmt);
-    perf_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_DATA, 0, title,
-                                        desc_fmt, ap);
-    va_end(ap);
-
     ucp_proto_perf_node_update_factors(perf_node, perf_factors);
     ucp_proto_perf_node_add_child(perf_node, child_perf_node);
 
@@ -465,7 +457,8 @@ void ucp_proto_perf_apply_func(ucp_proto_perf_t *perf, ucs_linear_func_t func,
         }
 
         va_start(ap, desc_fmt);
-        func_node = ucp_proto_perf_node_new_data(name, desc_fmt, ap);
+        func_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_DATA, 0,
+                                            name, desc_fmt, ap);
         va_end(ap);
 
         ucp_proto_perf_node_own_child(seg->node, &func_node);
@@ -500,6 +493,7 @@ ucp_proto_perf_add_ppln(const ucp_proto_perf_t *perf,
     ucs_linear_func_t factor_func;
     ucs_status_t status;
     char frag_str[64];
+    ucp_proto_perf_node_t *perf_node;
 
     if (frag_size >= max_length) {
         return NULL;
@@ -525,10 +519,11 @@ ucp_proto_perf_add_ppln(const ucp_proto_perf_t *perf,
     factors[max_factor_id].m += factors[max_factor_id].c / frag_size;
 
     ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
-    status = ucp_proto_perf_add_funcs(ppln_perf, frag_size + 1, max_length,
-                                      factors,
-                                      ucp_proto_perf_segment_node(frag_seg),
-                                      "pipeline", "frag size: %s", frag_str);
+    perf_node = ucp_proto_perf_node_new_data("pipeline", "frag size: %s",
+                                             frag_str);
+    status    = ucp_proto_perf_add_funcs(ppln_perf, frag_size + 1, max_length,
+                                         factors, perf_node,
+                                         ucp_proto_perf_segment_node(frag_seg));
     if (status != UCS_OK) {
         return NULL;
     }

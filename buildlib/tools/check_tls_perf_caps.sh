@@ -30,8 +30,14 @@ for tl_name in $(grep Transport ${legacy_info_file} | awk '{print $3}')
 do
     old_tl_caps=$(grep -A 8 "Transport: $tl_name" ${legacy_info_file} || true)
     new_tl_caps=$(grep -A 8 "Transport: $tl_name" ${pr_info_file}     || true)
-    for device in  $(echo "${old_tl_caps}" | grep Device | awk '{print $3}')
+    for device in $(echo "${old_tl_caps}" | grep Device | awk '{print $3}')
     do
+      # Ignore SMI devices
+      if [[ "$device" =~ ^smi[0-9]*:.$ ]]
+      then
+        continue;
+      fi
+
       old_caps=$(echo "$old_tl_caps" | grep -A 7 "Device: $device" || true)
       new_caps=$(echo "$new_tl_caps" | grep -A 7 "Device: $device" || true)
       for cap in bandwidth latency overhead

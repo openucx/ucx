@@ -305,7 +305,8 @@ void test_uct_ib_with_specific_port::cleanup() {
 class test_uct_ib_roce : public test_uct_ib {
 };
 
-UCS_TEST_P(test_uct_ib_roce, local_subnet_only, "IB_ROCE_LOCAL_SUBNET=y")
+UCS_TEST_P(test_uct_ib_roce, local_subnet_only,
+           "IB_ROCE_REACHABILITY_MODE=local_subnet")
 {
     send_recv_short();
 }

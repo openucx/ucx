@@ -365,23 +365,37 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
         num_channels = iface->tx.num_dci_channels;
     }
 
-    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, 1, num_channels);
+    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, num_channels);
     if (status != UCS_OK) {
         ucs_error("iface %p: failed to create dci %u at pool %u", iface,
                   dci_index, pool_index);
-        return status;
+        goto err;
     }
 
     dci             = uct_dc_mlx5_iface_dci(iface, dci_index);
     dci->path_index = pool->config.path_index;
     dci->pool_index = pool_index;
 
+    status = uct_dc_mlx5_iface_dci_connect(iface, dci);
+    if (status != UCS_OK) {
+        ucs_error("iface %p: failed to connect dci %u at pool %u", iface,
+                  dci_index, pool_index);
+        goto err_destroy;
+    }
+
     if (uct_dc_mlx5_iface_is_policy_shared(iface) ||
         uct_dc_mlx5_is_hw_dci(iface, dci_index)) {
         dci->flags |= UCT_DC_DCI_FLAG_SHARED;
     }
 
+    uct_iface_vfs_set_dirty(&iface->super.super.super.super.super);
+
     return UCS_OK;
+
+err_destroy:
+    uct_dc_mlx5_destroy_dci(iface, dci_index);
+err:
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -432,25 +446,6 @@ uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
 
     return ucs_likely(pool->stack_top < iface->tx.ndci);
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_iface_dcis_array_copy(void *dst, void *src, size_t length)
-{
-    uct_dc_dci_t *src_dcis = (uct_dc_dci_t*)src;
-    uct_dc_dci_t *dst_dcis = (uct_dc_dci_t*)dst;
-    size_t i;
-
-    memcpy(dst_dcis, src_dcis, sizeof(uct_dc_dci_t) * length);
-
-    /* txqp is a queue and need to splice tail */
-    for (i = 0; i < length; ++i) {
-        if (uct_dc_mlx5_is_dci_valid(&src_dcis[i])) {
-            ucs_queue_head_init(&dst_dcis[i].txqp.outstanding);
-            ucs_queue_splice(&dst_dcis[i].txqp.outstanding,
-                             &src_dcis[i].txqp.outstanding);
-        }
-    }
 }
 
 static UCS_F_ALWAYS_INLINE int

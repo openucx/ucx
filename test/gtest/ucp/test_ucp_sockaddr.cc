@@ -2526,6 +2526,7 @@ protected:
             std::string sb(size, 'x');
             std::string rb(size, 'y');
             std::string shdr(hdr_size, 'x');
+            std::string shdr_copy = shdr;
             std::string rhdr(hdr_size, 'y');
             ucp_mem_h smemh(NULL);
             ucp_mem_h rmemh(NULL);
@@ -2552,6 +2553,14 @@ protected:
             ucs_status_ptr_t sreq = ucp_am_send_nbx(sender().ep(), 0,
                                                     &shdr[0], hdr_size,
                                                     &sb[0], size, &param);
+            /* First message request triggers connection establishment and
+             * is placed into pending queue.
+             * To check UCP_AM_SEND_FLAG_COPY_HEADER we change AM header 
+             * content while the request is still in pending queue.*/
+            if (flags & UCP_AM_SEND_FLAG_COPY_HEADER) {
+                shdr.assign(shdr.size(), 'a');
+            }
+
             request_wait(sreq);
             wait_for_flag(&arg.received);
             // wait for receive request completion after 'received' flag set to
@@ -2560,7 +2569,7 @@ protected:
             EXPECT_TRUE(arg.received);
 
             compare_buffers(sb, rb);
-            compare_buffers(shdr, rhdr);
+            compare_buffers(shdr_copy, rhdr);
 
             set_am_data_handler(receiver(), 0, NULL, NULL);
 
@@ -2794,28 +2803,27 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols,
     test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
 }
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_short_reset,
-                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n", "ZCOPY_THRESH=inf")
+                     RUNNING_ON_VALGRIND, "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(16, 8, 1, false, false, UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_bcopy_reset,
-                     RUNNING_ON_VALGRIND,
-                     "PROTO_ENABLE=n", "ZCOPY_THRESH=inf")
+                     RUNNING_ON_VALGRIND, "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(2 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_zcopy_reset,
-                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n")
+                     RUNNING_ON_VALGRIND)
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_rndv_reset,
-                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n", "RNDV_THRESH=0")
+                     RUNNING_ON_VALGRIND, "RNDV_THRESH=0")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
