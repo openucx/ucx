@@ -1270,7 +1270,7 @@ ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((lane == ucp_ep_get_cm_lane(ep)) || (uct_ep == NULL)) {
             continue;
         }
@@ -1297,7 +1297,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep)) {
             num_failed_tl_ep++;
         }
@@ -1320,7 +1320,7 @@ ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps, uct_ep_h failed_ep)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep        = ucp_ep_get_lane(ep, lane);
+        uct_ep        = ucp_ep_get_lane_raw(ep, lane);
         uct_eps[lane] = uct_ep;
 
         /* Set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
@@ -1825,11 +1825,13 @@ out:
 
 ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 {
+    uct_ep_h uct_ep_lane;
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-        if ((uct_ep == ucp_ep_get_lane(ucp_ep, lane)) ||
-            ucp_wireup_ep_is_owner(ucp_ep_get_lane(ucp_ep, lane), uct_ep)) {
+        uct_ep_lane = ucp_ep_get_lane_raw(ucp_ep, lane);
+        if ((uct_ep == uct_ep_lane) ||
+            ucp_wireup_ep_is_owner(uct_ep_lane, uct_ep)) {
             return lane;
         }
     }
@@ -3938,4 +3940,18 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
     ep->cfg_index = cfg_index;
     ucp_ep_config_activate_worker_ifaces(ep->worker, cfg_index);
     ucp_ep_config_proto_init(ep->worker, cfg_index);
+}
+
+ucp_lane_index_t ucp_ep_get_num_valid_lanes(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane;
+    ucp_lane_index_t num_lanes = 0;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (ucp_ep_get_lane_raw(ep, lane) != NULL) {
+            ++num_lanes;
+        }
+    }
+
+    return num_lanes;
 }
