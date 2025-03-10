@@ -29,8 +29,8 @@ done])
 # CPPFLAGS variables.
 AC_DEFUN([ROCM_BUILD_FLAGS],
     $4="-I$1/include/hsa -I$1/include"
-    $3="-L$1/lib -L$1/lib64 -L$1/hsa/lib"
-    $2="-lhsa-runtime64 -lhsakmt"
+    $3="-L$1/lib -L$1/lib64"
+    $2="-lhsa-runtime64"
     $5="$1"
 )
 
@@ -39,8 +39,8 @@ AC_DEFUN([ROCM_BUILD_FLAGS],
 # Parse value of ARG into appropriate LIBS, LDFLAGS, and
 # CPPFLAGS variables.
 AC_DEFUN([HIP_BUILD_FLAGS],
-    $4="-D__HIP_PLATFORM_HCC__ -D__HIP_PLATFORM_AMD__ -I$1/include/hip -I$1/include"
-    $3="-L$1/hip/lib -L$1/lib"
+    $4="-D__HIP_PLATFORM_AMD__ -I$1/include/hip -I$1/include"
+    $3="-L$1/lib"
     $2="-lamdhip64"
 )
 
