@@ -1521,35 +1521,31 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
     int khret;
 
     pthread_mutex_lock(&uct_ib_device_to_ndev_cache_lock);
-    iter = kh_get(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev);
-    if (ucs_likely(iter != kh_end(&ib_dev_to_ndev_map))) {
-        *ndev_index_p  = kh_val(&ib_dev_to_ndev_map, iter);
-        status         = UCS_OK;
-        goto out_unlock;
-    }
-
     iter = kh_put(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev, &khret);
-    ucs_assert(khret != UCS_KH_PUT_KEY_PRESENT);
     if (khret == UCS_KH_PUT_FAILED) {
         status = UCS_ERR_IO_ERROR;
         goto out_unlock;
     }
 
-    status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
-                                              ndev_name, sizeof(ndev_name));
-    if (status != UCS_OK) {
-        goto out_unlock;
+    if (khret != UCS_KH_PUT_KEY_PRESENT) {
+        status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
+                                                ndev_name, sizeof(ndev_name));
+        if (status != UCS_OK) {
+            goto out_unlock;
+        }
+
+        ndev_index = if_nametoindex(ndev_name);
+        if (ndev_index == 0) {
+            ucs_error("failed to get interface index for %s (errno %d)",
+                    ndev_name, errno);
+            status = UCS_ERR_IO_ERROR;
+            goto out_unlock;
+        }
+
+        kh_val(&ib_dev_to_ndev_map, iter) = ndev_index;
     }
 
-    ndev_index = if_nametoindex(ndev_name);
-    if (ndev_index == 0) {
-        ucs_error("failed to get interface index for %s (errno %d)",
-                  ndev_name, errno);
-        status = UCS_ERR_IO_ERROR;
-        goto out_unlock;
-    }
-
-    kh_val(&ib_dev_to_ndev_map, iter) = *ndev_index_p = ndev_index;
+    *ndev_index_p = kh_val(&ib_dev_to_ndev_map, iter);
     status = UCS_OK;
 
 out_unlock:

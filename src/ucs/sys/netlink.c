@@ -275,10 +275,10 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     ucs_array_for_each(curr_entry, iface_rules) {
-        if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
-                                 ucs_sockaddr_get_inet_addr(
-                                    (const struct sockaddr *)&curr_entry->dest),
-                                 curr_entry->subnet_prefix_len)) {
+        if (ucs_sockaddr_is_same_subnet(
+                                info->sa_remote,
+                                (const struct sockaddr *)&curr_entry->dest,
+                                curr_entry->subnet_prefix_len)) {
             info->found = 1;
             return;
         }
