@@ -61,6 +61,34 @@ err:
     *sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
+static CUdevice sys_dev_to_device[UCS_SYS_DEVICE_ID_MAX] = {
+    [0 ... UCS_SYS_DEVICE_ID_MAX - 1] = CU_DEVICE_INVALID
+};
+
+ucs_status_t
+uct_cuda_base_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device)
+{
+    *device = sys_dev_to_device[sys_dev];
+
+    return (*device != CU_DEVICE_INVALID) ? UCS_OK : UCS_ERR_NO_DEVICE;
+}
+
+int uct_cuda_base_get_num_devices(void)
+{
+    static int num_devices = -2;
+    ucs_status_t status;
+
+    if (num_devices == -2) {
+        status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_devices),
+                                  UCS_LOG_LEVEL_DIAG);
+        if (status != UCS_OK) {
+            num_devices = -1;
+        }
+    }
+
+    return num_devices;
+}
+
 ucs_status_t
 uct_cuda_base_query_md_resources(uct_component_t *component,
                                  uct_md_resource_desc_t **resources_p,
@@ -73,8 +101,8 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     char device_name[10];
     int i, num_gpus;
 
-    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
-    if ((status != UCS_OK) || (num_gpus == 0)) {
+    num_gpus = uct_cuda_base_get_num_devices();
+    if (num_gpus < 1) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 
@@ -89,6 +117,8 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
         if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
             continue;
         }
+
+        sys_dev_to_device[sys_dev] = cuda_device;
 
         ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
                           cuda_device);
