@@ -1556,7 +1556,7 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
             /* Send wireup reply through old AM lane:
              * 1) If AM is reused, old lane is taken from reuse map.
              * 2) Otherwise, old lane is accessed through new AM lane (used
-             * as auxilary).
+             * as auxiliary).
              * */
             new_wireup_lane = (reuse_lane_map[old_lane] != UCP_NULL_LANE) ?
                                       reuse_lane_map[old_lane] :
