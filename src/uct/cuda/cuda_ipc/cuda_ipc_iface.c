@@ -42,6 +42,9 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Max number of event completions to pick during cuda events polling",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_poll), UCS_CONFIG_TYPE_UINT},
 
+    {"MAX_STREAMS", NULL, NULL, UCS_CONFIG_DEPRECATED_FIELD_OFFSET,
+     UCS_CONFIG_TYPE_DEPRECATED},
+
     {"CACHE", "y",
      "Enable remote endpoint IPC memhandle mapping cache",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_cache),
@@ -340,27 +343,27 @@ uct_cuda_ipc_progress_event_queue(uct_cuda_ipc_iface_t *iface,
                                   unsigned max_events)
 {
     unsigned count = 0;
-    uct_cuda_ipc_event_desc_t *cuda_event;
+    uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     ucs_status_t status;
 
-    ucs_queue_for_each_extract(cuda_event, queue_head, queue,
-                               cuEventQuery(cuda_event->event) == CUDA_SUCCESS) {
-        ucs_queue_remove(queue_head, &cuda_event->queue);
-        if (cuda_event->comp != NULL) {
-            ucs_trace_data("cuda_ipc event %p completed", cuda_event);
-            uct_invoke_completion(cuda_event->comp, UCS_OK);
+    ucs_queue_for_each_extract(cuda_ipc_event, queue_head, queue,
+                               cuEventQuery(cuda_ipc_event->event) == CUDA_SUCCESS) {
+        ucs_queue_remove(queue_head, &cuda_ipc_event->queue);
+        if (cuda_ipc_event->comp != NULL) {
+            ucs_trace_data("cuda_ipc event %p completed", cuda_ipc_event);
+            uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
         }
 
-        status = uct_cuda_ipc_unmap_memhandle(cuda_event->pid,
-                                              cuda_event->d_bptr,
-                                              cuda_event->mapped_addr,
+        status = uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid,
+                                              cuda_ipc_event->d_bptr,
+                                              cuda_ipc_event->mapped_addr,
                                               iface->config.enable_cache);
         if (status != UCS_OK) {
-            ucs_fatal("failed to unmap addr:%p", cuda_event->mapped_addr);
+            ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
         }
 
-        ucs_trace_poll("CUDA Event Done :%p", cuda_event);
-        ucs_mpool_put(cuda_event);
+        ucs_trace_poll("CUDA Event Done :%p", cuda_ipc_event);
+        ucs_mpool_put(cuda_ipc_event);
         count++;
 
         if (count >= max_events) {
@@ -652,7 +655,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 
     kh_init_inplace(cuda_ipc_queue_desc, &self->queue_desc_map);
     ucs_queue_head_init(&self->active_queue);
-    self->cuda_context = 0;
+    self->cuda_context = NULL;
     return UCS_OK;
 }
 
