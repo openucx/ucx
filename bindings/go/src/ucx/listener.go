@@ -13,12 +13,10 @@ import (
 )
 
 type UcpListener struct {
-	listener      C.ucp_listener_h
-	connHandler   unsafe.Pointer
+	listener C.ucp_listener_h
+	callback UcpListenerConnectionHandler
+	arg      unsafe.Pointer
 }
-
-// Needed to call connHandler.Reject() rather than listener.Reject(connHandler)
-var connHandles2Listener = make(map[unsafe.Pointer]C.ucp_listener_h)
 
 type UcpListenerAttributes struct {
 	Address *net.TCPAddr
@@ -26,7 +24,7 @@ type UcpListenerAttributes struct {
 
 func (l *UcpListener) Close() {
 	C.ucp_listener_destroy(l.listener)
-	delete(connHandles2Listener, l.connHandler)
+	unpackAndFreeArg(l.arg)
 }
 
 func (l *UcpListener) Query(attrs ...UcpListenerAttribute) (*UcpListenerAttributes, error) {

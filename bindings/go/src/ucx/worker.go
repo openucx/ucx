@@ -31,6 +31,7 @@ import (
 // optimize concurrent communications.
 type UcpWorker struct {
 	worker C.ucp_worker_h
+	handles []unsafe.Pointer
 }
 
 type UcpAddress struct {
@@ -52,6 +53,10 @@ type UcpWorkerAttributes struct {
 }
 
 func (w *UcpWorker) Close() {
+	for _, handle := range w.handles {
+		unpackAndFreeArg(handle)
+	}
+    w.handles = nil 
 	C.ucp_worker_destroy(w.worker)
 }
 
@@ -244,15 +249,15 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 
 // This routine creates new UcpListener.
 func (w *UcpWorker) NewListener(listenerParams *UcpListenerParams) (*UcpListener, error) {
-	var listener C.ucp_listener_h
+	listener := &UcpListener{callback: listenerParams.callback}
 
-	if status := C.ucp_listener_create(w.worker, &listenerParams.params, &listener); status != C.UCS_OK {
+	listener.arg = packArg(listener)
+	listenerParams.params.conn_handler.arg = listener.arg
+	if status := C.ucp_listener_create(w.worker, &listenerParams.params, &listener.listener); status != C.UCS_OK {
 		return nil, newUcxError(status)
 	}
 
-	connHandles2Listener[listenerParams.connHandler] = listener
-
-	return &UcpListener{listener, listenerParams.connHandler}, nil
+	return listener, nil
 }
 
 // This routine installs a user defined callback to handle incoming Active
@@ -267,7 +272,9 @@ func (w *UcpWorker) SetAmRecvHandler(id uint, flags UcpAmCbFlags, cb UcpAmRecvCa
 		C.UCP_AM_HANDLER_PARAM_FIELD_CB |
 		C.UCP_AM_HANDLER_PARAM_FIELD_ARG
 	amHandlerParams.id = C.uint(id)
-	amHandlerParams.arg = packArg(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
+	packedArg := packArg(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
+	w.handles = append(w.handles, packedArg)
+	amHandlerParams.arg = packedArg
 	amHandlerParams.flags = C.uint32_t(flags)
 	cbAddr := (*C.ucp_am_recv_callback_t)(unsafe.Pointer(&amHandlerParams.cb))
 	*cbAddr = (C.ucp_am_recv_callback_t)(C.ucxgo_amRecvCallback)

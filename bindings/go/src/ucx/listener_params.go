@@ -16,22 +16,16 @@ import (
 
 // Tuning parameters for the UCP listener.
 type UcpListenerParams struct {
-	params        C.ucp_listener_params_t
-	connHandler   unsafe.Pointer
-}
-
-type UcpListenerConnectionHandlerBundle struct {
-	connHandler UcpListenerConnectionHandler
-	listener    C.ucp_listener_h
+	params   C.ucp_listener_params_t
+	callback UcpListenerConnectionHandler
 }
 
 //export ucxgo_completeConnHandler
 func ucxgo_completeConnHandler(connRequest C.ucp_conn_request_h, arg unsafe.Pointer) {
-	listener := connHandles2Listener[arg]
-	callback := unpackArg(arg)
-	callback.(UcpListenerConnectionHandler)(&UcpConnectionRequest{
+	listener := unpackArg(arg).(*UcpListener)
+	listener.callback(&UcpConnectionRequest{
 		connRequest: connRequest,
-		listener:    listener,
+		listener:    listener.listener,
 	})
 }
 
@@ -53,8 +47,7 @@ func (p *UcpListenerParams) SetSocketAddress(a *net.TCPAddr) (*UcpListenerParams
 func (p *UcpListenerParams) SetConnectionHandler(connHandler UcpListenerConnectionHandler) *UcpListenerParams {
 	var ucpConnHndl C.ucp_listener_conn_handler_t
 
-	p.connHandler = packArg(connHandler)
-	ucpConnHndl.arg = p.connHandler
+	p.callback = connHandler
 	ucpConnHndl.cb = (C.ucp_listener_conn_callback_t)(C.ucxgo_completeConnHandler)
 	p.params.field_mask |= C.UCP_LISTENER_PARAM_FIELD_CONN_HANDLER
 	p.params.conn_handler = ucpConnHndl

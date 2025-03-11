@@ -54,10 +54,24 @@ func packArg(cb UcpCallback) unsafe.Pointer {
 	return unsafe.Pointer(h)
 }
 
+func unpackArgCommon(callback unsafe.Pointer, freeHandle bool) UcpCallback {
+    if callback == nil {
+        return nil
+    }
+
+    h := cgo.Handle(uintptr(callback))
+    if freeHandle {
+        defer h.Delete()
+    }
+    return h.Value().(UcpCallback)
+}
+
 func unpackArg(callback unsafe.Pointer) UcpCallback {
-	h := (*cgo.Handle)(callback)
-	defer h.Delete()
-	return h.Value().(UcpCallback)
+	return unpackArgCommon(callback, false)
+}
+
+func unpackAndFreeArg(callback unsafe.Pointer) UcpCallback {
+	return unpackArgCommon(callback, true)
 }
 
 func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Pointer) UcpRequestImmCallback {
@@ -73,7 +87,7 @@ func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Po
 		*cbAddr = cb
 		p.user_data = packArg(params.Cb)
 		immediateCallback = func() UcpCallback {
-			callback := unpackArg(p.user_data)
+			callback := unpackAndFreeArg(p.user_data)
 			return callback
 		}
 	}
