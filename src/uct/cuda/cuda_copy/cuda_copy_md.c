@@ -273,12 +273,13 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&allowed_types,
                 CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES, alloc_handle->ptr));
     if ((status != UCS_OK) || !(allowed_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
+        ucs_debug("unable to allocate vmm memory with fabric property");
         goto err_mem_unmap;
     }
 
     alloc_handle->is_vmm = 1;
 
-    ucs_trace("allocated vmm fabric memory at %p of size %ld\n",
+    ucs_trace("allocated vmm fabric memory at %p of size %ld",
               (void*)alloc_handle->ptr, alloc_handle->length);
     return UCS_OK;
 
