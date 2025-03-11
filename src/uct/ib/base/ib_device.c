@@ -87,25 +87,27 @@ UCS_ARRAY_DECLARE_TYPE(uct_ib_device_subnet_array_t, unsigned,
                        uct_ib_device_subnet_t);
 
 typedef struct {
-    uct_ib_device_t *dev;
-    uint8_t          port_num;
-    int              gid_index;
+    const char *dev_name;
+    uint8_t     port_num;
+    int         gid_index;
 } uct_ib_device_to_ndev_key_t;
 
 static UCS_F_ALWAYS_INLINE khint32_t
 uct_ib_device_to_ndev_cache_hash_func(uct_ib_device_to_ndev_key_t key)
 {
-    return kh_int_hash_func((uint64_t)key.dev |
-                            (key.port_num << 8) |
-                            (key.gid_index << 16));
+    khint32_t hash1 = kh_int_hash_func((key.port_num) | (key.gid_index << 16));
+    khint32_t hash2 = kh_str_hash_func(key.dev_name);
+
+    return hash1 ^ (hash2 << 5) ^ (hash2 >> 2);
 }
 
 static UCS_F_ALWAYS_INLINE int
 uct_ib_device_to_ndev_cache_hash_equal(uct_ib_device_to_ndev_key_t key1,
                                        uct_ib_device_to_ndev_key_t key2)
 {
-    return (key1.dev == key2.dev) && (key1.port_num == key2.port_num) &&
-           (key1.gid_index == key2.gid_index);
+    return (key1.port_num == key2.port_num) &&
+           (key1.gid_index == key2.gid_index) &&
+           !strcmp(key1.dev_name, key2.dev_name);
 }
 
 static
@@ -1516,7 +1518,7 @@ ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
                                   uint8_t gid_index, int *ndev_index_p)
 {
-    uct_ib_device_to_ndev_key_t ib_dev = {.dev = dev,
+    uct_ib_device_to_ndev_key_t ib_dev = {.dev_name = uct_ib_device_name(dev),
                                           .port_num = port_num,
                                           .gid_index = gid_index};
     ucs_status_t status;
