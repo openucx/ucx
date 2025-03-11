@@ -18,8 +18,8 @@ type UcpEp struct {
 
 var errorHandles = make(map[C.ucp_ep_h]UcpEpErrHandler)
 
-func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_request_param_t) {
-	packParams(goRequestParams, cRequestParams, unsafe.Pointer(C.ucxgo_completeGoSendRequest))
+func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_request_param_t) UcpCallback {
+	return packParams(goRequestParams, cRequestParams, unsafe.Pointer(C.ucxgo_completeGoSendRequest))
 }
 
 // This routine flushes all outstanding AMO and RMA communications on the endpoint.
@@ -28,9 +28,9 @@ func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_requ
 func (e *UcpEp) FlushNonBlocking(params *UcpRequestParams) (*UcpRequest, error) {
 	var requestParams C.ucp_request_param_t
 
-	setSendParams(params, &requestParams)
+	callback := setSendParams(params, &requestParams)
 	request := C.ucp_ep_flush_nbx(e.ep, &requestParams)
-	return NewRequest(request, params.Cb, nil)
+	return NewRequest(request, callback, nil)
 }
 
 func (e *UcpEp) CloseNonBlocking(mode C.uint, params *UcpRequestParams) (*UcpRequest, error) {
@@ -38,10 +38,10 @@ func (e *UcpEp) CloseNonBlocking(mode C.uint, params *UcpRequestParams) (*UcpReq
 	requestParams.op_attr_mask = C.UCP_OP_ATTR_FIELD_FLAGS
 	requestParams.flags = mode
 
-	setSendParams(params, &requestParams)
+	callback := setSendParams(params, &requestParams)
 	request := C.ucp_ep_close_nbx(e.ep, &requestParams)
 	delete(errorHandles, e.ep)
-	return NewRequest(request, params.Cb, nil)
+	return NewRequest(request, callback, nil)
 }
 
 // Non-blocking endpoint closure. Releases the endpoint without any
@@ -66,9 +66,9 @@ func (e *UcpEp) SendTagNonBlocking(tag uint64, address unsafe.Pointer, size uint
 	params *UcpRequestParams) (*UcpRequest, error) {
 	var requestParams C.ucp_request_param_t
 
-	setSendParams(params, &requestParams)
+	callback := setSendParams(params, &requestParams)
 	request := C.ucp_tag_send_nbx(e.ep, address, C.size_t(size), C.ucp_tag_t(tag), &requestParams)
-	return NewRequest(request, params.Cb, nil)
+	return NewRequest(request, callback, nil)
 }
 
 // This routine sends an Active Message to an ep.
@@ -78,10 +78,10 @@ func (e *UcpEp) SendAmNonBlocking(id uint, header unsafe.Pointer, headerSize uin
 	data unsafe.Pointer, dataSize uint64, flags UcpAmSendFlags, params *UcpRequestParams) (*UcpRequest, error) {
 	var requestParams C.ucp_request_param_t
 
-	setSendParams(params, &requestParams)
+	callback := setSendParams(params, &requestParams)
 	requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_FLAGS
 	requestParams.flags = C.uint(flags)
 
 	request := C.ucp_am_send_nbx(e.ep, C.uint(id), header, C.size_t(headerSize), data, C.size_t(dataSize), &requestParams)
-	return NewRequest(request, params.Cb, nil)
+	return NewRequest(request, callback, nil)
 }

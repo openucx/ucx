@@ -232,11 +232,11 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 	recvInfoPtr := (*C.ucp_tag_recv_info_t)(unsafe.Pointer(&requestParams.recv_info[0]))
 	*recvInfoPtr = recvInfo
 
-	packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeGoTagRecvRequest))
+	callback := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeGoTagRecvRequest))
 	request := C.ucp_tag_recv_nbx(w.worker, address, C.size_t(size), C.ucp_tag_t(tag),
 		C.ucp_tag_t(tagMask), &requestParams)
 
-	return NewRequest(request, params.Cb, &UcpTagRecvInfo{
+	return NewRequest(request, callback, &UcpTagRecvInfo{
 		SenderTag: uint64(recvInfo.sender_tag),
 		Length:    uint64(recvInfo.length),
 	})
@@ -290,8 +290,8 @@ func (w *UcpWorker) RecvAmDataNonBlocking(dataDesc *UcpAmData, recvBuffer unsafe
 	recvInfoPtr := (**C.size_t)(unsafe.Pointer(&requestParams.recv_info[0]))
 	*recvInfoPtr = &length
 
-	packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeAmRecvData))
+	callback := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeAmRecvData))
 	request := C.ucp_am_recv_data_nbx(w.worker, dataDesc.dataPtr, recvBuffer, C.size_t(size), &requestParams)
 
-	return NewRequest(request, params.Cb, length)
+	return NewRequest(request, callback, length)
 }

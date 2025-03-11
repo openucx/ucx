@@ -49,25 +49,30 @@ func (p *UcpRequestParams) SetCallback(cb UcpCallback) *UcpRequestParams {
 
 func packArg(cb UcpCallback) unsafe.Pointer {
 	h := cgo.NewHandle(cb)
-	return unsafe.Pointer(&h)
+	return unsafe.Pointer(h)
 }
 
-func unpackArg(callback unsafe.Pointer) any {
-	h := *(*cgo.Handle)(callback)
+func unpackArg(callback unsafe.Pointer) UcpCallback {
+	h := (*cgo.Handle)(callback)
 	defer h.Delete()
-	return h.Value()
+	return h.Value().(UcpCallback)
 }
 
-func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Pointer) {
+func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Pointer) UcpCallback {
 	if params == nil {
 		return
 	}
 
+	immediateCallback := nil
 	if params.Cb != nil {
 		p.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
 		cbAddr := (*unsafe.Pointer)(unsafe.Pointer(&p.cb[0]))
 		*cbAddr = cb
 		p.user_data = packArg(params.Cb)
+		immediateCallback = func() UcpCallback {
+			callback := unpackArg(p.user_data)
+			return callback
+		}
 	}
 
 	if params.memTypeSet {
@@ -83,6 +88,8 @@ func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Po
 		p.op_attr_mask |= C.UCP_OP_ATTR_FIELD_MEMH
 		p.memh = params.Memory.memHandle
 	}
+
+	return immediateCallback
 }
 
 // Checks whether request is a pointer
