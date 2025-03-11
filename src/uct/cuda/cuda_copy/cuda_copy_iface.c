@@ -38,7 +38,7 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events), UCS_CONFIG_TYPE_UINT},
 
     /* TODO: 1. Add separate keys for shared and dedicated bandwidth
-             2. Remove the "other" key (use pref_loc for managed memory) */
+             2. Remove the "dflt" key (use pref_loc for managed memory) */
     {"BW", "10000MBs,h2d:8300MBs,d2h:11660MBs,d2d:320GBs",
      "Effective memory bandwidth", 0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
@@ -48,8 +48,8 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
           ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2h)},
          {"d2d", "device to device bandwidth",
           ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2d)},
-         {"other", "any other memory types combinations bandwidth",
-          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.other)},
+         {"default", "any other memory types combinations bandwidth",
+          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.dflt)},
          {NULL})},
 
     {NULL}
@@ -144,7 +144,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency                 = UCT_CUDA_COPY_IFACE_LATENCY;
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = iface->config.bw.other;
+    iface_attr->bandwidth.shared        = iface->config.bw.dflt;
     iface_attr->overhead                = UCT_CUDA_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
@@ -427,7 +427,7 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
                    (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
             perf_attr->bandwidth.shared = iface->config.bw.d2d;
         } else {
-            perf_attr->bandwidth.shared = iface->config.bw.other;
+            perf_attr->bandwidth.shared = iface->config.bw.dflt;
         }
     }
 
