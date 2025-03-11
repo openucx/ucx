@@ -59,8 +59,7 @@ static ucs_status_t uct_cuda_copy_iface_get_address(uct_iface_h tl_iface,
 }
 
 static int uct_cuda_copy_iface_is_reachable_v2(
-        const uct_iface_h tl_iface,
-        const uct_iface_is_reachable_params_t *params)
+        const uct_iface_h tl_iface, uct_iface_is_reachable_params_t *params)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface,
                                                   uct_cuda_copy_iface_t);
