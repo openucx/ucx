@@ -62,9 +62,8 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
         if (status != UCS_OK) {
             return status;
         }
-
         ucp_proto_multi_request_init(req);
-        ucp_proto_multi_rma_init_func(req);
+        ucp_ep_handle_fence(req->send.ep, req, mpriv->lane_map);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 

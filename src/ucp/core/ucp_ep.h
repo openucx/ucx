@@ -81,17 +81,6 @@ typedef uint16_t                   ucp_ep_flags_t;
 #define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
     ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
 
-#define ucp_ep_check_fence(_ep) \
-({ \
-    /* Apply a fence if EP's sequence is behind worker's */ \
-    ucs_unlikely((_ep)->ext->fence_seq < (_ep)->worker->fence_seq) ? \
-        /* Strong fence if unflushed operations exist on multiple lanes */ \
-        (ucs_likely(ucs_is_pow2_or_zero((_ep)->ext->unflushed_lanes)) ? \
-            ucp_ep_fence_weak((_ep)) : \
-            ucp_ep_fence_strong((_ep))) : \
-        UCS_OK; \
-})
-
 #define UCP_SA_DATA_HEADER_VERSION_SHIFT 5
 
 

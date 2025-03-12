@@ -393,7 +393,7 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
             return status;
         }
 
-        ucp_proto_single_rma_init_func(req);
+        ucp_ep_handle_fence(req->send.ep, req, UCS_BIT(spriv->super.lane));
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 

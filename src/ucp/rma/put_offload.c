@@ -27,7 +27,10 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     ucs_status_t status;
     uct_rkey_t tl_rkey;
 
-    ucp_proto_single_rma_init_func(req);
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_ep_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
 
     tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, spriv->super.rkey_index);
     status  = uct_ep_put_short(ucp_ep_get_fast_lane(ep, spriv->super.lane),
@@ -131,11 +134,13 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
 
 static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
+                                                           send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
-        ucp_proto_multi_rma_init_func(req);
+        ucp_ep_handle_fence(req->send.ep, req, mpriv->lane_map);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 

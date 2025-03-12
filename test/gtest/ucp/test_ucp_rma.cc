@@ -441,6 +441,7 @@ public:
                 UCS_TEST_SKIP_R("Proto v2 is disabled");
             }
             modify_config("FENCE_MODE", "ep_based");
+            modify_config("MAX_RMA_LANES", "2");
         }
 
         test_ucp_memheap::init();
@@ -524,15 +525,6 @@ public:
         return sender().ep()->ext->fence_seq;
     }
 
-    int is_fence_required() {
-        return ep_fence_seq() < worker_fence_seq();
-    }
-
-    int is_strong_fence() {
-        /* Strong fence is required if there is more than one unflushed lane */
-        return !ucs_is_pow2_or_zero(sender().ep()->ext->unflushed_lanes);
-    }
-
     void do_fence() {
         uint64_t worker_fence_seq_before = worker_fence_seq();
         sender().fence();
@@ -574,16 +566,7 @@ public:
                                 uint64_t target, ucp_rkey_h rkey) {
         perform_nbx(op, sbuf, size, target, rkey);
         do_fence();
-
-        bool strong_fence_expected = is_fence_required() && is_strong_fence();
-
         perform_nbx(op, sbuf, size, target, rkey);
-
-        if (strong_fence_expected) {
-            EXPECT_EQ(worker_fence_seq(), ep_fence_seq());
-        } else {
-            EXPECT_NE(worker_fence_seq(), ep_fence_seq());
-        }
     }
 
     void test_ep_based_fence_common(op_type_t op) {

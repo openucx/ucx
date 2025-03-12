@@ -210,10 +210,17 @@ ucp_proto_multi_bcopy_progress(ucp_request_t *req,
                                ucp_proto_send_multi_cb_t send_func,
                                ucp_proto_complete_cb_t comp_func)
 {
+    ucs_status_t status;
+
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
         if (init_func != NULL) {
-            init_func(req);
+            status = init_func(req);
+            if (status != UCS_OK) {
+                /* remove from pending after request is completed */
+                ucp_proto_request_abort(req, status);
+                return UCS_OK;
+            }
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
@@ -236,13 +243,15 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
                                               uct_comp_cb, uct_mem_flags,
                                               dt_mask);
         if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK; /* remove from pending after request is completed */
+            goto abort;
         }
 
         ucp_proto_multi_request_init(req);
         if (init_func != NULL) {
-            init_func(req);
+            status = init_func(req);
+            if (status != UCS_OK) {
+                goto abort;
+            }
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
@@ -250,6 +259,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
 
     return ucp_proto_multi_progress(req, mpriv, send_func, complete_func,
                                     dt_mask);
+abort:
+    ucp_proto_request_abort(req, status);
+    return UCS_OK; /* remove from pending after request is completed */
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
@@ -355,12 +367,12 @@ ucp_proto_am_zcopy_multi_common_send_func(
                            &req->send.state.uct_comp);
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_multi_rma_init_func(ucp_request_t *req)
 {
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
-    req->send.ep->ext->unflushed_lanes |= mpriv->lane_map;
+    return ucp_ep_handle_fence(req->send.ep, req, mpriv->lane_map);
 }
 
 #endif

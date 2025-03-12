@@ -235,6 +235,20 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
 
     tl_rkey = ucp_rkey_get_tl_rkey(rkey, rkey_config->put_short.rkey_index);
 
+    if (ucp_ep_is_fence_required(ep)) {
+        /* Check if there's an unflushed lane that is not the short lane */
+        if (ucs_likely(
+            !ucs_is_pow2_or_zero(ep->ext->unflushed_lanes |
+                                 UCS_BIT(rkey_config->put_short.lane)))) {
+            status = ucp_ep_fence_strong(ep);
+        } else {
+            status = ucp_ep_fence_weak(ep);
+        }
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
     status = UCS_PROFILE_CALL(uct_ep_put_short,
                               ucp_ep_get_fast_lane(ep,
                                                    rkey_config->put_short.lane),
@@ -268,12 +282,6 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                   ucp_request_param_send_callback(param));
 
     if (worker->context->config.ext.proto_enable) {
-        status = ucp_ep_check_fence(ep);
-        if (status != UCS_OK) {
-            ret = UCS_STATUS_PTR(status);
-            goto out_unlock;
-        }
-
         status = ucp_put_send_short(ep, buffer, count, remote_addr, rkey, param);
         if (ucs_likely(status != UCS_ERR_NO_RESOURCE) ||
             ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
@@ -299,7 +307,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         ret = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(worker, rkey)->proto_select,
                 rkey->cfg_index, req, UCP_OP_ID_PUT, buffer, count, datatype,
-                contig_length, param, 0, 0);
+                contig_length, param, 0, 0, ucp_ep_check_fence(ep));
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, rma);
         if (status != UCS_OK) {
@@ -402,16 +410,10 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
             contig_length = ucp_contig_dt_length(datatype, count);
         }
 
-        status = ucp_ep_check_fence(ep);
-        if (status != UCS_OK) {
-            ret = UCS_STATUS_PTR(status);
-            goto out_unlock;
-        }
-
         ret = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(worker, rkey)->proto_select,
                 rkey->cfg_index, req, UCP_OP_ID_GET, buffer, count, datatype,
-                contig_length, param, 0, 0);
+                contig_length, param, 0, 0, ucp_ep_check_fence(ep));
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, rma);
         if (status != UCS_OK) {

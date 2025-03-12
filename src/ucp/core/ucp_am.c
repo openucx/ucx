@@ -1041,7 +1041,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
                                         UCP_WORKER_CFG_INDEX_NULL, req, op_id,
                                         buffer, count, datatype, contig_length,
                                         param, header_length,
-                                        ucp_am_send_nbx_get_op_flag(flags));
+                                        ucp_am_send_nbx_get_op_flag(flags), 0);
     } else {
         ucp_am_send_req_init(req, ep, header, header_length, buffer, datatype,
                              count, flags, id, param);
