@@ -477,6 +477,7 @@ ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
     }
 
     ctx_rsc->short_stream = NULL;
+    ctx_rsc->ctx          = ctx;
     *ctx_rsc_p            = ctx_rsc;
     return UCS_OK;
 }
