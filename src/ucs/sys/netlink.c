@@ -277,9 +277,13 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
     ucs_netlink_route_info_t info;
 
     UCS_INIT_ONCE(&init_once) {
-        rtm.rtm_family = sa_remote->sa_family;
+        rtm.rtm_family = AF_INET;
         rtm.rtm_table  = RT_TABLE_MAIN;
+        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
+                                 sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
+                                 NULL);
 
+        rtm.rtm_family = AF_INET6;
         ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
                                  sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
                                  NULL);
