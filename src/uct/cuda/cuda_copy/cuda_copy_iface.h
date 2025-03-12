@@ -53,14 +53,14 @@ typedef struct uct_cuda_copy_queue_desc {
 
 typedef struct uct_cuda_copy_ctx_rsc {
     /* pool of cuda events to check completion of memcpy operations */
-    ucs_mpool_t                  cuda_event_desc;
+    ucs_mpool_t                cuda_event_desc;
     /* stream used to issue short operations */
-    CUstream                     short_stream;
+    CUstream                   short_stream;
     /* array of queue descriptors for each src/dst memory type combination */
-    uct_cuda_copy_queue_desc_t   queue_desc[UCS_MEMORY_TYPE_LAST]
-                                           [UCS_MEMORY_TYPE_LAST];
+    uct_cuda_copy_queue_desc_t queue_desc[UCS_MEMORY_TYPE_LAST]
+                                         [UCS_MEMORY_TYPE_LAST];
     /* CUDA context handle */
-    CUcontext                     ctx;
+    CUcontext                  ctx;
 } uct_cuda_copy_ctx_rsc_t;
 
 
@@ -130,9 +130,8 @@ uct_cuda_copy_flush_bitmap_idx(ucs_memory_type_t src_mem_type,
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t
-uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface, CUcontext ctx,
-                             unsigned long long ctx_id,
-                             uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
-
+ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
+                                          CUcontext ctx,
+                                          unsigned long long ctx_id,
+                                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
 #endif

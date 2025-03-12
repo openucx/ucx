@@ -433,10 +433,10 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
     .ep_is_connected       = uct_base_ep_is_connected
 };
 
-ucs_status_t
-uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface, CUcontext ctx,
-                             unsigned long long ctx_id,
-                             uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
+ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
+                                          CUcontext ctx,
+                                          unsigned long long ctx_id,
+                                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
     ucs_kh_put_t ret;
     khiter_t iter;
