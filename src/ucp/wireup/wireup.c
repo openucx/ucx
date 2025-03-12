@@ -443,6 +443,8 @@ ucp_wireup_connect_local(ucp_ep_h ep,
         status = ucp_wireup_find_remote_p2p_addr(ep, remote_lane, remote_address,
                                                  &address_entry, &ep_entry);
         if (status != UCS_OK) {
+            /* TODO: move hander addr reply in separate path, for now temporary ignore this error */
+            continue;
             ucs_error("ep %p: no remote ep address for lane[%d]->remote_lane[%d]",
                       ep, lane, remote_lane);
             goto out;
@@ -860,6 +862,28 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     }
 }
 
+static void
+ucp_wireup_process_addr_reply(ucp_worker_h worker, ucp_ep_h ep,
+                              const ucp_wireup_msg_t *msg,
+                              const ucp_unpacked_address_t *remote_address)
+{
+    ucs_status_t status;
+
+    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_ADDR_REPLY);
+    ucs_info("ep %p: got wireup addr reply src_ep_id 0x%"PRIx64
+              " dst_ep_id 0x%"PRIx64" sn %d", ep, msg->src_ep_id,
+              msg->dst_ep_id, msg->conn_sn);
+
+    status = ucp_wireup_connect_local(ep, remote_address, NULL);
+    if (status != UCS_OK) {
+        ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+        return;
+    }
+
+    ucp_wireup_eps_progress(ep);
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
+}
+
 static void ucp_ep_removed_flush_completion(ucp_request_t *req)
 {
     ucs_log_level_t level = UCS_STATUS_IS_ERR(req->status) ?
@@ -983,7 +1007,7 @@ ucp_wireup_process_addr_request(ucp_worker_h worker, ucp_ep_h ep,
     }
 
     ucs_info("ep %p: sending wireup addr reply", ep);
-    ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_REPLY, &ucp_tl_bitmap_max,
+    ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_ADDR_REPLY, &ucp_tl_bitmap_max,
                         NULL);
     if (ep == NULL) {
         ucp_wireup_flush_onetime_reply_ep(reply_ep);
@@ -1061,6 +1085,8 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
     } else if (msg->type == UCP_WIREUP_MSG_ADDR_REQUEST) {
         ucp_wireup_process_addr_request(worker, ep, msg, &remote_address);
+    } else if (msg->type == UCP_WIREUP_MSG_ADDR_REPLY) {
+        ucp_wireup_process_addr_reply(worker, ep, msg, &remote_address);
     } else {
         ucs_bug("invalid wireup message");
     }
@@ -2287,6 +2313,9 @@ uct_ep_h ucp_wireup_init_slow_lane(ucp_ep_h ep, ucp_lane_index_t slow_lane_idx)
 
     ucs_assert(ep->worker->context->config.ext.on_demand_wireup);
     ucs_assert(ep->ext->uct_eps[slow_lane_idx] == NULL);
+
+    ucs_info("ep %p: init slow lane %d / %d", ep, slow_lane_idx,
+             UCP_MAX_FAST_PATH_LANES + slow_lane_idx);
 
     status = ucp_wireup_ep_create(ep, (uct_ep_h*)&wireup_ep);
     if (status != UCS_OK) {
