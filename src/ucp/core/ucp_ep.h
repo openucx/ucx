@@ -192,6 +192,16 @@ enum {
     UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE = UCS_BIT(2)
 };
 
+/**
+ * @brief Flags to control endpoint configuration comparison by
+ *        @a ucp_ep_config_is_equal2
+ */
+enum {
+    /**
+     * Ignore address index in the lane descriptors comparison.
+     */
+    UCP_EP_CONFIG_CMP_IGNORE_ADDR_INDEX = UCS_BIT(0)
+};
 
 #define UCP_EP_STAT_TAG_OP(_ep, _op) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
@@ -206,6 +216,10 @@ typedef struct ucp_ep_config_key_lane {
                                         was selected for */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
+    unsigned             addr_index; /* Address index in the remote address,
+                                        NOTE: can be removed if remote side
+                                        sends only requested address for on
+                                        demand wireup request */
 } ucp_ep_config_key_lane_t;
 
 
@@ -758,6 +772,9 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
+
+int ucp_ep_config_is_equal2(const ucp_ep_config_key_t *key1,
+                            const ucp_ep_config_key_t *key2, unsigned flags);
 
 void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
                         ucs_string_buffer_t *strb);
