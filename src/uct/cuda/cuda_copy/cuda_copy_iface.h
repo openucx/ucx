@@ -59,15 +59,13 @@ typedef struct uct_cuda_copy_ctx_rsc {
     /* array of queue descriptors for each src/dst memory type combination */
     uct_cuda_copy_queue_desc_t   queue_desc[UCS_MEMORY_TYPE_LAST]
                                            [UCS_MEMORY_TYPE_LAST];
-#if CUDA_VERSION >= 12000
-    /* CUDA context id */
-    unsigned long long            ctx_id;
-#endif
+    /* CUDA context handle */
+    CUcontext                     ctx;
 } uct_cuda_copy_ctx_rsc_t;
 
 
-/* Hash map for CUDA context resources. The key is the CUDA context handle. */
-KHASH_INIT(cuda_copy_ctx_rscs, khint64_t, uct_cuda_copy_ctx_rsc_t, 1,
+/* Hash map for CUDA context resources. The key is the CUDA context Id. */
+KHASH_INIT(cuda_copy_ctx_rscs, unsigned long long, uct_cuda_copy_ctx_rsc_t, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
 
 
@@ -126,13 +124,15 @@ uct_cuda_copy_flush_bitmap_idx(ucs_memory_type_t src_mem_type,
  * Create the resources of the given CUDA context.
  *
  * @param [in]  iface     CUDA copy transport interface
- * @param [in]  ctx       CUDA context
+ * @param [in]  ctx       CUDA context handle
+ * @param [in]  ctx_id    CUDA context Id
  * @param [out] ctx_rsc_p Returned pointer to context resources
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
-                                          CUcontext ctx,
-                                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
+ucs_status_t
+uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface, CUcontext ctx,
+                             unsigned long long ctx_id,
+                             uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
 
 #endif

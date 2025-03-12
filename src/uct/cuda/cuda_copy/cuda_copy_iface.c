@@ -23,15 +23,6 @@
 #define UCT_CUDA_COPY_IFACE_LATENCY  ucs_linear_func_make(8e-6, 0)
 
 
-typedef struct uct_cuda_copy_ctx_mpool_priv {
-#if CUDA_VERSION >= 12000
-    CUcontext validator;
-#else
-    CUdeviceptr validator;
-#endif
-} uct_cuda_copy_ctx_mpool_priv_t;
-
-
 static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
 
     {"", "", NULL,
@@ -323,48 +314,32 @@ uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
             cuEventCreate(&base->event, CU_EVENT_DISABLE_TIMING));
 }
 
-#if CUDA_VERSION >= 12000
-static int uct_cuda_copy_ctx_rsc_valid(CUcontext validator)
+
+static int uct_cuda_copy_ctx_rsc_valid(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
 {
+#if CUDA_VERSION >= 12000
     unsigned long long ctx_id;
     CUresult result;
 
-    result = cuCtxGetId(validator, &ctx_id);
+    result = cuCtxGetId(ctx_rsc->ctx, &ctx_id);
     if (result == CUDA_ERROR_CONTEXT_IS_DESTROYED) {
         return 0;
     } else if (result != CUDA_SUCCESS) {
         UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_WARN, result);
         return 0;
     }
-
-    return 1;
-}
-#else
-static int uct_cuda_copy_ctx_rsc_valid(CUdeviceptr validator)
-{
-    CUcontext ctx;
-    CUresult result;
-
-    result = cuPointerGetAttribute((void*)&ctx, CU_POINTER_ATTRIBUTE_CONTEXT,
-                                   validator);
-    if ((result == CUDA_ERROR_CONTEXT_IS_DESTROYED) ||
-        (result == CUDA_ERROR_INVALID_VALUE)) {
-        return 0;
-    } else if (result != CUDA_SUCCESS) {
-        UCT_CUDADRV_LOG(cuPointerGetAttribute, UCS_LOG_LEVEL_WARN, result);
-        return 0;
-    }
-
-    return 1;
-}
 #endif
+    return 1;
+}
 
 static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
-    uct_cuda_copy_ctx_mpool_priv_t *mpool_priv = ucs_mpool_priv(mp);
-    uct_cuda_copy_event_desc_t *base           = obj;
+    uct_cuda_copy_event_desc_t *base = obj;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc = ucs_container_of(mp,
+                                                        uct_cuda_copy_ctx_rsc_t,
+                                                        cuda_event_desc);
 
-    if (uct_cuda_copy_ctx_rsc_valid(mpool_priv->validator)) {
+    if (uct_cuda_copy_ctx_rsc_valid(ctx_rsc)) {
         UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(base->event));
     }
 }
@@ -458,47 +433,41 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
     .ep_is_connected       = uct_base_ep_is_connected
 };
 
-static ucs_status_t uct_cuda_copy_ctx_rsc_init(CUcontext ctx,
-                                               unsigned int max_cuda_events,
-                                               uct_cuda_copy_ctx_rsc_t *ctx_rsc)
+ucs_status_t
+uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface, CUcontext ctx,
+                             unsigned long long ctx_id,
+                             uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
+    ucs_kh_put_t ret;
+    khiter_t iter;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
-    uct_cuda_copy_ctx_mpool_priv_t *mpool_priv;
     ucs_memory_type_t src, dst;
 
-#if CUDA_VERSION >= 12000
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetId(ctx, &ctx_rsc->ctx_id));
-    if (status != UCS_OK) {
-        return status;
+    iter = kh_put(cuda_copy_ctx_rscs, &iface->ctx_rscs, ctx_id, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("cannot allocate hash entry");
+        return UCS_ERR_NO_MEMORY;
     }
-#endif
+
+    ucs_assertv_always(ret != UCS_KH_PUT_KEY_PRESENT,
+                       "the key %llu has already been added", ctx_id);
+
+    ctx_rsc = &kh_value(&iface->ctx_rscs, iter);
 
     ucs_mpool_params_reset(&mp_params);
-    mp_params.priv_size       = sizeof(uct_cuda_copy_ctx_mpool_priv_t);
     mp_params.elem_size       = sizeof(uct_cuda_copy_event_desc_t);
     mp_params.elems_per_chunk = 128;
-    mp_params.max_elems       = max_cuda_events;
+    mp_params.max_elems       = iface->config.max_cuda_events;
     mp_params.ops             = &uct_cuda_copy_event_desc_mpool_ops;
     mp_params.name            = "cuda_copy_event_descriptors";
 
     status = ucs_mpool_init(&mp_params, &ctx_rsc->cuda_event_desc);
     if (status != UCS_OK) {
-        ucs_error("mpool creation failed");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    mpool_priv = ucs_mpool_priv(&ctx_rsc->cuda_event_desc);
-
-#if CUDA_VERSION >= 12000
-    mpool_priv->validator = ctx;
-#else
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc(&mpool_priv->validator, 1));
-    if (status != UCS_OK) {
-        ucs_mpool_cleanup(&ctx_rsc->cuda_event_desc, 1);
+        kh_del(cuda_copy_ctx_rscs, &iface->ctx_rscs, iter);
         return status;
     }
-#endif
 
     ucs_memory_type_for_each(src) {
         ucs_memory_type_for_each(dst) {
@@ -508,37 +477,7 @@ static ucs_status_t uct_cuda_copy_ctx_rsc_init(CUcontext ctx,
     }
 
     ctx_rsc->short_stream = NULL;
-
-    return UCS_OK;
-}
-
-ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
-                                          CUcontext ctx,
-                                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
-{
-    ucs_kh_put_t ret;
-    khiter_t iter;
-    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
-    ucs_status_t status;
-
-    iter = kh_put(cuda_copy_ctx_rscs, &iface->ctx_rscs, (khint64_t)ctx, &ret);
-    if (ret == UCS_KH_PUT_FAILED) {
-        ucs_error("cannot allocate hash entry");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    ucs_assertv_always(ret != UCS_KH_PUT_KEY_PRESENT,
-                       "the key %lu has already been added", (uintptr_t)ctx);
-
-    ctx_rsc = &kh_value(&iface->ctx_rscs, iter);
-    status  = uct_cuda_copy_ctx_rsc_init(ctx, iface->config.max_cuda_events,
-                                         ctx_rsc);
-    if (status != UCS_OK) {
-        kh_del(cuda_copy_ctx_rscs, &iface->ctx_rscs, iter);
-        return status;
-    }
-
-    *ctx_rsc_p = ctx_rsc;
+    *ctx_rsc_p            = ctx_rsc;
     return UCS_OK;
 }
 
@@ -584,13 +523,9 @@ static void uct_cuda_copy_stream_destroy(CUstream *stream, int valid_ctx)
 
 static void uct_cuda_copy_ctx_rsc_destroy(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
 {
-    uct_cuda_copy_ctx_mpool_priv_t *mpool_priv;
-    int valid_ctx;
+    int ctx_rsc_valid = uct_cuda_copy_ctx_rsc_valid(ctx_rsc);
     ucs_memory_type_t src, dst;
     ucs_queue_head_t *event_q;
-
-    mpool_priv = ucs_mpool_priv(&ctx_rsc->cuda_event_desc);
-    valid_ctx  = uct_cuda_copy_ctx_rsc_valid(mpool_priv->validator);
 
     ucs_memory_type_for_each(src) {
         ucs_memory_type_for_each(dst) {
@@ -600,18 +535,11 @@ static void uct_cuda_copy_ctx_rsc_destroy(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
             }
 
             uct_cuda_copy_stream_destroy(&ctx_rsc->queue_desc[src][dst].stream,
-                                         valid_ctx);
+                                         ctx_rsc_valid);
         }
     }
 
-    uct_cuda_copy_stream_destroy(&ctx_rsc->short_stream, valid_ctx);
-
-#if CUDA_VERSION < 12000
-    if (valid_ctx) {
-        UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(mpool_priv->validator));
-    }
-#endif
-
+    uct_cuda_copy_stream_destroy(&ctx_rsc->short_stream, ctx_rsc_valid);
     ucs_mpool_cleanup(&ctx_rsc->cuda_event_desc, 1);
 }
 
