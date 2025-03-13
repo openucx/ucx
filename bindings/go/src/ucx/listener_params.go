@@ -22,11 +22,13 @@ type UcpListenerParams struct {
 
 //export ucxgo_completeConnHandler
 func ucxgo_completeConnHandler(connRequest C.ucp_conn_request_h, arg unsafe.Pointer) {
-	listener := unpackArg(arg).(*UcpListener)
-	listener.callback(&UcpConnectionRequest{
-		connRequest: connRequest,
-		listener:    listener.listener,
-	})
+	if callback := unpackArg(arg); callback != nil {
+		listener := callback.(*UcpListener)
+		listener.callback(&UcpConnectionRequest{
+			connRequest: connRequest,
+			listener:    listener.listener,
+		})
+	}
 }
 
 // Destination address
