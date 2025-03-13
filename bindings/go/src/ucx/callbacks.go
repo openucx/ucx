@@ -57,8 +57,8 @@ func ucxgo_completeGoTagRecvRequest(request unsafe.Pointer, status C.ucs_status_
 //export ucxgo_amRecvCallback
 func ucxgo_amRecvCallback(arg unsafe.Pointer, header unsafe.Pointer, headerSize C.size_t,
 	data unsafe.Pointer, dataSize C.size_t, params *C.ucp_am_recv_param_t) C.ucs_status_t {
-	if arg != nil {
-		bundle := unpackArg(arg).(*UcpAmRecvCallbackBundle)
+	if callback := unpackArg(arg); callback != nil {
+		bundle := callback.(*UcpAmRecvCallbackBundle)
 		var replyEp *UcpEp
 		if (params.recv_attr & C.UCP_AM_RECV_ATTR_FIELD_REPLY_EP) != 0 {
 			replyEp = &UcpEp{ep: params.reply_ep}
