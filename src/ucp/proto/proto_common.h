@@ -162,6 +162,14 @@ typedef struct {
 } ucp_proto_common_tl_perf_t;
 
 
+typedef struct {
+    ucp_lane_map_t   lane_map;
+    ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t length;
+    uint8_t          local_rsc_count[UCP_MAX_RESOURCES];
+} ucp_proto_lane_selection_t;
+
+
 /* Private data per lane */
 typedef struct {
     ucp_lane_index_t        lane;       /* Lane index in the endpoint */
