@@ -56,7 +56,7 @@ func (w *UcpWorker) Close() {
 	for _, handle := range w.handles {
 		unpackAndFreeArg(handle)
 	}
-    w.handles = nil 
+	w.handles = nil 
 	C.ucp_worker_destroy(w.worker)
 }
 
