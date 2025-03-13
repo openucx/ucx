@@ -298,7 +298,7 @@ static void uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md, CUcontext ctx,
     khiter_t iter;
     ucs_kh_put_t ret;
 
-    iter = kh_get(cuda_copy_ctx_set, &md->sync_memops, (khint64_t)ctx);
+    iter = kh_get(cuda_ctx_set, &md->sync_memops, (khint64_t)ctx);
     if (iter != kh_end(&md->sync_memops)) {
         return;
     }
@@ -319,7 +319,7 @@ static void uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md, CUcontext ctx,
         status = UCT_CUDADRV_FUNC_LOG_WARN(
                     cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS));
         if (status == UCS_OK) {
-            kh_put(cuda_copy_ctx_set, &md->sync_memops, (khint64_t)ctx, &ret);
+            kh_put(cuda_ctx_set, &md->sync_memops, (khint64_t)ctx, &ret);
             if (ret == UCS_KH_PUT_FAILED) {
                 ucs_error("cannot allocate hash entry");
             }
@@ -519,7 +519,7 @@ static ucs_status_t uct_cuda_copy_mem_free(uct_md_h md, uct_mem_h memh)
 static void uct_cuda_copy_md_close(uct_md_h uct_md) {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
 
-    kh_destroy_inplace(cuda_copy_ctx_set, &md->sync_memops);
+    kh_destroy_inplace(cuda_ctx_set, &md->sync_memops);
     ucs_free(md);
 }
 
@@ -883,7 +883,6 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     md->config.enable_fabric    = config->enable_fabric;
     md->config.dmabuf_supported = 0;
     md->granularity             = SIZE_MAX;
-    kh_init_inplace(cuda_copy_ctx_set, &md->sync_memops);
 
     if ((config->cuda_async_mem_type != UCS_MEMORY_TYPE_CUDA) &&
         (config->cuda_async_mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED)) {
@@ -905,6 +904,8 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     if (config->enable_dmabuf != UCS_NO) {
         md->config.dmabuf_supported = dmabuf_supported;
     }
+
+    kh_init_inplace(cuda_ctx_set, &md->sync_memops);
 
     *md_p = (uct_md_h)md;
 

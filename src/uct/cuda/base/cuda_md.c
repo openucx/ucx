@@ -17,8 +17,8 @@
 
 
 /* Hash map of CUDA context handles. The key is the CUDA device handle. */
-KHASH_MAP_INIT_INT(uct_cuda_ctxs, CUcontext);
-khash_t(uct_cuda_ctxs) uct_cuda_retained_primary_ctxs;
+KHASH_MAP_INIT_INT(cuda_ctx_map, CUcontext);
+khash_t(cuda_ctx_map) uct_cuda_retained_primary_ctxs;
 
 
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
@@ -117,7 +117,7 @@ uct_cuda_primary_ctx_retain(CUdevice cuda_device, CUcontext *cuda_ctx_p)
     int active;
     ucs_status_t status;
 
-    iter = kh_put(uct_cuda_ctxs, &uct_cuda_retained_primary_ctxs, cuda_device,
+    iter = kh_put(cuda_ctx_map, &uct_cuda_retained_primary_ctxs, cuda_device,
                   &ret);
     if (ret == UCS_KH_PUT_FAILED) {
         ucs_error("cannot allocate hash entry");
@@ -156,7 +156,7 @@ out:
     return UCS_OK;
 
 err_del_iter:
-    kh_del(uct_cuda_ctxs, &uct_cuda_retained_primary_ctxs, iter);
+    kh_del(cuda_ctx_map, &uct_cuda_retained_primary_ctxs, iter);
 err:
     return status;
 }
@@ -164,7 +164,7 @@ err:
 UCS_STATIC_INIT
 {
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
-    kh_init_inplace(uct_cuda_ctxs, &uct_cuda_retained_primary_ctxs);
+    kh_init_inplace(cuda_ctx_map, &uct_cuda_retained_primary_ctxs);
 }
 
 UCS_STATIC_CLEANUP
@@ -175,7 +175,7 @@ UCS_STATIC_CLEANUP
         UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(device));
     });
 
-    kh_destroy_inplace(uct_cuda_ctxs, &uct_cuda_retained_primary_ctxs);
+    kh_destroy_inplace(cuda_ctx_map, &uct_cuda_retained_primary_ctxs);
 }
 
 UCS_MODULE_INIT() {

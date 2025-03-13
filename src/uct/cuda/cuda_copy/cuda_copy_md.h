@@ -21,7 +21,8 @@ typedef enum {
 } uct_cuda_pref_loc_t;
 
 
-KHASH_SET_INIT_INT64(cuda_copy_ctx_set);
+/* Hash set of CUDA context handles */
+KHASH_SET_INIT_INT64(cuda_ctx_set);
 
 
 /**
@@ -40,8 +41,8 @@ typedef struct uct_cuda_copy_md {
         uct_cuda_pref_loc_t      pref_loc;
         int                      cuda_async_managed;
     } config;
-    /* Set of CUDA contexts whith CU_CTX_SYNC_MEMOPS flag */
-    khash_t(cuda_copy_ctx_set)   sync_memops;
+    /* CUDA contexts with the CU_CTX_SYNC_MEMOPS flag set */
+    khash_t(cuda_ctx_set)        sync_memops;
 } uct_cuda_copy_md_t;
 
 /**
