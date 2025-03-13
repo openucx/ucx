@@ -158,14 +158,12 @@ void test_another_thread::detect_mem_type(ucs_memory_type_t mem_type) const
     const size_t size = 16;
     T buffer(size, mem_type);
 
-    auto& md = m_md;
     ucs_memory_type_t detected_mem_type;
     ucs_status_t status;
-    std::thread t([&md, &buffer, &size, &detected_mem_type, &status]() {
-        status = uct_md_detect_memory_type(md, buffer.ptr(), size,
+    std::thread([&]() {
+        status = uct_md_detect_memory_type(this->m_md, buffer.ptr(), size,
                                            &detected_mem_type);
-    });
-    t.join();
+    }).join();
 
     ASSERT_EQ(status, UCS_OK);
     EXPECT_EQ(detected_mem_type, mem_type);
