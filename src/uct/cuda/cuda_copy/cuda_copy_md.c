@@ -418,7 +418,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     }
 
 allocated:
-    uct_cuda_copy_sync_memops(md, ctx, (void *)alloc_handle->ptr,
+    uct_cuda_copy_sync_memops(md, ctx, (void*)alloc_handle->ptr,
                               alloc_handle->is_vmm);
 
     *memh_p    = alloc_handle;

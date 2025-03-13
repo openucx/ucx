@@ -130,9 +130,8 @@ uct_cuda_primary_ctx_retain(CUdevice cuda_device, CUcontext *cuda_ctx_p)
         goto out;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxGetState(cuda_device,
-                                                                 &flags,
-                                                                 &active));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
     if (status != UCS_OK) {
         goto err_del_iter;
     }
@@ -145,8 +144,8 @@ uct_cuda_primary_ctx_retain(CUdevice cuda_device, CUcontext *cuda_ctx_p)
     }
 
     cuda_ctx = &kh_value(&uct_cuda_retained_primary_ctxs, iter);
-    status   = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(cuda_ctx,
-                                                                 cuda_device));
+    status   = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxRetain(cuda_ctx, cuda_device));
     if (status != UCS_OK) {
         goto err_del_iter;
     }
@@ -173,7 +172,7 @@ UCS_STATIC_CLEANUP
 
     kh_foreach_key(&uct_cuda_retained_primary_ctxs, device, {
         UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(device));
-    });
+    })
 
     kh_destroy_inplace(cuda_ctx_map, &uct_cuda_retained_primary_ctxs);
 }

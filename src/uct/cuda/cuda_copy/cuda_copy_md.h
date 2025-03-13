@@ -30,6 +30,9 @@ KHASH_SET_INIT_INT64(cuda_ctx_set);
  */
 typedef struct uct_cuda_copy_md {
     struct uct_md                super;           /* Domain info */
+    khash_t(cuda_ctx_set)        sync_memops;     /* CUDA contexts with the
+                                                     CU_CTX_SYNC_MEMOPS flag
+                                                     set */
     size_t                       granularity;     /* allocation granularity */
     struct {
         ucs_on_off_auto_value_t  alloc_whole_reg; /* force return of allocation
@@ -41,8 +44,6 @@ typedef struct uct_cuda_copy_md {
         uct_cuda_pref_loc_t      pref_loc;
         int                      cuda_async_managed;
     } config;
-    /* CUDA contexts with the CU_CTX_SYNC_MEMOPS flag set */
-    khash_t(cuda_ctx_set)        sync_memops;
 } uct_cuda_copy_md_t;
 
 /**
