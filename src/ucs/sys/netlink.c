@@ -292,8 +292,7 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
     info.if_index  = if_index;
     info.sa_remote = sa_remote;
     info.found     = 0;
-
     ucs_netlink_lookup_route(&info);
-out:
+
     return info.found;
 }
