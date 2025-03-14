@@ -38,6 +38,12 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
 #define UCT_NVML_FUNC_LOG_ERR(_func) \
     UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
+
+#define UCT_CUDADRV_LOG(_func, _log_level, _result) \
+    ucs_log((_log_level), "%s failed: %s", UCS_PP_MAKE_STRING(_func), \
+            uct_cuda_base_cu_get_error_string(_result))
+
+
 #define UCT_CUDADRV_FUNC(_func, _log_level) \
     ({ \
         ucs_status_t _status = UCS_OK; \
@@ -46,9 +52,7 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
             if (CUDA_ERROR_NOT_READY == _result) { \
                 _status = UCS_INPROGRESS; \
             } else if (CUDA_SUCCESS != _result) { \
-                ucs_log((_log_level), "%s failed: %s", \
-                        UCS_PP_MAKE_STRING(_func), \
-                        uct_cuda_base_cu_get_error_string(_result)); \
+                UCT_CUDADRV_LOG(_func, _log_level, _result); \
                 _status = UCS_ERR_IO_ERROR; \
             } \
         } while (0); \
