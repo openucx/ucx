@@ -1978,6 +1978,20 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         perf_attr->bandwidth = iface_attr.bandwidth;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_RATIO) {
+        if (uct_ib_iface_is_roce(ib_iface)) {
+            /* ROCE: Equal share per each path */
+            perf_attr->path_ratio = 1.0 / (double)iface_attr.dev_num_paths;
+        } else if (uct_ib_iface_port_attr(ib_iface)->active_speed ==
+                   UCT_IB_SPEED_NDR) {
+            /* CX7: first path consumes 90% of the full bandwidth */
+            perf_attr->path_ratio = 0.9;
+        } else {
+            /* Others: first path consumes 99% of the full bandwidth */
+            perf_attr->path_ratio = (iface_attr.dev_num_paths > 1)? 0.99 : 1.0;
+        }
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         perf_attr->latency = iface_attr.latency;
         if (uct_ep_op_is_bcopy(op) || uct_ep_op_is_zcopy(op)) {

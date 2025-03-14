@@ -21,6 +21,37 @@
 
 
 static UCS_F_ALWAYS_INLINE double
+ucp_proto_multi_get_path_ratio(const ucp_proto_init_params_t *params,
+                               double path_ratio, uint8_t path_index,
+                               ucp_rsc_index_t rsc_index)
+{
+    ucp_worker_iface_t *wiface = ucp_worker_iface(params->worker, rsc_index);
+    unsigned dev_num_paths     = wiface->attr.dev_num_paths;
+    unsigned i;
+    double weight, total_weight;
+
+    ucs_assertv(path_index < dev_num_paths, "path_index=%u dev_num_paths=%u",
+                path_index, dev_num_paths);
+
+    /* When selecting first path of any device, or any path of ROCE device,
+     * this condition should be always matched */
+    if ((path_index + 1) * path_ratio <= 1.0) {
+        return path_ratio;
+    }
+
+    /* If we are here, it means that the remaining part of the ratio is less
+     * than path_ratio, so we need to gradiently split it between all remaining
+     * paths */
+    total_weight = 0.0;
+    for (i = 1; i < dev_num_paths; ++i) {
+        total_weight += 1.0 / (1 << (i - 1));
+    }
+
+    weight = 1.0 / (1 << (path_index - 1));
+    return (1.0 - path_ratio) * (weight / total_weight);
+}
+
+static UCS_F_ALWAYS_INLINE double
 ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
                              ucp_lane_index_t lane,
                              const ucp_proto_common_tl_perf_t *lane_perf,
@@ -33,17 +64,17 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
     double ratio;
 
     if (UCS_CONFIG_DBL_IS_AUTO(multi_path_ratio)) {
-        /* When path_index is less than 4, the ratio is: 1 / 2**(2x), which is
-         * path0=100%, path1=25%, path2=6.25%, path3=1.5%.
-         * Subsequent paths have ratio 1 / (20x):
-         * path4=1.25%, path5=1% etc */
-        ratio = 1.0 / (double)(path_index < 4 ? (1 << path_index * 2) :
-                                                (20 * path_index));
-        return lane_perf->bandwidth * ratio;
+        ratio = ucp_proto_multi_get_path_ratio(params, lane_perf->path_ratio,
+                                               path_index, rsc_index);
     } else {
         ratio = 1.0 - (multi_path_ratio * path_index);
-        return lane_perf->bandwidth * ratio;
     }
+
+    ucs_trace("ratio=%0.3f path_index=%u avail_bw=" UCP_PROTO_PERF_FUNC_BW_FMT
+              " " UCP_PROTO_LANE_FMT, ratio, path_index,
+              (lane_perf->bandwidth * ratio) / UCS_MBYTE,
+              UCP_PROTO_LANE_ARG(params, lane, lane_perf));
+    return lane_perf->bandwidth * ratio;
 }
 
 static ucp_lane_index_t
@@ -127,6 +158,10 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
         ucp_proto_select_add_lane(selection, params, lanes[index]);
         index_map &= ~UCS_BIT(index);
     }
+
+    /* TODO: Aggregate performance:
+     * Split full iface bandwidth between selected paths, according to the total
+     * path ratio */
 }
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
@@ -209,13 +244,18 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     /* Filter out slow lanes */
     fixed_first_lane = params->first.lane_type != params->middle.lane_type;
     for (i = fixed_first_lane ? 1 : 0, num_fast_lanes = i; i < num_lanes; ++i) {
-        lane = lanes[i];
-        if ((lanes_perf[lane].bandwidth * max_bw_ratio) < max_bandwidth) {
+        lane      = lanes[i];
+        lane_perf = &lanes_perf[lane];
+        if ((lane_perf->bandwidth * max_bw_ratio) < max_bandwidth) {
             /* Bandwidth on this lane is too low compared to the fastest
                available lane, so it's not worth using it */
             ucp_proto_perf_node_deref(&lanes_perf_nodes[lane]);
+            ucs_trace("drop " UCP_PROTO_LANE_FMT,
+                      UCP_PROTO_LANE_ARG(&params->super.super, lane, lane_perf));
         } else {
             lanes[num_fast_lanes++] = lane;
+            ucs_trace("avail " UCP_PROTO_LANE_FMT,
+                      UCP_PROTO_LANE_ARG(&params->super.super, lane, lane_perf));
         }
     }
 
@@ -224,19 +264,20 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                     params->max_lanes, lanes_perf,
                                     fixed_first_lane, &selection);
 
+    ucs_trace("selected %u lanes for %s", selection.length,
+                ucp_proto_id_field(params->super.super.proto_id, name));
+    ucs_log_indent(1);
+
     for (i = 0; i < selection.length; ++i) {
         lane      = selection.lanes[i];
         lane_perf = &lanes_perf[lane];
-        ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(send_pre_overhead)
+        ucs_trace(UCP_PROTO_LANE_FMT UCP_PROTO_TIME_FMT(send_pre_overhead)
                   UCP_PROTO_TIME_FMT(send_post_overhead)
-                  UCP_PROTO_TIME_FMT(recv_overhead)
-                  " bw " UCP_PROTO_PERF_FUNC_BW_FMT
-                  UCP_PROTO_TIME_FMT(latency), lane,
+                  UCP_PROTO_TIME_FMT(recv_overhead),
+                  UCP_PROTO_LANE_ARG(&params->super.super, lane, lane_perf),
                   UCP_PROTO_TIME_ARG(lane_perf->send_pre_overhead),
                   UCP_PROTO_TIME_ARG(lane_perf->send_post_overhead),
-                  UCP_PROTO_TIME_ARG(lane_perf->recv_overhead),
-                  (lane_perf->bandwidth / UCS_MBYTE),
-                  UCP_PROTO_TIME_ARG(lane_perf->latency));
+                  UCP_PROTO_TIME_ARG(lane_perf->recv_overhead));
 
         /* Calculate maximal bandwidth-to-fragment-size ratio, which is used to
            adjust fragment sizes so they are proportional to bandwidth ratio and
@@ -255,6 +296,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         perf.sys_latency         = ucs_max(perf.sys_latency,
                                            lane_perf->sys_latency);
     }
+
+    ucs_log_indent(-1);
 
     /* Initialize multi-lane private data and relative weights */
     reg_md_map          = ucp_proto_common_reg_md_map(&params->super,

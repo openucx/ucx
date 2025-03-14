@@ -372,6 +372,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                            UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                           UCT_PERF_ATTR_FIELD_PATH_RATIO |
                            UCT_PERF_ATTR_FIELD_LATENCY;
     perf_attr.operation  = params->send_op;
 
@@ -385,6 +386,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     tl_perf->recv_overhead      = perf_attr.recv_overhead + params->overhead;
     tl_perf->bandwidth          = ucp_tl_iface_bandwidth(context,
                                                          &perf_attr.bandwidth);
+    tl_perf->path_ratio         = perf_attr.path_ratio;
     tl_perf->latency            = ucp_tl_iface_latency(context,
                                                        &perf_attr.latency) +
                                   params->latency;
