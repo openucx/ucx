@@ -258,6 +258,10 @@ uct_rocm_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
         }
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_RATIO) {
+        perf_attr->path_ratio = 1.0;
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
         perf_attr->send_pre_overhead = 0;
     }

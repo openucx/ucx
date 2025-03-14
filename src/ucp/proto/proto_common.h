@@ -26,6 +26,20 @@
 #define UCP_PROTO_MULTI_FRAG_DESC "multi-frag"
 
 
+#define UCP_PROTO_LANE_FMT \
+    "lane[%d] " UCT_TL_RESOURCE_DESC_FMT " bw " UCP_PROTO_PERF_FUNC_BW_FMT \
+    UCP_PROTO_TIME_FMT(latency)
+
+
+#define UCP_PROTO_LANE_ARG(_params, _lane, _lane_perf) \
+    (_lane), \
+    UCT_TL_RESOURCE_DESC_ARG( \
+        &(_params)->worker->context->tl_rscs[ \
+            ucp_proto_common_get_rsc_index(_params, _lane)].tl_rsc), \
+    (_lane_perf)->bandwidth / UCS_MBYTE, \
+    UCP_PROTO_TIME_ARG((_lane_perf)->latency)
+
+
 typedef enum {
     /* Send buffer is used by zero-copy operations */
     UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY    = UCS_BIT(0),
@@ -148,6 +162,9 @@ typedef struct {
     /* Transport bandwidth (without protocol memory copies) */
     double bandwidth;
 
+    /* Single path ratio of the full bandwidth */
+    double path_ratio;
+
     /* Network latency */
     double latency;
 
@@ -160,6 +177,14 @@ typedef struct {
     /* Maximum single message length */
     size_t max_frag;
 } ucp_proto_common_tl_perf_t;
+
+
+typedef struct {
+    ucp_lane_map_t   lane_map;
+    ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t length;
+    uint8_t          local_rsc_count[UCP_MAX_RESOURCES];
+} ucp_proto_lane_selection_t;
 
 
 /* Private data per lane */
