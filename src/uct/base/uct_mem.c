@@ -108,8 +108,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
     log_level    = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                    UCS_LOG_LEVEL_ERROR;
 
-    ucs_trace("allocating %s: %s memory length %zu sys_dev %s flags 0x%x",
-              alloc_name, ucs_memory_type_names[mem_type], alloc_length,
+    ucs_trace("allocating %s: length %zu %s memory sys_dev %s flags 0x%x",
+              alloc_name, alloc_length, ucs_memory_type_names[mem_type],
               ucs_topo_sys_device_get_name(sys_dev), flags);
     ucs_log_indent(1);
 
@@ -156,7 +156,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                  * allocation.
                  */
                 status = uct_md_mem_alloc(md, &alloc_length, &address, mem_type,
-                                          flags, alloc_name, sys_dev, &memh);
+                                          sys_dev, flags, alloc_name, &memh);
                 if (status != UCS_OK) {
                     ucs_log(log_level,
                             "failed to allocate %zu bytes using md %s for %s: %s",
