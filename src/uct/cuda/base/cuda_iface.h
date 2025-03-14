@@ -132,4 +132,16 @@ UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_iface_config_t *tl_config, const char *dev_name);
 
+
+/**
+ * Retain the primary context on the given CUDA device.
+ *
+ * @param [in]  cuda_device Device for which primary context is requested.
+ * @param [out] cuda_ctx_p  Returned context handle of the retained context.
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t
+uct_cuda_primary_ctx_retain(CUdevice cuda_device, CUcontext *cuda_ctx_p);
+
 #endif

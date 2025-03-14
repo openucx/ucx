@@ -10,9 +10,15 @@
 #include "cuda_md.h"
 #include "cuda_iface.h"
 
+#include <ucs/datastruct/khash.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <cuda.h>
+
+
+/* Hash map of CUDA context handles. The key is the CUDA device handle. */
+KHASH_MAP_INIT_INT(cuda_ctx_map, CUcontext);
+khash_t(cuda_ctx_map) uct_cuda_retained_primary_ctxs;
 
 
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
@@ -101,13 +107,74 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                            num_resources_p);
 }
 
+ucs_status_t
+uct_cuda_primary_ctx_retain(CUdevice cuda_device, CUcontext *cuda_ctx_p)
+{
+    ucs_kh_put_t ret;
+    khiter_t iter;
+    CUcontext *cuda_ctx;
+    unsigned int flags;
+    int active;
+    ucs_status_t status;
+
+    iter = kh_put(cuda_ctx_map, &uct_cuda_retained_primary_ctxs, cuda_device,
+                  &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("cannot allocate hash entry");
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    cuda_ctx = &kh_value(&uct_cuda_retained_primary_ctxs, iter);
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
+        goto out;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
+    if (status != UCS_OK) {
+        goto err_del_iter;
+    }
+
+    if (!active) {
+        ucs_error("primary device context is inactive on device %d",
+                  cuda_device);
+        status = UCS_ERR_IO_ERROR;
+        goto err_del_iter;
+    }
+
+    cuda_ctx = &kh_value(&uct_cuda_retained_primary_ctxs, iter);
+    status   = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxRetain(cuda_ctx, cuda_device));
+    if (status != UCS_OK) {
+        goto err_del_iter;
+    }
+
+out:
+    *cuda_ctx_p = *cuda_ctx;
+    return UCS_OK;
+
+err_del_iter:
+    kh_del(cuda_ctx_map, &uct_cuda_retained_primary_ctxs, iter);
+err:
+    return status;
+}
+
 UCS_STATIC_INIT
 {
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+    kh_init_inplace(cuda_ctx_map, &uct_cuda_retained_primary_ctxs);
 }
 
 UCS_STATIC_CLEANUP
 {
+    CUdevice device;
+
+    kh_foreach_key(&uct_cuda_retained_primary_ctxs, device, {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(device));
+    })
+
+    kh_destroy_inplace(cuda_ctx_map, &uct_cuda_retained_primary_ctxs);
 }
 
 UCS_MODULE_INIT() {
