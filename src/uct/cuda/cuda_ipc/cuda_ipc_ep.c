@@ -67,26 +67,27 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     void *mapped_rem_addr;
     void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
-    ucs_queue_head_t *outstanding_queue;
     ucs_status_t status;
     CUdeviceptr dst, src;
     CUstream stream;
     size_t offset;
+    uct_cuda_queue_desc_t *q_desc;
+    ucs_queue_head_t *event_q;
 
-    if (0 == iov[0].length) {
+    if (ucs_unlikely(0 == iov[0].length)) {
         ucs_trace_data("Zero length request: skip it");
         return UCS_OK;
     }
 
     status = uct_cuda_ipc_map_memhandle(key, &mapped_addr);
-    if (status != UCS_OK) {
+    if (ucs_unlikely(status != UCS_OK)) {
         return UCS_ERR_IO_ERROR;
     }
 
     /* ensure context is set before creating events/streams */
     if (iface->cuda_context == NULL) {
         UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&iface->cuda_context));
-        if (iface->cuda_context == NULL) {
+        if (ucs_unlikely(iface->cuda_context == NULL)) {
             ucs_error("attempt to perform cuda memcpy without active context");
             return UCS_ERR_IO_ERROR;
         }
@@ -96,18 +97,14 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
     ucs_assert(offset <= key->b_len);
 
-    if (!iface->streams_initialized) {
-        status = uct_cuda_ipc_iface_init_streams(iface);
-        if (UCS_OK != status) {
-            return status;
-        }
+    status = uct_cuda_ipc_get_queue_desc(iface, key->dev_num, &q_desc);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return UCS_ERR_IO_ERROR;
     }
 
-    key->dev_num %= iface->config.max_streams; /* round-robin */
-
-    stream            = iface->stream_d2d[key->dev_num];
-    outstanding_queue = &iface->outstanding_d2d_event_q;
-    cuda_ipc_event    = ucs_mpool_get(&iface->event_desc);
+    event_q        = &q_desc->event_queue;
+    stream         = q_desc->stream;
+    cuda_ipc_event = ucs_mpool_get(&iface->event_desc);
 
     if (ucs_unlikely(cuda_ipc_event == NULL)) {
         ucs_error("Failed to allocate cuda_ipc event object");
@@ -121,26 +118,28 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyDtoDAsync(dst, src, iov[0].length,
                                                         stream));
-    if (UCS_OK != status) {
+    if (ucs_unlikely(UCS_OK != status)) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
     }
-
-    iface->stream_refcount[key->dev_num]++;
-    cuda_ipc_event->stream_id = key->dev_num;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_ipc_event->event,
                                                     stream));
-    if (UCS_OK != status) {
+    if (ucs_unlikely(UCS_OK != status)) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
     }
 
-    ucs_queue_push(outstanding_queue, &cuda_ipc_event->queue);
+    if (ucs_queue_is_empty(event_q)) {
+        ucs_queue_push(&iface->active_queue, &q_desc->queue);
+    }
+
+    ucs_queue_push(event_q, &cuda_ipc_event->queue);
     cuda_ipc_event->comp        = comp;
     cuda_ipc_event->mapped_addr = mapped_addr;
     cuda_ipc_event->d_bptr      = (uintptr_t)key->d_bptr;
     cuda_ipc_event->pid         = key->pid;
+
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
     return UCS_INPROGRESS;
