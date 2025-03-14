@@ -562,6 +562,44 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_send_recv_small_frag,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
 
+class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx2()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        /* Device with high BW and lower latency */
+        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.cap.get.max_zcopy = 16384;
+        });
+        /* Device with lower BW and higher latency */
+        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 24e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx2, rndv_send_recv_small_frag,
+           "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2", "RNDV_THRESH=0")
+{
+    for (size_t i = 1024; i <= 65536; i += 1024) {
+        send_recv_am(i);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx2, rcx, "rc_x")
+
 class test_ucp_proto_mock_cma : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_cma()
@@ -664,11 +702,10 @@ public:
     virtual void init() override
     {
         add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.am.max_short  = 2000;
-            iface_attr.bandwidth.shared  = 28e9;
-            iface_attr.latency.c         = 600e-9;
-            iface_attr.latency.m         = 1e-9;
-            iface_attr.cap.get.max_zcopy = 16384;
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 28e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
         });
         test_ucp_proto_mock::init();
     }
