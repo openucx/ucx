@@ -25,37 +25,37 @@
 #define UCS_DEFINE_ATOMIC_AND(_wordsize, _suffix) \
     static inline void ucs_atomic_and##_wordsize(volatile uint##_wordsize##_t *ptr, \
                                                  uint##_wordsize##_t value) { \
-        __sync_and_and_fetch(ptr, value); \
+        __atomic_and_fetch(ptr, value, __ATOMIC_RELAXED); \
     }
 
 #define UCS_DEFINE_ATOMIC_FAND(_wordsize, _suffix) \
     static inline uint##_wordsize##_t ucs_atomic_fand##_wordsize(volatile uint##_wordsize##_t *ptr, \
                                                                  uint##_wordsize##_t value) { \
-        return __sync_fetch_and_and(ptr, value); \
+        return __atomic_fetch_and(ptr, value, __ATOMIC_RELAXED); \
     }
 
 #define UCS_DEFINE_ATOMIC_XOR(_wordsize, _suffix) \
     static inline void ucs_atomic_xor##_wordsize(volatile uint##_wordsize##_t *ptr, \
                                                  uint##_wordsize##_t value) { \
-        __sync_xor_and_fetch(ptr, value); \
+        __atomic_xor_fetch(ptr, value, __ATOMIC_RELAXED); \
     }
 
 #define UCS_DEFINE_ATOMIC_FXOR(_wordsize, _suffix) \
     static inline uint##_wordsize##_t ucs_atomic_fxor##_wordsize(volatile uint##_wordsize##_t *ptr, \
                                                                  uint##_wordsize##_t value) { \
-        return __sync_fetch_and_xor(ptr, value); \
+        return __atomic_fetch_xor(ptr, value, __ATOMIC_RELAXED); \
     }
 
 #define UCS_DEFINE_ATOMIC_OR(_wordsize, _suffix) \
     static inline void ucs_atomic_or##_wordsize(volatile uint##_wordsize##_t *ptr, \
                                                 uint##_wordsize##_t value) { \
-        __sync_or_and_fetch(ptr, value); \
+        __atomic_or_fetch(ptr, value, __ATOMIC_RELAXED); \
     }
 
 #define UCS_DEFINE_ATOMIC_FOR(_wordsize, _suffix) \
     static inline uint##_wordsize##_t ucs_atomic_for##_wordsize(volatile uint##_wordsize##_t *ptr, \
                                                                 uint##_wordsize##_t value) { \
-        return __sync_fetch_and_or(ptr, value); \
+        return __atomic_fetch_or(ptr, value, __ATOMIC_RELAXED); \
     }
 
 #define UCS_DEFINE_ATOMIC_SUB(wordsize, suffix) \

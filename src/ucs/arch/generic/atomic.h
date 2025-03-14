@@ -11,13 +11,13 @@
 #define UCS_DEFINE_ATOMIC_ADD(wordsize, suffix) \
     static inline void ucs_atomic_add##wordsize(volatile uint##wordsize##_t *ptr, \
                                                 uint##wordsize##_t value) { \
-        __sync_add_and_fetch(ptr, value); \
+        __atomic_add_fetch(ptr, value, __ATOMIC_RELAXED); \
     }
 
 #define UCS_DEFINE_ATOMIC_FADD(wordsize, suffix) \
     static inline uint##wordsize##_t ucs_atomic_fadd##wordsize(volatile uint##wordsize##_t *ptr, \
                                                                uint##wordsize##_t value) { \
-        return __sync_fetch_and_add(ptr, value); \
+        return __atomic_fetch_add(ptr, value, __ATOMIC_RELAXED); \
     }
 
 #define UCS_DEFINE_ATOMIC_SWAP(wordsize, suffix) \
@@ -26,7 +26,7 @@
         uint##wordsize##_t old; \
         do { \
            old = *ptr; \
-        } while(old != __sync_val_compare_and_swap(ptr, old, value)); \
+        } while(!__atomic_compare_exchange_n(ptr, &old, value, /*weak=*/0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)); \
         return old; \
     }
 
@@ -34,14 +34,16 @@
     static inline uint##wordsize##_t ucs_atomic_cswap##wordsize(volatile uint##wordsize##_t *ptr, \
                                                                 uint##wordsize##_t compare, \
                                                                 uint##wordsize##_t swap) { \
-        return __sync_val_compare_and_swap(ptr, compare, swap); \
+        uint##wordsize##_t expected = compare; \
+        __atomic_compare_exchange_n(ptr, &expected, swap, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST); \
+        return expected; \
     }
 
 #define UCS_DEFINE_ATOMIC_BOOL_CSWAP(wordsize, suffix) \
     static inline uint##wordsize##_t ucs_atomic_bool_cswap##wordsize(volatile uint##wordsize##_t *ptr, \
                                                                      uint##wordsize##_t compare, \
                                                                      uint##wordsize##_t swap) { \
-        return __sync_bool_compare_and_swap(ptr, compare, swap); \
+        return __atomic_compare_exchange_n(ptr, &compare, swap, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST); \
     }
 
 #endif
