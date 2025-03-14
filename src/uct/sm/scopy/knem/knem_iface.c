@@ -40,7 +40,7 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
 
 static int
 uct_knem_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                               const uct_iface_is_reachable_params_t *params)
+                               uct_iface_is_reachable_params_t *params)
 {
     return uct_iface_is_reachable_params_valid(
                    params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR) &&

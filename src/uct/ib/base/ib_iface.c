@@ -918,7 +918,7 @@ static int uct_ib_iface_dev_addr_is_reachable(
 }
 
 int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                                 const uct_iface_is_reachable_params_t *params)
+                                 uct_iface_is_reachable_params_t *params)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     const uct_ib_address_t *device_addr;
