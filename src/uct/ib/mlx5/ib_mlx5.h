@@ -1154,9 +1154,9 @@ uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr);
 
 ucs_status_t
 uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
-         void **address_p, ucs_memory_type_t mem_type,
-                                  unsigned flags, const char *alloc_name,
-                                  uct_mem_h *memh_p);
+                                  void **address_p, ucs_memory_type_t mem_type,
+                                  ucs_sys_device_t sys_dev, unsigned flags,
+                                  const char *alloc_name, uct_mem_h *memh_p);
 
 ucs_status_t
 uct_ib_mlx5_devx_device_mem_free(uct_md_h uct_md, uct_mem_h tl_memh);
