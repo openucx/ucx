@@ -2133,6 +2133,15 @@ out:
     return UCS_OK;
 }
 
+static void
+ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
+                                ucp_rkey_config_key_t *key)
+{
+    ucs_string_buffer_appendf(log_strb, "(0x%lx %d %d %d 0x%lx)\n",
+                              key->md_map, key->ep_cfg_index, key->sys_dev,
+                              key->mem_type, key->unreachable_md_map);
+}
+
 ucs_status_t
 ucp_worker_add_rkey_config(ucp_worker_h worker,
                            const ucp_rkey_config_key_t *key,
@@ -2148,12 +2157,30 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     khiter_t khiter;
     char buf[128];
     int khret;
+    ucs_string_buffer_t log_strb;
 
     ucs_assert(worker->context->config.ext.proto_enable);
 
     if (worker->rkey_config_count >= UCP_WORKER_MAX_RKEY_CONFIG) {
         ucs_error("too many rkey configurations: %d (max: %d)",
                   worker->rkey_config_count, UCP_WORKER_MAX_RKEY_CONFIG);
+
+        /* Dump all rkey config keys */
+        ucs_string_buffer_init(&log_strb);
+
+        ucs_carray_for_each(rkey_config, worker->rkey_config,
+                            worker->rkey_config_count) {
+            ucs_string_buffer_appendf(&log_strb, "rkey key %3ld: ",
+                                      rkey_config - worker->rkey_config);
+            ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+        }
+
+        ucs_string_buffer_appendf(&log_strb, "rkey key new: ");
+        ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+
+        ucs_debug("%s", ucs_string_buffer_cstr(&log_strb));
+        ucs_string_buffer_cleanup(&log_strb);
+
         status = UCS_ERR_EXCEEDS_LIMIT;
         goto err;
     }
@@ -3729,3 +3756,4 @@ ucp_wiface_process_for_each_lane(ucp_worker_h worker,
         wiface_process(wiface);
     }
 }
+     
