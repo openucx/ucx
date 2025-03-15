@@ -1836,7 +1836,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_init_select_flags(&peer_rma_flags, 0, 0);
 
     if ((ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
-        (context->config.ext.max_rndv_lanes == 0)) {
+        (context->config.ext.max_rndv_lanes == 0) ||
+        (context->config.ext.rndv_mode == UCP_RNDV_MODE_AM) ||
+        (context->config.ext.rndv_mode == UCP_RNDV_MODE_RKEY_PTR)) {
         return UCS_OK;
     }
 
