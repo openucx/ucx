@@ -222,12 +222,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
             status_p = ucp_proto_request_send_op_reply(
                     ep, &ucp_rkey_config(worker, rkey)->proto_select,
                     rkey->cfg_index, req, op_id, buffer, 1, param->datatype,
-                    op_size, param);
+                    op_size, param, ucp_ep_check_fence(ep));
         } else {
             status_p = ucp_proto_request_send_op(
                     ep, &ucp_rkey_config(worker, rkey)->proto_select,
                     rkey->cfg_index, req, UCP_OP_ID_AMO_POST, buffer, 1,
-                    param->datatype, op_size, param, 0, 0);
+                    param->datatype, op_size, param, 0, 0,
+                    ucp_ep_check_fence(ep));
         }
         if (UCS_PTR_IS_PTR(status_p) &&
             ucs_likely(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {

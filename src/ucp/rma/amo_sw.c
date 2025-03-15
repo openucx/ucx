@@ -17,7 +17,7 @@
 #include <ucs/profile/profile.h>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
-#include <ucp/proto/proto_single.h>
+#include <ucp/proto/proto_single.inl>
 
 
 static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
@@ -393,6 +393,7 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
             return status;
         }
 
+        ucp_ep_handle_fence(req->send.ep, req, UCS_BIT(spriv->super.lane));
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 

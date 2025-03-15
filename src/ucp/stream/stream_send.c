@@ -173,7 +173,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,
                                         UCP_OP_ID_STREAM_SEND, buffer, count,
-                                        datatype, contig_length, param, 0, 0);
+                                        datatype, contig_length, param, 0, 0,
+                                        0);
     } else {
         if (ucs_memtype_cache_is_empty()) {
             if (ucs_likely(attr_mask == 0)) {

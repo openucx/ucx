@@ -176,8 +176,10 @@ typedef struct {
  * per request.
  *
  * @param [in] req   Request which started to send.
+ *
+ * @return Status code to be returned from the init function.
  */
-typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
+typedef ucs_status_t (*ucp_proto_init_cb_t)(ucp_request_t *req);
 
 
 /**

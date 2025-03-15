@@ -89,6 +89,7 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
                                ucp_amo_request_reply_mem_type(req), op_size);
         }
 
+        ucp_ep_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
