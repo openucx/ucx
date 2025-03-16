@@ -955,6 +955,7 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
                 "%s(arg=%p data=%p length=%u flags=0x%x) returned %s",
                 ucs_debug_get_symbol_name((void*)handler->cb), handler->arg,
                 data, length, flags, ucs_status_string(status));
+    ucs_info("Finished invoke_am, status: %s", ucs_status_string(status));
     return status;
 }
 

@@ -221,12 +221,15 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 const uct_rc_iface_common_config_t *config,
                                 void *wq)
 {
-    ucs_status_t status  = UCS_ERR_NO_MEMORY;
+    ucs_status_t status = UCS_ERR_NO_MEMORY; 
     int len, max, stride, log_num_of_strides, wq_type;
+    int num_strides = uct_rc_mlx5_iface_is_srq_smbrwq(iface) ?
+                              15
+                              :
+                              iface->tm.mp.num_strides;
 
-    stride = uct_ib_mlx5_srq_stride(iface->tm.mp.num_strides);
-    max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len,
-                                     iface->tm.mp.num_strides);
+    stride = uct_ib_mlx5_srq_stride(num_strides);
+    max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len, num_strides);
     max    = ucs_roundup_pow2(max);
     len    = max * stride;
 
@@ -256,15 +259,14 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
 
     UCT_IB_MLX5DV_SET  (wq, wq, wq_type,       wq_type);
     UCT_IB_MLX5DV_SET  (wq, wq, log_wq_sz,     ucs_ilog2(max));
-    UCT_IB_MLX5DV_SET  (wq, wq, log_wq_stride, ucs_ilog2(stride));
+    UCT_IB_MLX5DV_SET  (wq, wq, log_wq_stride, ucs_ilog2(stride) - 2);
     UCT_IB_MLX5DV_SET  (wq, wq, pd,            uct_ib_mlx5_devx_md_get_pdn(md));
     UCT_IB_MLX5DV_SET  (wq, wq, dbr_umem_id,   iface->rx.srq.devx.dbrec->mem_id);
     UCT_IB_MLX5DV_SET64(wq, wq, dbr_addr,      iface->rx.srq.devx.dbrec->offset);
     UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem.mem->umem_id);
     UCT_IB_MLX5DV_SET  (wq, wq, enh_strwq_profile_id, 0);
 
-    if (UCT_RC_MLX5_MP_ENABLED(iface) ||
-        uct_rc_mlx5_iface_is_srq_smbrwq(iface)) {
+    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* Normalize to device's interface values (range of (-6) - 7) */
         /* cppcheck-suppress internalAstError */
         log_num_of_strides = ucs_ilog2(iface->tm.mp.num_strides) - 9;
@@ -281,12 +283,24 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                           log_num_of_strides & 0xF);
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
                           (ucs_ilog2(iface->super.super.config.seg_size) - 6));
+    } else if (uct_rc_mlx5_iface_is_srq_smbrwq(iface)) {
+        /* Setting stride size to 256 bytes */ 
+        log_num_of_strides = ucs_ilog2(iface->super.super.config.seg_size / 256) - 9;
+
+        ucs_info("max_message_size_strides: %d ucs_ilog2() = %d "
+                 "log_num_of_strides: %d",
+                 iface->config.max_message_size_strides,
+                 ucs_ilog2(iface->config.max_message_size_strides),
+                 log_num_of_strides);
+        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides, log_num_of_strides & 0xF);
+        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size, 2);
     }
 
     iface->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     uct_ib_mlx5_srq_buff_init(&iface->rx.srq, 0, max - 1,
                               iface->super.super.config.seg_size,
-                              iface->tm.mp.num_strides);
+                              num_strides
+                              );
     iface->super.rx.srq.quota = max - 1;
 
     return UCS_OK;

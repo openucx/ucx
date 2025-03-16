@@ -153,6 +153,7 @@ public:
         allocator->memcpy(&host_sn, UCS_MEMORY_TYPE_HOST,
                           const_cast<const void*>(sn), mem_type,
                           sizeof(psn_t));
+        
         return host_sn;
     }
 
@@ -447,12 +448,17 @@ public:
         ep          = m_perf.uct.peers[peer_index].ep;
 
         send_sn = 0;
+
+
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
+                ucs_info("PERFTEST SEND: %d", send_sn);
                 send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
                        rkey, NULL);
                 ucx_perf_update(&m_perf, 1, length);
 
+
+                ucs_info("PERFTEST WAITING FOR RECV: %d", send_sn);
                 do {
                     progress_responder();
                     sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type,
@@ -462,12 +468,17 @@ public:
                 ++send_sn;
             }
         } else if (my_index == 1) {
+
+            
             UCX_PERF_TEST_FOREACH(&m_perf) {
+                ucs_info("PERFTEST WAITING FOR RECV: %d", send_sn);
                 do {
                     progress_responder();
                     sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type,
                                      m_perf.recv_allocator);
                 } while (sn != send_sn);
+
+                ucs_info("PERFTEST SEND: %d", send_sn);
 
                 send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
                        rkey, NULL);
@@ -476,6 +487,7 @@ public:
             }
         }
 
+        ucs_info("PERFTEST FLUSH");
         flush(peer_index);
         ucx_perf_get_time(&m_perf);
         return UCS_OK;

@@ -81,6 +81,9 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
     uct_ib_mlx5_srq_seg_t *seg;
     uint16_t wqe_ctr;
 
+    ucs_info("check rx_completion, cq->cq_ci: %d, incrementing? %s ", cq->cq_ci,
+             uct_ib_mlx5_check_and_init_zipped(cq, cqe) ? "yes" : "no");
+
     if (uct_ib_mlx5_check_and_init_zipped(cq, cqe)) {
         ++cq->cq_ci;
         uct_ib_mlx5_update_cqe_zipping_stats(&iface->super.super, cq);
@@ -442,6 +445,9 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
 #endif
     ucs_status_t status;
 
+    iface->config.max_message_size_strides =
+            mlx5_config->super.max_message_size_strides;
+
     status = uct_rc_mlx5_iface_parse_srq_topo(md, mlx5_config,
                                               &iface->config.srq_topo,
                                               init_attr);
@@ -786,9 +792,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
-    init_attr->rx_hdr_len            = (UCT_RC_MLX5_MP_ENABLED(self) 
-    || uct_rc_mlx5_iface_is_srq_smbrwq(self)
-    ) ?
+    init_attr->rx_hdr_len            = (UCT_RC_MLX5_MP_ENABLED(self)) ?
                                                           0 :
                                                           sizeof(uct_rc_mlx5_hdr_t);
 
@@ -801,7 +805,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->tm.am_desc.super.cb = uct_rc_mlx5_release_desc;
 
     if (!UCT_RC_MLX5_MP_ENABLED(self) 
-    && !uct_rc_mlx5_iface_is_srq_smbrwq(self)
+    // && !uct_rc_mlx5_iface_is_srq_smbrwq(self)
         ) {
         self->tm.am_desc.offset = self->super.super.config.rx_headroom_offset;
     }

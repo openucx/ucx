@@ -133,7 +133,7 @@ static void uct_ib_mlx5_devx_set_smbrwq_attr(uct_ib_iface_t *iface, const uct_ib
     ucs_info("Setting SM-BRWQ attributes for QP: seg_size %d "
              "max number of strides: %d max_message_size: %d",
              seg_size, iface->config.max_send_message_size_strides,
-             seg_size * iface->config.max_send_message_size_strides);
+             256 * iface->config.max_send_message_size_strides);
 
     UCT_IB_MLX5DV_SET(create_qp_in, create_qp_in, qpc_ext, 1);
     UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
@@ -455,6 +455,7 @@ uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
     obj = mlx5dv_devx_obj_create(context, in, inlen, out, outlen);
     if (obj == NULL) {
         syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        ucs_log_print_backtrace(UCS_LOG_LEVEL_INFO);
         ucs_log(log_level,
                 "mlx5dv_devx_obj_create(%s) failed on %s, syndrome 0x%x: %m",
                 msg_arg, ibv_get_device_name(context->device), syndrome);

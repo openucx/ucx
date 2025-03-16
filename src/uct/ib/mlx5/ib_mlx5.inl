@@ -42,12 +42,12 @@ uct_ib_mlx5_cqe_is_hw_owned(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe,
     }
 }
 
-static UCS_F_ALWAYS_INLINE int
-uct_ib_mlx5_cqe_is_64k_striding(struct mlx5_cqe64 *cqe)
-{
-    uint32_t byte_cnt = htonl(cqe->byte_cnt);
-    return (!(byte_cnt & 0xFFFF)) && (((byte_cnt & 0x1FFF000) >> 16) > 0);
-}
+// static UCS_F_ALWAYS_INLINE int
+// uct_ib_mlx5_cqe_is_64k_striding(struct mlx5_cqe64 *cqe)
+// {
+//     uint32_t byte_cnt = htonl(cqe->byte_cnt);
+//     return (!(byte_cnt & 0xFFFF)) && (((byte_cnt & 0x1FFF000) >> 16) > 0);
+// }
 
 /**
  * Checks that cqe_format is equal to 3 (cqe is a part of compression block)
@@ -79,6 +79,8 @@ static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_stride(int num_sge)
     stride = sizeof(struct mlx5_wqe_srq_next_seg) +
              (num_sge * sizeof(struct mlx5_wqe_data_seg));
 
+    // ucs_info("SRQ_STRIDE: %zu + (%d * %zu) = %d, roundup_pow2 = %d", 
+    // sizeof(struct mlx5_wqe_srq_next_seg), num_sge, sizeof(struct mlx5_wqe_data_seg), stride, ucs_roundup_pow2(stride));
     return ucs_roundup_pow2(stride);
 }
 
@@ -199,9 +201,8 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
 
     uct_ib_mlx5_dump_cqe(cqe);
     
-    if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(cqe->op_own))
-        // && !uct_ib_mlx5_cqe_is_64k_striding(cqe)
-        ) {
+    ucs_info("CQE is error or zipped? %s", uct_ib_mlx5_cqe_is_error_or_zipped(cqe->op_own) ? "yes" : "no");
+    if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(cqe->op_own))) {
         return check_cqe_cb(iface, cq, cqe, poll_flags);
     }
 
@@ -211,6 +212,8 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
     }
 
     cq->cq_ci = idx + 1;
+
+    // ucs_info("POLL CQ: cq_ci: %d cqe: %p idx: %u", cq->cq_ci, cqe, idx);
 
     return cqe; /* todo optimize - let compiler know cqe is not null */
 }
@@ -678,6 +681,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
 static inline uct_ib_mlx5_srq_seg_t *
 uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t wqe_index)
 {
+    ucs_info("GET_WQE: wqe_index = %d srq->stride: %d", wqe_index, srq->stride);
     return UCS_PTR_BYTE_OFFSET(srq->buf, (wqe_index & srq->mask) * srq->stride);
 }
 
