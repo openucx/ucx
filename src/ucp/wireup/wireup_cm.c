@@ -651,6 +651,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
     uint8_t sa_data_ver;
+    int am_need_flush;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -695,8 +696,8 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, &tl_bitmap);
 
     ucp_context_dev_idx_tl_bitmap(context, dev_index, &tl_bitmap);
-    status    = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
-                                      &tl_bitmap, &addr, addr_indices);
+    status = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags, &tl_bitmap,
+                                   &addr, addr_indices, &am_need_flush);
     if (status != UCS_OK) {
         ucs_debug("ep %p: failed to initialize lanes: %s", ucp_ep,
                   ucs_status_string(status));
