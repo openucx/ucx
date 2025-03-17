@@ -336,15 +336,23 @@ static ucs_status_t uct_cuda_copy_push_ctx(CUdevice orig_device,
 {
     ucs_status_t status;
     CUcontext primary_ctx;
+    unsigned int flags;
+    int active;
 
     if (orig_device == device) {
         return UCS_OK;
     }
 
+    status = UCT_CUDADRV_FUNC(cuDevicePrimaryCtxGetState(device,
+                                                         &flags, &active),
+                              log_level);
+    if ((status != UCS_OK) || !active) {
+        return status;
+    }
+
     status = UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRetain(&primary_ctx, device),
                               log_level);
     if (status != UCS_OK) {
-        /* If it does not exist, CUDA_ERROR_NOT_INITIALIZED is returned */
         return status;
     }
 
@@ -425,6 +433,9 @@ static ucs_status_t uct_cuda_copy_push_alloc_ctx(const ucs_sys_device_t sys_dev,
         status = uct_cuda_copy_push_ctx(*cu_device, *alloc_cu_device,
                                         log_level);
         if (status != UCS_OK) {
+            ucs_log(log_level, "failed to set cuda context for system device %u "
+                    "(cu_device=%d)",
+                    sys_dev, *alloc_cu_device);
             return status;
         }
     }

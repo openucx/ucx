@@ -15,6 +15,8 @@
 #include <cuda.h>
 
 
+static CUdevice sys_dev_to_device[UCS_SYS_DEVICE_ID_MAX];
+
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                                ucs_sys_device_t *sys_dev_p)
 {
@@ -55,15 +57,15 @@ void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
         goto err;
     }
 
+    if (sys_dev_to_device[*sys_dev_p] == CU_DEVICE_INVALID) {
+        sys_dev_to_device[*sys_dev_p] = cuda_device;
+    }
+
     return;
 
 err:
     *sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
 }
-
-static CUdevice sys_dev_to_device[UCS_SYS_DEVICE_ID_MAX] = {
-    [0 ... UCS_SYS_DEVICE_ID_MAX - 1] = CU_DEVICE_INVALID
-};
 
 ucs_status_t
 uct_cuda_base_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device)
@@ -118,8 +120,6 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
             continue;
         }
 
-        sys_dev_to_device[sys_dev] = cuda_device;
-
         ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
                           cuda_device);
         status = ucs_topo_sys_device_set_name(sys_dev, device_name,
@@ -133,7 +133,14 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 
 UCS_STATIC_INIT
 {
+    size_t length = ucs_static_array_size(sys_dev_to_device);
+    CUdevice *device;
+
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+
+    ucs_carray_for_each(device, sys_dev_to_device, length) {
+        *device = CU_DEVICE_INVALID;
+    }
 }
 
 UCS_STATIC_CLEANUP
