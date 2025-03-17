@@ -166,7 +166,7 @@ enum {
     UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8),  /**< Endpoint requires an AM lane only */
     UCP_EP_INIT_KA_FROM_EXIST_LANES    = UCS_BIT(9),  /**< Use only existing lanes to create
                                                            keepalive lane */
-    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10)  /**< Endpoint allows selecting of auxiliary
+    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10), /**< Endpoint allows selecting of auxiliary
                                                            transports for AM lane */
 };
 
@@ -835,6 +835,8 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
                     size_t size, const void *rkey_buf,
                     ucs_memory_type_t local_mem_type,
                     ucp_md_index_t rkey_ptr_md_index);
+
+int ucp_ep_is_prioritized(ucp_ep_h ep);
 
 /**
  * @brief Indicates AM-based keepalive necessity.

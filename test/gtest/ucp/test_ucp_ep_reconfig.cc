@@ -164,7 +164,7 @@ public:
         }
     }
 
-    void send_recv(bool bidirectional)
+    void send_recv(bool bidirectional = false)
     {
 /* TODO: remove this when large messages asan bug is solved (size > ~70MB) */
 #ifdef __SANITIZE_ADDRESS__
@@ -520,3 +520,88 @@ UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfig_asymmetric, shm_ib, "shm,ib");
+
+class test_reconfigure_update_rank : public test_ucp_ep_reconfig {
+public:
+    void verify_configuration()
+    {
+        auto r_sender   = static_cast<const entity*>(&sender());
+        auto r_receiver = static_cast<const entity*>(&receiver());
+
+        EXPECT_TRUE(r_sender->is_reconfigured());
+        EXPECT_TRUE(r_receiver->is_reconfigured());
+
+        r_sender->verify_configuration(*r_receiver, r_sender->num_reused_rscs());
+        r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
+    }
+
+    void test_promotion()
+    {
+        create_entity(true, false);
+        create_entity(false, false);
+
+        auto s_tracker = sender().worker()->usage_tracker.handle;
+        auto r_tracker = receiver().worker()->usage_tracker.handle;
+
+        /* Fill usage tracker table */
+        for (size_t i = 0; i < sender().ucph()->config.ext.max_priority_eps; ++i) {
+            ucs_usage_tracker_set_min_score(s_tracker, (void*)i, 0.0);
+            ucs_usage_tracker_set_min_score(r_tracker, (void*)i, 0.0);
+        }
+
+        /* Create DC EP */
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+        send_recv();
+
+        /* Promote DC to RC */
+        ucs_usage_tracker_set_min_score(s_tracker, sender().ep(), 0.7);
+        ucp_wireup_send_promotion_request(sender().ep(), NULL, 0);
+        send_recv();
+        verify_configuration();
+    }
+
+    void test_demotion()
+    {
+        /* Create initial RC EP */
+        create_entity(true, false);
+        create_entity(false, false);
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+        send_recv();
+
+        /* Demote RC to DC */
+        ucs_usage_tracker_remove(sender().worker()->usage_tracker.handle,
+                                 sender().ep());
+
+        ucp_wireup_send_demotion_request(sender().ep(), NULL, 0);
+        send_recv();
+        verify_configuration();
+    }
+};
+
+UCS_TEST_P(test_reconfigure_update_rank, promote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=3s", "NUM_EPS=200")
+{
+    test_promotion();
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, demote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=3s", "NUM_EPS=200")
+{
+    test_demotion();
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, promote_scale,
+           "DYNAMIC_TL_SWITCH_INTERVAL=3s", "NUM_EPS=500")
+{
+    test_promotion();
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, demote_scale,
+           "DYNAMIC_TL_SWITCH_INTERVAL=3s", "NUM_EPS=500")
+{
+    test_demotion();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_update_rank, shm_ib, "shm,ib");

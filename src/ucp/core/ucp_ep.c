@@ -389,6 +389,13 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
     /* Create endpoint VFS node on demand to avoid memory bloat */
     ucs_vfs_obj_set_dirty(worker, ucp_worker_vfs_refresh);
 
+    if (ucp_context_usage_tracker_enabled(worker->context)) {
+        /* Create usage tracker record with '0' score in order to fill list of
+         * initial prioritized EPs */
+        ucs_usage_tracker_set_min_score(ucp_worker_get_usage_tracker(worker),
+                                        ep, 0.0);
+    }
+
     /* Insert new UCP endpoint to the UCP worker */
     if (ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_INTERNAL, 0);
@@ -586,7 +593,8 @@ ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode)
 {
-    if (!ucp_ep_config_err_mode_eq(ep, err_mode)) {
+    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+        !ucp_ep_config_err_mode_eq(ep, err_mode)) {
         ucs_error("ep %p: asymmetric endpoint configuration is not supported,"
                   " error handling level mismatch (expected: %d, got: %d)",
                   ep, ucp_ep_config(ep)->key.err_mode, err_mode);
@@ -1643,6 +1651,10 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
          */
         ucs_trace("not destroying ep %p because of connection from remote", ep);
         return;
+    }
+
+    if (ucp_context_usage_tracker_enabled(worker->context)) {
+        ucs_usage_tracker_remove(ucp_worker_get_usage_tracker(worker), ep);
     }
 
     ucp_ep_match_remove_ep(worker, ep);
@@ -3937,4 +3949,13 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
     ep->cfg_index = cfg_index;
     ucp_ep_config_activate_worker_ifaces(ep->worker, cfg_index);
     ucp_ep_config_proto_init(ep->worker, cfg_index);
+}
+
+int ucp_ep_is_prioritized(ucp_ep_h ep)
+{
+    const ucs_usage_tracker_h usage_tracker = ucp_worker_get_usage_tracker(
+            ep->worker);
+
+    return (usage_tracker != NULL) &&
+           ucs_usage_tracker_is_promoted(usage_tracker, ep);
 }

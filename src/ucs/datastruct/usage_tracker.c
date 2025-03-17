@@ -182,7 +182,8 @@ static int ucs_usage_tracker_compare(const void *elem_ptr1,
 
 /* Promote/Demote entries base on the latest score, and triggers user
   * callback accordingly. */
-static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker)
+static void
+ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker, int is_external_event)
 {
     ucs_usage_tracker_params_t *params = &usage_tracker->params;
     khint_t elems_count                = kh_size(&usage_tracker->hash);
@@ -218,7 +219,7 @@ static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker)
         }
 
         item->promoted = 1;
-        params->promote_cb(item->key, params->promote_arg);
+        params->promote_cb(item->key, params->promote_arg, is_external_event);
     }
 
     for (elem_index = params->promote_capacity; elem_index < elems_count;
@@ -229,8 +230,8 @@ static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker)
             continue;
         }
 
-        params->demote_cb(item->key, params->demote_arg);
         item->promoted = 0;
+        params->demote_cb(item->key, params->demote_arg, is_external_event);
     }
 
     ucs_free(elems_array);
@@ -239,13 +240,15 @@ static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker)
 void ucs_usage_tracker_set_min_score(ucs_usage_tracker_h usage_tracker,
                                      void *key, double score)
 {
+    const unsigned capacity = usage_tracker->params.promote_capacity;
     ucs_usage_tracker_element_t *elem;
 
     elem            = ucs_usage_tracker_put(usage_tracker, key);
     elem->min_score = score;
 
-    if (elem->min_score > elem->score) {
-        ucs_usage_tracker_promote(usage_tracker);
+    if ((elem->min_score > elem->score) ||
+        (kh_size(&usage_tracker->hash) <= capacity)) {
+        ucs_usage_tracker_promote(usage_tracker, 1);
     }
 }
 
@@ -270,6 +273,6 @@ void ucs_usage_tracker_progress(ucs_usage_tracker_h usage_tracker)
         ucs_usage_tracker_put(usage_tracker, *item);
     }
 
-    ucs_usage_tracker_promote(usage_tracker);
+    ucs_usage_tracker_promote(usage_tracker, 0);
     ucs_lru_reset(usage_tracker->lru);
 }

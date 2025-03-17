@@ -33,7 +33,7 @@ protected:
         }
     }
 
-    static void update_cb(void *entry, void *arg)
+    static void update_cb(void *entry, void *arg, int is_external)
     {
         auto results = reinterpret_cast<entries_vec_t*>(arg);
         results->push_back((uint64_t)entry);
