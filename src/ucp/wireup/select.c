@@ -1289,18 +1289,6 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
     double local_bw, remote_bw;
     unsigned path_index;
 
-    ucs_assertv(dev_count->local[dev_index] >= dev_count->local_skip[dev_index],
-        "dev_count->local[%u]=%u dev_count->local_skip[%u]=%u",
-        dev_index, dev_count->local[dev_index], dev_index,
-        dev_count->local_skip[dev_index]);
-    ucs_assertv(dev_count->remote[remote_addr->dev_index] >=
-                dev_count->remote_skip[remote_addr->dev_index],
-        "dev_count->remote[%u]=%u dev_count->remote_skip[%u]=%u",
-        remote_addr->dev_index,
-        dev_count->remote[remote_addr->dev_index],
-        remote_addr->dev_index,
-        dev_count->remote_skip[remote_addr->dev_index]);
-
     local_bw = ucp_wireup_iface_bw_distance(wiface);
 
     if (unpacked_addr->addr_version == UCP_OBJECT_VERSION_V2) {
@@ -1322,6 +1310,19 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
                     ucp_tl_iface_bandwidth_ratio(context, path_index,
                                                  remote_addr->dev_num_paths);
     } else {
+        /* keep old selection logic for compatibility reason */
+        ucs_assertv(dev_count->local[dev_index] >= dev_count->local_skip[dev_index],
+                    "dev_count->local[%u]=%u dev_count->local_skip[%u]=%u",
+                    dev_index, dev_count->local[dev_index], dev_index,
+                    dev_count->local_skip[dev_index]);
+        ucs_assertv(dev_count->remote[remote_addr->dev_index] >=
+                    dev_count->remote_skip[remote_addr->dev_index],
+                    "dev_count->remote[%u]=%u dev_count->remote_skip[%u]=%u",
+                    remote_addr->dev_index,
+                    dev_count->remote[remote_addr->dev_index],
+                    remote_addr->dev_index,
+                    dev_count->remote_skip[remote_addr->dev_index]);
+
         path_index = dev_count->local[dev_index] - dev_count->local_skip[dev_index];
         local_bw  *= ucp_tl_iface_bandwidth_ratio(context, path_index,
                                                   wiface->attr.dev_num_paths);
@@ -1628,12 +1629,11 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                             ucp_wireup_select_context_t *select_ctx,
                             unsigned allow_extra_path)
 {
-    ucp_proto_select_info_array_t sinfo_array    = UCS_ARRAY_DYNAMIC_INITIALIZER;
-    ucp_ep_h ep                                  = select_params->ep;
-    ucp_context_h context                        = ep->worker->context;
-    ucp_wireup_dev_usage_count dev_count         = {};
-    uint64_t local_dev_bitmap                    = bw_info->local_dev_bitmap;
-    uint64_t remote_dev_bitmap                   = bw_info->remote_dev_bitmap;
+    ucp_proto_select_info_array_t sinfo_array = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_ep_h ep                               = select_params->ep;
+    ucp_context_h context                     = ep->worker->context;
+    uint64_t local_dev_bitmap                 = bw_info->local_dev_bitmap;
+    uint64_t remote_dev_bitmap                = bw_info->remote_dev_bitmap;
     uint16_t num_paths_limit;
     uint16_t num_paths_count;
     const uct_iface_attr_t *iface_attr;
@@ -1645,10 +1645,7 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_info_t *sinfo;
     unsigned num_lanes;
     ucs_status_t status;
-
     ucp_rsc_index_t local_dev_index, remote_dev_index;
-    
-    bw_info->criteria.arg = &dev_count;
 
     if (excl_lane == UCP_NULL_LANE) {
         skip_local  = UCP_NULL_RESOURCE;
@@ -1681,13 +1678,6 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                 addr_index = sinfo->addr_index;
                 ae         = &select_params->address->address_list[addr_index];
 
-                dev_count.local[local_dev_index]++;
-                dev_count.remote[remote_dev_index]++;
-                dev_count.local_skip[local_dev_index]   = (local_dev_index ==
-                                                           skip_local);
-                dev_count.remote_skip[remote_dev_index] = (remote_dev_index ==
-                                                           skip_remote);
-
                 if (num_paths_limit == 0) {
                     num_paths_limit = ucs_min(iface_attr->dev_num_paths,
                                               ae->dev_num_paths);
@@ -1710,7 +1700,6 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    bw_info->criteria.arg = NULL; /* To suppress compiler warning */
     num_lanes = ucp_wireup_add_fast_lanes_a2a(ep->worker, &sinfo_array,
                                               select_params,
                                               bw_info->criteria.lane_type,
