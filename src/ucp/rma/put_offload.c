@@ -27,6 +27,16 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     ucs_status_t status;
     uct_rkey_t tl_rkey;
 
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
+
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+
     tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, spriv->super.rkey_index);
     status  = uct_ep_put_short(ucp_ep_get_fast_lane(ep, spriv->super.lane),
                                req->send.state.dt_iter.type.contig.buffer,
@@ -129,10 +139,20 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
 
 static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
+                                                           send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
+
+        status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
+
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
@@ -224,7 +244,7 @@ ucp_proto_put_offload_zcopy_progress(uct_pending_req_t *self)
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, NULL,
+            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
             UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
             ucp_proto_put_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,

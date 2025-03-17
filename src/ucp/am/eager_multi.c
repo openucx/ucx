@@ -290,10 +290,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
                            &req->send.state.uct_comp);
 }
 
-static void ucp_am_eager_multi_zcopy_init(ucp_request_t *req)
+static ucs_status_t ucp_am_eager_multi_zcopy_init(ucp_request_t *req)
 {
     ucp_am_eager_zcopy_pack_user_header(req);
     ucp_proto_msg_multi_request_init(req);
+
+    return UCS_OK;
 }
 
 static ucs_status_t

@@ -78,11 +78,11 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
                                                                   mpriv));
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_get_common_request_init(ucp_request_t *req)
 {
     /* coverity[tainted_data_downcast] */
-    ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
+    return ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
