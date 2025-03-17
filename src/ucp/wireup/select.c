@@ -1553,7 +1553,7 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
 }
 
 static int
-ucp_proto_select_info_score_rcompare(const void *e1, const void *e2)
+ucp_proto_select_info_score_compare(const void *e1, const void *e2)
 {
     const ucp_wireup_select_info_t *info1 = e1;
     const ucp_wireup_select_info_t *info2 = e2;
@@ -1578,18 +1578,20 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
     ucs_status_t status;
     const ucp_wireup_select_info_t *sinfo;
 
-    qsort(sinfo_array->buffer, sinfo_array->length,
-          sizeof(ucp_wireup_select_info_t),
-          ucp_proto_select_info_score_rcompare);
-
-    if (!ucs_array_is_empty(sinfo_array)) {
-        /* The fastest lane by score must have (close to) maximal BW */
-        max_bw = ucp_wireup_get_lane_bw(worker, ucs_array_begin(sinfo_array),
-                                        select_params->address);
+    if (ucs_array_is_empty(sinfo_array)) {
+        return 0;
     }
 
-    ucs_array_set_length(sinfo_array, ucs_min(max_lanes,
-                                               ucs_array_length(sinfo_array)));
+    qsort(sinfo_array->buffer, sinfo_array->length,
+          sizeof(ucp_wireup_select_info_t),
+          ucp_proto_select_info_score_compare);
+
+    /* The fastest lane by score must have (close to) maximal BW */
+    max_bw = ucp_wireup_get_lane_bw(worker, ucs_array_begin(sinfo_array),
+                                    select_params->address);
+
+    ucs_array_set_length(sinfo_array,
+                         ucs_min(max_lanes, ucs_array_length(sinfo_array)));
     /* Compare each element to max BW and filter only fast lanes */
     num_lanes = 0;
     ucs_array_for_each(sinfo, sinfo_array) {
@@ -1717,12 +1719,10 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
     return num_lanes;
 }
 
-static unsigned
-ucp_wireup_add_fast_lanes_d2d(ucp_worker_h worker,
-                              const ucp_wireup_select_params_t *select_params,
-                              const ucp_proto_select_info_array_t *sinfo_array,
-                              ucp_lane_type_t lane_type,
-                              ucp_wireup_select_context_t *select_ctx)
+static unsigned ucp_wireup_add_fast_lanes_pairwise(
+        ucp_worker_h worker, const ucp_wireup_select_params_t *select_params,
+        const ucp_proto_select_info_array_t *sinfo_array,
+        ucp_lane_type_t lane_type, ucp_wireup_select_context_t *select_ctx)
 {
     ucp_lane_index_t num_lanes = 0;
     double max_bw              = 0;
@@ -1763,12 +1763,11 @@ ucp_wireup_add_fast_lanes_d2d(ucp_worker_h worker,
     return num_lanes;
 }
 
-static unsigned
-ucp_wireup_add_bw_lanes_d2d(const ucp_wireup_select_params_t *select_params,
-                            ucp_wireup_select_bw_info_t *bw_info,
-                            ucp_tl_bitmap_t tl_bitmap, ucp_lane_index_t excl_lane,
-                            ucp_wireup_select_context_t *select_ctx,
-                            unsigned allow_extra_path)
+static unsigned ucp_wireup_add_bw_lanes_pairwise(
+        const ucp_wireup_select_params_t *select_params,
+        ucp_wireup_select_bw_info_t *bw_info, ucp_tl_bitmap_t tl_bitmap,
+        ucp_lane_index_t excl_lane, ucp_wireup_select_context_t *select_ctx,
+        unsigned allow_extra_path)
 {
     ucp_proto_select_info_array_t sinfo_array = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucp_rsc_index_t skip_dev_index            = UCP_NULL_RESOURCE;
@@ -1858,10 +1857,10 @@ ucp_wireup_add_bw_lanes_d2d(const ucp_wireup_select_params_t *select_params,
     }
 
     bw_info->criteria.arg = NULL; /* To suppress compiler warning */
-    num_lanes = ucp_wireup_add_fast_lanes_d2d(ep->worker, select_params,
-                                              &sinfo_array,
-                                              bw_info->criteria.lane_type,
-                                              select_ctx);
+    num_lanes = ucp_wireup_add_fast_lanes_pairwise(ep->worker, select_params,
+                                                   &sinfo_array,
+                                                   bw_info->criteria.lane_type,
+                                                   select_ctx);
 
     ucs_array_cleanup_dynamic(&sinfo_array);
     return num_lanes;
@@ -1874,26 +1873,46 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_context_t *select_ctx,
                         unsigned allow_extra_path)
 {
-    ucp_worker_h worker = select_params->ep->worker;
-    unsigned num_lanes, mem_type_num_lanes;
+    /* lanes counters only for logging */
+    struct {
+        unsigned num_lanes_stage[2];
+        unsigned pairwise_num_lanes;
+        unsigned mem_type_num_lanes;
+    } lanes_counters UCS_V_UNUSED = {0};
+    ucp_worker_h worker           = select_params->ep->worker;
     ucp_tl_bitmap_t mem_type_tl_bitmap;
 
-    num_lanes = ucp_wireup_add_bw_lanes_d2d(select_params, bw_info, tl_bitmap,
-                                            excl_lane, select_ctx,
-                                            allow_extra_path);
+    lanes_counters.num_lanes_stage[0] = select_ctx->num_lanes;
+    lanes_counters.pairwise_num_lanes =
+            ucp_wireup_add_bw_lanes_pairwise(select_params, bw_info, tl_bitmap,
+                                             excl_lane, select_ctx,
+                                             allow_extra_path);
+    lanes_counters.num_lanes_stage[1] = select_ctx->num_lanes;
+
     if (ucp_wireup_is_all_to_all_allowed(worker, select_params->address)) {
-        ucp_wireup_memaccess_bitmap(worker->context, UCS_MEMORY_TYPE_CUDA,
-                                    &mem_type_tl_bitmap);
         UCS_STATIC_BITMAP_AND_INPLACE(&mem_type_tl_bitmap, tl_bitmap);
         if (!UCS_STATIC_BITMAP_IS_ZERO(mem_type_tl_bitmap)) {
-            mem_type_num_lanes = ucp_wireup_add_bw_lanes_a2a(
-                    select_params, bw_info, mem_type_tl_bitmap, excl_lane,
-                    select_ctx, allow_extra_path);
-            ucs_debug("%p: bw memtype lanes are extended %u -> %u, "
-                      "reused %u lanes", select_params->ep, num_lanes,
-                      select_ctx->num_lanes, (num_lanes + mem_type_num_lanes) -
-                                             select_ctx->num_lanes);
+            ucp_wireup_memaccess_bitmap(worker->context, UCS_MEMORY_TYPE_CUDA,
+                                        &mem_type_tl_bitmap);
+            lanes_counters.mem_type_num_lanes     =
+                    ucp_wireup_add_bw_lanes_a2a(select_params, bw_info,
+                                                mem_type_tl_bitmap, excl_lane,
+                                                select_ctx, allow_extra_path);
         }
+    }
+
+    if ((lanes_counters.pairwise_num_lanes != 0) ||
+        (lanes_counters.mem_type_num_lanes != 0)) {
+        ucs_debug("%p: bw lanes are extended %u -> %u -> %u, "
+                  "%u/%u by pairwise and %u/%u by all-to-all-mem-access",
+                  select_params->ep,
+                  lanes_counters.num_lanes_stage[0],
+                  lanes_counters.num_lanes_stage[1], select_ctx->num_lanes,
+                  lanes_counters.pairwise_num_lanes -
+                  lanes_counters.num_lanes_stage[0],
+                  lanes_counters.pairwise_num_lanes,
+                  select_ctx->num_lanes - lanes_counters.num_lanes_stage[1],
+                  lanes_counters.mem_type_num_lanes);
     }
 
     return select_ctx->num_lanes;
@@ -1958,9 +1977,9 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    num_am_bw_lanes = ucp_wireup_add_bw_lanes_d2d(select_params, &bw_info,
-                                                  ucp_tl_bitmap_max, am_lane,
-                                                  select_ctx, 0);
+    num_am_bw_lanes = ucp_wireup_add_bw_lanes_pairwise(select_params, &bw_info,
+                                                       ucp_tl_bitmap_max,
+                                                       am_lane, select_ctx, 0);
     return ((am_lane != UCP_NULL_LANE) || (num_am_bw_lanes > 0)) ? UCS_OK :
            UCS_ERR_UNREACHABLE;
 }
