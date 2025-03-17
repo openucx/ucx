@@ -1981,7 +1981,7 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_RATIO) {
         if (uct_ib_iface_is_roce(ib_iface)) {
             /* ROCE: Equal share per each path */
-            perf_attr->path_ratio = 1.0 / (double)iface_attr.dev_num_paths;
+            perf_attr->path_ratio = 1.0 / iface_attr.dev_num_paths;
         } else if (uct_ib_iface_port_attr(ib_iface)->active_speed ==
                    UCT_IB_SPEED_NDR) {
             /* CX7: first path consumes 90% of the full bandwidth */

@@ -593,11 +593,12 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
 
     /* All existing IB paths should be selected. */
     check_ep_config(sender(), {
-        {1, 5418, "rendezvous fragmented copy-in copy-out", "rc_mlx5/mock_1:1/path0"},
-        {5419, 283699, "rendezvous zero-copy read from remote",
+        {1,       5418,   "rendezvous fragmented copy-in copy-out",
+         "rc_mlx5/mock_1:1/path0"},
+        {5419,    283699, "rendezvous zero-copy read from remote",
          "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
          "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
-         {283700, INF, "rendezvous zero-copy fenced write to remote",
+         {283700, INF,    "rendezvous zero-copy fenced write to remote",
          "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
          "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
     }, key);

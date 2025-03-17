@@ -140,7 +140,7 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
     }
 
     /* Select all available indexes */
-    index_map = UCS_BIT(num_lanes) - 1;
+    index_map = UCS_MASK(num_lanes);
 
     if (fixed_first_lane) {
         ucp_proto_select_add_lane(selection, params, lanes[0]);
