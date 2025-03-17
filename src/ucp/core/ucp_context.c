@@ -2240,11 +2240,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
             ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
             ucp_context_usage_tracker_enabled(context);
 
-    /* allow all to all connectivity only for protov2 */
-    context->config.ext.ep_allow_all_to_all =
-            context->config.ext.ep_allow_all_to_all &&
-            context->config.ext.proto_enable;
-
     return UCS_OK;
 
 err_free_key_list:
