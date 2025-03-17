@@ -159,6 +159,9 @@ typedef struct {
 
     /* Maximum single message length */
     size_t max_frag;
+
+    /* Performance selection tree node */
+    ucp_proto_perf_node_t *node;
 } ucp_proto_common_tl_perf_t;
 
 
@@ -170,6 +173,51 @@ typedef struct {
     uint8_t                 max_iov;    /* Maximal number of IOVs on this lane */
 } ucp_proto_common_lane_priv_t;
 
+
+typedef struct {
+    /* Required iface capabilities */
+    uint64_t        tl_cap_flags;
+
+    /* Required lane type */
+    ucp_lane_type_t lane_type;
+} ucp_proto_lane_desc_t;
+
+
+typedef struct {
+    const ucp_proto_init_params_t *params;
+    ucp_proto_common_tl_perf_t    lanes_perf[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t              lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t              length;
+    double                        max_bandwidth;
+    int                           fixed_first_lane;
+} ucp_proto_lane_storage_t;
+
+
+typedef struct {
+    ucp_lane_map_t                lane_map;
+    ucp_lane_index_t              lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t              length;
+    uint8_t                       local_rsc_count[UCP_MAX_RESOURCES];
+    ucp_proto_common_tl_perf_t    perf;
+    ucp_proto_lane_storage_t      *storage;
+} ucp_proto_lane_selection_t;
+
+
+ucs_status_t
+ucp_proto_select_lanes(const ucp_proto_common_init_params_t *params,
+                       const ucp_proto_lane_desc_t *lane_desc,
+                       const ucp_proto_lane_desc_t *first_lane_desc,
+                       ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
+                       ucp_proto_lane_selection_t *selection);
+
+void ucp_proto_select_destroy(ucp_proto_lane_selection_t *selection);
+
+static UCS_F_ALWAYS_INLINE const ucp_proto_common_tl_perf_t *
+ucp_proto_select_get_lane_perf(const ucp_proto_lane_selection_t *selection,
+                               ucp_lane_index_t lane)
+{
+    return &selection->storage->lanes_perf[lane];
+}
 
 /**
  * Called the first time the protocol starts sending a request, and only once
@@ -259,8 +307,7 @@ void ucp_proto_common_lane_perf_node(ucp_context_h context,
 ucs_status_t
 ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
-                               ucp_proto_common_tl_perf_t *perf,
-                               ucp_proto_perf_node_t **perf_node_p);
+                               ucp_proto_common_tl_perf_t *perf);
 
 
 /* @return number of lanes found */

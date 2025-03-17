@@ -124,13 +124,8 @@ typedef struct {
      * by this protocol */
     ptrdiff_t                      opt_align_offs;
 
-    struct {
-        /* Required iface capabilities */
-        uint64_t        tl_cap_flags;
-
-        /* Required lane type */
-        ucp_lane_type_t lane_type;
-    } first, middle;
+    ucp_proto_lane_desc_t          first;
+    ucp_proto_lane_desc_t          middle;
 } ucp_proto_multi_init_params_t;
 
 
