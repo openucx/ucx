@@ -5,6 +5,7 @@
 
 package ucx
 
+// #include <stdlib.h>
 // #include <ucp/api/ucp.h>
 // #include <ucs/type/status.h>
 import "C"
