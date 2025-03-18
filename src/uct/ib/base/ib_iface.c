@@ -307,7 +307,6 @@ void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
     void *ib_desc;
 
     ib_desc = UCS_PTR_BYTE_OFFSET(desc, -(ptrdiff_t)iface->config.rx_headroom_offset);
-    ucs_info("release desc %p rx_headroom_offset: %d", ib_desc, iface->config.rx_headroom_offset);
     ucs_mpool_put_inline(ib_desc);
 }
 
@@ -1565,16 +1564,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
             sizeof(uct_ib_iface_recv_desc_t) +
             ucs_max(sizeof(uct_recv_desc_t) + rx_headroom,
                     init_attr->rx_priv_len + init_attr->rx_hdr_len);
-    ucs_info("sizeof(uct_ib_iface_recv_desc_t) = %zu sizeof(uct_recv_desc_t) = %zu rx_payload_offset = (%d) "
-             "rx_headroom = (%zu) rx_priv_len = (%d) rx_hdr_len = (%d)",
-             sizeof(uct_ib_iface_recv_desc_t),
-             sizeof(uct_recv_desc_t), self->config.rx_payload_offset,
-             rx_headroom, init_attr->rx_priv_len, init_attr->rx_hdr_len);
     self->config.rx_hdr_offset      = self->config.rx_payload_offset -
                                       init_attr->rx_hdr_len;
-    ucs_info("rx_hdr_offset: %d =  payload_offset(%d) - rx_hdr_len(%d)",
-             self->config.rx_hdr_offset, self->config.rx_payload_offset,
-             init_attr->rx_hdr_len);
     self->config.rx_headroom_offset = self->config.rx_payload_offset -
                                       rx_headroom;
     self->config.seg_size           = init_attr->seg_size;

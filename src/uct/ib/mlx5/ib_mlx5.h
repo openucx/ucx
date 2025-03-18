@@ -527,6 +527,7 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t                           sw_pi;      /* what is posted to hw */
     uint16_t                           mask;
     uint16_t                           stride;
+    uint64_t                           free_bitmap;
     union {
         struct {
             struct ibv_srq             *srq;

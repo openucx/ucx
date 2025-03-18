@@ -224,7 +224,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     ucs_status_t status = UCS_ERR_NO_MEMORY; 
     int len, max, stride, log_num_of_strides, wq_type;
     int num_strides = uct_rc_mlx5_iface_is_srq_smbrwq(iface) ?
-                              15
+                              uct_ib_mlx5_srq_calc_num_sge(256)
                               :
                               iface->tm.mp.num_strides;
 
@@ -259,7 +259,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
 
     UCT_IB_MLX5DV_SET  (wq, wq, wq_type,       wq_type);
     UCT_IB_MLX5DV_SET  (wq, wq, log_wq_sz,     ucs_ilog2(max));
-    UCT_IB_MLX5DV_SET  (wq, wq, log_wq_stride, ucs_ilog2(stride) - 2);
+    UCT_IB_MLX5DV_SET  (wq, wq, log_wq_stride, ucs_ilog2(stride));
     UCT_IB_MLX5DV_SET  (wq, wq, pd,            uct_ib_mlx5_devx_md_get_pdn(md));
     UCT_IB_MLX5DV_SET  (wq, wq, dbr_umem_id,   iface->rx.srq.devx.dbrec->mem_id);
     UCT_IB_MLX5DV_SET64(wq, wq, dbr_addr,      iface->rx.srq.devx.dbrec->offset);
@@ -276,16 +276,14 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                            md->smbrwq.max_message_size_bytes,
                            iface->super.super.config.seg_size);
 
-        ucs_info("stride: %d seg_size (also stride size): %d, wqe size in strides: %d",
-                 stride, iface->super.super.config.seg_size, iface->tm.mp.num_strides);
-
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,
                           log_num_of_strides & 0xF);
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
                           (ucs_ilog2(iface->super.super.config.seg_size) - 6));
     } else if (uct_rc_mlx5_iface_is_srq_smbrwq(iface)) {
-        /* Setting stride size to 256 bytes */ 
-        log_num_of_strides = ucs_ilog2(iface->super.super.config.seg_size / 256) - 9;
+        /* Setting stride size to 256 bytes */
+        log_num_of_strides = 
+        ucs_ilog2(ucs_div_round_up(iface->super.super.config.seg_size, 256)) - 9;
 
         ucs_info("max_message_size_strides: %d ucs_ilog2() = %d "
                  "log_num_of_strides: %d",

@@ -955,9 +955,7 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     srq->sw_pi     = UINT16_MAX;
     srq->mask      = tail;
     srq->stride    = uct_ib_mlx5_srq_stride(sge_num);
-    
-    // ucs_info("SRQ %p: head %d tail %d sg_byte_count %zu sge_num %d stride %u",
-    //          srq, head, tail, sg_byte_count, sge_num, srq->stride);
+    srq->free_bitmap = 0x0000FFFF;
 
     for (i = head; i <= tail; ++i) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, i);

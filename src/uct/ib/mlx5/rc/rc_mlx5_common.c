@@ -15,6 +15,7 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
+#include <ucs/datastruct/bitmap.h>
 
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
@@ -99,12 +100,16 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
                               uct_ib_mlx5_srq_seg_t *seg)
 {
+    int num_strides = 
+    // uct_rc_mlx5_iface_is_srq_smbrwq(iface) ?
+    //                           uct_ib_mlx5_srq_calc_num_sge(256) :
+                              iface->tm.mp.num_strides;
     uct_ib_iface_recv_desc_t *desc;
     uint64_t desc_map;
     void *hdr;
     int i;
 
-    desc_map = ~seg->srq.ptr_mask & UCS_MASK(iface->tm.mp.num_strides);
+    desc_map = ~seg->srq.ptr_mask & UCS_MASK(num_strides);
     ucs_for_each_bit(i, desc_map) {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, return UCS_ERR_NO_MEMORY);
@@ -222,29 +227,47 @@ uct_rc_mlx5_iface_srq_post_recv_smbrwq(uct_rc_mlx5_iface_common_t *iface)
     uct_rc_iface_t *rc_iface   = &iface->super;
     uct_ib_mlx5_srq_seg_t *seg = NULL;
     uint16_t count             = 0;
-    uint16_t wqe_index, next_index;
+    uint16_t wqe_index;
 
     ucs_assert(rc_iface->rx.srq.available > 0);
 
-    wqe_index = srq->ready_idx;
-    seg       = uct_ib_mlx5_srq_get_wqe(srq, wqe_index);
+    // wqe_index = srq->ready_idx;
+    // seg       = uct_ib_mlx5_srq_get_wqe(srq, wqe_index);
 
-    for (;;) {
-        next_index = ntohs(seg->srq.next_wqe_index);
 
-        ucs_info("post_recv_smbrwq: wqe_index: %d next_index = %d count = %d", wqe_index, next_index, count);
-        if (next_index == (srq->free_idx & srq->mask)) {
-            break;
-        }
-        seg = uct_ib_mlx5_srq_get_wqe(srq, next_index);
+    UCS_BITMAP_BITS_FOR_EACH_BIT(wqe_index, &iface->rx.srq.free_bitmap, 1) {
+
+        ucs_info("post_recv_smbrwq: wqe_index: %d count = %d",
+                 wqe_index, count);
+
+        seg = uct_ib_mlx5_srq_get_wqe(srq, wqe_index);
 
         if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
             break;
         }
 
-        wqe_index = next_index;
         count++;
+        iface->rx.srq.free_bitmap &= ~UCS_BIT(wqe_index);
     }
+
+    // for (;;) {
+    //     next_index = ucs_ffs64(iface->rx.srq.free_bitmap);
+
+    //     ucs_info("post_recv_smbrwq: wqe_index: %d next_index = %d count = %d",
+    //              wqe_index, next_index, count);
+    //     if (next_index == (srq->free_idx & srq->mask)) {
+    //         break;
+    //     }
+    //     seg = uct_ib_mlx5_srq_get_wqe(srq, next_index);
+
+    //     if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
+    //         break;
+    //     }
+
+    //     wqe_index = next_index;
+    //     count++;
+    //     iface->rx.srq.free_bitmap &= ~UCS_BIT(next_index);
+    // }
 
     uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, wqe_index, count);
     return count;
@@ -542,7 +565,6 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
     kh_destroy_inplace(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs);
 
     if (!UCT_RC_MLX5_MP_ENABLED(iface)) {
-        ucs_info("skipping common_tag_cleanup");
         return;
     }
 
@@ -601,12 +623,9 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
     status = uct_ib_mlx5_verbs_srq_init(
             &iface->rx.srq, iface->rx.srq.verbs.srq,
             iface->super.super.config.seg_size,
-
-            uct_rc_mlx5_iface_is_srq_smbrwq(iface) ? 15 :
+            uct_rc_mlx5_iface_is_srq_smbrwq(iface) ? 
+                        uct_ib_mlx5_srq_calc_num_sge(256):
                                                      iface->tm.mp.num_strides
-
-            // 15
-            //                                        iface->config.max_message_size_strides
     );
 
     if (status != UCS_OK) {
@@ -1015,7 +1034,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
                                         uct_rc_mlx5_iface_is_srq_smbrwq(iface) ?
-                                                15 :
+                                                 :
                                                 iface->tm.mp.num_strides);
     if (status != UCS_OK) {
         goto err_free_srq;
