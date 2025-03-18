@@ -241,7 +241,7 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 	request := C.ucp_tag_recv_nbx(w.worker, address, C.size_t(size), C.ucp_tag_t(tag),
 		C.ucp_tag_t(tagMask), &requestParams)
 
-	return NewRequest(request, callback, &UcpTagRecvInfo{
+	return newRequest(request, callback, &UcpTagRecvInfo{
 		SenderTag: uint64(recvInfo.sender_tag),
 		Length:    uint64(recvInfo.length),
 	})
@@ -300,5 +300,5 @@ func (w *UcpWorker) RecvAmDataNonBlocking(dataDesc *UcpAmData, recvBuffer unsafe
 	callback := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeAmRecvData))
 	request := C.ucp_am_recv_data_nbx(w.worker, dataDesc.dataPtr, recvBuffer, C.size_t(size), &requestParams)
 
-	return NewRequest(request, callback, length)
+	return newRequest(request, callback, length)
 }

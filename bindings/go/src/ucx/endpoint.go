@@ -30,7 +30,7 @@ func (e *UcpEp) FlushNonBlocking(params *UcpRequestParams) (*UcpRequest, error) 
 
 	callback := setSendParams(params, &requestParams)
 	request := C.ucp_ep_flush_nbx(e.ep, &requestParams)
-	return NewRequest(request, callback, nil)
+	return newRequest(request, callback, nil)
 }
 
 func (e *UcpEp) CloseNonBlocking(mode C.uint, params *UcpRequestParams) (*UcpRequest, error) {
@@ -41,7 +41,7 @@ func (e *UcpEp) CloseNonBlocking(mode C.uint, params *UcpRequestParams) (*UcpReq
 	callback := setSendParams(params, &requestParams)
 	request := C.ucp_ep_close_nbx(e.ep, &requestParams)
 	delete(errorHandles, e.ep)
-	return NewRequest(request, callback, nil)
+	return newRequest(request, callback, nil)
 }
 
 // Non-blocking endpoint closure. Releases the endpoint without any
@@ -68,7 +68,7 @@ func (e *UcpEp) SendTagNonBlocking(tag uint64, address unsafe.Pointer, size uint
 
 	callback := setSendParams(params, &requestParams)
 	request := C.ucp_tag_send_nbx(e.ep, address, C.size_t(size), C.ucp_tag_t(tag), &requestParams)
-	return NewRequest(request, callback, nil)
+	return newRequest(request, callback, nil)
 }
 
 // This routine sends an Active Message to an ep.
@@ -83,5 +83,5 @@ func (e *UcpEp) SendAmNonBlocking(id uint, header unsafe.Pointer, headerSize uin
 	requestParams.flags = C.uint(flags)
 
 	request := C.ucp_am_send_nbx(e.ep, C.uint(id), header, C.size_t(headerSize), data, C.size_t(dataSize), &requestParams)
-	return NewRequest(request, callback, nil)
+	return newRequest(request, callback, nil)
 }
