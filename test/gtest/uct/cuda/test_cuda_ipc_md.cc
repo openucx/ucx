@@ -130,6 +130,31 @@ UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
     EXPECT_NE(dev_num, rkey.dev_num); // rkey was not updated
 }
 
+UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
+{
+    constexpr size_t size = 4096;
+    ucs::handle<uct_md_h> md;
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey;
+    CUdeviceptr ptr;
+
+    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, size));
+    EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
+    EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
+                                     &rkey));
+
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, rkey.ph.handle_type);
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md->ops->mem_dereg(md, &params));
+    cuMemFree(ptr);
+}
+
 UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
 {
     cuda_context cuda_ctx;

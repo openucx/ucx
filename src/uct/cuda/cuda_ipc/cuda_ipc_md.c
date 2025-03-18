@@ -224,8 +224,9 @@ legacy_path:
 
 common_path:
     ucs_list_add_tail(&memh->list, &key->link);
-    ucs_trace("registered addr:%p/%p type:%u length:%zd dev_num:%d buffer_id:%llu",
-              addr, (void *)key->d_bptr, key->ph.handle_type, key->b_len,
+    ucs_trace("registered addr:%p/%p length:%zd type:%u dev_num:%d "
+              "buffer_id:%llu",
+              addr, (void *)key->d_bptr, key->b_len, key->ph.handle_type,
               (int)memh->dev_num, key->ph.buffer_id);
 
     *key_p = key;

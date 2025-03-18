@@ -349,8 +349,8 @@ static ucs_status_t uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key,
         return uct_cuda_ipc_open_memhandle_mempool(key, mapped_addr);
 #endif
     default:
-        ucs_log((key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR?
-                UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR),
+        ucs_log((key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR)?
+                UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR,
                 "unsupported key handle type: %u", key->ph.handle_type);
         return UCS_ERR_INVALID_PARAM;
     }
