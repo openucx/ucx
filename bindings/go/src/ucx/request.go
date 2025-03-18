@@ -26,8 +26,6 @@ type UcpRequestParams struct {
 	Memory	   *UcpMemory
 }
 
-type UcpRequestImmCallback func() UcpCallback
-
 func (p *UcpRequestParams) SetMemType(memType UcsMemoryType) *UcpRequestParams {
 	p.memTypeSet = true
 	p.memType = memType
@@ -74,11 +72,10 @@ func unpackAndFreeArg(callback unsafe.Pointer) UcpCallback {
 	return unpackArgCommon(callback, true)
 }
 
-func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Pointer) UcpRequestImmCallback {
-	var immediateCallback UcpRequestImmCallback
+func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Pointer) unsafe.Pointer {
 
 	if params == nil {
-		return immediateCallback
+		return nil
 	}
 
 	if params.Cb != nil {
@@ -86,10 +83,6 @@ func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Po
 		cbAddr := (*unsafe.Pointer)(unsafe.Pointer(&p.cb[0]))
 		*cbAddr = cb
 		p.user_data = packArg(params.Cb)
-		immediateCallback = func() UcpCallback {
-			callback := unpackAndFreeArg(p.user_data)
-			return callback
-		}
 	}
 
 	if params.memTypeSet {
@@ -106,7 +99,7 @@ func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Po
 		p.memh = params.Memory.memHandle
 	}
 
-	return immediateCallback
+	return p.user_data
 }
 
 // Checks whether request is a pointer
@@ -115,7 +108,7 @@ func isRequestPtr(request C.ucs_status_ptr_t) bool {
 	return (uint64(uintptr(request)) - 1) < (uint64(errLast) - 1)
 }
 
-func NewRequest(request C.ucs_status_ptr_t, immediateCallback UcpRequestImmCallback, immidiateInfo interface{}) (*UcpRequest, error) {
+func NewRequest(request C.ucs_status_ptr_t, arg unsafe.Pointer, immidiateInfo interface{}) (*UcpRequest, error) {
 	ucpRequest := &UcpRequest{}
 
 	if isRequestPtr(request) {
@@ -123,8 +116,8 @@ func NewRequest(request C.ucs_status_ptr_t, immediateCallback UcpRequestImmCallb
 		ucpRequest.Status = UCS_INPROGRESS
 	} else {
 		ucpRequest.Status = UcsStatus(int64(uintptr(request)))
-		if immediateCallback != nil {
-			switch callback := immediateCallback().(type) {
+		if callback := unpackAndFreeArg(arg); callback != nil {
+			switch callback := callback.(type) {
 			case UcpSendCallback:
 				callback(ucpRequest, ucpRequest.Status)
 			case UcpTagRecvCallback:

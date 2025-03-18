@@ -18,7 +18,7 @@ type UcpEp struct {
 
 var errorHandles = make(map[C.ucp_ep_h]UcpEpErrHandler)
 
-func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_request_param_t) UcpRequestImmCallback {
+func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_request_param_t) unsafe.Pointer {
 	return packParams(goRequestParams, cRequestParams, unsafe.Pointer(C.ucxgo_completeGoSendRequest))
 }
 
