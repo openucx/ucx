@@ -556,6 +556,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, max_priority_eps),
    UCS_CONFIG_TYPE_UINT},
 
+  {"WIREUP_VIA_AM_LANE", "n",
+   "Use AM lane to send wireup messages",
+   ucs_offsetof(ucp_context_config_t, wireup_via_am_lane),
+   UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
