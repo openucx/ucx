@@ -558,8 +558,8 @@ void test_reconfigure_update_rank::verify_configuration()
 
     EXPECT_TRUE(r_sender->is_reconfigured());
     EXPECT_TRUE(r_receiver->is_reconfigured());
-    r_sender->verify_configuration(*r_receiver, r_sender->num_reused_rscs());
-    r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
+    r_sender->verify_configuration(*r_receiver, 0);
+    r_receiver->verify_configuration(*r_sender, 0);
 }
 
 UCS_TEST_P(test_reconfigure_update_rank, promote,
