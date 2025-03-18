@@ -827,8 +827,8 @@ static int ucp_wireup_compare_score(const void *elem1, const void *elem2,
     score1 = (*lane1 == UCP_NULL_LANE) ? 0.0 : lanes[*lane1].score[lane_type];
     score2 = (*lane2 == UCP_NULL_LANE) ? 0.0 : lanes[*lane2].score[lane_type];
 
-    /* sort from highest score to lowest */
-    return (score1 < score2) ? 1 : ((score1 > score2) ? -1 : 0);
+    /* reverse the value of ucp_score_cmp to sort scores in descending order */
+    return -ucp_score_cmp(score1, score2);
 }
 
 static int ucp_wireup_compare_lane_am_bw_score(const void *elem1, const void *elem2,
@@ -2259,7 +2259,8 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                   unsigned ep_init_flags,
                                   const ucp_address_entry_t *address_list,
                                   const ucp_wireup_lane_desc_t *lane_descs,
-                                  ucp_lane_index_t num_lanes)
+                                  ucp_lane_index_t num_lanes,
+                                  ucp_lane_index_t am_lane)
 {
     ucp_context_h context          = worker->context;
     ucp_lane_index_t p2p_lane      = UCP_NULL_LANE;
@@ -2269,6 +2270,11 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     uct_iface_attr_t *attrs;
     ucp_lane_index_t lane;
     unsigned addr_index;
+
+    if (context->config.ext.wireup_via_am_lane) {
+        ucs_assert(am_lane != UCP_NULL_LANE);
+        return am_lane;
+    }
 
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
@@ -2658,7 +2664,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                                                                    select_ctx),
                                           select_params->address->address_list,
                                           select_ctx->lane_descs,
-                                          key->num_lanes);
+                                          key->num_lanes, key->am_lane);
     }
 
     for (i = 0; key->rma_bw_lanes[i] != UCP_NULL_LANE; i++) {

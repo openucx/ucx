@@ -195,21 +195,18 @@ enum {
     UCT_IB_MLX5_MD_FLAG_CQE128_ZIP           = UCS_BIT(11),
     /* Device performance is optimized when RDMA_WRITE is not used */
     UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED = UCS_BIT(12),
-    /* Device supports indirect xgvmi MR. This flag is removed if xgvmi access
-     * command fails */
-    UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI       = UCS_BIT(13),
     /* Device supports symmetric key creation */
-    UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(14),
+    UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(13),
     /* Device supports DMA MMO */
-    UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(15),
+    UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(14),
     /* Device supports XGVMI UMR workflow */
-    UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(16),
+    UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(15),
     /* Device supports UAR WC allocation type */
-    UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
+    UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(16),
     /* Device supports implicit ODP with PCI relaxed order */
-    UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(18),
+    UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(17),
     /* Device supports forcing ordering configuration */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(19),
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE    = UCS_BIT(18),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
@@ -320,7 +317,6 @@ typedef struct {
     void                        *address;
     struct mlx5dv_devx_obj      *atomic_dvmr;
     struct mlx5dv_devx_obj      *indirect_dvmr;
-    struct mlx5dv_devx_umem     *umem;
     struct mlx5dv_devx_obj      *cross_mr;
     uct_ib_mlx5_devx_umr_mkey_t *exported_umr_mkey;
     struct mlx5dv_devx_obj      *smkey_mr;
@@ -1170,11 +1166,18 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
                          const uct_md_mem_reg_params_t *params,
                          uct_mem_h *memh_p);
 
+/**
+ * Check if the device capabilities declare XGVMI support.
+ * This function detects whether device supports XGVMI, but there is no way to
+ * detect whether XGVMI works with indirect mkeys. Currently we only support
+ * XGVMI with indirect mkeys.
+ * TODO: FW should expose this capability
+ */
+int uct_ib_mlx5_devx_check_xgvmi(void *cap_2);
+
 ucs_status_t
 uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
                            const uct_md_mem_dereg_params_t *params);
-
-int uct_ib_mlx5_devx_check_xgvmi(void *cap_2, const char *dev_name);
 
 ucs_status_t uct_ib_mlx5_devx_query_cap(struct ibv_context *ctx, uint32_t opmod,
                                         void *out, size_t size, char *msg_arg,
@@ -1196,9 +1199,10 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 
 struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device);
 
-ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
-                                      const uct_ib_md_config_t *md_config,
-                                      uct_ib_md_t **p_md);
+ucs_status_t uct_ib_mlx5_devx_md_open_common(const char* name, size_t size,
+                                             struct ibv_device *ibv_device,
+                                             const uct_ib_md_config_t *md_config,
+                                             uct_ib_md_t **p_md);
 
 ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
                                                uct_ib_mlx5_devx_mem_t *memh);

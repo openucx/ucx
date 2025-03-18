@@ -103,7 +103,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 
 UCS_STATIC_INIT
 {
-    UCT_CUDADRV_FUNC_LOG_ERR(cuInit(0));
+    UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
 }
 
 UCS_STATIC_CLEANUP

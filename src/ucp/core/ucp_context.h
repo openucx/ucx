@@ -205,6 +205,8 @@ typedef struct ucp_context_config {
     uint64_t                               extra_op_attr_flags;
     /** Upper limit to the amount of prioritized endpoints */
     unsigned                               max_priority_eps;
+    /* Use AM lane to send wireup messages */
+    int                                    wireup_via_am_lane;
     /** Extend endpoint lanes connections of each local device to all remote 
      *  devices */
     int                                    ep_allow_all_to_all;
@@ -429,7 +431,7 @@ typedef struct ucp_context {
         char                      *env_prefix;
 
         /* worker_fence implementation method */
-        unsigned                  worker_strong_fence;
+        ucp_fence_mode_t          worker_fence_mode;
 
         /* Progress wrapper enabled */
         int                       progress_wrapper_enabled;

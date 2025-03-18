@@ -246,7 +246,8 @@ public:
 
         ucp_ep_purge_lanes(ep, purge_enqueue_cb, this);
         void *request = ucp_ep_flush_internal(ep, 0, &param, NULL, flushed_cb,
-                                              "ep_restart");
+                                              "ep_restart",
+                                              UCT_FLUSH_FLAG_LOCAL);
 
         ASSERT_FALSE(UCS_PTR_IS_ERR(request));
         if (request != NULL) {

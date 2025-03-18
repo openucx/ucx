@@ -170,8 +170,7 @@ AS_IF([test "x$with_ib" = "xyes"],
                            MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
                            MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE,
                            MLX5DV_UAR_ALLOC_TYPE_BF,
-                           MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED,
-                           mlx5dv_devx_umem_reg_ex],
+                           MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
@@ -282,12 +281,34 @@ AS_IF([test "x$with_ib" = "xyes"],
            AC_CHECK_DECLS([ibv_alloc_dm],
                [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])],
                [], [[#include <infiniband/verbs.h>]])])
-        
+
         # DDP support
         AS_IF([test "x$have_mlx5" = xyes], [
            AC_CHECK_DECLS([MLX5DV_CONTEXT_MASK_OOO_RECV_WRS],
                [AC_DEFINE([HAVE_OOO_RECV_WRS], 1, [Have DDP support])],
                [], [[#include <infiniband/mlx5dv.h>]])])
+
+       # RDMA netlink support requires defines from rdma_netlink.h and the
+       # ability to get netlink index from ibv_device struct.
+       have_netlink_rdma=yes
+       AC_CHECK_DECL([NETLINK_RDMA], [], [have_netlink_rdma=no],
+                     [[#include <linux/netlink.h>]])
+       AC_CHECK_DECL([RDMA_NL_NLDEV], [], [have_netlink_rdma=no],
+                     [[#include <rdma/rdma_netlink.h>]])
+       AC_CHECK_DECL([ibv_get_device_index], [], [have_netlink_rdma=no],
+                     [[#include <infiniband/verbs.h>]])
+       AS_IF([test "x$have_netlink_rdma" = xyes],
+             [AC_DEFINE([HAVE_NETLINK_RDMA], [1], [RDMA netlink support])
+              # Define replacement constants if not present in header files
+              AC_CHECK_DECL(RDMA_NLDEV_ATTR_DEV_TYPE, [],
+                            [AC_DEFINE([RDMA_NLDEV_ATTR_DEV_TYPE], 99,
+                                       [RDMA netlink device type attribute])],
+                            [[#include <rdma/rdma_netlink.h>]])
+              AC_CHECK_DECL(RDMA_DEVICE_TYPE_SMI, [],
+                            [AC_DEFINE([RDMA_DEVICE_TYPE_SMI], 1,
+                                       [RDMA netlink SMI device type])],
+                            [[#include <rdma/rdma_netlink.h>]])
+             ])
 
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])

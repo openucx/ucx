@@ -17,7 +17,6 @@
 #include <ucs/debug/memtrack_int.h>
 
 #include <errno.h>
-#include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -29,19 +28,6 @@ typedef struct {
     int                    found;
 } ucs_netlink_route_info_t;
 
-
-/**
- * Callback function for parsing individual netlink messages.
- *
- * @param [in] nlh    Pointer to the netlink message header.
- * @param [in] nl_msg Pointer to the netlink message payload.
- * @param [in] arg    User-provided argument passed through from the caller.
- *
- * @return UCS_OK if parsing is complete, UCS_INPROGRESS if there are more
- *         messages to be parsed, or error code otherwise.
- */
-typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
-                                               const void *nl_msg, void *arg);
 
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
@@ -85,15 +71,16 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
             return UCS_ERR_IO_ERROR;
         }
 
-        status = parse_cb(nlh, NLMSG_DATA(nlh), arg);
+        status = parse_cb(nlh, arg);
         nlh    = NLMSG_NEXT(nlh, msg_len);
     }
 
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
+                         unsigned short nlmsg_flags,
                          const void *protocol_header, size_t header_length,
                          ucs_netlink_parse_cb_t parse_cb, void *arg)
 {
@@ -112,7 +99,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
 
     nlh.nlmsg_len   = NLMSG_LENGTH(header_length);
     nlh.nlmsg_type  = nlmsg_type;
-    nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    nlh.nlmsg_flags = NLM_F_REQUEST | nlmsg_flags;
     iov[0].iov_base = &nlh;
     iov[0].iov_len  = sizeof(nlh);
     iov[1].iov_base = (void *)protocol_header;
@@ -183,16 +170,15 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
 }
 
 static ucs_status_t
-ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
-                              void *arg)
+ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 {
     ucs_netlink_route_info_t *info = (ucs_netlink_route_info_t *)arg;
+    const struct rtmsg *rt_msg     = NLMSG_DATA(nlh);
     int rule_iface;
     const void *dst_in_addr;
 
-    if (ucs_netlink_get_route_info(RTM_RTA((const struct rtmsg *)nl_msg),
-                                   RTM_PAYLOAD(nlh), &rule_iface,
-                                   &dst_in_addr) != UCS_OK) {
+    if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
+                                   &rule_iface, &dst_in_addr) != UCS_OK) {
         return UCS_INPROGRESS;
     }
 
@@ -201,8 +187,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
     }
 
     if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
-                             dst_in_addr,
-                             ((const struct rtmsg *)nl_msg)->rtm_dst_len)) {
+                             dst_in_addr, rt_msg->rtm_dst_len)) {
         info->found = 1;
         return UCS_OK;
     }
@@ -229,8 +214,8 @@ int ucs_netlink_route_exists(const char *if_name,
     info.if_index  = iface_index;
     info.sa_remote = sa_remote;
 
-    ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
-                             ucs_netlink_parse_rt_entry_cb, &info);
+    ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
+                             sizeof(rtm), ucs_netlink_parse_rt_entry_cb, &info);
 
 out:
     return info.found;

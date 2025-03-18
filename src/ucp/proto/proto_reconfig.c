@@ -63,8 +63,7 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
         return UCS_OK;
     }
 
-    if (ucp_proto_config_is_am(req->send.proto_config) &&
-        (req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER)) {
+    if (ucp_proto_config_is_am(req->send.proto_config)) {
         status = ucp_proto_am_req_copy_header(req);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);

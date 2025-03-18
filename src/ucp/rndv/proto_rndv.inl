@@ -219,7 +219,7 @@ ucp_proto_rndv_request_total_offset(ucp_request_t *req)
     return req->send.rndv.offset + req->send.state.dt_iter.offset;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_bulk_request_init(ucp_request_t *req,
                                  const ucp_proto_rndv_bulk_priv_t *rpriv)
 {
@@ -229,6 +229,8 @@ ucp_proto_rndv_bulk_request_init(ucp_request_t *req,
         ucp_proto_rndv_bulk_request_init_lane_idx(req, rpriv);
     }
     ucp_proto_multi_set_send_lane(req);
+
+    return UCS_OK;
 }
 
 /**

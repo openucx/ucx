@@ -373,7 +373,6 @@ out_close_inotify_fd:
     ucs_free(dir_buf);
 out_unlock:
     pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
-out:
     return status;
 #else
     return UCS_ERR_UNSUPPORTED;

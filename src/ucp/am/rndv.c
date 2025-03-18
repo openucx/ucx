@@ -56,7 +56,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_rndv_proto_progress, (self),
                               UCP_AM_ID_RNDV_RTS, rpriv->lane,
                               ucp_am_rndv_rts_pack, req, max_rts_size,
                               ucp_am_rndv_rts_complete, 0);
-    return ucp_proto_am_handle_user_header_send_status(req, status);
+    return ucp_am_handle_user_header_send_status_or_abort(req, status);
 }
 
 static void ucp_am_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
