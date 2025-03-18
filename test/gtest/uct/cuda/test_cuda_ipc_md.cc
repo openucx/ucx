@@ -16,6 +16,7 @@ extern "C" {
 
 class test_cuda_ipc_md : public test_md {
 protected:
+    static uint64_t uuid_start;
     static uct_cuda_ipc_rkey_t
     unpack_common(uct_md_h md, int64_t uuid, CUdeviceptr ptr, size_t size)
     {
@@ -100,6 +101,8 @@ protected:
 #endif
 };
 
+uint64_t test_cuda_ipc_md::uuid_start = 0;
+
 UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
 {
     cuda_context cuda_ctx;
@@ -171,7 +174,8 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
                                m_md_config);
     }
 
-    for (int64_t i = 0; i < 64; ++i) {
+    int64_t i;
+    for (i = uuid_start; i < (uuid_start + 64); ++i) {
         /* We get unique dev_num on new UUID */
         uct_cuda_ipc_rkey_t rkey = unpack(md, i + 1);
         EXPECT_EQ(i, rkey.dev_num);
@@ -179,6 +183,8 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
         rkey = unpack(md, i + 1);
         EXPECT_EQ(i, rkey.dev_num);
     }
+
+    uuid_start = i;
 }
 
 #if HAVE_CUDA_FABRIC
@@ -205,7 +211,8 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds_mempool, 8)
     free_mempool(&ptr, &mpool, &cu_stream);
 
     if (cu_err == CUDA_SUCCESS) {
-        for (int64_t i = 0; i < 64; ++i) {
+        int64_t i;
+        for (i = uuid_start; i < (uuid_start + 64); ++i) {
             /* We get unique dev_num on new UUID */
             uct_cuda_ipc_rkey_t rkey = unpack_masync(md, i + 1);
             EXPECT_EQ(i, rkey.dev_num);
@@ -213,6 +220,8 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds_mempool, 8)
             rkey = unpack_masync(md, i + 1);
             EXPECT_EQ(i, rkey.dev_num);
         }
+
+        uuid_start = i;
     }
 }
 #endif
