@@ -15,7 +15,7 @@
 #include <cuda.h>
 
 
-static CUdevice sys_dev_to_device[UCS_SYS_DEVICE_ID_MAX];
+static CUdevice sys_dev_to_device[UCS_SYS_DEVICE_ID_MAX + 1];
 
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                                ucs_sys_device_t *sys_dev_p)
