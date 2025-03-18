@@ -58,19 +58,19 @@ wait_for_status() {
     local target_status=$1
     local timeout=600
     local interval=30
-    local elapsed=0
     local status=""
+    SECONDS=0
 
-    while [ $elapsed -lt $timeout ]; do
+    while [ $SECONDS -lt $timeout ]; do
         status=$(aws batch describe-jobs --jobs "$JOB_ID" --query 'jobs[0].status' --output text)
         if echo "$status" | grep -qE "$target_status"; then
-            echo "$status"
+            echo "$status (completed in ${SECONDS}s)"
             return 0
         fi
         sleep $interval
-        elapsed=$((elapsed + interval))
     done
-    echo "Timeout waiting for status $target_status. Final status: $status"
+
+    echo "Timeout waiting for status $target_status after ${SECONDS}s. Final status: $status"
     return 1
 }
 
@@ -86,7 +86,7 @@ kubectl -n ucx-ci-batch-nodes logs -f "$POD"
 
 # Propagate exit status
 exit_status=$(wait_for_status "SUCCEEDED|FAILED")
-if [[ "$exit_status" == "FAILED" ]]; then
+if [[ "$exit_status" =~ FAILED ]]; then
     msg="Failure running EFA test in AWS"
     azure_log_error "$msg"
     azure_complete_with_issues "$msg"
