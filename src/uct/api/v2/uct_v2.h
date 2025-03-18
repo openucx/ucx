@@ -969,7 +969,12 @@ typedef enum {
      * packed key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
-    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12)
+    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12),
+
+    /**
+     * Memory domain performs memory type related copy operations.
+     */
+    UCT_MD_FLAG_MEMTYPE_COPY   = UCS_BIT(13)
 } uct_md_flags_v2_t;
 
 

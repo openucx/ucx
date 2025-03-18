@@ -499,6 +499,23 @@ public:
     }
 };
 
+UCS_TEST_P(test_ucp_proto_mock_rcx, memtype_copy_enable,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1",
+           "MEMTYPE_COPY_ENABLE=n")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {0,       0, "rendezvous no data fetch", ""},
+        {1,      64, "rendezvous zero-copy fenced write to remote",
+                     "rc_mlx5/mock_0:1"},
+        {21992, INF, "rendezvous zero-copy read from remote",
+                     "rc_mlx5/mock_0:1"},
+    }, key);
+}
+
 UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_1_lane, "IB_NUM_PATHS?=1",
            "MAX_RNDV_LANES=1")
 {

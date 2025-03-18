@@ -31,6 +31,10 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
     ucp_lane_index_t lane;
     ucs_status_t status;
 
+    if (!ucp_proto_common_check_memtype_copy(&params->super)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     num_lanes = ucp_proto_common_find_lanes_with_min_frag(
             &params->super, params->lane_type, params->tl_cap_flags, 1,
             params->super.exclude_map, &lane);
