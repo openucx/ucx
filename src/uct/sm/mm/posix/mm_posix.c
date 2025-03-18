@@ -716,8 +716,9 @@ static void uct_posix_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rse
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_posix_rkey_unpack,
-                 (component, rkey_buffer, rkey_p, handle_p),
+                 (component, rkey_buffer, params, rkey_p, handle_p),
                  uct_component_t *component, const void *rkey_buffer,
+                 const uct_rkey_unpack_params_t *params,
                  uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_posix_packed_rkey_t *packed_rkey = rkey_buffer;

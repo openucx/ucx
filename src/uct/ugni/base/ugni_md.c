@@ -135,6 +135,7 @@ static ucs_status_t uct_ugni_rkey_release(uct_component_t *component,
 
 static ucs_status_t uct_ugni_rkey_unpack(uct_component_t *component,
                                          const void *rkey_buffer,
+                                         const uct_rkey_unpack_params_t *params,
                                          uct_rkey_t *rkey_p, void **handle_p)
 {
     const uint64_t *ptr = rkey_buffer;
