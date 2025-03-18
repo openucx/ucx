@@ -188,7 +188,7 @@ protected:
         params.mds.mds    = &md_p;
         params.mds.count  = 1;
         if (device > -1) {
-            params.field_mask |= UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEV;
+            params.field_mask |= UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEVICE;
             params.sys_device  = sys_dev[device];
         }
 

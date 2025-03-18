@@ -346,8 +346,10 @@ static ucs_status_t uct_cuda_copy_push_ctx(CUdevice orig_device,
     status = UCT_CUDADRV_FUNC(cuDevicePrimaryCtxGetState(device,
                                                          &flags, &active),
                               log_level);
-    if ((status != UCS_OK) || !active) {
+    if (status != UCS_OK) {
         return status;
+    } else if (!active) {
+        return UCS_ERR_NO_DEVICE;
     }
 
     status = UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRetain(&primary_ctx, device),

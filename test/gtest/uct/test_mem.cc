@@ -88,7 +88,7 @@ UCS_TEST_P(test_mem, md_alloc) {
                              UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE  |
                              UCT_MEM_ALLOC_PARAM_FIELD_MDS       |
                              UCT_MEM_ALLOC_PARAM_FIELD_NAME      |
-                             UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEV;
+                             UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEVICE;
     params.name            = "test";
     params.mem_type        = UCS_MEMORY_TYPE_HOST;
     params.sys_device      = UCS_SYS_DEVICE_ID_UNKNOWN; /* ignored by MDs now */
