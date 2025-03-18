@@ -31,8 +31,10 @@ protected:
 
         /* cuIpcOpenMemHandle used by cuda_ipc_cache does not allow to open
          * handle that was created by the same process */
+        uct_rkey_unpack_params_t unpack_params = { 0 };
         EXPECT_EQ(UCS_ERR_UNREACHABLE,
-                  md->component->rkey_unpack(md->component, &rkey, NULL, NULL));
+                  md->component->rkey_unpack(md->component, &rkey,
+                                             &unpack_params, NULL, NULL));
 
         uct_md_mem_dereg_params_t params;
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
@@ -150,7 +152,9 @@ UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
     // Unpack without a CUDA device context
     std::thread t([&md, &rkey, &status]() {
         rkey.dev_num = ~rkey.dev_num;
-        status = md->component->rkey_unpack(md->component, &rkey, NULL, NULL);
+        uct_rkey_unpack_params_t params = { 0 };
+        status = md->component->rkey_unpack(md->component, &rkey, &params, NULL,
+                                            NULL);
     });
     t.join();
 

@@ -420,9 +420,10 @@ err:
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
-                 (component, rkey_buffer, rkey_p, handle_p),
+                 (component, rkey_buffer, params, rkey_p, handle_p),
                  uct_component_t *component, const void *rkey_buffer,
-                 uct_rkey_t *rkey_p, void **handle_p)
+                 const uct_rkey_unpack_params_t *params, uct_rkey_t *rkey_p,
+                 void **handle_p)
 {
     uct_cuda_ipc_component_t *com = ucs_derived_of(component,
                                                    uct_cuda_ipc_component_t);

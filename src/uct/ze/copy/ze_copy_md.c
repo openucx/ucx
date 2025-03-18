@@ -109,9 +109,10 @@ static ucs_status_t uct_ze_copy_mem_free(uct_md_h tl_md, uct_mem_h memh)
     return UCT_ZE_FUNC_LOG_ERR(zeMemFree(md->ze_context, (void*)memh));
 }
 
-static ucs_status_t uct_ze_copy_rkey_unpack(uct_component_t *component,
-                                            const void *rkey_buffer,
-                                            uct_rkey_t *rkey_p, void **handle_p)
+static ucs_status_t
+uct_ze_copy_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                        const uct_rkey_unpack_params_t *params,
+                        uct_rkey_t *rkey_p, void **handle_p)
 {
     *handle_p = NULL;
     *rkey_p   = 0xdeadbeef;
