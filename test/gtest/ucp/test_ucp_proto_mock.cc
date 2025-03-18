@@ -163,7 +163,8 @@ private:
 
     static void cx7_perf_mock(uct_perf_attr_t& perf_attr)
     {
-        perf_attr.path_ratio = 0.9;
+        perf_attr.path_bandwidth.shared    = 0.95 * perf_attr.bandwidth.shared;
+        perf_attr.path_bandwidth.dedicated = 0;
     }
 
     /* We have to use singleton to mock C functions */

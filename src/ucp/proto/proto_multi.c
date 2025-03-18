@@ -21,37 +21,6 @@
 
 
 static UCS_F_ALWAYS_INLINE double
-ucp_proto_multi_get_path_ratio(const ucp_proto_init_params_t *params,
-                               double path_ratio, uint8_t path_index,
-                               ucp_rsc_index_t rsc_index)
-{
-    ucp_worker_iface_t *wiface = ucp_worker_iface(params->worker, rsc_index);
-    unsigned dev_num_paths     = wiface->attr.dev_num_paths;
-    unsigned i;
-    double weight, total_weight;
-
-    ucs_assertv(path_index < dev_num_paths, "path_index=%u dev_num_paths=%u",
-                path_index, dev_num_paths);
-
-    /* When selecting first path of any device, or any path of ROCE device,
-     * this condition should be always matched */
-    if ((path_index + 1) * path_ratio <= 1.0) {
-        return path_ratio;
-    }
-
-    /* If we are here, it means that the remaining part of the ratio is less
-     * than path_ratio, so we need to gradiently split it between all remaining
-     * paths */
-    total_weight = 0.0;
-    for (i = 1; i < dev_num_paths; ++i) {
-        total_weight += 1.0 / (1 << (i - 1));
-    }
-
-    weight = 1.0 / (1 << (path_index - 1));
-    return (1.0 - path_ratio) * (weight / total_weight);
-}
-
-static UCS_F_ALWAYS_INLINE double
 ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
                              ucp_lane_index_t lane,
                              const ucp_proto_common_tl_perf_t *lane_perf,
@@ -64,8 +33,12 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
     double ratio;
 
     if (UCS_CONFIG_DBL_IS_AUTO(multi_path_ratio)) {
-        ratio = ucp_proto_multi_get_path_ratio(params, lane_perf->path_ratio,
-                                               path_index, rsc_index);
+        ratio = 1.0 - (lane_perf->path_ratio * path_index);
+        if (ratio > 0) {
+            ratio = ucs_min(ratio, lane_perf->path_ratio);
+        } else {
+            ratio = 0.01 / path_index;
+        }
     } else {
         ratio = 1.0 - (multi_path_ratio * path_index);
     }

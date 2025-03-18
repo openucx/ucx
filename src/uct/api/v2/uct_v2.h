@@ -89,8 +89,8 @@ enum uct_perf_attr_field {
     /** Enables @ref uct_perf_attr_t::bandwidth */
     UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(8),
 
-    /** Enables @ref uct_perf_attr_t::path_ratio */
-    UCT_PERF_ATTR_FIELD_PATH_RATIO         = UCS_BIT(9),
+    /** Enables @ref uct_perf_attr_t::path_bandwidth */
+    UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH     = UCS_BIT(9),
 
     /** Enables @ref uct_perf_attr_t::latency */
     UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(10),
@@ -189,9 +189,16 @@ typedef struct {
     uct_ppn_bandwidth_t bandwidth;
 
     /**
-     * Single path ratio of the full bandwidth.
+     * Bandwidth of the single (first) interface path.
+     * With multi-path interfaces, this field indicates the bandwidth of a
+     * single path. In case of RoCE device with LAG, the single path bandwidth
+     * is equal to the full interface bandwidth divided by the number of paths.
+     * For CX7 and other IB devices, the single path takes the most of the
+     * interface bandwidth, and the rest of the paths share the remaining
+     * bandwidth.
+     * This field is set by the UCT layer.
      */
-    double              path_ratio;
+    uct_ppn_bandwidth_t path_bandwidth;
 
     /**
      * Latency as a function of number of endpoints.

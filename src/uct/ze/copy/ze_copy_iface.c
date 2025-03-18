@@ -135,7 +135,8 @@ static uct_iface_ops_t uct_ze_copy_iface_ops = {
 static ucs_status_t
 uct_ze_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+    if ((perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) ||
+        (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH)) {
         perf_attr->bandwidth.dedicated = 0;
         if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
             perf_attr->bandwidth.shared = 0;
@@ -160,8 +161,8 @@ uct_ze_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
         }
     }
 
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_RATIO) {
-        perf_attr->path_ratio = 1.0;
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        perf_attr->path_bandwidth = perf_attr->bandwidth;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
