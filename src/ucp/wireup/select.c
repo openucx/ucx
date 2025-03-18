@@ -1634,8 +1634,7 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
     ucp_context_h context                     = ep->worker->context;
     uint64_t local_dev_bitmap                 = bw_info->local_dev_bitmap;
     uint64_t remote_dev_bitmap                = bw_info->remote_dev_bitmap;
-    uint16_t num_paths_limit;
-    uint16_t num_paths_count;
+    uint16_t num_paths_count, num_paths;
     const uct_iface_attr_t *iface_attr;
     const ucp_address_entry_t *ae;
     ucp_rsc_index_t skip_local;
@@ -1646,6 +1645,7 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
     unsigned num_lanes;
     ucs_status_t status;
     ucp_rsc_index_t local_dev_index, remote_dev_index;
+    ucp_rsc_index_t extra_path;
 
     if (excl_lane == UCP_NULL_LANE) {
         skip_local  = UCP_NULL_RESOURCE;
@@ -1660,9 +1660,10 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
 
     ucs_for_each_bit(local_dev_index, local_dev_bitmap) {
         ucs_for_each_bit(remote_dev_index, remote_dev_bitmap) {
-            num_paths_count = 0;
-            num_paths_limit = 0;
-            do {
+            extra_path = allow_extra_path &&
+                         (skip_local  == local_dev_index) &&
+                         (skip_remote == remote_dev_index);
+            for (num_paths_count = extra_path; ;num_paths_count++) {
                 sinfo  = ucs_array_append(&sinfo_array, break);
                 status = ucp_wireup_select_transport(
                         select_ctx, select_params, &bw_info->criteria,
@@ -1674,29 +1675,18 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                 }
 
                 rsc_index  = sinfo->rsc_index;
-                iface_attr = ucp_worker_iface_get_attr(ep->worker, rsc_index);
                 addr_index = sinfo->addr_index;
+                iface_attr = ucp_worker_iface_get_attr(ep->worker, rsc_index);
                 ae         = &select_params->address->address_list[addr_index];
-
-                if (num_paths_limit == 0) {
-                    num_paths_limit = ucs_min(iface_attr->dev_num_paths,
-                                              ae->dev_num_paths);
-                    if ((skip_local  == local_dev_index) &&
-                        (skip_remote == remote_dev_index)) {
-                        num_paths_limit += !!allow_extra_path;
-                        num_paths_count++;
-                        if (num_paths_limit == 1) {
-                            /* we have single path and it should be skipped */
-                            ucs_array_pop_back(&sinfo_array);
-                            break;
-                        }
-                    }
+                num_paths  = extra_path + ucs_min(iface_attr->dev_num_paths,
+                                                  ae->dev_num_paths);
+                if (num_paths_count >= num_paths) {
+                    ucs_array_pop_back(&sinfo_array);
+                    break;
                 }
 
-                ucs_assert(num_paths_limit > 0);
-
-                sinfo->path_index = num_paths_count++;
-            } while (num_paths_count < num_paths_limit);
+                sinfo->path_index = num_paths_count;
+            }
         }
     }
 
@@ -1862,13 +1852,12 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_context_t *select_ctx,
                         unsigned allow_extra_path)
 {
-    /* lanes counters only for logging */
     struct {
         unsigned num_lanes_stage[2];
         unsigned pairwise_num_lanes;
         unsigned mem_type_num_lanes;
-    } lanes_counters UCS_V_UNUSED = {0};
-    ucp_worker_h worker           = select_params->ep->worker;
+    } lanes_counters    = {0}; /* only for logging */
+    ucp_worker_h worker = select_params->ep->worker;
     ucp_tl_bitmap_t mem_type_tl_bitmap;
 
     lanes_counters.num_lanes_stage[0] = select_ctx->num_lanes;
@@ -1883,7 +1872,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
         if (!UCS_STATIC_BITMAP_IS_ZERO(mem_type_tl_bitmap)) {
             ucp_wireup_memaccess_bitmap(worker->context, UCS_MEMORY_TYPE_CUDA,
                                         &mem_type_tl_bitmap);
-            lanes_counters.mem_type_num_lanes     =
+            lanes_counters.mem_type_num_lanes =
                     ucp_wireup_add_bw_lanes_a2a(select_params, bw_info,
                                                 mem_type_tl_bitmap, excl_lane,
                                                 select_ctx, allow_extra_path);
@@ -1892,7 +1881,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if ((lanes_counters.pairwise_num_lanes != 0) ||
         (lanes_counters.mem_type_num_lanes != 0)) {
-        ucs_debug("%p: bw lanes are extended %u -> %u -> %u, "
+        ucs_trace("%p: bw lanes are extended %u -> %u -> %u, "
                   "%u/%u by pairwise and %u/%u by all-to-all-mem-access",
                   select_params->ep,
                   lanes_counters.num_lanes_stage[0],
