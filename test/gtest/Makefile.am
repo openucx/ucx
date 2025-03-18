@@ -254,6 +254,10 @@ if HAVE_MLX5_DV
 gtest_SOURCES += \
 	uct/ib/test_cqe_zipping.cc
 endif
+if HAVE_EFA
+gtest_SOURCES += \
+    uct/ib/test_srd.cc
+endif
 endif # HAVE_IB
 
 if HAVE_CUDA
