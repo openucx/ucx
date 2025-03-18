@@ -103,7 +103,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
     mem_type     = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE) ?
                    params->mem_type : UCS_MEMORY_TYPE_HOST;
     sys_dev      = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEV) ?
-                   params->sys_dev : UCS_SYS_DEVICE_ID_UNKNOWN;
+                   params->sys_device : UCS_SYS_DEVICE_ID_UNKNOWN;
     alloc_length = length;
     log_level    = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                    UCS_LOG_LEVEL_ERROR;
@@ -166,10 +166,10 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 }
 
                 ucs_assert(memh != UCT_MEM_HANDLE_NULL);
-                mem->md       = md;
-                mem->mem_type = mem_type;
-                mem->sys_dev  = sys_dev;
-                mem->memh     = memh;
+                mem->md         = md;
+                mem->mem_type   = mem_type;
+                mem->sys_device = sys_dev;
+                mem->memh       = memh;
                 goto allocated;
             }
 

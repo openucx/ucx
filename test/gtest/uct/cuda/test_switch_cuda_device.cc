@@ -29,12 +29,11 @@ protected:
 template<class T>
 void test_switch_cuda_device::detect_mem_type(ucs_memory_type_t mem_type) const
 {
-    int current_device;
-
     if (m_num_devices < 2) {
         UCS_TEST_SKIP_R("less than two cuda devices available");
     }
 
+    int current_device;
     ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
     ASSERT_EQ(cudaSetDevice((current_device + 1) % m_num_devices), cudaSuccess);
 
@@ -190,7 +189,7 @@ protected:
         params.mds.count  = 1;
         if (device > -1) {
             params.field_mask |= UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEV;
-            params.sys_dev     = sys_dev[device];
+            params.sys_device  = sys_dev[device];
         }
 
         return uct_mem_alloc(size, &method, 1, &params, &mem);
@@ -217,6 +216,7 @@ protected:
 
         for (auto device = 0; device < m_num_devices; ++device) {
             ASSERT_UCS_OK(allocate(mem_type, device));
+            EXPECT_NE(CU_DEVICE_INVALID, sys_dev[device]);
             EXPECT_EQ(sys_dev[device], query_sys_dev(mem));
             EXPECT_EQ(cudaGetDevice(&current), cudaSuccess);
             EXPECT_EQ(m_num_devices - 1, current);

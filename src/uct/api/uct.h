@@ -1706,13 +1706,13 @@ ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
  * and the memory is allocated by memory allocation functions @ref uct_mem_alloc.
  */
 typedef struct uct_allocated_memory {
-    void                     *address; /**< Address of allocated memory */
-    size_t                   length;   /**< Real size of allocated memory */
-    uct_alloc_method_t       method;   /**< Method used to allocate the memory */
-    ucs_memory_type_t        mem_type; /**< type of allocated memory */
-    uct_md_h                 md;       /**< if method==MD: MD used to allocate the memory */
-    uct_mem_h                memh;     /**< if method==MD: MD memory handle */
-    ucs_sys_device_t         sys_dev;  /**< System device for allocated memory */
+    void                     *address;   /**< Address of allocated memory */
+    size_t                   length;     /**< Real size of allocated memory */
+    uct_alloc_method_t       method;     /**< Method used to allocate the memory */
+    ucs_memory_type_t        mem_type;   /**< type of allocated memory */
+    uct_md_h                 md;         /**< if method==MD: MD used to allocate the memory */
+    uct_mem_h                memh;       /**< if method==MD: MD memory handle */
+    ucs_sys_device_t         sys_device; /**< System device for allocated memory */
 } uct_allocated_memory_t;
 
 
@@ -2573,7 +2573,7 @@ typedef struct {
      * System device on which memory is to be allocated, or
      * UCS_SYS_DEVICE_ID_UNKNOWN to allow allocating on any device.
      */
-    ucs_sys_device_t             sys_dev;
+    ucs_sys_device_t             sys_device;
 } uct_mem_alloc_params_t;
 
 
