@@ -101,7 +101,7 @@ protected:
     }
 
 public:
-    void init()
+    virtual void init()
     {
         ucp_test::init();
 
@@ -164,7 +164,7 @@ public:
         }
     }
 
-    void send_recv(bool bidirectional)
+    void send_recv(bool bidirectional = false)
     {
 /* TODO: remove this when large messages asan bug is solved (size > ~70MB) */
 #ifdef __SANITIZE_ADDRESS__
@@ -520,3 +520,86 @@ UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfig_asymmetric, shm_ib, "shm,ib");
+
+class test_reconfigure_update_rank : public test_ucp_ep_reconfig {
+public:
+    void init() override
+    {
+        test_ucp_ep_reconfig::init();
+        modify_config("NUM_EPS", std::to_string(num_eps()));
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 200, "mid");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 500, "large");
+    }
+
+    void create_entities_and_connect() override
+    {
+        create_entity(true, false);
+        create_entity(false, false);
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+
+    unsigned num_eps() const
+    {
+        return get_variant_value();
+    }
+
+    void verify_configuration();
+};
+
+void test_reconfigure_update_rank::verify_configuration()
+{
+    auto r_sender   = static_cast<const entity*>(&sender());
+    auto r_receiver = static_cast<const entity*>(&receiver());
+
+    EXPECT_TRUE(r_sender->is_reconfigured());
+    EXPECT_TRUE(r_receiver->is_reconfigured());
+    r_sender->verify_configuration(*r_receiver, r_sender->num_reused_rscs());
+    r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, promote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=1000s")
+{
+    /* Create DC EP */
+    create_entities_and_connect();
+    send_recv();
+
+    /* Promote to RC */
+    auto s_tracker = sender().worker()->usage_tracker.handle;
+    ucs_usage_tracker_touch_key(s_tracker, sender().ep());
+    ucs_usage_tracker_progress(s_tracker);
+    send_recv();
+    verify_configuration();
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, demote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=1000s")
+{
+    mem_buffer sbuf(1024, UCS_MEMORY_TYPE_HOST);
+    mem_buffer rbuf(1024, UCS_MEMORY_TYPE_HOST);
+    std::vector<void*> reqs;
+
+    /* Create DC EP */
+    create_entities_and_connect();
+    send_message(sender(), receiver(), &sbuf, &rbuf, reqs);
+    requests_wait(reqs);
+
+    /* Promote to RC */
+    auto s_tracker = sender().worker()->usage_tracker.handle;
+    ucs_usage_tracker_touch_key(s_tracker, sender().ep());
+    ucs_usage_tracker_progress(s_tracker);
+    send_recv();
+
+    /* Demote to DC */
+    ucs_usage_tracker_remove(s_tracker, sender().ep());
+    ucp_wireup_send_demotion_request(sender().ep(), NULL, 0);
+    send_recv();
+    verify_configuration();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_update_rank, shm_ib, "shm,ib");

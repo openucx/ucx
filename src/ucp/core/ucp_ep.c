@@ -588,7 +588,8 @@ ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode)
 {
-    if (!ucp_ep_config_err_mode_eq(ep, err_mode)) {
+    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+        !ucp_ep_config_err_mode_eq(ep, err_mode)) {
         ucs_error("ep %p: asymmetric endpoint configuration is not supported,"
                   " error handling level mismatch (expected: %d, got: %d)",
                   ep, ucp_ep_config(ep)->key.err_mode, err_mode);
@@ -1645,6 +1646,10 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
          */
         ucs_trace("not destroying ep %p because of connection from remote", ep);
         return;
+    }
+
+    if (ucp_context_usage_tracker_enabled(worker->context)) {
+        ucs_usage_tracker_remove(ucp_worker_get_usage_tracker(worker), ep);
     }
 
     ucp_ep_match_remove_ep(worker, ep);
@@ -3940,4 +3945,13 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
     ep->cfg_index = cfg_index;
     ucp_ep_config_activate_worker_ifaces(ep->worker, cfg_index);
     ucp_ep_config_proto_init(ep->worker, cfg_index);
+}
+
+int ucp_ep_is_prioritized(ucp_ep_h ep)
+{
+    const ucs_usage_tracker_h usage_tracker = ucp_worker_get_usage_tracker(
+            ep->worker);
+
+    return (usage_tracker != NULL) &&
+           ucs_usage_tracker_is_promoted(usage_tracker, ep);
 }
