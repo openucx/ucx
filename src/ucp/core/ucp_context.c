@@ -563,7 +563,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"EP_ALLOW_ALL_TO_ALL", "n",
    "Change lanes selection logic to allow connect each local device to all "
-   "remote devices.\nTakes effect only if PROTO_ENABLE=yes.",
+   "remote devices.",
    ucs_offsetof(ucp_context_config_t, ep_allow_all_to_all),
    UCS_CONFIG_TYPE_BOOL},
 
