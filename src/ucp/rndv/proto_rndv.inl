@@ -266,7 +266,7 @@ ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
          * max_payload is later capped by remaining request length when
          * advancing datatype iterator
          */
-        max_payload = end_offset - total_offset;
+        max_payload = ucs_min(lpriv->max_frag, end_offset - total_offset);
     } else {
         /* Send in round-robin fashion, each lanes sends its maximal size */
         lane_offset = total_offset % max_frag_sum;
