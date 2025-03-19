@@ -1856,8 +1856,8 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
         unsigned num_lanes_stage[2];
         unsigned pairwise_num_lanes;
         unsigned mem_type_num_lanes;
-    } lanes_counters    = {0}; /* only for logging */
-    ucp_worker_h worker = select_params->ep->worker;
+    } lanes_counters        = {{0}}; /* only for logging */
+    ucp_worker_h worker     = select_params->ep->worker;
     ucp_tl_bitmap_t mem_type_tl_bitmap;
 
     lanes_counters.num_lanes_stage[0] = select_ctx->num_lanes;
@@ -1868,10 +1868,10 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     lanes_counters.num_lanes_stage[1] = select_ctx->num_lanes;
 
     if (ucp_wireup_is_all_to_all_allowed(worker, select_params->address)) {
+        ucp_wireup_memaccess_bitmap(worker->context, UCS_MEMORY_TYPE_CUDA,
+                                    &mem_type_tl_bitmap);
         UCS_STATIC_BITMAP_AND_INPLACE(&mem_type_tl_bitmap, tl_bitmap);
         if (!UCS_STATIC_BITMAP_IS_ZERO(mem_type_tl_bitmap)) {
-            ucp_wireup_memaccess_bitmap(worker->context, UCS_MEMORY_TYPE_CUDA,
-                                        &mem_type_tl_bitmap);
             lanes_counters.mem_type_num_lanes =
                     ucp_wireup_add_bw_lanes_a2a(select_params, bw_info,
                                                 mem_type_tl_bitmap, excl_lane,
