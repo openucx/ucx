@@ -69,6 +69,7 @@ public:
 
         modify_config("MAX_EAGER_LANES", num_lanes_str);
         modify_config("MAX_RNDV_LANES", num_lanes_str);
+        modify_config("EP_ALLOW_ALL_TO_ALL", "y");
 
         test_ucp_tag::init();
     }
