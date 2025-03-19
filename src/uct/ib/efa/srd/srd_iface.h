@@ -12,6 +12,7 @@
 
 #include <uct/ib/ud/base/ud_iface_common.h>
 
+#include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/ptr_array.h>
 
 BEGIN_C_DECLS
@@ -27,34 +28,57 @@ typedef struct uct_srd_iface_config {
 } uct_srd_iface_config_t;
 
 
+typedef struct uct_srd_recv_desc {
+    uct_ib_iface_recv_desc_t     super;
+    ucs_frag_list_elem_t         elem;     /* Element in defrag list */
+    uct_srd_hdr_t                *hdr;
+    uint32_t                     len;      /* Data length without SRD hdr */
+} uct_srd_recv_desc_t;
+
+
+/* Receive side of a remote endpoint */
+typedef struct uct_srd_rx_ep {
+    uint64_t                     uuid;     /* Received endpoint UUID */
+    ucs_frag_list_t              ooo_pkts;
+} uct_srd_rx_ep_t;
+
+
+KHASH_MAP_INIT_INT64(uct_srd_rx_ep_hash, uct_srd_rx_ep_t*);
+
+
 typedef struct uct_srd_iface {
-    uct_ib_iface_t             super;
-    struct ibv_qp              *qp;
+    uct_ib_iface_t                   super;
+    struct ibv_qp                    *qp;
 #ifdef HAVE_DECL_EFA_DV_RDMA_READ
-    struct ibv_qp_ex           *qp_ex;
+    struct ibv_qp_ex                 *qp_ex;
 #endif
+    UCS_STATS_NODE_DECLARE(stats);
 
     struct {
-        unsigned               available;
-        ucs_mpool_t            mp;
+        /* Pre-posted receive buffers */
+        unsigned                     available;
+        ucs_mpool_t                  mp;
+
+        /* State tracking for each remote endpoints */
+        khash_t(uct_srd_rx_ep_hash)  ep_hash;
     } rx;
 
     struct {
-        int32_t                available;
-        ucs_arbiter_t          pending_q;
-        struct ibv_sge         sge[UCT_IB_MAX_IOV];
-        struct ibv_send_wr     wr_inl;
-        struct ibv_send_wr     wr_desc;
-        ucs_mpool_t            send_op_mp;
-        uct_srd_am_short_hdr_t am_inl_hdr;
-        ucs_list_link_t        outstanding_list;
+        int32_t                      available;
+        ucs_arbiter_t                pending_q;
+        struct ibv_sge               sge[UCT_IB_MAX_IOV];
+        struct ibv_send_wr           wr_inl;
+        struct ibv_send_wr           wr_desc;
+        ucs_mpool_t                  send_op_mp;
+        uct_srd_am_short_hdr_t       am_inl_hdr;
+        ucs_list_link_t              outstanding_list;
     } tx;
 
     struct {
-        unsigned               tx_qp_len;
-        unsigned               max_inline;
-        size_t                 max_send_sge;
-        size_t                 max_get_zcopy;
+        unsigned                     tx_qp_len;
+        unsigned                     max_inline;
+        size_t                       max_send_sge;
+        size_t                       max_get_zcopy;
     } config;
 } uct_srd_iface_t;
 

@@ -18,6 +18,7 @@ typedef struct uct_srd_hdr {
     uint64_t        ep_uuid; /* Sender EP's random identifier */
     uct_srd_psn_t   psn;     /* Sender EP's packet sequence number */
     uint8_t         id;      /* AM and flags */
+    uint8_t         data[];
 } UCS_S_PACKED uct_srd_hdr_t;
 
 

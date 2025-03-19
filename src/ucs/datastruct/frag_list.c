@@ -373,6 +373,25 @@ ucs_frag_list_elem_t *ucs_frag_list_pull_slow(ucs_frag_list_t *head)
     return h;
 }
 
+ucs_frag_list_elem_t *ucs_frag_list_pull_all(ucs_frag_list_t *head)
+{
+    ucs_frag_list_elem_t *elem;
+
+    if (ucs_queue_is_empty(&head->ready_list) &&
+        ucs_queue_is_empty(&head->list)) {
+        return NULL;
+    }
+
+    for (;; head->head_sn++) {
+        elem = ucs_frag_list_pull(head);
+        if (elem != NULL) {
+            break;
+        }
+    }
+
+    return elem;
+}
+
 void ucs_frag_list_dump(ucs_frag_list_t *head, int how)
 {
     ucs_frag_list_elem_t *h, *e;
