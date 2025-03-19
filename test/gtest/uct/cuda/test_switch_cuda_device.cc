@@ -163,7 +163,7 @@ protected:
             uct_md_mem_attr_t attr = {
                 .field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV
             };
-            size_t size                 = 4096;
+            size_t size            = 4096;
             void *ptr;
 
             ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
@@ -171,8 +171,8 @@ protected:
             EXPECT_UCS_OK(uct_md_mem_query(md(), ptr, size, &attr));
             ASSERT_EQ(cudaSuccess, cudaFree(ptr));
 
-            UCS_TEST_MESSAGE << "CUDA device " << device <<
-                " sys_dev " << (int)attr.sys_dev;
+            UCS_TEST_MESSAGE << "CUDA device " << device << " sys_dev "
+                             << (int)attr.sys_dev;
             sys_dev.push_back(attr.sys_dev);
         }
 

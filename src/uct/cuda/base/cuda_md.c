@@ -86,8 +86,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     char device_name[10];
     int i, num_gpus;
 
-    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus),
-                              UCS_LOG_LEVEL_DIAG);
+    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
