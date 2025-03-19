@@ -1273,8 +1273,7 @@ ucp_wireup_is_all_to_all_allowed(const ucp_worker_h worker,
                                  const ucp_unpacked_address_t *unpacked_addr)
 {
     return worker->context->config.ext.ep_allow_all_to_all &&
-           (unpacked_addr->dst_version >= 19) &&
-           (worker->uuid != unpacked_addr->uuid);
+           (unpacked_addr->dst_version >= 19);
 }
 
 static double
