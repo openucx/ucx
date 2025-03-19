@@ -71,6 +71,7 @@ typedef struct {
     char             *name;
     unsigned         name_priority;
     ucs_numa_node_t  numa_node;
+    uintptr_t        user_value;
 } ucs_topo_sys_device_info_t;
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
@@ -95,21 +96,6 @@ UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 
 /* Selected topo provider */
 static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
-
-/* User set sys_dev user value */
-static uintptr_t ucs_topo_sys_dev_to_user_value[UCS_SYS_DEVICE_ID_MAX + 1];
-
-void ucs_topo_sysdev_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value)
-{
-    ucs_assertv_always(value != UINTPTR_MAX, "sys_dev=%u value=%"PRIxPTR,
-                       sys_dev, value);
-    ucs_topo_sys_dev_to_user_value[sys_dev] = value;
-}
-
-uintptr_t ucs_topo_sysdev_get_user_value(ucs_sys_device_t sys_dev)
-{
-    return ucs_topo_sys_dev_to_user_value[sys_dev];
-}
 
 /* According to NUMA distance definition distances are normalized to 10
  * and the relative distance correlates with the latency.
@@ -276,7 +262,9 @@ out:
     return numa_node;
 }
 
-ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
+ucs_status_t ucs_topo_find_device_by_bus_id_user_value(
+                                            const ucs_sys_bus_id_t *bus_id,
+                                            uintptr_t user_value,
                                             ucs_sys_device_t *sys_dev)
 {
     ucs_bus_id_bit_rep_t bus_id_bit_rep;
@@ -314,11 +302,19 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
         ucs_topo_global_ctx.devices[*sys_dev].name_priority = 0;
         ucs_topo_global_ctx.devices[*sys_dev].numa_node     =
                 ucs_topo_read_device_numa_node(bus_id);
+        ucs_topo_global_ctx.devices[*sys_dev].user_value    = user_value;
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     return UCS_OK;
+}
+
+ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
+                                            ucs_sys_device_t *sys_dev)
+{
+    return ucs_topo_find_device_by_bus_id_user_value(bus_id, UINTPTR_MAX,
+                                                     sys_dev);
 }
 
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
@@ -329,6 +325,29 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
     }
 
     *bus_id = ucs_topo_global_ctx.devices[sys_dev].bus_id;
+    return UCS_OK;
+}
+
+ucs_status_t ucs_topo_sys_dev_get_user_value(ucs_sys_device_t sys_dev,
+                                             uintptr_t *user_value)
+{
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    *user_value = ucs_topo_global_ctx.devices[sys_dev].user_value;
+    return UCS_OK;
+}
+
+ucs_status_t ucs_topo_sys_dev_set_user_value(ucs_sys_device_t sys_dev,
+                                             uintptr_t user_value)
+{
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    ucs_assertv_always(user_value != UINTPTR_MAX, "sys_dev=%u", sys_dev);
+    ucs_topo_global_ctx.devices[sys_dev].user_value = user_value;
     return UCS_OK;
 }
 
@@ -705,11 +724,11 @@ static ucs_sys_topo_provider_t ucs_sys_topo_provider_sysfs = {
 
 void ucs_topo_init()
 {
-    size_t length = ucs_static_array_size(ucs_topo_sys_dev_to_user_value);
-    uintptr_t *value;
+    size_t length = ucs_static_array_size(ucs_topo_global_ctx.devices);
+    ucs_topo_sys_device_info_t *device;
 
-    ucs_carray_for_each(value, ucs_topo_sys_dev_to_user_value, length) {
-        *value = UINTPTR_MAX;
+    ucs_carray_for_each(device, ucs_topo_global_ctx.devices, length) {
+        device->user_value = UINTPTR_MAX;
     }
 
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);

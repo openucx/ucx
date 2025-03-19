@@ -50,7 +50,8 @@ void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
     /* Function - always 0 */
     bus_id.function = 0;
 
-    status = ucs_topo_find_device_by_bus_id(&bus_id, sys_dev_p);
+    status = ucs_topo_find_device_by_bus_id_user_value(&bus_id,
+                                                       cuda_device, sys_dev_p);
     if (status != UCS_OK) {
         goto err;
     }
@@ -64,10 +65,16 @@ err:
 ucs_status_t
 uct_cuda_base_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device)
 {
-    uintptr_t value = ucs_topo_sysdev_get_user_value(sys_dev);
+    uintptr_t value;
+    ucs_status_t status;
+
+    status = ucs_topo_sys_dev_get_user_value(sys_dev, &value);
+    if (status != UCS_OK) {
+        return UCS_ERR_NO_DEVICE;
+    }
 
     *device = value;
-    if ((value == UINTPTR_MAX) || (*device == CU_DEVICE_INVALID)) {
+    if (*device == CU_DEVICE_INVALID) {
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -102,8 +109,6 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
         if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
             continue;
         }
-
-        ucs_topo_sysdev_set_user_value(sys_dev, cuda_device);
 
         ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
                           cuda_device);

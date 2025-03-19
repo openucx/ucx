@@ -62,6 +62,13 @@ static inline void *uct_mem_alloc_params_get_address(const uct_mem_alloc_params_
             params->address : NULL;
 }
 
+static int uct_mem_is_host_alloc(ucs_memory_type_t mem_type,
+                                 ucs_sys_device_t sys_dev)
+{
+    return (mem_type == UCS_MEMORY_TYPE_HOST) &&
+           (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN);
+}
+
 ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                            unsigned num_methods,
                            const uct_mem_alloc_params_t *params,
@@ -185,8 +192,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
             break;
 
         case UCT_ALLOC_METHOD_THP:
-            if ((mem_type != UCS_MEMORY_TYPE_HOST) ||
-                (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+            if (!uct_mem_is_host_alloc(mem_type, sys_dev)) {
                 break;
             }
 
@@ -228,8 +234,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
             break;
 
         case UCT_ALLOC_METHOD_HEAP:
-            if ((mem_type != UCS_MEMORY_TYPE_HOST) ||
-                (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+            if (!uct_mem_is_host_alloc(mem_type, sys_dev)) {
                 break;
             }
 
@@ -251,8 +256,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
             break;
 
         case UCT_ALLOC_METHOD_MMAP:
-            if ((mem_type != UCS_MEMORY_TYPE_HOST) ||
-                (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+            if (!uct_mem_is_host_alloc(mem_type, sys_dev)) {
                 break;
             }
 
@@ -271,8 +275,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
             break;
 
         case UCT_ALLOC_METHOD_HUGE:
-            if ((mem_type != UCS_MEMORY_TYPE_HOST) ||
-                (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+            if (!uct_mem_is_host_alloc(mem_type, sys_dev)) {
                 break;
             }
 

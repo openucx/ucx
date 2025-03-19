@@ -16,14 +16,14 @@ extern "C" {
 
 class test_switch_cuda_device : public test_md {
 protected:
-    int m_num_devices;
-
     template<class T> void detect_mem_type(ucs_memory_type_t mem_type) const;
 
     void init() override {
         test_md::init();
         ASSERT_EQ(cudaGetDeviceCount(&m_num_devices), cudaSuccess);
     }
+
+    int m_num_devices;
 };
 
 template<class T>
@@ -148,12 +148,6 @@ UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_managed)
 _UCT_MD_INSTANTIATE_TEST_CASE(test_switch_cuda_device, cuda_cpy);
 
 class test_mem_alloc_device : public test_switch_cuda_device {
-
-    std::vector<ucs_sys_device_t> sys_dev;
-
-public:
-    uct_allocated_memory_t mem;
-
 protected:
     void init() override {
         test_switch_cuda_device::init();
@@ -248,6 +242,12 @@ protected:
         UCS_TEST_SKIP_R("build without fabric support");
 #endif
     }
+
+    std::vector<ucs_sys_device_t> sys_dev;
+
+public:
+    uct_allocated_memory_t mem;
+
 };
 
 UCS_TEST_P(test_mem_alloc_device, different_device_cuda)
