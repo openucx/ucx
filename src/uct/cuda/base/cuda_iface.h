@@ -121,8 +121,6 @@ uct_cuda_base_get_sys_dev(CUdevice cuda_device,
 ucs_status_t
 uct_cuda_base_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device);
 
-int uct_cuda_base_get_num_devices(void);
-
 ucs_status_t uct_cuda_base_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)

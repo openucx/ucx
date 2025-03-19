@@ -15,8 +15,6 @@
 #include <cuda.h>
 
 
-static CUdevice sys_dev_to_device[UCS_SYS_DEVICE_ID_MAX + 1];
-
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                                ucs_sys_device_t *sys_dev_p)
 {
@@ -66,25 +64,14 @@ err:
 ucs_status_t
 uct_cuda_base_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device)
 {
-    *device = sys_dev_to_device[sys_dev];
+    uintptr_t value = ucs_topo_sysdev_get_user_value(sys_dev);
 
-    return (*device != CU_DEVICE_INVALID) ? UCS_OK : UCS_ERR_NO_DEVICE;
-}
-
-int uct_cuda_base_get_num_devices(void)
-{
-    static int num_devices = -2;
-    ucs_status_t status;
-
-    if (num_devices == -2) {
-        status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_devices),
-                                  UCS_LOG_LEVEL_DIAG);
-        if (status != UCS_OK) {
-            num_devices = -1;
-        }
+    *device = value;
+    if ((value == UINTPTR_MAX) || (*device == CU_DEVICE_INVALID)) {
+        return UCS_ERR_NO_DEVICE;
     }
 
-    return num_devices;
+    return UCS_OK;
 }
 
 ucs_status_t
@@ -99,8 +86,9 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     char device_name[10];
     int i, num_gpus;
 
-    num_gpus = uct_cuda_base_get_num_devices();
-    if (num_gpus < 1) {
+    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus),
+                              UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 
@@ -116,9 +104,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
             continue;
         }
 
-        if (sys_dev_to_device[sys_dev] == CU_DEVICE_INVALID) {
-            sys_dev_to_device[sys_dev] = cuda_device;
-        }
+        ucs_topo_sysdev_set_user_value(sys_dev, cuda_device);
 
         ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
                           cuda_device);
@@ -133,14 +119,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 
 UCS_STATIC_INIT
 {
-    size_t length = ucs_static_array_size(sys_dev_to_device);
-    CUdevice *device;
-
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
-
-    ucs_carray_for_each(device, sys_dev_to_device, length) {
-        *device = CU_DEVICE_INVALID;
-    }
 }
 
 UCS_STATIC_CLEANUP

@@ -95,15 +95,15 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
 
     /* set defaults in case some param fields are not set */
     address      = uct_mem_alloc_params_get_address(params);
-    flags        = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) ?
-                   params->flags : (UCT_MD_MEM_ACCESS_LOCAL_READ |
-                                    UCT_MD_MEM_ACCESS_LOCAL_WRITE);
-    alloc_name   = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
-                   params->name : "anonymous-uct_mem_alloc";
-    mem_type     = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE) ?
-                   params->mem_type : UCS_MEMORY_TYPE_HOST;
-    sys_dev      = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEVICE) ?
-                   params->sys_device : UCS_SYS_DEVICE_ID_UNKNOWN;
+    flags        = UCS_PARAM_VALUE(UCT_MEM_ALLOC_PARAM_FIELD, params, flags,
+                                   FLAGS, (UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                           UCT_MD_MEM_ACCESS_LOCAL_WRITE));
+    alloc_name   = UCS_PARAM_VALUE(UCT_MEM_ALLOC_PARAM_FIELD, params, name,
+                                   NAME, "anonymous-uct_mem_alloc");
+    mem_type     = UCS_PARAM_VALUE(UCT_MEM_ALLOC_PARAM_FIELD, params, mem_type,
+                                   MEM_TYPE, UCS_MEMORY_TYPE_HOST);
+    sys_dev      = UCS_PARAM_VALUE(UCT_MEM_ALLOC_PARAM_FIELD, params, sys_device,
+                                   SYS_DEVICE, UCS_SYS_DEVICE_ID_UNKNOWN);
     alloc_length = length;
     log_level    = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                    UCS_LOG_LEVEL_ERROR;
@@ -185,7 +185,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
             break;
 
         case UCT_ALLOC_METHOD_THP:
-            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+            if ((mem_type != UCS_MEMORY_TYPE_HOST) ||
+                (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
                 break;
             }
 
@@ -227,7 +228,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
             break;
 
         case UCT_ALLOC_METHOD_HEAP:
-            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+            if ((mem_type != UCS_MEMORY_TYPE_HOST) ||
+                (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
                 break;
             }
 
@@ -249,7 +251,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
             break;
 
         case UCT_ALLOC_METHOD_MMAP:
-            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+            if ((mem_type != UCS_MEMORY_TYPE_HOST) ||
+                (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
                 break;
             }
 
@@ -268,7 +271,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
             break;
 
         case UCT_ALLOC_METHOD_HUGE:
-            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+            if ((mem_type != UCS_MEMORY_TYPE_HOST) ||
+                (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
                 break;
             }
 

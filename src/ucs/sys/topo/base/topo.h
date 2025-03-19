@@ -266,6 +266,18 @@ void ucs_topo_init(void);
  */
 void ucs_topo_cleanup(void);
 
+
+/**
+ * Set custom mapping sys_dev to value. UINTPTR_MAX is not allowed.
+ */
+void ucs_topo_sysdev_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
+
+
+/*
+ * Retrieve value from sys_dev, UINTPTR_MAX when not set.
+ */
+uintptr_t ucs_topo_sysdev_get_user_value(ucs_sys_device_t sys_dev);
+
 END_C_DECLS
 
 #endif

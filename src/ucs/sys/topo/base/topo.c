@@ -90,13 +90,26 @@ const ucs_sys_dev_distance_t ucs_topo_default_distance = {
 
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 
-
 /* Global list of topology detectors */
 UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 
 /* Selected topo provider */
 static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
 
+/* User set sys_dev user value */
+static uintptr_t ucs_topo_sys_dev_to_user_value[UCS_SYS_DEVICE_ID_MAX + 1];
+
+void ucs_topo_sysdev_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value)
+{
+    ucs_assertv_always(value != UINTPTR_MAX, "sys_dev=%u value=%"PRIxPTR,
+                       sys_dev, value);
+    ucs_topo_sys_dev_to_user_value[sys_dev] = value;
+}
+
+uintptr_t ucs_topo_sysdev_get_user_value(ucs_sys_device_t sys_dev)
+{
+    return ucs_topo_sys_dev_to_user_value[sys_dev];
+}
 
 /* According to NUMA distance definition distances are normalized to 10
  * and the relative distance correlates with the latency.
@@ -692,6 +705,13 @@ static ucs_sys_topo_provider_t ucs_sys_topo_provider_sysfs = {
 
 void ucs_topo_init()
 {
+    size_t length = ucs_static_array_size(ucs_topo_sys_dev_to_user_value);
+    uintptr_t *value;
+
+    ucs_carray_for_each(value, ucs_topo_sys_dev_to_user_value, length) {
+        *value = UINTPTR_MAX;
+    }
+
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_topo_global_ctx.num_devices = 0;

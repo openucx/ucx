@@ -78,6 +78,11 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      ucs_offsetof(uct_cuda_copy_md_config_t, cuda_async_mem_type),
      UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
+    {"SKIP_INACTIVE_PRIMARY_CTX", "n",
+     "Do not use CUDA primary context if not active when allocating memory.\n",
+     ucs_offsetof(uct_cuda_copy_md_config_t, skip_inactive_primary_ctx),
+     UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -194,7 +199,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
 static ucs_status_t
 uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
                                uct_cuda_copy_alloc_handle_t *alloc_handle,
-                               unsigned flags, CUdevice cu_device)
+                               CUdevice cu_device, unsigned flags)
 {
 #if HAVE_CUDA_FABRIC
     CUmemAllocationProp prop    = {};
@@ -330,7 +335,8 @@ static void uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md,
                                   (CUdeviceptr)address));
 }
 
-static ucs_status_t uct_cuda_copy_push_ctx(CUdevice orig_device,
+static ucs_status_t uct_cuda_copy_push_ctx(uct_cuda_copy_md_t *md,
+                                           CUdevice orig_device,
                                            CUdevice device,
                                            ucs_log_level_t log_level)
 {
@@ -348,7 +354,7 @@ static ucs_status_t uct_cuda_copy_push_ctx(CUdevice orig_device,
                               log_level);
     if (status != UCS_OK) {
         return status;
-    } else if (!active) {
+    } else if (!active && md->config.skip_inactive_primary_ctx) {
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -387,13 +393,14 @@ static ucs_status_t uct_cuda_copy_pop_ctx(CUdevice orig_device, CUdevice device,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_copy_push_alloc_ctx(const ucs_sys_device_t sys_dev,
+static ucs_status_t uct_cuda_copy_push_alloc_ctx(uct_cuda_copy_md_t *md,
+                                                 const ucs_sys_device_t sys_dev,
                                                  CUdevice *cu_device,
                                                  CUdevice *alloc_cu_device,
                                                  ucs_log_level_t log_level)
 {
     ucs_status_t status;
-    int dev;
+    int dev, num_devices;
 
     status = UCT_CUDADRV_FUNC(cuCtxGetDevice(cu_device), UCS_LOG_LEVEL_DEBUG);
     if (status != UCS_OK) {
@@ -406,13 +413,19 @@ static ucs_status_t uct_cuda_copy_push_alloc_ctx(const ucs_sys_device_t sys_dev,
             return UCS_OK;
         }
 
-        for (dev = 0; dev < uct_cuda_base_get_num_devices(); dev++) {
+        status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_devices),
+                                  UCS_LOG_LEVEL_DIAG);
+        if (status != UCS_OK) {
+            num_devices = 0;
+        }
+
+        for (dev = 0; dev < num_devices; dev++) {
             if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(alloc_cu_device, dev)) !=
                 UCS_OK) {
                 continue;
             }
 
-            status = uct_cuda_copy_push_ctx(*cu_device, *alloc_cu_device,
+            status = uct_cuda_copy_push_ctx(md, *cu_device, *alloc_cu_device,
                                             log_level);
             if (status == UCS_OK) {
                 break;
@@ -429,10 +442,10 @@ static ucs_status_t uct_cuda_copy_push_alloc_ctx(const ucs_sys_device_t sys_dev,
         if (status != UCS_OK) {
             ucs_log(log_level, "failed to get device for system device %u",
                     sys_dev);
-            return status;
+            return UCS_ERR_INVALID_PARAM;
         }
 
-        status = uct_cuda_copy_push_ctx(*cu_device, *alloc_cu_device,
+        status = uct_cuda_copy_push_ctx(md, *cu_device, *alloc_cu_device,
                                         log_level);
         if (status != UCS_OK) {
             ucs_log(log_level, "failed to set cuda context for system device %u "
@@ -476,8 +489,8 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     alloc_handle->length = *length_p;
     alloc_handle->is_vmm = 0;
 
-    status = uct_cuda_copy_push_alloc_ctx(sys_dev, &cu_device, &alloc_cu_device,
-                                          log_level);
+    status = uct_cuda_copy_push_alloc_ctx(md, sys_dev, &cu_device,
+                                          &alloc_cu_device, log_level);
     if (status != UCS_OK) {
         return UCS_ERR_NO_DEVICE;
     }
@@ -1038,6 +1051,8 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     md->config.pref_loc         = config->pref_loc;
     md->config.enable_fabric    = config->enable_fabric;
     md->config.dmabuf_supported = 0;
+    md->config.skip_inactive_primary_ctx
+                                = config->skip_inactive_primary_ctx;
     md->sync_memops_set         = 0;
     md->granularity             = SIZE_MAX;
 
