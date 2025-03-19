@@ -625,6 +625,15 @@ protected:
     _UCT_INSTANTIATE_TEST_CASE(_test_case, cuda_ipc)
 
 
+/**
+ * Instantiate the parametrized test case for the SRD transports
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_SRD_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, srd)
+
+
 std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resource);
 
 #endif
