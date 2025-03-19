@@ -150,24 +150,30 @@ _UCT_MD_INSTANTIATE_TEST_CASE(test_switch_cuda_device, cuda_cpy);
 class test_mem_alloc_device : public test_switch_cuda_device {
 
     std::vector<ucs_sys_device_t> sys_dev;
+
 public:
-    uct_allocated_memory_t        mem;
+    uct_allocated_memory_t mem;
 
 protected:
     void init() override {
         test_switch_cuda_device::init();
 
-        uct_tl_resource_desc_t *tl_resources;
-        unsigned num_tl_resources;
-
         sys_dev.clear();
         for (auto device = 0; device < m_num_devices; ++device) {
+            uct_md_mem_attr_t attr = {
+                .field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV
+            };
+            size_t size                 = 4096;
+            void *ptr;
+
             ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
-            ASSERT_UCS_OK(uct_md_query_tl_resources(md(), &tl_resources,
-                                                    &num_tl_resources));
-            EXPECT_EQ(1, num_tl_resources);
-            sys_dev.push_back(tl_resources[0].sys_device);
-            uct_release_tl_resource_list(tl_resources);
+            ASSERT_EQ(cudaSuccess, cudaMalloc(&ptr, size));
+            EXPECT_UCS_OK(uct_md_mem_query(md(), ptr, size, &attr));
+            ASSERT_EQ(cudaSuccess, cudaFree(ptr));
+
+            UCS_TEST_MESSAGE << "CUDA device " << device <<
+                " sys_dev " << (int)attr.sys_dev;
+            sys_dev.push_back(attr.sys_dev);
         }
 
         ASSERT_EQ(m_num_devices, sys_dev.size());
