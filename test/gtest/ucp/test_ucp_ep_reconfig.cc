@@ -473,7 +473,7 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_ep_reconfig);
 
 class test_reconfig_asymmetric : public test_ucp_ep_reconfig {
 protected:
-    void create_entities_and_connect() override
+    virtual void create_entities_and_connect() override
     {
         create_entity(true, false);
 
@@ -521,7 +521,7 @@ UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfig_asymmetric, shm_ib, "shm,ib");
 
-class test_reconfigure_update_rank : public test_ucp_ep_reconfig {
+class test_reconfigure_update_rank : public test_reconfig_asymmetric {
 public:
     void init() override
     {
@@ -556,8 +556,14 @@ void test_reconfigure_update_rank::verify_configuration()
     auto r_sender   = static_cast<const entity*>(&sender());
     auto r_receiver = static_cast<const entity*>(&receiver());
 
-    EXPECT_TRUE(r_sender->is_reconfigured());
-    EXPECT_TRUE(r_receiver->is_reconfigured());
+    if (should_reconfigure()) {
+        EXPECT_TRUE(r_sender->is_reconfigured());
+        EXPECT_TRUE(r_receiver->is_reconfigured());
+    } else {
+        EXPECT_FALSE(r_sender->is_reconfigured());
+        EXPECT_FALSE(r_receiver->is_reconfigured());
+    }
+
     r_sender->verify_configuration(*r_receiver, 0);
     r_receiver->verify_configuration(*r_sender, 0);
 }
