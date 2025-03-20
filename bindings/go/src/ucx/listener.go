@@ -24,7 +24,7 @@ type UcpListenerAttributes struct {
 
 func (l *UcpListener) Close() {
 	C.ucp_listener_destroy(l.listener)
-	unpackAndFreeArg(l.arg)
+	unpackCallbackAndFree(l.arg)
 }
 
 func (l *UcpListener) Query(attrs ...UcpListenerAttribute) (*UcpListenerAttributes, error) {

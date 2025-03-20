@@ -47,12 +47,12 @@ func (p *UcpRequestParams) SetCallback(cb UcpCallback) *UcpRequestParams {
 	return p
 }
 
-func packArg(cb UcpCallback) unsafe.Pointer {
+func packCallback(cb UcpCallback) unsafe.Pointer {
 	h := cgo.NewHandle(cb)
 	return unsafe.Pointer(h)
 }
 
-func unpackArgCommon(callback unsafe.Pointer, freeHandle bool) UcpCallback {
+func unpackCallbackInternal(callback unsafe.Pointer, freeHandle bool) UcpCallback {
     if callback == nil {
         return nil
     }
@@ -64,12 +64,12 @@ func unpackArgCommon(callback unsafe.Pointer, freeHandle bool) UcpCallback {
     return h.Value().(UcpCallback)
 }
 
-func unpackArg(callback unsafe.Pointer) UcpCallback {
-	return unpackArgCommon(callback, false)
+func unpackCallback(callback unsafe.Pointer) UcpCallback {
+	return unpackCallbackInternal(callback, false)
 }
 
-func unpackAndFreeArg(callback unsafe.Pointer) UcpCallback {
-	return unpackArgCommon(callback, true)
+func unpackCallbackAndFree(callback unsafe.Pointer) UcpCallback {
+	return unpackCallbackInternal(callback, true)
 }
 
 func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Pointer) unsafe.Pointer {
@@ -82,7 +82,7 @@ func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Po
 		p.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
 		cbAddr := (*unsafe.Pointer)(unsafe.Pointer(&p.cb[0]))
 		*cbAddr = cb
-		p.user_data = packArg(params.Cb)
+		p.user_data = packCallback(params.Cb)
 	}
 
 	if params.memTypeSet {
@@ -116,7 +116,7 @@ func newRequest(request C.ucs_status_ptr_t, arg unsafe.Pointer, immidiateInfo in
 		ucpRequest.Status = UCS_INPROGRESS
 	} else {
 		ucpRequest.Status = UcsStatus(int64(uintptr(request)))
-		if callback := unpackAndFreeArg(arg); callback != nil {
+		if callback := unpackCallbackAndFree(arg); callback != nil {
 			switch callback := callback.(type) {
 			case UcpSendCallback:
 				callback(ucpRequest, ucpRequest.Status)

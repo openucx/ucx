@@ -54,7 +54,7 @@ type UcpWorkerAttributes struct {
 
 func (w *UcpWorker) Close() {
 	for _, handle := range w.handles {
-		unpackAndFreeArg(handle)
+		unpackCallbackAndFree(handle)
 	}
 	w.handles = nil 
 	C.ucp_worker_destroy(w.worker)
@@ -251,7 +251,7 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 func (w *UcpWorker) NewListener(listenerParams *UcpListenerParams) (*UcpListener, error) {
 	listener := &UcpListener{callback: listenerParams.callback}
 
-	listener.arg = packArg(listener)
+	listener.arg = packCallback(listener)
 	listenerParams.params.conn_handler.arg = listener.arg
 	if status := C.ucp_listener_create(w.worker, &listenerParams.params, &listener.listener); status != C.UCS_OK {
 		return nil, newUcxError(status)
@@ -272,7 +272,7 @@ func (w *UcpWorker) SetAmRecvHandler(id uint, flags UcpAmCbFlags, cb UcpAmRecvCa
 		C.UCP_AM_HANDLER_PARAM_FIELD_CB |
 		C.UCP_AM_HANDLER_PARAM_FIELD_ARG
 	amHandlerParams.id = C.uint(id)
-	packedArg := packArg(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
+	packedArg := packCallback(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
 	w.handles = append(w.handles, packedArg)
 	amHandlerParams.arg = packedArg
 	amHandlerParams.flags = C.uint32_t(flags)

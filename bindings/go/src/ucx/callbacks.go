@@ -33,7 +33,7 @@ type UcpListenerConnectionHandler = func(connRequest *UcpConnectionRequest)
 
 //export ucxgo_completeGoSendRequest
 func ucxgo_completeGoSendRequest(request unsafe.Pointer, status C.ucs_status_t, arg unsafe.Pointer) {
-	if callback := unpackAndFreeArg(arg); callback != nil {
+	if callback := unpackCallbackAndFree(arg); callback != nil {
 		callback.(UcpSendCallback)(&UcpRequest{
 			request: request,
 			Status:  UcsStatus(status),
@@ -43,7 +43,7 @@ func ucxgo_completeGoSendRequest(request unsafe.Pointer, status C.ucs_status_t, 
 
 //export ucxgo_completeGoTagRecvRequest
 func ucxgo_completeGoTagRecvRequest(request unsafe.Pointer, status C.ucs_status_t, tag_info *C.ucp_tag_recv_info_t, arg unsafe.Pointer) {
-	if callback := unpackAndFreeArg(arg); callback != nil {
+	if callback := unpackCallbackAndFree(arg); callback != nil {
 		callback.(UcpTagRecvCallback)(&UcpRequest{
 			request: request,
 			Status:  UcsStatus(status),
@@ -57,7 +57,7 @@ func ucxgo_completeGoTagRecvRequest(request unsafe.Pointer, status C.ucs_status_
 //export ucxgo_amRecvCallback
 func ucxgo_amRecvCallback(arg unsafe.Pointer, header unsafe.Pointer, headerSize C.size_t,
 	data unsafe.Pointer, dataSize C.size_t, params *C.ucp_am_recv_param_t) C.ucs_status_t {
-	if callback := unpackArg(arg); callback != nil {
+	if callback := unpackCallback(arg); callback != nil {
 		bundle := callback.(*UcpAmRecvCallbackBundle)
 		var replyEp *UcpEp
 		if (params.recv_attr & C.UCP_AM_RECV_ATTR_FIELD_REPLY_EP) != 0 {
@@ -78,7 +78,7 @@ func ucxgo_amRecvCallback(arg unsafe.Pointer, header unsafe.Pointer, headerSize 
 func ucxgo_completeAmRecvData(request unsafe.Pointer, status C.ucs_status_t,
 	length C.size_t, arg unsafe.Pointer) {
 
-	if callback := unpackAndFreeArg(arg); callback != nil {
+	if callback := unpackCallbackAndFree(arg); callback != nil {
 		callback.(UcpAmDataRecvCallback)(&UcpRequest{
 			request: request,
 			Status:  UcsStatus(status),
