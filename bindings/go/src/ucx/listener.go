@@ -15,7 +15,7 @@ import (
 type UcpListener struct {
 	listener C.ucp_listener_h
 	callback UcpListenerConnectionHandler
-	packedCb      unsafe.Pointer
+	packedCb unsafe.Pointer
 }
 
 type UcpListenerAttributes struct {
