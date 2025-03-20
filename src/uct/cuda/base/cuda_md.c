@@ -96,14 +96,13 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     char device_name[10];
     int i, num_gpus;
 
-    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
+    status = UCT_CUDA_FUNC_LOG_DIAG(cuDeviceGetCount, &num_gpus);
     if ((status != UCS_OK) || (num_gpus == 0)) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 
     for (i = 0; i < num_gpus; ++i) {
-        status = UCT_CUDADRV_FUNC(cuDeviceGet(&cuda_device, i),
-                                  UCS_LOG_LEVEL_DIAG);
+        status = UCT_CUDA_FUNC_LOG_DIAG(cuDeviceGet, &cuda_device, i);
         if (status != UCS_OK) {
             continue;
         }
@@ -133,8 +132,8 @@ ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
     CUcontext cuda_ctx;
 
     if (!force) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
+        status = UCT_CUDA_FUNC_LOG_ERR(cuDevicePrimaryCtxGetState, cuda_device,
+                                       &flags, &active);
         if (status != UCS_OK) {
             return status;
         }
@@ -146,8 +145,8 @@ ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
         }
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_device));
+    status = UCT_CUDA_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain, &cuda_ctx,
+                                   cuda_device);
     if (status != UCS_OK) {
         return status;
     }
@@ -158,7 +157,7 @@ ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
 
 UCS_STATIC_INIT
 {
-    UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+    UCT_CUDA_FUNC_LOG_DEBUG(cuInit, 0);
 }
 
 UCS_STATIC_CLEANUP

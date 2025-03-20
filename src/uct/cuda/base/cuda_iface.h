@@ -41,37 +41,39 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
     UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
-#define UCT_CUDADRV_LOG(_func, _log_level, _result) \
+#define UCT_CUDA_LOG(_log_level, _func, _result) \
     ucs_log((_log_level), "%s failed: %s", UCS_PP_MAKE_STRING(_func), \
             uct_cuda_base_cu_get_error_string(_result))
 
 
-#define UCT_CUDADRV_FUNC(_func, _log_level) \
+#define UCT_CUDA_FUNC(_log_level, _func, ...) \
     ({ \
-        ucs_status_t _status = UCS_OK; \
-        do { \
-            CUresult _result = (_func); \
-            if (CUDA_ERROR_NOT_READY == _result) { \
-                _status = UCS_INPROGRESS; \
-            } else if (CUDA_SUCCESS != _result) { \
-                UCT_CUDADRV_LOG(_func, _log_level, _result); \
-                _status = UCS_ERR_IO_ERROR; \
-            } \
-        } while (0); \
+        CUresult _result = (_func)(__VA_ARGS__); \
+        ucs_status_t _status; \
+        if (ucs_likely(_result == CUDA_SUCCESS)) { \
+            _status = UCS_OK; \
+        } else { \
+            UCT_CUDA_LOG(_log_level, _func, _result); \
+            _status = UCS_ERR_IO_ERROR; \
+        } \
         _status; \
     })
 
 
-#define UCT_CUDADRV_FUNC_LOG_ERR(_func) \
-    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
+#define UCT_CUDA_FUNC_LOG_ERR(_func, ...) \
+    UCT_CUDA_FUNC(UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
 
 
-#define UCT_CUDADRV_FUNC_LOG_WARN(_func) \
-    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_WARN)
+#define UCT_CUDA_FUNC_LOG_WARN(_func, ...) \
+    UCT_CUDA_FUNC(UCS_LOG_LEVEL_WARN, _func, __VA_ARGS__)
 
 
-#define UCT_CUDADRV_FUNC_LOG_DEBUG(_func) \
-    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
+#define UCT_CUDA_FUNC_LOG_DIAG(_func, ...) \
+    UCT_CUDA_FUNC(UCS_LOG_LEVEL_DIAG, _func, __VA_ARGS__)
+
+
+#define UCT_CUDA_FUNC_LOG_DEBUG(_func, ...) \
+    UCT_CUDA_FUNC(UCS_LOG_LEVEL_DEBUG, _func, __VA_ARGS__)
 
 
 static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_active()
@@ -88,7 +90,7 @@ static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_valid(CUcontext ctx)
     ucs_status_t status;
 
     /* Check if CUDA context is valid by running a dummy operation on it */
-    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetApiVersion(ctx, &version));
+    status = UCT_CUDA_FUNC_LOG_DEBUG(cuCtxGetApiVersion, ctx, &version);
     return (status == UCS_OK);
 }
 
@@ -271,8 +273,8 @@ uct_cuda_base_init_stream(CUstream *stream)
         return UCS_OK;
     }
 
-    return UCT_CUDADRV_FUNC_LOG_ERR(
-            cuStreamCreate(stream, CU_STREAM_NON_BLOCKING));
+    return UCT_CUDA_FUNC_LOG_ERR(cuStreamCreate, stream,
+                                 CU_STREAM_NON_BLOCKING);
 }
 
 #endif

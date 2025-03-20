@@ -130,14 +130,13 @@ uct_cuda_primary_ctx_push_first_active(CUdevice *cuda_device_p)
     CUdevice cuda_device;
     CUcontext cuda_ctx;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_devices));
+    status = UCT_CUDA_FUNC_LOG_ERR(cuDeviceGetCount, &num_devices);
     if (status != UCS_OK) {
         return status;
     }
 
     for (device_index = 0; device_index < num_devices; ++device_index) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDeviceGet(&cuda_device, device_index));
+        status = UCT_CUDA_FUNC_LOG_ERR(cuDeviceGet, &cuda_device, device_index);
         if (status != UCS_OK) {
             return status;
         }
@@ -145,10 +144,9 @@ uct_cuda_primary_ctx_push_first_active(CUdevice *cuda_device_p)
         status = uct_cuda_primary_ctx_retain(cuda_device, 0, &cuda_ctx);
         if (status == UCS_OK) {
             /* Found active primary context */
-            status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+            status = UCT_CUDA_FUNC_LOG_ERR(cuCtxPushCurrent, cuda_ctx);
             if (status != UCS_OK) {
-                UCT_CUDADRV_FUNC_LOG_WARN(
-                        cuDevicePrimaryCtxRelease(cuda_device));
+                UCT_CUDA_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease, cuda_device);
                 return status;
             }
 
@@ -169,8 +167,8 @@ uct_cuda_primary_ctx_pop_and_release(CUdevice cuda_device)
         return;
     }
 
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    UCT_CUDA_FUNC_LOG_WARN(cuCtxPopCurrent, NULL);
+    UCT_CUDA_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease, cuda_device);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -225,7 +223,7 @@ uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface,
 
         result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
         if (result != CUDA_SUCCESS) {
-            UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
+            UCT_CUDA_LOG(UCS_LOG_LEVEL_ERROR, cuCtxGetId, result);
             status = UCS_ERR_IO_ERROR;
             goto err_pop_and_release;
         }
@@ -293,14 +291,13 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         goto out_pop_and_release;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, *stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cuMemcpyAsync, (CUdeviceptr)dst,
+                                   (CUdeviceptr)src, length, *stream);
     if (ucs_unlikely(UCS_OK != status)) {
         goto out_pop_and_release;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuEventRecord(cuda_event->event, *stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cuEventRecord, cuda_event->event, *stream);
     if (ucs_unlikely(UCS_OK != status)) {
         goto out_pop_and_release;
     }
@@ -395,12 +392,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
         goto out_pop_and_release;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync(dst, src, length, *stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cuMemcpyAsync, dst, src, length, *stream);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out_pop_and_release;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(*stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cuStreamSynchronize, *stream);
 
 out_pop_and_release:
     uct_cuda_primary_ctx_pop_and_release(cuda_device);
