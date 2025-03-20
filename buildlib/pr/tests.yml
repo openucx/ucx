@@ -7,6 +7,7 @@ parameters:
   run_tests: yes
   asan_check: no
   valgrind_check: no
+  run_bullseye: no
 
 jobs:
   - job: tests_${{ parameters.name }}
@@ -48,4 +49,5 @@ jobs:
           TEST_PERF: ${{ parameters.test_perf }}
           ASAN_CHECK: ${{ parameters.asan_check }}
           VALGRIND_CHECK: ${{ parameters.valgrind_check }}
+          RUN_BULLSEYE: ${{ parameters.run_bullseye }}
           RUNNING_IN_AZURE: yes
