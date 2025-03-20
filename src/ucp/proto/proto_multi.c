@@ -84,7 +84,8 @@ ucp_proto_select_add_lane(ucp_proto_lane_selection_t *selection,
 {
     ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
 
-    ucs_assert(selection->length < UCP_PROTO_MAX_LANES);
+    ucs_assertv(selection->length < UCP_PROTO_MAX_LANES, "selection length=%u "
+                "max_lanes=%u", selection->length, UCP_PROTO_MAX_LANES);
     selection->lanes[selection->length++] = lane;
     selection->lane_map                  |= UCS_BIT(lane);
     selection->local_rsc_count[rsc_index]++;
@@ -242,7 +243,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                     fixed_first_lane, &selection);
 
     ucs_trace("selected %u lanes for %s", selection.length,
-                ucp_proto_id_field(params->super.super.proto_id, name));
+              ucp_proto_id_field(params->super.super.proto_id, name));
     ucs_log_indent(1);
 
     for (i = 0; i < selection.length; ++i) {

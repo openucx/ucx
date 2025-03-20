@@ -152,8 +152,7 @@ uct_gdr_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     int is_get_op               = (op == UCT_EP_OP_GET_SHORT) ||
                                   (op == UCT_EP_OP_GET_ZCOPY);
 
-    if ((perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) ||
-        (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH)) {
+    if (uct_perf_attr_has_bandwidth(perf_attr->field_mask)) {
         perf_attr->bandwidth = is_get_op ? iface->config.get_bw :
                                            iface->config.put_bw;
     }

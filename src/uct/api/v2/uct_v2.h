@@ -191,11 +191,7 @@ typedef struct {
     /**
      * Bandwidth of the single (first) interface path.
      * With multi-path interfaces, this field indicates the bandwidth of a
-     * single path. In case of RoCE device with LAG, the single path bandwidth
-     * is equal to the full interface bandwidth divided by the number of paths.
-     * For CX7 and other IB devices, the single path takes the most of the
-     * interface bandwidth, and the rest of the paths share the remaining
-     * bandwidth.
+     * single path.
      * This field is set by the UCT layer.
      */
     uct_ppn_bandwidth_t path_bandwidth;

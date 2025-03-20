@@ -135,8 +135,7 @@ static uct_iface_ops_t uct_ze_copy_iface_ops = {
 static ucs_status_t
 uct_ze_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    if ((perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) ||
-        (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH)) {
+    if (uct_perf_attr_has_bandwidth(perf_attr->field_mask)) {
         perf_attr->bandwidth.dedicated = 0;
         if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
             perf_attr->bandwidth.shared = 0;

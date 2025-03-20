@@ -1078,4 +1078,11 @@ static UCS_F_ALWAYS_INLINE int uct_ep_op_is_fetch(uct_ep_operation_t op)
                           UCS_BIT(UCT_EP_OP_ATOMIC_FETCH));
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_perf_attr_has_bandwidth(uint64_t perf_attr_mask)
+{
+    return (perf_attr_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) ||
+           (perf_attr_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH);
+}
+
 #endif

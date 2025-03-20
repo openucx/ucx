@@ -31,16 +31,16 @@
 
 
 /**
- * Maximum bandwidth of CX7 single path.
+ * Maximum bandwidth of CX7 single path with PCIe Gen5 and RDMA_READ operation.
  */
 #define UCT_IB_CX7_PATH_BANDWIDTH 38e9
 
 /**
  * Minimal CX7 single path ratio.
  * The minimal ratio is used to calculate the ratio for the first device path,
- * when the full interface bandwidth is capped by PCI distance. In this case
- * single path still does not consume the full interface bandwidth, but around
- * 95% of it according to measurements.
+ * when the full interface bandwidth is capped by PCI distance. With PCIe Gen4
+ * single path still does not consume the full interface bandwidth for RDMA_READ
+ * operations, but around 95% of it according to measurements.
  */
 #define UCT_IB_CX7_PATH_RATIO 0.95
 
@@ -1992,7 +1992,6 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
         if (uct_ib_iface_is_roce(ib_iface) &&
             (uct_ib_iface_roce_lag_level(ib_iface) > 1)) {
-            /* For RoCE devices split iface bandwidth equally between paths */
             perf_attr->path_bandwidth.shared    = iface_attr.bandwidth.shared /
                                                   iface_attr.dev_num_paths;
             perf_attr->path_bandwidth.dedicated = 0;
