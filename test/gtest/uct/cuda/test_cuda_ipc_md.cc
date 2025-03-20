@@ -16,9 +16,8 @@ extern "C" {
 
 class test_cuda_ipc_md : public test_md {
 protected:
-    static int64_t uuid_start;
-    int64_t uuid;
-    int64_t uuid_next;
+    static int64_t m_uuid;
+    int64_t        m_uuid_next;
 
     static uct_cuda_ipc_rkey_t
     unpack_common(uct_md_h md, int64_t uuid, CUdeviceptr ptr, size_t size)
@@ -56,13 +55,12 @@ protected:
 
     void init() override {
         test_md::init();
-        uuid = uuid_start;
-        uuid_next = uuid;
+        m_uuid_next = m_uuid;
     }
 
     void cleanup() override {
         test_md::cleanup();
-        uuid_start = uuid_next;
+        m_uuid = m_uuid_next;
     }
 
 #if HAVE_CUDA_FABRIC
@@ -115,7 +113,7 @@ protected:
 #endif
 };
 
-int64_t test_cuda_ipc_md::uuid_start = 0;
+int64_t test_cuda_ipc_md::m_uuid = 0;
 
 UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
 {
@@ -188,14 +186,14 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
                                m_md_config);
     }
 
-    uuid_next += 64;
-    for (auto start = uuid; start < uuid_next; start++) {
+    m_uuid_next = m_uuid + 64;
+    for (auto i = m_uuid; i < m_uuid_next; i++) {
         /* We get unique dev_num on new UUID */
-        uct_cuda_ipc_rkey_t rkey = unpack(md, start + 1);
-        EXPECT_EQ(start, rkey.dev_num);
+        uct_cuda_ipc_rkey_t rkey = unpack(md, i + 1);
+        EXPECT_EQ(i, rkey.dev_num);
         /* Subsequent call with the same UUID returns value from cache */
-        rkey = unpack(md, start + 1);
-        EXPECT_EQ(start, rkey.dev_num);
+        rkey = unpack(md, i + 1);
+        EXPECT_EQ(i, rkey.dev_num);
     }
 }
 
@@ -223,14 +221,14 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds_mempool, 8)
     free_mempool(&ptr, &mpool, &cu_stream);
 
     if (cu_err == CUDA_SUCCESS) {
-        uuid_next += 64;
-        for (auto start = uuid; start < uuid_next; start++) {
+        m_uuid_next = m_uuid + 64;
+        for (auto i = m_uuid; i < m_uuid_next; i++) {
             /* We get unique dev_num on new UUID */
-            uct_cuda_ipc_rkey_t rkey = unpack_masync(md, start + 1);
-            EXPECT_EQ(start, rkey.dev_num);
+            uct_cuda_ipc_rkey_t rkey = unpack_masync(md, i + 1);
+            EXPECT_EQ(i, rkey.dev_num);
             /* Subsequent call with the same UUID returns value from cache */
-            rkey = unpack_masync(md, start + 1);
-            EXPECT_EQ(start, rkey.dev_num);
+            rkey = unpack_masync(md, i + 1);
+            EXPECT_EQ(i, rkey.dev_num);
         }
     }
 }
