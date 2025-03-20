@@ -251,8 +251,8 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 func (w *UcpWorker) NewListener(listenerParams *UcpListenerParams) (*UcpListener, error) {
 	listener := &UcpListener{callback: listenerParams.callback}
 
-	listener.arg = packCallback(listener)
-	listenerParams.params.conn_handler.arg = listener.arg
+	listener.packedCb = packCallback(listener)
+	listenerParams.params.conn_handler.arg = listener.packedCb
 	if status := C.ucp_listener_create(w.worker, &listenerParams.params, &listener.listener); status != C.UCS_OK {
 		return nil, newUcxError(status)
 	}
@@ -272,9 +272,9 @@ func (w *UcpWorker) SetAmRecvHandler(id uint, flags UcpAmCbFlags, cb UcpAmRecvCa
 		C.UCP_AM_HANDLER_PARAM_FIELD_CB |
 		C.UCP_AM_HANDLER_PARAM_FIELD_ARG
 	amHandlerParams.id = C.uint(id)
-	packedArg := packCallback(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
+	packedCb := packCallback(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
 	w.handles = append(w.handles, packedArg)
-	amHandlerParams.arg = packedArg
+	amHandlerParams.arg = packedCb
 	amHandlerParams.flags = C.uint32_t(flags)
 	cbAddr := (*C.ucp_am_recv_callback_t)(unsafe.Pointer(&amHandlerParams.cb))
 	*cbAddr = (C.ucp_am_recv_callback_t)(C.ucxgo_amRecvCallback)

@@ -21,8 +21,8 @@ type UcpListenerParams struct {
 }
 
 //export ucxgo_completeConnHandler
-func ucxgo_completeConnHandler(connRequest C.ucp_conn_request_h, arg unsafe.Pointer) {
-	if callback := unpackCallback(arg); callback != nil {
+func ucxgo_completeConnHandler(connRequest C.ucp_conn_request_h, packedCb unsafe.Pointer) {
+	if callback := unpackCallback(packedCb); callback != nil {
 		listener := callback.(*UcpListener)
 		listener.callback(&UcpConnectionRequest{
 			connRequest: connRequest,

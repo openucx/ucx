@@ -15,7 +15,7 @@ import (
 type UcpListener struct {
 	listener C.ucp_listener_h
 	callback UcpListenerConnectionHandler
-	arg      unsafe.Pointer
+	packedCb      unsafe.Pointer
 }
 
 type UcpListenerAttributes struct {
@@ -24,7 +24,7 @@ type UcpListenerAttributes struct {
 
 func (l *UcpListener) Close() {
 	C.ucp_listener_destroy(l.listener)
-	unpackCallbackAndFree(l.arg)
+	unpackCallbackAndFree(l.packedCb)
 }
 
 func (l *UcpListener) Query(attrs ...UcpListenerAttribute) (*UcpListenerAttributes, error) {

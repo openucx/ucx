@@ -108,7 +108,7 @@ func isRequestPtr(request C.ucs_status_ptr_t) bool {
 	return (uint64(uintptr(request)) - 1) < (uint64(errLast) - 1)
 }
 
-func newRequest(request C.ucs_status_ptr_t, arg unsafe.Pointer, immidiateInfo interface{}) (*UcpRequest, error) {
+func newRequest(request C.ucs_status_ptr_t, packedCb unsafe.Pointer, immidiateInfo interface{}) (*UcpRequest, error) {
 	ucpRequest := &UcpRequest{}
 
 	if isRequestPtr(request) {
@@ -116,7 +116,7 @@ func newRequest(request C.ucs_status_ptr_t, arg unsafe.Pointer, immidiateInfo in
 		ucpRequest.Status = UCS_INPROGRESS
 	} else {
 		ucpRequest.Status = UcsStatus(int64(uintptr(request)))
-		if callback := unpackCallbackAndFree(arg); callback != nil {
+		if callback := unpackCallbackAndFree(packedCb); callback != nil {
 			switch callback := callback.(type) {
 			case UcpSendCallback:
 				callback(ucpRequest, ucpRequest.Status)
