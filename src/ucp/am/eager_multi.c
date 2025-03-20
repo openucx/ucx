@@ -39,6 +39,7 @@ ucp_am_eager_multi_bcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = context->config.ext.max_eager_lanes,
+        .min_chunk           = 0,
         .initial_reg_md_map  = 0,
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
@@ -135,18 +136,16 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_bcopy_send_func(
                                       ucp_am_eager_multi_bcopy_pack_args_first,
                                       &pack_ctx, 0);
         status      = ucp_proto_bcopy_send_func_status(packed_size);
-        status      = ucp_proto_am_handle_user_header_send_status(req, status);
-    } else {
-        pack_ctx.max_payload = ucp_proto_multi_max_payload(
-                req, lpriv, UCP_AM_MID_FRAG_META_LEN);
-
-        packed_size = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_AM_MIDDLE,
-                                      ucp_am_eager_multi_bcopy_pack_args_mid,
-                                      &pack_ctx, 0);
-        status      = ucp_proto_bcopy_send_func_status(packed_size);
+        return ucp_am_handle_user_header_send_status_or_release(req, status);
     }
 
-    return status;
+    pack_ctx.max_payload =
+            ucp_proto_multi_max_payload(req, lpriv, UCP_AM_MID_FRAG_META_LEN);
+
+    packed_size = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_AM_MIDDLE,
+                                  ucp_am_eager_multi_bcopy_pack_args_mid,
+                                  &pack_ctx, 0);
+    return ucp_proto_bcopy_send_func_status(packed_size);
 }
 
 static ucs_status_t
@@ -210,6 +209,7 @@ ucp_am_eager_multi_zcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .max_lanes           = context->config.ext.max_eager_lanes,
+        .min_chunk           = 0,
         .initial_reg_md_map  = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.lane_type     = UCP_LANE_TYPE_AM,
@@ -290,10 +290,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
                            &req->send.state.uct_comp);
 }
 
-static void ucp_am_eager_multi_zcopy_init(ucp_request_t *req)
+static ucs_status_t ucp_am_eager_multi_zcopy_init(ucp_request_t *req)
 {
     ucp_am_eager_zcopy_pack_user_header(req);
     ucp_proto_msg_multi_request_init(req);
+
+    return UCS_OK;
 }
 
 static ucs_status_t

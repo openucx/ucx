@@ -38,6 +38,12 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
 #define UCT_NVML_FUNC_LOG_ERR(_func) \
     UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
+
+#define UCT_CUDADRV_LOG(_func, _log_level, _result) \
+    ucs_log((_log_level), "%s failed: %s", UCS_PP_MAKE_STRING(_func), \
+            uct_cuda_base_cu_get_error_string(_result))
+
+
 #define UCT_CUDADRV_FUNC(_func, _log_level) \
     ({ \
         ucs_status_t _status = UCS_OK; \
@@ -46,9 +52,7 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
             if (CUDA_ERROR_NOT_READY == _result) { \
                 _status = UCS_INPROGRESS; \
             } else if (CUDA_SUCCESS != _result) { \
-                ucs_log((_log_level), "%s failed: %s", \
-                        UCS_PP_MAKE_STRING(_func), \
-                        uct_cuda_base_cu_get_error_string(_result)); \
+                UCT_CUDADRV_LOG(_func, _log_level, _result); \
                 _status = UCS_ERR_IO_ERROR; \
             } \
         } while (0); \
@@ -82,7 +86,7 @@ static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_valid(CUcontext ctx)
     ucs_status_t status;
 
     /* Check if CUDA context is valid by running a dummy operation on it */
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetApiVersion(ctx, &version));
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetApiVersion(ctx, &version));
     return (status == UCS_OK);
 }
 
@@ -95,11 +99,29 @@ static UCS_F_ALWAYS_INLINE int uct_cuda_base_context_match(CUcontext ctx1,
 }
 
 
+static UCS_F_ALWAYS_INLINE CUresult
+uct_cuda_base_ctx_get_id(CUcontext ctx, unsigned long long *ctx_id_p)
+{
+    unsigned long long ctx_id = 0;
+
+#if CUDA_VERSION >= 12000
+    CUresult result = cuCtxGetId(ctx, &ctx_id);
+    if (ucs_unlikely(result != CUDA_SUCCESS)) {
+        return result;
+    }
+#endif
+
+    *ctx_id_p = ctx_id;
+    return CUDA_SUCCESS;
+}
+
+
 typedef enum uct_cuda_base_gen {
     UCT_CUDA_BASE_GEN_P100 = 6,
     UCT_CUDA_BASE_GEN_V100 = 7,
     UCT_CUDA_BASE_GEN_A100 = 8,
-    UCT_CUDA_BASE_GEN_H100 = 9
+    UCT_CUDA_BASE_GEN_H100 = 9,
+    UCT_CUDA_BASE_GEN_B100 = 10
 } uct_cuda_base_gen_t;
 
 

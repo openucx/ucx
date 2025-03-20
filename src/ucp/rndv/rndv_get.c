@@ -47,6 +47,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = *reg_mem_info,
         .max_lanes           = context->config.ext.max_rndv_lanes,
+        .min_chunk           = context->config.ext.min_rndv_chunk_size,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
@@ -77,11 +78,11 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
                                                                   mpriv));
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_get_common_request_init(ucp_request_t *req)
 {
     /* coverity[tainted_data_downcast] */
-    ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
+    return ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(

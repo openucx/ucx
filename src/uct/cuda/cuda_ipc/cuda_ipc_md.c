@@ -41,7 +41,6 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_devices));
     if (UCS_OK != status) {
-        ucs_error("cuDeviceGetCount() failed: %s", ucs_status_string(status));
         return NULL;
     }
 
@@ -71,11 +70,7 @@ uct_cuda_ipc_get_dev_cache(uct_cuda_ipc_component_t *component,
     int ret;
 
     key.uuid = rkey->uuid;
-#if HAVE_CUDA_FABRIC
     key.type = rkey->ph.handle_type;
-#else
-    key.type = 0;
-#endif
 
     iter = kh_put(cuda_ipc_uuid_hash, hash, key, &ret);
     if (ret == UCS_KH_PUT_KEY_PRESENT) {
@@ -101,7 +96,8 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
                                 UCT_MD_FLAG_NEED_RKEY |
                                 UCT_MD_FLAG_INVALIDATE |
                                 UCT_MD_FLAG_INVALIDATE_RMA |
-                                UCT_MD_FLAG_INVALIDATE_AMO;
+                                UCT_MD_FLAG_INVALIDATE_AMO |
+                                UCT_MD_FLAG_MEMTYPE_COPY;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
@@ -113,11 +109,10 @@ static ucs_status_t
 uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
                          uct_cuda_ipc_lkey_t **key_p)
 {
-    CUipcMemHandle *legacy_handle;
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
 #if HAVE_CUDA_FABRIC
-#define UCT_CUDA_IPC_QUERY_NUM_ATTRS 2
+#define UCT_CUDA_IPC_QUERY_NUM_ATTRS 3
     CUmemGenericAllocationHandle handle;
     CUmemoryPool mempool;
     CUpointer_attribute attr_type[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
@@ -131,9 +126,15 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         return UCS_ERR_NO_MEMORY;
     }
 
-    legacy_handle = (CUipcMemHandle*)&key->ph;
     UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
                 (CUdeviceptr)addr));
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&key->ph.buffer_id,
+                                      CU_POINTER_ATTRIBUTE_BUFFER_ID,
+                                      (CUdeviceptr)addr));
+    if (status != UCS_OK) {
+        goto err;
+    }
 
 #if HAVE_CUDA_FABRIC
     /* cuda_ipc can handle VMM, mallocasync, and legacy pinned device so need to
@@ -143,6 +144,8 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     attr_data[0] = &legacy_capable;
     attr_type[1] = CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES;
     attr_data[1] = &allowed_handle_types;
+    attr_type[2] = CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE;
+    attr_data[2] = &mempool;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
@@ -152,8 +155,6 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     }
 
     if (legacy_capable) {
-        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
-        legacy_handle       = &key->ph.handle.legacy;
         goto legacy_path;
     }
 
@@ -185,9 +186,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto common_path;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&mempool,
-                CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE, (CUdeviceptr)addr));
-    if ((status != UCS_OK) || (mempool == 0)) {
+    if (mempool == 0) {
         /* cuda_ipc can only handle UCS_MEMORY_TYPE_CUDA, which has to be either
          * legacy type, or VMM type, or mempool type. Return error if memory
          * does not belong to any of the three types */
@@ -217,16 +216,18 @@ non_ipc:
     goto common_path;
 #endif
 legacy_path:
-    status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(legacy_handle, (CUdeviceptr)addr),
-                              UCS_LOG_LEVEL_ERROR);
+    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
+    status              = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuIpcGetMemHandle(&key->ph.handle.legacy, (CUdeviceptr)addr));
     if (status != UCS_OK) {
         goto err;
     }
 
 common_path:
     ucs_list_add_tail(&memh->list, &key->link);
-    ucs_trace("registered addr:%p/%p length:%zd dev_num:%d",
-              addr, (void *)key->d_bptr, key->b_len, (int)memh->dev_num);
+    ucs_trace("registered addr:%p/%p length:%zd dev_num:%d buffer_id:%llu",
+              addr, (void *)key->d_bptr, key->b_len, (int)memh->dev_num,
+              key->ph.buffer_id);
 
     *key_p = key;
     return UCS_OK;
@@ -484,11 +485,15 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     static uct_md_ops_t md_ops = {
         .close              = uct_cuda_ipc_md_close,
         .query              = uct_cuda_ipc_md_query,
-        .mkey_pack          = uct_cuda_ipc_mkey_pack,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg            = uct_cuda_ipc_mem_reg,
         .mem_dereg          = uct_cuda_ipc_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
-        .detect_memory_type = ucs_empty_function_return_unsupported
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+        .mkey_pack          = uct_cuda_ipc_mkey_pack,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     };
     uct_cuda_ipc_md_config_t *ipc_config = ucs_derived_of(config,
                                                           uct_cuda_ipc_md_config_t);
@@ -512,9 +517,9 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
     .super = {
         .query_md_resources = uct_cuda_base_query_md_resources,
         .md_open            = uct_cuda_ipc_md_open,
-        .cm_open            = ucs_empty_function_return_unsupported,
+        .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
         .rkey_unpack        = uct_cuda_ipc_rkey_unpack,
-        .rkey_ptr           = ucs_empty_function_return_unsupported,
+        .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
         .rkey_release       = uct_cuda_ipc_rkey_release,
         .rkey_compare       = uct_base_rkey_compare,
         .name               = "cuda_ipc",

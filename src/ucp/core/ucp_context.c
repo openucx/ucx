@@ -68,6 +68,8 @@
 #define UCP_TL_AUX_SUFFIX    "aux"
 #define UCP_TL_AUX(_tl_name) _tl_name ":" UCP_TL_AUX_SUFFIX
 
+/* Factor to multiply with in order to get infinite latency */
+#define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
 
 typedef enum ucp_transports_list_search_result {
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY      = UCS_BIT(0),
@@ -91,10 +93,11 @@ static const char *ucp_atomic_modes[] = {
 };
 
 static const char *ucp_fence_modes[] = {
-    [UCP_FENCE_MODE_WEAK]   = "weak",
-    [UCP_FENCE_MODE_STRONG] = "strong",
-    [UCP_FENCE_MODE_AUTO]   = "auto",
-    [UCP_FENCE_MODE_LAST]   = NULL
+    [UCP_FENCE_MODE_WEAK]     = "weak",
+    [UCP_FENCE_MODE_STRONG]   = "strong",
+    [UCP_FENCE_MODE_AUTO]     = "auto",
+    [UCP_FENCE_MODE_EP_BASED] = "ep_based",
+    [UCP_FENCE_MODE_LAST]     = NULL
 };
 
 static const char *ucp_rndv_modes[] = {
@@ -357,6 +360,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, rndv_frag_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
+  {"MEMTYPE_COPY_ENABLE", "y",
+   "Allows memory type copies. This option influences protocol selection.\n",
+   ucs_offsetof(ucp_context_config_t, memtype_copy_enable), UCS_CONFIG_TYPE_BOOL},
+
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type",
    ucs_offsetof(ucp_context_config_t, rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
@@ -378,9 +385,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"FENCE_MODE", "auto",
    "Fence mode used in ucp_worker_fence routine.\n"
-   " weak   - use weak fence mode.\n"
-   " strong - use strong fence mode.\n"
-   " auto   - automatically detect required fence mode.",
+   " weak     - use weak fence mode.\n"
+   " strong   - use strong fence mode.\n"
+   " auto     - automatically detect fence mode.\n"
+   " ep_based - use endpoint-based fence mode.",
    ucs_offsetof(ucp_context_config_t, fence_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_fence_modes)},
 
@@ -545,6 +553,17 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Possible values are: no_imm_cmpl, fast_cmpl, force_imm_cmpl, multi_send.",
    ucs_offsetof(ucp_context_config_t, extra_op_attr_flags),
    UCS_CONFIG_TYPE_BITMAP(ucp_extra_op_attr_flags_names)},
+
+  {"MAX_PRIORITY_EPS", "20",
+   "Max number of prioritized endpoints. Does not affect semantics,\n"
+   "but only transport selection criteria and resulting performance.",
+   ucs_offsetof(ucp_context_config_t, max_priority_eps),
+   UCS_CONFIG_TYPE_UINT},
+
+  {"WIREUP_VIA_AM_LANE", "n",
+   "Use AM lane to send wireup messages",
+   ucs_offsetof(ucp_context_config_t, wireup_via_am_lane),
+   UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -861,8 +880,8 @@ void ucp_config_print_cached_uct(const ucp_config_t *config, FILE *stream,
 void ucp_config_print(const ucp_config_t *config, FILE *stream,
                       const char *title, ucs_config_print_flags_t print_flags)
 {
-    ucs_config_parser_print_opts(stream, title, config, ucp_config_table,
-                                 NULL, UCS_DEFAULT_ENV_PREFIX, print_flags);
+    ucs_config_parser_print_opts(stream, title, config, ucp_config_table, NULL,
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags, NULL);
     ucp_config_print_cached_uct(config, stream, title, print_flags);
 }
 
@@ -2216,11 +2235,21 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     memcpy(context->config.am_mpools.sizes, config->mpool_sizes.memunits,
            config->mpool_sizes.count * sizeof(size_t));
 
-    context->config.worker_strong_fence =
-            (context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) ||
-            ((context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) &&
-             ((context->config.ext.max_rma_lanes > 1) ||
-              context->config.ext.proto_enable));
+    if ((context->config.ext.fence_mode == UCP_FENCE_MODE_EP_BASED) &&
+        !context->config.ext.proto_enable) {
+        ucs_error("UCX_FENCE_MODE=ep_based requires UCX_PROTO_ENABLE=y");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_key_list;
+    } else if (context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) {
+        if ((context->config.ext.max_rma_lanes > 1) ||
+            context->config.ext.proto_enable) {
+            context->config.worker_fence_mode = UCP_FENCE_MODE_STRONG;
+        } else {
+            context->config.worker_fence_mode = UCP_FENCE_MODE_WEAK;
+        }
+    } else {
+        context->config.worker_fence_mode = context->config.ext.fence_mode;
+    }
 
     context->config.progress_wrapper_enabled =
             ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
@@ -2563,6 +2592,31 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
     ucs_memory_info_set_host(mem_info);
 }
 
+void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
+                                     ucs_memory_type_t mem_type,
+                                     uint64_t md_reg_flags,
+                                     ucp_tl_bitmap_t *tl_bitmap)
+{
+    const uct_md_attr_v2_t *md_attr;
+    ucp_rsc_index_t rsc_index;
+    ucp_md_index_t md_index;
+    uint64_t mem_types;
+
+    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+        md_index = context->tl_rscs[rsc_index].md_index;
+        md_attr  = &context->tl_mds[md_index].attr;
+        if (md_attr->flags & md_reg_flags) {
+            mem_types = md_attr->reg_mem_types;
+        } else {
+            mem_types = md_attr->access_mem_types;
+        }
+        if (mem_types & UCS_BIT(mem_type)) {
+            UCS_STATIC_BITMAP_SET(tl_bitmap, rsc_index);
+        }
+    }
+}
+
 void
 ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
                           ucp_tl_bitmap_t *tl_bitmap)
@@ -2606,6 +2660,28 @@ const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx)
 {
     ucs_assert(cm_idx != UCP_NULL_RESOURCE);
     return context->tl_cmpts[context->config.cm_cmpt_idxs[cm_idx]].attr.name;
+}
+
+double ucp_tl_iface_latency_with_priority(ucp_context_h context,
+                                          const ucs_linear_func_t *latency,
+                                          int is_prioritized_ep)
+{
+    unsigned num_eps = context->config.est_num_eps;
+
+    if (ucp_context_usage_tracker_enabled(context)) {
+        if (is_prioritized_ep) {
+            /* The number of priority endpoints is limited by
+             * max_priority_eps */
+            num_eps = ucs_min(num_eps, context->config.ext.max_priority_eps);
+        } else if (latency->m > UCP_PROTO_PERF_EPSILON) {
+            /* If the transport is not scalable, assume a high number of
+             * endpoints */
+            num_eps = ucs_max(num_eps, context->config.ext.max_priority_eps *
+                                               UCP_CONTEXT_INFINITE_LAT_FACTOR);
+        }
+    }
+
+    return ucs_linear_func_apply(*latency, num_eps);
 }
 
 UCS_F_CTOR void ucp_global_init(void)

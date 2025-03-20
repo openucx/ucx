@@ -1290,7 +1290,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
-    uct_dc_dci_t *dci          = uct_dc_mlx5_iface_dci(iface, self->dci);
+    uct_dc_dci_t *dci;
 
     uct_dc_mlx5_ep_pending_purge(&self->super.super,
                                  uct_rc_ep_pending_purge_warn_cb, self);
@@ -1308,7 +1308,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(iface, self->dci),
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);
-
+    dci = uct_dc_mlx5_iface_dci(iface, self->dci);
     if (!uct_dc_mlx5_is_dci_valid(dci)) {
         return;
     }
@@ -1746,23 +1746,22 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
                                                 uct_dc_mlx5_iface_t);
     uct_dci_index_t dci_index  = ep->dci;
     uint16_t pi                = ntohs(cqe->wqe_counter);
+    uct_dc_dci_t *dci          = uct_dc_mlx5_iface_dci(iface, dci_index);
     uint8_t pool_index;
-    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
-
-    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, dci_index, txqp, txwq);
 
     ucs_debug("handle failure iface %p, ep %p, dci[%d] qpn 0x%x, status: %s",
-              iface, ep, dci_index, txwq->super.qp_num,
+              iface, ep, dci_index, dci->txwq.super.qp_num,
               ucs_status_string(ep_status));
 
     ucs_assert(!uct_dc_mlx5_iface_is_policy_shared(iface));
 
-    uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
-    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
+    uct_dc_mlx5_update_tx_res(iface, dci_index, pi);
+    uct_rc_txqp_purge_outstanding(&iface->super.super, &dci->txqp, ep_status,
+                                  pi, 0);
 
     /* Invoke a user's error callback and release TX/FC resources before
      * releasing DCI, to have DCI for doing possible flush(CANCEL) */
-    uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
+    uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, &dci->txwq, ep_status);
 
     ucs_assertv(ep->fc.fc_wnd == iface->super.super.config.fc_wnd_size,
                 "ep %p: fc_wnd=%d config_fc_wnd=%u", ep, ep->fc.fc_wnd,

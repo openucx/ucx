@@ -413,12 +413,12 @@ void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags)
 {
     ucs_config_parser_print_opts(stream, "Global configuration",
                                  &ucs_global_opts, ucs_global_opts_table, NULL,
-                                 UCS_DEFAULT_ENV_PREFIX, print_flags);
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags, NULL);
     ucs_config_parser_print_opts(stream,
                                  "Global configuration (runtime read-only)",
                                  &ucs_global_opts,
                                  ucs_global_opts_read_only_table, NULL,
-                                 UCS_DEFAULT_ENV_PREFIX, print_flags);
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags, NULL);
 }
 
 static void ucs_vfs_read_log_level(void *obj, ucs_string_buffer_t *strb,

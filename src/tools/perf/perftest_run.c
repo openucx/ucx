@@ -53,11 +53,8 @@ void print_progress(void *UCS_V_UNUSED rte_group,
                !(ctx->flags & TEST_FLAG_PRINT_CSV)) {
         if (ctx->flags & TEST_FLAG_PRINT_FINAL) {
             /* Print test name in the final and only output line */
-            for (i = 0; i < ctx->num_batch_files; ++i) {
-                ucs_string_buffer_appendf(&test_name, "%s/",
-                                          ctx->test_names[i]);
-            }
-            ucs_string_buffer_rtrim(&test_name, "/");
+            ucs_string_buffer_append_array(&strb, "/", "%s", ctx->test_names,
+                                           ctx->num_batch_files);
             ucs_string_buffer_appendf(&strb, "%10s",
                                       ucs_string_buffer_cstr(&test_name));
         } else {

@@ -81,6 +81,8 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
     {NULL}
 };
 
+static struct {} uct_cuda_dummy_memh;
+
 static int uct_cuda_copy_md_is_dmabuf_supported()
 {
     int dmabuf_supported = 0;
@@ -118,37 +120,14 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                 UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                 UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                 UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->dmabuf_mem_types = md->config.dmabuf_supported ?
                                 UCS_BIT(UCS_MEMORY_TYPE_CUDA) : 0;
     md_attr->max_alloc        = SIZE_MAX;
-    return UCS_OK;
-}
-
-static ucs_status_t
-uct_cuda_copy_mkey_pack(uct_md_h md, uct_mem_h memh, void *address,
-                        size_t length, const uct_md_mkey_pack_params_t *params,
-                        void *mkey_buffer)
-{
-    return UCS_OK;
-}
-
-static ucs_status_t uct_cuda_copy_rkey_unpack(uct_component_t *component,
-                                              const void *rkey_buffer,
-                                              uct_rkey_t *rkey_p,
-                                              void **handle_p)
-{
-    *rkey_p   = 0xdeadbeef;
-    *handle_p = NULL;
-    return UCS_OK;
-}
-
-static ucs_status_t uct_cuda_copy_rkey_release(uct_component_t *component,
-                                               uct_rkey_t rkey, void *handle)
-{
     return UCS_OK;
 }
 
@@ -165,7 +144,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 
     if (!uct_cuda_base_is_context_active()) {
         ucs_debug("attempt to register memory without active context");
-        return uct_md_dummy_mem_reg(md, address, length, params, memh_p);
+        *memh_p = &uct_cuda_dummy_memh;
+        return UCS_OK;
     }
 
     result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
@@ -174,7 +154,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
                                      (memType == CU_MEMORYTYPE_UNIFIED) ||
                                      (memType == CU_MEMORYTYPE_DEVICE))) {
         /* only host memory not allocated by cuda needs to be registered */
-        return uct_md_dummy_mem_reg(md, address, length, params, memh_p);
+        *memh_p = &uct_cuda_dummy_memh;
+        return UCS_OK;
     }
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
@@ -194,17 +175,15 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
                  (md, params),
                  uct_md_h md, const uct_md_mem_dereg_params_t *params)
 {
-    void *address;
     ucs_status_t status;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
-    address = (void *)params->memh;
-    if (address == (void*)0xdeadbeef) {
+    if (params->memh == &uct_cuda_dummy_memh) {
         return UCS_OK;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemHostUnregister(address));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemHostUnregister((void*)params->memh));
     if (status != UCS_OK) {
         return status;
     }
@@ -304,6 +283,59 @@ err_mem_release:
     return UCS_ERR_NO_MEMORY;
 }
 
+typedef CUresult (*uct_cuda_cuCtxSetFlags_t)(unsigned);
+
+static void uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md,
+                                      const void *address, int is_vmm)
+{
+    unsigned sync_memops_value = 1;
+#if HAVE_CUDA_FABRIC
+    static uct_cuda_cuCtxSetFlags_t cuda_cuCtxSetFlags_func =
+        (uct_cuda_cuCtxSetFlags_t)ucs_empty_function;
+    CUdriverProcAddressQueryResult sym_status;
+    CUresult cu_err;
+    ucs_status_t status;
+
+    if (md->sync_memops_set) {
+        return;
+    }
+
+    if (cuda_cuCtxSetFlags_func ==
+        (uct_cuda_cuCtxSetFlags_t)ucs_empty_function) {
+        cu_err = cuGetProcAddress("cuCtxSetFlags",
+                                  (void**)&cuda_cuCtxSetFlags_func, 12010,
+                                  CU_GET_PROC_ADDRESS_DEFAULT, &sym_status);
+        if ((cu_err != CUDA_SUCCESS) ||
+            (sym_status != CU_GET_PROC_ADDRESS_SUCCESS)) {
+            cuda_cuCtxSetFlags_func = NULL;
+        }
+    }
+
+    if (cuda_cuCtxSetFlags_func != NULL) {
+        /* Synchronize future DMA operations for all memory types */
+        status = UCT_CUDADRV_FUNC_LOG_WARN(
+                    cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS));
+        if (status == UCS_OK) {
+            md->sync_memops_set = 1;
+        }
+
+        return;
+    }
+#endif
+
+    if (is_vmm) {
+        ucs_warn("cannot set sync_memops on CUDA VMM without cuCtxSetFlags() "
+                 "(address=%p)", address);
+        return;
+    }
+
+    /* Synchronize for DMA for legacy memory types */
+    UCT_CUDADRV_FUNC_LOG_WARN(
+            cuPointerSetAttribute(&sync_memops_value,
+                                  CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+                                  (CUdeviceptr)address));
+}
+
 static ucs_status_t
 uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                         ucs_memory_type_t mem_type, unsigned flags,
@@ -379,6 +411,9 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     }
 
 allocated:
+    uct_cuda_copy_sync_memops(md, (void *)alloc_handle->ptr,
+                              alloc_handle->is_vmm);
+
     *memh_p    = alloc_handle;
     *address_p = (void*)alloc_handle->ptr;
     *length_p  = alloc_handle->length;
@@ -414,7 +449,7 @@ static int uct_cuda_copy_detect_vmm(void *address,
                                     ucs_memory_type_t *vmm_mem_type,
                                     CUdevice *cuda_device)
 {
-#if HAVE_CUDA_FABRIC
+#ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
     ucs_status_t status      = UCS_OK;
     CUmemAllocationProp prop = {};
     CUmemGenericAllocationHandle alloc_handle;
@@ -437,12 +472,15 @@ static int uct_cuda_copy_detect_vmm(void *address,
     }
 
     *cuda_device = (CUdevice)prop.location.id;
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_HOST
     if ((prop.location.type == CU_MEM_LOCATION_TYPE_HOST) ||
         (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA) ||
         (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT)) {
         /* TODO: Marking as CUDA to allow cuda_ipc access vmm for now */
         *vmm_mem_type = UCS_MEMORY_TYPE_CUDA;
-    } else if (prop.location.type == CU_MEM_LOCATION_TYPE_DEVICE) {
+    } else
+#endif
+    if (prop.location.type == CU_MEM_LOCATION_TYPE_DEVICE) {
         *vmm_mem_type = UCS_MEMORY_TYPE_CUDA;
     }
 
@@ -512,25 +550,65 @@ err:
     return 1; /* return 1 byte to avoid division by zero */
 }
 
-static void
-uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md, const void *address)
+/**
+ * Get information on memory allocations.
+ *
+ * @param [in]  address        Pointer to the memory allocation to query
+ * @param [in]  length         Size of the allocation
+ * @param [in]  ctx            CUDA context on which a pointer was allocated.
+ *                             NULL in case of VMM
+ * @param [out] base_address_p Returned base address
+ * @param [out] alloc_length_p Returned size of the memory allocation
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+static ucs_status_t
+uct_cuda_copy_md_get_address_range(const void *address, size_t length,
+                                   CUcontext ctx, void **base_address_p,
+                                   size_t *alloc_length_p)
 {
-#if HAVE_CUDA_FABRIC
     ucs_status_t status;
-    if (!md->sync_memops_set) {
-        /* Synchronize future DMA operations for all memory types */
-        status = UCT_CUDADRV_FUNC_LOG_WARN(cuCtxSetFlags(CU_CTX_SYNC_MEMOPS));
-        if (status == UCS_OK) {
-            md->sync_memops_set = 1;
+    CUdeviceptr base;
+    size_t alloc_length;
+    ucs_status_t status_ctx_pop;
+    CUcontext popped_ctx;
+
+    if (ctx != NULL) {
+        /* GetAddressRange requires context to be set. On DGXA100 it takes
+         * 0.03us to push and pop the context associated with address. */
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
+        if (status != UCS_OK) {
+            return status;
         }
     }
-#else
-    unsigned value = 1;
-    /* Synchronize for DMA for legacy memory types*/
-    UCT_CUDADRV_FUNC_LOG_WARN(
-            cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
-                                  (CUdeviceptr)address));
-#endif
+
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuMemGetAddressRange(&base, &alloc_length, (CUdeviceptr)address));
+    if (ctx != NULL) {
+        status_ctx_pop = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(&popped_ctx));
+        if (status != UCS_OK) {
+            /* cuMemGetAddressRange failed after pushing non-NULL context */
+            return UCS_ERR_INVALID_ADDR;
+        }
+
+        if (status_ctx_pop != UCS_OK) {
+            /* Failed to set the context that was current before the other
+             * context was pushed. */
+            return status_ctx_pop;
+        }
+    }
+
+    if (status == UCS_OK) {
+        *base_address_p = (void*)base;
+        *alloc_length_p = alloc_length;
+    } else {
+        /* Use default values when cuMemGetAddressRange failed without pushing
+         * non-NULL context */
+        *base_address_p = (void*)address;
+        *alloc_length_p = length;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -544,11 +622,11 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     CUcontext cuda_mem_ctx     = NULL;
     CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
-    CUdeviceptr base_address;
+    void *base_address;
     size_t alloc_length;
     size_t total_bytes;
     int32_t pref_loc;
-    unsigned is_vmm;
+    int is_vmm;
     CUresult cu_err;
     ucs_status_t status;
 
@@ -636,23 +714,21 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         return UCS_ERR_NO_DEVICE;
     }
 
-    uct_cuda_copy_sync_memops(md, address);
+    uct_cuda_copy_sync_memops(md, address, is_vmm);
 
     /* Extending the registration range is disable by configuration */
     if (md->config.alloc_whole_reg == UCS_CONFIG_OFF) {
         goto out_default_range;
     }
 
-    cu_err = cuMemGetAddressRange(&base_address, &alloc_length,
-                                  (CUdeviceptr)address);
-    if (cu_err != CUDA_SUCCESS) {
-        ucs_error("cuMemGetAddressRange(%p) error: %s", address,
-                  uct_cuda_base_cu_get_error_string(cu_err));
-        return UCS_ERR_INVALID_ADDR;
+    status = uct_cuda_copy_md_get_address_range(address, length, cuda_mem_ctx,
+                                                &base_address, &alloc_length);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    ucs_trace("query address %p: 0x%llx..0x%llx length %zu", address,
-              base_address, base_address + alloc_length, alloc_length);
+    ucs_trace("query address %p: %p..%p length %zu", address, base_address,
+              UCS_PTR_BYTE_OFFSET(base_address, alloc_length), alloc_length);
 
     if (md->config.alloc_whole_reg == UCS_CONFIG_AUTO) {
         total_bytes = uct_cuda_copy_md_get_total_device_mem(cuda_device);
@@ -663,7 +739,7 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         ucs_assert(md->config.alloc_whole_reg == UCS_CONFIG_ON);
     }
 
-    mem_info->base_address = (void*)base_address;
+    mem_info->base_address = base_address;
     mem_info->alloc_length = alloc_length;
     return UCS_OK;
 
@@ -815,11 +891,12 @@ static uct_md_ops_t md_ops = {
     .query              = uct_cuda_copy_md_query,
     .mem_alloc          = uct_cuda_copy_mem_alloc,
     .mem_free           = uct_cuda_copy_mem_free,
-    .mkey_pack          = uct_cuda_copy_mkey_pack,
+    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_cuda_copy_mem_reg,
     .mem_dereg          = uct_cuda_copy_mem_dereg,
-    .mem_attach         = ucs_empty_function_return_unsupported,
     .mem_query          = uct_cuda_copy_md_mem_query,
+    .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
+    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_cuda_copy_md_detect_memory_type
 };
 
@@ -884,10 +961,10 @@ err:
 uct_component_t uct_cuda_copy_component = {
     .query_md_resources = uct_cuda_base_query_md_resources,
     .md_open            = uct_cuda_copy_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
-    .rkey_unpack        = uct_cuda_copy_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
-    .rkey_release       = uct_cuda_copy_rkey_release,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_md_stub_rkey_unpack,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = "cuda_cpy",
     .md_config          = {
