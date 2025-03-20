@@ -574,12 +574,11 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
          * (don't set REMOTE_CONNECTED flag to avoid possible wrong behavior
          * in ucp_ep_close_flushed_callback() when a peer was already
          * disconnected, but we set REMOTE_CONNECTED flag again) */
-        ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED, 0);
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED,
+                            /* Reset flags that mark wireup is in progress */
+                            UCP_EP_FLAG_CONNECT_REQ_QUEUED |
+                            UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED);
     }
-
-    /* Reset flags that mark wireup is in progress */
-    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_CONNECT_REQ_QUEUED |
-                               UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED);
 
     ucp_wireup_update_flags(ep,
                             UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED |
