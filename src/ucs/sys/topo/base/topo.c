@@ -339,18 +339,6 @@ ucs_status_t ucs_topo_sys_dev_get_user_value(ucs_sys_device_t sys_dev,
     return UCS_OK;
 }
 
-ucs_status_t ucs_topo_sys_dev_set_user_value(ucs_sys_device_t sys_dev,
-                                             uintptr_t user_value)
-{
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        return UCS_ERR_NO_ELEM;
-    }
-
-    ucs_assertv_always(user_value != UINTPTR_MAX, "sys_dev=%u", sys_dev);
-    ucs_topo_global_ctx.devices[sys_dev].user_value = user_value;
-    return UCS_OK;
-}
-
 static ucs_status_t
 ucs_topo_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
 {
@@ -724,13 +712,6 @@ static ucs_sys_topo_provider_t ucs_sys_topo_provider_sysfs = {
 
 void ucs_topo_init()
 {
-    size_t length = ucs_static_array_size(ucs_topo_global_ctx.devices);
-    ucs_topo_sys_device_info_t *device;
-
-    ucs_carray_for_each(device, ucs_topo_global_ctx.devices, length) {
-        device->user_value = UINTPTR_MAX;
-    }
-
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_topo_global_ctx.num_devices = 0;

@@ -94,7 +94,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
  * Find system device by pci bus id.
  *
  * @param [in]  bus_id     pointer to bus id of the device of interest.
- * @param [in]  user_value user_value to add along
+ * @param [in]  user_value user_value to add along.
  * @param [out] sys_dev    system device index associated with the bus_id.
  *
  * @return UCS_OK or error in case device cannot be found.

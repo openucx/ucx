@@ -367,8 +367,8 @@ uct_cuda_copy_push_ctx(uct_cuda_copy_md_t *md, CUdevice device,
     return status;
 }
 
-static ucs_status_t uct_cuda_copy_pop_ctx(CUdevice orig_device, CUdevice device,
-                                          ucs_log_level_t log_level)
+static void uct_cuda_copy_pop_ctx(CUdevice orig_device, CUdevice device,
+                                  ucs_log_level_t log_level)
 {
     CUcontext ctx;
     ucs_status_t status;
@@ -376,16 +376,14 @@ static ucs_status_t uct_cuda_copy_pop_ctx(CUdevice orig_device, CUdevice device,
     if (orig_device != device) {
         status = UCT_CUDADRV_FUNC(cuCtxPopCurrent(&ctx), log_level);
         if (status != UCS_OK) {
-            return status;
+            return;
         }
 
         status = UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRelease(device), log_level);
         if (status != UCS_OK) {
-            return status;
+            return;
         }
     }
-
-    return UCS_OK;
 }
 
 static ucs_status_t uct_cuda_copy_push_alloc_ctx(uct_cuda_copy_md_t *md,
@@ -539,9 +537,9 @@ allocated:
     *memh_p    = alloc_handle;
     *address_p = (void*)alloc_handle->ptr;
     *length_p  = alloc_handle->length;
-
 out:
-    return uct_cuda_copy_pop_ctx(cu_device, alloc_cu_device, log_level);
+    uct_cuda_copy_pop_ctx(cu_device, alloc_cu_device, UCS_LOG_LEVEL_ERROR);
+    return status;
 }
 
 static ucs_status_t
