@@ -789,15 +789,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
-                 (ep, buffer, length, unpack_md_map, skip_md_map, rkey_p),
+                 (ep, buffer, length, unpack_md_map, skip_md_map, sys_device,
+                  rkey_p),
                  ucp_ep_h ep, const void *buffer, size_t length,
                  ucp_md_map_t unpack_md_map, ucp_md_map_t skip_md_map,
-                 ucp_rkey_h *rkey_p)
+                 ucs_sys_device_t sys_device, ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     const void *p                    = buffer;
     ucp_md_map_t md_map, remote_md_map, unreachable_md_map;
+    uct_rkey_unpack_params_t unpack_params;
     ucp_rsc_index_t cmpt_index;
     unsigned remote_md_index;
     const void *tl_rkey_buf;
@@ -884,7 +886,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
                                                       remote_md_index);
         tl_rkey->cmpt = worker->context->tl_cmpts[cmpt_index].cmpt;
 
-        status = uct_rkey_unpack(tl_rkey->cmpt, tl_rkey_buf, &tl_rkey->rkey);
+        unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
+        unpack_params.sys_device = sys_device;
+
+        status = uct_rkey_unpack_v2(tl_rkey->cmpt, tl_rkey_buf, &unpack_params,
+                                    &tl_rkey->rkey);
         if (status == UCS_OK) {
             ucs_trace("rkey[%d] for remote md %d is 0x%lx", rkey_index,
                       remote_md_index, tl_rkey->rkey.rkey);

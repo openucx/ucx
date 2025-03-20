@@ -221,7 +221,9 @@ int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer);
 ucs_status_t
 ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,
                             ucp_md_map_t unpack_md_map,
-                            ucp_md_map_t skip_md_map, ucp_rkey_h *rkey_p);
+                            ucp_md_map_t skip_md_map,
+                            ucs_sys_device_t sys_device,
+                            ucp_rkey_h *rkey_p);
 
 
 void ucp_rkey_dump_packed(const void *buffer, size_t length,
