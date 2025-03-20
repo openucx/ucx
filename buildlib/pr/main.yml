@@ -1,5 +1,5 @@
 variables:
-  DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+  DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools -v /auto/app:/auto/app -v /hpc/scrap:/hpc/scrap
   DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/ --net=host
   DOCKER_OPT_GPU: --gpus all --device=/dev/gdrdrv --ipc=host $(DOCKER_OPT_IB)
   DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
@@ -333,28 +333,70 @@ stages:
         name: althca
         demands: ucx_althca -equals yes
         test_perf: 0
+        run_bullseye: yes
     - template: tests.yml
       parameters:
         name: gpu
         demands: ucx_gpu -equals yes
         test_perf: 1
         container: ubuntu2404_doca31_gpunetio
+        run_bullseye: yes
     - template: tests.yml
       parameters:
         name: new
         demands: ucx_new -equals yes
         test_perf: 1
+        run_bullseye: yes
     - template: tests.yml
       parameters:
         name: roce
         demands: ucx_roce -equals yes
         test_perf: 0
+        run_bullseye: yes
+    - template: tests.yml
+      parameters:
+        name: roce_proto_disable
+        demands: ucx_roce -equals yes
+        test_perf: 0
+        proto_enable: no
+        run_bullseye: yes
     - template: tests.yml
       parameters:
         name: BlueField
         demands: ucx_bf -equals yes
         run_tests: yes
         test_perf: 0
+        run_bullseye: yes
+
+    - job: bullseye_report
+      displayName: Merge Bullseye reports
+      dependsOn: 
+        - tests_althca
+        - tests_gpu
+        - tests_new
+        - tests_roce
+        - tests_roce_proto_disable
+        - tests_BlueField
+      condition: succeededOrFailed()
+      pool:
+        name: MLNX
+        demands: ucx_docker
+      steps:
+      - bash: |
+          set -xe
+          export PATH="/auto/app/BullsEye/BullseyeCoverage-Latest-x86/bin/:$PATH"
+          COV_DIR=/hpc/scrap/azure/bullseye/${BUILD_BUILDID}-${BUILD_BUILDNUMBER}
+          REPORT_FILE="$COV_DIR"/bullseye_report.cov
+          covmerge -c "$COV_DIR"/coverage_*.cov -f "$REPORT_FILE"
+          covfn -f "$REPORT_FILE"
+          mv "$REPORT_FILE" $(Build.ArtifactStagingDirectory)
+          rm -rf "$COV_DIR"
+        displayName: Merge Bullseye files
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: $(Build.ArtifactStagingDirectory)
+          artifactName: BullseyeCoverageReport
+        displayName: Publish Bullseye report
 
   - stage: EFA_Tests
     dependsOn: [Static_check]
