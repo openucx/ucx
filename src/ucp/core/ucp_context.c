@@ -360,6 +360,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, rndv_frag_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
+  {"MEMTYPE_COPY_ENABLE", "y",
+   "Allows memory type copies. This option influences protocol selection.\n",
+   ucs_offsetof(ucp_context_config_t, memtype_copy_enable), UCS_CONFIG_TYPE_BOOL},
+
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type",
    ucs_offsetof(ucp_context_config_t, rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},

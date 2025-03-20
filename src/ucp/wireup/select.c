@@ -499,6 +499,15 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             continue;
         }
 
+        if (!context->config.ext.memtype_copy_enable &&
+            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      " : disabled to avoid memory type copies",
+                      UCT_TL_RESOURCE_DESC_ARG(resource));
+            continue;
+        }
+
         has_cm = ucp_ep_init_flags_has_cm(select_params->ep_init_flags);
         if (select_params->ep_init_flags & UCP_EP_INIT_CONNECT_TO_IFACE_ONLY) {
             local_iface_flags.mandatory |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
