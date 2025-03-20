@@ -82,9 +82,9 @@ static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_stride(int num_sge)
     return ucs_roundup_pow2(stride);
 }
 
-static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_calc_num_sge(int target_stride_size)
+static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_calc_num_sges(int stride_size)
 {
-    return (target_stride_size - sizeof(struct mlx5_wqe_srq_next_seg)) /
+    return (stride_size - sizeof(struct mlx5_wqe_srq_next_seg)) /
            sizeof(struct mlx5_wqe_data_seg);
 }
 
@@ -169,24 +169,6 @@ typedef struct mlx5_cqe64 *
 (uct_ib_mlx5_check_compl_cb_t)(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
                                struct mlx5_cqe64 *cqe, int poll_flags);
 
-static void uct_ib_mlx5_dump_cqe(struct mlx5_cqe64 *cqe)
-{
-    ucs_info("cqe: op_own 0x%x, wqe_counter 0x%x, byte_cnt 0x%x, "
-             "flags_rqpn 0x%x, sop_drop_qpn 0x%x, qpn 0x%lx, "
-             "imm_inval_pkey 0x%x, slid 0x%x, "
-             "app_info 0x%x Is First: %d Is Last: %d Is Filler: %d consumed strides: %d, len: %d ib_stride_index: %d",
-             cqe->op_own, ntohs(cqe->wqe_counter), ntohl(cqe->byte_cnt),
-             ntohl(cqe->flags_rqpn), ntohl(cqe->sop_drop_qpn),
-             ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER),
-             ntohl(cqe->imm_inval_pkey), ntohs(cqe->slid),
-             ntohl(cqe->app_info),
-             !!(ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_FIRST_MSG_FLAG),
-             !!(ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG),
-             !!(ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_FILLER_FLAG),
-             (ntohl(cqe->byte_cnt) & 0x1FFF0000) >> 16, ntohl(cqe->byte_cnt) & 0xFFFF,
-            uct_ib_mlx5_cqe_stride_index(cqe));
-}
-
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64 *
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
                     uct_ib_mlx5_check_compl_cb_t check_cqe_cb)
@@ -203,9 +185,6 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
 
     ucs_memory_cpu_load_fence();
 
-    uct_ib_mlx5_dump_cqe(cqe);
-    
-    // ucs_info("CQE is error or zipped? %s", uct_ib_mlx5_cqe_is_error_or_zipped(cqe->op_own) ? "yes" : "no");
     if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(cqe->op_own))) {
         return check_cqe_cb(iface, cq, cqe, poll_flags);
     }

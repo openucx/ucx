@@ -414,6 +414,10 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        dp_ordering_force;
         unsigned                       max_message_size_strides;
     } config;
+
+    struct {
+        unsigned                       num_strides;
+    } msg_based;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
 

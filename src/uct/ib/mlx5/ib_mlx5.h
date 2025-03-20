@@ -15,6 +15,7 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/datastruct/dynamic_bitmap.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/status.h>
 
@@ -527,7 +528,7 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t                           sw_pi;      /* what is posted to hw */
     uint16_t                           mask;
     uint16_t                           stride;
-    uint64_t                           free_bitmap;
+    ucs_dynamic_bitmap_t               free_bitmap;
     union {
         struct {
             struct ibv_srq             *srq;
@@ -920,7 +921,8 @@ uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
                            size_t sg_byte_count, int num_sge);
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
-                               uint32_t tail, size_t sg_byte_count, int num_sge);
+                               uint32_t tail, size_t sg_byte_count, int num_sge,
+                               unsigned num_strides);
 
 void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 

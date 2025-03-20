@@ -83,20 +83,12 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
     void *udesc;
     int stride_idx;
     int desc_offset;
-    // int dptr_offset;
 
     if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
         stride_idx           = uct_ib_mlx5_cqe_stride_index(cqe);
         udesc                = (void*)be64toh(seg->dptr[stride_idx].addr);
         uct_recv_desc(udesc) = release_desc;
         seg->srq.ptr_mask   &= ~UCS_BIT(stride_idx);
-
-        ucs_info("hold srq desc (%p): udesc[0] = %x, udesc[1] = %x, udesc[2] = "
-                 "%x, udesc[3] = %x, offset %u, stride_idx %d",
-                 udesc, ((uint32_t*)udesc)[0], ((uint32_t*)udesc)[1],
-                 ((uint32_t*)udesc)[2], ((uint32_t*)udesc)[3], offset,
-                 stride_idx);
-
     } else if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* stride_idx is valid in non inline CQEs only.
          * We can assume that stride_idx is correct here, because CQE
@@ -117,11 +109,6 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
         uct_recv_desc(udesc) = release_desc;
         seg->srq.ptr_mask   &= ~1;
         seg->srq.desc        = NULL;
-
-        ucs_info("hold srq desc (no strides) (%p): udesc[0] = %x, udesc[1] = %x, udesc[2] = "
-                 "%x, udesc[3] = %x, offset %u",
-                 udesc, ((uint32_t*)udesc)[0], ((uint32_t*)udesc)[1],
-                 ((uint32_t*)udesc)[2], ((uint32_t*)udesc)[3], offset);
     }
 }
 
@@ -167,34 +154,29 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
     }
 
     if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
-        ucs_info("release_srq_seg seg->srq.strides = %d, wqe_index = %d consumed: %d",
-                 seg->srq.strides, wqe_index, strides_consumed);
+        ucs_assertv(strides_consumed <= seg->srq.strides, "strides_consumed %d, seg->srq.strides %d",
+                    strides_consumed, seg->srq.strides);
 
-        seg->srq.strides -= strides_consumed;
-
-        if (seg->srq.strides) {
+        if (seg->srq.strides > strides_consumed) {
+            seg->srq.strides -= strides_consumed;
             /* Segment can't be freed until all strides are consumed */
             return;
         }
-        seg->srq.strides = uct_ib_mlx5_srq_calc_num_sge(256);
-        ucs_info("releasing wqe_index = %d", wqe_index);
-        iface->rx.srq.free_bitmap |= UCS_BIT(wqe_index);
+
+        seg->srq.strides = iface->msg_based.num_strides;
+        ucs_dynamic_bitmap_set(&iface->rx.srq.free_bitmap, ntohs(wqe_index));
     }
 
     ++iface->super.rx.srq.available;
 
     if (poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) {
         seg                     = uct_ib_mlx5_srq_get_wqe(srq, srq->free_idx);
-        ucs_info("setting next_wqe_index = %d", wqe_index);
         seg->srq.next_wqe_index = htons(wqe_index);
         srq->free_idx           = wqe_index;
         return;
     }
 
     seg_free = (seg->srq.ptr_mask == UCS_MASK(strides_consumed));
-
-    ucs_info("release srq seg: seg_free = %d, wqe_index = %d, srq->free_idx = %d, srq->ready_idx = %d",
-             seg_free, wqe_index, srq->free_idx, srq->ready_idx);
 
     if (ucs_likely(seg_free && (wqe_ctr == (srq->ready_idx + 1)))) {
          /* If the descriptor was not used - if there are no "holes", we can just
@@ -334,7 +316,6 @@ uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *iface,
                               struct mlx5_cqe64 *cqe,
                               unsigned byte_len, unsigned *flags)
 {
-    // char dump_str[2048] = {0};
     uct_ib_mlx5_srq_seg_t *seg;
     uct_ib_iface_recv_desc_t *desc;
     void *hdr;
@@ -359,10 +340,6 @@ uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *iface,
         *flags = 0;
     } else {
         hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-        // ucs_str_dump_hex(((char*)desc) + (iface->rx.srq.stride *
-        //                                   uct_ib_mlx5_cqe_stride_index(cqe)),
-        //                  byte_len, dump_str, byte_len, 16);
-        // ucs_info("common_data desc dump(%p): \n%s", desc, dump_str);
 
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
         *flags = UCT_CB_PARAM_FLAG_DESC;
@@ -433,10 +410,6 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
         stride_idx = uct_ib_mlx5_cqe_stride_index(cqe);
         // ucs_assert(stride_idx < iface->tm.mp.num_strides);
         hdr        = (void*)be64toh(seg->dptr[stride_idx].addr);
-
-        ucs_info("hdr (dptr[stride=%d]): 0x%x 0x%x 0x%x 0x%x", stride_idx,
-                 ((uint32_t*)hdr)[0], ((uint32_t*)hdr)[1], ((uint32_t*)hdr)[2],
-                 ((uint32_t*)hdr)[3]);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
     }
 
@@ -1561,7 +1534,6 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
         if (byte_len == 0) {
             byte_len = (strides_consumed > 0) ? 1 << 16 : 0;
-            ucs_info("Byte len modified to: %d", byte_len);
         }
     }
 

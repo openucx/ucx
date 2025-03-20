@@ -939,23 +939,25 @@ uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
     srq->buf = srq_info.dv.buf;
     srq->db  = srq_info.dv.dbrec;
     uct_ib_mlx5_srq_buff_init(srq, srq_info.dv.head, srq_info.dv.tail,
-                              sg_byte_count, sge_num);
+                              sg_byte_count, sge_num, sge_num);
 
     return UCS_OK;
 }
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
-                               uint32_t tail, size_t sg_byte_count, int sge_num)
+                               uint32_t tail, size_t sg_byte_count, int sge_num,
+                               unsigned num_strides)
 {
     uct_ib_mlx5_srq_seg_t *seg;
     unsigned i, j;
 
-    srq->free_idx  = tail;
-    srq->ready_idx = UINT16_MAX;
-    srq->sw_pi     = UINT16_MAX;
-    srq->mask      = tail;
-    srq->stride    = uct_ib_mlx5_srq_stride(sge_num);
-    srq->free_bitmap = 0x0000FFFF;
+    srq->free_idx    = tail;
+    srq->ready_idx   = UINT16_MAX;
+    srq->sw_pi       = UINT16_MAX;
+    srq->mask        = tail;
+    srq->stride      = uct_ib_mlx5_srq_stride(sge_num);
+
+    ucs_dynamic_bitmap_init(&srq->free_bitmap);
 
     for (i = head; i <= tail; ++i) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, i);
@@ -963,7 +965,7 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
         seg->srq.ptr_mask       = 0;
         seg->srq.free           = 0;
         seg->srq.desc           = NULL;
-        seg->srq.strides        = sge_num;
+        seg->srq.strides        = num_strides;
         for (j = 0; j < sge_num; ++j) {
             seg->dptr[j].byte_count = htonl(sg_byte_count);
         }

@@ -81,9 +81,6 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
     uct_ib_mlx5_srq_seg_t *seg;
     uint16_t wqe_ctr;
 
-    ucs_info("check rx_completion, cq->cq_ci: %d, incrementing? %s ", cq->cq_ci,
-             uct_ib_mlx5_check_and_init_zipped(cq, cqe) ? "yes" : "no");
-
     if (uct_ib_mlx5_check_and_init_zipped(cq, cqe)) {
         ++cq->cq_ci;
         uct_ib_mlx5_update_cqe_zipping_stats(&iface->super.super, cq);
@@ -624,6 +621,7 @@ static void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface)
                                                        uct_ib_mlx5_md_t);
 
     uct_rc_mlx5_destroy_srq(md, &iface->rx.srq);
+    ucs_dynamic_bitmap_cleanup(&iface->rx.srq.free_bitmap);
 }
 
 static void

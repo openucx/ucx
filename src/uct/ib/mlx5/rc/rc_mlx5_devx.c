@@ -221,15 +221,15 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 const uct_rc_iface_common_config_t *config,
                                 void *wq)
 {
-    ucs_status_t status = UCS_ERR_NO_MEMORY; 
+    ucs_status_t status = UCS_ERR_NO_MEMORY;
+    int num_sges        = uct_rc_mlx5_iface_is_srq_smbrwq(iface) ?
+                                         uct_ib_mlx5_srq_calc_num_sges(
+                                   config->super.stride_size) :
+                                         iface->tm.mp.num_strides;
     int len, max, stride, log_num_of_strides, wq_type;
-    int num_strides = uct_rc_mlx5_iface_is_srq_smbrwq(iface) ?
-                              uct_ib_mlx5_srq_calc_num_sge(256)
-                              :
-                              iface->tm.mp.num_strides;
 
-    stride = uct_ib_mlx5_srq_stride(num_strides);
-    max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len, num_strides);
+    stride = uct_ib_mlx5_srq_stride(num_sges);
+    max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len, num_sges);
     max    = ucs_roundup_pow2(max);
     len    = max * stride;
 
@@ -270,35 +270,24 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
         /* Normalize to device's interface values (range of (-6) - 7) */
         /* cppcheck-suppress internalAstError */
         log_num_of_strides = ucs_ilog2(iface->tm.mp.num_strides) - 9;
-        ucs_assertv_always(md->smbrwq.max_message_size_bytes
-                           >= iface->super.super.config.seg_size,
-                           "max_message_size_bytes %d, seg_size %d",
-                           md->smbrwq.max_message_size_bytes,
-                           iface->super.super.config.seg_size);
-
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,
                           log_num_of_strides & 0xF);
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
                           (ucs_ilog2(iface->super.super.config.seg_size) - 6));
     } else if (uct_rc_mlx5_iface_is_srq_smbrwq(iface)) {
-        /* Setting stride size to 256 bytes */
-        log_num_of_strides = 
-        ucs_ilog2(ucs_div_round_up(iface->super.super.config.seg_size, 256)) - 9;
-
-        ucs_info("max_message_size_strides: %d ucs_ilog2() = %d "
-                 "log_num_of_strides: %d",
-                 iface->config.max_message_size_strides,
-                 ucs_ilog2(iface->config.max_message_size_strides),
-                 log_num_of_strides);
-        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides, log_num_of_strides & 0xF);
-        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size, 2);
+        iface->msg_based.num_strides = iface->super.super.config.seg_size /
+                                       iface->super.super.config.stride_size;
+        log_num_of_strides = ucs_ilog2(iface->msg_based.num_strides) - 9;
+        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,
+                          log_num_of_strides & 0xF);
+        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
+                          ucs_ilog2(iface->super.super.config.stride_size) - 6);
     }
 
     iface->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     uct_ib_mlx5_srq_buff_init(&iface->rx.srq, 0, max - 1,
-                              iface->super.super.config.seg_size,
-                              num_strides
-                              );
+                              iface->super.super.config.seg_size, num_sges,
+                              iface->msg_based.num_strides);
     iface->super.rx.srq.quota = max - 1;
 
     return UCS_OK;

@@ -1930,10 +1930,6 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
         md->flags |= UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE;
     }
 
-    // if ((cap_2 != NULL) && (UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2, enh_eth_striding_wq))) {
-    //     ucs_info("%s: enhanced striding WQ is supported", uct_ib_device_name(dev));
-    // }
-
     ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
               uct_ib_device_name(dev),
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
@@ -2189,13 +2185,6 @@ ucs_status_t uct_ib_mlx5_devx_query_adv_rdma_cap(uct_ib_mlx5_md_t *md, struct ib
             adv_rdma_cap, cap, max_receive_send_message_size_stride);
     md->smbrwq.max_message_size_bytes  = UCT_IB_MLX5DV_GET(
             adv_rdma_cap, cap, max_receive_send_message_size_byte);
-    
-    ucs_info("%s: adv_rdma_cap: message_based_qp_and_striding_wq=%d, "
-             "max_receive_send_message_size_stride=%d, "
-             "max_receive_send_message_size_byte=%d",
-             uct_ib_device_name(&md->super.dev),
-             md->smbrwq.supported_tls, md->smbrwq.max_message_size_stride,
-             md->smbrwq.max_message_size_bytes);
 
     return status;
 }
@@ -2359,6 +2348,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_RMP;
     }
 
+    /*TODO: delete this print and validate stride size is within that range */
     ucs_info("RQ stride min size: %d, max_size: %d",
              1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_min_stride_sz_rq),
              1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_stride_sz_rq));
