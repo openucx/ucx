@@ -428,3 +428,59 @@ UCS_TEST_P(test_mem_alloc_device, same_device_cuda_fabric_implicit,
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_mem_alloc_device, cuda_cpy);
+
+class test_p2p_no_current_cuda_ctx : public uct_p2p_rma_test {
+public:
+    void test_xfer_on_thread(send_func_t send, size_t length, unsigned flags);
+};
+
+void test_p2p_no_current_cuda_ctx::test_xfer_on_thread(send_func_t send,
+                                                       size_t length,
+                                                       unsigned flags)
+{
+    mapped_buffer sendbuf(length, SEED1, sender());
+    mapped_buffer recvbuf(length, SEED2, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
+
+    std::exception_ptr thread_exception;
+    std::thread([&]() {
+        try {
+            blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
+        } catch (...) {
+            thread_exception = std::current_exception();
+        }
+    }).join();
+
+    if (thread_exception) {
+        std::rethrow_exception(thread_exception);
+    }
+
+    check_buf(sendbuf, recvbuf, flags);
+}
+
+UCS_TEST_P(test_p2p_no_current_cuda_ctx, put_short)
+{
+    test_xfer_on_thread(static_cast<send_func_t>(&uct_p2p_rma_test::put_short),
+                        1, TEST_UCT_FLAG_SEND_ZCOPY);
+}
+
+UCS_TEST_P(test_p2p_no_current_cuda_ctx, get_short)
+{
+    test_xfer_on_thread(static_cast<send_func_t>(&uct_p2p_rma_test::get_short),
+                        1, TEST_UCT_FLAG_RECV_ZCOPY);
+}
+
+UCS_TEST_P(test_p2p_no_current_cuda_ctx, put_zcopy)
+{
+    test_xfer_on_thread(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
+                        sender().iface_attr().cap.put.min_zcopy + 1,
+                        TEST_UCT_FLAG_SEND_ZCOPY);
+}
+
+UCS_TEST_P(test_p2p_no_current_cuda_ctx, get_zcopy)
+{
+    test_xfer_on_thread(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+                        sender().iface_attr().cap.get.min_zcopy + 1,
+                        TEST_UCT_FLAG_RECV_ZCOPY);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_p2p_no_current_cuda_ctx, cuda_copy)

@@ -60,10 +60,18 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(
         uct_cuda_ipc_iface_t *iface, uct_cuda_ipc_ctx_rsc_t **ctx_rsc_p)
 {
+    unsigned long long ctx_id;
+    CUresult result;
     ucs_status_t status;
     uct_cuda_ctx_rsc_t *ctx_rsc;
 
-    status = uct_cuda_base_ctx_rsc_get(&iface->super, &ctx_rsc);
+    result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
+    if (ucs_unlikely(result != CUDA_SUCCESS)) {
+        UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    status = uct_cuda_base_ctx_rsc_get(&iface->super, ctx_id, &ctx_rsc);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
