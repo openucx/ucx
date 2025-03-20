@@ -273,7 +273,7 @@ func (w *UcpWorker) SetAmRecvHandler(id uint, flags UcpAmCbFlags, cb UcpAmRecvCa
 		C.UCP_AM_HANDLER_PARAM_FIELD_ARG
 	amHandlerParams.id = C.uint(id)
 	packedCb := packCallback(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
-	w.handles = append(w.handles, packedArg)
+	w.handles = append(w.handles, packedCb)
 	amHandlerParams.arg = packedCb
 	amHandlerParams.flags = C.uint32_t(flags)
 	cbAddr := (*C.ucp_am_recv_callback_t)(unsafe.Pointer(&amHandlerParams.cb))
