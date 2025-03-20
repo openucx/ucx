@@ -182,10 +182,10 @@ protected:
 
         sys_dev.clear();
         for (auto device = 0; device < m_num_devices; ++device) {
-            uct_md_mem_attr_t attr = {
+            uct_md_mem_attr_t attr       = {
                 .field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV
             };
-            size_t size            = 4096;
+            static constexpr size_t size = 4096;
             void *ptr;
 
             ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
@@ -238,6 +238,7 @@ protected:
     {
         CUdevice current;
 
+        // Ensure a valid context for each device
         for (auto device = 0; device < m_num_devices; ++device) {
             ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
         }

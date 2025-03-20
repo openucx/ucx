@@ -328,15 +328,13 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
     return UCS_OK;
 }
 
-ucs_status_t ucs_topo_sys_dev_get_user_value(ucs_sys_device_t sys_dev,
-                                             uintptr_t *user_value)
+uintptr_t ucs_topo_sys_dev_get_user_value(ucs_sys_device_t sys_dev)
 {
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        return UCS_ERR_NO_ELEM;
+        return UINTPTR_MAX;
     }
 
-    *user_value = ucs_topo_global_ctx.devices[sys_dev].user_value;
-    return UCS_OK;
+    return ucs_topo_global_ctx.devices[sys_dev].user_value;
 }
 
 static ucs_status_t

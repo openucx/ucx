@@ -285,8 +285,8 @@ void ucs_topo_cleanup(void);
 /*
  * Retrieve value from sys_dev. UINTPTR_MAX is default value.
  */
-ucs_status_t ucs_topo_sys_dev_get_user_value(ucs_sys_device_t sys_dev,
-                                             uintptr_t *user_value);
+uintptr_t ucs_topo_sys_dev_get_user_value(ucs_sys_device_t sys_dev);
+
 
 END_C_DECLS
 
