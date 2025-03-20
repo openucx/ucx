@@ -563,6 +563,23 @@ err_cleanup_perf:
     return status;
 }
 
+int ucp_proto_common_check_memtype_copy(
+    const ucp_proto_common_init_params_t *params)
+{
+    if (params->super.worker->context->config.ext.memtype_copy_enable) {
+        return 1;
+    }
+
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY) {
+        return 1;
+    }
+
+    return ucs_test_flags(params->flags,
+                          UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
+                          UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) &&
+           (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS);
+}
+
 int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
                             uint64_t op_id_mask)
 {

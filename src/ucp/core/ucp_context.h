@@ -90,6 +90,8 @@ typedef struct ucp_context_config {
     size_t                                 rndv_num_frags[UCS_MEMORY_TYPE_LAST];
     /** Memory types of fragments used for RNDV pipeline protocol */
     uint64_t                               rndv_frag_mem_types;
+    /** Allows memtype copies that use bounce buffers, when set to true */
+    int                                    memtype_copy_enable;
     /** RNDV pipeline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Enabling 2-stage pipeline rndv protocol */
@@ -205,6 +207,8 @@ typedef struct ucp_context_config {
     uint64_t                               extra_op_attr_flags;
     /* Upper limit to the amount of prioritized endpoints */
     unsigned                               max_priority_eps;
+    /* Use AM lane to send wireup messages */
+    int                                    wireup_via_am_lane;
 } ucp_context_config_t;
 
 
@@ -426,7 +430,7 @@ typedef struct ucp_context {
         char                      *env_prefix;
 
         /* worker_fence implementation method */
-        unsigned                  worker_strong_fence;
+        ucp_fence_mode_t          worker_fence_mode;
 
         /* Progress wrapper enabled */
         int                       progress_wrapper_enabled;

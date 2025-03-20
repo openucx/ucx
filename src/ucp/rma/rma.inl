@@ -144,4 +144,44 @@ ucp_proto_sw_rma_cfg_thresh(ucp_context_h context, size_t default_value)
            default_value;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_rma_is_fence_required(ucp_ep_h ep)
+{
+    return ep->ext->fence_seq < ep->worker->fence_seq;
+}
+
+static UCS_F_ALWAYS_INLINE uint32_t
+ucp_ep_rma_get_fence_flag(ucp_ep_h ep)
+{
+    if (ucs_unlikely(ucp_ep_rma_is_fence_required(ep))) {
+        return UCP_REQUEST_FLAG_FENCE_REQUIRED;
+    }
+
+    return 0;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
+                        ucp_lane_map_t lane_map)
+{
+    ucs_status_t status;
+
+    /* Apply a fence if EP's sequence is behind worker's */
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
+        if (ucs_likely(
+            ucs_is_pow2_or_zero(ep->ext->unflushed_lanes | lane_map))) {
+            status = ucp_ep_fence_weak(ep);
+        } else {
+            status = ucp_ep_fence_strong(ep);
+        }
+    } else {
+        status = UCS_OK;
+    }
+
+    /* Re-set the lanes of the current operation for future fences */
+    ep->ext->unflushed_lanes |= lane_map;
+
+    return status;
+}
+
 #endif

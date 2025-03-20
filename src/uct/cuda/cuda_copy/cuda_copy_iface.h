@@ -9,6 +9,7 @@
 
 #include <ucs/datastruct/static_bitmap.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/datastruct/khash.h>
 #include <uct/base/uct_iface.h>
 #include <uct/cuda/base/cuda_iface.h>
 
@@ -39,6 +40,7 @@ typedef uint64_t uct_cuda_copy_iface_addr_t;
 */
 typedef ucs_static_bitmap_s(UCT_CUDA_MEMORY_TYPES_MAP) uct_cu_stream_bitmap_t;
 
+
 typedef struct uct_cuda_copy_queue_desc {
     /* stream on which asynchronous memcpy operations are enqueued */
     CUstream                    stream;
@@ -49,27 +51,49 @@ typedef struct uct_cuda_copy_queue_desc {
 } uct_cuda_copy_queue_desc_t;
 
 
+typedef struct uct_cuda_copy_bw {
+    double            h2d;
+    double            d2h;
+    double            d2d;
+    double            dflt;
+} uct_cuda_copy_bw_t;
+
+
+typedef struct uct_cuda_copy_ctx_rsc {
+    /* CUDA context handle */
+    CUcontext                  ctx;
+    /* CUDA context id */
+    unsigned long long         ctx_id;
+    /* pool of cuda events to check completion of memcpy operations */
+    ucs_mpool_t                event_mp;
+    /* stream used to issue short operations */
+    CUstream                   short_stream;
+    /* array of queue descriptors for each src/dst memory type combination */
+    uct_cuda_copy_queue_desc_t queue_desc[UCS_MEMORY_TYPE_LAST]
+                                         [UCS_MEMORY_TYPE_LAST];
+} uct_cuda_copy_ctx_rsc_t;
+
+
+/* Hash map for CUDA context resources. The key is the CUDA context Id. */
+KHASH_INIT(cuda_copy_ctx_rscs, unsigned long long, uct_cuda_copy_ctx_rsc_t*, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+
+
 typedef struct uct_cuda_copy_iface {
     uct_cuda_iface_t            super;
     /* used to store uuid and check iface reachability */
     uct_cuda_copy_iface_addr_t  id;
-    /* pool of cuda events to check completion of memcpy operations */
-    ucs_mpool_t                 cuda_event_desc;
+    /* CUDA resources per context */
+    khash_t(cuda_copy_ctx_rscs) ctx_rscs;
     /* list of queues which require progress */
     ucs_queue_head_t            active_queue;
-    /* stream used to issue short operations */
-    CUstream                    short_stream;
     /* fd to get event notifications */
     int                         eventfd;
-    /* stream used to issue short operations */
-    CUcontext                   cuda_context;
-    /* array of queue descriptors for each src/dst memory type combination */
-    uct_cuda_copy_queue_desc_t  queue_desc[UCS_MEMORY_TYPE_LAST][UCS_MEMORY_TYPE_LAST];
     /* config parameters to control cuda copy transport */
     struct {
         unsigned                max_poll;
         unsigned                max_cuda_events;
-        double                  bandwidth;
+        uct_cuda_copy_bw_t      bw;
     } config;
     /* handler to support arm/wakeup feature */
     struct {
@@ -87,7 +111,7 @@ typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
     unsigned                max_cuda_events;
-    double                  bandwidth;
+    uct_cuda_copy_bw_t      bw;
 } uct_cuda_copy_iface_config_t;
 
 
@@ -104,5 +128,19 @@ uct_cuda_copy_flush_bitmap_idx(ucs_memory_type_t src_mem_type,
 {
     return (src_mem_type * UCS_MEMORY_TYPE_LAST) + dst_mem_type;
 }
+
+
+/**
+ * Create the resources of the given CUDA context.
+ *
+ * @param [in]  iface     CUDA copy transport interface
+ * @param [in]  ctx_id    CUDA context id
+ * @param [out] ctx_rsc_p Returned pointer to context resources
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
+                                          unsigned long long ctx_id,
+                                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
 
 #endif

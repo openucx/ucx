@@ -77,7 +77,8 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
         !ucp_proto_common_init_check_err_handling(&ack_params) ||
-        ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
+        ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
+        !ucp_proto_common_check_memtype_copy(&ack_params)) {
         return;
     }
 

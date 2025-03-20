@@ -23,6 +23,7 @@
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
 #include <libgen.h>
+#include <pthread.h>
 #include <sched.h>
 
 #ifdef HAVE_NETLINK_RDMA
@@ -84,6 +85,35 @@ typedef struct uct_ib_device_subnet {
 
 UCS_ARRAY_DECLARE_TYPE(uct_ib_device_subnet_array_t, unsigned,
                        uct_ib_device_subnet_t);
+
+typedef struct {
+    uint64_t    guid;
+    uint8_t     port_num;
+    uint8_t     gid_index;
+} uct_ib_device_to_ndev_key_t;
+
+static UCS_F_ALWAYS_INLINE khint32_t
+uct_ib_device_to_ndev_cache_hash_func(uct_ib_device_to_ndev_key_t key)
+{
+    return kh_int_hash_func(((uint64_t)key.port_num << 24) ^
+                            ((uint64_t)key.gid_index << 16) ^
+                            key.guid);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_device_to_ndev_cache_hash_equal(uct_ib_device_to_ndev_key_t key1,
+                                       uct_ib_device_to_ndev_key_t key2)
+{
+    return (key1.port_num == key2.port_num) &&
+           (key1.gid_index == key2.gid_index) &&
+           (key1.guid == key2.guid);
+}
+
+KHASH_INIT(uct_ib_device_to_ndev, uct_ib_device_to_ndev_key_t, int, 1,
+           uct_ib_device_to_ndev_cache_hash_func,
+           uct_ib_device_to_ndev_cache_hash_equal);
+
+static khash_t(uct_ib_device_to_ndev) ib_dev_to_ndev_map;
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
@@ -1478,6 +1508,54 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
 
     ucs_strtrim(ndev_name);
     return UCS_OK;
+}
+
+ucs_status_t
+uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
+                                  uint8_t gid_index, int *ndev_index_p)
+{
+    uct_ib_device_to_ndev_key_t ib_dev = {.guid = IBV_DEV_ATTR(dev, node_guid),
+                                          .port_num = port_num,
+                                          .gid_index = gid_index};
+    static pthread_mutex_t uct_ib_device_to_ndev_cache_lock =
+                                          PTHREAD_MUTEX_INITIALIZER;
+    ucs_status_t status;
+    char ndev_name[IFNAMSIZ];
+    int ndev_index;
+    khiter_t iter;
+    int khret;
+
+    pthread_mutex_lock(&uct_ib_device_to_ndev_cache_lock);
+    iter = kh_put(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev, &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        status = UCS_ERR_IO_ERROR;
+        goto out_unlock;
+    }
+
+    if (khret != UCS_KH_PUT_KEY_PRESENT) {
+        status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
+                                                  ndev_name, sizeof(ndev_name));
+        if (status != UCS_OK) {
+            goto out_unlock;
+        }
+
+        ndev_index = if_nametoindex(ndev_name);
+        if (ndev_index == 0) {
+            ucs_error("failed to get interface index for %s (errno %d)",
+                      ndev_name, errno);
+            status = UCS_ERR_IO_ERROR;
+            goto out_unlock;
+        }
+
+        kh_val(&ib_dev_to_ndev_map, iter) = ndev_index;
+    }
+
+    *ndev_index_p = kh_val(&ib_dev_to_ndev_map, iter);
+    status        = UCS_OK;
+
+out_unlock:
+    pthread_mutex_unlock(&uct_ib_device_to_ndev_cache_lock);
+    return status;
 }
 
 unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num,

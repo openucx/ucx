@@ -43,14 +43,15 @@ ucp_proto_bcopy_send_func_status(ssize_t packed_size)
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_msg_multi_request_init(ucp_request_t *req)
 {
     if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
-        return;
+        return UCS_OK;
     }
 
     req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -270,7 +271,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_common(
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                           ucp_worker_cfg_index_t rkey_cfg_index,
-                          ucp_request_t *req, ucp_operation_id_t op_id,
+                          ucp_request_t *req, uint32_t req_flags,
+                          ucp_operation_id_t op_id,
                           const void *buffer, size_t count,
                           ucp_datatype_t datatype, size_t contig_length,
                           const ucp_request_param_t *param,
@@ -282,7 +284,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     size_t msg_length;
     uint8_t sg_count;
 
-    ucp_proto_request_send_init(req, ep, 0);
+    ucp_proto_request_send_init(req, ep, req_flags);
 
     status = UCS_PROFILE_CALL(ucp_datatype_iter_init, worker->context,
                               (void*)buffer, count, datatype, contig_length, 1,
@@ -305,8 +307,8 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_reply(
         ucp_ep_h ep, ucp_proto_select_t *proto_select,
         ucp_worker_cfg_index_t rkey_cfg_index, ucp_request_t *req,
-        ucp_operation_id_t op_id, const void *buffer, size_t count,
-        ucp_datatype_t datatype, size_t contig_length,
+        uint32_t req_flags, ucp_operation_id_t op_id, const void *buffer,
+        size_t count, ucp_datatype_t datatype, size_t contig_length,
         const ucp_request_param_t *param)
 {
     ucp_worker_h worker   = ep->worker;
@@ -316,7 +318,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_reply(
     ucs_status_t status;
     uint8_t sg_count;
 
-    ucp_proto_request_send_init(req, ep, 0);
+    ucp_proto_request_send_init(req, ep, req_flags);
 
     status = UCS_PROFILE_CALL(ucp_datatype_iter_init, context, (void*)buffer,
                               count, datatype, contig_length, 1,
