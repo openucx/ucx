@@ -78,7 +78,12 @@ void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
 
     mapped_buffer sendbuf(length, SEED1, sender(), 1, src_mem_type);
     mapped_buffer recvbuf(length, SEED2, receiver(), 3, mem_type);
+    bsend_and_check(send, sendbuf, recvbuf, flags);
+}
 
+void uct_p2p_rma_test::bsend_and_check(send_func_t send, mapped_buffer &sendbuf,
+                                       mapped_buffer &recvbuf, unsigned flags)
+{
     blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
     if (flags & TEST_UCT_FLAG_SEND_ZCOPY) {
         sendbuf.memset(0);
