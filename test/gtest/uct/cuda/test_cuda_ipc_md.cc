@@ -16,9 +16,6 @@ extern "C" {
 
 class test_cuda_ipc_md : public test_md {
 protected:
-    static int64_t m_uuid;
-    int64_t        m_uuid_next;
-
     static uct_cuda_ipc_rkey_t
     unpack_common(uct_md_h md, int64_t uuid, CUdeviceptr ptr, size_t size)
     {
@@ -111,6 +108,9 @@ protected:
         return rkey;
     }
 #endif
+
+    static int64_t m_uuid;
+    int64_t        m_uuid_next;
 };
 
 int64_t test_cuda_ipc_md::m_uuid = 0;
