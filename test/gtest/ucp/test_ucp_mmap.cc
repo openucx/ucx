@@ -235,8 +235,9 @@ ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
         ASSERT_UCS_OK(ucp_ep_rkey_unpack(ep, rkey_buffer, &rkey));
     } else {
         // Different MD map means different config index on proto v2
-        ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_size,
-                                                  md_map, 0, &rkey));
+        ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(
+                        ep, rkey_buffer, rkey_size, md_map, 0,
+                        UCS_SYS_DEVICE_ID_UNKNOWN, &rkey));
     }
 
     ucp_rkey_buffer_release(rkey_buffer);

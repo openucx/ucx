@@ -735,13 +735,13 @@ typedef struct uct_rkey_unpack_params {
      * @ref uct_rkey_unpack_field_mask_t. Fields not specified in this mask will
      * be ignored. Provides ABI compatibility with respect to adding new fields.
      */
-    uint64_t field_mask;
+    uint64_t             field_mask;
 
     /**
      * System device to unpack rkey on. Can be UCS_SYS_DEVICE_ID_UNKNOWN
      * (default behavior).
      */
-    ucs_sys_device_t sys_device;
+    ucs_sys_device_t     sys_device;
 } uct_rkey_unpack_params_t;
 
 
@@ -1183,7 +1183,7 @@ uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
  *       If the remote key buffer cannot be unpacked with the given component,
  *       UCS_ERR_INVALID_PARAM will be returned.
  *
- * @return Error code.
+ * @return UCS_OK on success or error code in case of failure.
  */
 ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
                                 const void *rkey_buffer,
