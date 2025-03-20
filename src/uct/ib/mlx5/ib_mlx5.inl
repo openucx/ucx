@@ -162,6 +162,7 @@ typedef struct mlx5_cqe64 *
 (uct_ib_mlx5_check_compl_cb_t)(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
                                struct mlx5_cqe64 *cqe, int poll_flags);
 
+
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64 *
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
                     uct_ib_mlx5_check_compl_cb_t check_cqe_cb)
@@ -188,7 +189,6 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
     }
 
     cq->cq_ci = idx + 1;
-
     return cqe; /* TODO optimize - let compiler know cqe is not null */
 }
 

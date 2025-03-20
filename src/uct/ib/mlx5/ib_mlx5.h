@@ -458,6 +458,8 @@ typedef struct uct_ib_mlx5_md {
         uint8_t supported_tls;
         uint16_t max_message_size_stride;
         uint32_t max_message_size_bytes;
+        uint32_t min_stride_size;
+        uint32_t max_stride_size;
     } msg_based_srq;
 } uct_ib_mlx5_md_t;
 

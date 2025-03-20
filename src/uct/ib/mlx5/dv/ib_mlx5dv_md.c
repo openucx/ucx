@@ -2348,10 +2348,11 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_RMP;
     }
 
-    /*TODO: delete this print and validate stride size is within that range */
-    ucs_info("RQ stride min size: %d, max_size: %d",
-             1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_min_stride_sz_rq),
-             1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_stride_sz_rq));
+    md->msg_based_srq.min_stride_size =
+            1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_min_stride_sz_rq);
+
+    md->msg_based_srq.max_stride_size =
+            1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_stride_sz_rq);
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ooo_sl_mask)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK;

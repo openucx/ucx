@@ -280,6 +280,14 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
         log_num_of_strides = ucs_ilog2(iface->msg_based.num_strides) - 9;
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,
                           log_num_of_strides & 0xF);
+        ucs_assertv_always((md->msg_based_srq.min_stride_size <=
+                            iface->super.super.config.stride_size) &&
+                                   (iface->super.super.config.stride_size <=
+                                    md->msg_based_srq.max_stride_size),
+                           "stride size %d is out of range [%d, %d]",
+                           iface->super.super.config.stride_size,
+                           md->msg_based_srq.min_stride_size,
+                           md->msg_based_srq.max_stride_size);
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
                           ucs_ilog2(iface->super.super.config.stride_size) - 6);
     }
