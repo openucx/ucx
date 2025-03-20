@@ -13,7 +13,7 @@ steps:
 
       case "${{ parameters.Name }}" in
         "Build-UCX")
-          module="/hpc/local/etc/modulefiles/dev/cuda12.1"
+          module="/hpc/local/etc/modulefiles/dev/cuda12.8"
           perfxParams=(--skip-run --source-branch $(Build.SourceBranch) --omb-cuda)
           ;;
         "Perf-test-multi-node")

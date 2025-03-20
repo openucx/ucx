@@ -93,10 +93,11 @@ static const char *ucp_atomic_modes[] = {
 };
 
 static const char *ucp_fence_modes[] = {
-    [UCP_FENCE_MODE_WEAK]   = "weak",
-    [UCP_FENCE_MODE_STRONG] = "strong",
-    [UCP_FENCE_MODE_AUTO]   = "auto",
-    [UCP_FENCE_MODE_LAST]   = NULL
+    [UCP_FENCE_MODE_WEAK]     = "weak",
+    [UCP_FENCE_MODE_STRONG]   = "strong",
+    [UCP_FENCE_MODE_AUTO]     = "auto",
+    [UCP_FENCE_MODE_EP_BASED] = "ep_based",
+    [UCP_FENCE_MODE_LAST]     = NULL
 };
 
 static const char *ucp_rndv_modes[] = {
@@ -380,9 +381,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"FENCE_MODE", "auto",
    "Fence mode used in ucp_worker_fence routine.\n"
-   " weak   - use weak fence mode.\n"
-   " strong - use strong fence mode.\n"
-   " auto   - automatically detect required fence mode.",
+   " weak     - use weak fence mode.\n"
+   " strong   - use strong fence mode.\n"
+   " auto     - automatically detect fence mode.\n"
+   " ep_based - use endpoint-based fence mode.",
    ucs_offsetof(ucp_context_config_t, fence_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_fence_modes)},
 
@@ -554,9 +556,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, max_priority_eps),
    UCS_CONFIG_TYPE_UINT},
 
-   {"ON_DEMAND_WIREUP", "y", /* TODO: disable by default */
-    "Enable new protocol selection logic",
-    ucs_offsetof(ucp_context_config_t, on_demand_wireup), UCS_CONFIG_TYPE_BOOL},
+  {"WIREUP_VIA_AM_LANE", "n",
+   "Use AM lane to send wireup messages",
+   ucs_offsetof(ucp_context_config_t, wireup_via_am_lane),
+   UCS_CONFIG_TYPE_BOOL},
+
+  {"ON_DEMAND_WIREUP", "y", /* TODO: disable by default */
+   "Enable new protocol selection logic",
+   ucs_offsetof(ucp_context_config_t, on_demand_wireup), UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -873,8 +880,8 @@ void ucp_config_print_cached_uct(const ucp_config_t *config, FILE *stream,
 void ucp_config_print(const ucp_config_t *config, FILE *stream,
                       const char *title, ucs_config_print_flags_t print_flags)
 {
-    ucs_config_parser_print_opts(stream, title, config, ucp_config_table,
-                                 NULL, UCS_DEFAULT_ENV_PREFIX, print_flags);
+    ucs_config_parser_print_opts(stream, title, config, ucp_config_table, NULL,
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags, NULL);
     ucp_config_print_cached_uct(config, stream, title, print_flags);
 }
 
@@ -2228,11 +2235,21 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     memcpy(context->config.am_mpools.sizes, config->mpool_sizes.memunits,
            config->mpool_sizes.count * sizeof(size_t));
 
-    context->config.worker_strong_fence =
-            (context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) ||
-            ((context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) &&
-             ((context->config.ext.max_rma_lanes > 1) ||
-              context->config.ext.proto_enable));
+    if ((context->config.ext.fence_mode == UCP_FENCE_MODE_EP_BASED) &&
+        !context->config.ext.proto_enable) {
+        ucs_error("UCX_FENCE_MODE=ep_based requires UCX_PROTO_ENABLE=y");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_key_list;
+    } else if (context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) {
+        if ((context->config.ext.max_rma_lanes > 1) ||
+            context->config.ext.proto_enable) {
+            context->config.worker_fence_mode = UCP_FENCE_MODE_STRONG;
+        } else {
+            context->config.worker_fence_mode = UCP_FENCE_MODE_WEAK;
+        }
+    } else {
+        context->config.worker_fence_mode = context->config.ext.fence_mode;
+    }
 
     context->config.progress_wrapper_enabled =
             ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||

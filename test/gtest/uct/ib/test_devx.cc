@@ -58,14 +58,7 @@ public:
     }
 
     bool check_xgvmi() const {
-        if (md()->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI) {
-            uct_ib_mlx5_devx_mem_t *memh = create_memh(1);
-            ASSERT_UCS_OK(uct_ib_mlx5_devx_reg_exported_key(md(), memh));
-            /* XGVMI capability might be dropped by this point! */
-            destroy_memh(memh);
-        }
-
-        return md()->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
+        return md()->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY;
     }
 
     void skip_no_xgvmi() const {

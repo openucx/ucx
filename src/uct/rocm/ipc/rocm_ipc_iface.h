@@ -13,21 +13,22 @@
 
 #define UCT_ROCM_IPC_TL_NAME "rocm_ipc"
 
-typedef struct uct_rocm_ipc_iface {
-    uct_base_iface_t super;
-    ucs_mpool_t signal_pool;
-    ucs_queue_head_t signal_queue;
-    struct {
-        size_t min_zcopy;
-        double latency;
-    } config;
+typedef struct uct_rocm_ipc_iface_config_params {
+    size_t min_zcopy;
+    double latency;
+    int    enable_ipc_handle_cache;
+} uct_rocm_ipc_iface_config_params_t;
 
+typedef struct uct_rocm_ipc_iface {
+    uct_base_iface_t                   super;
+    ucs_mpool_t                        signal_pool;
+    ucs_queue_head_t                   signal_queue;
+    uct_rocm_ipc_iface_config_params_t config;
 } uct_rocm_ipc_iface_t;
 
 typedef struct uct_rocm_ipc_iface_config {
-    uct_iface_config_t super;
-    size_t             min_zcopy;
-    double             latency;
+    uct_iface_config_t                 super;
+    uct_rocm_ipc_iface_config_params_t params;
 } uct_rocm_ipc_iface_config_t;
 
 #endif
