@@ -611,7 +611,6 @@ struct uct_ib_mlx5_odp_cap_bits {
     uint8_t         reserved_at_620[0x1e0];
 };
 
-
 struct uct_ib_mlx5_adv_rdma_cap_bits {
     uint8_t   reserved_at_0[0x40];
     uint8_t   mp_max_num_queues[0x8];
@@ -655,11 +654,11 @@ struct uct_ib_mlx5_query_hca_cap_in_bits {
 };
 
 typedef enum {
-    UCT_IB_MLX5_SMBRWQ_SUPPORT_RC  = UCS_BIT(0),
-    UCT_IB_MLX5_SMBRWQ_SUPPORT_UC  = UCS_BIT(1),
-    UCT_IB_MLX5_SMBRWQ_SUPPORT_DC  = UCS_BIT(2),
-    UCT_IB_MLX5_SMBRWQ_SUPPORT_UD  = UCS_BIT(3)
-} uct_ib_mlx5_smbrwq_supported_tls_t;
+    UCT_IB_MLX5_MSG_BASED_SRQ_SUPPORT_RC = UCS_BIT(0),
+    UCT_IB_MLX5_MSG_BASED_SRQ_SUPPORT_UC = UCS_BIT(1),
+    UCT_IB_MLX5_MSG_BASED_SRQ_SUPPORT_DC = UCS_BIT(2),
+    UCT_IB_MLX5_MSG_BASED_SRQ_SUPPORT_UD = UCS_BIT(3)
+} uct_ib_mlx5_msg_based_srq_supported_tls_t;
 
 typedef enum {
     /* QP are associated with port affinity */

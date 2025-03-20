@@ -84,7 +84,7 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
     int stride_idx;
     int desc_offset;
 
-    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
+    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) {
         stride_idx           = uct_ib_mlx5_cqe_stride_index(cqe);
         udesc                = (void*)be64toh(seg->dptr[stride_idx].addr);
         uct_recv_desc(udesc) = release_desc;
@@ -128,7 +128,7 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
                                   uct_recv_desc_t *release_desc, int poll_flags)
 {
     uct_ib_mlx5_srq_t *srq    = &iface->rx.srq;
-    uint16_t strides_consumed = (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) ?
+    uint16_t strides_consumed = (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) ?
                                         uct_rc_mlx5_iface_strides_consumed(
                                                 cqe->byte_cnt) :
                                         iface->tm.mp.num_strides;
@@ -153,7 +153,7 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
         seg->srq.strides = iface->tm.mp.num_strides;
     }
 
-    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
+    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) {
         ucs_assertv(strides_consumed <= seg->srq.strides, "strides_consumed %d, seg->srq.strides %d",
                     strides_consumed, seg->srq.strides);
 
@@ -340,7 +340,6 @@ uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *iface,
         *flags = 0;
     } else {
         hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
         *flags = UCT_CB_PARAM_FLAG_DESC;
         /* Assuming that next packet likely will be non-inline,
@@ -372,8 +371,7 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
 
     if (!UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* uct_rc_mlx5_iface_common_data will initialize flags value */
-        hdr = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, flags);
-
+        hdr        = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, flags);
         *context_p = uct_rc_mlx5_iface_single_frag_context(iface, flags);
         return hdr;
     }
@@ -405,7 +403,7 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
                                            UCT_RC_MLX5_IFACE_STAT_RX_INL_64,
                                            byte_len);
     } else {
-        // *flags    |= UCT_CB_PARAM_FLAG_DESC;
+        *flags    |= UCT_CB_PARAM_FLAG_DESC;
         seg        = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, ntohs(cqe->wqe_counter));
         stride_idx = uct_ib_mlx5_cqe_stride_index(cqe);
         // ucs_assert(stride_idx < iface->tm.mp.num_strides);
@@ -1468,7 +1466,8 @@ uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_mlx5_srq_seg_t *seg;
 
     /* filler CQE is relevant for MP XRQ only */
-    ucs_assert_always(UCT_RC_MLX5_MP_ENABLED(iface) || (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ));
+    ucs_assert_always(UCT_RC_MLX5_MP_ENABLED(iface) ||
+                      (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED));
 
     seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, ntohs(cqe->wqe_counter));
 
@@ -1478,7 +1477,6 @@ uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
                                       UCS_OK, 0, NULL, poll_flags);
 }
 #endif /* IBV_HW_TM */
-
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
@@ -1531,7 +1529,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         goto out_update_db;
     }
 
-    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
+    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) {
         if (byte_len == 0) {
             byte_len = (strides_consumed > 0) ? 1 << 16 : 0;
         }
@@ -1633,8 +1631,8 @@ out_update_db:
 out:
     max_batch = iface->super.super.config.rx_max_batch;
     if (ucs_unlikely(iface->super.rx.srq.available >= max_batch)) {
-        if (poll_flags & UCT_IB_MLX5_POLL_FLAG_SMBRWQ) {
-            uct_rc_mlx5_iface_srq_post_recv_smbrwq(iface);
+        if (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) {
+            uct_rc_mlx5_iface_srq_post_recv_msg_based(iface);
         } else if (poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) {
             uct_rc_mlx5_iface_srq_post_recv_ll(iface);
         } else {
@@ -2008,7 +2006,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_base_ep_zcopy_post(
     return UCS_INPROGRESS;
 }
 
-static UCS_F_ALWAYS_INLINE int uct_rc_mlx5_iface_is_srq_smbrwq(uct_rc_mlx5_iface_common_t *iface)
+static UCS_F_ALWAYS_INLINE int
+uct_rc_mlx5_iface_is_srq_msg_based(uct_rc_mlx5_iface_common_t *iface)
 {
     return iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST;
 }

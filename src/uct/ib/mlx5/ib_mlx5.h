@@ -169,8 +169,6 @@ struct mlx5_grh_av {
 
 #define UCT_IB_MLX5_DEVX_ECE_TRIG_RESP    0x10000000
 
-#define UCT_IB_MLX5_DEVX_SMBRWQ_MAX_SEND_RECEIVE_MESSAGE_SIZE 512
-
 enum {
     /* Device supports KSM */
     UCT_IB_MLX5_MD_FLAG_KSM                  = UCS_BIT(0),
@@ -242,7 +240,7 @@ enum {
     UCT_IB_MLX5_POLL_FLAG_TAG_CQE     = UCS_BIT(2),
     UCT_IB_MLX5_POLL_FLAG_LINKED_LIST = UCS_BIT(3),
     UCT_IB_MLX5_POLL_FLAG_CQE_ZIP     = UCS_BIT(4),
-    UCT_IB_MLX5_POLL_FLAG_SMBRWQ      = UCS_BIT(5)
+    UCT_IB_MLX5_POLL_FLAG_MSG_BASED   = UCS_BIT(5)
 };
 
 
@@ -460,14 +458,14 @@ typedef struct uct_ib_mlx5_md {
         uint8_t supported_tls;
         uint16_t max_message_size_stride;
         uint32_t max_message_size_bytes;
-    } smbrwq;
+    } msg_based_srq;
 } uct_ib_mlx5_md_t;
 
 enum {
-    UCT_IB_MLX5_SMBRWQ_TLS_RC  = UCS_BIT(0),
-    UCT_IB_MLX5_SMBRWQ_TLS_UC  = UCS_BIT(1),
-    UCT_IB_MLX5_SMBRWQ_TLS_DC  = UCS_BIT(2),
-    UCT_IB_MLX5_SMBRWQ_TLS_UD  = UCS_BIT(3)
+    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_RC = UCS_BIT(0),
+    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_UC = UCS_BIT(1),
+    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_DC = UCS_BIT(2),
+    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_UD = UCS_BIT(3)
 };
 
 typedef enum {
@@ -650,7 +648,7 @@ typedef struct uct_ib_mlx5_qp_attr {
     int                         full_handshake;
     int                         rdma_wr_disabled;
     uint8_t                     log_num_dci_stream_channels;
-    int                         is_smbrwq_associated;
+    int                         msg_based_srq_associated;
 } uct_ib_mlx5_qp_attr_t;
 
 

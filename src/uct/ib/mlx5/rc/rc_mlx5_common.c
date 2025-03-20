@@ -65,7 +65,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
-  {"SRQ_TOPO", "msg_based,cyclic,cyclic_emulated,list",
+  {"SRQ_TOPO", "cyclic,cyclic_emulated,list",
    "List of SRQ topology types in order of preference. Supported types are:\n"
    "\n"
    "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
@@ -218,7 +218,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
 }
 
 unsigned
-uct_rc_mlx5_iface_srq_post_recv_smbrwq(uct_rc_mlx5_iface_common_t *iface)
+uct_rc_mlx5_iface_srq_post_recv_msg_based(uct_rc_mlx5_iface_common_t *iface)
 {
     uct_ib_mlx5_srq_t *srq     = &iface->rx.srq;
     uct_rc_iface_t *rc_iface   = &iface->super;
@@ -314,14 +314,14 @@ ucs_status_t uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 
     ucs_assert(iface->tm.cmd_wq.super.super.type == UCT_IB_MLX5_OBJ_TYPE_LAST);
 
-    attr.super.qp_type          = IBV_QPT_RC;
-    attr.super.cap.max_send_wr  = iface->tm.cmd_qp_len;
-    attr.super.cap.max_send_sge = 1;
-    attr.super.ibv.pd           = md->super.pd;
-    attr.super.srq_num          = iface->rx.srq.srq_num;
-    attr.super.port             = dev->first_port;
-    attr.mmio_mode              = iface->tx.mmio_mode;
-    attr.is_smbrwq_associated   = uct_rc_mlx5_iface_is_srq_smbrwq(iface);
+    attr.super.qp_type            = IBV_QPT_RC;
+    attr.super.cap.max_send_wr    = iface->tm.cmd_qp_len;
+    attr.super.cap.max_send_sge   = 1;
+    attr.super.ibv.pd             = md->super.pd;
+    attr.super.srq_num            = iface->rx.srq.srq_num;
+    attr.super.port               = dev->first_port;
+    attr.mmio_mode                = iface->tx.mmio_mode;
+    attr.msg_based_srq_associated = uct_rc_mlx5_iface_is_srq_msg_based(iface);
     status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
                                         &iface->cq[UCT_IB_DIR_RX],
                                         &iface->cq[UCT_IB_DIR_RX],
@@ -593,7 +593,8 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        uct_rc_mlx5_iface_is_srq_smbrwq(iface) ?
+                                        uct_rc_mlx5_iface_is_srq_msg_based(
+                                                iface) ?
                                                 iface->msg_based.num_strides :
                                                 iface->tm.mp.num_strides);
 
@@ -905,9 +906,7 @@ void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
     iface->tm.eager_desc.super.cb = uct_rc_mlx5_release_desc;
     iface->tm.rndv_desc.super.cb  = uct_rc_mlx5_release_desc;
 
-    if (UCT_RC_MLX5_MP_ENABLED(iface) 
-    // || uct_rc_mlx5_iface_is_srq_smbrwq(iface)
-        ) {
+    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         iface->tm.eager_desc.offset = sizeof(struct ibv_tmh) +
                                       iface->super.super.config.rx_headroom_offset;
         iface->tm.am_desc.offset    = sizeof(uct_rc_mlx5_hdr_t) +
@@ -1000,7 +999,8 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        uct_rc_mlx5_iface_is_srq_smbrwq(iface) ?
+                                        uct_rc_mlx5_iface_is_srq_msg_based(
+                                                iface) ?
                                                 iface->msg_based.num_strides :
                                                 iface->tm.mp.num_strides);
     if (status != UCS_OK) {

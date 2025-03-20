@@ -2179,11 +2179,11 @@ ucs_status_t uct_ib_mlx5_devx_query_adv_rdma_cap(uct_ib_mlx5_md_t *md, struct ib
                                                 (UCT_IB_MLX5_CAP_ADV_RDMA << 1),
                                         out, sizeof(out), "QUERY_ADV_RDMA_CAP",
                                         0);
-    md->smbrwq.supported_tls           = UCT_IB_MLX5DV_GET(
+    md->msg_based_srq.supported_tls           = UCT_IB_MLX5DV_GET(
             adv_rdma_cap, cap, message_based_qp_and_striding_wq);
-    md->smbrwq.max_message_size_stride = UCT_IB_MLX5DV_GET(
+    md->msg_based_srq.max_message_size_stride = UCT_IB_MLX5DV_GET(
             adv_rdma_cap, cap, max_receive_send_message_size_stride);
-    md->smbrwq.max_message_size_bytes  = UCT_IB_MLX5DV_GET(
+    md->msg_based_srq.max_message_size_bytes  = UCT_IB_MLX5DV_GET(
             adv_rdma_cap, cap, max_receive_send_message_size_byte);
 
     return status;
@@ -2287,7 +2287,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
             goto err_lru_cleanup;
         }
     } else {
-        md->smbrwq.supported_tls = 0;
+        md->msg_based_srq.supported_tls = 0;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_msg) !=

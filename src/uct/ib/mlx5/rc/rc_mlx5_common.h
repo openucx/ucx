@@ -581,7 +581,7 @@ extern ucs_config_field_t uct_rc_mlx5_common_config_table[];
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface);
 unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface);
 unsigned
-uct_rc_mlx5_iface_srq_post_recv_smbrwq(uct_rc_mlx5_iface_common_t *iface);
+uct_rc_mlx5_iface_srq_post_recv_msg_based(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface);
 

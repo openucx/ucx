@@ -125,7 +125,9 @@ void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
 
 #if HAVE_DEVX
 
-static void uct_ib_mlx5_devx_set_smbrwq_attr(uct_ib_iface_t *iface, const uct_ib_mlx5_md_t *md, char *create_qp_in)
+static void uct_ib_mlx5_devx_set_msg_based_srq_attr(uct_ib_iface_t *iface,
+                                                    const uct_ib_mlx5_md_t *md,
+                                                    char *create_qp_in)
 {
     void *qpce = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, create_qp_in, qpc_data_extension);
 
@@ -136,14 +138,17 @@ static void uct_ib_mlx5_devx_set_smbrwq_attr(uct_ib_iface_t *iface, const uct_ib
                       iface->config.max_send_message_size_strides);
 }
 
-static int uct_ib_mlx5_devx_is_smbrwq_enabled(uct_ib_mlx5_md_t *md,
-                                              uct_ib_mlx5_qp_attr_t *attr)
+static int
+uct_ib_mlx5_devx_is_msg_based_srq_enabled(uct_ib_mlx5_md_t *md,
+                                          uct_ib_mlx5_qp_attr_t *attr)
 {
-    return (attr->is_smbrwq_associated) &&
+    return (attr->msg_based_srq_associated) &&
            (md->flags & UCT_IB_MLX5_MD_FLAG_QP_CTX_EXTENSION) &&
-           (((md->smbrwq.supported_tls & UCT_IB_MLX5_SMBRWQ_SUPPORT_RC) &&
+           (((md->msg_based_srq.supported_tls &
+              UCT_IB_MLX5_MSG_BASED_SRQ_SUPPORT_RC) &&
              (attr->super.qp_type == IBV_QPT_RC)) ||
-            ((md->smbrwq.supported_tls & UCT_IB_MLX5_SMBRWQ_SUPPORT_DC) &&
+            ((md->msg_based_srq.supported_tls &
+              UCT_IB_MLX5_MSG_BASED_SRQ_SUPPORT_DC) &&
              (attr->super.qp_type == UCT_IB_QPT_DCI)));
 }
 
@@ -216,8 +221,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     } else if (attr->super.qp_type == IBV_QPT_RC) {
         UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_RC);
 
-        if (uct_ib_mlx5_devx_is_smbrwq_enabled(md, attr)) {
-            uct_ib_mlx5_devx_set_smbrwq_attr(iface, md, in);
+        if (uct_ib_mlx5_devx_is_msg_based_srq_enabled(md, attr)) {
+            uct_ib_mlx5_devx_set_msg_based_srq_attr(iface, md, in);
         }
     } else {
         ucs_error("create qp failed: unknown type %d", attr->super.qp_type);
@@ -449,7 +454,6 @@ uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
     obj = mlx5dv_devx_obj_create(context, in, inlen, out, outlen);
     if (obj == NULL) {
         syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
-        ucs_log_print_backtrace(UCS_LOG_LEVEL_INFO);
         ucs_log(log_level,
                 "mlx5dv_devx_obj_create(%s) failed on %s, syndrome 0x%x: %m",
                 msg_arg, ibv_get_device_name(context->device), syndrome);

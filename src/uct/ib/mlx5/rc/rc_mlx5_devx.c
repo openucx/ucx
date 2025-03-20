@@ -222,7 +222,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 void *wq)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
-    int num_sges        = uct_rc_mlx5_iface_is_srq_smbrwq(iface) ?
+    int num_sges        = uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
                                          uct_ib_mlx5_srq_calc_num_sges(
                                    config->super.stride_size) :
                                          iface->tm.mp.num_strides;
@@ -251,7 +251,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                           UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ :
                           UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
     } else if (UCT_RC_MLX5_MP_ENABLED(iface) ||
-               uct_rc_mlx5_iface_is_srq_smbrwq(iface)) {
+               uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
         wq_type = UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ;
     } else {
         wq_type = UCT_IB_MLX5_SRQ_TOPO_LIST;
@@ -274,7 +274,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                           log_num_of_strides & 0xF);
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
                           (ucs_ilog2(iface->super.super.config.seg_size) - 6));
-    } else if (uct_rc_mlx5_iface_is_srq_smbrwq(iface)) {
+    } else if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
         iface->msg_based.num_strides = iface->super.super.config.seg_size /
                                        iface->super.super.config.stride_size;
         log_num_of_strides = ucs_ilog2(iface->msg_based.num_strides) - 9;

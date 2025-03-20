@@ -42,13 +42,6 @@ uct_ib_mlx5_cqe_is_hw_owned(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe,
     }
 }
 
-// static UCS_F_ALWAYS_INLINE int
-// uct_ib_mlx5_cqe_is_64k_striding(struct mlx5_cqe64 *cqe)
-// {
-//     uint32_t byte_cnt = htonl(cqe->byte_cnt);
-//     return (!(byte_cnt & 0xFFFF)) && (((byte_cnt & 0x1FFF000) >> 16) > 0);
-// }
-
 /**
  * Checks that cqe_format is equal to 3 (cqe is a part of compression block)
  * or opcode contains information about error.
@@ -196,7 +189,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
 
     cq->cq_ci = idx + 1;
 
-    return cqe; /* todo optimize - let compiler know cqe is not null */
+    return cqe; /* TODO optimize - let compiler know cqe is not null */
 }
 
 

@@ -52,7 +52,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
 
     /* Since long timeout will block SRQ in case of network failure on single
      * peer default SRQ to list topology. Incur performance degradation. */
-    {"RC_", "SRQ_TOPO=msg_based,list", NULL,
+    {"RC_", "SRQ_TOPO=list", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, rc_mlx5_common),
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
@@ -398,7 +398,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
         attr.rdma_wr_disabled            = (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
                                            (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
         attr.log_num_dci_stream_channels = ucs_ilog2(num_dci_channels);
-        attr.is_smbrwq_associated        = uct_rc_mlx5_iface_is_srq_smbrwq(
+        attr.msg_based_srq_associated    = uct_rc_mlx5_iface_is_srq_msg_based(
                 &iface->super);
         status = uct_ib_mlx5_devx_create_qp(ib_iface,
                                             &iface->super.cq[UCT_IB_DIR_TX],
