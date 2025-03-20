@@ -25,7 +25,6 @@ typedef enum {
  */
 typedef struct uct_cuda_copy_md {
     struct uct_md                super;           /* Domain info */
-    int                          sync_memops_set;
     size_t                       granularity;     /* allocation granularity */
     struct {
         ucs_on_off_auto_value_t  alloc_whole_reg; /* force return of allocation
