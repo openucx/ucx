@@ -49,9 +49,7 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
         ucs_status_t _status = UCS_OK; \
         do { \
             CUresult _result = (_func); \
-            if (CUDA_ERROR_NOT_READY == _result) { \
-                _status = UCS_INPROGRESS; \
-            } else if (CUDA_SUCCESS != _result) { \
+            if (ucs_unlikely(CUDA_SUCCESS != _result)) { \
                 UCT_CUDADRV_LOG(_func, _log_level, _result); \
                 _status = UCS_ERR_IO_ERROR; \
             } \
