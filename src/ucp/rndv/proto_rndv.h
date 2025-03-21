@@ -145,8 +145,7 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
 
 
 ucp_lane_index_t
-ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params,
-                              const char *ctrl_name);
+ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params);
 
 
 void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params);

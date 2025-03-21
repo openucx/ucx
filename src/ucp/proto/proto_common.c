@@ -497,8 +497,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                             size_t min_iov, ucp_lane_type_t lane_type,
                             ucs_memory_type_t reg_mem_type,
                             uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
-                            ucp_lane_map_t exclude_map,
-                            const char *title, ucp_lane_index_t *lanes)
+                            ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes)
 {
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
     ucp_context_h context                        = params->worker->context;
@@ -524,9 +523,9 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                               &sel_param_strb);
 
     num_lanes = 0;
-    ucs_trace("selecting up to %d/%d lanes for %s %s %s", max_lanes,
+    ucs_trace("selecting up to %d/%d lanes for %s %s", max_lanes,
               ep_config_key->num_lanes,
-              ucp_proto_id_field(params->proto_id, name), title,
+              ucp_proto_id_field(params->proto_id, name),
               ucs_string_buffer_cstr(&sel_param_strb));
     ucs_log_indent(1);
 
@@ -704,7 +703,7 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
     num_lanes = ucp_proto_common_find_lanes(
                    &params->super, params->flags, params->max_iov_offs,
                    params->min_iov, lane_type, params->reg_mem_info.type,
-                   tl_cap_flags, max_lanes, exclude_map, "data", lanes);
+                   tl_cap_flags, max_lanes, exclude_map, lanes);
 
     num_valid_lanes = 0;
     for (lane_index = 0; lane_index < num_lanes; ++lane_index) {
