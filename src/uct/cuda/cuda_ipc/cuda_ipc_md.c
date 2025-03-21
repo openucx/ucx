@@ -106,10 +106,68 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 }
 
 static ucs_status_t
+uct_cuda_ipc_mem_add_reg_push_ctx(CUdeviceptr address, CUdevice *cuda_device_p)
+{
+    CUdevice cuda_device = CU_DEVICE_INVALID;
+    #define UCT_CUDA_IPC_NUM_ATTRS 2
+    CUpointer_attribute attr_type[UCT_CUDA_IPC_NUM_ATTRS];
+    void *attr_data[UCT_CUDA_IPC_NUM_ATTRS];
+    CUcontext cuda_ctx;
+    int cuda_device_ordinal;
+    ucs_status_t status;
+
+    attr_type[0] = CU_POINTER_ATTRIBUTE_CONTEXT;
+    attr_data[0] = &cuda_ctx;
+    attr_type[1] = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
+    attr_data[1] = &cuda_device_ordinal;
+    
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuPointerGetAttributes(UCT_CUDA_IPC_NUM_ATTRS, attr_type, attr_data,
+                                   address));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (cuda_ctx == NULL) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_device,
+                                                      cuda_device_ordinal));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = uct_cuda_primary_ctx_retain(cuda_device, 0, &cuda_ctx);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+    if (status != UCS_OK) {
+        if (cuda_device != CU_DEVICE_INVALID) {
+            UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+        }
+
+        return status;
+    }
+
+    *cuda_device_p = cuda_device;
+    return UCS_OK;
+}
+
+static void uct_cuda_ipc_mem_add_reg_pop_ctx(CUdevice cuda_device)
+{
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    if (cuda_device != CU_DEVICE_INVALID) {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    }
+}
+
+static ucs_status_t
 uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
                          uct_cuda_ipc_lkey_t **key_p)
 {
     uct_cuda_ipc_lkey_t *key;
+    CUdevice cuda_device;
     ucs_status_t status;
 #if HAVE_CUDA_FABRIC
 #define UCT_CUDA_IPC_QUERY_NUM_ATTRS 3
@@ -126,20 +184,27 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         return UCS_ERR_NO_MEMORY;
     }
 
-    UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
-                (CUdeviceptr)addr));
+    status = uct_cuda_ipc_mem_add_reg_push_ctx((CUdeviceptr)addr, &cuda_device);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemGetAddressRange(&key->d_bptr, &key->b_len, (CUdeviceptr)addr));
+    if (status != UCS_OK) {
+        goto out_pop_ctx;
+    }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&key->ph.buffer_id,
                                       CU_POINTER_ATTRIBUTE_BUFFER_ID,
                                       (CUdeviceptr)addr));
     if (status != UCS_OK) {
-        goto err;
+        goto out_pop_ctx;
     }
 
 #if HAVE_CUDA_FABRIC
     /* cuda_ipc can handle VMM, mallocasync, and legacy pinned device so need to
      * pack appropriate handle */
-
     attr_type[0] = CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE;
     attr_data[0] = &legacy_capable;
     attr_type[1] = CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES;
@@ -151,7 +216,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
             cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
                 attr_data, (CUdeviceptr)addr));
     if (status != UCS_OK) {
-        goto err;
+        goto out_pop_ctx;
     }
 
     if (legacy_capable) {
@@ -178,7 +243,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemRelease(handle));
         if (status != UCS_OK) {
-            goto err;
+            goto out_pop_ctx;
         }
 
         key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
@@ -190,7 +255,8 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         /* cuda_ipc can only handle UCS_MEMORY_TYPE_CUDA, which has to be either
          * legacy type, or VMM type, or mempool type. Return error if memory
          * does not belong to any of the three types */
-        goto err;
+        status = UCS_ERR_INVALID_ADDR;
+        goto out_pop_ctx;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
@@ -204,7 +270,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportPointer(&key->ph.ptr,
                 (CUdeviceptr)key->d_bptr));
     if (status != UCS_OK) {
-        goto err;
+        goto out_pop_ctx;
     }
 
     key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL;
@@ -220,7 +286,7 @@ legacy_path:
     status              = UCT_CUDADRV_FUNC_LOG_ERR(
             cuIpcGetMemHandle(&key->ph.handle.legacy, (CUdeviceptr)addr));
     if (status != UCS_OK) {
-        goto err;
+        goto out_pop_ctx;
     }
 
 common_path:
@@ -230,10 +296,15 @@ common_path:
               key->ph.buffer_id);
 
     *key_p = key;
-    return UCS_OK;
+    status = UCS_OK;
 
-err:
-    ucs_free(key);
+out_pop_ctx:
+    uct_cuda_ipc_mem_add_reg_pop_ctx(cuda_device);
+out:
+    if (status != UCS_OK) {
+        ucs_free(key);
+    }
+
     return status;
 }
 
