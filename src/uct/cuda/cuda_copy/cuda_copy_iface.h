@@ -97,18 +97,4 @@ uct_cuda_copy_flush_bitmap_idx(ucs_memory_type_t src_mem_type,
     return (src_mem_type * UCS_MEMORY_TYPE_LAST) + dst_mem_type;
 }
 
-
-/**
- * Create the resources of the given CUDA context.
- *
- * @param [in]  iface     CUDA copy transport interface
- * @param [in]  ctx_id    CUDA context id
- * @param [out] ctx_rsc_p Returned pointer to context resources
- *
- * @return Error code as defined by @ref ucs_status_t.
- */
-ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
-                                          unsigned long long ctx_id,
-                                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p);
-
 #endif

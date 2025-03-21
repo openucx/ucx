@@ -101,25 +101,16 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
         uct_cuda_copy_iface_t *iface, uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
+    ucs_status_t status;
     uct_cuda_ctx_rsc_t *ctx_rsc;
-    unsigned long long ctx_id;
-    CUresult result;
-    khiter_t iter;
 
-    result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
-    if (ucs_unlikely(result != CUDA_SUCCESS)) {
-        UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
-        return UCS_ERR_IO_ERROR;
+    status = uct_cuda_base_ctx_rsc_get(&iface->super, &ctx_rsc);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
-    iter = kh_get(cuda_ctx_rscs, &iface->super.ctx_rscs, ctx_id);
-    if (ucs_likely(iter != kh_end(&iface->super.ctx_rscs))) {
-        ctx_rsc    = kh_value(&iface->super.ctx_rscs, iter);
-        *ctx_rsc_p = ucs_derived_of(ctx_rsc, uct_cuda_copy_ctx_rsc_t);
-        return UCS_OK;
-    }
-
-    return uct_cuda_copy_ctx_rsc_create(iface, ctx_id, ctx_rsc_p);
+    *ctx_rsc_p = ucs_derived_of(ctx_rsc, uct_cuda_copy_ctx_rsc_t);
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

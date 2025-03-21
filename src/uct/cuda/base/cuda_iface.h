@@ -154,6 +154,9 @@ typedef struct {
 } uct_cuda_ctx_rsc_t;
 
 
+typedef uct_cuda_ctx_rsc_t * (*uct_cuda_alloc_rsc_t)();
+
+
 /* Hash map for CUDA context resources. The key is the CUDA context Id. */
 KHASH_INIT(cuda_ctx_rscs, unsigned long long, uct_cuda_ctx_rsc_t*, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
@@ -164,6 +167,8 @@ typedef struct uct_cuda_iface {
     int                    eventfd;
     /* CUDA resources per context */
     khash_t(cuda_ctx_rscs) ctx_rscs;
+    uct_cuda_alloc_rsc_t   alloc_rsc;
+    unsigned               max_events;
 } uct_cuda_iface_t;
 
 
@@ -178,6 +183,22 @@ uct_cuda_base_get_sys_dev(CUdevice cuda_device,
 
 ucs_status_t uct_cuda_base_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
 
+/**
+ * Init the resources of the given CUDA context.
+ *
+ * @param [in]  iface     CUDA transport interface
+ * @param [in]  ctx_id    CUDA context id
+ * @param [out] ctx_rsc_p Returned pointer to context resources
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
+                                          unsigned long long ctx_id,
+                                          uct_cuda_ctx_rsc_t **ctx_rsc_p);
+
+/** TODO */
+int uct_cuda_base_is_ctx_rsc_valid(const uct_cuda_ctx_rsc_t *ctx_rsc);
+
 #if (__CUDACC_VER_MAJOR__ >= 100000)
 void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(void *arg);
 #else
@@ -189,5 +210,28 @@ UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
                     uct_iface_internal_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_iface_config_t *tl_config, const char *dev_name);
+
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_base_ctx_rsc_get(uct_cuda_iface_t *iface, uct_cuda_ctx_rsc_t **ctx_rsc_p)
+{
+    unsigned long long ctx_id;
+    CUresult result;
+    khiter_t iter;
+
+    result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
+    if (ucs_unlikely(result != CUDA_SUCCESS)) {
+        UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    iter = kh_get(cuda_ctx_rscs, &iface->ctx_rscs, ctx_id);
+    if (ucs_likely(iter != kh_end(&iface->ctx_rscs))) {
+        *ctx_rsc_p = kh_value(&iface->ctx_rscs, iter);
+        return UCS_OK;
+    }
+
+    return uct_cuda_base_ctx_rsc_create(iface, ctx_id, ctx_rsc_p);
+}
 
 #endif
