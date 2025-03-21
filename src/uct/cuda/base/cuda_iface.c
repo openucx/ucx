@@ -217,6 +217,12 @@ err_del_iter:
     return UCS_ERR_NO_MEMORY;
 }
 
+void uct_cuda_base_ctx_rsc_destroy(uct_cuda_ctx_rsc_t *ctx_rsc)
+{
+    ucs_mpool_cleanup(&ctx_rsc->event_mp, 1);
+    ucs_free(ctx_rsc);
+}
+
 UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
                     uct_iface_internal_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,

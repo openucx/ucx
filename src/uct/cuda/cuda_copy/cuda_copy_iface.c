@@ -479,8 +479,7 @@ static void uct_cuda_copy_ctx_rsc_destroy(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
     }
 
     uct_cuda_copy_stream_destroy(&ctx_rsc->short_stream, ctx_rsc_valid);
-    ucs_mpool_cleanup(&ctx_rsc->super.event_mp, 1);
-    ucs_free(ctx_rsc);
+    uct_cuda_base_ctx_rsc_destroy(&ctx_rsc->super);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)

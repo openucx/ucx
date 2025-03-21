@@ -162,7 +162,7 @@ KHASH_INIT(cuda_ctx_rscs, unsigned long long, uct_cuda_ctx_rsc_t*, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
 
 
-typedef struct uct_cuda_iface {
+typedef struct {
     uct_base_iface_t       super;
     int                    eventfd;
     /* CUDA resources per context */
@@ -196,7 +196,8 @@ ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
                                           unsigned long long ctx_id,
                                           uct_cuda_ctx_rsc_t **ctx_rsc_p);
 
-/** TODO */
+void uct_cuda_base_ctx_rsc_destroy(uct_cuda_ctx_rsc_t *ctx_rsc);
+
 int uct_cuda_base_is_ctx_rsc_valid(const uct_cuda_ctx_rsc_t *ctx_rsc);
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
