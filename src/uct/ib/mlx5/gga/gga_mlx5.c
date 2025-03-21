@@ -132,6 +132,7 @@ uct_ib_mlx5_gga_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 
 static ucs_status_t
 uct_gga_mlx5_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                         const uct_rkey_unpack_params_t *params,
                          uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_ib_md_packed_mkey_t *mkey = rkey_buffer;
@@ -287,6 +288,7 @@ uct_gga_mlx5_rkey_resolve(uct_gga_mlx5_md_t *md,
     uct_md_h uct_md                          = &md->super.super.super;
     uct_md_mem_attach_params_t attach_params = { 0 };
     uct_md_mkey_pack_params_t repack_params  = { 0 };
+    uct_rkey_unpack_params_t unpack_params   = { 0 };
     uint64_t repack_mkey;
     ucs_status_t status;
 
@@ -310,7 +312,7 @@ uct_gga_mlx5_rkey_resolve(uct_gga_mlx5_md_t *md,
         goto err_dereg;
     }
 
-    status = uct_ib_rkey_unpack(NULL, &repack_mkey,
+    status = uct_ib_rkey_unpack(NULL, &repack_mkey, &unpack_params,
                                 &rkey_handle->rkey_ob.rkey,
                                 &rkey_handle->rkey_ob.handle);
     uct_gga_mlx5_rkey_trace(md, rkey_handle, "new");

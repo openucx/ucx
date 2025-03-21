@@ -60,7 +60,8 @@ ucp_ep_rkey_unpack_reachable(ucp_ep_h ep, const void *buffer, size_t length,
     ucp_ep_config_t *config = &ucs_array_elem(&ep->worker->ep_config,
                                               ep->cfg_index);
     return ucp_ep_rkey_unpack_internal(ep, buffer, length,
-                                       config->key.reachable_md_map, 0, rkey_p);
+                                       config->key.reachable_md_map, 0,
+                                       UCS_SYS_DEVICE_ID_UNKNOWN, rkey_p);
 }
 
 #endif

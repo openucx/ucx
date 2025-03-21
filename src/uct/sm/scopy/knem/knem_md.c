@@ -216,6 +216,7 @@ uct_knem_mkey_pack(uct_md_h md, uct_mem_h memh, void *address, size_t length,
 
 static ucs_status_t uct_knem_rkey_unpack(uct_component_t *component,
                                          const void *rkey_buffer,
+                                         const uct_rkey_unpack_params_t *params,
                                          uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_knem_key_t *packed = (uct_knem_key_t *)rkey_buffer;

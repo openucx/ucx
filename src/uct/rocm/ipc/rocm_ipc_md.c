@@ -143,9 +143,10 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_ipc_rkey_unpack(uct_component_t *component,
-                                             const void *rkey_buffer,
-                                             uct_rkey_t *rkey_p, void **handle_p)
+static ucs_status_t
+uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                         const uct_rkey_unpack_params_t *params,
+                         uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_rocm_ipc_key_t *packed = (uct_rocm_ipc_key_t *)rkey_buffer;
     uct_rocm_ipc_key_t *key;

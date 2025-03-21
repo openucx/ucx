@@ -502,6 +502,7 @@ static void uct_xpmem_mem_detach(uct_mm_md_t *md,
 
 static ucs_status_t
 uct_xpmem_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                      const uct_rkey_unpack_params_t *params,
                       uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_xpmem_packed_rkey_t *packed_rkey = rkey_buffer;
