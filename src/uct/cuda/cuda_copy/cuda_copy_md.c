@@ -78,7 +78,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      ucs_offsetof(uct_cuda_copy_md_config_t, cuda_async_mem_type),
      UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
-    {"RETAIN_INACTIVE_PRIMARY_CTX", "y",
+    {"RETAIN_INACTIVE_PRIMARY_CTX", "n",
      "Enable retaining and using an inactive CUDA primary context for memory"
      " allocation",
      ucs_offsetof(uct_cuda_copy_md_config_t, retain_inactive_primary_ctx),

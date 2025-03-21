@@ -15,9 +15,6 @@ extern "C" {
 #include <cuda_runtime.h>
 #include <thread>
 
-#include <thread>
-
-#include <thread>
 
 class test_switch_cuda_device : public test_md {
 protected:
