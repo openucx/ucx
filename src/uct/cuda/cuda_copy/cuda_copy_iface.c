@@ -329,7 +329,7 @@ static int uct_cuda_copy_is_ctx_valid(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
     unsigned long long ctx_id;
     CUresult result;
 
-    result = uct_cuda_base_ctx_get_id(ctx_rsc->ctx, &ctx_id);
+    result = uct_cuda_base_ctx_get_id(ctx_rsc->super.ctx, &ctx_id);
     if (result == CUDA_ERROR_CONTEXT_IS_DESTROYED) {
         return 0;
     } else if (result != CUDA_SUCCESS) {
@@ -337,10 +337,10 @@ static int uct_cuda_copy_is_ctx_valid(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
         return 0;
     }
 
-    return ctx_id == ctx_rsc->ctx_id;
+    return ctx_id == ctx_rsc->super.ctx_id;
 #else
     /* Best effort check on older Cuda versions */
-    return uct_cuda_base_is_context_valid(ctx_rsc->ctx);
+    return uct_cuda_base_is_context_valid(ctx_rsc->super.ctx);
 #endif
 }
 
@@ -349,7 +349,7 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     uct_cuda_event_desc_t *base = obj;
     uct_cuda_copy_ctx_rsc_t *ctx_rsc = ucs_container_of(mp,
                                                         uct_cuda_copy_ctx_rsc_t,
-                                                        event_mp);
+                                                        super.event_mp);
 
     if (uct_cuda_copy_is_ctx_valid(ctx_rsc)) {
         UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(base->event));
@@ -466,7 +466,7 @@ ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
         return UCS_ERR_IO_ERROR;
     }
 
-    iter = kh_put(cuda_copy_ctx_rscs, &iface->ctx_rscs, ctx_id, &ret);
+    iter = kh_put(cuda_ctx_rscs, &iface->super.ctx_rscs, ctx_id, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
         ucs_error("failed to allocate cuda context resource hash entry");
         return UCS_ERR_NO_MEMORY;
@@ -490,7 +490,7 @@ ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
     mp_params.ops             = &uct_cuda_copy_event_desc_mpool_ops;
     mp_params.name            = "cuda_copy_event_descriptors";
 
-    status = ucs_mpool_init(&mp_params, &ctx_rsc->event_mp);
+    status = ucs_mpool_init(&mp_params, &ctx_rsc->super.event_mp);
     if (status != UCS_OK) {
         goto err_free_ctx_rsc;
     }
@@ -502,17 +502,17 @@ ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
         }
     }
 
-    ctx_rsc->short_stream            = NULL;
-    ctx_rsc->ctx                     = ctx;
-    ctx_rsc->ctx_id                  = ctx_id;
-    kh_value(&iface->ctx_rscs, iter) = ctx_rsc;
-    *ctx_rsc_p                       = ctx_rsc;
+    ctx_rsc->short_stream                  = NULL;
+    ctx_rsc->super.ctx                     = ctx;
+    ctx_rsc->super.ctx_id                  = ctx_id;
+    kh_value(&iface->super.ctx_rscs, iter) = &ctx_rsc->super;
+    *ctx_rsc_p                             = ctx_rsc;
     return UCS_OK;
 
 err_free_ctx_rsc:
     ucs_free(ctx_rsc);
 err_del_iter:
-    kh_del(cuda_copy_ctx_rscs, &iface->ctx_rscs, iter);
+    kh_del(cuda_ctx_rscs, &iface->super.ctx_rscs, iter);
     return UCS_ERR_NO_MEMORY;
 }
 
@@ -539,7 +539,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->config.bw              = config->bw;
     UCS_STATIC_BITMAP_RESET_ALL(&self->streams_to_sync);
 
-    kh_init_inplace(cuda_copy_ctx_rscs, &self->ctx_rscs);
+    kh_init_inplace(cuda_ctx_rscs, &self->super.ctx_rscs);
 
     ucs_queue_head_init(&self->active_queue);
 
@@ -566,8 +566,8 @@ static void uct_cuda_copy_ctx_rsc_destroy(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
             event_q = &ctx_rsc->queue_desc[src][dst].event_queue;
             if (!ucs_queue_is_empty(event_q)) {
                 ucs_warn("cuda context %llu stream[%d][%d] being destroyed with"
-                         " %zu outstanding events",
-                         ctx_rsc->ctx_id, src, dst, ucs_queue_length(event_q));
+                         " %zu outstanding events", ctx_rsc->super.ctx_id, src,
+                         dst, ucs_queue_length(event_q));
             }
 
             uct_cuda_copy_stream_destroy(&ctx_rsc->queue_desc[src][dst].stream,
@@ -576,22 +576,23 @@ static void uct_cuda_copy_ctx_rsc_destroy(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
     }
 
     uct_cuda_copy_stream_destroy(&ctx_rsc->short_stream, ctx_rsc_valid);
-    ucs_mpool_cleanup(&ctx_rsc->event_mp, 1);
+    ucs_mpool_cleanup(&ctx_rsc->super.event_mp, 1);
     ucs_free(ctx_rsc);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
-    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
+    uct_cuda_ctx_rsc_t *ctx_rsc;
 
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
-    kh_foreach_value(&self->ctx_rscs, ctx_rsc, {
-        uct_cuda_copy_ctx_rsc_destroy(ctx_rsc);
+    kh_foreach_value(&self->super.ctx_rscs, ctx_rsc, {
+        uct_cuda_copy_ctx_rsc_destroy(
+            ucs_derived_of(ctx_rsc, uct_cuda_copy_ctx_rsc_t));
     });
 
-    kh_destroy_inplace(cuda_copy_ctx_rscs, &self->ctx_rscs);
+    kh_destroy_inplace(cuda_ctx_rscs, &self->super.ctx_rscs);
 }
 
 UCS_CLASS_DEFINE(uct_cuda_copy_iface_t, uct_cuda_iface_t);

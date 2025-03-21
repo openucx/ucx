@@ -101,6 +101,7 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
         uct_cuda_copy_iface_t *iface, uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
+    uct_cuda_ctx_rsc_t *ctx_rsc;
     unsigned long long ctx_id;
     CUresult result;
     khiter_t iter;
@@ -111,9 +112,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
         return UCS_ERR_IO_ERROR;
     }
 
-    iter = kh_get(cuda_copy_ctx_rscs, &iface->ctx_rscs, ctx_id);
-    if (ucs_likely(iter != kh_end(&iface->ctx_rscs))) {
-        *ctx_rsc_p = kh_value(&iface->ctx_rscs, iter);
+    iter = kh_get(cuda_ctx_rscs, &iface->super.ctx_rscs, ctx_id);
+    if (ucs_likely(iter != kh_end(&iface->super.ctx_rscs))) {
+        ctx_rsc    = kh_value(&iface->super.ctx_rscs, iter);
+        *ctx_rsc_p = ucs_derived_of(ctx_rsc, uct_cuda_copy_ctx_rsc_t);
         return UCS_OK;
     }
 
@@ -156,7 +158,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         return UCS_ERR_IO_ERROR;
     }
 
-    cuda_event = ucs_mpool_get(&ctx_rsc->event_mp);
+    cuda_event = ucs_mpool_get(&ctx_rsc->super.event_mp);
     if (ucs_unlikely(cuda_event == NULL)) {
         ucs_error("failed to allocate cuda event object");
         return UCS_ERR_NO_MEMORY;

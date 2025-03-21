@@ -10,6 +10,8 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
 #include <ucs/async/eventfd.h>
+#include <ucs/datastruct/khash.h>
+
 #include <cuda.h>
 #include <nvml.h>
 
@@ -125,12 +127,6 @@ typedef enum uct_cuda_base_gen {
 } uct_cuda_base_gen_t;
 
 
-typedef struct uct_cuda_iface {
-    uct_base_iface_t super;
-    int              eventfd;
-} uct_cuda_iface_t;
-
-
 typedef struct {
     /* Stream on which asynchronous memcpy operations are enqueued */
     CUstream         stream;
@@ -146,6 +142,29 @@ typedef struct {
     uct_completion_t *comp;
     ucs_queue_elem_t queue;
 } uct_cuda_event_desc_t;
+
+
+typedef struct {
+    /* CUDA context handle */
+    CUcontext          ctx;
+    /* CUDA context id */
+    unsigned long long ctx_id;
+    /* pool of cuda events to check completion of memcpy operations */
+    ucs_mpool_t        event_mp;
+} uct_cuda_ctx_rsc_t;
+
+
+/* Hash map for CUDA context resources. The key is the CUDA context Id. */
+KHASH_INIT(cuda_ctx_rscs, unsigned long long, uct_cuda_ctx_rsc_t*, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+
+
+typedef struct uct_cuda_iface {
+    uct_base_iface_t       super;
+    int                    eventfd;
+    /* CUDA resources per context */
+    khash_t(cuda_ctx_rscs) ctx_rscs;
+} uct_cuda_iface_t;
 
 
 ucs_status_t
