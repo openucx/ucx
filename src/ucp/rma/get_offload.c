@@ -56,10 +56,20 @@ static void ucp_proto_get_offload_bcopy_completion(uct_completion_t *self)
 
 static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
+                                                           send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
+
+        status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
+
         ucp_proto_completion_init(&req->send.state.uct_comp,
                                   ucp_proto_get_offload_bcopy_completion);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
@@ -170,7 +180,7 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, NULL,
+            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
             UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCP_DT_MASK_CONTIG_IOV,
             ucp_proto_get_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,

@@ -5,6 +5,7 @@
  */
 
 #include <uct/test_md.h>
+#include <uct/test_p2p_rma.h>
 
 extern "C" {
 #include <ucs/sys/ptr_arith.h>
@@ -12,6 +13,8 @@ extern "C" {
 
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <thread>
+
 #include <thread>
 
 #include <thread>
@@ -151,11 +154,6 @@ cuda_fabric_mem_buffer::cuda_fabric_mem_buffer(size_t size,
 {
     init(size, CU_MEM_HANDLE_TYPE_FABRIC);
 }
-
-UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_fabric)
-{
-    detect_mem_type<cuda_fabric_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
-}
 #endif
 
 UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda)
@@ -173,7 +171,114 @@ UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_vmm)
     detect_mem_type<cuda_vmm_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
 }
 
+#if HAVE_CUDA_FABRIC
+UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_fabric)
+{
+    detect_mem_type<cuda_fabric_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
+}
+#endif
+
 _UCT_MD_INSTANTIATE_TEST_CASE(test_switch_cuda_device, cuda_cpy);
+
+class test_p2p_create_destroy_ctx : public uct_p2p_rma_test {
+public:
+    void test_xfer(send_func_t send, size_t length, unsigned flags,
+                   ucs_memory_type_t mem_type) override;
+};
+
+void test_p2p_create_destroy_ctx::test_xfer(send_func_t send, size_t length,
+                                            unsigned flags,
+                                            ucs_memory_type_t mem_type)
+{
+    int num_devices;
+    ASSERT_EQ(cuDeviceGetCount(&num_devices), CUDA_SUCCESS);
+
+    if (num_devices < 1) {
+        UCS_TEST_SKIP_R("no cuda devices available");
+    }
+
+    CUdevice device;
+    ASSERT_EQ(cuDeviceGet(&device, 0), CUDA_SUCCESS);
+
+    CUcontext ctx;
+    ASSERT_EQ(cuCtxCreate(&ctx, 0, device), CUDA_SUCCESS);
+    uct_p2p_rma_test::test_xfer(send, length, flags, mem_type);
+    EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
+}
+
+UCS_TEST_P(test_p2p_create_destroy_ctx, put_short)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_short), 1,
+              TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_p2p_create_destroy_ctx, get_short)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_short), 1,
+              TEST_UCT_FLAG_RECV_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_p2p_create_destroy_ctx, put_zcopy)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
+              sender().iface_attr().cap.put.min_zcopy + 1,
+              TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_p2p_create_destroy_ctx, get_zcopy)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+              sender().iface_attr().cap.get.min_zcopy + 1,
+              TEST_UCT_FLAG_RECV_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_p2p_create_destroy_ctx, cuda_copy)
+
+class test_another_thread : public test_md {
+public:
+    template<class T> void detect_mem_type(ucs_memory_type_t mem_type) const;
+};
+
+template<class T>
+void test_another_thread::detect_mem_type(ucs_memory_type_t mem_type) const
+{
+    const size_t size = 16;
+    T buffer(size, mem_type);
+
+    ucs_memory_type_t detected_mem_type;
+    ucs_status_t status;
+    std::thread([&]() {
+        status = uct_md_detect_memory_type(this->m_md, buffer.ptr(), size,
+                                           &detected_mem_type);
+    }).join();
+
+    ASSERT_EQ(status, UCS_OK);
+    EXPECT_EQ(detected_mem_type, mem_type);
+}
+
+UCS_TEST_P(test_another_thread, detect_mem_type_cuda)
+{
+    detect_mem_type<mem_buffer>(UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_another_thread, detect_mem_type_cuda_managed)
+{
+    detect_mem_type<mem_buffer>(UCS_MEMORY_TYPE_CUDA_MANAGED);
+}
+
+UCS_TEST_P(test_another_thread, detect_mem_type_cuda_vmm)
+{
+    detect_mem_type<cuda_vmm_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
+}
+
+#if HAVE_CUDA_FABRIC
+UCS_TEST_P(test_another_thread, detect_mem_type_cuda_fabric)
+{
+    detect_mem_type<cuda_fabric_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
+}
+#endif
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_another_thread, cuda_cpy);
 
 class test_mem_alloc_device : public test_switch_cuda_device {
 protected:
@@ -276,7 +381,6 @@ protected:
 
 public:
     uct_allocated_memory_t mem;
-
 };
 
 UCS_TEST_P(test_mem_alloc_device, different_device_cuda)
@@ -316,50 +420,3 @@ UCS_TEST_P(test_mem_alloc_device, same_device_cuda_fabric_implicit,
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_mem_alloc_device, cuda_cpy);
-
-
-class test_another_thread : public test_md {
-public:
-    template<class T> void detect_mem_type(ucs_memory_type_t mem_type) const;
-};
-
-template<class T>
-void test_another_thread::detect_mem_type(ucs_memory_type_t mem_type) const
-{
-    const size_t size = 16;
-    T buffer(size, mem_type);
-
-    ucs_memory_type_t detected_mem_type;
-    ucs_status_t status;
-    std::thread([&]() {
-        status = uct_md_detect_memory_type(this->m_md, buffer.ptr(), size,
-                                           &detected_mem_type);
-    }).join();
-
-    ASSERT_EQ(status, UCS_OK);
-    EXPECT_EQ(detected_mem_type, mem_type);
-}
-
-UCS_TEST_P(test_another_thread, detect_mem_type_cuda)
-{
-    detect_mem_type<mem_buffer>(UCS_MEMORY_TYPE_CUDA);
-}
-
-UCS_TEST_P(test_another_thread, detect_mem_type_cuda_managed)
-{
-    detect_mem_type<mem_buffer>(UCS_MEMORY_TYPE_CUDA_MANAGED);
-}
-
-UCS_TEST_P(test_another_thread, detect_mem_type_cuda_vmm)
-{
-    detect_mem_type<cuda_vmm_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
-}
-
-#if HAVE_CUDA_FABRIC
-UCS_TEST_P(test_another_thread, detect_mem_type_cuda_fabric)
-{
-    detect_mem_type<cuda_fabric_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
-}
-#endif
-
-_UCT_MD_INSTANTIATE_TEST_CASE(test_another_thread, cuda_cpy);

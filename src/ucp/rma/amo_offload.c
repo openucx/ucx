@@ -50,8 +50,8 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
                                                             send.uct);
-    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucp_ep_t *ep                         = req->send.ep;
+    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     uint64_t remote_addr                 = req->send.amo.remote_addr;
     uct_atomic_op_t op                   = req->send.amo.uct_op;
     uct_completion_callback_t comp_cb;
@@ -71,7 +71,7 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
         if (!(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
             mem_type = is_memtype ? req->send.state.dt_iter.mem_info.type :
                                     UCS_MEMORY_TYPE_HOST;
-            ucp_dt_contig_pack(req->send.ep->worker, &req->send.amo.value,
+            ucp_dt_contig_pack(ep->worker, &req->send.amo.value,
                                req->send.state.dt_iter.type.contig.buffer,
                                op_size, mem_type, op_size);
             req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
@@ -87,6 +87,12 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
             ucp_dt_contig_pack(ep->worker, &req->send.amo.result,
                                req->send.amo.reply_buffer, op_size,
                                ucp_amo_request_reply_mem_type(req), op_size);
+        }
+
+        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;

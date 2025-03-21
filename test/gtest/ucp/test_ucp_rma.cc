@@ -430,10 +430,20 @@ UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma_reg)
 class test_ucp_rma_order : public test_ucp_rma {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_RMA);
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, EP_BASED_FENCE,
+                               "ep_based");
     }
 
     virtual void init() {
+        if (get_variant_value() & EP_BASED_FENCE) {
+            if (!is_proto_enabled()) {
+                UCS_TEST_SKIP_R("Proto v2 is disabled");
+            }
+            modify_config("FENCE_MODE", "ep_based");
+            modify_config("MAX_RMA_LANES", "2");
+        }
+
         test_ucp_memheap::init();
     }
 
@@ -472,6 +482,10 @@ public:
             EXPECT_EQ(*last, iter) << "size is " << size;
         }
     }
+private:
+    enum {
+        EP_BASED_FENCE = UCS_BIT(0)
+    };
 };
 
 UCS_TEST_P(test_ucp_rma_order, put_ordering) {
@@ -485,3 +499,112 @@ UCS_TEST_P(test_ucp_rma_order, put_ordering) {
 // TODO: Strong fence hangs with SW RMA emulation, because it requires progress
 // on both peers. Add other tls, when fence implementation revised
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_order, shm_rc_dc, "self,shm,rc,dc")
+
+class test_ucp_ep_based_fence : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants,
+                    UCP_FEATURE_RMA | UCP_FEATURE_AMO64 | UCP_FEATURE_AMO32);
+    }
+
+    virtual void init() {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("Proto v2 is disabled");
+        }
+
+        modify_config("FENCE_MODE", "ep_based");
+        modify_config("MAX_RMA_LANES", "2");
+        test_ucp_memheap::init();
+    }
+
+    uint64_t worker_fence_seq() {
+        return sender().ep()->worker->fence_seq;
+    }
+
+    uint64_t ep_fence_seq() {
+        return sender().ep()->ext->fence_seq;
+    }
+
+    void do_fence() {
+        uint64_t worker_fence_seq_before = worker_fence_seq();
+        sender().fence();
+
+        EXPECT_EQ(worker_fence_seq_before + 1, worker_fence_seq());
+        EXPECT_GT(worker_fence_seq(), ep_fence_seq());
+    }
+
+    enum op_type_t { OP_PUT, OP_GET, OP_ATOMIC };
+
+    void perform_nbx(op_type_t op, void *sbuf, size_t size, uint64_t target,
+                     ucp_rkey_h rkey) {
+        ucp_request_param_t param = {0};
+        ucs_status_ptr_t sptr;
+
+        switch (op) {
+        case OP_PUT:
+            sptr = ucp_put_nbx(sender().ep(), sbuf, size, target, rkey, &param);
+            break;
+        case OP_GET:
+            sptr = ucp_get_nbx(sender().ep(), sbuf, size, target, rkey, &param);
+            break;
+        case OP_ATOMIC:
+            param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+            param.datatype = ucp_dt_make_contig(size);
+            sptr = ucp_atomic_op_nbx(sender().ep(), UCP_ATOMIC_OP_ADD, sbuf, 1,
+                                     target, rkey, &param);
+            break;
+        default:
+            UCS_TEST_ABORT("Invalid operation type");
+        }
+
+        ASSERT_FALSE(UCS_PTR_IS_ERR(sptr));
+        ASSERT_NE(sender().ep()->ext->unflushed_lanes, 0);
+        request_release(sptr);
+    }
+
+    void perform_nbx_with_fence(op_type_t op, void *sbuf, size_t size,
+                                void *target, ucp_rkey_h rkey) {
+        perform_nbx(op, sbuf, size, (uint64_t)target, rkey);
+        do_fence();
+        perform_nbx(op, sbuf, size, (uint64_t)target, rkey);
+    }
+
+    void test_ep_based_fence_common(op_type_t op) {
+        mem_buffer sbuf(TEST_BUF_SIZE, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(TEST_BUF_SIZE, receiver());
+        rbuf.memset(0);
+        sbuf.memset(CHAR_MAX);
+
+        ucs::handle<ucp_rkey_h> rkey;
+        rbuf.rkey(sender(), rkey);
+
+        if (op == OP_ATOMIC) {
+            perform_nbx_with_fence(op, sbuf.ptr(), sizeof(uint32_t), rbuf.ptr(),
+                                   rkey);
+            perform_nbx_with_fence(op, sbuf.ptr(), sizeof(uint64_t), rbuf.ptr(),
+                                   rkey);
+        } else {
+            for (size_t size = 1; size <= TEST_BUF_SIZE; size *= 10) {
+                perform_nbx_with_fence(op, sbuf.ptr(), size, rbuf.ptr(), rkey);
+            }
+        }
+
+        flush_workers();
+    }
+private:
+    static constexpr size_t TEST_BUF_SIZE = 1000000;
+};
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_put) {
+    test_ep_based_fence_common(OP_PUT);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_get) {
+    test_ep_based_fence_common(OP_GET);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_atomic) {
+    test_ep_based_fence_common(OP_ATOMIC);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")

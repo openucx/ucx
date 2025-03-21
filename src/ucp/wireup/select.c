@@ -499,6 +499,15 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             continue;
         }
 
+        if (!context->config.ext.memtype_copy_enable &&
+            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      " : disabled to avoid memory type copies",
+                      UCT_TL_RESOURCE_DESC_ARG(resource));
+            continue;
+        }
+
         has_cm = ucp_ep_init_flags_has_cm(select_params->ep_init_flags);
         if (select_params->ep_init_flags & UCP_EP_INIT_CONNECT_TO_IFACE_ONLY) {
             local_iface_flags.mandatory |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
@@ -2044,7 +2053,8 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                   unsigned ep_init_flags,
                                   const ucp_address_entry_t *address_list,
                                   const ucp_wireup_lane_desc_t *lane_descs,
-                                  ucp_lane_index_t num_lanes)
+                                  ucp_lane_index_t num_lanes,
+                                  ucp_lane_index_t am_lane)
 {
     ucp_context_h context          = worker->context;
     ucp_lane_index_t p2p_lane      = UCP_NULL_LANE;
@@ -2054,6 +2064,11 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     uct_iface_attr_t *attrs;
     ucp_lane_index_t lane;
     unsigned addr_index;
+
+    if (context->config.ext.wireup_via_am_lane) {
+        ucs_assert(am_lane != UCP_NULL_LANE);
+        return am_lane;
+    }
 
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
@@ -2440,7 +2455,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                                                                    select_ctx),
                                           select_params->address->address_list,
                                           select_ctx->lane_descs,
-                                          key->num_lanes);
+                                          key->num_lanes, key->am_lane);
     }
 
     for (i = 0; key->rma_bw_lanes[i] != UCP_NULL_LANE; i++) {

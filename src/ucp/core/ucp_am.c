@@ -1038,9 +1038,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         req->send.msg_proto.am.header.reg_desc = NULL;
         req->send.msg_proto.am.header.length   = header_length;
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
-                                        UCP_WORKER_CFG_INDEX_NULL, req, op_id,
-                                        buffer, count, datatype, contig_length,
-                                        param, header_length,
+                                        UCP_WORKER_CFG_INDEX_NULL, req, 0,
+                                        op_id, buffer, count, datatype,
+                                        contig_length, param, header_length,
                                         ucp_am_send_nbx_get_op_flag(flags));
     } else {
         ucp_am_send_req_init(req, ep, header, header_length, buffer, datatype,
