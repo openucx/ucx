@@ -153,4 +153,20 @@ UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_iface_config_t *tl_config, const char *dev_name);
 
+
+/**
+ * Retain the primary context on the given CUDA device.
+ *
+ * @param [in]  cuda_device Device for which primary context is requested.
+ * @param [in]  force       Retain the primary context regardless of its state.
+ * @param [out] cuda_ctx_p  Returned context handle of the retained context.
+ *
+ * @return UCS_OK if the method completes successfully. UCS_ERR_NO_DEVICE if the
+ *         primary device context is inactive on the given CUDA device and
+ *         retaining is not forced. UCS_ERR_IO_ERROR if the CUDA driver API
+ *         methods called inside failed with an error.
+ */
+ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
+                                         CUcontext *cuda_ctx_p);
+
 #endif

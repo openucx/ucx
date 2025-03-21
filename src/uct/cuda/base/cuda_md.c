@@ -101,6 +101,38 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                            num_resources_p);
 }
 
+ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
+                                         CUcontext *cuda_ctx_p)
+{
+    unsigned int flags;
+    int active;
+    ucs_status_t status;
+    CUcontext cuda_ctx;
+
+    if (!force) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        if (!active) {
+            ucs_debug("cuda primary context is inactive on device %d",
+                      cuda_device);
+            return UCS_ERR_NO_DEVICE;
+        }
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_device));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *cuda_ctx_p = cuda_ctx;
+    return UCS_OK;
+}
+
 UCS_STATIC_INIT
 {
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
