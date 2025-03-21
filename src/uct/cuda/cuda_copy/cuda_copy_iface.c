@@ -156,7 +156,7 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
                                               uct_completion_t *comp)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
-    uct_cuda_copy_queue_desc_t *q_desc;
+    uct_cuda_queue_desc_t *q_desc;
     ucs_queue_iter_t iter;
 
     if (comp != NULL) {
@@ -178,15 +178,14 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
 static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_copy_queue_head_ready(ucs_queue_head_t *queue_head)
 {
-    uct_cuda_copy_event_desc_t *cuda_event;
+    uct_cuda_event_desc_t *cuda_event;
 
     if (ucs_queue_is_empty(queue_head)) {
         return 0;
     }
 
     cuda_event = ucs_queue_head_elem_non_empty(queue_head,
-                                               uct_cuda_copy_event_desc_t,
-                                               queue);
+                                               uct_cuda_event_desc_t, queue);
     return (CUDA_SUCCESS == cuEventQuery(cuda_event->event));
 }
 
@@ -196,7 +195,7 @@ uct_cuda_copy_progress_event_queue(uct_cuda_copy_iface_t *iface,
                                    unsigned max_events)
 {
     unsigned count = 0;
-    uct_cuda_copy_event_desc_t *cuda_event;
+    uct_cuda_event_desc_t *cuda_event;
 
     ucs_queue_for_each_extract(cuda_event, queue_head, queue,
                                cuEventQuery(cuda_event->event) ==
@@ -223,7 +222,7 @@ static unsigned uct_cuda_copy_iface_progress(uct_iface_h tl_iface)
     unsigned max_events = iface->config.max_poll;
     unsigned count      = 0;
     ucs_queue_head_t *event_q;
-    uct_cuda_copy_queue_desc_t *q_desc;
+    uct_cuda_queue_desc_t *q_desc;
     ucs_queue_iter_t iter;
 
     ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
@@ -245,7 +244,7 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
     ucs_status_t status;
     CUstream *stream;
     ucs_queue_head_t *event_q;
-    uct_cuda_copy_queue_desc_t *q_desc;
+    uct_cuda_queue_desc_t *q_desc;
     ucs_queue_iter_t iter;
 
     ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
@@ -317,7 +316,7 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
 static void
 uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t*)obj;
+    uct_cuda_event_desc_t *base = obj;
 
     memset(base, 0 , sizeof(*base));
     UCT_CUDADRV_FUNC_LOG_ERR(
@@ -347,7 +346,7 @@ static int uct_cuda_copy_is_ctx_valid(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
 
 static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
-    uct_cuda_copy_event_desc_t *base = obj;
+    uct_cuda_event_desc_t *base = obj;
     uct_cuda_copy_ctx_rsc_t *ctx_rsc = ucs_container_of(mp,
                                                         uct_cuda_copy_ctx_rsc_t,
                                                         event_mp);
@@ -485,7 +484,7 @@ ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
     }
 
     ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = sizeof(uct_cuda_copy_event_desc_t);
+    mp_params.elem_size       = sizeof(uct_cuda_event_desc_t);
     mp_params.elems_per_chunk = 128;
     mp_params.max_elems       = iface->config.max_cuda_events;
     mp_params.ops             = &uct_cuda_copy_event_desc_mpool_ops;

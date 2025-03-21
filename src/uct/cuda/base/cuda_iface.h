@@ -130,6 +130,24 @@ typedef struct uct_cuda_iface {
     int              eventfd;
 } uct_cuda_iface_t;
 
+
+typedef struct {
+    /* Stream on which asynchronous memcpy operations are enqueued */
+    CUstream         stream;
+    /* Queue of cuda events */
+    ucs_queue_head_t event_queue;
+    /* Needed to allow queue descriptor to be added to iface */
+    ucs_queue_elem_t queue;
+} uct_cuda_queue_desc_t;
+
+
+typedef struct {
+    CUevent          event;
+    uct_completion_t *comp;
+    ucs_queue_elem_t queue;
+} uct_cuda_event_desc_t;
+
+
 ucs_status_t
 uct_cuda_base_query_devices_common(
         uct_md_h md, uct_device_type_t dev_type,

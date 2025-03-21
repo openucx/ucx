@@ -41,16 +41,6 @@ typedef uint64_t uct_cuda_copy_iface_addr_t;
 typedef ucs_static_bitmap_s(UCT_CUDA_MEMORY_TYPES_MAP) uct_cu_stream_bitmap_t;
 
 
-typedef struct uct_cuda_copy_queue_desc {
-    /* stream on which asynchronous memcpy operations are enqueued */
-    CUstream                    stream;
-    /* queue of cuda events */
-    ucs_queue_head_t            event_queue;
-    /* needed to allow queue descriptor to be added to iface->active_queue */
-    ucs_queue_elem_t            queue;
-} uct_cuda_copy_queue_desc_t;
-
-
 typedef struct uct_cuda_copy_bw {
     double            h2d;
     double            d2h;
@@ -61,16 +51,16 @@ typedef struct uct_cuda_copy_bw {
 
 typedef struct uct_cuda_copy_ctx_rsc {
     /* CUDA context handle */
-    CUcontext                  ctx;
+    CUcontext             ctx;
     /* CUDA context id */
-    unsigned long long         ctx_id;
+    unsigned long long    ctx_id;
     /* pool of cuda events to check completion of memcpy operations */
-    ucs_mpool_t                event_mp;
+    ucs_mpool_t           event_mp;
     /* stream used to issue short operations */
-    CUstream                   short_stream;
+    CUstream              short_stream;
     /* array of queue descriptors for each src/dst memory type combination */
-    uct_cuda_copy_queue_desc_t queue_desc[UCS_MEMORY_TYPE_LAST]
-                                         [UCS_MEMORY_TYPE_LAST];
+    uct_cuda_queue_desc_t queue_desc[UCS_MEMORY_TYPE_LAST]
+                                    [UCS_MEMORY_TYPE_LAST];
 } uct_cuda_copy_ctx_rsc_t;
 
 
@@ -113,13 +103,6 @@ typedef struct uct_cuda_copy_iface_config {
     unsigned                max_cuda_events;
     uct_cuda_copy_bw_t      bw;
 } uct_cuda_copy_iface_config_t;
-
-
-typedef struct uct_cuda_copy_event_desc {
-    CUevent          event;
-    uct_completion_t *comp;
-    ucs_queue_elem_t queue;
-} uct_cuda_copy_event_desc_t;
 
 
 static UCS_F_ALWAYS_INLINE unsigned
