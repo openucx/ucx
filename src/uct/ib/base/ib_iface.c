@@ -664,25 +664,22 @@ static void uct_ib_iface_log_subnet_info(const struct sockaddr *sa1,
 }
 
 static int
-uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, int gid_index,
+uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
                               struct sockaddr *sa_remote,
                               const uct_iface_is_reachable_params_t *params)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
-    char ndev_name[IFNAMSIZ];
     char remote_str[128];
-    ucs_status_t status;
+    int ndev_index;
 
-    status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
-                                              ndev_name, sizeof(ndev_name));
-    if (status != UCS_OK) {
-        uct_iface_fill_info_str_buf(params,
-                                    "couldn't get network interface name");
+    if (uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index,
+                                          &ndev_index) != UCS_OK) {
+        uct_iface_fill_info_str_buf(params, "iface index is not found");
         return 0;
     }
 
-    if (!ucs_netlink_route_exists(ndev_name, sa_remote)) {
+    if (!ucs_netlink_route_exists(ndev_index, sa_remote)) {
         uct_iface_fill_info_str_buf(params, "remote address %s is not routable",
                                     ucs_sockaddr_str(sa_remote, remote_str, 128));
         return 0;

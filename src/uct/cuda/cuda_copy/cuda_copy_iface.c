@@ -37,13 +37,23 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      "Max number of cuda events. -1 is infinite",
      ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events), UCS_CONFIG_TYPE_UINT},
 
-    {"BW", "10000MBs",
-     "Effective memory bandwidth",
-     ucs_offsetof(uct_cuda_copy_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
+    /* TODO: 1. Add separate keys for shared and dedicated bandwidth
+             2. Remove the "dflt" key (use pref_loc for managed memory) */
+    {"BW", "10000MBs,h2d:8300MBs,d2h:11660MBs,d2d:320GBs",
+     "Effective memory bandwidth", 0,
+     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
+         {"h2d", "host to device bandwidth",
+          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.h2d)},
+         {"d2h", "device to host bandwidth",
+          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2h)},
+         {"d2d", "device to device bandwidth",
+          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2d)},
+         {"default", "any other memory types combinations bandwidth",
+          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.dflt)},
+         {NULL})},
 
     {NULL}
 };
-
 
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t)(uct_iface_t*);
@@ -134,40 +144,13 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency                 = UCT_CUDA_COPY_IFACE_LATENCY;
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = iface->config.bandwidth;
+    iface_attr->bandwidth.shared        = iface->config.bw.dflt;
     iface_attr->overhead                = UCT_CUDA_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_copy_sync_streams(uct_cuda_copy_iface_t *iface)
-{
-    CUstream stream;
-    uint32_t stream_index;
-    ucs_memory_type_t src_mem_type, dst_mem_type;
-    ucs_status_t status;
-
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(stream_index, &iface->streams_to_sync) {
-        src_mem_type = stream_index / UCS_MEMORY_TYPE_LAST;
-        if ((src_mem_type >= UCS_MEMORY_TYPE_LAST)) {
-            break;
-        }
-
-        dst_mem_type = stream_index % UCS_MEMORY_TYPE_LAST;
-        stream       = iface->queue_desc[src_mem_type][dst_mem_type].stream;
-        status       = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(stream));
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        UCS_STATIC_BITMAP_RESET(&iface->streams_to_sync,
-                                uct_cuda_copy_flush_bitmap_idx(src_mem_type,
-                                                               dst_mem_type));
-    }
-
-    return UCS_OK;
-}
 
 static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                               uct_completion_t *comp)
@@ -175,15 +158,9 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
     uct_cuda_copy_queue_desc_t *q_desc;
     ucs_queue_iter_t iter;
-    ucs_status_t status;
 
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
-    }
-
-    status = uct_cuda_copy_sync_streams(iface);
-    if (status != UCS_OK) {
-        return status;
     }
 
     ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
@@ -196,7 +173,6 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
 
     UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_OK;
-
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
@@ -313,21 +289,6 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_cuda_copy_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
-{
-    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                                  uct_cuda_copy_iface_t);
-    ucs_status_t status;
-
-    status = uct_cuda_copy_sync_streams(iface);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return uct_base_ep_flush(tl_ep, flags, comp);
-}
-
 static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .ep_get_short             = uct_cuda_copy_ep_get_short,
     .ep_put_short             = uct_cuda_copy_ep_put_short,
@@ -335,7 +296,7 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .ep_put_zcopy             = uct_cuda_copy_ep_put_zcopy,
     .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
     .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
-    .ep_flush                 = uct_cuda_copy_ep_flush,
+    .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_copy_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_ep_t),
@@ -353,30 +314,46 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
-static void uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
+static void
+uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t *) obj;
-    ucs_status_t status;
+    uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t*)obj;
 
     memset(base, 0 , sizeof(*base));
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
+    UCT_CUDADRV_FUNC_LOG_ERR(
             cuEventCreate(&base->event, CU_EVENT_DISABLE_TIMING));
-    if (UCS_OK != status) {
-        ucs_error("cuEventCreate Failed");
+}
+
+static int uct_cuda_copy_is_ctx_valid(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
+{
+#if CUDA_VERSION >= 12000
+    unsigned long long ctx_id;
+    CUresult result;
+
+    result = uct_cuda_base_ctx_get_id(ctx_rsc->ctx, &ctx_id);
+    if (result == CUDA_ERROR_CONTEXT_IS_DESTROYED) {
+        return 0;
+    } else if (result != CUDA_SUCCESS) {
+        UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_WARN, result);
+        return 0;
     }
+
+    return ctx_id == ctx_rsc->ctx_id;
+#else
+    /* Best effort check on older Cuda versions */
+    return uct_cuda_base_is_context_valid(ctx_rsc->ctx);
+#endif
 }
 
 static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
-    uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t *) obj;
-    uct_cuda_copy_iface_t *iface     = ucs_container_of(mp,
-                                                        uct_cuda_copy_iface_t,
-                                                        cuda_event_desc);
-    CUcontext cuda_context;
+    uct_cuda_copy_event_desc_t *base = obj;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc = ucs_container_of(mp,
+                                                        uct_cuda_copy_ctx_rsc_t,
+                                                        event_mp);
 
-    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
-    if (uct_cuda_base_context_match(cuda_context, iface->cuda_context)) {
-        UCT_CUDADRV_FUNC_LOG_ERR(cuEventDestroy(base->event));
+    if (uct_cuda_copy_is_ctx_valid(ctx_rsc)) {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(base->event));
     }
 }
 
@@ -398,6 +375,8 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     int zcopy                      = uct_ep_op_is_zcopy(op);
     const double latency           = 1.8e-6;
     const double overhead          = 4.0e-6;
+    /* stream synchronization factor */
+    const double ss_factor         = zcopy ? 1 : 0.95;
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         if (uct_ep_op_is_fetch(op)) {
@@ -407,16 +386,15 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
         perf_attr->bandwidth.dedicated = 0;
         if ((src_mem_type == UCS_MEMORY_TYPE_HOST) &&
             (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
-            perf_attr->bandwidth.shared = (zcopy ? 8300.0 : 7900.0) * UCS_MBYTE;
+            perf_attr->bandwidth.shared = iface->config.bw.h2d * ss_factor;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
-            perf_attr->bandwidth.shared = (zcopy ? 11660.0 : 9320.0) *
-                                          UCS_MBYTE;
+            perf_attr->bandwidth.shared = iface->config.bw.d2h * ss_factor;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
-            perf_attr->bandwidth.shared = 320.0 * UCS_GBYTE;
+            perf_attr->bandwidth.shared = iface->config.bw.d2d;
         } else {
-            perf_attr->bandwidth.shared = iface->config.bandwidth;
+            perf_attr->bandwidth.shared = iface->config.bw.dflt;
         }
     }
 
@@ -469,6 +447,76 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
     .ep_is_connected       = uct_base_ep_is_connected
 };
 
+ucs_status_t uct_cuda_copy_ctx_rsc_create(uct_cuda_copy_iface_t *iface,
+                                          unsigned long long ctx_id,
+                                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
+{
+    CUcontext ctx;
+    ucs_status_t status;
+    ucs_kh_put_t ret;
+    khiter_t iter;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
+    ucs_mpool_params_t mp_params;
+    ucs_memory_type_t src, dst;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&ctx));
+    if (status != UCS_OK) {
+        return status;
+    } else if (ctx == NULL) {
+        ucs_error("no cuda context bound to calling thread");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    iter = kh_put(cuda_copy_ctx_rscs, &iface->ctx_rscs, ctx_id, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to allocate cuda context resource hash entry");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_assertv_always(ret != UCS_KH_PUT_KEY_PRESENT,
+                       "the key has already been added iface=%p key=%llu",
+                       iface, ctx_id);
+
+    ctx_rsc = ucs_malloc(sizeof(*ctx_rsc), "uct_cuda_copy_ctx_rsc_t");
+    if (ctx_rsc == NULL) {
+        ucs_error("failed to allocate cuda context resource struct");
+        status = UCS_ERR_NO_MEMORY;
+        goto err_del_iter;
+    }
+
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = sizeof(uct_cuda_copy_event_desc_t);
+    mp_params.elems_per_chunk = 128;
+    mp_params.max_elems       = iface->config.max_cuda_events;
+    mp_params.ops             = &uct_cuda_copy_event_desc_mpool_ops;
+    mp_params.name            = "cuda_copy_event_descriptors";
+
+    status = ucs_mpool_init(&mp_params, &ctx_rsc->event_mp);
+    if (status != UCS_OK) {
+        goto err_free_ctx_rsc;
+    }
+
+    ucs_memory_type_for_each(src) {
+        ucs_memory_type_for_each(dst) {
+            ctx_rsc->queue_desc[src][dst].stream = NULL;
+            ucs_queue_head_init(&ctx_rsc->queue_desc[src][dst].event_queue);
+        }
+    }
+
+    ctx_rsc->short_stream            = NULL;
+    ctx_rsc->ctx                     = ctx;
+    ctx_rsc->ctx_id                  = ctx_id;
+    kh_value(&iface->ctx_rscs, iter) = ctx_rsc;
+    *ctx_rsc_p                       = ctx_rsc;
+    return UCS_OK;
+
+err_free_ctx_rsc:
+    ucs_free(ctx_rsc);
+err_del_iter:
+    kh_del(cuda_copy_ctx_rscs, &iface->ctx_rscs, iter);
+    return UCS_ERR_NO_MEMORY;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -476,8 +524,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     uct_cuda_copy_iface_config_t *config = ucs_derived_of(tl_config,
                                                           uct_cuda_copy_iface_config_t);
     ucs_status_t status;
-    ucs_memory_type_t src, dst;
-    ucs_mpool_params_t mp_params;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cuda_iface_t, &uct_cuda_copy_iface_ops,
                               &uct_cuda_copy_iface_internal_ops, md, worker,
@@ -491,72 +537,62 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->id                     = ucs_generate_uuid((uintptr_t)self);
     self->config.max_poll        = config->max_poll;
     self->config.max_cuda_events = config->max_cuda_events;
-    self->config.bandwidth       = config->bandwidth;
+    self->config.bw              = config->bw;
     UCS_STATIC_BITMAP_RESET_ALL(&self->streams_to_sync);
 
-    ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = sizeof(uct_cuda_copy_event_desc_t);
-    mp_params.elems_per_chunk = 128;
-    mp_params.max_elems       = self->config.max_cuda_events;
-    mp_params.ops             = &uct_cuda_copy_event_desc_mpool_ops;
-    mp_params.name            = "CUDA EVENT objects";
-    status = ucs_mpool_init(&mp_params, &self->cuda_event_desc);
-    if (UCS_OK != status) {
-        ucs_error("mpool creation failed");
-        return UCS_ERR_IO_ERROR;
-    }
+    kh_init_inplace(cuda_copy_ctx_rscs, &self->ctx_rscs);
 
     ucs_queue_head_init(&self->active_queue);
-
-    ucs_memory_type_for_each(src) {
-        ucs_memory_type_for_each(dst) {
-            self->queue_desc[src][dst].stream = 0;
-            ucs_queue_head_init(&self->queue_desc[src][dst].event_queue);
-        }
-    }
-
-    self->short_stream = 0;
-    self->cuda_context = 0;
 
     return UCS_OK;
 }
 
+static void uct_cuda_copy_stream_destroy(CUstream *stream_p, int valid_ctx)
+{
+    if ((*stream_p == NULL) || !valid_ctx) {
+        return;
+    }
+
+    UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream_p));
+}
+
+static void uct_cuda_copy_ctx_rsc_destroy(uct_cuda_copy_ctx_rsc_t *ctx_rsc)
+{
+    int ctx_rsc_valid = uct_cuda_copy_is_ctx_valid(ctx_rsc);
+    ucs_memory_type_t src, dst;
+    ucs_queue_head_t *event_q;
+
+    ucs_memory_type_for_each(src) {
+        ucs_memory_type_for_each(dst) {
+            event_q = &ctx_rsc->queue_desc[src][dst].event_queue;
+            if (!ucs_queue_is_empty(event_q)) {
+                ucs_warn("cuda context %llu stream[%d][%d] being destroyed with"
+                         " %zu outstanding events",
+                         ctx_rsc->ctx_id, src, dst, ucs_queue_length(event_q));
+            }
+
+            uct_cuda_copy_stream_destroy(&ctx_rsc->queue_desc[src][dst].stream,
+                                         ctx_rsc_valid);
+        }
+    }
+
+    uct_cuda_copy_stream_destroy(&ctx_rsc->short_stream, ctx_rsc_valid);
+    ucs_mpool_cleanup(&ctx_rsc->event_mp, 1);
+    ucs_free(ctx_rsc);
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
-    CUstream *stream;
-    CUcontext cuda_context;
-    ucs_queue_head_t *event_q;
-    ucs_memory_type_t src, dst;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
 
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
-    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
-    if (uct_cuda_base_context_match(cuda_context, self->cuda_context)) {
+    kh_foreach_value(&self->ctx_rscs, ctx_rsc, {
+        uct_cuda_copy_ctx_rsc_destroy(ctx_rsc);
+    });
 
-        ucs_memory_type_for_each(src) {
-            ucs_memory_type_for_each(dst) {
-                stream  = &self->queue_desc[src][dst].stream;
-                event_q = &self->queue_desc[src][dst].event_queue;
-
-                if (!ucs_queue_is_empty(event_q)) {
-                    ucs_warn("stream destroyed but queue not empty");
-                }
-
-                if (*stream == 0) {
-                    continue;
-                }
-
-                UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(*stream));
-            }
-        }
-
-        if (self->short_stream) {
-            UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(self->short_stream));
-        }
-    }
-
-    ucs_mpool_cleanup(&self->cuda_event_desc, 1);
+    kh_destroy_inplace(cuda_copy_ctx_rscs, &self->ctx_rscs);
 }
 
 UCS_CLASS_DEFINE(uct_cuda_copy_iface_t, uct_cuda_iface_t);

@@ -465,6 +465,15 @@ protected:
         EXPECT_TRUE(ctx.received);
     }
 
+    void send_recv_am_range(size_t msg_start, size_t msg_end, size_t msg_step,
+                            ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+    {
+        for (size_t msg_size = msg_start; msg_size <= msg_end;
+             msg_size += msg_step) {
+            send_recv_am(msg_size, mem_type);
+        }
+    }
+
     static ucp_worker_cfg_index_t ep_config_index(const entity &e)
     {
         return e.ep()->cfg_index;
@@ -498,6 +507,23 @@ public:
         test_ucp_proto_mock::init();
     }
 };
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, memtype_copy_enable,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1",
+           "MEMTYPE_COPY_ENABLE=n")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {0,       0, "rendezvous no data fetch", ""},
+        {1,      64, "rendezvous zero-copy fenced write to remote",
+                     "rc_mlx5/mock_0:1"},
+        {21992, INF, "rendezvous zero-copy read from remote",
+                     "rc_mlx5/mock_0:1"},
+    }, key);
+}
 
 UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_1_lane, "IB_NUM_PATHS?=1",
            "MAX_RNDV_LANES=1")
@@ -555,12 +581,57 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_2_lanes, "IB_NUM_PATHS?=2",
 UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_send_recv_small_frag,
            "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2", "RNDV_THRESH=0")
 {
-    for (size_t i = 1024; i <= 65536; i += 1024) {
-        send_recv_am(i);
-    }
+    send_recv_am_range(UCS_KBYTE, 64 * UCS_KBYTE, UCS_KBYTE);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx2()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        /* Device with high BW and lower latency */
+        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.cap.get.max_zcopy = 16384;
+        });
+        /* Device with lower BW and higher latency */
+        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 24e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx2, rndv_send_recv_small_frag,
+           "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2", "RNDV_THRESH=0")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {1,    3724, "rendezvous fragmented copy-in copy-out",
+         "rc_mlx5/mock_0:1/path0"},
+        {3725, INF,  "rendezvous zero-copy read from remote",
+         "54% on rc_mlx5/mock_0:1/path0 and 46% on rc_mlx5/mock_1:1/path0"},
+    }, key);
+
+    send_recv_am_range(UCS_KBYTE, 64 * UCS_KBYTE, UCS_KBYTE);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx2, rcx, "rc_x")
 
 class test_ucp_proto_mock_cma : public test_ucp_proto_mock {
 public:
@@ -664,11 +735,10 @@ public:
     virtual void init() override
     {
         add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.am.max_short  = 2000;
-            iface_attr.bandwidth.shared  = 28e9;
-            iface_attr.latency.c         = 600e-9;
-            iface_attr.latency.m         = 1e-9;
-            iface_attr.cap.get.max_zcopy = 16384;
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 28e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
         });
         test_ucp_proto_mock::init();
     }
