@@ -37,6 +37,9 @@ public:
 
     virtual void test_xfer(send_func_t send, size_t length,
                            unsigned flags, ucs_memory_type_t mem_type);
+
+    void bsend_and_check(send_func_t send, mapped_buffer &sendbuf,
+                         mapped_buffer &recvbuf, unsigned flags);
 };
 
 #endif

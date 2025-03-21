@@ -272,3 +272,60 @@ UCS_TEST_P(test_another_thread, detect_mem_type_cuda_fabric)
 #endif
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_another_thread, cuda_cpy);
+
+class test_p2p_no_current_cuda_ctx : public uct_p2p_rma_test {
+public:
+    void test_xfer(send_func_t send, size_t length, unsigned flags,
+                   ucs_memory_type_t mem_type) override;
+};
+
+void test_p2p_no_current_cuda_ctx::test_xfer(send_func_t send, size_t length,
+                                             unsigned flags,
+                                             ucs_memory_type_t mem_type)
+{
+    ucs_memory_type_t src_mem_type = UCS_MEMORY_TYPE_HOST;
+
+    mapped_buffer sendbuf(length, SEED1, sender(), 1, src_mem_type);
+    mapped_buffer recvbuf(length, SEED2, receiver(), 3, mem_type);
+
+    std::exception_ptr thread_exception;
+    std::thread([&]() {
+        try {
+            bsend_and_check(send, sendbuf, recvbuf, flags);
+        } catch (...) {
+            thread_exception = std::current_exception();
+        }
+    }).join();
+
+    if (thread_exception) {
+        std::rethrow_exception(thread_exception);
+    }
+}
+
+UCS_TEST_P(test_p2p_no_current_cuda_ctx, put_short)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_short), 1,
+              TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_p2p_no_current_cuda_ctx, get_short)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_short), 1,
+              TEST_UCT_FLAG_RECV_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_p2p_no_current_cuda_ctx, put_zcopy)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
+              sender().iface_attr().cap.put.min_zcopy + 1,
+              TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_p2p_no_current_cuda_ctx, get_zcopy)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+              sender().iface_attr().cap.get.min_zcopy + 1,
+              TEST_UCT_FLAG_RECV_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_p2p_no_current_cuda_ctx, cuda_copy)

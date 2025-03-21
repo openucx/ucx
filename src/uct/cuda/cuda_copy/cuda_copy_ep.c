@@ -98,26 +98,125 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
     return mem_info.type;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
-        uct_cuda_copy_iface_t *iface, uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
+static ucs_status_t
+uct_cuda_primary_ctx_push_first_active(CUdevice *cuda_device_p,
+                                       CUcontext *cuda_ctx_p)
+{
+    int num_devices, device_num;
+    ucs_status_t status;
+    CUdevice device;
+    CUcontext ctx;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_devices));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    for (device_num = 0; device_num < num_devices; ++device_num) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&device, device_num));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = uct_cuda_primary_ctx_retain(device, 0, &ctx);
+        if (status == UCS_OK) {
+            break;
+        } else if (status == UCS_ERR_NO_DEVICE) {
+            continue;
+        } else {
+            return status;
+        }
+    }
+
+    if (device_num == num_devices) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
+    if (status != UCS_OK) {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(device));
+        return status;
+    }
+
+    *cuda_device_p = device;
+    *cuda_ctx_p    = ctx;
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_primary_ctx_pop_and_release(CUdevice cuda_device)
+{
+    if (ucs_likely(cuda_device == CU_DEVICE_INVALID)) {
+        return;
+    }
+
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_copy_ctx_try_get_id(unsigned long long *ctx_id_p, CUdevice *device_p)
 {
     unsigned long long ctx_id;
     CUresult result;
-    khiter_t iter;
+    CUdevice device;
+    CUcontext ctx;
+    ucs_status_t status;
 
     result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
-    if (ucs_unlikely(result != CUDA_SUCCESS)) {
+    if (ucs_likely(result == CUDA_SUCCESS)) {
+        *ctx_id_p = ctx_id;
+        *device_p = CU_DEVICE_INVALID;
+        return UCS_OK;
+    }
+
+    status = uct_cuda_primary_ctx_push_first_active(&device, &ctx);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
+    if (result != CUDA_SUCCESS) {
         UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
+        uct_cuda_primary_ctx_pop_and_release(device);
         return UCS_ERR_IO_ERROR;
+    }
+
+    *ctx_id_p = ctx_id;
+    *device_p = device;
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface, CUdevice *cuda_device_p,
+                          uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
+{
+    unsigned long long ctx_id;
+    CUdevice device;
+    ucs_status_t status;
+    khiter_t iter;
+    uct_cuda_copy_ctx_rsc_t *ctx_rsc;
+
+    status = uct_cuda_copy_ctx_try_get_id(&ctx_id, &device);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
     iter = kh_get(cuda_copy_ctx_rscs, &iface->ctx_rscs, ctx_id);
     if (ucs_likely(iter != kh_end(&iface->ctx_rscs))) {
-        *ctx_rsc_p = kh_value(&iface->ctx_rscs, iter);
-        return UCS_OK;
+        ctx_rsc = kh_value(&iface->ctx_rscs, iter);
+        goto out;
     }
 
-    return uct_cuda_copy_ctx_rsc_create(iface, ctx_id, ctx_rsc_p);
+    status = uct_cuda_copy_ctx_rsc_create(iface, ctx_id, &ctx_rsc);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+out:
+    *cuda_device_p = device;
+    *ctx_rsc_p     = ctx_rsc;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -126,6 +225,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     uct_base_iface_t *base_iface = ucs_derived_of(tl_ep->iface, uct_base_iface_t);
+    CUdevice device;
     uct_cuda_copy_event_desc_t *cuda_event;
     uct_cuda_copy_queue_desc_t *q_desc;
     ucs_status_t status;
@@ -139,9 +239,9 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         return UCS_OK;
     }
 
-    status = uct_cuda_copy_ctx_rsc_get(iface, &ctx_rsc);
+    status = uct_cuda_copy_ctx_rsc_get(iface, &device, &ctx_rsc);
     if (ucs_unlikely(status != UCS_OK)) {
-        return status;
+        goto out;
     }
 
     src_type = uct_cuda_copy_get_mem_type(base_iface->md, src, length);
@@ -153,25 +253,27 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         ucs_error("stream for src %s dst %s not available",
                    ucs_memory_type_names[src_type],
                    ucs_memory_type_names[dst_type]);
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto out_pop_and_release;
     }
 
     cuda_event = ucs_mpool_get(&ctx_rsc->event_mp);
     if (ucs_unlikely(cuda_event == NULL)) {
         ucs_error("failed to allocate cuda event object");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto out_pop_and_release;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, *stream));
     if (ucs_unlikely(UCS_OK != status)) {
-        return status;
+        goto out_pop_and_release;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuEventRecord(cuda_event->event, *stream));
     if (ucs_unlikely(UCS_OK != status)) {
-        return status;
+        goto out_pop_and_release;
     }
 
     if (ucs_queue_is_empty(event_q)) {
@@ -187,7 +289,12 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     ucs_trace("cuda async issued: %p dst:%p[%s], src:%p[%s] len:%ld",
               cuda_event, dst, ucs_memory_type_names[dst_type], src,
               ucs_memory_type_names[src_type], length);
-    return UCS_INPROGRESS;
+    status = UCS_INPROGRESS;
+
+out_pop_and_release:
+    uct_cuda_primary_ctx_pop_and_release(device);
+out:
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_zcopy,
@@ -237,27 +344,33 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                   uct_cuda_copy_iface_t);
+    CUdevice device;
     uct_cuda_copy_ctx_rsc_t *ctx_rsc;
     ucs_status_t status;
     CUstream *stream;
 
-    status = uct_cuda_copy_ctx_rsc_get(iface, &ctx_rsc);
+    status = uct_cuda_copy_ctx_rsc_get(iface, &device, &ctx_rsc);
     if (ucs_unlikely(status != UCS_OK)) {
-        return status;
+        goto out;
     }
 
     stream = &ctx_rsc->short_stream;
     status = uct_cuda_copy_init_stream(stream);
     if (ucs_unlikely(status != UCS_OK)) {
-        return status;
+        goto out_pop_and_release;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync(dst, src, length, *stream));
     if (ucs_unlikely(status != UCS_OK)) {
-        return status;
+        goto out_pop_and_release;
     }
 
-    return UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(*stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(*stream));
+
+out_pop_and_release:
+    uct_cuda_primary_ctx_pop_and_release(device);
+out:
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
