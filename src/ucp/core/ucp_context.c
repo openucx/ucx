@@ -565,6 +565,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, wireup_via_am_lane),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"EP_ALLOW_ALL_TO_ALL", "n",
+   "Change lanes selection logic to allow connect each local device to all "
+   "remote devices.",
+   ucs_offsetof(ucp_context_config_t, ep_allow_all_to_all),
+   UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -2254,6 +2260,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.progress_wrapper_enabled =
             ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
             ucp_context_usage_tracker_enabled(context);
+
     return UCS_OK;
 
 err_free_key_list:
