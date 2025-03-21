@@ -498,8 +498,7 @@ size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params)
 }
 
 ucp_lane_index_t
-ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params,
-                              const char *ctrl_name)
+ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
 {
     ucp_lane_index_t lane, num_lanes;
 
@@ -509,10 +508,10 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params,
                                             UCP_LANE_TYPE_AM,
                                             UCS_MEMORY_TYPE_UNKNOWN,
                                             UCT_IFACE_FLAG_AM_BCOPY, 1, 0,
-                                            ctrl_name, &lane);
+                                            &lane);
     if (num_lanes == 0) {
-        ucs_debug("no active message lane for %s %s",
-                  ucp_proto_id_field(params->proto_id, name), ctrl_name);
+        ucs_debug("no active message lane for %s",
+                  ucp_proto_id_field(params->proto_id, name));
         return UCP_NULL_LANE;
     }
 
@@ -542,10 +541,9 @@ void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
-                init_params->select_param),
+                                                     init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
-        .lane                = ucp_proto_rndv_find_ctrl_lane(init_params,
-                                                             UCP_PROTO_RNDV_RTS_NAME),
+        .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
         .md_map              = 0
@@ -608,7 +606,7 @@ ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
         return UCS_OK;
     }
 
-    apriv->lane = ucp_proto_rndv_find_ctrl_lane(&init_params->super, name);
+    apriv->lane = ucp_proto_rndv_find_ctrl_lane(&init_params->super);
     if (apriv->lane == UCP_NULL_LANE) {
         return UCS_ERR_NO_ELEM;
     }
