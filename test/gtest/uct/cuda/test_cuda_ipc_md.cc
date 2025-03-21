@@ -4,15 +4,22 @@
  * See file LICENSE for terms.
  */
 
-#include <thread>
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
+#include "test_cuda_custom_buffer.h"
 #include <common/cuda_context.h>
 #include <uct/test_md.h>
-#include <cuda.h>
 
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
+#include <ucs/sys/ptr_arith.h>
 }
+
+#include <cuda.h>
+
+#include <thread>
 
 class test_cuda_ipc_md : public test_md {
 protected:
@@ -51,40 +58,6 @@ protected:
     }
 
 #if HAVE_CUDA_FABRIC
-    static void alloc_mempool(CUdeviceptr *ptr, CUmemoryPool *mpool,
-                              CUstream *cu_stream, size_t size)
-    {
-        CUmemPoolProps pool_props = {};
-        CUmemAccessDesc map_desc;
-        CUdevice cu_device;
-
-        EXPECT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&cu_device));
-
-        pool_props.allocType     = CU_MEM_ALLOCATION_TYPE_PINNED;
-        pool_props.location.id   = (int)cu_device;
-        pool_props.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-        pool_props.handleTypes   = CU_MEM_HANDLE_TYPE_FABRIC;
-        pool_props.maxSize       = size;
-        map_desc.flags           = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-        map_desc.location        = pool_props.location;
-
-        EXPECT_EQ(CUDA_SUCCESS,
-                  cuStreamCreate(cu_stream, CU_STREAM_NON_BLOCKING));
-        EXPECT_EQ(CUDA_SUCCESS, cuMemPoolCreate(mpool, &pool_props));
-        EXPECT_EQ(CUDA_SUCCESS, cuMemPoolSetAccess(*mpool, &map_desc, 1));
-        EXPECT_EQ(CUDA_SUCCESS,
-                  cuMemAllocFromPoolAsync(ptr, size, *mpool, *cu_stream));
-        EXPECT_EQ(CUDA_SUCCESS, cuStreamSynchronize(*cu_stream));
-    }
-
-    static void
-    free_mempool(CUdeviceptr *ptr, CUmemoryPool *mpool, CUstream *cu_stream)
-    {
-        EXPECT_EQ(CUDA_SUCCESS, cuMemFree(*ptr));
-        EXPECT_EQ(CUDA_SUCCESS, cuMemPoolDestroy(*mpool));
-        EXPECT_EQ(CUDA_SUCCESS, cuStreamDestroy(*cu_stream));
-    }
-
     static uct_cuda_ipc_rkey_t unpack_masync(uct_md_h md, int64_t uuid)
     {
         size_t size = 4 * UCS_MBYTE;
@@ -92,13 +65,47 @@ protected:
         CUmemoryPool mpool;
         CUstream cu_stream;
 
-        alloc_mempool(&ptr, &mpool, &cu_stream, size);
+        cuda_mem_pool::alloc_mempool(&ptr, &mpool, &cu_stream, size);
         uct_cuda_ipc_rkey_t rkey = unpack_common(md, uuid, ptr, size);
-        free_mempool(&ptr, &mpool, &cu_stream);
+        cuda_mem_pool::free_mempool(&ptr, &mpool, &cu_stream);
         return rkey;
     }
 #endif
+
+    template<class T> void mkey_pack() const;
 };
+
+template<class T> void test_cuda_ipc_md::mkey_pack() const
+{
+    const size_t size = 16;
+    T buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    uct_md_mem_reg_params_t reg_params = {};
+    uct_mem_h memh;
+    ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), buffer.ptr(), size, &reg_params,
+                                    &memh));
+
+    std::exception_ptr thread_exception;
+    std::thread([&]() {
+        try {
+            uct_md_mkey_pack_params_t params = {};
+            std::vector<uint8_t> rkey(md_attr().rkey_packed_size);
+            ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, buffer.ptr(),
+                                              size, &params, rkey.data()));
+        } catch (...) {
+            thread_exception = std::current_exception();
+        }
+    }).join();
+
+    if (thread_exception) {
+        std::rethrow_exception(thread_exception);
+    }
+
+    uct_md_mem_dereg_params_t dereg_params;
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = memh;
+    EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+}
 
 UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
 {
@@ -171,13 +178,13 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds_mempool, 8)
     CUmemFabricHandle fabric_handle;
     CUresult cu_err;
 
-    alloc_mempool(&ptr, &mpool, &cu_stream, 64);
+    cuda_mem_pool::alloc_mempool(&ptr, &mpool, &cu_stream, 64);
     EXPECT_EQ(CUDA_SUCCESS, (cuPointerGetAttribute((void*)&q_mpool,
                     CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE, ptr)));
 
     cu_err = cuMemPoolExportToShareableHandle((void*)&fabric_handle, q_mpool,
                                               CU_MEM_HANDLE_TYPE_FABRIC, 0);
-    free_mempool(&ptr, &mpool, &cu_stream);
+    cuda_mem_pool::free_mempool(&ptr, &mpool, &cu_stream);
 
     if (cu_err == CUDA_SUCCESS) {
         for (int64_t i = 0; i < 64; ++i) {
@@ -189,6 +196,28 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds_mempool, 8)
             EXPECT_EQ(i, rkey.dev_num);
         }
     }
+}
+#endif
+
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_legacy)
+{
+    mkey_pack<mem_buffer>();
+}
+
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_error)
+{
+    mkey_pack<cuda_vmm_mem_buffer>();
+}
+
+#if HAVE_CUDA_FABRIC
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
+{
+    mkey_pack<cuda_mem_pool>();
+}
+
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_fabric)
+{
+    mkey_pack<cuda_fabric_mem_buffer>();
 }
 #endif
 
