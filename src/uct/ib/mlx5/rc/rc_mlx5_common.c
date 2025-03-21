@@ -14,6 +14,7 @@
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/datastruct/dynamic_bitmap.h>
 #include <ucs/profile/profile.h>
 
 
@@ -73,7 +74,10 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "                  cannot be used with DDP enabled.\n"
    "\n"
    "cyclic_emulated   SRQ is organized as a continuous array of WQEs, but HW\n"
-   "                  treats it as a linked list. Doesn`t require DEVX.",
+   "                  treats it as a linked list. Doesn`t require DEVX.\n"
+   "\n"
+   "msg_based         SRQ is organized as a striding linked list of messages,\n"
+   "                  a cqe is generated per message instead of per-packet",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
 
@@ -96,12 +100,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
                               uct_ib_mlx5_srq_seg_t *seg)
 {
+    int num_strides = iface->tm.mp.num_strides;
     uct_ib_iface_recv_desc_t *desc;
     uint64_t desc_map;
     void *hdr;
     int i;
 
-    desc_map = ~seg->srq.ptr_mask & UCS_MASK(iface->tm.mp.num_strides);
+    desc_map = ~seg->srq.ptr_mask & UCS_MASK(num_strides);
     ucs_for_each_bit(i, desc_map) {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, return UCS_ERR_NO_MEMORY);
@@ -212,6 +217,33 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
     return count;
 }
 
+unsigned
+uct_rc_mlx5_iface_srq_post_recv_msg_based(uct_rc_mlx5_iface_common_t *iface)
+{
+    uct_ib_mlx5_srq_t *srq     = &iface->rx.srq;
+    uct_rc_iface_t *rc_iface   = &iface->super;
+    uct_ib_mlx5_srq_seg_t *seg = NULL;
+    uint16_t count             = 0;
+    uint16_t wqe_index;
+
+    ucs_assert(rc_iface->rx.srq.available > 0);
+
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(wqe_index, &iface->rx.srq.free_bitmap) {
+        seg = uct_ib_mlx5_srq_get_wqe(srq, wqe_index);
+
+        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
+            break;
+        }
+
+        count++;
+
+        ucs_dynamic_bitmap_reset(&iface->rx.srq.free_bitmap, wqe_index);
+    }
+
+    uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, wqe_index, count);
+    return count;
+}
+
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
 {
     /* prepost recvs only if quota available (recvs were not preposted
@@ -282,13 +314,14 @@ ucs_status_t uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 
     ucs_assert(iface->tm.cmd_wq.super.super.type == UCT_IB_MLX5_OBJ_TYPE_LAST);
 
-    attr.super.qp_type          = IBV_QPT_RC;
-    attr.super.cap.max_send_wr  = iface->tm.cmd_qp_len;
-    attr.super.cap.max_send_sge = 1;
-    attr.super.ibv.pd           = md->super.pd;
-    attr.super.srq_num          = iface->rx.srq.srq_num;
-    attr.super.port             = dev->first_port;
-    attr.mmio_mode              = iface->tx.mmio_mode;
+    attr.super.qp_type            = IBV_QPT_RC;
+    attr.super.cap.max_send_wr    = iface->tm.cmd_qp_len;
+    attr.super.cap.max_send_sge   = 1;
+    attr.super.ibv.pd             = md->super.pd;
+    attr.super.srq_num            = iface->rx.srq.srq_num;
+    attr.super.port               = dev->first_port;
+    attr.mmio_mode                = iface->tx.mmio_mode;
+    attr.msg_based_srq_associated = uct_rc_mlx5_iface_is_srq_msg_based(iface);
     status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
                                         &iface->cq[UCT_IB_DIR_RX],
                                         &iface->cq[UCT_IB_DIR_RX],
@@ -560,7 +593,11 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        iface->tm.mp.num_strides);
+                                        uct_rc_mlx5_iface_is_srq_msg_based(
+                                                iface) ?
+                                                iface->msg_based.num_strides :
+                                                iface->tm.mp.num_strides);
+
     if (status != UCS_OK) {
         goto err_free_srq;
     }
@@ -594,9 +631,15 @@ void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 
 void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
 {
-    uct_rc_mlx5_release_desc_t *release = ucs_derived_of(self,
-                                                         uct_rc_mlx5_release_desc_t);
-    void *ib_desc = (char*)desc - release->offset;
+    uct_rc_mlx5_release_desc_t *release;
+    
+    void *ib_desc;
+
+    release = ucs_derived_of(self, uct_rc_mlx5_release_desc_t);
+
+    ib_desc = (char*)desc - release->offset;
+
+
     ucs_mpool_put_inline(ib_desc);
 }
 
@@ -969,7 +1012,10 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        iface->tm.mp.num_strides);
+                                        uct_rc_mlx5_iface_is_srq_msg_based(
+                                                iface) ?
+                                                iface->msg_based.num_strides :
+                                                iface->tm.mp.num_strides);
     if (status != UCS_OK) {
         goto err_free_srq;
     }
