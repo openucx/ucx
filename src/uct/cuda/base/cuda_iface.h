@@ -154,23 +154,39 @@ typedef struct {
 } uct_cuda_ctx_rsc_t;
 
 
-typedef uct_cuda_ctx_rsc_t * (*uct_cuda_alloc_rsc_t)();
-
-
 /* Hash map for CUDA context resources. The key is the CUDA context Id. */
 KHASH_INIT(cuda_ctx_rscs, unsigned long long, uct_cuda_ctx_rsc_t*, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
 
 
 typedef struct {
-    uct_base_iface_t       super;
-    int                    eventfd;
+    uct_base_iface_t          super;
+    int                       eventfd;
     /* CUDA resources per context */
-    khash_t(cuda_ctx_rscs) ctx_rscs;
-    uct_cuda_alloc_rsc_t   alloc_rsc;
-    unsigned               max_events;
+    khash_t(cuda_ctx_rscs)    ctx_rscs;
+    /* list of queues which require progress */
+    ucs_queue_head_t          active_queue;
+    unsigned                  max_events;
+    unsigned                  max_poll;
+    size_t                    event_size;
+
+    struct {
+        uct_cuda_ctx_rsc_t * (*create_rsc)(uct_iface_h);
+        void                 (*destroy_rsc)(uct_iface_h, uct_cuda_ctx_rsc_t *);
+        unsigned             (*progress_queue)(uct_iface_h, ucs_queue_head_t *,
+                                               unsigned);
+    } ops;
 } uct_cuda_iface_t;
 
+ucs_status_t uct_cuda_base_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
+
+ucs_status_t uct_cuda_base_iface_event_fd_arm(uct_iface_h tl_iface,
+                                              unsigned events);
+
+unsigned uct_cuda_base_iface_progress(uct_iface_h tl_iface);
+
+ucs_status_t uct_cuda_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                       uct_completion_t *comp);
 
 ucs_status_t
 uct_cuda_base_query_devices_common(
@@ -178,27 +194,17 @@ uct_cuda_base_query_devices_common(
         uct_tl_device_resource_t **tl_devices_p, unsigned *num_tl_devices_p);
 
 void
-uct_cuda_base_get_sys_dev(CUdevice cuda_device,
-                          ucs_sys_device_t *sys_dev_p);
+uct_cuda_base_get_sys_dev(CUdevice cuda_device, ucs_sys_device_t *sys_dev_p);
 
-ucs_status_t uct_cuda_base_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
-
-/**
- * Init the resources of the given CUDA context.
- *
- * @param [in]  iface     CUDA transport interface
- * @param [in]  ctx_id    CUDA context id
- * @param [out] ctx_rsc_p Returned pointer to context resources
- *
- * @return Error code as defined by @ref ucs_status_t.
- */
 ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
                                           unsigned long long ctx_id,
                                           uct_cuda_ctx_rsc_t **ctx_rsc_p);
 
-void uct_cuda_base_ctx_rsc_destroy(uct_cuda_ctx_rsc_t *ctx_rsc);
+void uct_cuda_base_queue_desc_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                                      uct_cuda_queue_desc_t *qdesc);
 
-int uct_cuda_base_is_ctx_rsc_valid(const uct_cuda_ctx_rsc_t *ctx_rsc);
+void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                                  CUstream *stream);
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
 void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(void *arg);
@@ -233,6 +239,17 @@ uct_cuda_base_ctx_rsc_get(uct_cuda_iface_t *iface, uct_cuda_ctx_rsc_t **ctx_rsc_
     }
 
     return uct_cuda_base_ctx_rsc_create(iface, ctx_id, ctx_rsc_p);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_base_init_stream(CUstream *stream)
+{
+    if (ucs_likely(*stream != NULL)) {
+        return UCS_OK;
+    }
+
+    return UCT_CUDADRV_FUNC_LOG_ERR(
+            cuStreamCreate(stream, CU_STREAM_NON_BLOCKING));
 }
 
 #endif

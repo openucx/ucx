@@ -62,12 +62,8 @@ typedef struct uct_cuda_copy_iface {
     uct_cuda_iface_t            super;
     /* used to store uuid and check iface reachability */
     uct_cuda_copy_iface_addr_t  id;
-    /* list of queues which require progress */
-    ucs_queue_head_t            active_queue;
     /* config parameters to control cuda copy transport */
     struct {
-        unsigned                max_poll;
-        unsigned                max_cuda_events;
         uct_cuda_copy_bw_t      bw;
     } config;
     /* handler to support arm/wakeup feature */
