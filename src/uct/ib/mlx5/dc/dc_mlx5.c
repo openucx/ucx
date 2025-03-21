@@ -1006,7 +1006,7 @@ void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md)
 
 static int
 uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                                  const uct_iface_is_reachable_params_t *params)
+                                  uct_iface_is_reachable_params_t *params)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     const uct_dc_mlx5_iface_addr_t *addr;
