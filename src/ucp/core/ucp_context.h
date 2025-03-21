@@ -258,8 +258,13 @@ typedef struct ucp_tl_resource_desc {
     uct_tl_resource_desc_t        tl_rsc;       /* UCT resource descriptor */
     uint16_t                      tl_name_csum; /* Checksum of transport name */
     ucp_md_index_t                md_index;     /* Memory domain index (within the context) */
-    ucp_rsc_index_t               dev_index;    /* Arbitrary device index. Resources
-                                                   with same index have same device name. */
+    ucp_rsc_index_t               dev_index;    /* Arbitrary device index.
+                                                   Resources with same index are
+                                                   bound to the same physical
+                                                   device, but its name may be
+                                                   different for different
+                                                   transports, e.g. ib0/tcp but
+                                                   mlx5_0:1/rc_verbs */
     uint8_t                       flags;        /* Flags that describe resource specifics */
 } ucp_tl_resource_desc_t;
 
