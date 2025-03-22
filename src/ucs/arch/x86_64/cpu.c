@@ -1060,13 +1060,12 @@ size_t ucs_x86_nt_src_buffer_transfer(void *dst, const void *src, size_t len)
     return len;
 }
 
-static UCS_F_ALWAYS_INLINE
-void ucs_x86_copy_bytes_le_128(void *dst, const void *src, size_t len)
+static UCS_F_ALWAYS_INLINE void
+ucs_x86_copy_bytes_le_128(void *dst, const void *src, uint32_t len)
 {
-#if defined (__LZCNT__)
     __m256i y0, y1, y2, y3;
     /* Handle lengths that fall usually within eager short range */
-    switch (_lzcnt_u32(len)) {
+    switch (ucs_count_leading_zero_bits(len)) {
     /* 0 */
     case 32:
         break;
@@ -1121,9 +1120,6 @@ void ucs_x86_copy_bytes_le_128(void *dst, const void *src, size_t len)
         _mm256_storeu_si256(UCS_PTR_BYTE_OFFSET(dst, len - 32), y3);
         break;
     }
-#else
-    memcpy(dst, src, len);
-#endif
 }
 
 /* This is an adaptation of the memcpy code from https://github.com/amd/aocl-libmem
