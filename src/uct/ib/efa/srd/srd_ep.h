@@ -47,5 +47,4 @@ ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
 void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op);
 
-
 #endif

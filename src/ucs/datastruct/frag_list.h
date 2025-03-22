@@ -124,6 +124,12 @@ ucs_status_t ucs_frag_list_init(ucs_frag_list_sn_t initial_sn, ucs_frag_list_t *
                                int max_holes
                                UCS_STATS_ARG(ucs_stats_node_t *stats_parent));
 
+
+/**
+ * Pull all fragments regardless of SN.
+ */
+ucs_frag_list_elem_t *ucs_frag_list_pull_all(ucs_frag_list_t *head);
+
 /**
  * Cleanup the frag_list.
  */

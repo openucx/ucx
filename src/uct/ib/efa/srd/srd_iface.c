@@ -8,6 +8,7 @@
 #include "config.h"
 #endif
 
+#include <uct/ib/efa/srd/srd_log.h>
 #include <uct/ib/efa/srd/srd_iface.h>
 #include <uct/ib/efa/base/ib_efa.h>
 #include <uct/ib/base/ib_log.h>
@@ -207,6 +208,14 @@ uct_srd_iface_post_recv(uct_srd_iface_t *iface)
     }
 }
 
+#ifdef ENABLE_STATS
+static ucs_stats_class_t uct_srd_iface_stats_class = {
+    .name         = "srd_iface",
+    .num_counters = 0,
+    .class_id     = UCS_STATS_CLASS_ID_INVALID,
+};
+#endif
+
 static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -234,6 +243,8 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
 
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx.queue_len;
     init_attr.cq_len[UCT_IB_DIR_RX] = config->super.rx.queue_len;
+    init_attr.rx_priv_len           = sizeof(uct_srd_recv_desc_t) -
+                                      sizeof(uct_ib_iface_recv_desc_t);
     init_attr.rx_hdr_len            = sizeof(uct_srd_hdr_t);
     init_attr.seg_size              = ucs_min(mtu, config->super.seg_size);
     init_attr.qp_type               = IBV_QPT_DRIVER;
@@ -241,6 +252,12 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_srd_iface_tl_ops,
                               &uct_srd_iface_ops, md, worker, params,
                               &config->super, &init_attr);
+
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_srd_iface_stats_class,
+                                  self->super.stats, "-%p", self);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     ret = efadv_query_device(ib_md->pd->context, &efa_attr, sizeof(efa_attr));
     if (ret != 0) {
@@ -265,6 +282,8 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
+    kh_init_inplace(uct_srd_rx_ep_hash, &self->rx.ep_hash);
+
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "srd_recv_desc", &self->rx.mp);
     if (status != UCS_OK) {
@@ -283,7 +302,9 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_send_sge  = efa_attr.max_sq_sge;
     self->config.max_get_zcopy = efa_attr.max_rdma_size;
 
-    uct_srd_iface_post_recv(self);
+    while (self->rx.available >= self->super.config.rx_max_batch) {
+        uct_srd_iface_post_recv(self);
+    }
 
     return UCS_OK;
 
@@ -291,20 +312,40 @@ err_cleanup_rx_mp:
     ucs_mpool_cleanup(&self->rx.mp, 1);
 err_cleanup_send_op_mp:
     ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
+    UCS_STATS_NODE_FREE(self->stats);
     return status;
+}
+
+static void uct_iface_rx_ep_cleanup(uct_srd_rx_ep_t *ep)
+{
+    ucs_frag_list_elem_t *elem;
+    uct_srd_recv_desc_t *desc;
+
+    while ((elem = ucs_frag_list_pull_all(&ep->ooo_pkts)) != NULL) {
+        desc = ucs_container_of(elem, uct_srd_recv_desc_t, elem);
+        ucs_mpool_put(desc);
+    }
+
+    ucs_frag_list_cleanup(&ep->ooo_pkts);
+    ucs_free(ep);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_srd_iface_t)
 {
+    uct_srd_rx_ep_t *ep;
+
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_srd_iface_send_op_purge(self);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     uct_ib_destroy_qp(self->qp);
+    kh_foreach_value(&self->rx.ep_hash, ep, {
+        uct_iface_rx_ep_cleanup(ep);
+    });
+    kh_destroy_inplace(uct_srd_rx_ep_hash, &self->rx.ep_hash);
     ucs_mpool_cleanup(&self->rx.mp, 0);
     ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
-    ucs_assertv(ucs_list_is_empty(&self->tx.outstanding_list),
-                "iface=%p tx outstanding list is not empty", self);
+    UCS_STATS_NODE_FREE(self->stats);
 }
 
 UCS_CLASS_DEFINE(uct_srd_iface_t, uct_ib_iface_t);
@@ -352,11 +393,130 @@ uct_srd_iface_poll_tx(uct_srd_iface_t *iface)
     return num_wcs;
 }
 
+static void
+uct_srd_ep_process_rx_desc(uct_srd_iface_t *iface, uct_srd_recv_desc_t *desc)
+{
+    uct_ib_iface_invoke_am_desc(&iface->super, desc->hdr->id, desc->hdr->data,
+                                desc->len, &desc->super);
+}
+
+static void uct_srd_iface_process_rx(uct_srd_iface_t *iface, uct_srd_hdr_t *hdr,
+                                     unsigned length, uct_srd_recv_desc_t *desc)
+{
+    uct_srd_rx_ep_t *ep;
+    khiter_t iter;
+    ucs_status_t status;
+    int ret;
+    ucs_frag_list_ooo_type_t ooo_type;
+    ucs_frag_list_elem_t *elem;
+
+    ucs_trace_func("");
+
+    /* Get the remote ep */
+    iter = kh_get(uct_srd_rx_ep_hash, &iface->rx.ep_hash, hdr->ep_uuid);
+    if (iter == kh_end(&iface->rx.ep_hash)) {
+        ep = ucs_malloc(sizeof(*ep), "uct_srd_rx_ep_t");
+        if (ep == NULL) {
+            ucs_error("failed to allocate rx endpoint");
+            goto err;
+        }
+
+        ep->uuid = hdr->ep_uuid;
+        status   = ucs_frag_list_init(UCT_SRD_INITIAL_PSN - 1, &ep->ooo_pkts,
+                                      -1 UCS_STATS_ARG(iface->stats));
+        if (status != UCS_OK) {
+            ucs_error("failed to initialize defrag ep=%zx status=%s", ep->uuid,
+                      ucs_status_string(status));
+            ucs_free(ep);
+            goto err;
+        }
+
+        iter = kh_put(uct_srd_rx_ep_hash, &iface->rx.ep_hash, ep->uuid, &ret);
+        if (iter == kh_end(&iface->rx.ep_hash)) {
+            ucs_frag_list_cleanup(&ep->ooo_pkts);
+            ucs_free(ep);
+            goto err;
+        }
+
+        kh_value(&iface->rx.ep_hash, iter) = ep;
+    } else {
+        ep = kh_value(&iface->rx.ep_hash, iter);
+    }
+
+    desc->hdr = hdr;
+    desc->len = length - sizeof(*hdr);
+
+    ooo_type = ucs_frag_list_insert(&ep->ooo_pkts, &desc->elem, hdr->psn);
+    ucs_assertv_always((ooo_type != UCS_FRAG_LIST_INSERT_DUP) &&
+                       (ooo_type != UCS_FRAG_LIST_INSERT_FAIL),
+                       "ooo_type=%d ep_uuid=%"PRIx64" psn=%u",
+                       ooo_type, ep->uuid, hdr->psn);
+
+    if ((ooo_type == UCS_FRAG_LIST_INSERT_FAST) ||
+        (ooo_type == UCS_FRAG_LIST_INSERT_FIRST)) {
+        /* Not actually added to the fragment list */
+        uct_srd_ep_process_rx_desc(iface, desc);
+    }
+
+    if ((ooo_type == UCS_FRAG_LIST_INSERT_FAST) ||
+        (ooo_type == UCS_FRAG_LIST_INSERT_SLOW)) {
+        /* Nothing can be pulled from fragment list */
+        return;
+    }
+
+    ucs_assertv((ooo_type == UCS_FRAG_LIST_INSERT_FIRST) ||
+                (ooo_type == UCS_FRAG_LIST_INSERT_READY),
+                "ooo_type=%d ep_uuid=%"PRIx64" psn=%u",
+                ooo_type, ep->uuid, hdr->psn);
+
+    while ((elem = ucs_frag_list_pull(&ep->ooo_pkts)) != NULL) {
+        desc = ucs_container_of(elem, uct_srd_recv_desc_t, elem);
+        uct_srd_ep_process_rx_desc(iface, desc);
+    }
+
+    return;
+
+err:
+    ucs_mpool_put(desc);
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_srd_iface_poll_rx(uct_srd_iface_t *iface)
+{
+    unsigned num_wcs = iface->super.config.rx_max_poll;
+    struct ibv_wc wc[num_wcs];
+    ucs_status_t status;
+    void *packet;
+    int i;
+
+    status = uct_ib_poll_cq(iface->super.cq[UCT_IB_DIR_RX], &num_wcs, wc);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super, i, packet, wc, num_wcs) {
+        uct_ib_log_recv_completion(&iface->super, &wc[i], packet,
+                                   wc[i].byte_len, uct_srd_dump_packet);
+        uct_srd_iface_process_rx(iface, (uct_srd_hdr_t*)packet, wc[i].byte_len,
+                                 (uct_srd_recv_desc_t*)wc[i].wr_id);
+    }
+
+    iface->rx.available += num_wcs;
+    uct_srd_iface_post_recv(iface);
+    return num_wcs;
+}
+
 static unsigned uct_srd_iface_progress(uct_iface_h tl_iface)
 {
     uct_srd_iface_t *iface = ucs_derived_of(tl_iface, uct_srd_iface_t);
+    unsigned count;
 
-    return uct_srd_iface_poll_tx(iface);
+    count = uct_srd_iface_poll_rx(iface);
+    if (count == 0) {
+        count = uct_srd_iface_poll_tx(iface);
+    }
+
+    return count;
 }
 
 ucs_status_t
