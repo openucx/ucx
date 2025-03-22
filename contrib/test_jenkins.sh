@@ -1070,6 +1070,32 @@ run_gtest_armclang() {
 	fi
 }
 
+run_gtest_bullseye() {
+	export PATH="/auto/app/BullsEye/BullseyeCoverage-Latest-x86/bin/:$PATH"
+
+	COV_DIR=/hpc/scrap/azure/${BUILD_DEFINITIONNAME}/${BUILD_BUILDID}-${BUILD_BUILDNUMBER}
+    mkdir -p "$COV_DIR"
+    COVFILE=$COV_DIR/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov
+    export COVFILE   
+
+	if ! command -v cov01 &> /dev/null; then
+		echo "=== Skipping Bullseye: cov01 not found ==="
+		return 0
+	fi
+
+	echo "=== Running gtests with Bullseye Coverage ==="
+	cov01 --on
+	build devel --enable-gtest
+	run_gtest "default"
+	cov01 --off
+
+	if ! covfn -f "${COVFILE}"; then
+		echo "Error: COVFILE validation failed."
+		exit 1
+	fi
+}
+
+
 #
 # Run the test suite (gtest) in release configuration with small subset of tests
 #
@@ -1207,6 +1233,9 @@ run_tests() {
 
 	# build and run gtest with armclang
 	run_gtest_armclang
+
+	# # build and run gtest with bullseye
+	run_gtest_bullseye
 
 	# release mode tests
 	do_distributed_task 0 4 run_release_mode_tests
