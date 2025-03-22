@@ -17,6 +17,7 @@ class mock_iface {
 public:
     /* Can't use std::function due to coverity errors */
     using iface_attr_func_t = void (*)(uct_iface_attr&);
+    using perf_attr_func_t = void (*)(uct_perf_attr_t&);
 
     mock_iface() : m_tl(nullptr)
     {
@@ -37,9 +38,11 @@ public:
 
     void add_mock_iface(
             const std::string &dev_name = "mock",
-            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {})
+            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
+            perf_attr_func_t perf_cb = cx7_perf_mock)
     {
         m_iface_attrs_funcs[dev_name] = cb;
+        m_perf_attrs_funcs[dev_name]  = perf_cb;
     }
 
     void mock_transport(const std::string &tl_name)
@@ -127,6 +130,7 @@ private:
         uct_base_iface_t *base      = ucs_derived_of(*iface_p, uct_base_iface_t);
         m_self->m_iface_names[base] = params->mode.device.dev_name;
         m_self->m_mock.setup(&(*iface_p)->ops.iface_query, iface_query_mock);
+        m_self->m_mock.setup(&base->internal_ops->iface_estimate_perf, perf_mock);
         return UCS_OK;
     }
 
@@ -143,6 +147,26 @@ private:
         return UCS_OK;
     }
 
+    static ucs_status_t perf_mock(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+    {
+        uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
+
+        UCS_MOCK_ORIG_FUNC(m_self->m_mock,
+                           &base->internal_ops->iface_estimate_perf, iface,
+                           perf_attr);
+
+        std::string &iface_name = m_self->m_iface_names[base];
+        auto it                 = m_self->m_perf_attrs_funcs.find(iface_name);
+        (it->second)(*perf_attr);
+        return UCS_OK;
+    }
+
+    static void cx7_perf_mock(uct_perf_attr_t& perf_attr)
+    {
+        perf_attr.path_bandwidth.shared    = 0.95 * perf_attr.bandwidth.shared;
+        perf_attr.path_bandwidth.dedicated = 0;
+    }
+
     /* We have to use singleton to mock C functions */
     static mock_iface *m_self;
 
@@ -150,6 +174,7 @@ private:
     uct_tl_t                                           *m_tl;
     std::unordered_map<uct_base_iface_t *, std::string> m_iface_names;
     std::map<std::string, iface_attr_func_t>            m_iface_attrs_funcs;
+    std::map<std::string, perf_attr_func_t>             m_perf_attrs_funcs;
     std::string                                         m_real_dev_name;
 };
 
@@ -582,6 +607,26 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_send_recv_small_frag,
            "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2", "RNDV_THRESH=0")
 {
     send_recv_am_range(UCS_KBYTE, 64 * UCS_KBYTE, UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
+           "IB_NUM_PATHS?=4", "MAX_RNDV_LANES=8", "RNDV_THRESH=0")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    /* All existing IB paths should be selected. */
+    check_ep_config(sender(), {
+        {1,       5418,   "rendezvous fragmented copy-in copy-out",
+         "rc_mlx5/mock_1:1/path0"},
+        {5419,    283699, "rendezvous zero-copy read from remote",
+         "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
+         "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
+         {283700, INF,    "rendezvous zero-copy fenced write to remote",
+         "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
+         "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
+    }, key);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")

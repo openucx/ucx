@@ -30,6 +30,20 @@
 #include <poll.h>
 
 
+/**
+ * Maximum bandwidth of CX7 single path with PCIe Gen5 and RDMA_READ operation.
+ */
+#define UCT_IB_CX7_PATH_BANDWIDTH 38e9
+
+/**
+ * Minimal CX7 single path ratio.
+ * The minimal ratio is used to calculate the ratio for the first device path,
+ * when the full interface bandwidth is capped by PCI distance. With PCIe Gen4
+ * single path still does not consume the full interface bandwidth for RDMA_READ
+ * operations, but around 95% of it according to measurements.
+ */
+#define UCT_IB_CX7_PATH_RATIO 0.95
+
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
                                UCS_CONFIG_TYPE_RANGE_SPEC);
@@ -1973,6 +1987,26 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth = iface_attr.bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        if (uct_ib_iface_is_roce(ib_iface) &&
+            (uct_ib_iface_roce_lag_level(ib_iface) > 1)) {
+            perf_attr->path_bandwidth.shared    = iface_attr.bandwidth.shared /
+                                                  iface_attr.dev_num_paths;
+            perf_attr->path_bandwidth.dedicated = 0;
+        } else if (((op == UCT_EP_OP_GET_BCOPY) ||
+                    (op == UCT_EP_OP_GET_ZCOPY)) &&
+                   (uct_ib_iface_port_attr(ib_iface)->active_speed ==
+                    UCT_IB_SPEED_NDR)) {
+            /* CX7: use HW limit or 95% of the full iface bandwidth */
+            perf_attr->path_bandwidth.shared    =
+                ucs_min(UCT_IB_CX7_PATH_BANDWIDTH,
+                        UCT_IB_CX7_PATH_RATIO * iface_attr.bandwidth.shared);
+            perf_attr->path_bandwidth.dedicated = 0;
+        } else {
+            perf_attr->path_bandwidth = iface_attr.bandwidth;
+        }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {

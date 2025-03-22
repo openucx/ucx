@@ -591,6 +591,10 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         perf_attr->bandwidth = iface_attr.bandwidth;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        perf_attr->path_bandwidth = iface_attr.bandwidth;
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         perf_attr->latency = iface_attr.latency;
     }
