@@ -1245,12 +1245,16 @@ UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
     receiver().connect(&sender(), get_ep_params());
     test_run_xfer(true, true, true, true, false);
 
-    ASSERT_EQ(num_lanes(), ucp_ep_num_lanes(sender().ep()));
-    ASSERT_EQ(num_lanes(), ucp_ep_num_lanes(receiver().ep()));
+    auto ep_num_lanes = ucp_ep_num_lanes(sender().ep());
+    ASSERT_EQ(ep_num_lanes, ucp_ep_num_lanes(receiver().ep()));
+
+    if (is_proto_enabled()) {
+        EXPECT_EQ(num_lanes(), ep_num_lanes);
+    }
 
     size_t bytes_sent = 0;
     unsigned num_used_lanes = 0;
-    for (ucp_lane_index_t lane = 0; lane < num_lanes(); ++lane) {
+    for (ucp_lane_index_t lane = 0; lane < ep_num_lanes; ++lane) {
         size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
         size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
         UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
@@ -1263,7 +1267,7 @@ UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
 
     /* One lane could be reserved for tag offload and not selected for AM/RMA
        bandwidth lane */
-    EXPECT_GE(num_used_lanes, num_lanes() - 1);
+    EXPECT_GE(num_used_lanes, ep_num_lanes - 1);
 
     EXPECT_GE(bytes_sent, get_msg_size());
 }
