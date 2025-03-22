@@ -10,6 +10,7 @@ package ucx
 import "C"
 import (
 	"unsafe"
+	"runtime/cgo"
 )
 
 type UcpRequest struct {
@@ -46,18 +47,42 @@ func (p *UcpRequestParams) SetCallback(cb UcpCallback) *UcpRequestParams {
 	return p
 }
 
-func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Pointer) uint64 {
+func packCallback(cb UcpCallback) unsafe.Pointer {
+	h := cgo.NewHandle(cb)
+	return unsafe.Pointer(h)
+}
+
+func unpackCallbackInternal(callback unsafe.Pointer, freeHandle bool) UcpCallback {
+    if callback == nil {
+        return nil
+    }
+
+    h := cgo.Handle(uintptr(callback))
+    if freeHandle {
+        defer h.Delete()
+    }
+    return h.Value().(UcpCallback)
+}
+
+func unpackCallback(callback unsafe.Pointer) UcpCallback {
+	return unpackCallbackInternal(callback, false)
+}
+
+func unpackCallbackAndFree(callback unsafe.Pointer) UcpCallback {
+	return unpackCallbackInternal(callback, true)
+}
+
+func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Pointer) unsafe.Pointer {
+
 	if params == nil {
-		return 0
+		return nil
 	}
 
-	var cbId uint64
 	if params.Cb != nil {
-		cbId = register(params.Cb)
 		p.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
 		cbAddr := (*unsafe.Pointer)(unsafe.Pointer(&p.cb[0]))
 		*cbAddr = cb
-		p.user_data = unsafe.Pointer(uintptr(cbId))
+		p.user_data = packCallback(params.Cb)
 	}
 
 	if params.memTypeSet {
@@ -74,7 +99,7 @@ func packParams(params *UcpRequestParams, p *C.ucp_request_param_t, cb unsafe.Po
 		p.memh = params.Memory.memHandle
 	}
 
-	return cbId
+	return p.user_data
 }
 
 // Checks whether request is a pointer
@@ -83,7 +108,7 @@ func isRequestPtr(request C.ucs_status_ptr_t) bool {
 	return (uint64(uintptr(request)) - 1) < (uint64(errLast) - 1)
 }
 
-func NewRequest(request C.ucs_status_ptr_t, callbackId uint64, immidiateInfo interface{}) (*UcpRequest, error) {
+func newRequest(request C.ucs_status_ptr_t, packedCb unsafe.Pointer, immidiateInfo interface{}) (*UcpRequest, error) {
 	ucpRequest := &UcpRequest{}
 
 	if isRequestPtr(request) {
@@ -91,7 +116,7 @@ func NewRequest(request C.ucs_status_ptr_t, callbackId uint64, immidiateInfo int
 		ucpRequest.Status = UCS_INPROGRESS
 	} else {
 		ucpRequest.Status = UcsStatus(int64(uintptr(request)))
-		if callback, found := deregister(callbackId); found {
+		if callback := unpackCallbackAndFree(packedCb); callback != nil {
 			switch callback := callback.(type) {
 			case UcpSendCallback:
 				callback(ucpRequest, ucpRequest.Status)
