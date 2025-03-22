@@ -9,6 +9,8 @@
 
 ## Current
 ### Features:
+#### CUDA
+ * Added config keys to update cuda_copy bandwidth for coherent platforms
 ### Bugfixes:
 
 ## 1.18.1-rc1 (February 20, 2025)
