@@ -841,6 +841,8 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
                     ucs_memory_type_t local_mem_type,
                     ucp_md_index_t rkey_ptr_md_index);
 
+int ucp_ep_is_prioritized(ucp_ep_h ep);
+
 /**
  * @brief Indicates AM-based keepalive necessity.
  * 
