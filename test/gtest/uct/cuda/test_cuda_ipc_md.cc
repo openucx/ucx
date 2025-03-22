@@ -50,6 +50,16 @@ protected:
         return rkey;
     }
 
+    void init() override {
+        test_md::init();
+        m_uuid_next = m_uuid;
+    }
+
+    void cleanup() override {
+        test_md::cleanup();
+        m_uuid = m_uuid_next;
+    }
+
 #if HAVE_CUDA_FABRIC
     static void alloc_mempool(CUdeviceptr *ptr, CUmemoryPool *mpool,
                               CUstream *cu_stream, size_t size)
@@ -98,7 +108,12 @@ protected:
         return rkey;
     }
 #endif
+
+    static int64_t m_uuid;
+    int64_t        m_uuid_next;
 };
+
+int64_t test_cuda_ipc_md::m_uuid = 0;
 
 UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
 {
@@ -130,6 +145,31 @@ UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
     EXPECT_NE(dev_num, rkey.dev_num); // rkey was not updated
 }
 
+UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
+{
+    constexpr size_t size = 4096;
+    ucs::handle<uct_md_h> md;
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey;
+    CUdeviceptr ptr;
+
+    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, size));
+    EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
+    EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
+                                     &rkey));
+
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, rkey.ph.handle_type);
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md->ops->mem_dereg(md, &params));
+    cuMemFree(ptr);
+}
+
 UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
 {
     cuda_context cuda_ctx;
@@ -146,7 +186,8 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
                                m_md_config);
     }
 
-    for (int64_t i = 0; i < 64; ++i) {
+    m_uuid_next = m_uuid + 64;
+    for (auto i = m_uuid; i < m_uuid_next; i++) {
         /* We get unique dev_num on new UUID */
         uct_cuda_ipc_rkey_t rkey = unpack(md, i + 1);
         EXPECT_EQ(i, rkey.dev_num);
@@ -180,7 +221,8 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds_mempool, 8)
     free_mempool(&ptr, &mpool, &cu_stream);
 
     if (cu_err == CUDA_SUCCESS) {
-        for (int64_t i = 0; i < 64; ++i) {
+        m_uuid_next = m_uuid + 64;
+        for (auto i = m_uuid; i < m_uuid_next; i++) {
             /* We get unique dev_num on new UUID */
             uct_cuda_ipc_rkey_t rkey = unpack_masync(md, i + 1);
             EXPECT_EQ(i, rkey.dev_num);

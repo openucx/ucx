@@ -118,7 +118,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     CUpointer_attribute attr_type[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
     int legacy_capable;
-    int allowed_handle_types;
+    uint64_t allowed_handle_types;
 #endif
 
     key = ucs_calloc(1, sizeof(*key), "uct_cuda_ipc_lkey_t");
@@ -225,9 +225,10 @@ legacy_path:
 
 common_path:
     ucs_list_add_tail(&memh->list, &key->link);
-    ucs_trace("registered addr:%p/%p length:%zd dev_num:%d buffer_id:%llu",
-              addr, (void *)key->d_bptr, key->b_len, (int)memh->dev_num,
-              key->ph.buffer_id);
+    ucs_trace("registered addr:%p/%p length:%zd type:%u dev_num:%d "
+              "buffer_id:%llu",
+              addr, (void *)key->d_bptr, key->b_len, key->ph.handle_type,
+              (int)memh->dev_num, key->ph.buffer_id);
 
     *key_p = key;
     return UCS_OK;
