@@ -79,8 +79,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
     {"RETAIN_INACTIVE_PRIMARY_CTX", "n",
-     "Enable retaining and using an inactive CUDA primary context for memory"
-     " allocation",
+     "Retain and use an inactive CUDA primary context for memory allocation",
      ucs_offsetof(uct_cuda_copy_md_config_t, retain_inactive_primary_ctx),
      UCS_CONFIG_TYPE_BOOL},
 
@@ -326,16 +325,13 @@ static void uct_cuda_copy_sync_memops(CUdeviceptr dptr, int is_vmm)
 }
 
 static ucs_status_t
-uct_cuda_copy_push_ctx(uct_cuda_copy_md_t *md, CUdevice device,
+uct_cuda_copy_push_ctx(CUdevice device, int retain_inactive,
                        ucs_log_level_t log_level)
 {
     ucs_status_t status;
     CUcontext primary_ctx;
 
-    status = uct_cuda_primary_ctx_retain(
-                                     device,
-                                     md->config.retain_inactive_primary_ctx,
-                                     &primary_ctx);
+    status = uct_cuda_primary_ctx_retain(device, retain_inactive, &primary_ctx);
     if (status != UCS_OK) {
         return status;
     }
@@ -348,35 +344,24 @@ uct_cuda_copy_push_ctx(uct_cuda_copy_md_t *md, CUdevice device,
     return status;
 }
 
-static void uct_cuda_copy_pop_ctx(CUdevice orig_device, CUdevice device,
-                                  ucs_log_level_t log_level)
-{
-    CUcontext ctx;
-    ucs_status_t status;
-
-    if (orig_device != device) {
-        status = UCT_CUDADRV_FUNC(cuCtxPopCurrent(&ctx), log_level);
-        if (status != UCS_OK) {
-            return;
-        }
-
-        status = UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRelease(device), log_level);
-        if (status != UCS_OK) {
-            return;
-        }
-    }
-}
-
-static ucs_status_t uct_cuda_copy_push_alloc_ctx(uct_cuda_copy_md_t *md,
-                                                 const ucs_sys_device_t sys_dev,
-                                                 CUdevice *cu_device_p,
-                                                 CUdevice *alloc_cu_device_p,
-                                                 ucs_log_level_t log_level)
+/*
+ * With a valid sys_dev, the function pushes on the current thread the
+ * corresponding CUDA context.
+ * When sys_dev was specified as unknown, the function leaves the current CUDA
+ * context untouched. If no context is set, it tries to push the first
+ * available context among all CUDA GPUs found.
+ */
+static ucs_status_t
+uct_cuda_copy_push_alloc_ctx(uct_cuda_copy_md_t *md,
+                             const ucs_sys_device_t sys_dev,
+                             CUdevice *cu_device_p,
+                             CUdevice *alloc_cu_device_p,
+                             ucs_log_level_t log_level)
 {
     ucs_status_t status;
-    int dev, num_devices;
+    int dev_ordinal, num_devices;
 
-    status = UCT_CUDADRV_FUNC(cuCtxGetDevice(cu_device_p), UCS_LOG_LEVEL_DEBUG);
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(cu_device_p));
     if (status != UCS_OK) {
         *cu_device_p = CU_DEVICE_INVALID;
     }
@@ -384,7 +369,8 @@ static ucs_status_t uct_cuda_copy_push_alloc_ctx(uct_cuda_copy_md_t *md,
     if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
         status = uct_cuda_base_get_cuda_device(sys_dev, alloc_cu_device_p);
         if (status != UCS_OK) {
-            ucs_log(log_level, "failed to get device for system device %u",
+            ucs_log(log_level,
+                    "failed to get cuda device for system device %u",
                     sys_dev);
             return UCS_ERR_INVALID_PARAM;
         }
@@ -395,7 +381,9 @@ static ucs_status_t uct_cuda_copy_push_alloc_ctx(uct_cuda_copy_md_t *md,
         }
 
         /* Make sys_dev the active cuda device */
-        status = uct_cuda_copy_push_ctx(md, *alloc_cu_device_p, log_level);
+        status = uct_cuda_copy_push_ctx(*alloc_cu_device_p,
+                                        md->config.retain_inactive_primary_ctx,
+                                        log_level);
         if (status != UCS_OK) {
             ucs_log(log_level, "failed to set cuda context for system device %u "
                     "(cu_device=%d)",
@@ -404,7 +392,6 @@ static ucs_status_t uct_cuda_copy_push_alloc_ctx(uct_cuda_copy_md_t *md,
 
         return status;
     }
-
 
     /* Use the active cuda device */
     if (*cu_device_p != CU_DEVICE_INVALID) {
@@ -419,13 +406,15 @@ static ucs_status_t uct_cuda_copy_push_alloc_ctx(uct_cuda_copy_md_t *md,
     }
 
     /* Use the first active cuda device for allocation */
-    for (dev = 0; dev < num_devices; dev++) {
-        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(alloc_cu_device_p, dev)) !=
+    for (dev_ordinal = 0; dev_ordinal < num_devices; dev_ordinal++) {
+        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(alloc_cu_device_p, dev_ordinal)) !=
             UCS_OK) {
             continue;
         }
 
-        status = uct_cuda_copy_push_ctx(md, *alloc_cu_device_p, log_level);
+        status = uct_cuda_copy_push_ctx(*alloc_cu_device_p,
+                                        md->config.retain_inactive_primary_ctx,
+                                        log_level);
         if (status == UCS_OK) {
             break;
         }
@@ -450,6 +439,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     uct_cuda_copy_alloc_handle_t *alloc_handle;
     ucs_log_level_t log_level;
     CUdevice alloc_cu_device, cu_device;
+    CUcontext ctx;
 
     if ((mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) &&
         (mem_type != UCS_MEMORY_TYPE_CUDA)) {
@@ -522,8 +512,14 @@ allocated:
     *memh_p    = alloc_handle;
     *address_p = (void*)alloc_handle->ptr;
     *length_p  = alloc_handle->length;
+
 out:
-    uct_cuda_copy_pop_ctx(cu_device, alloc_cu_device, UCS_LOG_LEVEL_ERROR);
+    if (cu_device != alloc_cu_device) {
+        (void)UCT_CUDADRV_FUNC(cuCtxPopCurrent(&ctx), UCS_LOG_LEVEL_WARN);
+        (void)UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRelease(alloc_cu_device),
+                               UCS_LOG_LEVEL_WARN);
+    }
+
     return status;
 }
 
@@ -662,7 +658,7 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
         CUcontext cuda_ctx, CUdevice cuda_device, int is_vmm,
         ucs_memory_info_t *mem_info)
 {
-    CUcontext cuda_mem_ctx;
+    CUcontext tmp_ctx;
     CUdeviceptr base_address;
     size_t alloc_length;
     size_t total_bytes;
@@ -671,16 +667,13 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     mem_info->alloc_length = length;
 
     if (cuda_ctx == NULL) {
-        if (uct_cuda_primary_ctx_retain(cuda_device, 0, &cuda_mem_ctx) !=
+        if (uct_cuda_copy_push_ctx(cuda_device, 0, UCS_LOG_LEVEL_ERROR) !=
             UCS_OK) {
             return;
         }
-    } else {
-        cuda_mem_ctx = cuda_ctx;
-    }
-
-    if (UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_mem_ctx)) != UCS_OK) {
-        goto out_primary_ctx_release;
+    } else if (UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx)) !=
+               UCS_OK) {
+        return;
     }
 
     /* Wrapped the method by push/pop CUDA context since it sets
@@ -714,8 +707,7 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     mem_info->alloc_length = alloc_length;
 
 out_ctx_pop:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(&cuda_mem_ctx));
-out_primary_ctx_release:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(&tmp_ctx));
     if (cuda_ctx == NULL) {
         UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
     }
