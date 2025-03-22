@@ -91,6 +91,21 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
 
 /**
+ * Find system device by pci bus id.
+ *
+ * @param [in]  bus_id     pointer to bus id of the device of interest.
+ * @param [in]  user_value user_value to add along.
+ * @param [out] sys_dev    system device index associated with the bus_id.
+ *
+ * @return UCS_OK or error in case device cannot be found.
+ */
+ucs_status_t ucs_topo_find_device_by_bus_id_user_value(
+                                            const ucs_sys_bus_id_t *bus_id,
+                                            uintptr_t user_value,
+                                            ucs_sys_device_t *sys_dev);
+
+
+/**
  * Find pci bus id of the given system device.
  *
  * @param [in]  sys_dev system device index.
@@ -265,6 +280,13 @@ void ucs_topo_init(void);
  * Cleanup UCS topology subsystem.
  */
 void ucs_topo_cleanup(void);
+
+
+/*
+ * Retrieve value from sys_dev. UINTPTR_MAX is default value.
+ */
+uintptr_t ucs_topo_sys_dev_get_user_value(ucs_sys_device_t sys_dev);
+
 
 END_C_DECLS
 

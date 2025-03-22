@@ -539,10 +539,11 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
 }
 
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              ucs_memory_type_t mem_type, unsigned flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, unsigned flags,
                               const char *alloc_name, uct_mem_h *memh_p)
 {
-    return md->ops->mem_alloc(md, length_p, address_p, mem_type, flags,
+    return md->ops->mem_alloc(md, length_p, address_p, mem_type, sys_dev, flags,
                               alloc_name, memh_p);
 }
 

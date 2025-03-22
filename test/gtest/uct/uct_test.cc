@@ -1462,12 +1462,13 @@ uct_test::mapped_buffer::mapped_buffer(size_t size,
     if ((mem_type == UCS_MEMORY_TYPE_HOST) || (mem_type == UCS_MEMORY_TYPE_RDMA)) {
         m_entity.mem_alloc(alloc_size, mem_flags, &m_mem, mem_type, num_retries);
     } else {
-        m_mem.method   = UCT_ALLOC_METHOD_LAST;
-        m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
-        m_mem.length   = alloc_size;
-        m_mem.mem_type = mem_type;
-        m_mem.memh     = UCT_MEM_HANDLE_NULL;
-        m_mem.md       = NULL;
+        m_mem.method     = UCT_ALLOC_METHOD_LAST;
+        m_mem.address    = mem_buffer::allocate(alloc_size, mem_type);
+        m_mem.length     = alloc_size;
+        m_mem.mem_type   = mem_type;
+        m_mem.memh       = UCT_MEM_HANDLE_NULL;
+        m_mem.md         = NULL;
+        m_mem.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
         m_entity.mem_type_reg(&m_mem, mem_flags);
     }
 

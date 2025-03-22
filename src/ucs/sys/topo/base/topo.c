@@ -71,6 +71,7 @@ typedef struct {
     char             *name;
     unsigned         name_priority;
     ucs_numa_node_t  numa_node;
+    uintptr_t        user_value;
 } ucs_topo_sys_device_info_t;
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
@@ -90,13 +91,11 @@ const ucs_sys_dev_distance_t ucs_topo_default_distance = {
 
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 
-
 /* Global list of topology detectors */
 UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 
 /* Selected topo provider */
 static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
-
 
 /* According to NUMA distance definition distances are normalized to 10
  * and the relative distance correlates with the latency.
@@ -263,7 +262,9 @@ out:
     return numa_node;
 }
 
-ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
+ucs_status_t ucs_topo_find_device_by_bus_id_user_value(
+                                            const ucs_sys_bus_id_t *bus_id,
+                                            uintptr_t user_value,
                                             ucs_sys_device_t *sys_dev)
 {
     ucs_bus_id_bit_rep_t bus_id_bit_rep;
@@ -301,11 +302,19 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
         ucs_topo_global_ctx.devices[*sys_dev].name_priority = 0;
         ucs_topo_global_ctx.devices[*sys_dev].numa_node     =
                 ucs_topo_read_device_numa_node(bus_id);
+        ucs_topo_global_ctx.devices[*sys_dev].user_value    = user_value;
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     return UCS_OK;
+}
+
+ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
+                                            ucs_sys_device_t *sys_dev)
+{
+    return ucs_topo_find_device_by_bus_id_user_value(bus_id, UINTPTR_MAX,
+                                                     sys_dev);
 }
 
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
@@ -317,6 +326,15 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 
     *bus_id = ucs_topo_global_ctx.devices[sys_dev].bus_id;
     return UCS_OK;
+}
+
+uintptr_t ucs_topo_sys_dev_get_user_value(ucs_sys_device_t sys_dev)
+{
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        return UINTPTR_MAX;
+    }
+
+    return ucs_topo_global_ctx.devices[sys_dev].user_value;
 }
 
 static ucs_status_t
