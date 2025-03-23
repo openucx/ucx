@@ -72,9 +72,10 @@
 #define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
 
 typedef enum ucp_transports_list_search_result {
-    UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY      = UCS_BIT(0),
-    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN  = UCS_BIT(1),
-    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_ALIAS = UCS_BIT(2)
+    UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY             = UCS_BIT(0),
+    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN         = UCS_BIT(1),
+    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_ALIAS        = UCS_BIT(2),
+    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_GLOBAL_ALIAS = UCS_BIT(3)
 } ucp_transports_list_search_result_t;
 
 
@@ -683,7 +684,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
   { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
   { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5",
-               "gga_mlx5", NULL } },
+               "gga_mlx5", UCP_TL_AUX("ud_mlx5"), UCP_TL_AUX("ud_verbs"), NULL } },
   { "ud_v",  { "ud_verbs", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
   { "ud",    { "ud_mlx5", "ud_verbs", NULL } },
@@ -1008,6 +1009,11 @@ static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
                                     str_suffix, &dummy_mask);
 }
 
+static int ucp_tls_is_global_alias(ucp_tl_alias_t *alias)
+{
+    return !strcmp(alias->alias, "ib");
+}
+
 static uint8_t
 ucp_transports_list_search(const char *tl_name,
                            const ucs_config_names_array_t *tl_array,
@@ -1043,6 +1049,11 @@ ucp_transports_list_search(const char *tl_name,
                 /* alias={tl_name:aux}, UCX_TLS=[^]alias */
                 *tl_cfg_mask  |= tmp_tl_cfg_mask;
                 search_result |= UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_ALIAS;
+
+                if (ucp_tls_is_global_alias(alias)) {
+                    search_result |=
+                          UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_GLOBAL_ALIAS;
+                }
             }
         }
 
@@ -1102,13 +1113,17 @@ ucp_is_resource_in_transports_list(const char *tl_name,
         return !(search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY);
     }
 
-    /* Only explicit indication in the deny list can completely disable
-     * transport which can be used as an auxiliary.
-     * E.g: UCX_TLS=^tl_name,tl_name:aux, or alias={tl_name} and
-     * UCX_TLS=^alias,alias:aux. */
-    if (ucs_test_all_flags(search_result,
-                           UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY |
-                           UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN)) {
+    /* A transport that can be used as an auxiliary is disabled under one of
+     * the following two conditions:
+     *  - if explicitly listed in the deny list
+     *    E.g: UCX_TLS=^tl_name,tl_name:aux, or alias={tl_name} and
+     *    UCX_TLS=^alias,alias:aux.
+     *  - if it's included in an alias that is considered global, meaning that
+     *    disabling it disables ALL transports including auxiliary ones.
+     *    E.g: UCX_TLS=^ib */
+    if ((search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY) &&
+        (search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN || 
+         search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_GLOBAL_ALIAS)) {
         return 0;
     }
 
