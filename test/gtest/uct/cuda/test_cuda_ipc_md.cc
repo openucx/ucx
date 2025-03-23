@@ -98,6 +98,34 @@ protected:
         return rkey;
     }
 #endif
+
+    void test_mkey_pack_on_thread(void *ptr, size_t size)
+    {
+       uct_md_mem_reg_params_t reg_params = {};
+       uct_mem_h memh;
+       ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), ptr, size, &reg_params, &memh));
+
+       std::exception_ptr thread_exception;
+       std::thread([&]() {
+           try {
+               uct_md_mkey_pack_params_t params = {};
+               std::vector<uint8_t> rkey(md_attr().rkey_packed_size);
+               ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, ptr, size, &params,
+                                                 rkey.data()));
+           } catch (...) {
+               thread_exception = std::current_exception();
+           }
+       }).join();
+
+       if (thread_exception) {
+           std::rethrow_exception(thread_exception);
+       }
+
+       uct_md_mem_dereg_params_t dereg_params;
+       dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+       dereg_params.memh       = memh;
+       EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+    }
 };
 
 UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
@@ -156,7 +184,29 @@ UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
     }
 }
 
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_legacy)
+{
+    size_t size = 4 * UCS_MBYTE;
+    CUdeviceptr ptr;
+
+    EXPECT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, size));
+    test_mkey_pack_on_thread((void*)ptr, size);
+    EXPECT_EQ(CUDA_SUCCESS, cuMemFree(ptr));
+}
+
 #if HAVE_CUDA_FABRIC
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
+{
+    size_t size = 4 * UCS_MBYTE;
+    CUdeviceptr ptr;
+    CUmemoryPool mpool;
+    CUstream cu_stream;
+
+    alloc_mempool(&ptr, &mpool, &cu_stream, size);
+    test_mkey_pack_on_thread((void*)ptr, size);
+    free_mempool(&ptr, &mpool, &cu_stream);
+}
+
 UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds_mempool, 8)
 {
     cuda_context cuda_ctx;
