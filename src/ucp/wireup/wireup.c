@@ -701,10 +701,10 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
 }
 
 static ucs_status_t
-ucp_wireup_match_ep_by_connection(ucp_worker_h worker,
-                                  const ucp_unpacked_address_t *remote_address,
-                                  ucp_ep_match_conn_sn_t conn_sn,
-                                  unsigned ep_init_flags, ucp_ep_h *ep_p)
+ucp_wireup_get_ep_by_conn_sn(ucp_worker_h worker,
+                             const ucp_unpacked_address_t *remote_address,
+                             ucp_ep_match_conn_sn_t conn_sn,
+                             unsigned ep_init_flags, ucp_ep_h *ep_p)
 {
     uint64_t remote_uuid = remote_address->uuid;
     ucp_ep_h ep;
@@ -746,6 +746,9 @@ static int ucp_wireup_should_ignore_request(ucp_ep_h ep, uint64_t remote_uuid,
     unsigned flag_to_test = (msg_type == UCP_WIREUP_MSG_REQUEST) ?
                                     UCP_EP_FLAG_CONNECT_REQ_QUEUED :
                                     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED;
+
+    ucs_assert_always(ucp_wireup_is_entry_msg(msg_type));
+
     /*
      * If the current endpoint already sent a connection request, we have a
      * "simultaneous connect" situation. In this case, only one of the endpoints
@@ -791,9 +794,8 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         ucp_ep_match_remove_ep(worker, ep);
     } else {
         ucs_assert(msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID);
-        status = ucp_wireup_match_ep_by_connection(worker, remote_address,
-                                                   msg->conn_sn, ep_init_flags,
-                                                   &ep);
+        status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address,
+                                              msg->conn_sn, ep_init_flags, &ep);
         if (status != UCS_OK) {
             return;
         }
@@ -885,9 +887,8 @@ static UCS_F_NOINLINE void ucp_wireup_process_promotion_request(
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PROMOTE);
 
     if (ep == NULL) {
-        status = ucp_wireup_match_ep_by_connection(worker, remote_address,
-                                                   msg->conn_sn, ep_init_flags,
-                                                   &ep);
+        status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address,
+                                              msg->conn_sn, ep_init_flags, &ep);
         if (status != UCS_OK) {
             ucs_debug("ep %p: promotion request from 0x%.8lX denied because no"
                       " local EP matches remote connection",
