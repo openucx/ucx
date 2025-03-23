@@ -76,7 +76,7 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    ret = zeCommandQueueSynchronize(iface->ze_cmdq, UINT32_MAX);
+    ret = zeCommandQueueSynchronize(iface->ze_cmdq, UINT64_MAX);
     if (ret != ZE_RESULT_SUCCESS) {
         return UCS_ERR_IO_ERROR;
     }
