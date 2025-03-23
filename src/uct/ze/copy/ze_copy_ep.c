@@ -20,6 +20,10 @@
 
 #include <level_zero/ze_api.h>
 
+#define UCT_ZE_NO_TIMEOUT \
+    (ZE_MAJOR_VERSION(ZE_API_VERSION_1_0) == 0 ? UINT32_MAX : UINT64_MAX)
+
+
 static UCS_CLASS_INIT_FUNC(uct_ze_copy_ep_t, const uct_ep_params_t *params)
 {
     uct_ze_copy_iface_t *iface = ucs_derived_of(params->iface,
@@ -76,7 +80,7 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    ret = zeCommandQueueSynchronize(iface->ze_cmdq, UINT32_MAX);
+    ret = zeCommandQueueSynchronize(iface->ze_cmdq, UCT_ZE_NO_TIMEOUT);
     if (ret != ZE_RESULT_SUCCESS) {
         return UCS_ERR_IO_ERROR;
     }
