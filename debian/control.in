@@ -3,6 +3,7 @@ Section: libs
 Priority: extra
 Maintainer: ucx-group@elist.ornl.gov
 Build-Depends: debhelper (>= 9.0),
+ binutils-dev,
  libibverbs-dev,
  librdmacm-dev,
  pkg-config,
