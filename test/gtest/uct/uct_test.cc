@@ -1468,6 +1468,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size,
         m_mem.mem_type = mem_type;
         m_mem.memh     = UCT_MEM_HANDLE_NULL;
         m_mem.md       = NULL;
+        m_mem.sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
         m_entity.mem_type_reg(&m_mem, mem_flags);
     }
 

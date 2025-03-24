@@ -1712,6 +1712,7 @@ typedef struct uct_allocated_memory {
     ucs_memory_type_t        mem_type; /**< type of allocated memory */
     uct_md_h                 md;       /**< if method==MD: MD used to allocate the memory */
     uct_mem_h                memh;     /**< if method==MD: MD memory handle */
+    ucs_sys_device_t         sys_dev;  /**< System device for allocated memory */
 } uct_allocated_memory_t;
 
 
@@ -2501,7 +2502,10 @@ typedef enum {
     UCT_MEM_ALLOC_PARAM_FIELD_MDS            = UCS_BIT(3),
 
     /** Enables @ref uct_mem_alloc_params_t::name */
-    UCT_MEM_ALLOC_PARAM_FIELD_NAME           = UCS_BIT(4)
+    UCT_MEM_ALLOC_PARAM_FIELD_NAME           = UCS_BIT(4),
+
+    /** Enables @ref uct_mem_alloc_params_t::sys_dev */
+    UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEV        = UCS_BIT(5)
 } uct_mem_alloc_params_field_t;
 
 
@@ -2564,6 +2568,12 @@ typedef struct {
      * "anonymous-uct_mem_alloc" is used by default.
      */
     const char                   *name;
+
+    /**
+     * System device on which memory is to be allocated, or
+     * UCS_SYS_DEVICE_ID_UNKNOWN to allow allocating on any device.
+     */
+    ucs_sys_device_t             sys_dev;
 } uct_mem_alloc_params_t;
 
 

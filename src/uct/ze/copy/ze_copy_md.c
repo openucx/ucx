@@ -63,7 +63,8 @@ static ucs_status_t uct_ze_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 static ucs_status_t
 uct_ze_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
                       ucs_memory_type_t mem_type, unsigned flags,
-                      const char *alloc_name, uct_mem_h *memh_p)
+                      const char *alloc_name, ucs_sys_device_t sys_dev,
+                      uct_mem_h *memh_p)
 {
     uct_ze_copy_md_t *md = ucs_derived_of(tl_md, uct_ze_copy_md_t);
     ze_host_mem_alloc_desc_t host_desc  = {};
