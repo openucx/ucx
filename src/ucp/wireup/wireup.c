@@ -1714,12 +1714,12 @@ ucp_wireup_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
 static ucs_status_t
 ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
                                 uct_ep_h *new_uct_eps,
-                                const ucp_lane_index_t *reuse_lane_map)
+                                ucp_lane_index_t *reuse_lane_map)
 {
     uct_ep_h uct_ep   = NULL;
     int am_need_flush = ucp_wireup_is_am_need_flush(ep, key, reuse_lane_map);
     ucp_lane_index_t old_lane, new_wireup_lane, old_wireup_lane;
-    ucp_lane_index_t new_order_lane;
+    ucp_lane_index_t new_order_lane, lane;
     ucp_wireup_ep_t *new_wireup_ep, *old_ep_wrapper;
     uct_ep_h old_wireup_ep, new_aux_ep;
     ucp_rsc_index_t aux_rsc_index;
@@ -1754,6 +1754,14 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
             new_wireup_lane = (reuse_lane_map[old_lane] != UCP_NULL_LANE) ?
                                       reuse_lane_map[old_lane] :
                                       key->am_lane;
+
+            /* Detach new AM lane from its matching old lane if exists */
+            for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
+                if (reuse_lane_map[lane] == key->am_lane) {
+                    reuse_lane_map[lane] = UCP_NULL_LANE;
+                    break;
+                }
+            }
         } else {
             new_wireup_lane = ucp_wireup_find_non_reused_lane(ep, key,
                                                               reuse_lane_map);

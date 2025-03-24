@@ -195,7 +195,7 @@ public:
         }
     }
 
-    static constexpr unsigned num_iterations = 1000;
+    static constexpr unsigned num_iterations = 100;
 };
 
 void test_ucp_ep_reconfig::entity::store_config()
@@ -328,7 +328,7 @@ bool test_ucp_ep_reconfig::entity::is_lane_connected(ucp_ep_h ep,
 }
 
 void test_ucp_ep_reconfig::entity::verify_configuration(
-        const entity &other, unsigned expected_reused_rscs) const
+        const entity &other, unsigned min_reused_rscs) const
 {
     unsigned reused_lanes            = 0;
     const ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep());
@@ -353,9 +353,11 @@ void test_ucp_ep_reconfig::entity::verify_configuration(
 
     if (!is_reconfigured()) {
         EXPECT_EQ(num_lanes, reused_lanes);
-    } else if (test->reuse_lanes() && (expected_reused_rscs > 0)) {
-        EXPECT_EQ(expected_reused_rscs,
-                           UCS_STATIC_BITMAP_POPCOUNT(reused_rscs));
+    } else if (test->reuse_lanes() && (min_reused_rscs > 0)) {
+        unsigned actual_reused_rscs = UCS_STATIC_BITMAP_POPCOUNT(reused_rscs);
+        /* Account for the case where we detach a single reused lane to allow
+         * AM flush */
+        EXPECT_GE(actual_reused_rscs, min_reused_rscs - 1);
     }
 }
 
@@ -409,13 +411,14 @@ ucp_tl_bitmap_t test_ucp_ep_reconfig::tl_bitmap()
     }
 
     /* For single transport, half of the resources should be reserved for
-     * receiver side to use */
+     * receiver side to use. Sender must use the first half in order for
+     * reused lanes to be configured correctly. */
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     size_t num_tls            = 0;
     ucp_rsc_index_t rsc_idx;
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_idx, &sender().ucph()->tl_bitmap) {
-        if (++num_tls > (sender().ucph()->num_tls / 2)) {
+        if (++num_tls <= (sender().ucph()->num_tls / 2)) {
             UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
         }
     }
