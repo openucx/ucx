@@ -337,18 +337,20 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
                               ucs_queue_head_t *event_q)
 {
-    unsigned count = 0;
+    unsigned count      = 0;
+    unsigned max_events = iface->config.max_poll;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     ucs_queue_iter_t iter;
+    CUresult result;
     ucs_status_t status;
-    unsigned max_events = iface->config.max_poll;
 
     ucs_queue_for_each_safe(cuda_ipc_event, iter, event_q, queue) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventQuery(cuda_ipc_event->event));
-        if (UCS_INPROGRESS == status) {
+        result = cuEventQuery(cuda_ipc_event->event);
+        if (result == CUDA_ERROR_NOT_READY) {
             continue;
-        } else if (UCS_OK != status) {
-            return status;
+        } else if (ucs_unlikely(result != CUDA_SUCCESS)) {
+            UCT_CUDADRV_LOG(cuEventQuery, UCS_LOG_LEVEL_ERROR, result);
+            continue;
         }
 
         ucs_queue_del_iter(event_q, iter);
@@ -360,7 +362,7 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
                                               cuda_ipc_event->d_bptr,
                                               cuda_ipc_event->mapped_addr,
                                               iface->config.enable_cache);
-        if (status != UCS_OK) {
+        if (ucs_unlikely(status != UCS_OK)) {
             ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
         }
 
