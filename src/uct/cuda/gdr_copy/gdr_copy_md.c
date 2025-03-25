@@ -98,9 +98,10 @@ uct_gdr_copy_mkey_pack(uct_md_h md, uct_mem_h memh, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_rkey_unpack(uct_component_t *component,
-                                             const void *rkey_buffer,
-                                             uct_rkey_t *rkey_p, void **handle_p)
+static ucs_status_t
+uct_gdr_copy_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                         const uct_rkey_unpack_params_t *params,
+                         uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_gdr_copy_key_t *packed = (uct_gdr_copy_key_t *)rkey_buffer;
     uct_gdr_copy_key_t *key;

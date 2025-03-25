@@ -715,6 +715,36 @@ typedef struct uct_rkey_compare_params {
     uint64_t                      field_mask;
 } uct_rkey_compare_params_t;
 
+
+/**
+ * @ingroup UCT_MD
+ * @brief Rkey unpack parameters field mask.
+ */
+typedef enum {
+    UCT_RKEY_UNPACK_FIELD_SYS_DEVICE = UCS_BIT(0)  /**< sys_device field */
+} uct_rkey_unpack_field_mask_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Parameters for unpacking remote key using @ref uct_rkey_unpack_v2.
+ */
+typedef struct uct_rkey_unpack_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_rkey_unpack_field_mask_t. Fields not specified in this mask will
+     * be ignored. Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t             field_mask;
+
+    /**
+     * System device to unpack rkey on. Can be UCS_SYS_DEVICE_ID_UNKNOWN
+     * (default behavior).
+     */
+    ucs_sys_device_t     sys_device;
+} uct_rkey_unpack_params_t;
+
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief Get interface performance attributes, by memory types and operation.
@@ -1132,6 +1162,34 @@ int uct_ep_is_connected(uct_ep_h ep,
 ucs_status_t
 uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
                  const uct_rkey_compare_params_t *params, int *result);
+
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief Unpack a remote key.
+ *
+ * @param [in]  component    Component on which to unpack the remote key.
+ * @param [in]  rkey_buffer  Packed remote key buffer.
+ * @param [in]  params       Operation parameters, see @ref
+ *                           uct_rkey_unpack_params_t.
+ * @param [out] rkey_ob      Filled with the unpacked remote key and its type.
+ *
+ * @note The remote key must be unpacked with the same component that was used
+ *       to pack it. For example, if a remote device address on the remote
+ *       memory domain which was used to pack the key is reachable by a
+ *       transport on a local component, then that component is eligible to
+ *       unpack the key.
+ *       If the remote key buffer cannot be unpacked with the given component,
+ *       UCS_ERR_INVALID_PARAM will be returned.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
+                                const void *rkey_buffer,
+                                const uct_rkey_unpack_params_t *params,
+                                uct_rkey_bundle_t *rkey_ob);
+
 
 END_C_DECLS
 

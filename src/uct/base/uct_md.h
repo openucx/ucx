@@ -217,8 +217,9 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
  *
  */
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
-                                     const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                     void **handle_p);
+                                     const void *rkey_buffer,
+                                     const uct_rkey_unpack_params_t *params,
+                                     uct_rkey_t *rkey_p, void **handle_p);
 
 ucs_status_t uct_base_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
                                    uct_rkey_t rkey2,
