@@ -1015,7 +1015,7 @@ static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
                                     str_suffix, &dummy_mask);
 }
 
-static int ucp_tls_is_global_alias(ucp_tl_alias_t *alias)
+static int ucp_tls_is_global_alias(const ucp_tl_alias_t *alias)
 {
     return !strcmp(alias->alias, "ib");
 }
@@ -1119,14 +1119,13 @@ ucp_is_resource_in_transports_list(const char *tl_name,
         return !(search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY);
     }
 
-    /* A transport that can be used as an auxiliary is disabled under one of
-     * the following two conditions:
-     *  - if explicitly listed in the deny list
-     *    E.g: UCX_TLS=^tl_name,tl_name:aux, or alias={tl_name} and
-     *    UCX_TLS=^alias,alias:aux.
-     *  - if it's included in an alias that is considered global, meaning that
-     *    disabling it disables ALL transports including auxiliary ones.
-     *    E.g: UCX_TLS=^ib */
+    /* A transport that can be used as an auxiliary is disabled by
+     * including it in the deny list in one of the following ways:
+     *  - explicit transport name:
+     *    UCX_TLS=^tl_name,tl_name:aux, or alias={tl_name} and
+     *    UCX_TLS=^alias,alias:aux
+     *  - a global alias that contains it:
+     *    UCX_TLS=^ib */
     if ((search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY) &&
         (search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN || 
          search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_GLOBAL_ALIAS)) {
