@@ -520,7 +520,7 @@ ucs_status_t uct_rc_mlx5_base_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
     uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
 
-    return uct_rc_ep_fence(tl_ep, &ep->tx.wq.fi, 1);
+    return uct_rc_ep_fence(tl_ep, &ep->tx.wq.fi);
 }
 
 void uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep)

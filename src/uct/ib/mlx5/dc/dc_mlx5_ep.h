@@ -365,16 +365,20 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
         num_channels = iface->tx.num_dci_channels;
     }
 
-    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, num_channels);
+    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, num_channels, &dci);
     if (status != UCS_OK) {
         ucs_error("iface %p: failed to create dci %u at pool %u", iface,
                   dci_index, pool_index);
         goto err;
     }
 
-    dci             = uct_dc_mlx5_iface_dci(iface, dci_index);
     dci->path_index = pool->config.path_index;
     dci->pool_index = pool_index;
+
+    ucs_assertv_always(!uct_dc_mlx5_is_dci_valid(
+                               uct_dc_mlx5_iface_dci(iface, dci_index)),
+                       "iface=%p dci_index=%d", iface, dci_index);
+    ucs_array_elem(&iface->tx.dcis, dci_index) = dci;
 
     status = uct_dc_mlx5_iface_dci_connect(iface, dci);
     if (status != UCS_OK) {
@@ -393,7 +397,8 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
     return UCS_OK;
 
 err_destroy:
-    uct_dc_mlx5_destroy_dci(iface, dci_index);
+    ucs_array_elem(&iface->tx.dcis, dci_index) = NULL;
+    uct_dc_mlx5_destroy_dci(iface, dci);
 err:
     return status;
 }
