@@ -10,6 +10,7 @@ package ucx
 import "C"
 import (
 	"unsafe"
+	"sync"
 )
 
 // UCP worker is an opaque object representing the communication context. The
@@ -32,6 +33,7 @@ import (
 type UcpWorker struct {
 	worker C.ucp_worker_h
 	handles []unsafe.Pointer
+	mu sync.Mutex
 }
 
 type UcpAddress struct {
@@ -53,6 +55,8 @@ type UcpWorkerAttributes struct {
 }
 
 func (w *UcpWorker) Close() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	for _, handle := range w.handles {
 		unpackCallbackAndFree(handle)
 	}
@@ -273,7 +277,9 @@ func (w *UcpWorker) SetAmRecvHandler(id uint, flags UcpAmCbFlags, cb UcpAmRecvCa
 		C.UCP_AM_HANDLER_PARAM_FIELD_ARG
 	amHandlerParams.id = C.uint(id)
 	packedCb := packCallback(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
+	w.mu.Lock()
 	w.handles = append(w.handles, packedCb)
+	w.mu.Unlock()
 	amHandlerParams.arg = packedCb
 	amHandlerParams.flags = C.uint32_t(flags)
 	cbAddr := (*C.ucp_am_recv_callback_t)(unsafe.Pointer(&amHandlerParams.cb))
