@@ -329,7 +329,7 @@ stages:
         demands: ucx_gpu -equals yes
         test_perf: 1
         container: centos7_cuda11
-        run_bullseye: yes
+        run_bullseye: no
     - template: tests.yml
       parameters:
         name: new
@@ -361,7 +361,6 @@ stages:
       displayName: Merge Bullseye reports
       dependsOn: 
         - tests_althca
-        - tests_gpu
         - tests_new
         - tests_roce
         - tests_roce_proto_disable
