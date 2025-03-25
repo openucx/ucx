@@ -340,7 +340,7 @@ stages:
         demands: ucx_gpu -equals yes
         test_perf: 1
         container: ubuntu2404_doca31_gpunetio
-        run_bullseye: yes
+        run_bullseye: no
     - template: tests.yml
       parameters:
         name: new
@@ -372,7 +372,6 @@ stages:
       displayName: Merge Bullseye reports
       dependsOn: 
         - tests_althca
-        - tests_gpu
         - tests_new
         - tests_roce
         - tests_roce_proto_disable
