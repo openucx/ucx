@@ -543,7 +543,7 @@ int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
                                 const union ibv_gid *dgid);
 
 int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                                 const uct_iface_is_reachable_params_t *params);
+                                 uct_iface_is_reachable_params_t *params);
 
 /*
  * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)
