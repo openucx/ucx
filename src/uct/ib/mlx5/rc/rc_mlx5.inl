@@ -86,8 +86,18 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
 
     if (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) {
         stride_idx           = uct_ib_mlx5_cqe_stride_index(cqe);
-        udesc                = (void*)be64toh(seg->dptr[stride_idx].addr);
-        uct_recv_desc(udesc) = release_desc;
+        ucs_assert(stride_idx < iface->msg_based.num_strides);
+        ucs_info("holds srq seg %p:\nstride_idx=%d, addr=0x%lx", seg,
+        stride_idx, (uint64_t)seg->dptr[stride_idx].addr);
+        // if (seg->dptr[stride_idx].addr) {
+            udesc       = (void*)be64toh(seg->dptr[stride_idx].addr -
+                                         (uct_ib_mlx5_cqe_stride_index(cqe) *
+                                          iface->super.super.config.stride_size)
+                                          );
+            desc_offset = offset - iface->super.super.config.rx_hdr_offset;
+            udesc       = UCS_PTR_BYTE_OFFSET(udesc, desc_offset);
+            uct_recv_desc(udesc) = release_desc;
+        // }
         seg->srq.ptr_mask   &= ~UCS_BIT(stride_idx);
     } else if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* stride_idx is valid in non inline CQEs only.
@@ -2010,4 +2020,21 @@ static UCS_F_ALWAYS_INLINE int
 uct_rc_mlx5_iface_is_srq_msg_based(uct_rc_mlx5_iface_common_t *iface)
 {
     return iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_mlx5_num_sges(uct_rc_mlx5_iface_common_t *iface,
+                     int stride_size)
+{
+    return uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
+                   uct_ib_mlx5_srq_calc_num_sges(stride_size) :
+                   iface->tm.mp.num_strides;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_mlx5_num_strides(uct_rc_mlx5_iface_common_t *iface)
+{
+    return uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
+                   iface->msg_based.num_strides :
+                   iface->tm.mp.num_strides;
 }

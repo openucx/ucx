@@ -597,6 +597,13 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
     return (void*)((char *)desc + iface->config.rx_hdr_offset);
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_iface_max_message_size(uct_ib_iface_t *iface)
+{
+    return iface->config.max_send_message_size_strides *
+           iface->config.stride_size;
+}
+
 typedef struct uct_ib_recv_wr {
     struct ibv_recv_wr ibwr;
     struct ibv_sge     sg;

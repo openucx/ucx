@@ -171,6 +171,9 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 size_t am_min_hdr, size_t rma_max_iov)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    //TODO: should check here if smbrwq is used or not
+    int max_message_size = 
+        uct_ib_iface_max_message_size(&iface->super);
     ucs_status_t status;
 
     status = uct_ib_iface_query(&iface->super,
@@ -224,24 +227,26 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->super.config.path_mtu);
 
 
+
     /* PUT */
     iface_attr->cap.put.max_short = put_max_short;
-    iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.put.max_bcopy = max_message_size;
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
     iface_attr->cap.put.max_iov   = rma_max_iov;
 
     /* GET */
-    iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.get.max_bcopy =  ucs_min(max_message_size, iface->super.config.seg_size);
     iface_attr->cap.get.min_zcopy = iface->super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1;
-    iface_attr->cap.get.max_zcopy = iface->config.max_get_zcopy;
+    iface_attr->cap.get.max_zcopy =  ucs_min(max_message_size, iface->config.max_get_zcopy);
     iface_attr->cap.get.max_iov   = rma_max_iov;
 
     /* AM */
     iface_attr->cap.am.max_short  = uct_ib_iface_hdr_size(max_inline, am_min_hdr);
-    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - am_min_hdr;
+    iface_attr->cap.am.max_bcopy  = max_message_size - am_min_hdr;
+    ucs_info("MAX AM BCOPY: %ld", iface_attr->cap.am.max_bcopy);
     iface_attr->cap.am.min_zcopy  = 0;
-    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - am_min_hdr;
+    iface_attr->cap.am.max_zcopy  = max_message_size - am_min_hdr;
     iface_attr->cap.am.max_hdr    = am_max_hdr - am_min_hdr;
     iface_attr->cap.am.max_iov    = am_max_iov;
 

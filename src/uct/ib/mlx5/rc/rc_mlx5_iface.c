@@ -389,10 +389,7 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
 {
     int ddp_enabled           = (init_attr->flags & UCT_IB_DDP_SUPPORTED) &&
                                 (config->ddp_enable != UCS_NO);
-    unsigned cyclic_srq_flags = UCT_IB_MLX5_MD_FLAG_RMP |
-                                ((init_attr->qp_type == UCT_IB_QPT_DCI) ?
-                                         UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ :
-                                         UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ);
+    unsigned cyclic_srq_flags = UCT_IB_MLX5_MD_FLAG_RMP;
     unsigned msg_based_flags  = UCT_IB_MLX5_MD_FLAG_RMP;
     ucs_string_buffer_t strb  = UCS_STRING_BUFFER_INITIALIZER;
     int i;
@@ -612,7 +609,7 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
         return status;
     }
 
-    if ((iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST)) {
+    if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST) {
         iface->super.progress = uct_rc_mlx5_iface_progress_ll;
     } else if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
         iface->super.progress = uct_rc_mlx5_iface_progress_striding_ll;

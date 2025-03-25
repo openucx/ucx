@@ -951,11 +951,11 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     uct_ib_mlx5_srq_seg_t *seg;
     unsigned i, j;
 
-    srq->free_idx    = tail;
-    srq->ready_idx   = UINT16_MAX;
-    srq->sw_pi       = UINT16_MAX;
-    srq->mask        = tail;
-    srq->stride      = uct_ib_mlx5_srq_stride(sge_num);
+    srq->free_idx  = tail;
+    srq->ready_idx = UINT16_MAX;
+    srq->sw_pi     = UINT16_MAX;
+    srq->mask      = tail;
+    srq->stride    = uct_ib_mlx5_srq_stride(sge_num);
 
     ucs_dynamic_bitmap_init(&srq->free_bitmap);
 

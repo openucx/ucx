@@ -100,7 +100,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
                               uct_ib_mlx5_srq_seg_t *seg)
 {
-    int num_strides = iface->tm.mp.num_strides;
+    int num_strides = uct_rc_mlx5_num_sges(iface, iface->rx.srq.stride); //iface->tm.mp.num_strides;
     uct_ib_iface_recv_desc_t *desc;
     uint64_t desc_map;
     void *hdr;
@@ -240,7 +240,7 @@ uct_rc_mlx5_iface_srq_post_recv_msg_based(uct_rc_mlx5_iface_common_t *iface)
         ucs_dynamic_bitmap_reset(&iface->rx.srq.free_bitmap, wqe_index);
     }
 
-    uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, wqe_index, count);
+    uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, 0, count);
     return count;
 }
 
@@ -593,10 +593,7 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        uct_rc_mlx5_iface_is_srq_msg_based(
-                                                iface) ?
-                                                iface->msg_based.num_strides :
-                                                iface->tm.mp.num_strides);
+                                        uct_rc_mlx5_num_strides(iface));
 
     if (status != UCS_OK) {
         goto err_free_srq;
@@ -631,15 +628,9 @@ void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 
 void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
 {
-    uct_rc_mlx5_release_desc_t *release;
-    
-    void *ib_desc;
-
-    release = ucs_derived_of(self, uct_rc_mlx5_release_desc_t);
-
-    ib_desc = (char*)desc - release->offset;
-
-
+    uct_rc_mlx5_release_desc_t *release = ucs_derived_of(self,
+                                                         uct_rc_mlx5_release_desc_t);
+    void *ib_desc = (char*)desc - release->offset;
     ucs_mpool_put_inline(ib_desc);
 }
 
@@ -1012,10 +1003,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        uct_rc_mlx5_iface_is_srq_msg_based(
-                                                iface) ?
-                                                iface->msg_based.num_strides :
-                                                iface->tm.mp.num_strides);
+                                        uct_rc_mlx5_num_strides(iface));
     if (status != UCS_OK) {
         goto err_free_srq;
     }
