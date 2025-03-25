@@ -47,12 +47,13 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
-                                  ucs_memory_type_t frag_mem_type)
+                                  ucs_memory_type_t frag_mem_type,
+                                  ucs_sys_device_t frag_sys_dev)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
     req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
-                                              UCS_SYS_DEVICE_ID_UNKNOWN);
+                                              frag_sys_dev);
     if (req->send.rndv.mdesc == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -219,6 +220,19 @@ ucp_proto_rndv_mtype_query_desc(const ucp_proto_query_params_t *params,
 
     ucs_string_buffer_appendf(&strb, ", frag %s",
                               ucs_memory_type_names[frag_mem_type]);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_update_sys_dev(const ucp_proto_init_params_t *init_params,
+                                    ucp_memory_info_t *mem_info)
+{
+    /* TODO: ucp_mm_get_alloc_md_index caches sys_dev by memory type. Extend the
+             cache by system device Id. */
+    ucs_sys_device_t sys_dev = init_params->select_param->sys_dev;
+    if (!UCP_MEM_IS_HOST(mem_info->type) &&
+        (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        mem_info->sys_dev = sys_dev;
+    }
 }
 
 #endif

@@ -108,6 +108,7 @@ typedef struct ucp_rndv_frag_mp_chunk_hdr {
 typedef struct ucp_rndv_mpool_priv {
     ucp_worker_h        worker;
     ucs_memory_type_t   mem_type;
+    ucs_sys_device_t    sys_dev;
 } ucp_rndv_mpool_priv_t;
 
 
