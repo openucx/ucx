@@ -391,4 +391,20 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     return packed_rkey_size;
 }
 
+static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
+ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
+                               ucp_lane_index_t lane)
+{
+    ucs_assert(lane < UCP_MAX_LANES);
+    return params->ep_config_key->lanes[lane].rsc_index;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
+ucp_proto_common_get_dev_index(const ucp_proto_init_params_t *params,
+                               ucp_lane_index_t lane)
+{
+    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+    return params->worker->context->tl_rscs[rsc_index].dev_index;
+}
+
 #endif

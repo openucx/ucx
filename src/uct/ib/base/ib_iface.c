@@ -28,7 +28,22 @@
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
+#include <float.h>
 
+
+/**
+ * Maximum bandwidth of NDR single path with PCIe Gen5 and RDMA_READ operation.
+ */
+#define UCT_IB_NDR_PATH_BANDWIDTH 38e9
+
+/**
+ * Minimal NDR single path ratio.
+ * The minimal ratio is used to calculate the ratio for the first device path,
+ * when the full interface bandwidth is capped by PCI distance. With PCIe Gen4
+ * single path still does not consume the full interface bandwidth for RDMA_READ
+ * operations, but around 95% of it according to measurements.
+ */
+#define UCT_IB_NDR_PATH_RATIO 0.95
 
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
@@ -1945,6 +1960,8 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
                                               OPERATION, UCT_EP_OP_LAST);
     const uct_ib_iface_send_overhead_t *send_overhead =
             &ib_iface->config.send_overhead;
+    double max_path_bandwidth                         = DBL_MAX;
+    double path_ratio;
     uct_iface_attr_t iface_attr;
     ucs_status_t status;
 
@@ -1973,6 +1990,26 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth = iface_attr.bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        if (uct_ib_iface_is_roce(ib_iface) &&
+            (uct_ib_iface_roce_lag_level(ib_iface) > 1)) {
+            path_ratio = 1.0 / iface_attr.dev_num_paths;
+        } else if (((op == UCT_EP_OP_GET_BCOPY) ||
+                    (op == UCT_EP_OP_GET_ZCOPY)) &&
+                   (uct_ib_iface_port_attr(ib_iface)->active_speed ==
+                    UCT_IB_SPEED_NDR)) {
+            max_path_bandwidth = UCT_IB_NDR_PATH_BANDWIDTH;
+            path_ratio         = UCT_IB_NDR_PATH_RATIO;
+        } else {
+            path_ratio = 1.0;
+        }
+
+        perf_attr->path_bandwidth.dedicated = 0;
+        perf_attr->path_bandwidth.shared    =
+            ucs_min(iface_attr.bandwidth.shared * path_ratio,
+                    max_path_bandwidth);
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {

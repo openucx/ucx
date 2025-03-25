@@ -377,25 +377,34 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     const double overhead          = 4.0e-6;
     /* stream synchronization factor */
     const double ss_factor         = zcopy ? 1 : 0.95;
+    uct_ppn_bandwidth_t bandwidth  = {};
 
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+    if (uct_perf_attr_has_bandwidth(perf_attr->field_mask)) {
         if (uct_ep_op_is_fetch(op)) {
             ucs_swap(&src_mem_type, &dst_mem_type);
         }
 
-        perf_attr->bandwidth.dedicated = 0;
+        bandwidth.dedicated = 0;
         if ((src_mem_type == UCS_MEMORY_TYPE_HOST) &&
             (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
-            perf_attr->bandwidth.shared = iface->config.bw.h2d * ss_factor;
+            bandwidth.shared = iface->config.bw.h2d * ss_factor;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
-            perf_attr->bandwidth.shared = iface->config.bw.d2h * ss_factor;
+            bandwidth.shared = iface->config.bw.d2h * ss_factor;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
-            perf_attr->bandwidth.shared = iface->config.bw.d2d;
+            bandwidth.shared = iface->config.bw.d2d;
         } else {
-            perf_attr->bandwidth.shared = iface->config.bw.dflt;
+            bandwidth.shared = iface->config.bw.dflt;
         }
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth = bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        perf_attr->path_bandwidth = bandwidth;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {

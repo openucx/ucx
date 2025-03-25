@@ -89,14 +89,17 @@ enum uct_perf_attr_field {
     /** Enables @ref uct_perf_attr_t::bandwidth */
     UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(8),
 
+    /** Enables @ref uct_perf_attr_t::path_bandwidth */
+    UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH     = UCS_BIT(9),
+
     /** Enables @ref uct_perf_attr_t::latency */
-    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
+    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(10),
 
     /** Enable @ref uct_perf_attr_t::max_inflight_eps */
-    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10),
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(11),
 
     /** Enable @ref uct_perf_attr_t::flags */
-    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(11)
+    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(12)
 };
 
 /**
@@ -184,6 +187,13 @@ typedef struct {
      * Bandwidth model. This field is set by the UCT layer.
      */
     uct_ppn_bandwidth_t bandwidth;
+
+    /**
+     * Bandwidth of a single interface path. It is smaller than or equal to
+     * @ref bandwidth.
+     * This field is set by the UCT layer.
+     */
+    uct_ppn_bandwidth_t path_bandwidth;
 
     /**
      * Latency as a function of number of endpoints.
