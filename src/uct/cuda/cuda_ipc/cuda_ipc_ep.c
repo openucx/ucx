@@ -57,58 +57,71 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
     return ep->remote_pid == *(pid_t*)params->iface_addr;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(
+        uct_cuda_ipc_iface_t *iface, uct_cuda_ipc_ctx_rsc_t **ctx_rsc_p)
+{
+    ucs_status_t status;
+    uct_cuda_ctx_rsc_t *ctx_rsc;
+
+    status = uct_cuda_base_ctx_rsc_get(&iface->super, &ctx_rsc);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    *ctx_rsc_p = ucs_derived_of(ctx_rsc, uct_cuda_ipc_ctx_rsc_t);
+    return UCS_OK;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                   const uct_iov_t *iov, uct_rkey_t rkey,
                                   uct_completion_t *comp, int direction)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_ipc_iface_t);
-    uct_cuda_ipc_rkey_t *key    = (uct_cuda_ipc_rkey_t *) rkey;
+    uct_cuda_ipc_rkey_t *key    = (uct_cuda_ipc_rkey_t *)rkey;
     void *mapped_rem_addr;
     void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
-    ucs_queue_head_t *outstanding_queue;
+    uct_cuda_ipc_ctx_rsc_t *ctx_rsc;
+    uct_cuda_queue_desc_t *q_desc;
     ucs_status_t status;
     CUdeviceptr dst, src;
-    CUstream stream;
+    CUstream *stream;
     size_t offset;
 
-    if (0 == iov[0].length) {
+    if (ucs_unlikely(0 == iov[0].length)) {
         ucs_trace_data("Zero length request: skip it");
         return UCS_OK;
     }
 
     status = uct_cuda_ipc_map_memhandle(key, &mapped_addr);
-    if (status != UCS_OK) {
+    if (ucs_unlikely(status != UCS_OK)) {
         return UCS_ERR_IO_ERROR;
     }
 
-    /* ensure context is set before creating events/streams */
-    if (iface->cuda_context == NULL) {
-        UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&iface->cuda_context));
-        if (iface->cuda_context == NULL) {
-            ucs_error("attempt to perform cuda memcpy without active context");
-            return UCS_ERR_IO_ERROR;
-        }
+    status = uct_cuda_ipc_ctx_rsc_get(iface, &ctx_rsc);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
     offset          = (uintptr_t)remote_addr - (uintptr_t)key->d_bptr;
     mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
     ucs_assert(offset <= key->b_len);
 
-    if (!iface->streams_initialized) {
-        status = uct_cuda_ipc_iface_init_streams(iface);
-        if (UCS_OK != status) {
-            return status;
-        }
+    key->dev_num %= iface->config.max_streams; /* round-robin */
+    q_desc        = &ctx_rsc->queue_desc[key->dev_num];
+    stream        = &q_desc->stream;
+    status        = uct_cuda_base_init_stream(stream);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
-    key->dev_num %= iface->config.max_streams; /* round-robin */
+    if (ucs_unlikely(stream == NULL)) {
+        ucs_error("stream for dev_num=%d not available", key->dev_num);
+        return UCS_ERR_IO_ERROR;
+    }
 
-    stream            = iface->stream_d2d[key->dev_num];
-    outstanding_queue = &iface->outstanding_d2d_event_q;
-    cuda_ipc_event    = ucs_mpool_get(&iface->event_desc);
-
+    cuda_ipc_event = ucs_mpool_get(&ctx_rsc->super.event_mp);
     if (ucs_unlikely(cuda_ipc_event == NULL)) {
         ucs_error("Failed to allocate cuda_ipc event object");
         return UCS_ERR_NO_MEMORY;
@@ -120,24 +133,25 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         ((direction == UCT_CUDA_IPC_PUT) ? iov[0].buffer : mapped_rem_addr);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyDtoDAsync(dst, src, iov[0].length,
-                                                        stream));
+                                                        *stream));
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
     }
 
-    iface->stream_refcount[key->dev_num]++;
-    cuda_ipc_event->stream_id = key->dev_num;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_ipc_event->event,
-                                                    stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_ipc_event->super.event,
+                                                    *stream));
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
     }
 
-    ucs_queue_push(outstanding_queue, &cuda_ipc_event->queue);
-    cuda_ipc_event->comp        = comp;
+    if (ucs_queue_is_empty(&q_desc->event_queue)) {
+        ucs_queue_push(&iface->super.active_queue, &q_desc->queue);
+    }
+
+    ucs_queue_push(&q_desc->event_queue, &cuda_ipc_event->super.queue);
+    cuda_ipc_event->super.comp  = comp;
     cuda_ipc_event->mapped_addr = mapped_addr;
     cuda_ipc_event->d_bptr      = (uintptr_t)key->d_bptr;
     cuda_ipc_event->pid         = key->pid;
