@@ -10,6 +10,9 @@
 #include <uct/base/uct_md.h>
 
 
+#define UCT_CUDA_MAX_DEVICES 32
+
+
 ucs_status_t
 uct_cuda_base_query_md_resources(uct_component_t *component,
                                  uct_md_resource_desc_t **resources_p,

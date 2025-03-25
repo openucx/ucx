@@ -27,7 +27,6 @@
 
 
 #define UCT_CUDA_DEV_NAME_MAX_LEN 64
-#define UCT_CUDA_MAX_DEVICES      32
 
 
 static const char *uct_cuda_pref_loc[] = {
@@ -78,7 +77,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      ucs_offsetof(uct_cuda_copy_md_config_t, cuda_async_mem_type),
      UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
-    {"RETAIN_PRIMARY_CTX", "n",
+    {"RETAIN_PRIMARY_CTX", "y",
      "Retain and use an inactive CUDA primary context for memory allocation",
      ucs_offsetof(uct_cuda_copy_md_config_t, retain_primary_ctx),
      UCS_CONFIG_TYPE_BOOL},
@@ -758,7 +757,8 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
             return status;
         }
 
-        if (cuda_mem_type != CU_MEMORYTYPE_DEVICE) {
+        if ((cuda_mem_type != CU_MEMORYTYPE_DEVICE) ||
+            (cuda_device == CU_DEVICE_INVALID)) {
             /* pointer not recognized */
             return UCS_ERR_INVALID_ADDR;
         }

@@ -13,6 +13,7 @@
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <cuda.h>
+#include <pthread.h>
 
 
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
@@ -124,6 +125,10 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                            num_resources_p);
 }
 
+static pthread_mutex_t uct_cuda_retained_lock = PTHREAD_MUTEX_INITIALIZER;
+static CUdevice uct_cuda_retained_cu_device[UCT_CUDA_MAX_DEVICES];
+static int uct_cuda_retained_cu_device_count;
+
 ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
                                          CUcontext *cuda_ctx_p)
 {
@@ -132,18 +137,41 @@ ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
     ucs_status_t status;
     CUcontext cuda_ctx;
 
-    if (!force) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
-        if (status != UCS_OK) {
-            return status;
-        }
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
+    if (status != UCS_OK) {
+        return status;
+    }
 
-        if (!active) {
+    if (!active) {
+        if (!force) {
             ucs_debug("cuda primary context is inactive on device %d",
                       cuda_device);
             return UCS_ERR_NO_DEVICE;
         }
+
+        /* Use one extra retain */
+        pthread_mutex_lock(&uct_cuda_retained_lock);
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
+        if (status != UCS_OK) {
+            pthread_mutex_unlock(&uct_cuda_retained_lock);
+            return status;
+        }
+
+        if (!active) {
+            status = UCT_CUDADRV_FUNC_LOG_ERR(
+                    cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_device));
+            if (status != UCS_OK) {
+                pthread_mutex_unlock(&uct_cuda_retained_lock);
+                return status;
+            }
+
+            uct_cuda_retained_cu_device[uct_cuda_retained_cu_device_count++] =
+                    cuda_device;
+        }
+
+        pthread_mutex_unlock(&uct_cuda_retained_lock);
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
@@ -163,6 +191,16 @@ UCS_STATIC_INIT
 
 UCS_STATIC_CLEANUP
 {
+    int i;
+    CUresult result;
+
+    for (i = 0; i < uct_cuda_retained_cu_device_count; i++) {
+        result = cuDevicePrimaryCtxRelease(uct_cuda_retained_cu_device[i]);
+        if (result != CUDA_ERROR_DEINITIALIZED) {
+            ucs_error("device %d: failed to release primary context error:%d",
+                      uct_cuda_retained_cu_device[i], result);
+        }
+    }
 }
 
 UCS_MODULE_INIT() {
