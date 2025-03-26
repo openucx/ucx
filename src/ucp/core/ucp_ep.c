@@ -1649,7 +1649,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     }
 
     if (ucp_context_usage_tracker_enabled(worker->context)) {
-        ucs_usage_tracker_remove(ucp_worker_get_usage_tracker(worker), ep);
+        ucs_usage_tracker_remove(worker->usage_tracker.handle, ep);
     }
 
     ucp_ep_match_remove_ep(worker, ep);
@@ -3949,8 +3949,7 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
 
 int ucp_ep_is_prioritized(ucp_ep_h ep)
 {
-    const ucs_usage_tracker_h usage_tracker = ucp_worker_get_usage_tracker(
-            ep->worker);
+    const ucs_usage_tracker_h usage_tracker = ep->worker->usage_tracker.handle;
 
     return (usage_tracker != NULL) &&
            ucs_usage_tracker_is_promoted(usage_tracker, ep);

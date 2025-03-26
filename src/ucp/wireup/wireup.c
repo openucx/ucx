@@ -48,6 +48,7 @@
 
 #define UCP_WIREUP_MSG_SCORE_TO_DOUBLE (1.0 / UINT8_MAX)
 
+/* Wireup request and promote both require handling new connections */
 static int ucp_wireup_is_entry_msg(unsigned msg_type)
 {
     return (msg_type == UCP_WIREUP_MSG_REQUEST) ||
@@ -200,8 +201,7 @@ out:
 
 static double ucp_wireup_get_ep_usage_score(ucp_ep_h ep)
 {
-    const ucs_usage_tracker_h usage_tracker = ucp_worker_get_usage_tracker(
-            ep->worker);
+    const ucs_usage_tracker_h usage_tracker = ep->worker->usage_tracker.handle;
     double score;
 
     ucs_assert_always(usage_tracker != NULL);
@@ -594,6 +594,7 @@ ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
            UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
 }
 
+/* Common code for sending wireup pre-request, promote and demote messages */
 static ucs_status_t ucp_wireup_send_pre_flow_msg(ucp_ep_h ep, uint8_t type)
 {
     ucs_status_t status;
@@ -642,6 +643,7 @@ void ucp_wireup_send_demotion_request(void *entry, void *arg,
                                 is_external_event);
 }
 
+/* Common code for processing wireup pre-request, promote and demote messages */
 static void
 ucp_wireup_process_pre_flow_msg(ucp_ep_h ep,
                                 const ucp_unpacked_address_t *remote_address,
@@ -700,6 +702,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
                                     msg->src_ep_id);
 }
 
+/* Match EP by remote worker. In case no match is found, create a new EP. */
 static ucs_status_t
 ucp_wireup_get_ep_by_conn_sn(ucp_worker_h worker,
                              const ucp_unpacked_address_t *remote_address,
@@ -903,7 +906,7 @@ static UCS_F_NOINLINE void ucp_wireup_process_promotion_request(
         return;
     }
 
-    usage_tracker = ucp_worker_get_usage_tracker(worker);
+    usage_tracker = worker->usage_tracker.handle;
     ucs_assert_always(usage_tracker != NULL);
     ucs_usage_tracker_set_min_score(usage_tracker, ep, score);
 
@@ -928,8 +931,8 @@ static UCS_F_NOINLINE void ucp_wireup_process_demotion_request(
     ucs_debug("ep %p: demotion request from 0x%.8lX accepted (score: %.2f)", ep,
               msg->src_ep_id, msg->score * UCP_WIREUP_MSG_SCORE_TO_DOUBLE);
 
-    ucs_assert_always(ucp_worker_get_usage_tracker(worker) != NULL);
-    ucs_usage_tracker_remove(ucp_worker_get_usage_tracker(worker), ep);
+    ucs_assert_always(worker->usage_tracker.handle != NULL);
+    ucs_usage_tracker_remove(worker->usage_tracker.handle, ep);
     ucp_wireup_process_pre_flow_msg(ep, remote_address,
                                     UCP_EP_INIT_CREATE_AM_LANE, msg->src_ep_id);
 }

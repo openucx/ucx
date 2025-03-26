@@ -2406,6 +2406,7 @@ static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
     ucs_status_t status;
     ucs_usage_tracker_h handle;
 
+    worker->usage_tracker.handle = NULL;
     if (!ucp_context_usage_tracker_enabled(context)) {
         return UCS_OK;
     }
