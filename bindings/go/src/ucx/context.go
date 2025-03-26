@@ -109,7 +109,7 @@ func (c *UcpContext) NewWorker(workerParams *UcpWorkerParams) (*UcpWorker, error
 	var ucp_worker C.ucp_worker_h
 
 	if (workerParams.params.thread_mode == C.ucs_thread_mode_t(UCS_THREAD_MODE_SINGLE)) {
-		workerParams.SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
+		workerParams.SetThreadMode(UCS_THREAD_MODE_MULTI)
 	}
 
 	if status := C.ucp_worker_create(c.context, &workerParams.params, &ucp_worker); status != C.UCS_OK {
