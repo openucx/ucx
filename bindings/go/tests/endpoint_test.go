@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
- * See file LICENSE for terms.
- */
+* Copyright (C) 2021, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+* See file LICENSE for terms.
+*/
 package goucxtests
 
 import (
@@ -11,6 +11,8 @@ import (
 	"time"
 	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"unsafe"
+	"sync"
+	"strconv"
 	. "github.com/openucx/ucx/bindings/go/src/cuda"
 )
 
@@ -192,8 +194,7 @@ func TestUcpEpAm(t *testing.T) {
 		receiver := prepareContext(t, nil)
 		t.Logf("Testing AM %v -> %v", memType.senderMemType, memType.recvMemType)
 
-		ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_MULTI)
-		receiver.worker, _ = receiver.context.NewWorker(ucpWorkerParams)
+		receiver.worker, _ = receiver.context.NewWorker(&UcpWorkerParams{})
 		sender.worker, _ = sender.context.NewWorker(&UcpWorkerParams{})
 
 		connect(sender, receiver)
@@ -202,12 +203,14 @@ func TestUcpEpAm(t *testing.T) {
 		receiveMem := memoryAllocate(receiver, 4096, memType.recvMemType)
 		memorySet(sender, []byte(sendData))
 
+		// Concurrency test #threads
+		concurNumOfThreads := 20
 		// To pass from progress thread AM data and test it's content
 		amDataChan := make(chan *UcpAmData, 1)
 		// To keep all requests from threads and close them on completion
-		requests := make(chan *UcpRequest, 4)
+		requests := make(chan *UcpRequest, 4 + concurNumOfThreads)
 		// t.Fatalf can't be called from non main thread need to pass an error
-		threadErr := make(chan error)
+		threadErr := make(chan error, 1)
 
 		// Test eager handler with data persistence
 		receiver.worker.SetAmRecvHandler(1, UCP_AM_FLAG_WHOLE_MSG|UCP_AM_FLAG_PERSISTENT_DATA, func(header unsafe.Pointer, headerSize uint64,
@@ -261,6 +264,36 @@ func TestUcpEpAm(t *testing.T) {
 
 		requests <- send1
 		requests <- send2
+
+		// Test that SetAmRecvHandler is thread safe
+		var wg sync.WaitGroup
+		wg.Add(int(concurNumOfThreads))
+		for i := 0; i < concurNumOfThreads; i++ {
+			cbId := i + 3
+			sendData := strconv.Itoa(cbId)
+			sendDataMem := CBytes([]byte(sendData))
+			sendDataLen := uint64(len(sendData))
+			go func() {
+				defer wg.Done()
+				receiver.worker.SetAmRecvHandler(uint(cbId), UCP_AM_FLAG_WHOLE_MSG, func(header unsafe.Pointer, headerSize uint64,
+					data *UcpAmData, replyEp *UcpEp) UcsStatus {
+						if !data.IsDataValid() {
+							threadErr <- errors.New("Data is not received")
+						}
+
+						receivedData := string(GoBytes(header, headerSize))
+						if receivedData != sendData {
+							threadErr <- fmt.Errorf("receivedData %v != sendData %v", receivedData, sendData)
+						}
+
+						return UCS_OK
+				})
+
+				sendReq, _ := sender.ep.SendAmNonBlocking(uint(cbId), sendDataMem, sendDataLen, nil, 0, UCP_AM_SEND_FLAG_EAGER, nil)
+				requests <- sendReq
+			}()
+		}
+		wg.Wait()
 
 	senderProgress:
 		for {
