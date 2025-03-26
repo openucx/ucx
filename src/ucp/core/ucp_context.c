@@ -75,7 +75,7 @@ typedef enum ucp_transports_list_search_result {
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY             = UCS_BIT(0),
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN         = UCS_BIT(1),
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_ALIAS        = UCS_BIT(2),
-    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_GLOBAL_ALIAS = UCS_BIT(3)
+    UCP_TRANSPORTS_LIST_SEARCH_RESULT_TL_AND_AUX_IN_ALIAS = UCS_BIT(3)
 } ucp_transports_list_search_result_t;
 
 
@@ -1009,11 +1009,6 @@ static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
                                     str_suffix, &dummy_mask);
 }
 
-static int ucp_tls_is_global_alias(const ucp_tl_alias_t *alias)
-{
-    return !strcmp(alias->alias, "ib");
-}
-
 static uint8_t
 ucp_transports_list_search(const char *tl_name,
                            const ucs_config_names_array_t *tl_array,
@@ -1022,6 +1017,7 @@ ucp_transports_list_search(const char *tl_name,
     uint8_t search_result = 0;
     uint64_t tmp_tl_cfg_mask;
     ucp_tl_alias_t *alias;
+    int tl_in_alias, tl_aux_in_alias;
 
     if (ucp_config_is_tl_name_present(tl_array, tl_name, 0, NULL,
                                       tl_cfg_mask)) {
@@ -1039,21 +1035,25 @@ ucp_transports_list_search(const char *tl_name,
         tmp_tl_cfg_mask = 0;
         if (ucp_config_is_tl_name_present(tl_array, alias->alias, 1, NULL,
                                           &tmp_tl_cfg_mask)) {
-            if (ucp_tls_alias_is_present(alias, tl_name, NULL)) {
+            tl_in_alias = ucp_tls_alias_is_present(alias, tl_name, NULL);
+            if (tl_in_alias) {
                 /* alias={tl_name}, UCX_TLS=[^]alias */
                 *tl_cfg_mask  |= tmp_tl_cfg_mask;
                 search_result |= UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY;
             }
 
-            if (ucp_tls_alias_is_present(alias, tl_name, UCP_TL_AUX_SUFFIX)) {
+            tl_aux_in_alias = ucp_tls_alias_is_present(alias, tl_name,
+                                                       UCP_TL_AUX_SUFFIX);
+            if (tl_aux_in_alias) {
                 /* alias={tl_name:aux}, UCX_TLS=[^]alias */
                 *tl_cfg_mask  |= tmp_tl_cfg_mask;
                 search_result |= UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_ALIAS;
+            }
 
-                if (ucp_tls_is_global_alias(alias)) {
-                    search_result |=
-                          UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_GLOBAL_ALIAS;
-                }
+            if (tl_in_alias && tl_aux_in_alias) {
+                /* alias={tl_name, tl_name:aux}, UCX_TLS=[^]alias */
+                search_result |= 
+                          UCP_TRANSPORTS_LIST_SEARCH_RESULT_TL_AND_AUX_IN_ALIAS;
             }
         }
 
@@ -1120,9 +1120,10 @@ ucp_is_resource_in_transports_list(const char *tl_name,
      *    UCX_TLS=^alias,alias:aux
      *  - a global alias that contains it:
      *    UCX_TLS=^ib */
-    if ((search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY) &&
-        (search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN || 
-         search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_GLOBAL_ALIAS)) {
+    if (ucs_test_all_flags(search_result,
+                           UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY |
+                           UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN) ||
+        search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_TL_AND_AUX_IN_ALIAS) {
         return 0;
     }
 
