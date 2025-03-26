@@ -108,7 +108,10 @@ func (c *UcpContext) Query(attrs ...UcpContextAttr) (*C.ucp_context_attr_t, erro
 func (c *UcpContext) NewWorker(workerParams *UcpWorkerParams) (*UcpWorker, error) {
 	var ucp_worker C.ucp_worker_h
 
-	workerParams.SetThreadMode(UCS_THREAD_MODE_MULTI)
+	if (workerParams.params.thread_mode == 0) {
+		workerParams.SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
+	}
+
 	if status := C.ucp_worker_create(c.context, &workerParams.params, &ucp_worker); status != C.UCS_OK {
 		return nil, newUcxError(status)
 	}
