@@ -140,6 +140,12 @@ typedef struct {
 } uct_cuda_ipc_rkey_t;
 
 
+typedef struct {
+    uct_cuda_ipc_rkey_t       super;
+    int                       stream_id;
+} uct_cuda_ipc_unpacked_rkey_t;
+
+
 #define UCT_CUDA_IPC_GET_DEVICE(_cu_device)                          \
     do {                                                             \
         if (UCS_OK !=                                                \
