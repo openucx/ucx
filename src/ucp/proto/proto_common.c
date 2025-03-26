@@ -48,14 +48,6 @@ int ucp_proto_common_init_check_err_handling(
             UCP_ERR_HANDLING_MODE_NONE);
 }
 
-ucp_rsc_index_t
-ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
-                               ucp_lane_index_t lane)
-{
-    ucs_assert(lane < UCP_MAX_LANES);
-    return params->ep_config_key->lanes[lane].rsc_index;
-}
-
 static size_t
 ucp_proto_common_get_seg_size(const ucp_proto_common_init_params_t *params,
                               ucp_lane_index_t lane)
@@ -372,6 +364,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                            UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
                            UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                           UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
                            UCT_PERF_ATTR_FIELD_LATENCY;
     perf_attr.operation  = params->send_op;
 
@@ -385,6 +378,9 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     tl_perf->recv_overhead      = perf_attr.recv_overhead + params->overhead;
     tl_perf->bandwidth          = ucp_tl_iface_bandwidth(context,
                                                          &perf_attr.bandwidth);
+    tl_perf->path_ratio         = ucp_tl_iface_bandwidth(context,
+                                                         &perf_attr.path_bandwidth) /
+                                  tl_perf->bandwidth;
     tl_perf->latency            = ucp_tl_iface_latency(context,
                                                        &perf_attr.latency) +
                                   params->latency;
@@ -456,41 +452,6 @@ err_deref_perf_node:
     return status;
 }
 
-/*
- * TODO: This is a quickfix, needed to select lanes for multi-lane RNDV
- * protocol in the order of rma_bw_lanes (RMA_BW lanes sorted by score).
- * The proper solution is to have a generic mechanism to sort lanes based on
- * the calculated performance, implemented in proto_multi.
- * This function should be removed once the proper solution is implemented.
- */
-static inline ucp_lane_index_t
-ucp_proto_common_lanes_iter(const ucp_ep_config_key_t *ep_config_key,
-                            ucp_lane_map_t lane_map, ucp_lane_type_t lane_type,
-                            ucp_lane_index_t start, ucp_lane_index_t *lane)
-{
-    if (start >= UCP_MAX_LANES) {
-        return UCP_MAX_LANES;
-    }
-
-    if (lane_type == UCP_LANE_TYPE_RMA_BW) {
-        for (; start < ep_config_key->num_lanes; ++start) {
-            *lane = ep_config_key->rma_bw_lanes[start];
-            if ((*lane == UCP_NULL_LANE) || (lane_map & UCS_BIT(*lane))) {
-                break;
-            }
-        }
-        return start;
-    }
-
-    /*
-     * By default iterate over all lanes in lane_map
-     * Reset lane_map bits below start position, then find first bit set
-     */
-    lane_map &= ~((1ULL << start) - 1);
-    *lane     = ucs_ffs64_safe(lane_map);
-    return *lane;
-}
-
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                             unsigned flags, ptrdiff_t max_iov_offs,
@@ -505,7 +466,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     const ucp_rkey_config_key_t *rkey_config_key = params->rkey_config_key;
     const ucp_proto_select_param_t *select_param = params->select_param;
     const uct_iface_attr_t *iface_attr;
-    ucp_lane_index_t lane, num_lanes, i;
+    ucp_lane_index_t lane, num_lanes;
     const uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
     ucp_rsc_index_t rsc_index;
@@ -538,12 +499,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     }
 
     lane_map = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
-    lane     = 0;
-    for (i = ucp_proto_common_lanes_iter(ep_config_key, lane_map, lane_type,
-                                         0, &lane);
-         (i < ep_config_key->num_lanes) && (lane != UCP_NULL_LANE);
-         i = ucp_proto_common_lanes_iter(ep_config_key, lane_map, lane_type,
-                                         i + 1, &lane)) {
+    ucs_for_each_bit(lane, lane_map) {
         if (num_lanes >= max_lanes) {
             break;
         }
