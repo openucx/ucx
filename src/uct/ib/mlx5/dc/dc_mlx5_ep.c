@@ -273,10 +273,17 @@ ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    uct_dc_dci_t *dci;
 
-    return uct_rc_ep_fence(tl_ep,
-                           &uct_dc_mlx5_iface_dci(iface, ep->dci)->txwq.fi,
-                           ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
+        dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
+        ucs_assertv(uct_dc_mlx5_is_dci_valid(dci), "iface=%p ep=%p dci=%d",
+                    iface, ep, ep->dci);
+        return uct_rc_ep_fence(tl_ep, &dci->txwq.fi);
+    }
+
+    UCT_TL_EP_STAT_FENCE(&ep->super);
+    return UCS_OK;
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE
