@@ -277,16 +277,16 @@ func TestUcpEpAm(t *testing.T) {
 				defer wg.Done()
 				receiver.worker.SetAmRecvHandler(uint(cbId), UCP_AM_FLAG_WHOLE_MSG, func(header unsafe.Pointer, headerSize uint64,
 					data *UcpAmData, replyEp *UcpEp) UcsStatus {
-						if !data.IsDataValid() {
-							threadErr <- errors.New("Data is not received")
-						}
+					if !data.IsDataValid() {
+						threadErr <- errors.New("Data is not received")
+					}
 
-						receivedData := string(GoBytes(header, headerSize))
-						if receivedData != sendData {
-							threadErr <- fmt.Errorf("receivedData %v != sendData %v", receivedData, sendData)
-						}
+					receivedData := string(GoBytes(header, headerSize))
+					if receivedData != sendData {
+						threadErr <- fmt.Errorf("receivedData %v != sendData %v", receivedData, sendData)
+					}
 
-						return UCS_OK
+					return UCS_OK
 				})
 
 				sendReq, _ := sender.ep.SendAmNonBlocking(uint(cbId), sendDataMem, sendDataLen, nil, 0, UCP_AM_SEND_FLAG_EAGER, nil)
