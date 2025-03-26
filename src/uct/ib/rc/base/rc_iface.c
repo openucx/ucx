@@ -172,8 +172,8 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     //TODO: should check here if smbrwq is used or not
-    int max_message_size = 
-        uct_ib_iface_max_message_size(&iface->super);
+    int max_message_size = 16382;
+        // uct_ib_iface_max_message_size(&iface->super);
     ucs_status_t status;
 
     status = uct_ib_iface_query(&iface->super,

@@ -263,10 +263,13 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem.mem->umem_id);
     UCT_IB_MLX5DV_SET  (wq, wq, enh_strwq_profile_id, 0);
 
+    iface->msg_based.num_strides = 1;
+
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* Normalize to device's interface values (range of (-6) - 7) */
         /* cppcheck-suppress internalAstError */
         log_num_of_strides = ucs_ilog2(iface->tm.mp.num_strides) - 9;
+
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,
                           log_num_of_strides & 0xF);
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
@@ -277,6 +280,8 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
         log_num_of_strides = ucs_ilog2(iface->msg_based.num_strides) - 9;
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,
                           log_num_of_strides & 0xF);
+
+        UCT_IB_MLX5DV_SET(wq, wq, two_byte_shift_en, 0);
         ucs_assertv_always((md->msg_based_srq.min_stride_size <=
                             iface->super.super.config.stride_size) &&
                                    (iface->super.super.config.stride_size <=

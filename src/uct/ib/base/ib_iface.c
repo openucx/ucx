@@ -1652,6 +1652,12 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                                       rx_headroom;
     self->config.seg_size           = init_attr->seg_size;
     self->config.stride_size        = config->stride_size;
+    ucs_info("sizeof(uct_ib_iface_recv_desc_t): %zu rx_payload_offset %d "
+             "rx_hdr_offset %d rx_headroom_offset %d "
+             "init_attr->rx_priv_len %d init_attr->rx_hdr_len %d",
+             sizeof(uct_ib_iface_recv_desc_t), self->config.rx_payload_offset,
+             self->config.rx_hdr_offset, self->config.rx_headroom_offset,
+             init_attr->rx_priv_len, init_attr->rx_hdr_len);
     self->config.roce_path_factor   = config->roce_path_factor;
     self->config.tx_max_poll        = config->tx.max_poll;
     self->config.rx_max_poll        = config->rx.max_poll;

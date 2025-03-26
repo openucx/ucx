@@ -100,7 +100,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
                               uct_ib_mlx5_srq_seg_t *seg)
 {
-    int num_strides = uct_rc_mlx5_num_sges(iface, iface->rx.srq.stride); //iface->tm.mp.num_strides;
+    int num_strides = iface->tm.mp.num_strides;
     uct_ib_iface_recv_desc_t *desc;
     uint64_t desc_map;
     void *hdr;
@@ -230,13 +230,11 @@ uct_rc_mlx5_iface_srq_post_recv_msg_based(uct_rc_mlx5_iface_common_t *iface)
 
     UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(wqe_index, &iface->rx.srq.free_bitmap) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, wqe_index);
-
         if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
             break;
         }
 
         count++;
-
         ucs_dynamic_bitmap_reset(&iface->rx.srq.free_bitmap, wqe_index);
     }
 
