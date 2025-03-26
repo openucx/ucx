@@ -366,7 +366,7 @@ stages:
         demands: ucx_bf -equals yes
         run_tests: yes
         test_perf: 0
-        run_bullseye: yes
+        run_bullseye: no
 
     - job: bullseye_report
       displayName: Merge Bullseye reports
@@ -375,7 +375,6 @@ stages:
         - tests_new
         - tests_roce
         - tests_roce_proto_disable
-        - tests_BlueField
       condition: succeededOrFailed()
       pool:
         name: MLNX
