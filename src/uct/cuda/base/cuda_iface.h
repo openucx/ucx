@@ -250,17 +250,10 @@ ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_base_ctx_rsc_get(uct_cuda_iface_t *iface, uct_cuda_ctx_rsc_t **ctx_rsc_p)
+uct_cuda_base_ctx_rsc_get(uct_cuda_iface_t *iface, unsigned long long ctx_id,
+                          uct_cuda_ctx_rsc_t **ctx_rsc_p)
 {
-    unsigned long long ctx_id;
-    CUresult result;
     khiter_t iter;
-
-    result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
-    if (ucs_unlikely(result != CUDA_SUCCESS)) {
-        UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
-        return UCS_ERR_IO_ERROR;
-    }
 
     iter = kh_get(cuda_ctx_rscs, &iface->ctx_rscs, ctx_id);
     if (ucs_likely(iter != kh_end(&iface->ctx_rscs))) {
