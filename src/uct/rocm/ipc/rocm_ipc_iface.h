@@ -29,6 +29,9 @@ typedef struct uct_rocm_ipc_iface {
 typedef struct uct_rocm_ipc_iface_config {
     uct_iface_config_t                 super;
     uct_rocm_ipc_iface_config_params_t params;
+    size_t                             min_zcopy;
+    double                             latency;
+    unsigned                           sigpool_max_elems;
 } uct_rocm_ipc_iface_config_t;
 
 #endif
