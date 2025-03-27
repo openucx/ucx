@@ -21,12 +21,14 @@ class test_ucp_perf : public ucp_test, public test_perf {
 public:
     enum {
         VARIANT_TEST_TYPE,
-        VARIANT_ATOMIC_MODE
+        VARIANT_ATOMIC_MODE,
+        VARIANT_WIREUP_MODE = VARIANT_ATOMIC_MODE,
     };
 
     enum {
         ATOMIC_CPU = 1,
-        ATOMIC_DEVICE
+        ATOMIC_DEVICE,
+        WIREUP_ALL_TO_ALL
     };
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
@@ -48,6 +50,10 @@ public:
                 add_variant_value(variant->values, ATOMIC_DEVICE, "device");
             } else {
                 add_variant_with_value(variants, 0, i, test->title);
+
+                variant = &add_variant(variants, 0);
+                add_variant_value(variant->values, i, test->title);
+                add_variant_value(variant->values, WIREUP_ALL_TO_ALL, "all_to_all");
             }
         }
     }
@@ -342,7 +348,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
     ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
-    const char* atomic_mode_str = "guess";
+    const char* atomic_mode_str     = "guess";
+    const char* connect_all_to_all  = "n";
 
     if (get_variant_value(VARIANT_ATOMIC_MODE) == ATOMIC_CPU) {
         atomic_mode_str = "cpu";
@@ -352,6 +359,13 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
 
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv atomic_mode("UCX_ATOMIC_MODE", atomic_mode_str);
+
+    if (get_variant_value(VARIANT_WIREUP_MODE) == WIREUP_ALL_TO_ALL) {
+        connect_all_to_all = "y";
+    }
+
+    ucs::scoped_setenv wireup_ep_allow_all_to_all_env(
+            "UCX_CONNECT_ALL_TO_ALL", connect_all_to_all);
 
     test.iters         = ucs_min(test.iters, max_iter);
     test.send_mem_type = UCS_MEMORY_TYPE_HOST;

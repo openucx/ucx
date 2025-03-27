@@ -565,6 +565,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, wireup_via_am_lane),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"CONNECT_ALL_TO_ALL", "n",
+   "Establish connections between all pairs of local and remote devices that\n"
+   "are reachable through the transport layer.",
+   ucs_offsetof(ucp_context_config_t, connect_all_to_all),
+   UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
