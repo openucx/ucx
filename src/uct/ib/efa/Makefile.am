@@ -16,12 +16,14 @@ libuct_ib_efa_la_LDFLAGS  = $(EFA_LIB) $(IBVERBS_LDFLAGS) \
 
 libuct_ib_efa_la_SOURCES  = base/ib_efa_md.c \
                             srd/srd_iface.c \
-                            srd/srd_ep.c
+                            srd/srd_ep.c \
+                            srd/srd_log.c
 
 noinst_HEADERS            = base/ib_efa.h \
                             srd/srd_iface.h \
                             srd/srd_ep.h \
-                            srd/srd_def.h
+                            srd/srd_def.h \
+                            srd/srd_log.h
 
 PKG_CONFIG_NAME=ib-efa
 
