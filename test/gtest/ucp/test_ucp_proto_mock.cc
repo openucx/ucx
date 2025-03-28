@@ -180,7 +180,68 @@ private:
 
 mock_iface *mock_iface::m_self = nullptr;
 
-class test_ucp_proto_mock : public ucp_test, public mock_iface {
+class mock_topo_provider : public ucs_sys_topo_provider_t {
+public:
+    static constexpr ucs_sys_dev_distance_t DEFAULT_DISTANCE = {0, INFINITY};
+
+    mock_topo_provider():
+        ucs_sys_topo_provider_t {
+            "mock", { &get_distance, &get_memory_distance }
+        }
+    {
+        ucs_assert(m_self == nullptr);
+        m_self = this;
+    }
+
+    ~mock_topo_provider()
+    {
+        m_self = nullptr;
+    }
+
+    void add_mock_distance(ucs_sys_device_t device1, ucs_sys_device_t device2,
+                           ucs_sys_dev_distance_t distance)
+    {
+        m_distances[make_key(device1, device2)] = distance;
+    }
+
+private:
+    static ucs_status_t
+    get_distance(ucs_sys_device_t device1, ucs_sys_device_t device2,
+                 ucs_sys_dev_distance_t *distance)
+    {
+        auto it = m_self->m_distances.find(make_key(device1, device2));
+        if (it != m_self->m_distances.end()) {
+            *distance = it->second;
+        } else {
+            *distance = DEFAULT_DISTANCE;
+        }
+        return UCS_OK;
+    }
+
+    static void get_memory_distance(ucs_sys_device_t device,
+                                    ucs_sys_dev_distance_t *distance)
+    {
+        *distance = DEFAULT_DISTANCE;
+    }
+
+    static uint16_t make_key(ucs_sys_device_t device1, ucs_sys_device_t device2)
+    {
+        if (device1 > device2) {
+            std::swap(device1, device2);
+        }
+        return (device1 << 8) | device2;
+    }
+
+    /* We have to use singleton to mock C functions */
+    static mock_topo_provider *m_self;
+
+    std::unordered_map<uint16_t, ucs_sys_dev_distance_t> m_distances;
+};
+
+mock_topo_provider *mock_topo_provider::m_self = nullptr;
+
+class test_ucp_proto_mock : public ucp_test, public mock_iface,
+                            public mock_topo_provider {
 public:
     const static size_t INF                               = UCS_MEMUNITS_INF;
     const static uint16_t AM_ID                           = 123;
@@ -248,14 +309,8 @@ public:
         }
 
         /* Reset topo provider to force reload from config */
-        ucs_sys_topo_reset_provider();
-
-        /*
-         * By default TOPO_PRIO="sysfs,default"
-         * We keep only default config to always have the same topo distances
-         * when test is being executed on different machines.
-         */
-        modify_config("TOPO_PRIO", "default");
+        ucs_sys_topo_add_provider(this);
+        modify_config("TOPO_PRIO", "mock");
 
         ucp_test::init();
         connect();
@@ -266,7 +321,7 @@ public:
         mock_iface::cleanup();
         ucp_test::cleanup();
         /* Reset topo provider to not affect subsequent tests */
-        ucs_sys_topo_reset_provider();
+        ucs_sys_topo_remove_provider(this);
     }
 
     static void check_ep_config(const entity &e,
@@ -813,3 +868,54 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
                               "rc_x,cuda,rocm")
+
+class test_ucp_proto_mock_gpu_selection : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_gpu_selection()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    template<unsigned N> void add_mock_ifaces() {
+        add_mock_ifaces<N - 1>();
+        /* GPU distance is decreasing with N */
+        ucs_sys_dev_distance_t distance = {0, 32e9 - (N * 1e8)};
+        add_mock_distance(N, 0, distance);
+        //add_mock_distance(N, UCS_SYS_DEVICE_ID_UNKNOWN, distance);
+        add_mock_iface("mock" + std::to_string(N),
+                       [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            /* BW is increasing with N */
+            iface_attr.bandwidth.shared = 30e9 + (N * 1e8);
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+    }
+
+    virtual void init() override
+    {
+        add_mock_ifaces<50>();
+        test_ucp_proto_mock::init();
+    }
+};
+
+/* Stop template recursion at 0 */
+template <> void test_ucp_proto_mock_gpu_selection::add_mock_ifaces<0>() {}
+
+UCS_TEST_P(test_ucp_proto_mock_gpu_selection, test, "IB_NUM_PATHS?=2",
+           "MAX_RNDV_LANES=4", "SELECT_DISTANCE_MD=")
+{
+    send_recv_am(1024, UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+    key.param.mem_type         = UCS_MEMORY_TYPE_CUDA_MANAGED;
+
+    check_ep_config(sender(), {
+        /* TODO */
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu_selection, rcx_gpu,
+                              "rc_x,cuda")
