@@ -9,7 +9,10 @@
 #endif
 
 #include "srd_ep.h"
+#include "srd_log.h"
 #include "srd_iface.h"
+
+#include <uct/ib/base/ib_log.h>
 
 
 static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
@@ -114,9 +117,13 @@ void uct_srd_post_send(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
     wr->wr.ud.ah         = ep->ah;
     wr->send_flags       = send_flags;
 
+    uct_ib_log_post_send(&iface->super, iface->qp, wr, max_log_sge,
+                         uct_srd_dump_packet);
+
     ret = ibv_post_send(iface->qp, wr, &bad_wr);
     if (ucs_unlikely(ret != 0)) {
-        ucs_fatal("ibv_post_send(iface=%p) returned %d (%m)", iface, ret);
+        ucs_fatal("ibv_post_send(iface=%p) returned %d bad_wr=%p (%m)", iface,
+                  ret, bad_wr);
     }
 
     iface->tx.available--;
