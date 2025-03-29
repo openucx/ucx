@@ -525,7 +525,8 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
 
-    status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type);
+    status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type,
+                                               rpriv->bulk.frag_sys_dev);
     if (status != UCS_OK) {
         ucp_proto_request_abort(req, status);
         return UCS_OK;
@@ -636,6 +637,8 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     } else {
         comp_cb = ucp_proto_rndv_put_mtype_completion;
     }
+
+    ucp_proto_rndv_mtype_update_sys_dev(init_params, &frag_mem_info);
 
     ucp_proto_rndv_put_common_probe(
             init_params, UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE), frag_size,

@@ -645,6 +645,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     }
 
     rpriv->frag_mem_type = init_params->super.reg_mem_info.type;
+    rpriv->frag_sys_dev  = init_params->super.reg_mem_info.sys_dev;
 
     if (rpriv->super.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */
