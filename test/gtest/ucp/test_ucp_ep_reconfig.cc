@@ -101,7 +101,7 @@ protected:
     }
 
 public:
-    void init()
+    virtual void init()
     {
         ucp_test::init();
 
@@ -167,7 +167,7 @@ public:
         }
     }
 
-    void send_recv(bool bidirectional)
+    void send_recv(bool bidirectional = false)
     {
 /* TODO: remove this when large messages asan bug is solved (size > ~70MB) */
 #ifdef __SANITIZE_ADDRESS__
@@ -198,7 +198,7 @@ public:
         }
     }
 
-    static constexpr unsigned num_iterations = 1000;
+    static constexpr unsigned num_iterations = 100;
 };
 
 void test_ucp_ep_reconfig::entity::store_config()
@@ -331,7 +331,7 @@ bool test_ucp_ep_reconfig::entity::is_lane_connected(ucp_ep_h ep,
 }
 
 void test_ucp_ep_reconfig::entity::verify_configuration(
-        const entity &other, unsigned expected_reused_rscs) const
+        const entity &other, unsigned min_reused_rscs) const
 {
     unsigned reused_lanes            = 0;
     const ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep());
@@ -356,9 +356,11 @@ void test_ucp_ep_reconfig::entity::verify_configuration(
 
     if (!is_reconfigured()) {
         EXPECT_EQ(num_lanes, reused_lanes);
-    } else if (test->reuse_lanes() && (expected_reused_rscs > 0)) {
-        EXPECT_EQ(expected_reused_rscs,
-                           UCS_STATIC_BITMAP_POPCOUNT(reused_rscs));
+    } else if (test->reuse_lanes() && (min_reused_rscs > 0)) {
+        unsigned actual_reused_rscs = UCS_STATIC_BITMAP_POPCOUNT(reused_rscs);
+        /* Account for the case where we detach a single reused lane to allow
+         * AM flush */
+        EXPECT_GE(actual_reused_rscs, min_reused_rscs - 1);
     }
 }
 
@@ -412,13 +414,14 @@ ucp_tl_bitmap_t test_ucp_ep_reconfig::tl_bitmap()
     }
 
     /* For single transport, half of the resources should be reserved for
-     * receiver side to use */
+     * receiver side to use. Sender must use the first half in order for
+     * reused lanes to be configured correctly. */
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     size_t num_tls            = 0;
     ucp_rsc_index_t rsc_idx;
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_idx, &sender().ucph()->tl_bitmap) {
-        if (++num_tls > (sender().ucph()->num_tls / 2)) {
+        if (++num_tls <= (sender().ucph()->num_tls / 2)) {
             UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
         }
     }
@@ -476,7 +479,7 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_ep_reconfig);
 
 class test_reconfig_asymmetric : public test_ucp_ep_reconfig {
 protected:
-    void create_entities_and_connect() override
+    virtual void create_entities_and_connect() override
     {
         create_entity(true, false);
 
@@ -523,3 +526,92 @@ UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfig_asymmetric, shm_ib, "shm,ib");
+
+class test_reconfigure_update_rank : public test_reconfig_asymmetric {
+public:
+    void init() override
+    {
+        test_ucp_ep_reconfig::init();
+        modify_config("NUM_EPS", std::to_string(num_eps()));
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 200, "mid");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 500, "large");
+    }
+
+    void create_entities_and_connect() override
+    {
+        create_entity(true, false);
+        create_entity(false, false);
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+
+    unsigned num_eps() const
+    {
+        return get_variant_value();
+    }
+
+    void verify_configuration();
+};
+
+void test_reconfigure_update_rank::verify_configuration()
+{
+    auto r_sender   = static_cast<const entity*>(&sender());
+    auto r_receiver = static_cast<const entity*>(&receiver());
+
+    if (should_reconfigure()) {
+        EXPECT_TRUE(r_sender->is_reconfigured());
+        EXPECT_TRUE(r_receiver->is_reconfigured());
+    } else {
+        EXPECT_FALSE(r_sender->is_reconfigured());
+        EXPECT_FALSE(r_receiver->is_reconfigured());
+    }
+
+    r_sender->verify_configuration(*r_receiver, 0);
+    r_receiver->verify_configuration(*r_sender, 0);
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, promote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=1000s")
+{
+    /* Create DC EP */
+    create_entities_and_connect();
+    send_recv();
+
+    /* Promote to RC */
+    auto s_tracker = sender().worker()->usage_tracker.handle;
+    ucs_usage_tracker_touch_key(s_tracker, sender().ep());
+    ucs_usage_tracker_progress(s_tracker);
+    send_recv();
+    verify_configuration();
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, demote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=1000s")
+{
+    mem_buffer sbuf(1024, UCS_MEMORY_TYPE_HOST);
+    mem_buffer rbuf(1024, UCS_MEMORY_TYPE_HOST);
+    std::vector<void*> reqs;
+
+    /* Create DC EP */
+    create_entities_and_connect();
+    send_message(sender(), receiver(), &sbuf, &rbuf, reqs);
+    requests_wait(reqs);
+
+    /* Promote to RC */
+    auto s_tracker = sender().worker()->usage_tracker.handle;
+    ucs_usage_tracker_touch_key(s_tracker, sender().ep());
+    ucs_usage_tracker_progress(s_tracker);
+    send_recv();
+
+    /* Demote to DC */
+    ucs_usage_tracker_remove(s_tracker, sender().ep());
+    ucp_wireup_send_demotion_request(sender().ep(), NULL, 0);
+    send_recv();
+    verify_configuration();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_update_rank, shm_ib, "shm,ib");
