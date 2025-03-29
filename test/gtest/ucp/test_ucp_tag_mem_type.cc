@@ -21,10 +21,11 @@ extern "C" {
 class test_ucp_tag_mem_type: public test_ucp_tag {
 public:
     enum {
-        VARIANT_GDR_OFF     = UCS_BIT(0),
-        VARIANT_TAG_OFFLOAD = UCS_BIT(1),
-        VARIANT_PROTO_V1    = UCS_BIT(2),
-        VARIANT_MAX         = UCS_BIT(3)
+        VARIANT_GDR_OFF            = UCS_BIT(0),
+        VARIANT_TAG_OFFLOAD        = UCS_BIT(1),
+        VARIANT_PROTO_V1           = UCS_BIT(2),
+        VARIANT_CONNECT_ALL_TO_ALL = UCS_BIT(3),
+        VARIANT_MAX                = UCS_BIT(4)
     };
 
     void init()
@@ -71,6 +72,10 @@ public:
         m_send_mem_type         = m_mem_type_pairs[mem_type_pair_index][0];
         m_recv_mem_type         = m_mem_type_pairs[mem_type_pair_index][1];
 
+        if (variant_flags & VARIANT_CONNECT_ALL_TO_ALL) {
+            modify_config("CONNECT_ALL_TO_ALL", "y");
+        }
+
         modify_config("MAX_EAGER_LANES", "2");
         modify_config("MAX_RNDV_LANES", "2");
 
@@ -107,6 +112,10 @@ public:
 
         if (variant_flags & VARIANT_PROTO_V1) {
             name += ",proto_v1";
+        }
+
+        if (variant_flags & VARIANT_CONNECT_ALL_TO_ALL) {
+            name += ",connect_all_to_all";
         }
 
         add_variant_with_value(variants, get_ctx_params(), variant_value, name);
