@@ -58,7 +58,7 @@ struct uct_srd_send_op {
 
 
 /*
- * Registerd send descriptor used for bcopy/zcopy posts and corresponding TX CQE.
+ * Registered send descriptor used for bcopy/zcopy posts and corresponding TX CQE.
  */
 struct uct_srd_send_desc {
     uct_srd_send_op_t            super;
