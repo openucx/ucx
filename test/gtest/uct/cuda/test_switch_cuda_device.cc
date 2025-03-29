@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <ucs/sys/ptr_arith.h>
+#include <uct/base/uct_md.h>
 }
 
 #include <cuda.h>
@@ -484,3 +485,177 @@ UCS_TEST_P(test_p2p_no_current_cuda_ctx, get_zcopy)
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_p2p_no_current_cuda_ctx, cuda_copy)
+
+class test_p2p_send_on_diff_device : public uct_p2p_test {
+public:
+    typedef ucs_status_t (test_p2p_send_on_diff_device::*rma_send_func_t)(
+                          uct_ep_h, const void*, size_t, uint64_t, uct_rkey_t);
+
+    using rkey_mem_pair_t = std::pair<uct_rkey_bundle_t, uct_mem_h>;
+
+    test_p2p_send_on_diff_device() : uct_p2p_test(0), m_num_devices(0) {}
+
+    template<typename mem_src_t, typename mem_dest_t>
+    void send_diff_device(const std::vector<rma_send_func_t>& send_funcs,
+                          ucs_memory_type_t src_type,
+                          ucs_memory_type_t dest_type)
+    {
+        int current_device;
+        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+
+        const size_t size = UCS_MBYTE;
+        mem_src_t src_buf(size, src_type);
+        mem_dest_t dest_buf(size, dest_type);
+        rkey_mem_pair_t rkey_dest = rkey_unpack(sender(), dest_buf.ptr(), size);
+
+        // Set different device context and call send op
+        ASSERT_EQ(cudaSetDevice((current_device + 1) % m_num_devices), cudaSuccess);
+
+        for (const auto& send_func : send_funcs) {
+            ASSERT_UCS_OK_OR_INPROGRESS(
+              (this->*send_func)(sender_ep(), src_buf.ptr(), size,
+                                (uint64_t)dest_buf.ptr(), rkey_dest.first.rkey));
+            sender().flush();
+        }
+
+        rkey_release(sender(), rkey_dest);
+
+        // Set back an original device to avoid test failures
+        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+    }
+
+    template<typename mem_alloc_t1, typename mem_alloc_t2>
+    void test_diff_device(const std::vector<rma_send_func_t>& send_funcs,
+                          ucs_memory_type_t mem_type1,
+                          ucs_memory_type_t mem_type2)
+    {
+        send_diff_device<mem_alloc_t1, mem_alloc_t2> (send_funcs, mem_type1,
+                                                      mem_type2);
+        send_diff_device<mem_alloc_t2, mem_alloc_t1> (send_funcs, mem_type2,
+                                                      mem_type1);
+    }
+
+    ucs_status_t uct_put_short(uct_ep_h ep, const void *send_buf, size_t size,
+                               uint64_t recv_buf, uct_rkey_t rkey)
+    {
+        return uct_ep_put_short(ep, send_buf, size, recv_buf, rkey);
+    }
+
+    ucs_status_t uct_put_zcopy(uct_ep_h ep, const void *send_buf, size_t size,
+                               uint64_t recv_buf, uct_rkey_t rkey)
+    {
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, send_buf, size, NULL, 1);
+        return uct_ep_put_zcopy(ep, iov, iovcnt, recv_buf, rkey, NULL);
+    }
+
+    ucs_status_t uct_get_short(uct_ep_h ep, const void *send_buf, size_t size,
+                               uint64_t recv_buf, uct_rkey_t rkey)
+    {
+        return uct_ep_get_short(ep, (void*)send_buf, size, recv_buf, rkey);
+    }
+
+    ucs_status_t uct_get_zcopy(uct_ep_h ep, const void *send_buf, size_t size,
+                               uint64_t recv_buf, uct_rkey_t rkey)
+    {
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, send_buf, size, NULL, 1);
+        return uct_ep_get_zcopy(ep, iov, iovcnt, recv_buf, rkey, NULL);
+    }
+
+    const std::vector<rma_send_func_t> short_funcs() const
+    {
+        return {&test_p2p_send_on_diff_device::uct_put_short,
+                &test_p2p_send_on_diff_device::uct_get_short};
+    }
+
+    const std::vector<rma_send_func_t> zcopy_funcs() const
+    {
+        return {&test_p2p_send_on_diff_device::uct_put_zcopy,
+                &test_p2p_send_on_diff_device::uct_get_zcopy};
+    }
+
+protected:
+    void init() override
+    {
+        ASSERT_EQ(cudaGetDeviceCount(&m_num_devices), cudaSuccess);
+        if (m_num_devices < 2) {
+            UCS_TEST_SKIP_R("less than two cuda devices available");
+        }
+        uct_p2p_test::init();
+    }
+
+private:
+    rkey_mem_pair_t rkey_unpack(entity &e, void *buf, size_t size)
+    {
+        uct_md_mem_reg_params_t reg_params = {};
+        uct_rkey_bundle_t rkey             = {};
+        uct_mem_h memh                     = NULL;
+
+        ASSERT_UCS_OK(uct_md_mem_reg_v2(e.md(), buf, size, &reg_params, &memh));
+
+        if (e.md_attr().rkey_packed_size == 0) {
+            return {rkey, memh};
+        }
+
+        std::vector<uint8_t> packed_rkey(e.md_attr().rkey_packed_size);
+        uct_md_mkey_pack_params_t pack_params = {};
+        ASSERT_UCS_OK(uct_md_mkey_pack_v2(e.md(), memh, buf, size, &pack_params,
+                      packed_rkey.data()));
+
+        uct_rkey_unpack_params_t unpack_params = {};
+        ASSERT_UCS_OK(uct_rkey_unpack_v2(e.md()->component, packed_rkey.data(),
+                      &unpack_params, &rkey));
+
+        return {rkey, memh};
+    }
+
+    void rkey_release(entity &e, rkey_mem_pair_t &rkey)
+    {
+        uct_rkey_release(e.md()->component, &rkey.first);
+
+        uct_md_mem_dereg_params_t dereg_params;
+        dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+        dereg_params.memh       = rkey.second;
+        ASSERT_UCS_OK(uct_md_mem_dereg_v2(e.md(), &dereg_params));
+    }
+
+    int                          m_num_devices;
+};
+
+UCS_TEST_P(test_p2p_send_on_diff_device, vmm_short)
+{
+    test_diff_device<cuda_vmm_mem_buffer, mem_buffer>(
+                     short_funcs(), UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_HOST);
+}
+
+UCS_TEST_P(test_p2p_send_on_diff_device, vmm_zcopy)
+{
+    test_diff_device<cuda_vmm_mem_buffer, mem_buffer>(
+                     zcopy_funcs(), UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_HOST);
+}
+
+UCS_TEST_P(test_p2p_send_on_diff_device, legacy_short)
+{
+    test_diff_device<mem_buffer, mem_buffer>(
+                     short_funcs(), UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_HOST);
+}
+
+UCS_TEST_P(test_p2p_send_on_diff_device, legacy_zcopy)
+{
+    test_diff_device<mem_buffer, mem_buffer>(
+                     zcopy_funcs(), UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_HOST);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_p2p_send_on_diff_device, cuda_copy)
+
+class test_p2p_send_on_diff_device_cuda_ipc : public test_p2p_send_on_diff_device {
+};
+
+#if HAVE_CUDA_FABRIC
+UCS_TEST_P(test_p2p_send_on_diff_device_cuda_ipc, fabric_zcopy)
+{
+    send_diff_device<cuda_fabric_mem_buffer, cuda_fabric_mem_buffer>(
+                     zcopy_funcs(), UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_CUDA);
+}
+#endif //HAVE_CUDA_FABRIC
+
+_UCT_INSTANTIATE_TEST_CASE(test_p2p_send_on_diff_device_cuda_ipc, cuda_ipc)
