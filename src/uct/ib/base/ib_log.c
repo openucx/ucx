@@ -171,14 +171,14 @@ static void uct_ib_dump_wr_opcode(struct ibv_qp *qp, uint64_t wr_id,
 }
 
 static void uct_ib_dump_wr(struct ibv_qp *qp, uct_ib_opcode_t *op,
-                           struct ibv_send_wr *wr, char *buf, size_t max)
+                           struct ibv_send_wr *wr, char *buf, size_t max,
+                           struct ibv_ah *ah, int remote_qpn)
 {
     char *s    = buf;
     char *ends = buf + max;
 
-    if (qp->qp_type == IBV_QPT_UD) {
-        snprintf(s, ends - s, " [rqpn 0x%x ah %p]", wr->wr.ud.remote_qpn,
-                 wr->wr.ud.ah);
+    if (ah != NULL) {
+        snprintf(s, ends - s, " [rqpn 0x%x ah %p]", remote_qpn, ah);
         s += strlen(s);
     }
 
@@ -205,10 +205,11 @@ static void uct_ib_dump_wr(struct ibv_qp *qp, uct_ib_opcode_t *op,
     }
 }
 
-static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
-                                struct ibv_send_wr *wr, int max_sge,
-                                uct_log_data_dump_func_t data_dump,
-                                char *buf, size_t max)
+static void uct_ib_dump_send_wr_ah(uct_ib_iface_t *iface, struct ibv_qp *qp,
+                                   struct ibv_send_wr *wr, int max_sge,
+                                   uct_log_data_dump_func_t data_dump,
+                                   char *buf, size_t max, struct ibv_ah *ah,
+                                   int remote_qpn)
 {
     static uct_ib_opcode_t opcodes[] = {
         [IBV_WR_RDMA_WRITE]           = { "RDMA_WRITE", UCT_IB_OPCODE_FLAG_HAS_RADDR },
@@ -226,13 +227,33 @@ static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
     uct_ib_dump_wr_opcode(qp, wr->wr_id, op, wr->send_flags, s, ends - s);
     s += strlen(s);
 
-    uct_ib_dump_wr(qp, op, wr, s, ends - s);
+    uct_ib_dump_wr(qp, op, wr, s, ends - s, ah, remote_qpn);
     s += strlen(s);
 
     uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, NULL, wr->sg_list,
                             wr->num_sge,
                             (wr->send_flags & IBV_SEND_INLINE) ? -1 : 0,
                             data_dump, max_sge, s, ends - s);
+}
+
+static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
+                                struct ibv_send_wr *wr, int max_sge,
+                                uct_log_data_dump_func_t data_dump, char *buf,
+                                size_t max)
+{
+    struct ibv_ah *ah;
+    int remote_qpn;
+
+    if (qp->qp_type == IBV_QPT_UD) {
+        ah         = wr->wr.ud.ah;
+        remote_qpn = wr->wr.ud.remote_qpn;
+    } else {
+        ah         = NULL;
+        remote_qpn = -1;
+    }
+
+    uct_ib_dump_send_wr_ah(iface, qp, wr, max_sge, data_dump, buf, max, ah,
+                           remote_qpn);
 }
 
 void uct_ib_memlock_limit_msg(ucs_string_buffer_t *message, int sys_errno)
@@ -250,6 +271,20 @@ void uct_ib_memlock_limit_msg(ucs_string_buffer_t *message, int sys_errno)
                     memlock_limit / UCS_KBYTE);
         }
     }
+}
+
+void __uct_ib_log_post_send_one(const char *file, int line,
+                                const char *function, uct_ib_iface_t *iface,
+                                struct ibv_qp *qp, struct ibv_send_wr *wr,
+                                int max_sge,
+                                uct_log_data_dump_func_t data_dump_cb,
+                                struct ibv_ah *ah, int remote_qpn)
+{
+    char buf[256] = {0};
+
+    uct_ib_dump_send_wr_ah(iface, qp, wr, max_sge, data_dump_cb, buf,
+                           sizeof(buf) - 1, ah, remote_qpn);
+    uct_log_data(file, line, function, buf);
 }
 
 void __uct_ib_log_post_send(const char *file, int line, const char *function,
