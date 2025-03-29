@@ -1197,7 +1197,7 @@ UCS_TEST_P(test_cuda, sparse_regions)
     }
 
     /* make CUDA registrations list sparse */
-    for (int i = 0; i < count; i++) {
+    for (int i = 1; i < count; i++) {
         if ((i & 1) == 0) {
             free_memory(ptr[i], UCS_MEMORY_TYPE_CUDA);
         }

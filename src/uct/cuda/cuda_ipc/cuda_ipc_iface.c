@@ -326,6 +326,7 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
     status = uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid,
                                           cuda_ipc_event->d_bptr,
                                           cuda_ipc_event->mapped_addr,
+                                          cuda_ipc_event->cuda_device,
                                           iface->config.enable_cache);
     if (status != UCS_OK) {
         ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
