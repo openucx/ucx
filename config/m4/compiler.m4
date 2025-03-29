@@ -456,7 +456,7 @@ AS_IF([test "x$enable_gcov" = xyes],
 AC_ARG_ENABLE([stack-usage-check],
         AS_HELP_STRING([--enable-stack-usage-check], [Enable stack usage check with -Wframe-larger-than=8192]),
         [],
-        [enable_stack_usage_check=yes])
+        [enable_stack_usage_check=no])
 
 AS_IF([test "x$enable_stack_usage_check" = xyes],
       [AS_IF([test "x$enable_asan" = xyes],

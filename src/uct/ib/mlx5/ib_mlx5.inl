@@ -42,7 +42,6 @@ uct_ib_mlx5_cqe_is_hw_owned(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe,
     }
 }
 
-
 /**
  * Checks that cqe_format is equal to 3 (cqe is a part of compression block)
  * or opcode contains information about error.
@@ -74,6 +73,12 @@ static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_stride(int num_sge)
              (num_sge * sizeof(struct mlx5_wqe_data_seg));
 
     return ucs_roundup_pow2(stride);
+}
+
+static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_calc_num_sges(int stride_size)
+{
+    return (stride_size - sizeof(struct mlx5_wqe_srq_next_seg)) /
+           sizeof(struct mlx5_wqe_data_seg);
 }
 
 static UCS_F_ALWAYS_INLINE int

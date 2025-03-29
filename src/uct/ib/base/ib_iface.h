@@ -243,7 +243,9 @@ struct uct_ib_iface_config {
     /**
      * Estimated overhead of preparing a work request and posting it to the NIC
      */
-    uct_ib_iface_send_overhead_t     send_overhead;
+    uct_ib_iface_send_overhead_t send_overhead;
+
+    unsigned                     stride_size;
 };
 
 
@@ -363,6 +365,8 @@ struct uct_ib_iface {
         uint8_t                          counter_set_id;
         uct_ib_iface_send_overhead_t     send_overhead;
         uct_ib_iface_reachability_mode_t reachability_mode;
+        unsigned                         max_send_message_size_strides;
+        unsigned                         stride_size;
     } config;
 
     uct_ib_iface_ops_t        *ops;
@@ -591,6 +595,13 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
                                                uct_ib_iface_recv_desc_t *desc)
 {
     return (void*)((char *)desc + iface->config.rx_hdr_offset);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_iface_max_message_size(uct_ib_iface_t *iface)
+{
+    return iface->config.max_send_message_size_strides *
+           iface->config.stride_size;
 }
 
 typedef struct uct_ib_recv_wr {
