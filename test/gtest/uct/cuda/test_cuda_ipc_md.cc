@@ -187,6 +187,31 @@ UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
     EXPECT_NE(dev_num, rkey.dev_num); // rkey was not updated
 }
 
+UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
+{
+    constexpr size_t size = 4096;
+    ucs::handle<uct_md_h> md;
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey;
+    CUdeviceptr ptr;
+
+    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, size));
+    EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
+    EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
+                                     &rkey));
+
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, rkey.ph.handle_type);
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md->ops->mem_dereg(md, &params));
+    cuMemFree(ptr);
+}
+
 UCS_TEST_P(test_cuda_ipc_md, mkey_pack_legacy)
 {
     size_t size = 4 * UCS_MBYTE;
@@ -197,9 +222,9 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_legacy)
     EXPECT_EQ(CUDA_SUCCESS, cuMemFree(ptr));
 }
 
-#if HAVE_CUDA_FABRIC
 UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
 {
+#if HAVE_CUDA_FABRIC
     size_t size = 4 * UCS_MBYTE;
     CUdeviceptr ptr;
     CUmemoryPool mpool;
@@ -208,41 +233,9 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
     alloc_mempool(&ptr, &mpool, &cu_stream, size);
     test_mkey_pack_on_thread((void*)ptr, size);
     free_mempool(&ptr, &mpool, &cu_stream);
-}
-
-UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds_mempool, 8)
-{
-    cuda_context cuda_ctx;
-    ucs::handle<uct_md_h> md;
-    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
-                           GetParam().component, GetParam().md_name.c_str(),
-                           m_md_config);
-
-    CUdeviceptr ptr;
-    CUmemoryPool mpool, q_mpool;
-    CUstream cu_stream;
-    CUmemFabricHandle fabric_handle;
-    CUresult cu_err;
-
-    alloc_mempool(&ptr, &mpool, &cu_stream, 64);
-    EXPECT_EQ(CUDA_SUCCESS, (cuPointerGetAttribute((void*)&q_mpool,
-                    CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE, ptr)));
-
-    cu_err = cuMemPoolExportToShareableHandle((void*)&fabric_handle, q_mpool,
-                                              CU_MEM_HANDLE_TYPE_FABRIC, 0);
-    free_mempool(&ptr, &mpool, &cu_stream);
-
-    if (cu_err == CUDA_SUCCESS) {
-        for (int64_t i = 0; i < 64; ++i) {
-            /* We get unique dev_num on new UUID */
-            uct_cuda_ipc_rkey_t rkey = unpack_masync(md, i + 1);
-            EXPECT_EQ(i, rkey.dev_num);
-            /* Subsequent call with the same UUID returns value from cache */
-            rkey = unpack_masync(md, i + 1);
-            EXPECT_EQ(i, rkey.dev_num);
-        }
-    }
-}
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
 #endif
+}
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);

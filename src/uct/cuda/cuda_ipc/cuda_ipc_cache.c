@@ -348,7 +348,7 @@ static ucs_status_t uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key,
                                                 CUdevice cu_dev,
                                                 CUdeviceptr *mapped_addr)
 {
-    ucs_log_level_t log_level;
+    ucs_log_level_t level;
 
     ucs_trace("key handle type %u", key->ph.handle_type);
 
@@ -362,15 +362,15 @@ static ucs_status_t uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key,
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL:
         return uct_cuda_ipc_open_memhandle_mempool(key, cu_dev, mapped_addr);
 #endif
-    case UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR:
-        log_level = UCS_LOG_LEVEL_DEBUG;
+    case UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC:
+        level = UCS_LOG_LEVEL_DEBUG;
         break;
     default:
-        log_level = UCS_LOG_LEVEL_ERROR;
+        level = UCS_LOG_LEVEL_ERROR;
         break;
     }
 
-    ucs_log(log_level, "unsupported key handle type: %u", key->ph.handle_type);
+    ucs_log(level, "unsupported key handle type: %u", key->ph.handle_type);
     return UCS_ERR_INVALID_PARAM;
 }
 
