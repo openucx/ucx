@@ -15,7 +15,7 @@
 
 
 typedef enum uct_cuda_ipc_key_handle {
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR = 0,
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC = 0,
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
 #if HAVE_CUDA_FABRIC
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
