@@ -53,7 +53,7 @@ uct_srd_iface_create_qp(uct_srd_iface_t *iface,
                         const uct_srd_iface_config_t *config,
                         struct efadv_device_attr *efa_attr)
 {
-#ifdef HAVE_DECL_EFA_DV_RDMA_READ
+#ifdef HAVE_DECL_EFADV_DEVICE_ATTR_CAPS_RDMA_READ
     struct efadv_qp_init_attr efa_qp_init_attr = {0};
     struct ibv_qp_init_attr_ex qp_init_attr    = {0};
 #else
@@ -74,12 +74,13 @@ uct_srd_iface_create_qp(uct_srd_iface_t *iface,
     qp_init_attr.cap.max_recv_wr     = ucs_min(config->super.rx.queue_len,
                                                efa_attr->max_rq_wr);
     qp_init_attr.cap.max_send_sge    = ucs_min(config->super.tx.min_sge + 1,
-                                               efa_attr->max_sq_sge);
+                                               IBV_DEV_ATTR(&md->super.dev,
+                                                            max_sge_rd));
     qp_init_attr.cap.max_recv_sge    = 1;
     qp_init_attr.cap.max_inline_data = ucs_min(config->super.tx.min_inline,
                                                md->super.dev.max_inline_data);
 
-#ifdef HAVE_DECL_EFA_DV_RDMA_READ
+#ifdef HAVE_DECL_EFADV_DEVICE_ATTR_CAPS_RDMA_READ
     qp_init_attr.pd             = pd;
     qp_init_attr.comp_mask      = IBV_QP_INIT_ATTR_PD |
                                   IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
@@ -110,10 +111,14 @@ uct_srd_iface_create_qp(uct_srd_iface_t *iface,
         return UCS_ERR_IO_ERROR;
     }
 
-    iface->config.max_inline = qp_init_attr.cap.max_inline_data;
-    iface->config.tx_qp_len  = qp_init_attr.cap.max_send_wr;
-    iface->tx.available      = qp_init_attr.cap.max_send_wr;
-    iface->rx.available      = qp_init_attr.cap.max_recv_wr;
+    iface->config.max_send_sge  = qp_init_attr.cap.max_send_sge;
+    iface->config.max_get_zcopy = efa_attr->max_rdma_size;
+    iface->config.max_get_bcopy = ucs_min(iface->super.config.seg_size,
+                                          efa_attr->max_rdma_size);
+    iface->config.max_inline    = qp_init_attr.cap.max_inline_data;
+    iface->config.tx_qp_len     = qp_init_attr.cap.max_send_wr;
+    iface->tx.available         = qp_init_attr.cap.max_send_wr;
+    iface->rx.available         = qp_init_attr.cap.max_recv_wr;
 
     ucs_debug("iface=%p: created SRD QP 0x%x on " UCT_IB_IFACE_FMT
               " TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
@@ -203,9 +208,18 @@ uct_srd_iface_post_recv(uct_srd_iface_t *iface)
 {
     unsigned batch = iface->super.config.rx_max_batch;
 
-    if (iface->rx.available >= batch) {
+    while (iface->rx.available >= batch) {
         uct_srd_iface_post_recv_always(iface, batch);
     }
+}
+
+static void
+uct_srd_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
+{
+    uct_srd_send_desc_t *desc = obj;
+
+    *(uint32_t*)&desc->lkey = uct_ib_memh_get_lkey(memh);
+    desc->super.ep          = NULL;
 }
 
 #ifdef ENABLE_STATS
@@ -283,12 +297,25 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_cleanup_stats_node;
     }
 
+    status = uct_iface_mpool_init(&self->super.super, &self->tx.send_desc_mp,
+                                  sizeof(uct_srd_send_desc_t) +
+                                      self->super.config.seg_size,
+                                  sizeof(uct_srd_send_desc_t),
+                                  UCT_SRD_SEND_DESC_ALIGN,
+                                  &config->super.tx.mp,
+                                  self->config.tx_qp_len,
+                                  uct_srd_iface_send_desc_init,
+                                  "srd_send_desc");
+    if (status != UCS_OK) {
+        goto err_cleanup_send_op_mp;
+    }
+
     kh_init_inplace(uct_srd_rx_ctx_hash, &self->rx.ctx_hash);
 
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "srd_recv_desc", &self->rx.mp);
     if (status != UCS_OK) {
-        goto err_cleanup_send_op_mp;
+        goto err_cleanup_send_desc_mp;
     }
 
     status = uct_srd_iface_create_qp(self, config, &efa_attr);
@@ -299,18 +326,17 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     uct_ud_send_wr_init(&self->tx.wr_inl, self->tx.sge, 1);
     uct_ud_send_wr_init(&self->tx.wr_desc, self->tx.sge, 0);
 
+    self->tx.send_desc         = NULL;
     self->super.config.sl      = uct_ib_iface_config_select_sl(&config->super);
-    self->config.max_send_sge  = efa_attr.max_sq_sge;
-    self->config.max_get_zcopy = efa_attr.max_rdma_size;
 
-    while (self->rx.available >= self->super.config.rx_max_batch) {
-        uct_srd_iface_post_recv(self);
-    }
+    uct_srd_iface_post_recv(self);
 
     return UCS_OK;
 
 err_cleanup_rx_mp:
     ucs_mpool_cleanup(&self->rx.mp, 1);
+err_cleanup_send_desc_mp:
+    ucs_mpool_cleanup(&self->tx.send_desc_mp, 1);
 err_cleanup_send_op_mp:
     ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
 err_cleanup_stats_node:
@@ -347,6 +373,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_iface_t)
     kh_destroy_inplace(uct_srd_rx_ctx_hash, &self->rx.ctx_hash);
     ucs_mpool_cleanup(&self->rx.mp, 0);
     ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
+
+    if (self->tx.send_desc != NULL) {
+        ucs_mpool_put(self->tx.send_desc);
+    }
+
+    ucs_mpool_cleanup(&self->tx.send_desc_mp, 1);
     UCS_STATS_NODE_FREE(self->stats);
 }
 
@@ -580,7 +612,7 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
             iface->config.max_inline, sizeof(uct_srd_hdr_t));
 
     /* GET */
-    iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.get.max_bcopy = iface->config.max_get_bcopy;
     iface_attr->cap.get.max_zcopy = iface->config.max_get_zcopy;
     iface_attr->cap.get.max_iov   = iface->config.max_send_sge;
     iface_attr->cap.get.min_zcopy =
@@ -624,12 +656,11 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .ep_connect_to_ep         = (uct_ep_connect_to_ep_func_t)
         ucs_empty_function_return_unsupported,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_srd_ep_t),
-    .ep_am_bcopy              = (uct_ep_am_bcopy_func_t)
-        ucs_empty_function_return_unsupported,
+    .ep_am_bcopy              = uct_srd_ep_am_bcopy,
     .ep_am_zcopy              = (uct_ep_am_zcopy_func_t)
         ucs_empty_function_return_unsupported,
-    .ep_get_zcopy             = (uct_ep_get_zcopy_func_t)
-        ucs_empty_function_return_unsupported,
+    .ep_get_zcopy             = uct_srd_ep_get_zcopy,
+    .ep_get_bcopy             = uct_srd_ep_get_bcopy,
     .ep_am_short              = uct_srd_ep_am_short,
     .ep_am_short_iov          = (uct_ep_am_short_iov_func_t)
         ucs_empty_function_return_unsupported,
