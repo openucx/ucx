@@ -17,6 +17,7 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <stddef.h>
+#include <sched.h>
 
 BEGIN_C_DECLS
 
