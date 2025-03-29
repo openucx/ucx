@@ -11,6 +11,7 @@ dist_examples_DATA =   \
 	ucp_hello_world.c  \
 	uct_hello_world.c  \
 	ucp_client_server.c \
+	ucp_client_server_multi_dev.c \
 	ucp_util.h
 
 if HAVE_CUDA
@@ -34,14 +35,16 @@ installcheck-local:
 	$(CC) -o uct_hello_world   $(examplesdir)/uct_hello_world.c   -luct $(EXAMPLE_CCLD_FLAGS)
 	$(CC) -o ucp_hello_world   $(examplesdir)/ucp_hello_world.c   -lucp $(EXAMPLE_CCLD_FLAGS)
 	$(CC) -o ucp_client_server $(examplesdir)/ucp_client_server.c -lucp $(EXAMPLE_CCLD_FLAGS)
-	$(RM) *.o uct_hello_world ucp_hello_world ucp_client_server
+	$(CC) -o ucp_client_server_multi_dev $(examplesdir)/ucp_client_server_multi_dev.c -lucp $(EXAMPLE_CCLD_FLAGS)
+	$(RM) *.o uct_hello_world ucp_hello_world ucp_client_server ucp_client_server_multi_dev
 
 if HAVE_EXAMPLES
 
 noinst_PROGRAMS = \
 	ucp_hello_world \
 	uct_hello_world \
-	ucp_client_server
+	ucp_client_server \
+	ucp_client_server_multi_dev
 
 ucp_hello_world_SOURCES  = ucp_hello_world.c
 ucp_hello_world_CFLAGS   = $(BASE_CFLAGS) $(EXAMPLE_CUDA_CFLAGS)
@@ -66,5 +69,15 @@ ucp_client_server_LDFLAGS  = $(EXAMPLE_CUDA_LD_FLAGS)
 ucp_client_server_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                              $(top_builddir)/src/ucp/libucp.la \
                              $(EXAMPLE_CUDA_LIBS)
+
+ucp_client_server_multi_dev_SOURCES  = ucp_client_server_multi_dev.c
+ucp_client_server_multi_dev_CFLAGS   = $(BASE_CFLAGS) $(EXAMPLE_CUDA_CFLAGS)
+ucp_client_server_multi_dev_CPPFLAGS = $(BASE_CPPFLAGS) $(EXAMPLE_CUDA_CPPFLAGS)
+ucp_client_server_multi_dev_LDFLAGS  = $(EXAMPLE_CUDA_LD_FLAGS)
+ucp_client_server_multi_dev_LDADD    = $(top_builddir)/src/ucs/libucs.la \
+                                       $(top_builddir)/src/ucp/libucp.la \
+                                       $(EXAMPLE_CUDA_LIBS)
+
+
 
 endif
