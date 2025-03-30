@@ -12,6 +12,7 @@
 
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
+#include <uct/cuda/base/cuda_iface.h>
 }
 
 class test_cuda_ipc_md : public test_md {
@@ -110,10 +111,35 @@ protected:
        std::exception_ptr thread_exception;
        std::thread([&]() {
            try {
-               uct_md_mkey_pack_params_t params = {};
+               uct_md_mkey_pack_params_t pack_params = {};
                std::vector<uint8_t> rkey(md_attr().rkey_packed_size);
-               ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, ptr, size, &params,
-                                                 rkey.data()));
+               ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, ptr, size,
+                                                 &pack_params, rkey.data()));
+
+               // No context and sys_dev is not provided
+               uct_rkey_unpack_params_t unpack_params = {};
+               ucs_status_t status = uct_rkey_unpack_v2(
+                                         md()->component, rkey.data(),
+                                         &unpack_params, NULL);
+               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+
+               // No context and unknown sys_dev is provided
+               unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
+               unpack_params.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+               status = uct_rkey_unpack_v2(md()->component, rkey.data(),
+                                           &unpack_params, NULL);
+               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+
+               // No context and some valid sys_dev is provided, but
+               // cuIpcOpenMemHandle used by cuda_ipc_cache does not allow to
+               // open a handle that was created by the same process
+               ucs_sys_device_t sys_dev;
+               uct_cuda_base_get_sys_dev(0, &sys_dev);
+
+               unpack_params.sys_device = sys_dev;
+               status = uct_rkey_unpack_v2(md()->component, rkey.data(),
+                                           &unpack_params, NULL);
+               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
            } catch (...) {
                thread_exception = std::current_exception();
            }
@@ -184,32 +210,6 @@ UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
     params.memh       = memh;
     EXPECT_UCS_OK(md->ops->mem_dereg(md, &params));
     cuMemFree(ptr);
-}
-
-UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
-{
-    cuda_context cuda_ctx;
-    ucs::handle<uct_md_h> md;
-    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
-                           GetParam().component, GetParam().md_name.c_str(),
-                           m_md_config);
-
-    {
-        /* Create and destroy temporary MD */
-        ucs::handle<uct_md_h> tmp_md;
-        UCS_TEST_CREATE_HANDLE(uct_md_h, tmp_md, uct_md_close, uct_md_open,
-                               GetParam().component, GetParam().md_name.c_str(),
-                               m_md_config);
-    }
-
-    for (int64_t i = 0; i < 64; ++i) {
-        /* We get unique dev_num on new UUID */
-        uct_cuda_ipc_rkey_t rkey = unpack(md, i + 1);
-        EXPECT_EQ(i, rkey.dev_num);
-        /* Subsequent call with the same UUID returns value from cache */
-        rkey = unpack(md, i + 1);
-        EXPECT_EQ(i, rkey.dev_num);
-    }
 }
 
 UCS_TEST_P(test_cuda_ipc_md, mkey_pack_legacy)
