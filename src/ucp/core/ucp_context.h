@@ -205,10 +205,13 @@ typedef struct ucp_context_config {
     double                                 rcache_overhead;
     /** UCP extra operation attributes flags */
     uint64_t                               extra_op_attr_flags;
-    /* Upper limit to the amount of prioritized endpoints */
+    /** Upper limit to the amount of prioritized endpoints */
     unsigned                               max_priority_eps;
     /* Use AM lane to send wireup messages */
     int                                    wireup_via_am_lane;
+    /** Extend endpoint lanes connections of each local device to all remote
+     *  devices */
+    int                                    connect_all_to_all;
 } ucp_context_config_t;
 
 
