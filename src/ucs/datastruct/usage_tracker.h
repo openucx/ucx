@@ -65,6 +65,8 @@ typedef struct ucs_usage_tracker {
     ucs_usage_tracker_hash_t   hash;
     /* LRU cache to track most active entries */
     ucs_lru_h                  lru;
+    /* Flag to indicate whether progress is currently performed */
+    uint8_t                    in_use;
 } ucs_usage_tracker_t;
 
 
