@@ -620,6 +620,11 @@ ucp_wireup_send_rank_update(ucp_ep_h ep, uint8_t type, int is_external_event)
         return;
     }
 
+    if ((ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED) ||
+        (ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
+        return;
+    }
+
     ucs_debug("ep %p: send %s request to %p (score: %.2f)", ep,
               ucp_wireup_msg_str(type), (void*)ucp_ep_remote_id(ep),
               ucp_wireup_get_ep_usage_score(ep));
@@ -792,9 +797,9 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
     if (ep != NULL) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
-        ucp_ep_update_remote_id(ep, msg->src_ep_id);
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
         ucp_ep_match_remove_ep(worker, ep);
+        ucp_ep_update_remote_id(ep, msg->src_ep_id);
     } else {
         ucs_assert(msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID);
         status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address,
@@ -888,8 +893,14 @@ static UCS_F_NOINLINE void ucp_wireup_process_promotion_request(
     ucs_status_t status;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PROMOTE);
+    usage_tracker = worker->usage_tracker.handle;
+    ucs_assert_always(usage_tracker != NULL);
 
     if (ep == NULL) {
+        if (kh_size(&usage_tracker->hash) >= usage_tracker->params.promote_thresh) {
+            return;
+        }
+
         status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address,
                                               msg->conn_sn, ep_init_flags, &ep);
         if (status != UCS_OK) {
@@ -900,8 +911,10 @@ static UCS_F_NOINLINE void ucp_wireup_process_promotion_request(
         }
     }
 
-    /* Prevent a race between 2 simultaneous requests */
-    if (ucp_wireup_should_ignore_request(ep, remote_address->uuid,
+    /* Prevent redundent promotion if request was sent */
+    if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
+        /* Prevent a race between 2 simultaneous requests */
+        ucp_wireup_should_ignore_request(ep, remote_address->uuid,
                                          UCP_WIREUP_MSG_PROMOTE)) {
         return;
     }
@@ -1593,7 +1606,7 @@ static int ucp_wireup_is_am_need_flush(ucp_ep_h ep,
            /* Lane is not being reused by new AM lane */
            (reuse_lane_map[am_lane] != key->am_lane) &&
            /* Lane is operational */
-           ((ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) ||
+           (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
             !ucp_ep_is_lane_p2p(ep, am_lane));
 }
 
@@ -1658,7 +1671,8 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
     /* AM flush is not needed */
     return !ucp_wireup_is_am_need_flush(ep, new_key, reuse_lane_map) ||
            /* AM and wireup lanes are the same lane */
-           (ucp_ep_get_am_lane(ep) == ucp_wireup_get_reconfig_msg_lane(ep));
+           (ucp_ep_get_am_lane(ep) == ucp_wireup_get_reconfig_msg_lane(ep)) ||
+           !(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED);
 }
 
 static int ucp_wireup_should_reconfigure(ucp_ep_h ep,
@@ -2232,7 +2246,8 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     ucp_wireup_ep_set_next_ep(ucp_ep_get_lane(ep, lane), uct_ep,
                               ucp_ep_get_rsc_index(ep, lane));
 
-    if (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
+    if (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) &&
+        !(ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED)) {
         status = ucp_wireup_send_request(ep);
         if (status != UCS_OK) {
             goto err_destroy_wireup_ep;
