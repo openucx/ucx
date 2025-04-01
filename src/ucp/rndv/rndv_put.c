@@ -525,7 +525,8 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
 
-    status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type);
+    status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type,
+                                               rpriv->bulk.frag_sys_dev);
     if (status != UCS_OK) {
         ucp_proto_request_abort(req, status);
         return UCS_OK;
@@ -594,6 +595,7 @@ static void
 ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context = init_params->worker->context;
+    ucs_memory_type_t frag_mem_type;
     uct_completion_callback_t comp_cb;
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
@@ -611,19 +613,19 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
      * because pipeline protocols assume that both peers use the same
      * fragment sizes (and they are different for different memory types by
      * default). */
-    frag_mem_info.type = ucp_proto_rndv_put_mtype_frag_mem_type(
+    frag_mem_type = ucp_proto_rndv_put_mtype_frag_mem_type(
             context->config.ext.rndv_frag_mem_types,
             init_params->rkey_config_key->mem_type);
 
-    status = ucp_proto_rndv_mtype_init(init_params, frag_mem_info.type,
+    status = ucp_proto_rndv_mtype_init(init_params, frag_mem_type,
                                        &mdesc_md_map, &frag_size);
     if (status != UCS_OK) {
         return;
     }
 
-    status = ucp_mm_get_alloc_md_index(context, frag_mem_info.type,
-                                       &dummy_md_id,
-                                       &frag_mem_info.sys_dev);
+    status = ucp_mm_get_alloc_md_index(context, frag_mem_type,
+                                       init_params->select_param->sys_dev,
+                                       &dummy_md_id, &frag_mem_info);
     if (status != UCS_OK) {
         return;
     }

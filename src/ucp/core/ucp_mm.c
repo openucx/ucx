@@ -240,10 +240,11 @@ static int ucp_is_md_selected_by_config(ucp_context_h context,
            !strncmp(cfg_cmpt_name, cmpt_name, UCT_COMPONENT_NAME_MAX);
 }
 
-static ucs_status_t
-ucp_mem_do_alloc(ucp_context_h context, void *address, size_t length,
-                 unsigned uct_flags, ucs_memory_type_t mem_type,
-                 const char *name, uct_allocated_memory_t *mem)
+static ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
+                                     size_t length, unsigned uct_flags,
+                                     ucs_memory_type_t mem_type,
+                                     ucs_sys_device_t sys_dev, const char *name,
+                                     uct_allocated_memory_t *mem)
 {
     uct_alloc_method_t method;
     uct_mem_alloc_params_t params;
@@ -273,13 +274,15 @@ ucp_mem_do_alloc(ucp_context_h context, void *address, size_t length,
                                  UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
                                  UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
                                  UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
-                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME     |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEVICE;
         params.flags           = uct_flags;
         params.name            = name;
         params.mem_type        = mem_type;
         params.address         = address;
         params.mds.mds         = mds;
         params.mds.count       = num_mds;
+        params.sys_device      = sys_dev;
 
         status = uct_mem_alloc(length, &method, 1, &params, mem);
         if (status == UCS_OK) {
@@ -972,17 +975,18 @@ err_free_memh:
     goto out;
 }
 
-static ucs_status_t
-ucp_memh_alloc(ucp_context_h context, void *address, size_t length,
-               ucs_memory_type_t mem_type, uint8_t memh_flags,
-               unsigned uct_flags, const char *alloc_name, ucp_mem_h *memh_p)
+static ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address,
+                                   size_t length, ucs_memory_type_t mem_type,
+                                   ucs_sys_device_t sys_dev, uint8_t memh_flags,
+                                   unsigned uct_flags, const char *alloc_name,
+                                   ucp_mem_h *memh_p)
 {
     uct_allocated_memory_t mem;
     ucs_status_t status;
     ucp_mem_h memh;
 
     status = ucp_mem_do_alloc(context, address, length, uct_flags, mem_type,
-                              alloc_name, &mem);
+                              sys_dev, alloc_name, &mem);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1118,8 +1122,9 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     if (memh_flags & UCP_MEMH_FLAG_IMPORTED) {
         status = ucp_memh_import(context, exported_memh_buffer, &memh);
     } else if (flags & UCP_MEM_MAP_ALLOCATE) {
-        status = ucp_memh_alloc(context, address, length, mem_type, 0,
-                                uct_flags, alloc_name, &memh);
+        status = ucp_memh_alloc(context, address, length, mem_type,
+                                UCS_SYS_DEVICE_ID_UNKNOWN, 0, uct_flags,
+                                alloc_name, &memh);
     } else {
         status = ucp_memh_create(context, address, length, mem_type,
                                  UCT_ALLOC_METHOD_LAST, 0, uct_flags, &memh);
@@ -1351,8 +1356,9 @@ ucp_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **ch
     ucs_status_t status;
 
     status = ucp_memh_alloc(worker->context, NULL, *size_p + sizeof(*chunk_hdr),
-                            UCS_MEMORY_TYPE_HOST, UCP_MEMH_FLAG_NO_RCACHE,
-                            UCT_MD_MEM_ACCESS_RMA, ucs_mpool_name(mp), &memh);
+                            UCS_MEMORY_TYPE_HOST, UCS_SYS_DEVICE_ID_UNKNOWN,
+                            UCP_MEMH_FLAG_NO_RCACHE, UCT_MD_MEM_ACCESS_RMA,
+                            ucs_mpool_name(mp), &memh);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1387,6 +1393,7 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(mp);
     ucp_context_h context        = mpriv->worker->context;
     ucs_memory_type_t mem_type   = mpriv->mem_type;
+    ucs_sys_device_t sys_dev     = mpriv->sys_dev;
     size_t frag_size             = context->config.ext.rndv_frag_size[mem_type];
     ucp_rndv_frag_mp_chunk_hdr_t *chunk_hdr;
     ucs_status_t status;
@@ -1403,7 +1410,7 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 
     /* payload; need to get default flags from ucp_mem_map_params2uct_flags() */
     status = ucp_memh_alloc(context, NULL, frag_size * num_elems, mem_type,
-                            UCP_MEMH_FLAG_NO_RCACHE,
+                            sys_dev, UCP_MEMH_FLAG_NO_RCACHE,
                             UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK,
                             ucs_mpool_name(mp), &chunk_hdr->memh);
     if (status != UCS_OK) {
@@ -1729,10 +1736,11 @@ void ucp_mem_rcache_cleanup(ucp_context_h context)
     }
 }
 
-ucs_status_t
-ucp_mm_get_alloc_md_index(ucp_context_h context,
-                          ucs_memory_type_t alloc_mem_type,
-                          ucp_md_index_t *md_idx, ucs_sys_device_t *sys_dev)
+ucs_status_t ucp_mm_get_alloc_md_index(ucp_context_h context,
+                                       ucs_memory_type_t alloc_mem_type,
+                                       ucs_sys_device_t alloc_sys_dev,
+                                       ucp_md_index_t *md_idx_p,
+                                       ucp_memory_info_t *mem_info_p)
 {
     ucs_status_t status;
     uct_allocated_memory_t mem;
@@ -1742,8 +1750,8 @@ ucp_mm_get_alloc_md_index(ucp_context_h context,
         status = ucp_mem_do_alloc(context, NULL, 1,
                                   UCT_MD_MEM_ACCESS_RMA |
                                           UCT_MD_MEM_FLAG_HIDE_ERRORS,
-                                  alloc_mem_type, "get_alloc_md_id",
-                                  &mem);
+                                  alloc_mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
+                                  "get_alloc_md_id", &mem);
         if (status != UCS_OK) {
             return status;
         }
@@ -1763,8 +1771,17 @@ ucp_mm_get_alloc_md_index(ucp_context_h context,
         uct_mem_free(&mem);
     }
 
-    *md_idx  = context->alloc_md[alloc_mem_type].md_index;
-    *sys_dev = context->alloc_md[alloc_mem_type].sys_dev;
+    *md_idx_p        = context->alloc_md[alloc_mem_type].md_index;
+    mem_info_p->type = alloc_mem_type;
+
+    /* TODO: Extend the cache by alloc sys dev */
+    if (UCP_MEM_IS_HOST(alloc_mem_type) ||
+        (alloc_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        mem_info_p->sys_dev = context->alloc_md[alloc_mem_type].sys_dev;
+    } else {
+        mem_info_p->sys_dev = alloc_sys_dev;
+    }
+
     return UCS_OK;
 }
 
