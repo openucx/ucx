@@ -2406,8 +2406,8 @@ static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
     ucs_status_t status;
     ucs_usage_tracker_h handle;
 
-    worker->usage_tracker.handle = NULL;
     if (!ucp_context_usage_tracker_enabled(context)) {
+        worker->usage_tracker.handle = NULL;
         return UCS_OK;
     }
 
@@ -2416,8 +2416,8 @@ static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
     params.remove_thresh    = UCP_WORKER_USAGE_TRACKER_REMOVE_THRESHOLD;
     params.exp_decay.m      = UCP_WORKER_USAGE_TRACKER_EXP_DECAY_MULTIPLIER;
     params.exp_decay.c      = UCP_WORKER_USAGE_TRACKER_EXP_DECAY_ADDER;
-    params.promote_cb       = ucp_wireup_send_promotion_request;
-    params.demote_cb        = ucp_wireup_send_demotion_request;
+    params.promote_cb       = ucp_wireup_send_promote_request;
+    params.demote_cb        = ucp_wireup_send_demote_request;
 
     status = ucs_usage_tracker_create(&params, &handle);
     if (status != UCS_OK) {

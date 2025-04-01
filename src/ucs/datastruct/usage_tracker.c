@@ -135,20 +135,18 @@ int ucs_usage_tracker_is_promoted(ucs_usage_tracker_h usage_tracker, void *key)
     return kh_value(&usage_tracker->hash, iter).promoted;
 }
 
-ucs_status_t ucs_usage_tracker_get_score(ucs_usage_tracker_h usage_tracker,
-                                         void *key, double *score_p)
+double ucs_usage_tracker_get_score(ucs_usage_tracker_h usage_tracker, void *key)
 {
     ucs_usage_tracker_element_t *item;
     khiter_t iter;
 
     iter = kh_get(usage_tracker_hash, &usage_tracker->hash, (uint64_t)key);
     if (iter == kh_end(&usage_tracker->hash)) {
-        return UCS_ERR_NO_ELEM;
+        return 0.0;
     }
 
-    item     = &kh_value(&usage_tracker->hash, iter);
-    *score_p = ucs_usage_tracker_score(item);
-    return UCS_OK;
+    item = &kh_value(&usage_tracker->hash, iter);
+    return ucs_usage_tracker_score(item);
 }
 
 ucs_status_t
@@ -229,7 +227,9 @@ static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker,
         }
 
         item->promoted = 1;
-        params->promote_cb(item->key, params->promote_arg, is_external_event);
+        if (!is_external_event) {
+            params->promote_cb(item->key, params->promote_arg);
+        }
     }
 
     for (elem_index = params->promote_capacity; elem_index < elems_count;
@@ -241,7 +241,9 @@ static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker,
         }
 
         item->promoted = 0;
-        params->demote_cb(item->key, params->demote_arg, is_external_event);
+        if (!is_external_event) {
+            params->demote_cb(item->key, params->demote_arg);
+        }
     }
 
     ucs_free(elems_array);

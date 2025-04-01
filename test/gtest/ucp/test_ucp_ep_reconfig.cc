@@ -357,7 +357,8 @@ void test_ucp_ep_reconfig::entity::verify_configuration(
         unsigned actual_reused_rscs = UCS_STATIC_BITMAP_POPCOUNT(reused_rscs);
         /* Account for the case where we detach a single reused lane to allow
          * AM flush */
-        EXPECT_GE(actual_reused_rscs, min_reused_rscs - 1);
+        min_reused_rscs -= 1;
+        EXPECT_GE(actual_reused_rscs, min_reused_rscs);
     }
 }
 
@@ -606,7 +607,7 @@ UCS_TEST_P(test_reconfigure_update_rank, demote,
 
     /* Demote to DC */
     ucs_usage_tracker_remove(s_tracker, sender().ep());
-    ucp_wireup_send_demotion_request(sender().ep(), NULL, 0);
+    ucp_wireup_send_demote_request(sender().ep(), NULL);
     send_recv();
     verify_configuration();
 }

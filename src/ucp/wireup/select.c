@@ -2497,6 +2497,8 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     UCS_STATIC_BITMAP_AND_INPLACE(&scalable_tl_bitmap, tl_bitmap);
 
     if (!UCS_STATIC_BITMAP_IS_ZERO(scalable_tl_bitmap) &&
+        /* For prioritized EP we don't want to filter out TLs that may have
+         * better latency than scalable TLs */
         !ucp_ep_is_prioritized(ep)) {
         ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                       remote_address, scalable_tl_bitmap, 0);

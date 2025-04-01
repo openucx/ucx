@@ -230,11 +230,9 @@ double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *addr_entry);
 
-void ucp_wireup_send_promotion_request(void *entry, void *arg,
-                                       int is_external_event);
+void ucp_wireup_send_promote_request(void *entry, void *arg);
 
-void ucp_wireup_send_demotion_request(void *entry, void *arg,
-                                      int is_external_event);
+void ucp_wireup_send_demote_request(void *entry, void *arg);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {

@@ -27,8 +27,7 @@ typedef struct {
 
 
 /* Callback type for rank modify notification */
-typedef void (*ucs_usage_tracker_elem_update_cb_t)(void *entry, void *arg,
-                                                   int is_external_event);
+typedef void (*ucs_usage_tracker_elem_update_cb_t)(void *entry, void *arg);
 
 
 typedef struct {
@@ -128,13 +127,11 @@ void ucs_usage_tracker_set_min_score(ucs_usage_tracker_h usage_tracker,
  *
  * @param [in]  usage_tracker  Handle to the Usage Tracker object.
  * @param [in]  key            Key of the entry.
- * @param [out] score_p        Filled with the requested entry's score.
  *
- * @return UCS_OK if successful, or an error code as defined by
- * @ref ucs_status_t otherwise.
+ * @return requested entry's score, or 0 if an error occurred.
  */
-ucs_status_t ucs_usage_tracker_get_score(ucs_usage_tracker_h usage_tracker,
-                                         void *key, double *score_p);
+double
+ucs_usage_tracker_get_score(ucs_usage_tracker_h usage_tracker, void *key);
 
 
 /**
