@@ -911,7 +911,7 @@ static UCS_F_NOINLINE void ucp_wireup_process_promotion_request(
         }
     }
 
-    /* Prevent redundent promotion if request was sent */
+    /* Prevent redundant promotion if request was sent */
     if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
         /* Prevent a race between 2 simultaneous requests */
         ucp_wireup_should_ignore_request(ep, remote_address->uuid,
