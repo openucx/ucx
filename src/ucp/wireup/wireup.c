@@ -1285,30 +1285,29 @@ ucp_wireup_connect_lane_to_ep(ucp_ep_h ep, unsigned ep_init_flags,
                               const ucp_unpacked_address_t *remote_address)
 {
     int connect_aux;
-    uct_ep_h uct_ep;
+    uct_ep_h wireup_ep;
     ucs_status_t status;
 
     if (ucp_ep_get_lane_raw(ep, lane) == NULL) {
-        status = ucp_wireup_ep_create(ep, &uct_ep);
+        status = ucp_wireup_ep_create(ep, &wireup_ep);
         if (status != UCS_OK) {
             /* coverity[leaked_storage] */
             return status;
         }
 
-        ucs_trace("ep %p: assign uct_ep[%d]=%p wireup", ep, lane, uct_ep);
-        ucp_ep_set_lane(ep, lane, uct_ep);
+        ucs_trace("ep %p: assign uct_ep[%d]=%p wireup", ep, lane, wireup_ep);
+        ucp_ep_set_lane(ep, lane, wireup_ep);
     } else {
-        uct_ep = ucp_ep_get_lane_raw(ep, lane);
-        ucs_assert(ucp_wireup_ep_test(uct_ep));
+        wireup_ep = ucp_ep_get_lane_raw(ep, lane);
+        ucs_assert(ucp_wireup_ep_test(wireup_ep));
     }
 
     ucs_trace("ep %p: connect uct_ep[%d]=%p to remote addr %p wireup", ep,
-              lane, uct_ep, remote_address);
+              lane, wireup_ep, remote_address);
     connect_aux = !ucp_ep_init_flags_has_cm(ep_init_flags) &&
                   (lane == ucp_ep_get_wireup_msg_lane(ep));
-    status      = ucp_wireup_ep_connect(ucp_ep_get_lane(ep, lane), ep_init_flags,
-                                        rsc_index, path_index, connect_aux,
-                                        remote_address);
+    status      = ucp_wireup_ep_connect(wireup_ep, ep_init_flags, rsc_index,
+                                        path_index, connect_aux, remote_address);
     if (status != UCS_OK) {
         return status;
     }

@@ -492,6 +492,10 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
 
     ucs_assert(wireup_ep != NULL);
 
+    if (wireup_ep->super.uct_ep != NULL) {
+        goto connect_aux;
+    }
+
     uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
                                UCT_EP_PARAM_FIELD_PATH_INDEX;
     uct_ep_params.path_index = path_index;
@@ -511,7 +515,7 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
               ucp_ep_peer_name(ucp_ep),
               UCT_TL_RESOURCE_DESC_ARG(
                       &worker->context->tl_rscs[rsc_index].tl_rsc));
-
+connect_aux:
     /* We need to create an auxiliary transport only for active messages.
        Skip this step if auxiliary already exists. */
     if (connect_aux && (wireup_ep->aux_ep == NULL)) {
