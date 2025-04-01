@@ -5,6 +5,7 @@
  */
 
 #include "ucp_test.h"
+#include <functional>
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
@@ -15,10 +16,6 @@ extern "C" {
 
 class mock_iface {
 public:
-    /* Can't use std::function due to coverity errors */
-    using iface_attr_func_t = void (*)(uct_iface_attr&);
-    using perf_attr_func_t = void (*)(uct_perf_attr_t&);
-
     mock_iface() : m_tl(nullptr)
     {
         ucs_assert(m_self == nullptr);
@@ -36,13 +33,16 @@ public:
         m_mock.cleanup();
     }
 
-    void add_mock_iface(
-            const std::string &dev_name = "mock",
-            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
-            perf_attr_func_t perf_cb = cx7_perf_mock)
+    template <typename IfaceFn = void (*)(uct_iface_attr&),
+              typename PerfFn  = void (*)(uct_perf_attr_t&)>
+    void add_mock_iface(const std::string &dev_name = "mock",
+                        IfaceFn cb = [](uct_iface_attr_t &iface_attr) {},
+                        PerfFn perf_cb = default_perf_mock)
     {
-        m_iface_attrs_funcs[dev_name] = cb;
-        m_perf_attrs_funcs[dev_name]  = perf_cb;
+        m_iface_attrs_funcs[dev_name] =
+            iface_attr_func_t(new std::function<void(uct_iface_attr&)>(cb));
+        m_perf_attrs_funcs[dev_name]  =
+            perf_attr_func_t(new std::function<void(uct_perf_attr_t&)>(perf_cb));
     }
 
     void mock_transport(const std::string &tl_name)
@@ -143,7 +143,7 @@ private:
         uct_base_iface_t *base  = ucs_derived_of(iface, uct_base_iface_t);
         std::string &iface_name = m_self->m_iface_names[base];
         auto it                 = m_self->m_iface_attrs_funcs.find(iface_name);
-        (it->second)(*iface_attr);
+        (*it->second)(*iface_attr);
         return UCS_OK;
     }
 
@@ -157,15 +157,21 @@ private:
 
         std::string &iface_name = m_self->m_iface_names[base];
         auto it                 = m_self->m_perf_attrs_funcs.find(iface_name);
-        (it->second)(*perf_attr);
+        (*it->second)(*perf_attr);
         return UCS_OK;
     }
 
-    static void cx7_perf_mock(uct_perf_attr_t& perf_attr)
+    static void default_perf_mock(uct_perf_attr_t& perf_attr)
     {
-        perf_attr.path_bandwidth.shared    = 0.95 * perf_attr.bandwidth.shared;
-        perf_attr.path_bandwidth.dedicated = 0;
+        perf_attr.path_bandwidth = perf_attr.bandwidth;
     }
+
+    /* TODO: We can't easily use std::function inside container because coverity
+     * complains on uninit member variables inside std::function, so it's not
+     * trivial to suppress the warning. Workaround is to avoid std::function
+     * copying by using unique_ptr */
+    using iface_attr_func_t = std::unique_ptr<std::function<void(uct_iface_attr&)>>;
+    using perf_attr_func_t  = std::unique_ptr<std::function<void(uct_perf_attr_t&)>>;
 
     /* We have to use singleton to mock C functions */
     static mock_iface *m_self;
@@ -876,31 +882,25 @@ public:
         mock_transport("rc_mlx5");
     }
 
-    template<unsigned N> void add_mock_ifaces() {
-        add_mock_ifaces<N - 1>();
-        /* GPU distance is decreasing with N */
-        ucs_sys_dev_distance_t distance = {0, 32e9 - (N * 1e8)};
-        add_mock_distance(N, 0, distance);
-        //add_mock_distance(N, UCS_SYS_DEVICE_ID_UNKNOWN, distance);
-        add_mock_iface("mock" + std::to_string(N),
-                       [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.am.max_short = 2000;
-            /* BW is increasing with N */
-            iface_attr.bandwidth.shared = 30e9 + (N * 1e8);
-            iface_attr.latency.c        = 600e-9;
-            iface_attr.latency.m        = 1e-9;
-        });
-    }
-
     virtual void init() override
     {
-        add_mock_ifaces<50>();
+        for (unsigned i = 0; i < 50; ++i) {
+            /* GPU distance is decreasing with i */
+            ucs_sys_dev_distance_t distance = {0, 32e9 - (i * 1e8)};
+            add_mock_distance(i, 0, distance);
+            add_mock_distance(i, UCS_SYS_DEVICE_ID_UNKNOWN, distance);
+            add_mock_iface("mock" + std::to_string(i),
+                           [i](uct_iface_attr_t &iface_attr) {
+                iface_attr.cap.am.max_short = 2000;
+                /* BW is increasing with i */
+                iface_attr.bandwidth.shared = 30e9 + (i * 1e8);
+                iface_attr.latency.c        = 600e-9;
+                iface_attr.latency.m        = 1e-9;
+            });
+        }
         test_ucp_proto_mock::init();
     }
 };
-
-/* Stop template recursion at 0 */
-template <> void test_ucp_proto_mock_gpu_selection::add_mock_ifaces<0>() {}
 
 UCS_TEST_P(test_ucp_proto_mock_gpu_selection, test, "IB_NUM_PATHS?=2",
            "MAX_RNDV_LANES=4", "SELECT_DISTANCE_MD=")
