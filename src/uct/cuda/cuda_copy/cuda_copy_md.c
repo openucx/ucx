@@ -284,7 +284,8 @@ err_mem_release:
 
 typedef CUresult (*uct_cuda_cuCtxSetFlags_t)(unsigned);
 
-static void uct_cuda_copy_sync_memops(CUdeviceptr dptr, int is_vmm)
+static void uct_cuda_copy_sync_memops(uct_cuda_copy_md_t *md,
+                                      CUdeviceptr dptr, int is_vmm)
 {
     unsigned sync_memops_value = 1;
 #if HAVE_CUDA_FABRIC
@@ -292,6 +293,17 @@ static void uct_cuda_copy_sync_memops(CUdeviceptr dptr, int is_vmm)
         (uct_cuda_cuCtxSetFlags_t)ucs_empty_function;
     CUdriverProcAddressQueryResult sym_status;
     CUresult cu_err;
+    CUcontext ctx;
+    khiter_t iter;
+    ucs_kh_put_t ret;
+    ucs_status_t status;
+
+    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&ctx));
+
+    iter = kh_get(cuda_ctx_set, &md->sync_memops, (khint64_t)ctx);
+    if (iter != kh_end(&md->sync_memops)) {
+        return;
+    }
 
     if (cuda_cuCtxSetFlags_func ==
         (uct_cuda_cuCtxSetFlags_t)ucs_empty_function) {
@@ -306,7 +318,12 @@ static void uct_cuda_copy_sync_memops(CUdeviceptr dptr, int is_vmm)
 
     if (cuda_cuCtxSetFlags_func != NULL) {
         /* Synchronize future DMA operations for all memory types */
-        UCT_CUDADRV_FUNC_LOG_WARN(cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS));
+        status = UCT_CUDADRV_FUNC_LOG_WARN(
+                cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS));
+        if (status == UCS_OK) {
+            kh_put(cuda_ctx_set, &md->sync_memops, (khint64_t)ctx, &ret);
+        }
+
         return;
     }
 #endif
@@ -513,7 +530,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     }
 
 allocated:
-    uct_cuda_copy_sync_memops(alloc_handle->ptr, alloc_handle->is_vmm);
+    uct_cuda_copy_sync_memops(md, alloc_handle->ptr, alloc_handle->is_vmm);
 
     *memh_p    = alloc_handle;
     *address_p = (void*)alloc_handle->ptr;
@@ -619,6 +636,7 @@ static ucs_status_t uct_cuda_copy_mem_free(uct_md_h md, uct_mem_h memh)
 static void uct_cuda_copy_md_close(uct_md_h uct_md) {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
 
+    kh_destroy_inplace(cuda_ctx_set, &md->sync_memops);
     ucs_free(md);
 }
 
@@ -658,7 +676,7 @@ err:
 }
 
 static void uct_cuda_copy_md_sync_memops_get_address_range(
-        const uct_cuda_copy_md_t *md, CUdeviceptr address, size_t length,
+        uct_cuda_copy_md_t *md, CUdeviceptr address, size_t length,
         CUcontext cuda_ctx, CUdevice cuda_device, int is_vmm,
         ucs_memory_info_t *mem_info)
 {
@@ -682,7 +700,7 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
 
     /* Wrapped the method by push/pop CUDA context since it sets
        CU_CTX_SYNC_MEMOPS flag for the current context */
-    uct_cuda_copy_sync_memops(address, is_vmm);
+    uct_cuda_copy_sync_memops(md, address, is_vmm);
 
     if (md->config.alloc_whole_reg == UCS_CONFIG_OFF) {
         /* Extending the registration range is disable by configuration */
@@ -1027,6 +1045,8 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     if (config->enable_dmabuf != UCS_NO) {
         md->config.dmabuf_supported = dmabuf_supported;
     }
+
+    kh_init_inplace(cuda_ctx_set, &md->sync_memops);
 
     *md_p = (uct_md_h)md;
 
