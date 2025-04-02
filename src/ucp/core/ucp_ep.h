@@ -102,9 +102,9 @@ enum {
     UCP_EP_FLAG_REMOTE_ID              = UCS_BIT(7), /* remote ID is valid */
     UCP_EP_FLAG_BLOCK_FLUSH            = UCS_BIT(8), /* Flush ops have to be blocking
                                                         while merging pending queues */
-    UCP_EP_FLAG_CONNECT_PRE_MSG_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
+    UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    /* 11 bit is vacant for a flag */
+    UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED = UCS_BIT(11),/* Promote/Demote request was queued */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
                                                         temporary wireup configuration or
@@ -119,15 +119,14 @@ enum {
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
     UCP_EP_FLAG_CONNECT_REP_SENT       = UCS_BIT(17),/* DEBUG: Connection reply was sent */
     UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(18),/* DEBUG: Connection ACK was sent */
-    UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(19),/* DEBUG: Connection request was ignored */
-    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(20),/* DEBUG: Connection pre-request was sent */
-    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(21),/* DEBUG: flush_state is valid */
-    UCP_EP_FLAG_DISCONNECTED_CM_LANE   = UCS_BIT(22),/* DEBUG: CM lane was disconnected, i.e.
+    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(19),/* DEBUG: Connection pre-request was sent */
+    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(20),/* DEBUG: flush_state is valid */
+    UCP_EP_FLAG_DISCONNECTED_CM_LANE   = UCS_BIT(21),/* DEBUG: CM lane was disconnected, i.e.
                                                         @uct_ep_disconnect was called for CM EP */
-    UCP_EP_FLAG_CLIENT_CONNECT_CB      = UCS_BIT(23),/* DEBUG: Client connect callback invoked */
-    UCP_EP_FLAG_SERVER_NOTIFY_CB       = UCS_BIT(24),/* DEBUG: Server notify callback invoked */
-    UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(25),/* DEBUG: Got disconnect notification */
-    UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ   = UCS_BIT(26) /* DEBUG: Connection pre-request needs to be
+    UCP_EP_FLAG_CLIENT_CONNECT_CB      = UCS_BIT(22),/* DEBUG: Client connect callback invoked */
+    UCP_EP_FLAG_SERVER_NOTIFY_CB       = UCS_BIT(23),/* DEBUG: Server notify callback invoked */
+    UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(24),/* DEBUG: Got disconnect notification */
+    UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ   = UCS_BIT(25) /* DEBUG: Connection pre-request needs to be
                                                         received from a peer */
 };
 
@@ -754,8 +753,10 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                      const ucp_ep_config_key_t *key2,
                                      ucp_lane_index_t lane2);
 
+int ucp_ep_is_am_need_flush(ucp_ep_h ep, const ucp_ep_config_key_t *key);
+
 ucp_lane_index_t
-ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *old_key,
+ucp_ep_config_find_match_lane(ucp_ep_h ep, const ucp_ep_config_key_t *old_key,
                               ucp_lane_index_t old_lane,
                               const ucp_ep_config_key_t *new_key);
 

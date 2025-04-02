@@ -145,15 +145,16 @@ public:
 
     void send_message(const ucp_test_base::entity &e1,
                       const ucp_test_base::entity &e2, const mem_buffer *sbuf,
-                      const mem_buffer *rbuf, std::vector<void*> &reqs)
+                      const mem_buffer *rbuf, unsigned ep_index,
+                      std::vector<void*> &reqs)
     {
         const ucp_request_param_t param = {
             .op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL
         };
 
-        void *sreq = ucp_tag_send_nbx(e1.ep(), sbuf->ptr(), sbuf->size(), 0,
-                                      &param);
-        void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(), sbuf->ptr(),
+        void *sreq = ucp_tag_send_nbx(e1.ep(0, ep_index), sbuf->ptr(), 
+                                      sbuf->size(), 0, &param);
+        void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(0, ep_index), sbuf->ptr(),
                                                 sbuf->size(), 0, &param);
         reqs.insert(reqs.end(), {sreq, sreq_sync});
 
@@ -164,7 +165,7 @@ public:
         }
     }
 
-    void send_recv(bool bidirectional = false)
+    void send_recv(bool bidirectional = false, unsigned ep_index = 0)
     {
 /* TODO: remove this when large messages asan bug is solved (size > ~70MB) */
 #ifdef __SANITIZE_ADDRESS__
@@ -181,12 +182,13 @@ public:
 
             for (unsigned i = 0; i < num_iterations; ++i) {
                 send_message(sender(), receiver(), sbufs[i].get(),
-                             rbufs[i].get(), reqs);
+                             rbufs[i].get(), ep_index, reqs);
 
                 if (bidirectional) {
                     send_message(receiver(), sender(),
                                  sbufs[i + num_iterations].get(),
-                                 rbufs[i + num_iterations].get(), reqs);
+                                 rbufs[i + num_iterations].get(), ep_index,
+                                 reqs);
                 }
             }
 
@@ -553,6 +555,8 @@ public:
     }
 
     void verify_configuration();
+    bool
+    has_transport(const ucp_test_base::entity &e, const std::string &tl_name);
 };
 
 void test_reconfigure_update_rank::verify_configuration()
@@ -572,44 +576,62 @@ void test_reconfigure_update_rank::verify_configuration()
     r_receiver->verify_configuration(*r_sender, 0);
 }
 
+bool test_reconfigure_update_rank::has_transport(const ucp_test_base::entity &e,
+                                                 const std::string &tl_name)
+{
+    for (auto lane = 0; lane < ucp_ep_num_lanes(e.ep()); ++lane) {
+        auto rsc_index = ucp_ep_get_rsc_index(e.ep(), lane);
+
+        if (tl_name == e.ucph()->tl_rscs[rsc_index].tl_rsc.tl_name) {
+            return 1;
+        }
+    }
+
+    return !has_resource(e, tl_name);
+}
+
 UCS_TEST_P(test_reconfigure_update_rank, promote,
-           "DYNAMIC_TL_SWITCH_INTERVAL=1000s")
+           "DYNAMIC_TL_SWITCH_INTERVAL=1ns", "DYNAMIC_TL_PROGRESS_FACTOR=1")
 {
     /* Create DC EP */
     create_entities_and_connect();
-    send_recv();
+    EXPECT_TRUE(has_transport(sender(), "dc_mlx5"));
+    EXPECT_TRUE(has_transport(receiver(), "dc_mlx5"));
 
     /* Promote to RC */
-    auto s_tracker = sender().worker()->usage_tracker.handle;
-    ucs_usage_tracker_touch_key(s_tracker, sender().ep());
-    ucs_usage_tracker_progress(s_tracker);
     send_recv();
     verify_configuration();
+    EXPECT_TRUE(has_transport(sender(), "rc_mlx5"));
+    EXPECT_TRUE(has_transport(receiver(), "rc_mlx5"));
 }
 
 UCS_TEST_P(test_reconfigure_update_rank, demote,
-           "DYNAMIC_TL_SWITCH_INTERVAL=1000s")
+           "DYNAMIC_TL_SWITCH_INTERVAL=1ns", "DYNAMIC_TL_PROGRESS_FACTOR=1",
+           "MAX_PRIORITY_EPS=10")
 {
-    mem_buffer sbuf(1024, UCS_MEMORY_TYPE_HOST);
-    mem_buffer rbuf(1024, UCS_MEMORY_TYPE_HOST);
-    std::vector<void*> reqs;
-
     /* Create DC EP */
     create_entities_and_connect();
-    send_message(sender(), receiver(), &sbuf, &rbuf, reqs);
-    requests_wait(reqs);
+    EXPECT_TRUE(has_transport(sender(), "dc_mlx5"));
+    EXPECT_TRUE(has_transport(receiver(), "dc_mlx5"));
 
     /* Promote to RC */
-    auto s_tracker = sender().worker()->usage_tracker.handle;
-    ucs_usage_tracker_touch_key(s_tracker, sender().ep());
-    ucs_usage_tracker_progress(s_tracker);
     send_recv();
+    EXPECT_TRUE(has_transport(sender(), "rc_mlx5"));
+    EXPECT_TRUE(has_transport(receiver(), "rc_mlx5"));
 
-    /* Demote to DC */
-    ucs_usage_tracker_remove(s_tracker, sender().ep());
-    ucp_wireup_send_demote_request(sender().ep(), NULL);
-    send_recv();
+    auto num_eps = sender().ucph()->config.ext.max_priority_eps + 1;
+
+    /* Fill usage tracker with (max + 1) EPs and promote them */
+    for (int ep_index = 1; ep_index < num_eps; ++ep_index) {
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+        send_recv(false, ep_index);
+    }
+
+    /* Old EP is demoted */
     verify_configuration();
+    EXPECT_TRUE(has_transport(sender(), "dc_mlx5"));
+    EXPECT_TRUE(has_transport(receiver(), "dc_mlx5"));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_update_rank, shm_ib, "shm,ib");

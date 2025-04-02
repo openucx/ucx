@@ -46,8 +46,6 @@
         } \
     } while (0)
 
-#define UCP_WIREUP_MSG_SCORE_TO_DOUBLE (1.0 / UINT8_MAX)
-
 /* Wireup request and promote both require handling new connections */
 static int ucp_wireup_msg_is_request(unsigned msg_type)
 {
@@ -117,6 +115,13 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
     return lane;
 }
 
+static unsigned ucp_wireup_get_msg_size(const ucp_wireup_msg_t *msg)
+{
+    return (msg->type == UCP_WIREUP_MSG_PROMOTE) ||
+           (msg->type == UCP_WIREUP_MSG_DEMOTE) ?
+           sizeof(ucp_wireup_msg_extended_t) : sizeof(ucp_wireup_msg_t);
+}
+
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
@@ -152,7 +157,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     VALGRIND_CHECK_MEM_IS_DEFINED(req->send.buffer, req->send.length);
 
     wireup_msg_iov[0].iov_base = &req->send.wireup;
-    wireup_msg_iov[0].iov_len  = sizeof(req->send.wireup);
+    wireup_msg_iov[0].iov_len  = ucp_wireup_get_msg_size(&req->send.wireup);
 
     wireup_msg_iov[1].iov_base = req->send.buffer;
     wireup_msg_iov[1].iov_len  = req->send.length;
@@ -212,8 +217,11 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     int is_priority_update = (type == UCP_WIREUP_MSG_PROMOTE) ||
                              (type == UCP_WIREUP_MSG_DEMOTE);
     ucs_status_t status;
+    ucp_wireup_msg_extended_t *ext_hdr;
+    ucs_usage_tracker_h usage_tracker;
 
     msg_hdr->type      = type;
+    msg_hdr->err_mode  = ucp_ep_config(ep)->key.err_mode;
     msg_hdr->conn_sn   = ep->conn_sn;
     msg_hdr->src_ep_id = ucp_ep_local_id(ep);
     if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
@@ -225,11 +233,9 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     }
 
     if (is_priority_update) {
-        msg_hdr->score = ucs_usage_tracker_get_score(
-                                 ep->worker->usage_tracker.handle, ep) /
-                         UCP_WIREUP_MSG_SCORE_TO_DOUBLE;
-    } else {
-        msg_hdr->err_mode = ucp_ep_config(ep)->key.err_mode;
+        ext_hdr        = ucs_derived_of(msg_hdr, ucp_wireup_msg_extended_t);
+        usage_tracker  = ep->worker->usage_tracker.handle;
+        ext_hdr->score = ucs_usage_tracker_get_score(usage_tracker, ep);
     }
 
     /* pack all addresses */
@@ -569,7 +575,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
             /* Reset flags that mark wireup is in progress */
             ucp_ep_update_flags(ep, 0,
                                 UCP_EP_FLAG_CONNECT_REQ_QUEUED |
-                                        UCP_EP_FLAG_CONNECT_PRE_MSG_QUEUED);
+                                UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED);
         }
     }
 
@@ -587,27 +593,12 @@ ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
            UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
 }
 
-/* Common code for sending wireup pre-request, promote and demote messages */
-static ucs_status_t ucp_wireup_send_pre_flow_msg(ucp_ep_h ep, uint8_t type)
+static void ucp_wireup_send_priority_update(ucp_ep_h ep, uint8_t type)
 {
     ucs_status_t status;
 
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_PRE_MSG_QUEUED));
-
-    status = ucp_wireup_msg_send(ep, type, &ucp_tl_bitmap_max, NULL);
-    if (status != UCS_OK) {
-        ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
-        return status;
-    }
-
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_PRE_MSG_QUEUED, 0);
-    return UCS_OK;
-}
-
-static void ucp_wireup_send_priority_update(ucp_ep_h ep, uint8_t type)
-{
-    if ((ep->flags & UCP_EP_FLAG_CONNECT_PRE_MSG_QUEUED) ||
-        (ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
+    if (ep->flags & (UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED |
+                     UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
         return;
     }
 
@@ -617,7 +608,14 @@ static void ucp_wireup_send_priority_update(ucp_ep_h ep, uint8_t type)
                                           ep));
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
-    ucp_wireup_send_pre_flow_msg(ep, type);
+
+    status = ucp_wireup_msg_send(ep, type, &ucp_tl_bitmap_max, NULL);
+    if (status == UCS_OK) {
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED, 0);
+    } else {
+        ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+    }
+
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
 }
 
@@ -694,7 +692,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
 static ucs_status_t
 ucp_wireup_get_ep_by_conn_sn(ucp_worker_h worker,
                              const ucp_unpacked_address_t *remote_address,
-                             ucp_ep_match_conn_sn_t conn_sn,
+                             const ucp_wireup_msg_t *msg,
                              unsigned ep_init_flags, ucp_ep_h *ep_p)
 {
     uint64_t remote_uuid = remote_address->uuid;
@@ -702,33 +700,39 @@ ucp_wireup_get_ep_by_conn_sn(ucp_worker_h worker,
     ucs_status_t status;
 
     ep = ucp_ep_match_retrieve(worker, remote_uuid,
-                               conn_sn ^ (remote_uuid == worker->uuid),
+                               msg->conn_sn ^ (remote_uuid == worker->uuid),
                                UCS_CONN_MATCH_QUEUE_EXP);
-    if (ep != NULL) {
-        goto out;
+    if (ep == NULL) {
+        /* Create a new endpoint if does not exist */
+        status = ucp_ep_create_base(worker, ep_init_flags, remote_address->name,
+                                    "remote-request", &ep);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        /* Add internal endpoint to hash */
+        ep->conn_sn = msg->conn_sn;
+        if (!ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
+                                 UCS_CONN_MATCH_QUEUE_UNEXP) &&
+            (worker->context->config.features & UCP_FEATURE_STREAM)) {
+            ucs_diag("worker %p: created the endpoint %p without"
+                     " connection matching, but Stream API support was"
+                     " requested on the context %p",
+                     worker, ep, worker->context);
+        }
+    } else {
+        status = ucp_ep_config_err_mode_check_mismatch(ep, msg->err_mode);
+        if (status != UCS_OK) {
+            goto err_set_ep_failed;
+        }
     }
 
-    /* Create a new endpoint if does not exist */
-    status = ucp_ep_create_base(worker, ep_init_flags, remote_address->name,
-                                "remote-request", &ep);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* Add internal endpoint to hash */
-    ep->conn_sn = conn_sn;
-    if (!ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
-                             UCS_CONN_MATCH_QUEUE_UNEXP) &&
-        (worker->context->config.features & UCP_FEATURE_STREAM)) {
-        ucs_diag("worker %p: created the endpoint %p without"
-                 " connection matching, but Stream API support was"
-                 " requested on the context %p",
-                 worker, ep, worker->context);
-    }
-
-out:
     *ep_p = ep;
     return UCS_OK;
+
+err_set_ep_failed:
+    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+    return status;
 }
 
 static int ucp_wireup_should_ignore_request(ucp_ep_h ep, uint64_t remote_uuid,
@@ -736,7 +740,7 @@ static int ucp_wireup_should_ignore_request(ucp_ep_h ep, uint64_t remote_uuid,
 {
     unsigned flag_to_test = (msg_type == UCP_WIREUP_MSG_REQUEST) ?
                                     UCP_EP_FLAG_CONNECT_REQ_QUEUED :
-                                    UCP_EP_FLAG_CONNECT_PRE_MSG_QUEUED;
+                                    UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED;
 
     ucs_assert_always(ucp_wireup_msg_is_request(msg_type));
 
@@ -753,7 +757,6 @@ static int ucp_wireup_should_ignore_request(ucp_ep_h ep, uint64_t remote_uuid,
     if ((ep->flags & flag_to_test) && (remote_uuid > ep->worker->uuid)) {
         ucs_trace("ep %p: ignoring simultaneous %s request", ep,
                   ucp_wireup_msg_str(msg_type));
-        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_IGNORED, 0);
         return 1;
     }
 
@@ -788,15 +791,10 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
     } else {
         ucs_assert(msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID);
-        status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address,
-                                              msg->conn_sn, ep_init_flags, &ep);
+        status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address, msg,
+                                              ep_init_flags, &ep);
         if (status != UCS_OK) {
             return;
-        }
-
-        status = ucp_ep_config_err_mode_check_mismatch(ep, msg->err_mode);
-        if (status != UCS_OK) {
-            goto err_set_ep_failed;
         }
 
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
@@ -873,17 +871,17 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
                                    const ucp_wireup_msg_t *msg,
                                    const ucp_unpacked_address_t *remote_address)
 {
-    double score           = msg->score * UCP_WIREUP_MSG_SCORE_TO_DOUBLE;
     unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE;
     ucp_ep_h ep            = msg_ep;
     ucs_usage_tracker_h usage_tracker;
+    ucp_wireup_msg_extended_t *extended;
     ucs_status_t status;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PROMOTE);
 
     if (ep == NULL) {
-        status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address,
-                                              msg->conn_sn, ep_init_flags, &ep);
+        status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address, msg,
+                                              ep_init_flags, &ep);
         if (status != UCS_OK) {
             ucs_debug("ep %p: promotion request from 0x%.8lX denied because no"
                       " local EP matches remote connection",
@@ -892,7 +890,7 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
         }
     }
 
-    /* Prevent redundent promotion if request was sent */
+    /* Prevent redundant promotion if request was sent */
     if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
         /* Prevent a race between 2 simultaneous requests */
         ucp_wireup_should_ignore_request(ep, remote_address->uuid,
@@ -901,17 +899,18 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
     }
 
     usage_tracker = worker->usage_tracker.handle;
-    ucs_usage_tracker_set_min_score(usage_tracker, ep, score);
+    extended      = ucs_derived_of(msg, ucp_wireup_msg_extended_t);
+    ucs_usage_tracker_set_min_score(usage_tracker, ep, extended->score);
 
     if (!ucs_usage_tracker_is_promoted(usage_tracker, ep)) {
         ucs_debug("ep %p: promotion request from 0x%.8lX denied due to "
                   "insufficient score value (%.2f)",
-                  ep, msg->src_ep_id, score);
+                  ep, msg->src_ep_id, extended->score);
         return;
     }
 
     ucs_debug("ep %p: promotion request from 0x%.8lX accepted (score: %.2f)",
-              ep, msg->src_ep_id, score);
+              ep, msg->src_ep_id, extended->score);
     ucp_wireup_process_pre_msg(ep, remote_address, ep_init_flags,
                                msg->src_ep_id);
 }
@@ -921,10 +920,12 @@ ucp_wireup_process_demote_request(ucp_worker_h worker, ucp_ep_h ep,
                                   const ucp_wireup_msg_t *msg,
                                   const ucp_unpacked_address_t *remote_address)
 {
+    double score = ucs_derived_of(msg, ucp_wireup_msg_extended_t)->score;
+
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_DEMOTE);
 
     ucs_debug("ep %p: demotion request from 0x%.8lX accepted (score: %.2f)", ep,
-              msg->src_ep_id, msg->score * UCP_WIREUP_MSG_SCORE_TO_DOUBLE);
+              msg->src_ep_id, score);
 
     ucs_assert_always(worker->usage_tracker.handle != NULL);
     ucs_usage_tracker_remove(worker->usage_tracker.handle, ep);
@@ -1134,9 +1135,8 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         }
     }
 
-    status = ucp_address_unpack(worker, msg + 1,
-                                UCP_ADDRESS_PACK_FLAGS_ALL,
-                                &remote_address);
+    status = ucp_address_unpack(worker, data + ucp_wireup_get_msg_size(msg),
+                                UCP_ADDRESS_PACK_FLAGS_ALL, &remote_address);
     if (status != UCS_OK) {
         ucs_error("failed to unpack address: %s", ucs_status_string(status));
         goto out;
@@ -1579,17 +1579,9 @@ static int ucp_wireup_is_am_need_flush(ucp_ep_h ep,
                                        const ucp_ep_config_key_t *key,
                                        const ucp_lane_index_t *reuse_lane_map)
 {
-    ucp_lane_index_t am_lane = ucp_ep_get_am_lane(ep);
-
-           /* In CM mode, messages are not sent before wireup is completed */
-    return !ucp_ep_has_cm_lane(ep) &&
-           /* AM lane exists */
-           (am_lane != UCP_NULL_LANE) && (key->am_lane != UCP_NULL_LANE) &&
+    return ucp_ep_is_am_need_flush(ep, key) &&
            /* Lane is not being reused by new AM lane */
-           (reuse_lane_map[am_lane] != key->am_lane) &&
-           /* Lane is operational */
-           (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
-            !ucp_ep_is_lane_p2p(ep, am_lane));
+           (reuse_lane_map[ucp_ep_get_am_lane(ep)] != key->am_lane);
 }
 
 static ucp_lane_index_t ucp_wireup_get_reconfig_msg_lane(ucp_ep_h ep)
@@ -1621,7 +1613,8 @@ ucp_wireup_check_is_reconfigurable(ucp_ep_h ep,
     /* TODO: 1) Support lanes which are connected to the same remote MD, but
      *          different remote sys_dev (eg. TCP). */
     for (old_lane = 0; old_lane < old_key->num_lanes; ++old_lane) {
-        new_lane = ucp_ep_config_find_match_lane(old_key, old_lane, new_key);
+        new_lane = ucp_ep_config_find_match_lane(ep, old_key, old_lane,
+                                                 new_key);
 
         /* Old config has a lane with same remote MD as new config */
         if ((new_lane != UCP_NULL_LANE) &&
@@ -1718,7 +1711,7 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     uct_ep_h uct_ep   = NULL;
     int am_need_flush = ucp_wireup_is_am_need_flush(ep, key, reuse_lane_map);
     ucp_lane_index_t old_lane, new_wireup_lane, old_wireup_lane;
-    ucp_lane_index_t new_order_lane, lane;
+    ucp_lane_index_t new_order_lane;
     ucp_wireup_ep_t *new_wireup_ep, *old_ep_wrapper;
     uct_ep_h old_wireup_ep, new_aux_ep;
     ucp_rsc_index_t aux_rsc_index;
@@ -1753,14 +1746,6 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
             new_wireup_lane = (reuse_lane_map[old_lane] != UCP_NULL_LANE) ?
                                       reuse_lane_map[old_lane] :
                                       key->am_lane;
-
-            /* Detach new AM lane from its matching old lane if exists */
-            for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
-                if (reuse_lane_map[lane] == key->am_lane) {
-                    reuse_lane_map[lane] = UCP_NULL_LANE;
-                    break;
-                }
-            }
         } else {
             new_wireup_lane = ucp_wireup_find_non_reused_lane(ep, key,
                                                               reuse_lane_map);
@@ -2182,9 +2167,18 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
 {
+    ucs_status_t status;
+
     ucs_assert(ucp_ep_has_cm_lane(ep));
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED));
+
     ucs_debug("ep %p: send wireup pre-request (flags=0x%x)", ep, ep->flags);
-    return ucp_wireup_send_pre_flow_msg(ep, UCP_WIREUP_MSG_PRE_REQUEST);
+    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_PRE_REQUEST,
+                                 &ucp_tl_bitmap_max, NULL);
+
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED, 0);
+
+    return status;
 }
 
 ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
@@ -2231,7 +2225,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
                               ucp_ep_get_rsc_index(ep, lane));
 
     if (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) &&
-        !(ep->flags & UCP_EP_FLAG_CONNECT_PRE_MSG_QUEUED)) {
+        !(ep->flags & UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED)) {
         status = ucp_wireup_send_request(ep);
         if (status != UCS_OK) {
             goto err_destroy_wireup_ep;

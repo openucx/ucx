@@ -178,7 +178,8 @@ struct ucp_request {
             } state;
 
             union {
-                ucp_wireup_msg_t  wireup;
+                ucp_wireup_msg_t          wireup;
+                ucp_wireup_msg_extended_t wireup_ext;
 
                 struct {
                     /* Used to identify matching parts of a large message */

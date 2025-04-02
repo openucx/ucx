@@ -23,15 +23,6 @@
         goto err; \
     }
 
-#define UCS_USAGE_TRACKER_CHECK_IN_USE(_usage_tracker) \
-    if (_usage_tracker->in_use) { \
-        return; \
-    } \
-    _usage_tracker->in_use = 1;
-
-#define UCS_USAGE_TRACKER_MARK_UNUSED(_usage_tracker) \
-    _usage_tracker->in_use = 0;
-
 ucs_status_t ucs_usage_tracker_create(const ucs_usage_tracker_params_t *params,
                                       ucs_usage_tracker_h *usage_tracker_p)
 {
@@ -73,7 +64,6 @@ ucs_status_t ucs_usage_tracker_create(const ucs_usage_tracker_params_t *params,
     kh_init_inplace(usage_tracker_hash, &usage_tracker->hash);
 
     usage_tracker->params = *params;
-    usage_tracker->in_use = 0;
     *usage_tracker_p      = usage_tracker;
 
     return UCS_OK;
@@ -254,15 +244,12 @@ void ucs_usage_tracker_set_min_score(ucs_usage_tracker_h usage_tracker,
 {
     ucs_usage_tracker_element_t *elem;
 
-    UCS_USAGE_TRACKER_CHECK_IN_USE(usage_tracker);
     elem            = ucs_usage_tracker_put(usage_tracker, key);
     elem->min_score = score;
 
     if (elem->min_score >= elem->score) {
         ucs_usage_tracker_promote(usage_tracker, 1);
     }
-
-    UCS_USAGE_TRACKER_MARK_UNUSED(usage_tracker);
 }
 
 void ucs_usage_tracker_progress(ucs_usage_tracker_h usage_tracker)
@@ -271,8 +258,6 @@ void ucs_usage_tracker_progress(ucs_usage_tracker_h usage_tracker)
     khiter_t iter;
     ucs_usage_tracker_element_t *elem;
     uint64_t key;
-
-    UCS_USAGE_TRACKER_CHECK_IN_USE(usage_tracker);
 
     kh_foreach_key(&usage_tracker->hash, key,
         iter = kh_get(usage_tracker_hash, &usage_tracker->hash, key);
@@ -288,7 +273,6 @@ void ucs_usage_tracker_progress(ucs_usage_tracker_h usage_tracker)
         ucs_usage_tracker_put(usage_tracker, *item);
     }
 
-    ucs_usage_tracker_promote(usage_tracker, 0);
     ucs_lru_reset(usage_tracker->lru);
-    UCS_USAGE_TRACKER_MARK_UNUSED(usage_tracker);
+    ucs_usage_tracker_promote(usage_tracker, 0);
 }

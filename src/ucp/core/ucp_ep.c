@@ -588,8 +588,7 @@ ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode)
 {
-    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-        !ucp_ep_config_err_mode_eq(ep, err_mode)) {
+    if (!ucp_ep_config_err_mode_eq(ep, err_mode)) {
         ucs_error("ep %p: asymmetric endpoint configuration is not supported,"
                   " error handling level mismatch (expected: %d, got: %d)",
                   ep, ucp_ep_config(ep)->key.err_mode, err_mode);
@@ -1868,14 +1867,33 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                           config_lane2->dst_md_index);
 }
 
+int ucp_ep_is_am_need_flush(ucp_ep_h ep, const ucp_ep_config_key_t *key)
+{
+    ucp_lane_index_t am_lane = ucp_ep_get_am_lane(ep);
+
+    /* In CM mode, messages are not sent before wireup is completed */
+    return !ucp_ep_has_cm_lane(ep) &&
+           /* AM lane exists */
+           (am_lane != UCP_NULL_LANE) && (key->am_lane != UCP_NULL_LANE) &&
+           /* Lane is operational */
+           (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
+            !ucp_ep_is_lane_p2p(ep, am_lane));
+}
+
 ucp_lane_index_t
-ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *old_key,
+ucp_ep_config_find_match_lane(ucp_ep_h ep, const ucp_ep_config_key_t *old_key,
                               ucp_lane_index_t old_lane,
                               const ucp_ep_config_key_t *new_key)
 {
     ucp_lane_index_t new_lane;
 
     for (new_lane = 0; new_lane < new_key->num_lanes; ++new_lane) {
+        if ((new_lane == new_key->am_lane) &&
+            ucp_ep_is_am_need_flush(ep, new_key)) {
+            /* Skip new AM lane in order to allow old AM replacement */
+            continue;
+        }
+
         if (ucp_ep_config_lane_is_peer_match(old_key, old_lane, new_key,
                                              new_lane)) {
             return new_lane;
@@ -1900,7 +1918,7 @@ static ucp_lane_index_t ucp_ep_config_find_reusable_lane(
         return new_key->cm_lane;
     }
 
-    new_lane = ucp_ep_config_find_match_lane(old_key, old_lane, new_key);
+    new_lane = ucp_ep_config_find_match_lane(ep, old_key, old_lane, new_key);
     if (new_lane == UCP_NULL_LANE) {
         /* No matching lane was found */
         return UCP_NULL_LANE;

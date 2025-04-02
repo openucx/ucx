@@ -123,18 +123,25 @@ typedef struct {
  */
 typedef struct ucp_wireup_msg {
     uint8_t                type; /* Message type */
-    union {
-        uint8_t            err_mode;  /* Peer error handling mode defined in
-                                         @ucp_err_handling_mode_t */
-        uint8_t            score;     /* Peer score determinted by amount of
-                                         traffic that flows through it */
-    };
+    uint8_t                err_mode; /* Peer error handling mode defined in
+                                        @ucp_err_handling_mode_t */
     ucp_ep_match_conn_sn_t conn_sn; /* Connection sequence number */
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
                                          UCS_PTR_MAP_KEY_INVALID */
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
+
+
+/**
+ * Packet structure for promote/demote requests.
+ */
+typedef struct ucp_wireup_msg_extended {
+    ucp_wireup_msg_t super;
+    double           score; /* Peer score determinted by amount of
+                               traffic that flows through it */
+    /* packed addresses follow */
+} UCS_S_PACKED ucp_wireup_msg_extended_t;
 
 
 typedef struct {
