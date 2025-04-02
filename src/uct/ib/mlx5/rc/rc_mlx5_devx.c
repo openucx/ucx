@@ -225,7 +225,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     int num_sges        = uct_rc_mlx5_num_sges(iface, config->super.stride_size);
     int len, max, stride, log_num_of_strides, wq_type;
 
-    stride = uct_ib_mlx5_srq_stride(num_sges);
+    stride = uct_rc_mlx5_iface_stride_size(iface);
     max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len, num_sges);
     max    = ucs_roundup_pow2(max);
     len    = max * stride;
@@ -297,7 +297,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     iface->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     uct_ib_mlx5_srq_buff_init(&iface->rx.srq, 0, max - 1,
                               iface->super.super.config.seg_size, num_sges,
-                              iface->msg_based.num_strides);
+                              iface->msg_based.num_strides, stride);
     iface->super.rx.srq.quota = max - 1;
 
     return UCS_OK;

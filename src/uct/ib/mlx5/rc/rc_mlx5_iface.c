@@ -21,6 +21,9 @@
 #include "rc_mlx5.inl"
 
 
+#define UCT_RC_MLX5_IFACE_MSG_BASED_SRQ_CQ_LEN 65536
+
+
 enum {
     UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
 
@@ -549,7 +552,10 @@ out_tm_disabled:
 #else
     iface->tm.enabled                = 0;
 #endif
-    init_attr->cq_len[UCT_IB_DIR_RX] = rc_config->super.rx.queue_len;
+    init_attr->cq_len[UCT_IB_DIR_RX] =
+            uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
+                    UCT_RC_MLX5_IFACE_MSG_BASED_SRQ_CQ_LEN :
+                    rc_config->super.rx.cq_len;
     init_attr->seg_size              = rc_config->super.seg_size;
     iface->tm.mp.num_strides         = 1;
 

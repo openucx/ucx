@@ -118,6 +118,13 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Length of receive queue in the QPs.",
    ucs_offsetof(uct_ib_iface_config_t, rx.queue_len), UCS_CONFIG_TYPE_UINT},
 
+  {"RX_CQ_LEN", "4096",
+   "Length of receive completion queue in the QPs.\n"
+   "defaults to the same value as RX_QUEUE_LEN.\n"
+   "in case of striding message-based receive queue, it should be set to number\n"
+   "of receive buffers multiplied by the number of strides.",
+   ucs_offsetof(uct_ib_iface_config_t, rx.cq_len), UCS_CONFIG_TYPE_UINT},
+
   {"RX_MAX_BATCH", "16",
    "How many post-receives to perform in one batch.",
    ucs_offsetof(uct_ib_iface_config_t, rx.max_batch), UCS_CONFIG_TYPE_UINT},
@@ -1652,12 +1659,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                                       rx_headroom;
     self->config.seg_size           = init_attr->seg_size;
     self->config.stride_size        = config->stride_size;
-    ucs_info("sizeof(uct_ib_iface_recv_desc_t): %zu rx_payload_offset %d "
-             "rx_hdr_offset %d rx_headroom_offset %d "
-             "init_attr->rx_priv_len %d init_attr->rx_hdr_len %d",
-             sizeof(uct_ib_iface_recv_desc_t), self->config.rx_payload_offset,
-             self->config.rx_hdr_offset, self->config.rx_headroom_offset,
-             init_attr->rx_priv_len, init_attr->rx_hdr_len);
     self->config.roce_path_factor   = config->roce_path_factor;
     self->config.tx_max_poll        = config->tx.max_poll;
     self->config.rx_max_poll        = config->rx.max_poll;

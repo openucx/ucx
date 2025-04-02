@@ -70,8 +70,10 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_zcopy_inlresp0,
 #if HAVE_DEVX
 /* test mlx5dv_create_qp() */
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_zcopy_inlresp0_devx_no,
-                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY),
-                     "IB_TX_INLINE_RESP=0", "IB_MLX5_DEVX=n") {
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY) ||
+                             !is_srq_msg_based(),
+                     "IB_TX_INLINE_RESP=0", "IB_MLX5_DEVX=n")
+{
     EXPECT_EQ(1u, sender().iface_attr().cap.get.min_zcopy);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
                     sender().iface_attr().cap.get.min_zcopy,

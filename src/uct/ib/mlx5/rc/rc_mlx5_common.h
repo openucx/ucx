@@ -669,6 +669,8 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 }
 #endif
 
+int uct_rc_mlx5_iface_stride_size(uct_rc_mlx5_iface_common_t *iface);
+
 #if HAVE_DEVX
 ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                       const uct_rc_iface_common_config_t *config);

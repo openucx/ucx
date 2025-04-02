@@ -181,6 +181,7 @@ struct uct_ib_iface_config {
 
     struct {
         unsigned            queue_len;       /* Queue length */
+        unsigned            cq_len;          /* Completion queue length */
         unsigned            max_batch;       /* How many buffers can be batched to one post receive */
         unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
         uct_iface_mpool_config_t mp;
@@ -598,7 +599,7 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_ib_iface_max_message_size(uct_ib_iface_t *iface)
+uct_ib_iface_max_message_size(const uct_ib_iface_t *iface)
 {
     return iface->config.max_send_message_size_strides *
            iface->config.stride_size;

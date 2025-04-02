@@ -238,7 +238,7 @@ uct_rc_mlx5_iface_srq_post_recv_msg_based(uct_rc_mlx5_iface_common_t *iface)
         ucs_dynamic_bitmap_reset(&iface->rx.srq.free_bitmap, wqe_index);
     }
 
-    uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, 0, count);
+    uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, wqe_index, count);
     return count;
 }
 
@@ -574,6 +574,13 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
     qp_attr->super.srq_num = srq->srq_num;
 }
 
+int uct_rc_mlx5_iface_stride_size(uct_rc_mlx5_iface_common_t *iface)
+{
+    return uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
+                   iface->super.super.config.stride_size :
+                   uct_ib_mlx5_srq_stride(uct_rc_mlx5_num_strides(iface));
+}
+
 ucs_status_t
 uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                  const uct_rc_iface_common_config_t *rc_config)
@@ -591,7 +598,8 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        uct_rc_mlx5_num_strides(iface));
+                                        uct_rc_mlx5_num_strides(iface),
+                                        uct_rc_mlx5_iface_stride_size(iface));
 
     if (status != UCS_OK) {
         goto err_free_srq;
@@ -1001,7 +1009,8 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        uct_rc_mlx5_num_strides(iface));
+                                        uct_rc_mlx5_num_strides(iface),
+                                        uct_rc_mlx5_iface_stride_size(iface));
     if (status != UCS_OK) {
         goto err_free_srq;
     }
@@ -1151,9 +1160,12 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                     uct_iface_attr_t *iface_attr,
                                     size_t max_inline, size_t max_tag_eager_iov)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
-                                                       uct_rc_mlx5_iface_common_t);
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_device_t *dev = uct_ib_iface_device(ib_iface);
+    unsigned max_bcopy   = uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
+                                     uct_ib_iface_max_message_size(ib_iface) :
+                                     iface->super.super.config.seg_size;
 
     /* Atomics */
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
@@ -1216,6 +1228,20 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
 
     /* Tag Offload */
     uct_rc_mlx5_tag_query(iface, iface_attr, max_inline, max_tag_eager_iov);
+
+    /* Striding Message Based */
+    iface_attr->cap.am.max_bcopy  = ucs_min(max_bcopy -
+                                                    sizeof(uct_rc_mlx5_hdr_t),
+                                            iface_attr->cap.am.max_bcopy);
+    iface_attr->cap.am.max_zcopy  = ucs_min(max_bcopy -
+                                                    sizeof(uct_rc_mlx5_hdr_t),
+                                            iface_attr->cap.am.max_zcopy);
+    iface_attr->cap.get.max_bcopy = ucs_min(max_bcopy,
+                                            iface_attr->cap.get.max_bcopy);
+    iface_attr->cap.get.max_zcopy = ucs_min(max_bcopy,
+                                            iface_attr->cap.get.max_zcopy);
+    iface_attr->cap.put.max_bcopy = ucs_min(max_bcopy,
+                                            iface_attr->cap.put.max_bcopy);
 }
 
 ucs_status_t

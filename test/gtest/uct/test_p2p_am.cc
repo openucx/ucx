@@ -582,7 +582,9 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_bcopy,
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_keep_data,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT,
-                                 UCT_IFACE_FLAG_AM_DUP)) {
+                                 UCT_IFACE_FLAG_AM_DUP) ||
+                             !is_srq_msg_based())
+{
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
@@ -591,7 +593,9 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_keep_data,
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_iov_keep_data,
-                     !check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP))
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT,
+                                 UCT_IFACE_FLAG_AM_DUP) ||
+                             !is_srq_msg_based())
 {
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short_iov),
@@ -601,7 +605,9 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_iov_keep_data,
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_bcopy_keep_data,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY,
-                                 UCT_IFACE_FLAG_AM_DUP)) {
+                                 UCT_IFACE_FLAG_AM_DUP) ||
+                             !is_srq_msg_based())
+{
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     sizeof(uint64_t),
@@ -627,7 +633,8 @@ const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 128;
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs,
                      (RUNNING_ON_VALGRIND || m_rx_buf_limit_failed ||
                       !check_caps(UCT_IFACE_FLAG_AM_SHORT |
-                                  UCT_IFACE_FLAG_CB_SYNC)))
+                                  UCT_IFACE_FLAG_CB_SYNC)) ||
+                             !is_srq_msg_based())
 {
     mapped_buffer sendbuf(ucs_min(sender().iface_attr().cap.am.max_short,
                                   10 * sizeof(uint64_t)),
