@@ -1655,7 +1655,7 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                                                      0, sinfo, NULL, 0);
                 if (status != UCS_OK) {
                     ucs_array_pop_back(&sinfo_array);
-                    break;
+                    continue;
                 }
             }
         }
@@ -1671,7 +1671,7 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                                                      0, sinfo, NULL, 0);
                 if (status != UCS_OK) {
                     ucs_array_pop_back(&sinfo_array);
-                    break;
+                    continue;
                 }
             }
         }
