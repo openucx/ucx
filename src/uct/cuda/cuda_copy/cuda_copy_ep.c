@@ -65,26 +65,61 @@ uct_cuda_copy_get_stream(uct_cuda_copy_ctx_rsc_t *ctx_rsc,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
-uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
+uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length,
+                           ucs_sys_device_t *sys_dev)
 {
     ucs_memory_info_t mem_info;
+    uct_md_mem_attr_t mem_attr;
     ucs_status_t status;
 
     status = ucs_memtype_cache_lookup(address, length, &mem_info);
     if (status == UCS_ERR_NO_ELEM) {
-        return UCS_MEMORY_TYPE_HOST;
+        goto out_host;
     }
 
-    if ((status == UCS_ERR_UNSUPPORTED) ||
-        (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN)) {
-        status = uct_cuda_copy_md_detect_memory_type(md, address, length,
-                                                     &mem_info.type);
+    if (ucs_unlikely((status == UCS_ERR_UNSUPPORTED) ||
+                     (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN))) {
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+
+        status = uct_cuda_copy_md_mem_query(md, address, length, &mem_attr);
         if (status != UCS_OK) {
-            return UCS_MEMORY_TYPE_HOST;
+            goto out_host;
         }
+
+        mem_info.type    = mem_attr.mem_type;
+        mem_info.sys_dev = mem_attr.sys_dev;
     }
 
+    *sys_dev = mem_info.sys_dev;
     return mem_info.type;
+
+out_host:
+    *sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    return UCS_MEMORY_TYPE_HOST;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_copy_get_mem_types(uct_md_h md, void *src, void *dst, size_t length,
+                            ucs_memory_type_t *src_mem_type_p,
+                            ucs_memory_type_t *dst_mem_type_p,
+                            ucs_sys_device_t *sys_dev_p)
+{
+    ucs_sys_device_t src_sys_dev, dst_sys_dev;
+
+    *src_mem_type_p = uct_cuda_copy_get_mem_type(md, src, length, &src_sys_dev);
+    *dst_mem_type_p = uct_cuda_copy_get_mem_type(md, dst, length, &dst_sys_dev);
+    *sys_dev_p      = (src_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                      src_sys_dev : dst_sys_dev;
+
+    ucs_assertv((src_sys_dev == dst_sys_dev) ||
+                (src_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+                (dst_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN),
+                "src mtype %s, sys_dev %s; dst mtype %s, sys_dev %s",
+                ucs_memory_type_names[*src_mem_type_p],
+                ucs_topo_sys_device_get_name(src_sys_dev),
+                ucs_memory_type_names[*dst_mem_type_p],
+                ucs_topo_sys_device_get_name(dst_sys_dev));
 }
 
 static ucs_status_t
@@ -139,7 +174,8 @@ uct_cuda_primary_ctx_pop_and_release(CUdevice cuda_device)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface, CUdevice *cuda_device_p,
+uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface,
+                          ucs_sys_device_t sys_dev, CUdevice *cuda_device_p,
                           uct_cuda_copy_ctx_rsc_t **ctx_rsc_p)
 {
     unsigned long long ctx_id;
@@ -148,15 +184,40 @@ uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface, CUdevice *cuda_device_p,
     ucs_status_t status;
     uct_cuda_ctx_rsc_t *ctx_rsc;
 
-    result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
-    if (ucs_likely(result == CUDA_SUCCESS)) {
-        /* If there is a current context, the CU_DEVICE_INVALID is returned in
-           cuda_device_p */
-        cuda_device = CU_DEVICE_INVALID;
+    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        /* If valid sys_dev is provided we need to retain and push primary context
+         * of the device. This is because of some limitation when using VMM and
+         * cuMemcpyAsync - the current context should match the device VMM has
+         * access to. */
+        status = uct_cuda_base_get_cuda_device(sys_dev, &cuda_device);
+        if (ucs_unlikely(status != UCS_OK)) {
+            goto err;
+        }
+
+        status = uct_cuda_copy_push_ctx(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
+        if (status != UCS_OK) {
+            goto err;
+        }
     } else {
-        /* Otherwise, the first active primary context found is pushed as a
-           current context. The caller must pop, and release the primary context
-           on the device returned in cuda_device_p. */
+        /* If there is a current context set, the CU_DEVICE_INVALID is returned
+         * in cuda_device_p */
+        cuda_device = CU_DEVICE_INVALID;
+    }
+
+    result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
+    if (ucs_unlikely(result != CUDA_SUCCESS)) {
+        if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            /* Primary context is pushed, but ctx_get_id failed, which means
+             * that some CUDA error occurred.*/
+            ucs_error("failed to get primary context id of device %s (%d)",
+                      ucs_topo_sys_device_get_name(sys_dev), cuda_device);
+            status = UCS_ERR_IO_ERROR;
+            goto err_pop_and_release;
+        }
+
+        /* Specific GPU device was not requested, push the first active primary
+         * context as current context. The caller must pop, and release the
+         * primary context on the device returned in cuda_device_p. */
         status = uct_cuda_primary_ctx_push_first_active(&cuda_device);
         if (status != UCS_OK) {
             goto err;
@@ -200,18 +261,20 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     CUstream *stream;
     ucs_queue_head_t *event_q;
     uct_cuda_copy_ctx_rsc_t *ctx_rsc;
+    ucs_sys_device_t sys_dev;
 
     if (!length) {
         return UCS_OK;
     }
 
-    status = uct_cuda_copy_ctx_rsc_get(iface, &cuda_device, &ctx_rsc);
+    uct_cuda_copy_get_mem_types(base_iface->md, src, dst, length, &src_type,
+                                &dst_type, &sys_dev);
+
+    status = uct_cuda_copy_ctx_rsc_get(iface, sys_dev, &cuda_device, &ctx_rsc);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
 
-    src_type = uct_cuda_copy_get_mem_type(base_iface->md, src, length);
-    dst_type = uct_cuda_copy_get_mem_type(base_iface->md, dst, length);
     q_desc   = &ctx_rsc->queue_desc[src_type][dst_type];
     event_q  = &q_desc->event_queue;
     stream   = uct_cuda_copy_get_stream(ctx_rsc, src_type, dst_type);
@@ -313,9 +376,15 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
     CUdevice cuda_device;
     uct_cuda_copy_ctx_rsc_t *ctx_rsc;
     ucs_status_t status;
+    ucs_memory_type_t src_type;
+    ucs_memory_type_t dst_type;
+    ucs_sys_device_t sys_dev;
     CUstream *stream;
 
-    status = uct_cuda_copy_ctx_rsc_get(iface, &cuda_device, &ctx_rsc);
+    uct_cuda_copy_get_mem_types(iface->super.super.md, (void*)src, (void*)dst,
+                                length, &src_type, &dst_type, &sys_dev);
+
+    status = uct_cuda_copy_ctx_rsc_get(iface, sys_dev, &cuda_device, &ctx_rsc);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }

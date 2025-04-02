@@ -71,4 +71,14 @@ ucs_status_t uct_cuda_copy_md_detect_memory_type(uct_md_h md,
                                                  size_t length,
                                                  ucs_memory_type_t *mem_type_p);
 
+
+ucs_status_t uct_cuda_copy_push_ctx(CUdevice device, int retain_inactive,
+                                    ucs_log_level_t log_level);
+
+
+ucs_status_t
+uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
+                           uct_md_mem_attr_t *mem_attr);
+
+
 #endif

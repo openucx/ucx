@@ -324,9 +324,8 @@ static void uct_cuda_copy_sync_memops(CUdeviceptr dptr, int is_vmm)
                                   CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, dptr));
 }
 
-static ucs_status_t
-uct_cuda_copy_push_ctx(CUdevice device, int retain_inactive,
-                       ucs_log_level_t log_level)
+ucs_status_t uct_cuda_copy_push_ctx(CUdevice device, int retain_inactive,
+                                    ucs_log_level_t log_level)
 {
     ucs_status_t status;
     CUcontext primary_ctx;
@@ -874,7 +873,7 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
     return UCT_DMABUF_FD_INVALID;
 }
 
-static ucs_status_t
+ucs_status_t
 uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
                            uct_md_mem_attr_t *mem_attr)
 {
