@@ -1886,11 +1886,19 @@ ucp_ep_config_find_match_lane(ucp_ep_h ep, const ucp_ep_config_key_t *old_key,
                               const ucp_ep_config_key_t *new_key)
 {
     ucp_lane_index_t new_lane;
+    int is_match;
+
+    if ((old_lane == ucp_ep_get_am_lane(ep)) &&
+        ucp_ep_is_am_need_flush(ep, new_key)) {
+        /* Old AM lane can be reused only by matching AM lane in new config */
+        is_match = ucp_ep_config_lane_is_peer_match(old_key, old_lane, new_key,
+                                                    new_key->am_lane);
+        return is_match ? new_key->am_lane : UCP_NULL_LANE;
+    }
 
     for (new_lane = 0; new_lane < new_key->num_lanes; ++new_lane) {
         if ((new_lane == new_key->am_lane) &&
             ucp_ep_is_am_need_flush(ep, new_key)) {
-            /* Skip new AM lane in order to allow old AM replacement */
             continue;
         }
 
