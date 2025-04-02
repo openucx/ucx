@@ -1706,7 +1706,7 @@ ucp_wireup_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
 static ucs_status_t
 ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
                                 uct_ep_h *new_uct_eps,
-                                ucp_lane_index_t *reuse_lane_map)
+                                const ucp_lane_index_t *reuse_lane_map)
 {
     uct_ep_h uct_ep   = NULL;
     int am_need_flush = ucp_wireup_is_am_need_flush(ep, key, reuse_lane_map);
@@ -1837,7 +1837,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
 
     if (!ucp_wireup_should_reconfigure(ep, reuse_lane_map,
                                        new_key->num_lanes)) {
-        /* Restore wireup lane as it was overriden by
+        /* Restore wireup lane as it was overridden by
          * ucp_wireup_try_select_lanes. Also init connection bitmap as no lanes
          * are re-connected. */
         new_key->wireup_msg_lane = old_key->wireup_msg_lane;
