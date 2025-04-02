@@ -16,6 +16,9 @@ extern "C" {
 
 class mock_iface {
 public:
+    using iface_attr_func_t = std::function<void(uct_iface_attr&)>;
+    using perf_attr_func_t  = std::function<void(uct_perf_attr_t&)>;
+
     mock_iface() : m_tl(nullptr)
     {
         ucs_assert(m_self == nullptr);
@@ -33,16 +36,12 @@ public:
         m_mock.cleanup();
     }
 
-    template <typename IfaceFn = void (*)(uct_iface_attr&),
-              typename PerfFn  = void (*)(uct_perf_attr_t&)>
     void add_mock_iface(const std::string &dev_name = "mock",
-                        IfaceFn cb = [](uct_iface_attr_t &iface_attr) {},
-                        PerfFn perf_cb = default_perf_mock)
+                        iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
+                        perf_attr_func_t perf_cb = default_perf_mock)
     {
-        m_iface_attrs_funcs[dev_name] =
-            iface_attr_func_t(new std::function<void(uct_iface_attr&)>(cb));
-        m_perf_attrs_funcs[dev_name]  =
-            perf_attr_func_t(new std::function<void(uct_perf_attr_t&)>(perf_cb));
+        m_iface_attrs_funcs[dev_name] = std::move(cb);
+        m_perf_attrs_funcs[dev_name]  = std::move(perf_cb);
     }
 
     void mock_transport(const std::string &tl_name)
@@ -143,7 +142,7 @@ private:
         uct_base_iface_t *base  = ucs_derived_of(iface, uct_base_iface_t);
         std::string &iface_name = m_self->m_iface_names[base];
         auto it                 = m_self->m_iface_attrs_funcs.find(iface_name);
-        (*it->second)(*iface_attr);
+        (it->second)(*iface_attr);
         return UCS_OK;
     }
 
@@ -157,7 +156,7 @@ private:
 
         std::string &iface_name = m_self->m_iface_names[base];
         auto it                 = m_self->m_perf_attrs_funcs.find(iface_name);
-        (*it->second)(*perf_attr);
+        (it->second)(*perf_attr);
         return UCS_OK;
     }
 
@@ -165,13 +164,6 @@ private:
     {
         perf_attr.path_bandwidth = perf_attr.bandwidth;
     }
-
-    /* TODO: We can't easily use std::function inside container because coverity
-     * complains on uninit member variables inside std::function, so it's not
-     * trivial to suppress the warning. Workaround is to avoid std::function
-     * copying by using unique_ptr */
-    using iface_attr_func_t = std::unique_ptr<std::function<void(uct_iface_attr&)>>;
-    using perf_attr_func_t  = std::unique_ptr<std::function<void(uct_perf_attr_t&)>>;
 
     /* We have to use singleton to mock C functions */
     static mock_iface *m_self;
