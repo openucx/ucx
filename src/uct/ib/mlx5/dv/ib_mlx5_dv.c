@@ -457,7 +457,6 @@ uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
         ucs_log(log_level,
                 "mlx5dv_devx_obj_create(%s) failed on %s, syndrome 0x%x: %m",
                 msg_arg, ibv_get_device_name(context->device), syndrome);
-        ucs_log_print_backtrace(UCS_LOG_LEVEL_WARN);
     }
 
     return obj;

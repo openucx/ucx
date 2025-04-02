@@ -233,7 +233,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx.queue_len;
-    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.rx.cq_len;
+    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.rx.queue_len;
     init_attr.rx_hdr_len            = sizeof(uct_srd_hdr_t);
     init_attr.seg_size              = ucs_min(mtu, config->super.seg_size);
     init_attr.qp_type               = IBV_QPT_DRIVER;
