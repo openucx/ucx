@@ -1139,26 +1139,23 @@ run_gtest_bullseye() {
 		*)       SRC_PATH="/auto/app/BullsEye/BullseyeCoverage-Latest-x86" ;;
 	esac
 
-	# Create a local copy of Bullseye binaries
+	# Create a local Bullseye copy due to NFS instability
 	DEST_PATH="${WORKSPACE}/BS_LOCAL"
 	mkdir -p "$DEST_PATH"
-	rsync -az "$SRC_PATH/" "$DEST_PATH/"
+	rsync -az "$SRC_PATH/" "$DEST_PATH/" || true
 
 	export PATH="$DEST_PATH/bin:$PATH"
 
 	if ! command -v cov01 &> /dev/null; then
 		azure_log_warning "=== Skipping Bullseye: cov01 not found ==="
-		return 0
+	else
+		echo "=== Enable Bullseye instrumentation ==="
+		COV_DIR=/hpc/scrap/azure/bullseye/${BUILD_BUILDID}-${BUILD_BUILDNUMBER}
+		mkdir -p "$COV_DIR"
+		export COVFILE=$COV_DIR/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov
+		cov01 --on
 	fi
 
-	# Set Bullseye report file per job
-	COV_DIR=/hpc/scrap/azure/bullseye/${BUILD_BUILDID}-${BUILD_BUILDNUMBER}
-	mkdir -p "$COV_DIR"
-	COVFILE=$COV_DIR/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov
-	export COVFILE
-
-	echo "=== Running gtests with Bullseye Coverage ==="
-	cov01 --on
 	build devel --enable-gtest
 	run_gtest "default"
 	cov01 --off
