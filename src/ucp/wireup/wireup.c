@@ -1139,8 +1139,10 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         }
     }
 
-    status = ucp_address_unpack(worker, data + ucp_wireup_get_msg_size(msg),
-                                UCP_ADDRESS_PACK_FLAGS_ALL, &remote_address);
+    status = ucp_address_unpack(worker,
+                                (char*)msg + ucp_wireup_get_msg_size(msg),
+                                UCP_ADDRESS_PACK_FLAGS_ALL,
+                                &remote_address);
     if (status != UCS_OK) {
         ucs_error("failed to unpack address: %s", ucs_status_string(status));
         goto out;
