@@ -876,16 +876,17 @@ public:
 
     virtual void init() override
     {
-        for (unsigned i = 0; i < 50; ++i) {
+        for (unsigned i = 0; i < 15; ++i) {
             /* GPU distance is decreasing with i */
-            ucs_sys_dev_distance_t distance = {0, 32e9 - (i * 1e8)};
-            add_mock_distance(i, 0, distance);
-            add_mock_distance(i, UCS_SYS_DEVICE_ID_UNKNOWN, distance);
-            add_mock_iface("mock" + std::to_string(i),
-                           [i](uct_iface_attr_t &iface_attr) {
+            ucs_sys_dev_distance_t distance = {0, 40e9 - (i * 1e9)};
+            add_mock_distance(i + 1, 0, distance);
+            add_mock_distance(i + 1, UCS_SYS_DEVICE_ID_UNKNOWN, distance);
+            char name[10];
+            snprintf(name, sizeof(name), "mock%02u", i);
+            add_mock_iface(name, [i](uct_iface_attr_t &iface_attr) {
                 iface_attr.cap.am.max_short = 2000;
                 /* BW is increasing with i */
-                iface_attr.bandwidth.shared = 30e9 + (i * 1e8);
+                iface_attr.bandwidth.shared = 30e9 + (i * 1e9);
                 iface_attr.latency.c        = 600e-9;
                 iface_attr.latency.m        = 1e-9;
             });
@@ -904,8 +905,24 @@ UCS_TEST_P(test_ucp_proto_mock_gpu_selection, test, "IB_NUM_PATHS?=2",
     key.param.op_attr          = 0;
     key.param.mem_type         = UCS_MEMORY_TYPE_CUDA_MANAGED;
 
+    /* We expect to select lanes with largest max(BW, distance) */
+    const std::string config = "25% on rc_mlx5/mock06/path0, 26% on rc_mlx5/mock05/path0, "
+                               "26% on rc_mlx5/mock04/path0 and 23% on rc_mlx5/mock03/path0";
     check_ep_config(sender(), {
         /* TODO */
+        {1, 8246,    "copy-in",   "rc_mlx5/mock00/path0"},
+        {8247, 512 * UCS_KBYTE,
+         "rendezvous cuda_copy, fenced write to remote, frag host, cuda_copy, frag host",
+         config},
+        {(512 * UCS_KBYTE) + 1, 553854,
+         "rendezvous cuda_copy, fenced write to remote, frag cuda, cuda_copy, frag cuda",
+         config},
+        {553855, 123523016,
+         "rendezvous pipeline cuda_copy, fenced write to remote, frag host, cuda_copy, frag host",
+         config},
+        {123523017, INF,
+         "rendezvous pipeline cuda_copy, fenced write to remote, frag cuda, cuda_copy, frag cuda",
+         config},
     }, key);
 }
 
