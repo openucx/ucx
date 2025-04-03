@@ -616,6 +616,8 @@ err:
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 {
+    ucs_dynamic_bitmap_cleanup(&srq->free_bitmap);
+
     switch (srq->type) {
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
         uct_ib_destroy_srq(srq->verbs.srq);

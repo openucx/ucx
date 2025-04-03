@@ -634,7 +634,6 @@ static void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface)
                                                        uct_ib_mlx5_md_t);
 
     uct_rc_mlx5_destroy_srq(md, &iface->rx.srq);
-    ucs_dynamic_bitmap_cleanup(&iface->rx.srq.free_bitmap);
 }
 
 static void
