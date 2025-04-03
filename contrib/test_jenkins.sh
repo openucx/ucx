@@ -1165,10 +1165,10 @@ run_gtest_bullseye() {
 
 	if $BULLSEYE_ENABLED; then
 		cov01 --off
-        if ! covfn -f "${COVFILE}"; then
-            azure_log_error "Bullseye report validation failed!"
-        fi
-    fi
+		if ! covfn -f "${COVFILE}"; then
+			azure_log_error "Bullseye report validation failed!"
+		fi
+	fi
 }
 
 #
