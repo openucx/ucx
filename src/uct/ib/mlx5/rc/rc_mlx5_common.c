@@ -1163,9 +1163,7 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_device_t *dev = uct_ib_iface_device(ib_iface);
-    unsigned max_bcopy   = uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
-                                     uct_ib_iface_max_message_size(ib_iface) :
-                                     iface->super.super.config.seg_size;
+    unsigned max_bcopy   = uct_ib_iface_max_message_size(ib_iface);
 
     /* Atomics */
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
@@ -1230,18 +1228,20 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     uct_rc_mlx5_tag_query(iface, iface_attr, max_inline, max_tag_eager_iov);
 
     /* Striding Message Based */
-    iface_attr->cap.am.max_bcopy  = ucs_min(max_bcopy -
-                                                    sizeof(uct_rc_mlx5_hdr_t),
-                                            iface_attr->cap.am.max_bcopy);
-    iface_attr->cap.am.max_zcopy  = ucs_min(max_bcopy -
-                                                    sizeof(uct_rc_mlx5_hdr_t),
-                                            iface_attr->cap.am.max_zcopy);
-    iface_attr->cap.get.max_bcopy = ucs_min(max_bcopy,
-                                            iface_attr->cap.get.max_bcopy);
-    iface_attr->cap.get.max_zcopy = ucs_min(max_bcopy,
-                                            iface_attr->cap.get.max_zcopy);
-    iface_attr->cap.put.max_bcopy = ucs_min(max_bcopy,
-                                            iface_attr->cap.put.max_bcopy);
+    if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
+        iface_attr->cap.am.max_bcopy =
+                ucs_min(max_bcopy - sizeof(uct_rc_mlx5_hdr_t),
+                        iface_attr->cap.am.max_bcopy);
+        iface_attr->cap.am.max_zcopy =
+                ucs_min(max_bcopy - sizeof(uct_rc_mlx5_hdr_t),
+                        iface_attr->cap.am.max_zcopy);
+        iface_attr->cap.get.max_bcopy = ucs_min(max_bcopy,
+                                                iface_attr->cap.get.max_bcopy);
+        iface_attr->cap.get.max_zcopy = ucs_min(max_bcopy,
+                                                iface_attr->cap.get.max_zcopy);
+        iface_attr->cap.put.max_bcopy = ucs_min(max_bcopy,
+                                                iface_attr->cap.put.max_bcopy);
+    }
 }
 
 ucs_status_t

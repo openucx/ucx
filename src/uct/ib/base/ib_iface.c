@@ -73,7 +73,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {"", "ALLOC=thp,mmap,heap", NULL,
    ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-  {"SEG_SIZE", "32768",
+  {"SEG_SIZE", "8192",
    "Size of bounce buffers used for post_send and post_recv.",
    ucs_offsetof(uct_ib_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
