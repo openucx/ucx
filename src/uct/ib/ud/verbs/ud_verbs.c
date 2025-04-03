@@ -597,8 +597,12 @@ uct_ud_verbs_iface_unpack_peer_address(uct_ud_iface_t *iface,
 
     memset(peer_address, 0, sizeof(*peer_address));
 
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
-                                        &ah_attr, &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
+                                                 &ah_attr, &path_mtu);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "UD verbs connect",
                                     &peer_address->ah);
     if (status != UCS_OK) {
@@ -633,8 +637,12 @@ int uct_ud_verbs_ep_is_connected(const uct_ep_h tl_ep,
     }
 
     ib_addr = (uct_ib_address_t*)params->device_addr;
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ep->super.path_index,
-                                        &ah_attr, &path_mtu);
+    status  = uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr,
+                                                  ep->super.path_index, &ah_attr,
+                                                  &path_mtu);
+    if (status != UCS_OK) {
+        return 0;
+    }
 
     status = uct_ib_device_get_ah_cached(uct_ib_iface_device(ib_iface),
                                          &ah_attr, &ah);
