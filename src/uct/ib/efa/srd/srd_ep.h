@@ -10,14 +10,6 @@
 #include "srd_def.h"
 
 
-#define UCT_SRD_INITIAL_PSN   1
-#define UCT_SRD_EP_NULL_ID    UCS_MASK(24)
-#define UCT_SRD_SEND_OP_ALIGN UCS_SYS_CACHE_LINE_SIZE
-
-
-typedef struct uct_srd_send_op      uct_srd_send_op_t;
-
-
 typedef struct uct_srd_ep {
     uct_base_ep_t   super;
     uint64_t        ep_uuid;          /* Random EP identifier */
@@ -29,21 +21,28 @@ typedef struct uct_srd_ep {
 } uct_srd_ep_t;
 
 
-/*
- * Send descriptor used when receiving TX CQE.
- */
-struct uct_srd_send_op {
-    ucs_list_link_t                  list;         /* Link in ep outstanding send list */
-    uct_srd_ep_t                     *ep;          /* Sender EP */
-} UCS_V_ALIGNED(UCT_SRD_SEND_OP_ALIGN);
-
-
 UCS_CLASS_DECLARE_NEW_FUNC(uct_srd_ep_t, uct_ep_t, const uct_ep_params_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_srd_ep_t, uct_ep_t);
 
 
 ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  const void *buffer, unsigned length);
+ucs_status_t uct_srd_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                     const uct_iov_t *iov, size_t iovcnt);
+ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                            uct_pack_callback_t pack_cb, void *arg,
+                            unsigned flags);
+ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp);
+ucs_status_t uct_srd_ep_get_bcopy(uct_ep_h tl_ep,
+                                  uct_unpack_callback_t unpack_cb, void *arg,
+                                  size_t length, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp);
+ucs_status_t uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
+                                 unsigned header_length, const uct_iov_t *iov,
+                                 size_t iovcnt, unsigned flags,
+                                 uct_completion_t *comp);
 
 void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op);
 
