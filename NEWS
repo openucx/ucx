@@ -7,11 +7,15 @@
 ##
 #
 
-## Current
+## 1.18.1-rc2 (April 2, 2025)
 ### Features:
 #### CUDA
  * Added config keys to update cuda_copy bandwidth for coherent platforms
+ * Improved cache invalidation of memory allocated using CUDA memory pool
 ### Bugfixes:
+#### CUDA
+ * Fixed registration of CUDA Fabric memory allocated by UCT
+ * Fixed VA recycling check of memory allocated using VMM and CUDA memory pool
 
 ## 1.18.1-rc1 (February 20, 2025)
 ### Features:
