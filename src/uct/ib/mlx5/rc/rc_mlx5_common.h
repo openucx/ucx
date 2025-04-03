@@ -99,6 +99,7 @@ typedef enum {
     UCT_RC_MLX5_SRQ_TOPO_LIST,
     UCT_RC_MLX5_SRQ_TOPO_CYCLIC,
     UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED,
+    UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST,
     UCT_RC_MLX5_SRQ_TOPO_LAST
 } uct_rc_mlx5_srq_topo_t;
 
@@ -411,7 +412,12 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        log_ack_req_freq;
         uint8_t                        dp_ordering;
         uint8_t                        dp_ordering_force;
+        unsigned                       max_message_size_strides;
     } config;
+
+    struct {
+        unsigned                       num_strides;
+    } msg_based;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
 
@@ -575,6 +581,8 @@ extern ucs_config_field_t uct_rc_mlx5_common_config_table[];
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface);
 unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface);
+unsigned
+uct_rc_mlx5_iface_srq_post_recv_msg_based(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface);
 
@@ -660,6 +668,8 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     return UCS_ERR_UNSUPPORTED;
 }
 #endif
+
+int uct_rc_mlx5_iface_stride_size(uct_rc_mlx5_iface_common_t *iface);
 
 #if HAVE_DEVX
 ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,

@@ -15,6 +15,7 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/datastruct/dynamic_bitmap.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/status.h>
 
@@ -208,8 +209,11 @@ enum {
     /* Device supports forcing ordering configuration */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE    = UCS_BIT(18),
 
+    /* Device supports extended QP context capabilities */
+    UCT_IB_MLX5_MD_FLAG_QP_CTX_EXTENSION      = UCS_BIT(20),
+
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 21,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -232,7 +236,8 @@ enum {
     UCT_IB_MLX5_POLL_FLAG_HAS_EP      = UCS_BIT(1),
     UCT_IB_MLX5_POLL_FLAG_TAG_CQE     = UCS_BIT(2),
     UCT_IB_MLX5_POLL_FLAG_LINKED_LIST = UCS_BIT(3),
-    UCT_IB_MLX5_POLL_FLAG_CQE_ZIP     = UCS_BIT(4)
+    UCT_IB_MLX5_POLL_FLAG_CQE_ZIP     = UCS_BIT(4),
+    UCT_IB_MLX5_POLL_FLAG_MSG_BASED   = UCS_BIT(5)
 };
 
 
@@ -444,8 +449,22 @@ typedef struct uct_ib_mlx5_md {
         uint8_t              rc;
         uint8_t              dc;
     } dp_ordering_cap;
+
+    struct {
+        uint8_t supported_tls;
+        uint16_t max_message_size_stride;
+        uint32_t max_message_size_bytes;
+        uint32_t min_stride_size;
+        uint32_t max_stride_size;
+    } msg_based_srq;
 } uct_ib_mlx5_md_t;
 
+enum {
+    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_RC = UCS_BIT(0),
+    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_UC = UCS_BIT(1),
+    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_DC = UCS_BIT(2),
+    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_UD = UCS_BIT(3)
+};
 
 typedef enum {
     UCT_IB_MLX5_MMIO_MODE_BF_POST,    /* BF without flush, can be used only from
@@ -471,6 +490,7 @@ typedef struct uct_ib_mlx5_iface_config {
     uct_ib_mlx5_mmio_mode_t  mmio_mode;
     ucs_ternary_auto_value_t ar_enable;
     int                      cqe_zip_enable[UCT_IB_DIR_LAST];
+    unsigned                 max_message_size_strides;
 } uct_ib_mlx5_iface_config_t;
 
 
@@ -504,6 +524,7 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t                           sw_pi;      /* what is posted to hw */
     uint16_t                           mask;
     uint16_t                           stride;
+    ucs_dynamic_bitmap_t               free_bitmap;
     union {
         struct {
             struct ibv_srq             *srq;
@@ -625,6 +646,7 @@ typedef struct uct_ib_mlx5_qp_attr {
     int                         full_handshake;
     int                         rdma_wr_disabled;
     uint8_t                     log_num_dci_stream_channels;
+    int                         msg_based_srq_associated;
 } uct_ib_mlx5_qp_attr_t;
 
 
@@ -892,10 +914,11 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
  */
 ucs_status_t
 uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                           size_t sg_byte_count, int num_sge);
+                           size_t sg_byte_count, int num_sge, int stride_size);
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
-                               uint32_t tail, size_t sg_byte_count, int num_sge);
+                               uint32_t tail, size_t sg_byte_count, int num_sge,
+                               unsigned num_strides, int stride_size);
 
 void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 
