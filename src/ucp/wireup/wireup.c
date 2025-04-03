@@ -871,15 +871,21 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
                                    const ucp_wireup_msg_t *msg,
                                    const ucp_unpacked_address_t *remote_address)
 {
-    unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE;
-    ucp_ep_h ep            = msg_ep;
-    ucs_usage_tracker_h usage_tracker;
+    unsigned ep_init_flags            = UCP_EP_INIT_CREATE_AM_LANE;
+    ucp_ep_h ep                       = msg_ep;
+    ucs_usage_tracker_h usage_tracker = worker->usage_tracker.handle;
     ucp_wireup_msg_extended_t *extended;
     ucs_status_t status;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PROMOTE);
+    extended = ucs_derived_of(msg, ucp_wireup_msg_extended_t);
 
     if (ep == NULL) {
+        /* Avoid EP creation in case no promotion is expected */
+        if (!ucs_usage_tracker_is_promotable(usage_tracker, extended->score)) {
+            return;
+        }
+
         status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address, msg,
                                               ep_init_flags, &ep);
         if (status != UCS_OK) {
@@ -898,8 +904,6 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
         return;
     }
 
-    usage_tracker = worker->usage_tracker.handle;
-    extended      = ucs_derived_of(msg, ucp_wireup_msg_extended_t);
     ucs_usage_tracker_set_min_score(usage_tracker, ep, extended->score);
 
     if (!ucs_usage_tracker_is_promoted(usage_tracker, ep)) {

@@ -171,4 +171,16 @@ ucs_usage_tracker_touch_key(ucs_usage_tracker_h usage_tracker, void *key)
  */
 int ucs_usage_tracker_is_promoted(ucs_usage_tracker_h usage_tracker, void *key);
 
+
+/**
+ * @brief Check if a given score would get its corresponding key promoted.
+ *
+ * @param [in]  usage_tracker  Handle to the Usage Tracker object.
+ * @param [in]  score          Score to check.
+
+ * @return 1 if entry would be promoted, 0 otherwise.
+ */
+int ucs_usage_tracker_is_promotable(ucs_usage_tracker_h usage_tracker,
+                                    double score);
+
 #endif

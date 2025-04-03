@@ -555,8 +555,8 @@ public:
     }
 
     void verify_configuration();
-    bool
-    has_transport(const ucp_test_base::entity &e, const std::string &tl_name);
+    bool is_transport_exist(const ucp_test_base::entity &e,
+                            const std::string &tl_name);
 };
 
 void test_reconfigure_update_rank::verify_configuration()
@@ -576,8 +576,8 @@ void test_reconfigure_update_rank::verify_configuration()
     r_receiver->verify_configuration(*r_sender, 0);
 }
 
-bool test_reconfigure_update_rank::has_transport(const ucp_test_base::entity &e,
-                                                 const std::string &tl_name)
+bool test_reconfigure_update_rank::is_transport_exist(
+        const ucp_test_base::entity &e, const std::string &tl_name)
 {
     for (auto lane = 0; lane < ucp_ep_num_lanes(e.ep()); ++lane) {
         auto rsc_index = ucp_ep_get_rsc_index(e.ep(), lane);
@@ -595,14 +595,14 @@ UCS_TEST_P(test_reconfigure_update_rank, promote,
 {
     /* Create DC EP */
     create_entities_and_connect();
-    EXPECT_TRUE(has_transport(sender(), "dc_mlx5"));
-    EXPECT_TRUE(has_transport(receiver(), "dc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(sender(), "dc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "dc_mlx5"));
 
     /* Promote to RC */
     send_recv();
     verify_configuration();
-    EXPECT_TRUE(has_transport(sender(), "rc_mlx5"));
-    EXPECT_TRUE(has_transport(receiver(), "rc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(sender(), "rc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "rc_mlx5"));
 }
 
 UCS_TEST_P(test_reconfigure_update_rank, demote,
@@ -611,13 +611,13 @@ UCS_TEST_P(test_reconfigure_update_rank, demote,
 {
     /* Create DC EP */
     create_entities_and_connect();
-    EXPECT_TRUE(has_transport(sender(), "dc_mlx5"));
-    EXPECT_TRUE(has_transport(receiver(), "dc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(sender(), "dc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "dc_mlx5"));
 
     /* Promote to RC */
     send_recv();
-    EXPECT_TRUE(has_transport(sender(), "rc_mlx5"));
-    EXPECT_TRUE(has_transport(receiver(), "rc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(sender(), "rc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "rc_mlx5"));
 
     auto num_eps = sender().ucph()->config.ext.max_priority_eps + 1;
 
@@ -630,8 +630,8 @@ UCS_TEST_P(test_reconfigure_update_rank, demote,
 
     /* Old EP is demoted */
     verify_configuration();
-    EXPECT_TRUE(has_transport(sender(), "dc_mlx5"));
-    EXPECT_TRUE(has_transport(receiver(), "dc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(sender(), "dc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "dc_mlx5"));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_update_rank, shm_ib, "shm,ib");

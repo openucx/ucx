@@ -178,6 +178,23 @@ static int ucs_usage_tracker_compare(const void *elem_ptr1,
     return (elem1->key > elem2->key) ? 1 : -1;
 }
 
+int ucs_usage_tracker_is_promotable(ucs_usage_tracker_h usage_tracker,
+                                    double score)
+{
+    ucs_usage_tracker_params_t *params = &usage_tracker->params;
+    ucs_usage_tracker_element_t item   = {0};
+    unsigned count                     = 0;
+    ucs_usage_tracker_element_t value;
+
+    item.score = score;
+    kh_foreach_value(&usage_tracker->hash, value,
+        count += (ucs_usage_tracker_compare(&value, &item, params) > 0);
+    )
+
+    return (kh_size(&usage_tracker->hash) <= params->promote_thresh) ||
+           (count >= (kh_size(&usage_tracker->hash) - params->promote_thresh));
+}
+
 /* Promote/Demote entries base on the latest score, and triggers user
   * callback accordingly. */
 static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker,
