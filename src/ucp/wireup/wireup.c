@@ -113,8 +113,6 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     ssize_t packed_len;
     unsigned am_flags;
     struct iovec wireup_msg_iov[2];
-    ucp_rsc_index_t rsc_index;
-    ucp_worker_iface_t *wiface;
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
 
@@ -146,22 +144,6 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     wireup_msg_iov[1].iov_base = req->send.buffer;
     wireup_msg_iov[1].iov_len  = req->send.length;
-
-    /* bcopy size may by limited by MTU of max_bcopy capability,
-     * make sure we have enough space.
-     * TODO: find reliable way of exchange wireup message without this limit */
-    rsc_index  = ucp_ep_get_rsc_index(ep, req->send.lane);
-    wiface     = ucp_worker_iface(ep->worker, rsc_index);
-    packed_len = wireup_msg_iov[0].iov_len + wireup_msg_iov[1].iov_len;
-    if ((packed_len > wiface->attr.cap.am.max_bcopy) ||
-        ((wiface->attr.cap.am.align_mtu != 0) &&
-         (packed_len > wiface->attr.cap.am.align_mtu))) {
-        ucs_error("ep %p: wireup message size %zu exceeds max bcopy size %zu or"
-                  " MTU %zu", ep, packed_len, wiface->attr.cap.am.max_bcopy,
-                  wiface->attr.cap.am.align_mtu);
-        status = UCS_ERR_MESSAGE_TRUNCATED;
-        goto out_free_req;
-    }
 
     packed_len = uct_ep_am_bcopy(ucp_ep_get_lane(ep, req->send.lane),
                                  UCP_AM_ID_WIREUP, ucp_wireup_msg_pack,
