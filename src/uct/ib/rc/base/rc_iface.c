@@ -224,7 +224,6 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->super.config.path_mtu);
 
 
-
     /* PUT */
     iface_attr->cap.put.max_short = put_max_short;
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;

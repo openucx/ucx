@@ -244,9 +244,9 @@ struct uct_ib_iface_config {
     /**
      * Estimated overhead of preparing a work request and posting it to the NIC
      */
-    uct_ib_iface_send_overhead_t send_overhead;
+    uct_ib_iface_send_overhead_t     send_overhead;
 
-    unsigned                     stride_size;
+    unsigned                         stride_size;
 };
 
 

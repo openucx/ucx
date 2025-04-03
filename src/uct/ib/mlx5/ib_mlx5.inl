@@ -42,6 +42,7 @@ uct_ib_mlx5_cqe_is_hw_owned(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe,
     }
 }
 
+
 /**
  * Checks that cqe_format is equal to 3 (cqe is a part of compression block)
  * or opcode contains information about error.

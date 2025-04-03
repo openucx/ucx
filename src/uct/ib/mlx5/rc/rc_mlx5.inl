@@ -12,6 +12,9 @@
 #include <uct/ib/mlx5/ib_mlx5.inl>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 
+
+#define UCT_IB_MLX5_NUM_OF_STRIDES_CONSUMED_MASK 0x1FFF0000
+
 #define UCT_RC_MLX5_EP_DECL(_tl_ep, _iface, _ep) \
     uct_rc_mlx5_ep_t *_ep = ucs_derived_of(_tl_ep, uct_rc_mlx5_ep_t); \
     uct_rc_mlx5_iface_common_t *_iface = ucs_derived_of(_tl_ep->iface, \
@@ -109,8 +112,6 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
         seg->srq.desc        = NULL;
     }
 }
-
-#define UCT_IB_MLX5_NUM_OF_STRIDES_CONSUMED_MASK 0x1FFF0000
 
 static UCS_F_ALWAYS_INLINE uint16_t uct_rc_mlx5_iface_strides_consumed(uint32_t byte_cnt)
 {
@@ -455,9 +456,9 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
                                     byte_len - sizeof(*hdr),
                                     cqe->imm_inval_pkey, cqe->slid, flags);
     } else {
-        status = uct_iface_invoke_am(&iface->super.super.super,
-                                     hdr->rc_hdr.am_id, hdr + 1,
-                                     byte_len - sizeof(*hdr), flags);
+        status = uct_iface_invoke_am(&iface->super.super.super, hdr->rc_hdr.am_id,
+                                     hdr + 1, byte_len - sizeof(*hdr),
+                                     flags);
     }
 
     uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr, status,
