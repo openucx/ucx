@@ -591,7 +591,7 @@ bool test_reconfigure_update_rank::has_transport(const ucp_test_base::entity &e,
 }
 
 UCS_TEST_P(test_reconfigure_update_rank, promote,
-           "DYNAMIC_TL_SWITCH_INTERVAL=1ns", "DYNAMIC_TL_PROGRESS_FACTOR=1")
+           "DYNAMIC_TL_SWITCH_INTERVAL=2ns", "DYNAMIC_TL_PROGRESS_FACTOR=1")
 {
     /* Create DC EP */
     create_entities_and_connect();
@@ -606,7 +606,7 @@ UCS_TEST_P(test_reconfigure_update_rank, promote,
 }
 
 UCS_TEST_P(test_reconfigure_update_rank, demote,
-           "DYNAMIC_TL_SWITCH_INTERVAL=1ns", "DYNAMIC_TL_PROGRESS_FACTOR=1",
+           "DYNAMIC_TL_SWITCH_INTERVAL=2ns", "DYNAMIC_TL_PROGRESS_FACTOR=1",
            "MAX_PRIORITY_EPS=10")
 {
     /* Create DC EP */
