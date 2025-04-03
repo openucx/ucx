@@ -184,11 +184,14 @@ int ucs_usage_tracker_is_promotable(ucs_usage_tracker_h usage_tracker,
     ucs_usage_tracker_params_t *params = &usage_tracker->params;
     ucs_usage_tracker_element_t item   = {0};
     unsigned count                     = 0;
-    ucs_usage_tracker_element_t value;
+    ucs_usage_tracker_element_t value, *value_p, *item_p;
 
     item.score = score;
+    item_p     = &item;
+
     kh_foreach_value(&usage_tracker->hash, value,
-        count += (ucs_usage_tracker_compare(&value, &item, params) > 0);
+        value_p = &value;
+        count  += (ucs_usage_tracker_compare(&value_p, &item_p, params) > 0);
     )
 
     return (kh_size(&usage_tracker->hash) <= params->promote_thresh) ||
