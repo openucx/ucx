@@ -76,7 +76,9 @@ static size_t ucp_am_eager_multi_bcopy_pack_args_first(void *dest, void *arg)
     ucp_request_t *req                   = pack_ctx->req;
     size_t length;
 
-    ucs_assertv(req->send.state.dt_iter.offset == 0, "offset %zu",
+    ucs_assertv(ucp_proto_am_is_first_fragment(req),
+                "req=%p internal_flags=%u offset=%zu", req,
+                req->send.msg_proto.am.internal_flags,
                 req->send.state.dt_iter.offset);
 
     ucp_am_fill_header(hdr, req);
@@ -96,8 +98,10 @@ static size_t ucp_am_eager_multi_bcopy_pack_args_mid(void *dest, void *arg)
     size_t length;
     ucp_am_mid_ftr_t *mid_ftr;
 
-    /* some amount of data should be packed in the first fragment */
-    ucs_assert(req->send.state.dt_iter.offset > 0);
+    ucs_assertv(!ucp_proto_am_is_first_fragment(req),
+                "req=%p internal_flags=%u offset=%zu", req,
+                req->send.msg_proto.am.internal_flags,
+                req->send.state.dt_iter.offset);
 
     hdr->offset = req->send.state.dt_iter.offset;
     length      = ucp_proto_multi_data_pack(pack_ctx, hdr + 1);
@@ -121,7 +125,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_bcopy_send_func(
     ssize_t packed_size;
     ucs_status_t status;
 
-    if (req->send.state.dt_iter.offset == 0) {
+    if (ucp_proto_am_is_first_fragment(req)) {
         pack_ctx.max_payload = ucp_proto_multi_max_payload(
                 req, lpriv,
                 UCP_AM_FIRST_FRAG_META_LEN +
@@ -149,12 +153,17 @@ static ucs_status_t
 ucp_am_eager_multi_bcopy_proto_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    ucs_status_t status;
 
     /* coverity[tainted_data_downcast] */
-    return ucp_proto_multi_bcopy_progress(
+    status = ucp_proto_multi_bcopy_progress(
             req, req->send.proto_config->priv, ucp_proto_msg_multi_request_init,
             ucp_am_eager_multi_bcopy_send_func,
             ucp_proto_request_am_bcopy_complete_success);
+    if (status == UCS_INPROGRESS) {
+        ucp_proto_am_set_middle_fragment(req);
+    }
+    return status;
 }
 
 void ucp_am_eager_multi_bcopy_proto_abort(ucp_request_t *req,
@@ -254,7 +263,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
     UCS_STATIC_ASSERT(sizeof(hdr.first) == sizeof(ucp_am_hdr_t));
     UCS_STATIC_ASSERT(sizeof(hdr.middle) == sizeof(ucp_am_hdr_t));
 
-    if (req->send.state.dt_iter.offset == 0) {
+    if (ucp_proto_am_is_first_fragment(req)) {
         am_id         = UCP_AM_ID_AM_FIRST;
         footer_size   = sizeof(*ftr) + user_hdr_size;
         footer_offset = 0;
@@ -291,14 +300,19 @@ static ucs_status_t
 ucp_am_eager_multi_zcopy_proto_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t status;
 
     /* coverity[tainted_data_downcast] */
-    return ucp_proto_multi_zcopy_progress(
+    status = ucp_proto_multi_zcopy_progress(
             req, req->send.proto_config->priv, ucp_am_eager_multi_zcopy_init,
             UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
             ucp_am_eager_multi_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_am_eager_zcopy_completion);
+    if (status == UCS_INPROGRESS) {
+        ucp_proto_am_set_middle_fragment(req);
+    }
+    return status;
 }
 
 ucp_proto_t ucp_am_eager_multi_zcopy_proto = {
