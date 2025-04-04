@@ -693,6 +693,11 @@ run_mpi_tests() {
 
 			test_malloc_hooks_mpi
 
+			if [ "X$have_cuda" == "Xyes" ] && [ -x ./test/apps/test_mpi_cuda ]
+			then
+				mpirun -np 2 ./test/apps/test_mpi_cuda
+			fi
+
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
 			# from installation directory
 			export LD_LIBRARY_PATH=${save_LD_LIBRARY_PATH}

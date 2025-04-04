@@ -15,6 +15,9 @@ noinst_PROGRAMS       =
 
 if HAVE_MPICC
 noinst_PROGRAMS      += test_memhooks
+if HAVE_CUDA
+noinst_PROGRAMS      += test_mpi_cuda
+endif
 endif
 
 if HAVE_SHMEMCC
@@ -31,6 +34,14 @@ AM_CFLAGS             = $(BASE_CFLAGS)
 if HAVE_MPICC
 test_memhooks_SOURCES = test_memhooks.c
 test_memhooks_LDFLAGS = -ldl
+
+if HAVE_CUDA
+test_mpi_cuda_SOURCES  = test_mpi_cuda.c
+test_mpi_cuda_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+test_mpi_cuda_CFLAGS   = $(BASE_CFLAGS)
+test_mpi_cuda_LDFLAGS  = $(CUDA_LDFLAGS)
+test_mpi_cuda_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la
+endif
 
 # A library we use for testing that memory hooks work in libraries loaded
 # after the hooks were installed
