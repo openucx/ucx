@@ -40,6 +40,8 @@ typedef struct uct_srd_rx_ctx {
 
 KHASH_MAP_INIT_INT64(uct_srd_rx_ctx_hash, uct_srd_rx_ctx_t*);
 
+KHASH_MAP_INIT_INT64(uct_srd_ep_hash, uct_srd_ep_t*);
+
 
 typedef struct uct_srd_iface {
     uct_ib_iface_t                   super;
@@ -48,6 +50,7 @@ typedef struct uct_srd_iface {
     struct ibv_qp_ex                 *qp_ex;
 #endif
     UCS_STATS_NODE_DECLARE(stats);
+    khash_t(uct_srd_ep_hash)         ep_hash;
 
     struct {
         /* Pre-posted receive buffers */
@@ -60,6 +63,7 @@ typedef struct uct_srd_iface {
 
     struct {
         int32_t                      available;
+        int                          in_pending; /* true if invoked from arbiter dispatch */
         ucs_arbiter_t                pending_q;
         struct ibv_sge               sge[UCT_IB_MAX_IOV];
         struct ibv_send_wr           wr_inl;
@@ -68,6 +72,7 @@ typedef struct uct_srd_iface {
         ucs_mpool_t                  send_desc_mp;
         uct_srd_am_short_hdr_t       am_inl_hdr;
         ucs_list_link_t              outstanding_list;
+        ucs_list_link_t              ctl_list;   /* pending CTL messages */
     } tx;
 
     struct {
@@ -108,10 +113,17 @@ typedef struct uct_srd_iface {
                          (_iface)->super.config.seg_size, \
                          "am_zcopy_header_and_data");
 
-#define UCT_SRD_CHECK_AM_BCOPY(_iface, _id, _data_len) \
-    UCT_CHECK_AM_ID(_id); \
-    UCT_SRD_CHECK_AM_LEN(_iface, _id, _data_len, \
-                         (_iface)->super.config.seg_size, "am_bcopy");
+
+void uct_srd_iface_post_send(uct_srd_iface_t *iface, struct ibv_ah *ah,
+                             int dest_qpn, struct ibv_send_wr *wr,
+                             unsigned send_flags);
+
+
+ucs_status_t uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
+void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
+ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
+                                       uct_srd_ctl_id_t id, uint64_t ep_uuid,
+                                       struct ibv_ah *ah, int dest_qpn);
 
 
 static UCS_F_ALWAYS_INLINE int
@@ -130,6 +142,7 @@ uct_srd_iface_get_send_op(uct_srd_iface_t *iface)
 
     return ucs_mpool_get(&iface->tx.send_op_mp);
 }
+
 
 static UCS_F_ALWAYS_INLINE uct_srd_send_desc_t *
 uct_srd_iface_get_send_desc(uct_srd_iface_t *iface)
