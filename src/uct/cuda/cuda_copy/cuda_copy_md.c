@@ -284,9 +284,8 @@ err_mem_release:
 
 typedef CUresult (*uct_cuda_cuCtxSetFlags_t)(unsigned);
 
-static void uct_cuda_copy_sync_memops(CUdeviceptr dptr, int is_vmm)
+static ucs_status_t uct_cuda_copy_sync_memops_fabric(int log_level)
 {
-    unsigned sync_memops_value = 1;
 #if HAVE_CUDA_FABRIC
     static uct_cuda_cuCtxSetFlags_t cuda_cuCtxSetFlags_func =
         (uct_cuda_cuCtxSetFlags_t)ucs_empty_function;
@@ -306,12 +305,22 @@ static void uct_cuda_copy_sync_memops(CUdeviceptr dptr, int is_vmm)
 
     if (cuda_cuCtxSetFlags_func != NULL) {
         /* Synchronize future DMA operations for all memory types */
-        UCT_CUDADRV_FUNC_LOG_WARN(cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS));
-        return;
+        UCT_CUDADRV_FUNC(cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS),
+                         log_level);
+        return UCS_OK;
     }
 #endif
 
-    if (is_vmm) {
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static void uct_cuda_copy_sync_memops(CUdeviceptr dptr, int is_vmm)
+{
+    unsigned sync_memops_value = 1;
+
+    if (uct_cuda_copy_sync_memops_fabric(UCS_LOG_LEVEL_WARN) == UCS_OK) {
+        return;
+    } else if (is_vmm) {
         ucs_warn("cannot set sync_memops on CUDA VMM without cuCtxSetFlags() "
                  "(address=0x%llx)",
                  dptr);
@@ -1028,6 +1037,13 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     }
 
     *md_p = (uct_md_h)md;
+
+    /*
+     * Setting sync memops flag can cause a deadlock if other CUDA operations
+     * are performed in parallel. We avoid that issue by preemptively setting
+     * it during MD open.
+     */
+    uct_cuda_copy_sync_memops_fabric(UCS_LOG_LEVEL_DEBUG);
 
     return UCS_OK;
 
