@@ -6,6 +6,7 @@
 #ifndef UCT_CUDA_COPY_MD_H
 #define UCT_CUDA_COPY_MD_H
 
+#include <ucs/datastruct/khash.h>
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <cuda.h>
@@ -20,11 +21,15 @@ typedef enum {
 } uct_cuda_pref_loc_t;
 
 
+KHASH_SET_INIT_INT64(cuda_ctx_set);
+
+
 /**
  * @brief cuda_copy MD descriptor
  */
 typedef struct uct_cuda_copy_md {
     struct uct_md                super;           /* Domain info */
+    khash_t(cuda_ctx_set)        sync_memops;
     size_t                       granularity;     /* allocation granularity */
     struct {
         ucs_on_off_auto_value_t  alloc_whole_reg; /* force return of allocation
