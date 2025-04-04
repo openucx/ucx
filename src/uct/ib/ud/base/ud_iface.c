@@ -733,10 +733,11 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
 
     iface_attr->cap.am.max_short       = uct_ib_iface_hdr_size(iface->config.max_inline,
                                                                sizeof(uct_ud_neth_t));
-    iface_attr->cap.am.max_bcopy       = iface->super.config.seg_size - UCT_UD_RX_HDR_LEN;
     iface_attr->cap.am.min_zcopy       = 0;
     iface_attr->cap.am.max_zcopy       = iface->super.config.seg_size - UCT_UD_RX_HDR_LEN;
     iface_attr->cap.am.align_mtu       = uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
+    iface_attr->cap.am.max_bcopy       = ucs_min(iface->super.config.seg_size - UCT_UD_RX_HDR_LEN,
+                                                 iface_attr->cap.am.align_mtu);
     iface_attr->cap.am.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.am.max_iov         = am_max_iov;
     iface_attr->cap.am.max_hdr         = am_max_hdr;

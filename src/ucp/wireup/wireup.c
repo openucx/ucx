@@ -113,6 +113,8 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     ssize_t packed_len;
     unsigned am_flags;
     struct iovec wireup_msg_iov[2];
+    uct_ep_h uct_ep;
+    uct_iface_attr_t iface_attr;
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
 
@@ -144,6 +146,29 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     wireup_msg_iov[1].iov_base = req->send.buffer;
     wireup_msg_iov[1].iov_len  = req->send.length;
+
+    /* bcopy size may by limited by max_bcopy capability, make sure we have
+     * enough space.
+     * TODO: find reliable way of exchange wireup message without this limit */
+    packed_len = wireup_msg_iov[0].iov_len + wireup_msg_iov[1].iov_len;
+    uct_ep     = ucp_ep_get_lane(ep, req->send.lane);
+    if (ucp_wireup_ep_test(uct_ep)) {
+        uct_ep = ucp_wireup_ep_get_msg_ep(ucp_wireup_ep(uct_ep));
+    }
+
+    status = uct_iface_query(uct_ep->iface, &iface_attr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_error("ep %p: wireup failed to query iface: %s", ep,
+                  ucs_status_string(status));
+        status = UCS_OK;
+        goto out_free_req;
+    }
+
+    if (packed_len > iface_attr.cap.am.max_bcopy) {
+        ucs_error("ep %p: wireup message size %zu exceeds max bcopy size %zu",
+                  ep, packed_len, iface_attr.cap.am.max_bcopy);
+        goto out_free_req;
+    }
 
     packed_len = uct_ep_am_bcopy(ucp_ep_get_lane(ep, req->send.lane),
                                  UCP_AM_ID_WIREUP, ucp_wireup_msg_pack,
