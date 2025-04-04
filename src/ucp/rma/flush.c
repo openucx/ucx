@@ -762,8 +762,6 @@ ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 
-    /* TODO: Handle unflushed_lanes == 0 before reaching this function
-     *       as part of optimizing flush */
     ucs_assertv(ucs_is_pow2(ep->ext->unflushed_lanes),
                 "ep=%p unflushed_lanes=0x%" PRIx64, ep,
                 ep->ext->unflushed_lanes);
