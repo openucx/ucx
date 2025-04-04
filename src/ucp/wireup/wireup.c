@@ -156,11 +156,17 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         uct_ep = ucp_wireup_ep_get_msg_ep(ucp_wireup_ep(uct_ep));
     }
 
-    uct_iface_query(uct_ep->iface, &iface_attr);
+    status = uct_iface_query(uct_ep->iface, &iface_attr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_error("ep %p: wireup failed to query iface: %s", ep,
+                  ucs_status_string(status));
+        status = UCS_OK;
+        goto out_free_req;
+    }
+
     if (packed_len > iface_attr.cap.am.max_bcopy) {
         ucs_error("ep %p: wireup message size %zu exceeds max bcopy size %zu",
                   ep, packed_len, iface_attr.cap.am.max_bcopy);
-        status = UCS_ERR_MESSAGE_TRUNCATED;
         goto out_free_req;
     }
 
