@@ -11,7 +11,16 @@
 #include <ucs/datastruct/frag_list.h>
 
 
+#define UCT_SRD_INITIAL_PSN     1
+#define UCT_SRD_SEND_OP_ALIGN   UCS_SYS_CACHE_LINE_SIZE
+#define UCT_SRD_SEND_DESC_ALIGN UCS_SYS_CACHE_LINE_SIZE
+
+
 typedef ucs_frag_list_sn_t uct_srd_psn_t;
+
+typedef struct uct_srd_ep        uct_srd_ep_t;
+typedef struct uct_srd_send_op   uct_srd_send_op_t;
+typedef struct uct_srd_send_desc uct_srd_send_desc_t;
 
 
 typedef struct uct_srd_hdr {
@@ -30,6 +39,34 @@ typedef struct uct_srd_am_short_hdr {
 typedef struct uct_srd_iface_addr {
     uct_ib_uint24_t qp_num;
 } uct_srd_iface_addr_t;
+
+
+typedef void (*uct_srd_send_op_comp_t)(uct_srd_send_op_t *send_op,
+                                       ucs_status_t status);
+
+
+/*
+ * Send descriptor used when receiving TX CQE.
+ */
+struct uct_srd_send_op {
+    ucs_list_link_t        list;       /* Link in ep outstanding send list */
+    uct_srd_ep_t           *ep;        /* Sender EP */
+    uct_completion_t       *user_comp; /* User completion, NULL if none */
+    uct_srd_send_op_comp_t comp_cb;    /* Send operation completion */
+} UCS_V_ALIGNED(UCT_SRD_SEND_OP_ALIGN);
+
+
+/*
+ * Registered send descriptor used for bcopy/zcopy posts and corresponding TX CQE.
+ */
+struct uct_srd_send_desc {
+    uct_srd_send_op_t     super;
+    uint32_t              lkey;        /* Registration key for this send_desc */
+    uct_unpack_callback_t unpack_cb;
+    void                  *unpack_arg;
+    size_t                length;
+    uct_srd_hdr_t         hdr[];
+} UCS_V_ALIGNED(UCT_SRD_SEND_DESC_ALIGN);
 
 
 #endif
