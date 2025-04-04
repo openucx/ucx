@@ -17,6 +17,170 @@
 
 static uct_iface_ops_t uct_srd_iface_tl_ops;
 
+
+void uct_srd_iface_post_send(uct_srd_iface_t *iface, struct ibv_ah *ah,
+                             int dest_qpn, struct ibv_send_wr *wr,
+                             unsigned send_flags)
+{
+    struct ibv_send_wr *bad_wr;
+    int ret;
+
+    wr->wr.ud.ah         = ah;
+    wr->wr.ud.remote_qpn = dest_qpn;
+    wr->send_flags       = send_flags;
+
+    uct_ib_log_post_send(&iface->super, iface->qp, wr, 2, uct_srd_dump_packet);
+
+    ret = ibv_post_send(iface->qp, wr, &bad_wr);
+    if (ucs_unlikely(ret != 0)) {
+        ucs_fatal("ibv_post_send(iface=%p) returned %d bad_wr=%p (%m)", iface,
+                  ret, bad_wr);
+    }
+}
+
+static uct_srd_ep_t *
+uct_srd_iface_get_ep(uct_srd_iface_t *iface, uint64_t ep_uuid)
+{
+    khiter_t iter = kh_get(uct_srd_ep_hash, &iface->ep_hash, ep_uuid);
+    if (iter != kh_end(&iface->ep_hash)) {
+        return kh_val(&iface->ep_hash, iter);
+    }
+
+    return NULL;
+}
+
+ucs_status_t uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
+{
+    int ret;
+    khiter_t iter;
+    ucs_status_t status;
+
+    iter = kh_get(uct_srd_ep_hash, &iface->ep_hash, ep->ep_uuid);
+    if (iter == kh_end(&iface->ep_hash)) {
+        iter = kh_put(uct_srd_ep_hash, &iface->ep_hash, ep->ep_uuid, &ret);
+        if (iter == kh_end(&iface->ep_hash)) {
+            status  = UCS_ERR_IO_ERROR;
+            goto err;
+        }
+
+        kh_value(&iface->ep_hash, iter) = ep;
+        return UCS_OK;
+    }
+
+    status = UCS_ERR_ALREADY_EXISTS;
+
+err:
+    ucs_error("iface=%p ep=%p ep_uuid=%"PRIx64" add ep to hash status=%s",
+              iface, ep, ep->ep_uuid, ucs_status_string(status));
+    return status;
+}
+
+void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
+{
+    khiter_t iter;
+
+    iter = kh_get(uct_srd_ep_hash, &iface->ep_hash, ep->ep_uuid);
+    if (iter == kh_end(&iface->ep_hash)) {
+        ucs_error("iface=%p ep=%p ep_uuid=%"PRIx64" not found in ep hash",
+                  iface, ep, ep->ep_uuid);
+        return;
+    }
+
+    kh_del(uct_srd_ep_hash, &iface->ep_hash, iter);
+}
+
+/* Request the remote interface to create the address handler */
+ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
+                                       uct_srd_ctl_id_t id, uint64_t ep_uuid,
+                                       struct ibv_ah *ah, int dest_qpn)
+{
+    ucs_status_t status;
+    uct_srd_ctl_op_t *ctl_op;
+    const char *err_msg;
+
+    /* Construct a control operation to be queued */
+    ctl_op = ucs_malloc(sizeof(*ctl_op) + sizeof(*ctl_op->hdr) +
+                            iface->super.addr_size,
+                        "uct_srd_ctl_op_t");
+    if (ctl_op == NULL) {
+        status  = UCS_ERR_NO_MEMORY;
+        err_msg = "failed to allocate ctl_op";
+        goto err;
+    }
+
+    ctl_op->ah           = ah;
+    ctl_op->dest_qpn     = dest_qpn;
+    ctl_op->hdr->id      = id;
+    ctl_op->hdr->ep_uuid = ep_uuid;
+    uct_ib_pack_uint24(ctl_op->hdr->qpn, iface->qp->qp_num);
+
+    if (id == UCT_SRD_CTL_ID_REQ) {
+        status = uct_ib_iface_get_device_address(
+                                         &iface->super.super.super,
+                                         (uct_device_addr_t *)(ctl_op->hdr + 1));
+        if (status != UCS_OK) {
+            err_msg = "failed to get device address";
+            ucs_free(ctl_op);
+            goto err;
+        }
+    }
+
+    ucs_list_add_tail(&iface->tx.ctl_list, &ctl_op->list);
+    return UCS_OK;
+
+err:
+    ucs_error("iface=%p id=%d ep_uuid=%"PRIx64" ah=%p dest_qpn=%d %s",
+              iface, id, ep_uuid, ah, dest_qpn, err_msg);
+    return status;
+}
+
+static ucs_status_t
+uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
+{
+    uct_srd_send_op_t *send_op;
+
+    /* Post the request, no action required on TX completion */
+    send_op = uct_srd_iface_get_send_op(iface);
+    if (send_op == NULL) {
+        ucs_error("iface=%p send_op allocationd failed for ctl op send", iface);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    send_op->ep      = NULL;
+    send_op->comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
+
+    iface->tx.sge[0].addr   = (uintptr_t)ctl_op->hdr;
+    iface->tx.sge[0].length = sizeof(*ctl_op->hdr);
+    if (ctl_op->hdr->id == UCT_SRD_CTL_ID_REQ) {
+        iface->tx.sge[0].length += iface->super.addr_size;
+    }
+
+    iface->tx.wr_inl.wr_id   = (uintptr_t)send_op;
+    iface->tx.wr_inl.num_sge = 1;
+
+    uct_srd_iface_post_send(iface, ctl_op->ah, ctl_op->dest_qpn,
+                            &iface->tx.wr_inl, IBV_SEND_INLINE);
+    iface->tx.available--;
+    ucs_list_add_tail(&iface->tx.outstanding_list, &send_op->list);
+    return UCS_OK;
+}
+
+static void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface)
+{
+    ucs_status_t status;
+    uct_srd_ctl_op_t *ctl_op, *next;
+
+    ucs_list_for_each_safe(ctl_op, next, &iface->tx.ctl_list, list) {
+        status = uct_srd_iface_ctl_op_send(iface, ctl_op);
+        if (status != UCS_OK) {
+            break;
+        }
+
+        ucs_list_del(&ctl_op->list);
+        ucs_free(ctl_op);
+    }
+}
+
 ucs_status_t
 uct_srd_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 {
@@ -184,6 +348,17 @@ static void uct_srd_iface_send_op_purge(uct_srd_iface_t *iface)
     }
 }
 
+static void uct_srd_iface_ctl_op_purge(uct_srd_iface_t *iface)
+{
+    uct_srd_ctl_op_t *ctl_op;
+
+    while (!ucs_list_is_empty(&iface->tx.ctl_list)) {
+        ctl_op = ucs_list_extract_head(&iface->tx.ctl_list, uct_srd_ctl_op_t,
+                                       list);
+        ucs_free(ctl_op);
+    }
+}
+
 static UCS_F_ALWAYS_INLINE void uct_srd_iface_post_recv(uct_srd_iface_t *iface)
 {
     int max = iface->super.config.rx_max_batch;
@@ -274,6 +449,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_arbiter_init(&self->tx.pending_q);
     ucs_list_head_init(&self->tx.outstanding_list);
+    ucs_list_head_init(&self->tx.ctl_list);
 
     status = uct_srd_iface_create_qp(self, config, &efa_attr);
     if (status != UCS_OK) {
@@ -308,6 +484,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     kh_init_inplace(uct_srd_rx_ctx_hash, &self->rx.ctx_hash);
+    kh_init_inplace(uct_srd_ep_hash, &self->ep_hash);
 
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "srd_recv_desc", &self->rx.mp);
@@ -318,6 +495,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     uct_ud_send_wr_init(&self->tx.wr_inl, self->tx.sge, 1);
     uct_ud_send_wr_init(&self->tx.wr_desc, self->tx.sge, 0);
 
+    self->tx.in_pending   = 0;
     self->super.config.sl = uct_ib_iface_config_select_sl(&config->super);
 
     while (self->rx.available >= self->super.config.rx_max_batch) {
@@ -358,11 +536,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_iface_t)
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_srd_iface_send_op_purge(self);
+    uct_srd_iface_ctl_op_purge(self);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     uct_ib_destroy_qp(self->qp);
     kh_foreach_value(&self->rx.ctx_hash, ctx, {
         uct_iface_rx_ctx_cleanup(ctx);
     });
+    kh_destroy_inplace(uct_srd_ep_hash, &self->ep_hash);
     kh_destroy_inplace(uct_srd_rx_ctx_hash, &self->rx.ctx_hash);
     ucs_mpool_cleanup(&self->rx.mp, 0);
     ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
@@ -517,6 +697,70 @@ err:
     ucs_mpool_put(desc);
 }
 
+static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
+                                      uct_srd_ctl_hdr_t *ctl, unsigned length,
+                                      uct_srd_recv_desc_t *desc)
+{
+    uct_ib_address_t *ib_addr = (uct_ib_address_t*)(ctl + 1);
+    int qpn                   = uct_ib_unpack_uint24(ctl->qpn);
+    struct ibv_ah_attr ah_attr;
+    enum ibv_mtu path_mtu;
+    ucs_status_t status;
+    struct ibv_ah *ah;
+    uct_srd_ep_t *ep;
+    const char *err_msg;
+
+    if (ctl->id == UCT_SRD_CTL_ID_RESP) {
+        ucs_assertv(sizeof(*ctl) == length,
+                    "resp size expected=%zu received=%u", sizeof(*ctl), length);
+
+        ep = uct_srd_iface_get_ep(iface, ctl->ep_uuid);
+        if (ep != NULL) {
+            ep->ah_added = 1;
+            ucs_arbiter_group_schedule(&iface->tx.pending_q,
+                                       &ep->pending_group);
+        } else {
+            ucs_debug("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%d received ctl "
+                      "response without a local endpoint",
+                      iface, ctl->id, ctl->ep_uuid, qpn);
+        }
+
+        goto out;
+    }
+
+    ucs_assertv(ctl->id == UCT_SRD_CTL_ID_REQ, "iface=%p id=%u", iface,
+                ctl->id);
+    ucs_assertv((sizeof(*ctl) + iface->super.addr_size) == length,
+                "req size mismatched expected=%zu received=%u",
+                sizeof(*ctl) + iface->super.addr_size, length);
+
+    /* TODO do we need an actual non-zero path index ? */
+    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, 0, &ah_attr,
+                                        &path_mtu);
+    status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH", &ah);
+    if (status != UCS_OK) {
+        err_msg = "failed to create AH";
+        goto err;
+    }
+
+    status = uct_srd_iface_ctl_trigger(iface, UCT_SRD_CTL_ID_RESP, ctl->ep_uuid,
+                                       ah, qpn);
+    if (status != UCS_OK) {
+        err_msg = "failed to trigger ctl response";
+        goto err;
+    }
+
+out:
+    ucs_mpool_put(desc);
+    return;
+
+err:
+    ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%d %s status=%s",
+              iface, ctl->id, ctl->ep_uuid, qpn, err_msg,
+              ucs_status_string(status));
+    goto out;
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_srd_iface_poll_rx(uct_srd_iface_t *iface)
 {
@@ -535,8 +779,15 @@ uct_srd_iface_poll_rx(uct_srd_iface_t *iface)
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super, i, packet, wc, num_wcs) {
         uct_ib_log_recv_completion(&iface->super, &wc[i], packet,
                                    wc[i].byte_len, uct_srd_dump_packet);
-        uct_srd_iface_process_rx(iface, (uct_srd_hdr_t*)packet, wc[i].byte_len,
-                                 (uct_srd_recv_desc_t*)wc[i].wr_id);
+        if ((*(uint8_t*)packet < UCT_AM_ID_MAX)) {
+            uct_srd_iface_process_rx(iface, (uct_srd_hdr_t*)packet,
+                                     wc[i].byte_len,
+                                     (uct_srd_recv_desc_t*)wc[i].wr_id);
+        } else {
+            uct_srd_iface_process_ctl(iface, (uct_srd_ctl_hdr_t*)packet,
+                                      wc[i].byte_len,
+                                      (uct_srd_recv_desc_t*)wc[i].wr_id);
+        }
     }
 
     iface->rx.available += num_wcs;
@@ -559,6 +810,8 @@ static unsigned uct_srd_iface_progress(uct_iface_h tl_iface)
         count = uct_srd_iface_poll_tx(iface);
     }
 
+    uct_srd_iface_ctl_op_progress(iface);
+    ucs_arbiter_dispatch(&iface->tx.pending_q, 1, uct_srd_ep_do_pending, NULL);
     return count;
 }
 
@@ -656,10 +909,8 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .ep_get_bcopy             = uct_srd_ep_get_bcopy,
     .ep_am_short              = uct_srd_ep_am_short,
     .ep_am_short_iov          = uct_srd_ep_am_short_iov,
-    .ep_pending_add           = (uct_ep_pending_add_func_t)
-        ucs_empty_function_return_unsupported,
-    .ep_pending_purge         = (uct_ep_pending_purge_func_t)
-        ucs_empty_function_return_unsupported,
+    .ep_pending_add           = uct_srd_ep_pending_add,
+    .ep_pending_purge         = uct_srd_ep_pending_purge,
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = (uct_iface_fence_func_t)
         ucs_empty_function_return_unsupported,

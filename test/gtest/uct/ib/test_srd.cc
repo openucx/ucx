@@ -79,15 +79,27 @@ protected:
         EXPECT_EQ(expect.hdr,   stats.hdr);
     }
 
+    void progress_ctl()
+    {
+        for (auto count = 10; count > 0; count--) {
+            short_progress_loop();
+        }
+    }
+
     completion                m_comp;
     static constexpr uint64_t m_seed = 0x54321;
+    static int                m_count;
 
+    uct_pending_req_t         m_req[3];
     entity *m_e1, *m_e2, *m_e3;
 };
+
+int test_srd::m_count = 0;
 
 void test_srd::init()
 {
     uct_test::init();
+    m_count = 0;
 
     m_e1 = uct_test::create_entity(0, NULL);
     m_e2 = uct_test::create_entity(0, NULL);
@@ -97,7 +109,6 @@ void test_srd::init()
     m_entities.push_back(m_e3);
 
     m_e1->connect_to_iface(0, *m_e2);
-    m_e2->connect_to_iface(0, *m_e1);
     m_e3->connect_to_iface(0, *m_e2);
 }
 
@@ -278,6 +289,8 @@ UCS_TEST_P(test_srd, get_zcopy_failure)
         iov[i].count  = 1;
     }
 
+    progress_ctl();
+
     status = uct_ep_get_zcopy(m_e1->ep(0), iov, 1, 0, 0, NULL);
     ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
     status = uct_ep_get_zcopy(m_e1->ep(0), iov, 2, 0, 0, NULL);
@@ -295,6 +308,8 @@ UCS_TEST_P(test_srd, get_zcopy_destroy_outstanding)
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, dstbuf.ptr(), dstbuf.length(),
                             dstbuf.memh(), 1);
 
+    progress_ctl();
+
     ucs_status_t status = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt,
                                            srcbuf.addr(), srcbuf.rkey(),
                                            &m_comp);
@@ -310,6 +325,8 @@ UCS_TEST_P(test_srd, get_zcopy)
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, dstbuf.ptr(), dstbuf.length(),
                             dstbuf.memh(), 1);
 
+    progress_ctl();
+
     srcbuf.pattern_fill(m_seed);
     ucs_status_t status = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt,
                                            srcbuf.addr(), srcbuf.rkey(),
@@ -323,6 +340,8 @@ UCS_TEST_P(test_srd, get_bcopy)
 {
     mapped_buffer srcbuf(4096, 0ul, *m_e2);
     mapped_buffer dstbuf(4096, 0ul, *m_e1);
+
+    progress_ctl();
 
     srcbuf.pattern_fill(m_seed);
     ucs_status_t status = uct_ep_get_bcopy(m_e1->ep(0),
@@ -341,6 +360,8 @@ UCS_TEST_P(test_srd, get_bcopy_no_resource)
     mapped_buffer srcbuf(4096, 0ul, *m_e2);
     mapped_buffer dstbuf(4096, 0ul, *m_e1);
     ucs_status_t status;
+
+    progress_ctl();
 
     for (i = 0; i < count; i++) {
         status = uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
@@ -372,6 +393,124 @@ UCS_TEST_P(test_srd, am_short_no_resource)
     ASSERT_LT(100, i);
     ASSERT_GT(count, i);
     ASSERT_UCS_STATUS_EQ(UCS_ERR_NO_RESOURCE, status);
+}
+
+UCS_TEST_P(test_srd, am_short_no_resource_with_pending)
+{
+    uint8_t c = 23;
+
+    m_req[0].func = [](uct_pending_req_t*) { return UCS_ERR_BUSY; };
+
+    /* Can be added to pending because remote did not respond to CTL_REQ */
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[0], 0));
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_NO_RESOURCE,
+                         uct_ep_am_short(m_e1->ep(0), 31, 0x1, &c, 1));
+
+    /* Cannot post: CTL_RESP received, but pending is not empty */
+    progress_ctl();
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_NO_RESOURCE,
+                         uct_ep_am_short(m_e1->ep(0), 31, 0x1, &c, 1));
+}
+
+UCS_TEST_P(test_srd, pending_ok_if_no_resource)
+{
+    int count = 0;
+    uint8_t c = 23;
+    ucs_status_t status;
+
+    progress_ctl();
+
+    auto i = 0;
+    for (; i < 400; i++) {
+        status = uct_ep_am_short(m_e1->ep(0), 31, 0x1, &c, 1);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            break;
+        }
+    }
+
+    ASSERT_LT(0, i);
+    ASSERT_LT(i, 400);
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[0], 0));
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[1], 0));
+    ASSERT_EQ(0, count);
+
+    uct_ep_pending_purge(
+            m_e1->ep(0),
+            [](uct_pending_req_t*, void *arg) {
+                (*reinterpret_cast<int*>(arg))++;
+            },
+            &count);
+    ASSERT_EQ(2, count);
+}
+
+UCS_TEST_P(test_srd, pending_busy_if_ready_to_send)
+{
+    progress_ctl();
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_BUSY,
+                         uct_ep_pending_add(m_e1->ep(0), &m_req[0], 0));
+}
+
+UCS_TEST_P(test_srd, pending_purge_dispatch)
+{
+    int count = 0;
+
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[0], 0));
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[1], 0));
+    uct_ep_pending_purge(
+            m_e1->ep(0),
+            [](uct_pending_req_t*, void *arg) {
+                (*reinterpret_cast<int*>(arg))++;
+            },
+            &count);
+    ASSERT_EQ(2, count);
+}
+
+UCS_TEST_P(test_srd, pending_dispatch)
+{
+    for (auto i = 0; i < 3; i++) {
+        m_req[i].func = [](uct_pending_req_t*) {
+            m_count++;
+            if (m_count == 1) {
+                return UCS_ERR_NO_RESOURCE;
+            } else if (m_count == 2) {
+                return UCS_INPROGRESS;
+            } else {
+                return UCS_OK;
+            }
+        };
+
+        ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[i], 0));
+    }
+
+    wait_for_value(&m_count, 5, true);
+    int count = 0;
+    uct_ep_pending_purge(
+            m_e1->ep(0),
+            [](uct_pending_req_t*, void *arg) {
+                (*reinterpret_cast<int*>(arg))++;
+            },
+            &count);
+    ASSERT_EQ(0, count);
+}
+
+UCS_TEST_P(test_srd, get_bcopy_no_resource_ah)
+{
+    mapped_buffer srcbuf(4096, 0ul, *m_e2);
+    mapped_buffer dstbuf(4096, 0ul, *m_e1);
+    ucs_status_t status;
+
+    status = uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
+                              dstbuf.ptr(), dstbuf.length(), srcbuf.addr(),
+                              srcbuf.rkey(), NULL);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_NO_RESOURCE, status);
+}
+
+UCS_TEST_P(test_srd, destroy_ep_before_ctl_resp)
+{
+    m_e1->connect_to_iface(1, *m_e2);
+    m_e1->destroy_ep(1);
+
+    progress_ctl();
 }
 
 UCT_INSTANTIATE_SRD_TEST_CASE(test_srd)

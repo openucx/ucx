@@ -275,7 +275,8 @@ void __uct_ib_log_post_send(const char *file, int line, const char *function,
     int remote_qpn;
 
     for (; wr != NULL; wr = wr->next) {
-        if (qp->qp_type == IBV_QPT_UD) {
+        if ((qp->qp_type == IBV_QPT_UD) ||
+            ((qp->qp_type == IBV_QPT_DRIVER) && (wr->opcode == IBV_WR_SEND))) {
             ah         = wr->wr.ud.ah;
             remote_qpn = wr->wr.ud.remote_qpn;
         } else {
