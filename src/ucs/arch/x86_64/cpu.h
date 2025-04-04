@@ -139,6 +139,8 @@ static UCS_F_ALWAYS_INLINE void ucs_cpu_relax()
 {
 #ifdef __SSE2__
     _mm_pause();
+#else
+     asm volatile ("" ::: "memory");
 #endif
 }
 
