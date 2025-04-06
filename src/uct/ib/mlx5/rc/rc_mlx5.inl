@@ -12,9 +12,6 @@
 #include <uct/ib/mlx5/ib_mlx5.inl>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 
-
-#define UCT_IB_MLX5_NUM_OF_STRIDES_CONSUMED_MASK 0x1FFF0000
-
 #define UCT_RC_MLX5_EP_DECL(_tl_ep, _iface, _ep) \
     uct_rc_mlx5_ep_t *_ep = ucs_derived_of(_tl_ep, uct_rc_mlx5_ep_t); \
     uct_rc_mlx5_iface_common_t *_iface = ucs_derived_of(_tl_ep->iface, \
@@ -97,8 +94,8 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
          * return UCS_OK from the corresponding callback. */
         stride_idx = uct_ib_mlx5_cqe_stride_index(cqe);
         ucs_assert(stride_idx < iface->tm.mp.num_strides);
-        ucs_assert(!(cqe->op_own &
-                     (MLX5_INLINE_SCATTER_32 | MLX5_INLINE_SCATTER_64)));
+        ucs_assert(!(cqe->op_own & (MLX5_INLINE_SCATTER_32 |
+                                    MLX5_INLINE_SCATTER_64)));
 
         udesc       = (void*)be64toh(seg->dptr[stride_idx].addr);
         desc_offset = offset - iface->super.super.config.rx_hdr_offset;
@@ -164,7 +161,8 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
     }
 
     if (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) {
-        ucs_assertv(strides_consumed <= seg->srq.strides, "strides_consumed %d, seg->srq.strides %d",
+        ucs_assertv(strides_consumed <= seg->srq.strides,
+                    "strides_consumed %d, seg->srq.strides %d",
                     strides_consumed, seg->srq.strides);
 
         if (seg->srq.strides > strides_consumed) {
@@ -174,7 +172,7 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
         }
 
         seg->srq.strides = iface->msg_based.num_strides;
-        ucs_dynamic_bitmap_set(&iface->rx.srq.free_bitmap, wqe_index);
+        ucs_dynamic_bitmap_set(&iface->rx.srq.free_wqes, wqe_index);
     }
 
     ++iface->super.rx.srq.available;
@@ -1545,7 +1543,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     }
 
     if ((poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) && (byte_len == 0)) {
-        byte_len = (strides_consumed > 0) ? 1 << 16 : 0;
+        byte_len = (strides_consumed > 0) ? UCS_BIT(16) : 0;
     }
 
     if (!(poll_flags & UCT_IB_MLX5_POLL_FLAG_TM)) {
@@ -2020,22 +2018,23 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_base_ep_zcopy_post(
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_mlx5_iface_is_srq_msg_based(uct_rc_mlx5_iface_common_t *iface)
+uct_rc_mlx5_iface_is_srq_msg_based(const uct_rc_mlx5_iface_common_t *iface)
 {
     return iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST;
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_mlx5_num_sges(uct_rc_mlx5_iface_common_t *iface,
-                     int stride_size)
+uct_rc_mlx5_num_sge(const uct_rc_mlx5_iface_common_t *iface, int stride_size)
 {
-    return uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
-                   uct_ib_mlx5_srq_calc_num_sges(stride_size) :
-                   iface->tm.mp.num_strides;
+    if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
+        return (stride_size - sizeof(struct mlx5_wqe_srq_next_seg)) /
+               sizeof(struct mlx5_wqe_data_seg);
+    }
+    return iface->tm.mp.num_strides;
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_mlx5_num_strides(uct_rc_mlx5_iface_common_t *iface)
+uct_rc_mlx5_num_strides(const uct_rc_mlx5_iface_common_t *iface)
 {
     return uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
                    iface->msg_based.num_strides :

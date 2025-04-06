@@ -407,8 +407,11 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    device_frequency_khz[0x20];
 
     uint8_t    reserved_at_500[0x20];
+
     uint8_t    num_of_uars_per_page[0x20];
+
     uint8_t    flex_parser_protocols[0x20];
+
     uint8_t    max_geneve_tlv_options[0x8];
     uint8_t    geneve_tlv_sample[0x1];
     uint8_t    geneve_tlv_option_offset[0x1];
@@ -422,6 +425,7 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    adv_virtualization[0x1];
     uint8_t    driver_metadata_ptr[0x1];
     uint8_t    log_max_dct_connections[0x5];
+
     uint8_t    reserved_at_580[0xb];
     uint8_t    log_max_dci_stream_channels[0x5];
     uint8_t    reserved_at_590[0x3];
@@ -1142,8 +1146,9 @@ struct uct_ib_mlx5_wq_bits {
 
     uint8_t         wq_umem_id[0x20];
 
-    uint8_t         reserved_at_180[0x90]; //0x480
+    uint8_t         reserved_at_180[0x90];
     uint8_t         enh_strwq_profile_id[0x10];
+
     uint8_t         reserved_at_220[0x3e0];
 
     struct uct_ib_mlx5_cmd_pas_bits pas[0];
@@ -1856,7 +1861,6 @@ enum {
     UCT_IB_MLX5_OBJ_TYPE_MKEY         = 0xFF01
 };
 
-/* Possible values for @ref uct_ib_mlx5_qpc_ext_bits::receive_send_cqe_granularity field*/
 enum {
     /* CQE is generated for every packet that arrives on the QP. */
     UCT_IB_MLX5_CQE_GRANULARITY_PER_PACKET  = 0x0,

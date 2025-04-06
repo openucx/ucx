@@ -246,6 +246,7 @@ struct uct_ib_iface_config {
      */
     uct_ib_iface_send_overhead_t     send_overhead;
 
+    /* Striding message-based RQ stride size */
     unsigned                         stride_size;
 };
 
@@ -596,13 +597,6 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
                                                uct_ib_iface_recv_desc_t *desc)
 {
     return (void*)((char *)desc + iface->config.rx_hdr_offset);
-}
-
-static UCS_F_ALWAYS_INLINE int
-uct_ib_iface_max_message_size(const uct_ib_iface_t *iface)
-{
-    return iface->config.max_send_message_size_strides *
-           iface->config.stride_size;
 }
 
 typedef struct uct_ib_recv_wr {

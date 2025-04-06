@@ -124,23 +124,9 @@ void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
 }
 
 #if HAVE_DEVX
-
-static void uct_ib_mlx5_devx_set_msg_based_srq_attr(uct_ib_iface_t *iface,
-                                                    const uct_ib_mlx5_md_t *md,
-                                                    char *create_qp_in)
-{
-    void *qpce = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, create_qp_in, qpc_data_extension);
-
-    UCT_IB_MLX5DV_SET(create_qp_in, create_qp_in, qpc_ext, 1);
-    UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
-                      UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
-    UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size,
-                      iface->config.max_send_message_size_strides);
-}
-
 static int
-uct_ib_mlx5_devx_is_msg_based_srq_enabled(uct_ib_mlx5_md_t *md,
-                                          uct_ib_mlx5_qp_attr_t *attr)
+uct_ib_mlx5_devx_is_msg_based_srq_enabled(const uct_ib_mlx5_md_t *md,
+                                          const uct_ib_mlx5_qp_attr_t *attr)
 {
     return (attr->msg_based_srq_associated) &&
            (md->flags & UCT_IB_MLX5_MD_FLAG_QP_CTX_EXTENSION) &&
@@ -170,6 +156,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     uct_ib_mlx5_devx_uar_t *uar;
     ucs_status_t status;
     void *qpc;
+    void *qpce;
 
     uct_ib_iface_fill_attr(iface, &attr->super);
 
@@ -222,7 +209,13 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_RC);
 
         if (uct_ib_mlx5_devx_is_msg_based_srq_enabled(md, attr)) {
-            uct_ib_mlx5_devx_set_msg_based_srq_attr(iface, md, in);
+            qpce = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, create_qp_in,
+                                         qpc_data_extension);
+            UCT_IB_MLX5DV_SET(create_qp_in, create_qp_in, qpc_ext, 1);
+            UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
+                              UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
+            UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size,
+                              iface->config.max_send_message_size_strides);
         }
     } else {
         ucs_error("create qp failed: unknown type %d", attr->super.qp_type);

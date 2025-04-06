@@ -2351,11 +2351,11 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
         md->flags |= UCT_IB_MLX5_MD_FLAG_RMP;
     }
 
-    md->msg_based_srq.min_stride_size =
-            1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_min_stride_sz_rq);
+    md->msg_based_srq.min_stride_size = UCS_BIT(
+            UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_min_stride_sz_rq));
 
-    md->msg_based_srq.max_stride_size =
-            1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_stride_sz_rq);
+    md->msg_based_srq.max_stride_size = UCS_BIT(
+            UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_stride_sz_rq));
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ooo_sl_mask)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK;

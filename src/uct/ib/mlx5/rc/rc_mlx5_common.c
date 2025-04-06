@@ -228,14 +228,14 @@ uct_rc_mlx5_iface_srq_post_recv_msg_based(uct_rc_mlx5_iface_common_t *iface)
 
     ucs_assert(rc_iface->rx.srq.available > 0);
 
-    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(wqe_index, &iface->rx.srq.free_bitmap) {
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(wqe_index, &iface->rx.srq.free_wqes) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, wqe_index);
         if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
             break;
         }
 
         count++;
-        ucs_dynamic_bitmap_reset(&iface->rx.srq.free_bitmap, wqe_index);
+        ucs_dynamic_bitmap_reset(&iface->rx.srq.free_wqes, wqe_index);
     }
 
     uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, wqe_index, count);
@@ -616,7 +616,7 @@ err:
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 {
-    ucs_dynamic_bitmap_cleanup(&srq->free_bitmap);
+    ucs_dynamic_bitmap_cleanup(&srq->free_wqes);
 
     switch (srq->type) {
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
@@ -1164,8 +1164,9 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
 {
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_device_t *dev = uct_ib_iface_device(ib_iface);
-    unsigned max_bcopy   = uct_ib_iface_max_message_size(ib_iface);
+    uct_ib_device_t *dev  = uct_ib_iface_device(ib_iface);
+    unsigned max_msg_size = ib_iface->config.max_send_message_size_strides *
+                            ib_iface->config.stride_size;
 
     /* Atomics */
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
@@ -1232,16 +1233,16 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     /* Striding Message Based */
     if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
         iface_attr->cap.am.max_bcopy =
-                ucs_min(max_bcopy - sizeof(uct_rc_mlx5_hdr_t),
+                ucs_min(max_msg_size - sizeof(uct_rc_mlx5_hdr_t),
                         iface_attr->cap.am.max_bcopy);
         iface_attr->cap.am.max_zcopy =
-                ucs_min(max_bcopy - sizeof(uct_rc_mlx5_hdr_t),
+                ucs_min(max_msg_size - sizeof(uct_rc_mlx5_hdr_t),
                         iface_attr->cap.am.max_zcopy);
-        iface_attr->cap.get.max_bcopy = ucs_min(max_bcopy,
+        iface_attr->cap.get.max_bcopy = ucs_min(max_msg_size,
                                                 iface_attr->cap.get.max_bcopy);
-        iface_attr->cap.get.max_zcopy = ucs_min(max_bcopy,
+        iface_attr->cap.get.max_zcopy = ucs_min(max_msg_size,
                                                 iface_attr->cap.get.max_zcopy);
-        iface_attr->cap.put.max_bcopy = ucs_min(max_bcopy,
+        iface_attr->cap.put.max_bcopy = ucs_min(max_msg_size,
                                                 iface_attr->cap.put.max_bcopy);
     }
 }

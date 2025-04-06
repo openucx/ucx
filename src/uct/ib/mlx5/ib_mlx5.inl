@@ -76,12 +76,6 @@ static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_stride(int num_sge)
     return ucs_roundup_pow2(stride);
 }
 
-static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_calc_num_sges(int stride_size)
-{
-    return (stride_size - sizeof(struct mlx5_wqe_srq_next_seg)) /
-           sizeof(struct mlx5_wqe_data_seg);
-}
-
 static UCS_F_ALWAYS_INLINE int
 uct_ib_mlx5_srq_max_wrs(int rxq_len, int num_sge)
 {

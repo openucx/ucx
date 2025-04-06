@@ -77,6 +77,8 @@
 #define UCT_IB_MLX5_MP_RQ_FIRST_MSG_FLAG UCS_BIT(29) /* MP first packet indication */
 #define UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG  UCS_BIT(30) /* MP last packet indication */
 #define UCT_IB_MLX5_MP_RQ_FILLER_FLAG    UCS_BIT(31) /* Filler CQE indicator */
+/* Only relevant to cqes consumed from a striding message receive queue */
+#define UCT_IB_MLX5_NUM_OF_STRIDES_CONSUMED_MASK 0x1FFF0000
 
 #if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_BF
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC MLX5DV_UAR_ALLOC_TYPE_BF
@@ -450,11 +452,17 @@ typedef struct uct_ib_mlx5_md {
         uint8_t              dc;
     } dp_ordering_cap;
 
+    /* Striding message receive queue limitations queried from the device */
     struct {
+        /* A bitmap indicating which transports supports striding message based RQ*/
         uint8_t supported_tls;
+        /* Max message size HW limitation in strides*/
         uint16_t max_message_size_stride;
+        /* Max message size HW limitation in bytes*/
         uint32_t max_message_size_bytes;
+        /* Minimal stride size supported by HW*/
         uint32_t min_stride_size;
+        /* Maximal stride size supported by HW*/
         uint32_t max_stride_size;
     } msg_based_srq;
 } uct_ib_mlx5_md_t;
@@ -524,7 +532,7 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t                           sw_pi;      /* what is posted to hw */
     uint16_t                           mask;
     uint16_t                           stride;
-    ucs_dynamic_bitmap_t               free_bitmap;
+    ucs_dynamic_bitmap_t               free_wqes; /* used for striding message-based RQ only*/
     union {
         struct {
             struct ibv_srq             *srq;

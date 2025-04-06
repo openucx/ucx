@@ -81,8 +81,9 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zip_enable[UCT_IB_DIR_RX]),
      UCS_CONFIG_TYPE_BOOL},
 
-     {"MAX_MESSAGE_SIZE_STRIDES", "64",
-     "Max message size for striding message based SRQ in strides",
+    {"MAX_MESSAGE_SIZE_STRIDES", "64",
+     "Max number of strides in a message received by a striding message-based SRQ.\n"
+     "This value may affect max_bcopy and max_zcopy values when message-based SRQ is used.",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, max_message_size_strides),
      UCS_CONFIG_TYPE_UINT},
 
@@ -955,8 +956,8 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     srq->mask      = tail;
     srq->stride    = stride_size;
 
-    ucs_dynamic_bitmap_init(&srq->free_bitmap);
-    ucs_dynamic_bitmap_reserve(&srq->free_bitmap, sge_num);
+    ucs_dynamic_bitmap_init(&srq->free_wqes);
+    ucs_dynamic_bitmap_reserve(&srq->free_wqes, sge_num);
 
     for (i = head; i <= tail; ++i) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, i);

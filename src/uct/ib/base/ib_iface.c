@@ -78,7 +78,8 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"STRIDE_SIZE", "256",
-   "Stride size of the SRQ",
+   "SRQ stride size, used for striding message-based receive queue only.\n"
+   "for optimal performance, value should be aligned to the cache line size.",
    ucs_offsetof(uct_ib_iface_config_t, stride_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_QUEUE_LEN", "256",
@@ -121,8 +122,8 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {"RX_CQ_LEN", "4096",
    "Length of receive completion queue in the QPs.\n"
    "defaults to the same value as RX_QUEUE_LEN.\n"
-   "in case of striding message-based receive queue, it should be set to number\n"
-   "of receive buffers multiplied by the number of strides.",
+   "when striding message-based receive queue is used, it should be set to\n"
+   "the number of receive buffers multiplied by the number of strides.",
    ucs_offsetof(uct_ib_iface_config_t, rx.cq_len), UCS_CONFIG_TYPE_UINT},
 
   {"RX_MAX_BATCH", "16",
