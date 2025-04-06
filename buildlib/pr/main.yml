@@ -348,7 +348,7 @@ stages:
         demands: ucx_roce -equals yes
         test_perf: 0
         proto_enable: no
-        run_bullseye: yes
+        run_bullseye: no
     - template: tests.yml
       parameters:
         name: BlueField
@@ -363,7 +363,6 @@ stages:
         - tests_althca
         - tests_new
         - tests_roce
-        - tests_roce_proto_disable
       condition: succeededOrFailed()
       pool:
         name: MLNX
