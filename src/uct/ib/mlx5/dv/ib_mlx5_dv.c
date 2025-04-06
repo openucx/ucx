@@ -209,9 +209,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_RC);
 
         if (uct_ib_mlx5_devx_is_msg_based_srq_enabled(md, attr)) {
-            qpce = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, create_qp_in,
-                                         qpc_data_extension);
-            UCT_IB_MLX5DV_SET(create_qp_in, create_qp_in, qpc_ext, 1);
+            qpce = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, in, qpc_data_extension);
+            UCT_IB_MLX5DV_SET(create_qp_in, in, qpc_ext, 1);
             UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
                               UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
             UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size,
