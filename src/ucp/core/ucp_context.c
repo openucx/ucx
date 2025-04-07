@@ -1121,11 +1121,9 @@ ucp_is_resource_in_transports_list(const char *tl_name,
 
     /* A transport that can be used as an auxiliary is disabled by
      * including it in the deny list in one of the following ways:
-     *  - explicit transport name:
-     *    UCX_TLS=^tl_name,tl_name:aux, or alias={tl_name} and
-     *    UCX_TLS=^alias,alias:aux
-     *  - a global alias that contains it:
-     *    UCX_TLS=^ib */
+     *  - UCX_TLS=^tl_name,tl_name:aux
+     *  - UCX_TLS=^alias,alias:aux where alias={tl_name}
+     *  - UCX_TLS=^alias where alias={tl_name,tl_name:aux} */
     if (ucs_test_all_flags(search_result,
                            UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY |
                            UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN) ||
