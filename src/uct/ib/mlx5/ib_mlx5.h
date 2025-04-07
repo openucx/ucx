@@ -460,9 +460,9 @@ typedef struct uct_ib_mlx5_md {
         uint16_t max_message_size_stride;
         /* Max message size in bytes */
         uint32_t max_message_size_bytes;
-        /* Minimal stride size */
+        /* Min stride size */
         uint32_t min_stride_size;
-        /* Maximal stride size */
+        /* Max stride size */
         uint32_t max_stride_size;
     } msg_based_srq;
 } uct_ib_mlx5_md_t;

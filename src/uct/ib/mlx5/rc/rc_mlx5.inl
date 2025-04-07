@@ -2030,6 +2030,7 @@ uct_rc_mlx5_num_sge(const uct_rc_mlx5_iface_common_t *iface, int stride_size)
         return (stride_size - sizeof(struct mlx5_wqe_srq_next_seg)) /
                sizeof(struct mlx5_wqe_data_seg);
     }
+
     return iface->tm.mp.num_strides;
 }
 
