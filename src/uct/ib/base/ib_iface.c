@@ -121,8 +121,8 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"RX_CQ_LEN", "4096",
    "Length of receive completion queue in the QPs.\n"
-   "defaults to the same value as RX_QUEUE_LEN.\n"
-   "when striding message-based receive queue is used, it should be set to\n"
+   "Defaults to the same value as RX_QUEUE_LEN.\n"
+   "When striding message-based receive queue is used, it should be set to\n"
    "the number of receive buffers multiplied by the number of strides.",
    ucs_offsetof(uct_ib_iface_config_t, rx.cq_len), UCS_CONFIG_TYPE_UINT},
 

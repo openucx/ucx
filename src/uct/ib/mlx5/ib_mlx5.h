@@ -454,15 +454,15 @@ typedef struct uct_ib_mlx5_md {
 
     /* Striding message receive queue limitations queried from the device */
     struct {
-        /* A bitmap indicating which transports supports striding message based RQ*/
+        /* A bitmap indicating which transports supports striding message based RQ */
         uint8_t supported_tls;
-        /* Max message size HW limitation in strides*/
+        /* Max message size in strides */
         uint16_t max_message_size_stride;
-        /* Max message size HW limitation in bytes*/
+        /* Max message size in bytes */
         uint32_t max_message_size_bytes;
-        /* Minimal stride size supported by HW*/
+        /* Minimal stride size */
         uint32_t min_stride_size;
-        /* Maximal stride size supported by HW*/
+        /* Maximal stride size */
         uint32_t max_stride_size;
     } msg_based_srq;
 } uct_ib_mlx5_md_t;

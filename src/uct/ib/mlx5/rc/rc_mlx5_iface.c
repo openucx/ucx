@@ -277,7 +277,8 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
         attr->uidx                     = 0xffffff;
-        attr->msg_based_srq_associated = uct_rc_mlx5_iface_is_srq_msg_based(iface);
+        attr->msg_based_srq_associated = uct_rc_mlx5_iface_is_srq_msg_based(
+                iface);
         status = uct_ib_mlx5_devx_create_qp(ib_iface, &iface->cq[UCT_IB_DIR_TX],
                                             &iface->cq[UCT_IB_DIR_RX], qp, txwq,
                                             attr);
