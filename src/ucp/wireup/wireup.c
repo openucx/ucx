@@ -46,6 +46,9 @@
         } \
     } while (0)
 
+#define UCP_EP_REQUEST_MSG_QUEUED \
+    (UCP_EP_FLAG_CONNECT_REQ_QUEUED | UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED)
+
 /* Wireup request and promote both require handling new connections */
 static int ucp_wireup_msg_is_request(unsigned msg_type)
 {
@@ -117,9 +120,21 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
 
 static unsigned ucp_wireup_get_msg_size(const ucp_wireup_msg_t *msg)
 {
-    return (msg->type == UCP_WIREUP_MSG_PROMOTE) ||
-           (msg->type == UCP_WIREUP_MSG_DEMOTE) ?
-           sizeof(ucp_wireup_msg_extended_t) : sizeof(ucp_wireup_msg_t);
+    switch (msg->type) {
+    case UCP_WIREUP_MSG_PROMOTE:
+    case UCP_WIREUP_MSG_DEMOTE:
+        return sizeof(ucp_wireup_msg_extended_t);
+    case UCP_WIREUP_MSG_PRE_REQUEST:
+    case UCP_WIREUP_MSG_REQUEST:
+    case UCP_WIREUP_MSG_REPLY:
+    case UCP_WIREUP_MSG_REPLY_RECONFIG:
+    case UCP_WIREUP_MSG_ACK:
+    case UCP_WIREUP_MSG_EP_CHECK:
+    case UCP_WIREUP_MSG_EP_REMOVED:
+        return sizeof(ucp_wireup_msg_t);
+    default:
+        ucs_fatal("unsupported wireup msg type: %u", msg->type);
+    }
 }
 
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
@@ -573,9 +588,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED, 0);
         if (ucp_context_usage_tracker_enabled(ep->worker->context)) {
             /* Reset flags that mark wireup is in progress */
-            ucp_ep_update_flags(ep, 0,
-                                UCP_EP_FLAG_CONNECT_REQ_QUEUED |
-                                UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED);
+            ucp_ep_update_flags(ep, 0, UCP_EP_REQUEST_MSG_QUEUED);
         }
     }
 
@@ -597,13 +610,12 @@ static void ucp_wireup_send_priority_update(ucp_ep_h ep, uint8_t type)
 {
     ucs_status_t status;
 
-    if (ep->flags & (UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED |
-                     UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
+    if (ep->flags & UCP_EP_REQUEST_MSG_QUEUED) {
         return;
     }
 
-    ucs_debug("ep %p: send %s request to %p (score: %.2f)", ep,
-              ucp_wireup_msg_str(type), (void*)ucp_ep_remote_id(ep),
+    ucs_debug("ep %p: send %s request to 0x%"PRIx64" (score: %.2f)", ep,
+              ucp_wireup_msg_str(type), ucp_ep_remote_id(ep),
               ucs_usage_tracker_get_score(ep->worker->usage_tracker.handle,
                                           ep));
 
@@ -889,9 +901,9 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
         status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address, msg,
                                               ep_init_flags, &ep);
         if (status != UCS_OK) {
-            ucs_debug("ep %p: promotion request from 0x%.8lX denied because no"
-                      " local EP matches remote connection",
-                      ep, msg->src_ep_id);
+            ucs_debug("ep %p: promotion request from 0x%"PRIx64" failed with"
+                      " the following error: %s", ep, msg->src_ep_id,
+                      ucs_status_string(status));
             return;
         }
     }
@@ -907,13 +919,13 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
     ucs_usage_tracker_set_min_score(usage_tracker, ep, extended->score);
 
     if (!ucs_usage_tracker_is_promoted(usage_tracker, ep)) {
-        ucs_debug("ep %p: promotion request from 0x%.8lX denied due to "
+        ucs_debug("ep %p: promotion request from 0x%"PRIx64" denied due to "
                   "insufficient score value (%.2f)",
                   ep, msg->src_ep_id, extended->score);
         return;
     }
 
-    ucs_debug("ep %p: promotion request from 0x%.8lX accepted (score: %.2f)",
+    ucs_debug("ep %p: promotion request from 0x%"PRIx64" accepted (score: %.2f)",
               ep, msg->src_ep_id, extended->score);
     ucp_wireup_process_pre_msg(ep, remote_address, ep_init_flags,
                                msg->src_ep_id);
@@ -928,8 +940,8 @@ ucp_wireup_process_demote_request(ucp_worker_h worker, ucp_ep_h ep,
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_DEMOTE);
 
-    ucs_debug("ep %p: demotion request from 0x%.8lX accepted (score: %.2f)", ep,
-              msg->src_ep_id, score);
+    ucs_debug("ep %p: demotion request from 0x%"PRIx64" accepted (score: %.2f)",
+              ep, msg->src_ep_id, score);
 
     ucs_assert_always(worker->usage_tracker.handle != NULL);
     ucs_usage_tracker_remove(worker->usage_tracker.handle, ep);
@@ -2230,8 +2242,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     ucp_wireup_ep_set_next_ep(ucp_ep_get_lane(ep, lane), uct_ep,
                               ucp_ep_get_rsc_index(ep, lane));
 
-    if (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) &&
-        !(ep->flags & UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED)) {
+    if (!(ep->flags & UCP_EP_REQUEST_MSG_QUEUED)) {
         status = ucp_wireup_send_request(ep);
         if (status != UCS_OK) {
             goto err_destroy_wireup_ep;
