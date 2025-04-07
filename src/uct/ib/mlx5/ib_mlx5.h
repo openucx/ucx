@@ -532,7 +532,6 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t                           sw_pi;      /* what is posted to hw */
     uint16_t                           mask;
     uint16_t                           stride;
-    ucs_dynamic_bitmap_t               free_wqes; /* used for striding message-based RQ only*/
     union {
         struct {
             struct ibv_srq             *srq;

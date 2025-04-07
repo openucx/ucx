@@ -956,9 +956,6 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     srq->mask      = tail;
     srq->stride    = stride_size;
 
-    ucs_dynamic_bitmap_init(&srq->free_wqes);
-    ucs_dynamic_bitmap_reserve(&srq->free_wqes, sge_num);
-
     for (i = head; i <= tail; ++i) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, i);
         seg->srq.next_wqe_index = htons((i + 1) & tail);

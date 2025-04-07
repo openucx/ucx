@@ -792,7 +792,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     init_attr->flags |= UCT_IB_CQ_IGNORE_OVERRUN;
     uct_ib_mlx5_parse_cqe_zipping(md, &mlx5_config->super, init_attr);
 
-    self->super.super.config.max_send_message_size_strides =
+    self->super.super.config.max_message_size_strides =
             mlx5_config->super.max_message_size_strides;
 
     status = uct_rc_mlx5_iface_preinit(self, tl_md, rc_config, mlx5_config,

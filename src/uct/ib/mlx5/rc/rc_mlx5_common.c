@@ -106,6 +106,12 @@ uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
     void *hdr;
     int i;
 
+    ucs_assertv((iface->tm.mp.num_strides == 1) ||
+                        !uct_rc_mlx5_iface_is_srq_msg_based(iface),
+                "tm.mp.num_strides %d != 1, HW tag matching is not supported "
+                "when message-based srq is used",
+                iface->tm.mp.num_strides);
+
     desc_map = ~seg->srq.ptr_mask & UCS_MASK(num_strides);
     ucs_for_each_bit(i, desc_map) {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
@@ -211,31 +217,6 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
 
         wqe_index = next_index;
         count++;
-    }
-
-    uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, wqe_index, count);
-    return count;
-}
-
-unsigned
-uct_rc_mlx5_iface_srq_post_recv_msg_based(uct_rc_mlx5_iface_common_t *iface)
-{
-    uct_ib_mlx5_srq_t *srq     = &iface->rx.srq;
-    uct_rc_iface_t *rc_iface   = &iface->super;
-    uct_ib_mlx5_srq_seg_t *seg = NULL;
-    uint16_t count             = 0;
-    uint16_t wqe_index;
-
-    ucs_assert(rc_iface->rx.srq.available > 0);
-
-    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(wqe_index, &iface->rx.srq.free_wqes) {
-        seg = uct_ib_mlx5_srq_get_wqe(srq, wqe_index);
-        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
-            break;
-        }
-
-        count++;
-        ucs_dynamic_bitmap_reset(&iface->rx.srq.free_wqes, wqe_index);
     }
 
     uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, wqe_index, count);
@@ -616,8 +597,6 @@ err:
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 {
-    ucs_dynamic_bitmap_cleanup(&srq->free_wqes);
-
     switch (srq->type) {
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
         uct_ib_destroy_srq(srq->verbs.srq);
@@ -1165,7 +1144,7 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_device_t *dev  = uct_ib_iface_device(ib_iface);
-    unsigned max_msg_size = ib_iface->config.max_send_message_size_strides *
+    unsigned max_msg_size = ib_iface->config.max_message_size_strides *
                             ib_iface->config.stride_size;
 
     /* Atomics */
@@ -1240,8 +1219,6 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                         iface_attr->cap.am.max_zcopy);
         iface_attr->cap.get.max_bcopy = ucs_min(max_msg_size,
                                                 iface_attr->cap.get.max_bcopy);
-        iface_attr->cap.get.max_zcopy = ucs_min(max_msg_size,
-                                                iface_attr->cap.get.max_zcopy);
         iface_attr->cap.put.max_bcopy = ucs_min(max_msg_size,
                                                 iface_attr->cap.put.max_bcopy);
     }

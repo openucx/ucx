@@ -172,7 +172,6 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
         }
 
         seg->srq.strides = iface->msg_based.num_strides;
-        ucs_dynamic_bitmap_set(&iface->rx.srq.free_wqes, wqe_index);
     }
 
     ++iface->super.rx.srq.available;
@@ -351,7 +350,7 @@ uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *iface,
         hdr = UCS_PTR_BYTE_OFFSET(hdr, uct_rc_mlx5_stride_offset(iface, cqe,
                                                                  poll_flags));
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
-        *flags = !!(poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) ?
+        *flags = (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) ?
                          0 :
                          UCT_CB_PARAM_FLAG_DESC;
         /* Assuming that next packet likely will be non-inline,
@@ -1531,7 +1530,6 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
                              UCT_IB_IFACE_STAT_RX_COMPLETION, 1);
 
-
     strides_consumed = uct_rc_mlx5_iface_strides_consumed(cqe->byte_cnt);
     byte_len         = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
     count            = 1;
@@ -1642,9 +1640,7 @@ out_update_db:
 out:
     max_batch = iface->super.super.config.rx_max_batch;
     if (ucs_unlikely(iface->super.rx.srq.available >= max_batch)) {
-        if (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) {
-            uct_rc_mlx5_iface_srq_post_recv_msg_based(iface);
-        } else if (poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) {
+        if (poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) {
             uct_rc_mlx5_iface_srq_post_recv_ll(iface);
         } else {
             uct_rc_mlx5_iface_srq_post_recv(iface);

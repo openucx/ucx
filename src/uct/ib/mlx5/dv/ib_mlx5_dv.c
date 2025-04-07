@@ -214,7 +214,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
             UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
                               UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
             UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size,
-                              iface->config.max_send_message_size_strides);
+                              iface->config.max_message_size_strides);
         }
     } else {
         ucs_error("create qp failed: unknown type %d", attr->super.qp_type);

@@ -367,7 +367,7 @@ struct uct_ib_iface {
         uint8_t                          counter_set_id;
         uct_ib_iface_send_overhead_t     send_overhead;
         uct_ib_iface_reachability_mode_t reachability_mode;
-        unsigned                         max_send_message_size_strides;
+        unsigned                         max_message_size_strides;
         unsigned                         stride_size;
     } config;
 
