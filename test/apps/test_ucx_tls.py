@@ -85,7 +85,8 @@ tl_aliases = {
     "mm":   ["posix", "sysv", "xpmem", ],
     "sm":   ["posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", ],
     "shm":  ["posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", ],
-    "ib":   ["rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", ],
+    "ib":   ["rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm",
+             "ud_mlx5:aux", "ud_verbs:aux", ],
     "ud_v": ["ud_verbs", "rdmacm", ],
     "ud_x": ["ud_mlx5", "rdmacm", ],
     "ud":   ["ud_mlx5", "ud_verbs", "rdmacm", ],
@@ -122,6 +123,24 @@ def exec_cmd(cmd):
         print(output)
 
     return status, output
+
+def find_ka_transport(neps=1, override=0, tls="ib"):
+    if (override):
+        os.putenv("UCX_NUM_EPS", "2")
+
+    with _override_env("UCX_TLS", tls):
+        status, output = exec_cmd(f"{ucx_info}{ucx_info_eh_args}{neps} | "
+                                   "grep keepalive")
+
+    match = re.search(r'\d+:(\S+)/\S+', output)
+    if match:
+        am_tls = match.group(1)
+        if (override):
+            os.unsetenv("UCX_NUM_EPS")
+
+        return am_tls
+    else:
+        return None
 
 def find_am_transport(dev, neps=1, override=0, tls="ib"):
     if (override):
@@ -188,7 +207,7 @@ def test_ucx_tls_positive(tls):
 def test_ucx_tls_negative(tls):
     # Use TLS list in "negate" mode and verify that the found tl is not in the list
     found_tl = find_am_transport(None, tls="^"+tls)
-    print(f"Using UCX_TLS={tls}, found TL: {found_tl}")
+    print(f"Using UCX_TLS=^{tls}, found TL: {found_tl}")
     tls = tls.split(',')
     if not found_tl or found_tl in tls:
         print("No available TL found")
@@ -196,6 +215,19 @@ def test_ucx_tls_negative(tls):
     for tl in tls:
         if tl in tl_aliases and found_tl in tl_aliases[tl]:
             print("Found TL belongs to the forbidden UCX_TLS")
+            sys.exit(1)
+
+def test_ucx_aux_negative(tls, forbidden_tls):
+    found_tl = find_ka_transport(tls="^"+tls)
+    print(f"Using UCX_TLS=^{tls}, found keepalive TL: {found_tl}")
+
+    if not found_tl:
+        print("No available TL found")
+        sys.exit(1)
+
+    for tl in forbidden_tls:
+        if found_tl == tl:
+            print("No available TL found")
             sys.exit(1)
 
 def _powerset(iterable, with_empty_set=True):
@@ -224,6 +256,13 @@ def test_tls_allow_list(ucx_info):
         itertools.product(tls_variants, test_funcs):
         test_func(",".join(tls_variant))
 
+    test_ucx_aux_negative("ib", {"ud_mlx5", "ud_verbs"})
+    test_ucx_aux_negative("ud,ud:aux", {"ud_mlx5", "ud_verbs"})
+    test_ucx_aux_negative("ud_v,ud_v:aux", {"ud_verbs"})
+    test_ucx_aux_negative("ud_x,ud_x:aux", {"ud_mlx5"})
+    test_ucx_aux_negative("ud_verbs,ud_verbs:aux", {"ud_verbs"})
+    test_ucx_aux_negative("ud_mlx5,ud_mlx5:aux", {"ud_mlx5"})
+
 parser = OptionParser()
 parser.add_option("-p", "--prefix", metavar="PATH", help = "root UCX directory")
 parser.add_option("-v", "--verbose", action="store_true", \
@@ -242,6 +281,7 @@ if not (os.path.isdir(bin_prefix)):
 
 ucx_info = bin_prefix + "/ucx_info"
 ucx_info_args = " -e -u t -n "
+ucx_info_eh_args = " -e -u te -n "
 
 status, output = exec_cmd(ucx_info + " -c | grep -e \"UCX_RC_.*_MAX_NUM_EPS\"")
 match = re.findall(r'\S+=(\d+)', output)
