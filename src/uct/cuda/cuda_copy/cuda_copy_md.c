@@ -771,21 +771,10 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
             return UCS_ERR_INVALID_ADDR;
         }
 
-        if (is_managed ||
-            ((cuda_mem_ctx == NULL) && md->config.cuda_async_managed)) {
-            /* is_managed: cuMemGetAddress range does not support managed memory
-             * so use provided address and length as base address and alloc
-             * length respectively
-             *
-             * cuda_async_managed: currently virtual/stream-ordered CUDA
-             * allocations are typed as `UCS_MEMORY_TYPE_CUDA_MANAGED`. This may
-             * be changed using UCX_CUDA_COPY_ASYNC_MEM_TYPE env var.
-             * Ideally checking for
-             * `CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE` would be better
-             * here, but due to a bug in the driver `cudaMalloc` also returns false
-             * in that case. Therefore, checking whether the allocation was not
-             * allocated in a context should also allows us to identify
-             * virtual/stream-ordered CUDA allocations. */
+        if (is_managed) {
+            /* cuMemGetAddress range does not support managed memory so use
+             * provided address and length as base address and alloc length
+             * respectively */
             mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
 
             cu_err = cuMemRangeGetAttribute(
@@ -810,6 +799,16 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
             }
 
             goto out_default_range;
+        } else if ((cuda_mem_ctx == NULL) && md->config.cuda_async_managed) {
+            /* Currently virtual/stream-ordered CUDA allocations are typed as
+             * `UCS_MEMORY_TYPE_CUDA_MANAGED`. This may be changed using
+             * UCX_CUDA_COPY_ASYNC_MEM_TYPE env var. Ideally checking for
+             * `CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE` would be better
+             * here, but due to a bug in the driver `cudaMalloc` also returns
+             * false in that case. Therefore, checking whether the allocation
+             * was not allocated in a context should also allows us to
+             * identify virtual/stream-ordered CUDA allocations. */
+            mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
         } else {
             mem_info->type = UCS_MEMORY_TYPE_CUDA;
         }
