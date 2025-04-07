@@ -775,6 +775,10 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
     ucs_status_t status;
     void *request;
 
+    ucs_assertv(ep->ext->unflushed_lanes != 0,
+                "ep=%p unflushed_lanes=0x%" PRIx64, ep,
+                ep->ext->unflushed_lanes);
+
     request = ucp_ep_flush_internal(ep, 0, &ucp_request_null_param, NULL,
                                     ucp_ep_flushed_callback, "ep_fence_strong",
                                     UCT_FLUSH_FLAG_REMOTE);
