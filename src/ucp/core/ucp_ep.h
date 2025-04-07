@@ -205,6 +205,10 @@ typedef struct ucp_ep_config_key_lane {
                                         was selected for */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
+    unsigned             addr_index; /* Address index in the remote address,
+                                      NOTE: can be removed if remote side
+                                      sends only requested address for on
+                                      demand wireup request */
 } ucp_ep_config_key_lane_t;
 
 
@@ -768,7 +772,7 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *old_key,
 
 int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
                                 const ucp_ep_config_key_t *key2,
-                                ucp_lane_index_t lane);
+                                ucp_lane_index_t lane, unsigned flags);
 
 /**
  * @brief Compare two endpoint configurations.
@@ -780,6 +784,9 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
  */
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
+
+int ucp_ep_config_is_equal2(const ucp_ep_config_key_t *key1,
+                            const ucp_ep_config_key_t *key2, unsigned flags);
 
 void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
                         ucs_string_buffer_t *strb);

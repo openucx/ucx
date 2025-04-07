@@ -109,7 +109,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
         /* Search for next lane to start flush */
         lane   = ucs_ffs64(all_lanes & ~req->send.flush.started_lanes);
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if (uct_ep == NULL) {
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
             continue;
@@ -381,6 +381,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const char *debug_name,
                                        unsigned uct_flags)
 {
+    ucp_lane_index_t num_lanes = ucp_ep_num_valid_lanes(ep);
     ucs_status_t status;
     ucp_request_t *req;
 
@@ -404,12 +405,12 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     req->send.flush.uct_flags       = uct_flags;
     req->send.flush.sw_started      = 0;
     req->send.flush.sw_done         = 0;
-    req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
+    req->send.flush.num_lanes       = num_lanes;
     req->send.flush.started_lanes   = 0;
     req->send.lane                  = UCP_NULL_LANE;
     req->send.uct.func              = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
-    req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
+    req->send.state.uct_comp.count  = num_lanes;
     req->send.state.uct_comp.status = UCS_OK;
 
     ucp_request_set_super(req, worker_req);
