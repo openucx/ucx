@@ -281,7 +281,7 @@ if not (os.path.isdir(bin_prefix)):
 
 ucx_info = bin_prefix + "/ucx_info"
 ucx_info_args = " -e -u t -n "
-ucx_info_eh_args = " -e -u te -n "
+ucx_info_eh_args = " -e -u et -n "
 
 status, output = exec_cmd(ucx_info + " -c | grep -e \"UCX_RC_.*_MAX_NUM_EPS\"")
 match = re.findall(r'\S+=(\d+)', output)
