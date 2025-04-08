@@ -821,7 +821,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     ucs_trace_func("");
 
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx.queue_len;
-    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.tx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.rx.queue_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, &uct_ud_verbs_iface_tl_ops, md,
                               worker, params, config, &init_attr);
