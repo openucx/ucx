@@ -704,7 +704,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         goto out_free_addr;
     }
 
-    status = ucp_wireup_connect_local(ucp_ep, &addr, NULL);
+    status = ucp_wireup_connect_local(ucp_ep, &addr, NULL, NULL);
     if (status != UCS_OK) {
         ucs_debug("ep %p: failed to connect lanes: %s", ucp_ep,
                   ucs_status_string(status));
@@ -1260,7 +1260,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         goto out_free_request;
     }
 
-    status = ucp_wireup_connect_local(ep, remote_addr, NULL);
+    status = ucp_wireup_connect_local(ep, remote_addr, NULL, NULL);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to connect to remote address on "
                  "device %s, tl_bitmap " UCT_TL_BITMAP_FMT ", status %s",
