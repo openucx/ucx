@@ -105,14 +105,27 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
     return lane;
 }
 
+static inline ucp_rsc_index_t
+ucp_wireup_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+
+    return ucp_wireup_ep_test(uct_ep)?
+              ucp_wireup_ep_get_msg_rsc_index(ucp_wireup_ep(uct_ep)) :
+              ucp_ep_get_rsc_index(ep, lane);
+}
+
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_h ep         = req->send.ep;
+    ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_h ep           = req->send.ep;
+    ucp_context_h context = ep->worker->context;
     ucs_status_t status;
     ssize_t packed_len;
     unsigned am_flags;
     struct iovec wireup_msg_iov[2];
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
 
@@ -144,6 +157,21 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     wireup_msg_iov[1].iov_base = req->send.buffer;
     wireup_msg_iov[1].iov_len  = req->send.length;
+
+    /* bcopy size may be limited by max_bcopy capability, make sure we have
+     * enough space.
+     * TODO: find reliable way of exchange wireup message without this limit */
+    packed_len = wireup_msg_iov[0].iov_len + wireup_msg_iov[1].iov_len;
+    rsc_index  = ucp_wireup_ep_get_rsc_index(ep, req->send.lane);
+    wiface     = ucp_worker_iface(ep->worker, rsc_index);
+    if (packed_len > wiface->attr.cap.am.max_bcopy) {
+        ucs_error("ep %p: wireup message size %zu exceeds max bcopy size %zu on "
+                  UCT_TL_RESOURCE_DESC_FMT, ep, packed_len,
+                  wiface->attr.cap.am.max_bcopy,
+                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc));
+        status = UCS_OK;
+        goto out_free_req;
+    }
 
     packed_len = uct_ep_am_bcopy(ucp_ep_get_lane(ep, req->send.lane),
                                  UCP_AM_ID_WIREUP, ucp_wireup_msg_pack,
@@ -1583,10 +1611,7 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     ucs_assert(new_wireup_ep != NULL);
 
     /* Get correct aux_rsc_index either from next_ep or aux_ep */
-    aux_rsc_index = (!is_wireup_ep ||
-                     ucp_wireup_ep_is_next_ep_active(old_ep_wrapper)) ?
-                            ucp_ep_get_rsc_index(ep, old_lane) :
-                            ucp_wireup_ep_get_aux_rsc_index(old_wireup_ep);
+    aux_rsc_index = ucp_wireup_ep_get_rsc_index(ep, old_lane);
 
     ucs_assert(aux_rsc_index != UCP_NULL_RESOURCE);
     is_p2p = ucp_ep_config_connect_p2p(ep->worker, &ucp_ep_config(ep)->key,
