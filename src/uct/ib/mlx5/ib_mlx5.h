@@ -492,6 +492,7 @@ typedef struct uct_ib_mlx5_iface_config {
     ucs_ternary_auto_value_t ar_enable;
     int                      cqe_zip_enable[UCT_IB_DIR_LAST];
     unsigned                 max_message_size_strides;
+    unsigned long            rx_cq_len;
 } uct_ib_mlx5_iface_config_t;
 
 

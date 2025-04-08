@@ -119,13 +119,6 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Length of receive queue in the QPs.",
    ucs_offsetof(uct_ib_iface_config_t, rx.queue_len), UCS_CONFIG_TYPE_UINT},
 
-  {"RX_CQ_LEN", "auto",
-   "Length of receive completion queue in the QPs.\n"
-   "Defaults to the same value as RX_QUEUE_LEN.\n"
-   "When striding message-based receive queue is used, it should be set to\n"
-   "the number of receive buffers multiplied by the number of strides.",
-   ucs_offsetof(uct_ib_iface_config_t, rx.cq_len), UCS_CONFIG_TYPE_ULUNITS},
-
   {"RX_MAX_BATCH", "16",
    "How many post-receives to perform in one batch.",
    ucs_offsetof(uct_ib_iface_config_t, rx.max_batch), UCS_CONFIG_TYPE_UINT},
@@ -1355,14 +1348,6 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
     } else {
         iface->num_paths = config->num_paths;
     }
-}
-
-unsigned long uct_ib_iface_get_rx_cq_length(const uct_ib_iface_config_t *config)
-{
-    if (config->rx.cq_len == UCS_ULUNITS_AUTO) {
-        return config->rx.queue_len;
-    }
-    return config->rx.cq_len;
 }
 
 int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)

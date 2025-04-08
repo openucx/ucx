@@ -996,8 +996,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
 
     init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.cq_len[UCT_IB_DIR_TX] = sq_length;
-    init_attr.cq_len[UCT_IB_DIR_RX] = uct_ib_iface_get_rx_cq_length(
-            &config->super.super);
+    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.super.rx.queue_len;
 
     uct_ib_mlx5_parse_cqe_zipping(md, &config->mlx5_common, &init_attr);
 

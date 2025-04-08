@@ -181,7 +181,6 @@ struct uct_ib_iface_config {
 
     struct {
         unsigned            queue_len;       /* Queue length */
-        unsigned long       cq_len;          /* Completion queue length */
         unsigned            max_batch;       /* How many buffers can be batched to one post receive */
         unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
         uct_iface_mpool_config_t mp;
@@ -562,8 +561,6 @@ uct_ib_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 
 
 int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface);
-
-unsigned long uct_ib_iface_get_rx_cq_length(const uct_ib_iface_config_t *config);
 
 
 /**

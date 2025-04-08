@@ -434,19 +434,25 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
     return UCS_ERR_INVALID_PARAM;
 }
 
-static unsigned long
-uct_rc_mlx5_iface_get_rx_cq_length(const uct_rc_mlx5_iface_common_t *iface,
-                                   const uct_rc_iface_common_config_t *rc_config)
+static unsigned long uct_rc_mlx5_iface_get_rx_cq_length(
+        const uct_rc_mlx5_iface_common_t *iface,
+        const uct_rc_iface_common_config_t *rc_config,
+        const uct_rc_mlx5_iface_common_config_t *mlx5_config)
 {
-    int num_strides = rc_config->super.seg_size / rc_config->super.stride_size;
-    if (rc_config->super.rx.cq_len == UCS_ULUNITS_AUTO) {
-        if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
-            return num_strides * rc_config->super.rx.queue_len;
-        }
-        return rc_config->super.rx.queue_len;
+    int num_strides;
+
+    if (mlx5_config->super.rx_cq_len != UCS_ULUNITS_AUTO) {
+        return mlx5_config->super.rx_cq_len;
     }
 
-    return rc_config->super.rx.cq_len;
+    if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
+        ucs_assertv_always(rc_config->super.stride_size > 0, "stride_size=%d",
+                           rc_config->super.stride_size);
+        num_strides = rc_config->super.seg_size / rc_config->super.stride_size;
+        return num_strides * rc_config->super.rx.queue_len;
+    }
+
+    return rc_config->super.rx.queue_len;
 }
 
 static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
@@ -569,7 +575,7 @@ out_tm_disabled:
     init_attr->seg_size      = rc_config->super.seg_size;
     iface->tm.mp.num_strides = 1;
     init_attr->cq_len[UCT_IB_DIR_RX] =
-            uct_rc_mlx5_iface_get_rx_cq_length(iface, rc_config);
+            uct_rc_mlx5_iface_get_rx_cq_length(iface, rc_config, mlx5_config);
 
 #if IBV_HW_TM
 out_mp_disabled:

@@ -87,6 +87,13 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      ucs_offsetof(uct_ib_mlx5_iface_config_t, max_message_size_strides),
      UCS_CONFIG_TYPE_UINT},
 
+    {"RX_CQ_LEN", "auto",
+     "Length of receive completion queue in the QPs.\n"
+     "Defaults to the same value as RX_QUEUE_LEN.\n"
+     "When striding message-based receive queue is used, it should be set to\n"
+     "the number of receive buffers multiplied by the number of strides.",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, rx_cq_len), UCS_CONFIG_TYPE_ULUNITS},
+
     {NULL}
 };
 
