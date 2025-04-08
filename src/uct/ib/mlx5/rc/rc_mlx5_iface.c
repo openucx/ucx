@@ -21,9 +21,6 @@
 #include "rc_mlx5.inl"
 
 
-#define UCT_RC_MLX5_IFACE_MSG_BASED_SRQ_CQ_LEN 65536
-
-
 enum {
     UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
 
@@ -198,7 +195,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     }
 
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline,
-                                   UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
+                                   UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0),
+                                   iface->msg_based.max_message_size_strides);
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_EP_CHECK;
     iface_attr->latency.m     += 1e-9; /* 1 ns per each extra QP */
     iface_attr->ep_addr_len    = ep_addr_len;
@@ -276,9 +274,9 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     uint64_t cookie;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
-        attr->uidx                     = 0xffffff;
-        attr->msg_based_srq_associated = uct_rc_mlx5_iface_is_srq_msg_based(
-                iface);
+        attr->uidx                 = 0xffffff;
+        attr->is_srq_msg_based     = uct_rc_mlx5_iface_is_srq_msg_based(iface);
+        attr->max_msg_size_strides = iface->msg_based.max_message_size_strides;
         status = uct_ib_mlx5_devx_create_qp(ib_iface, &iface->cq[UCT_IB_DIR_TX],
                                             &iface->cq[UCT_IB_DIR_RX], qp, txwq,
                                             attr);
@@ -436,6 +434,21 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
     return UCS_ERR_INVALID_PARAM;
 }
 
+static unsigned long
+uct_rc_mlx5_iface_get_rx_cq_length(const uct_rc_mlx5_iface_common_t *iface,
+                                   const uct_rc_iface_common_config_t *rc_config)
+{
+    int num_strides = rc_config->super.seg_size / rc_config->super.stride_size;
+    if (rc_config->super.rx.cq_len == UCS_ULUNITS_AUTO) {
+        if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
+            return num_strides * rc_config->super.rx.queue_len;
+        }
+        return rc_config->super.rx.queue_len;
+    }
+
+    return rc_config->super.rx.cq_len;
+}
+
 static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
                                               uct_md_h tl_md,
                                               uct_rc_iface_common_config_t *rc_config,
@@ -453,7 +466,7 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
 #endif
     ucs_status_t status;
 
-    iface->config.max_message_size_strides =
+    iface->msg_based.max_message_size_strides =
             mlx5_config->super.max_message_size_strides;
 
     status = uct_rc_mlx5_iface_parse_srq_topo(md, mlx5_config,
@@ -553,12 +566,10 @@ out_tm_disabled:
 #else
     iface->tm.enabled                = 0;
 #endif
+    init_attr->seg_size      = rc_config->super.seg_size;
+    iface->tm.mp.num_strides = 1;
     init_attr->cq_len[UCT_IB_DIR_RX] =
-            uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
-                    UCT_RC_MLX5_IFACE_MSG_BASED_SRQ_CQ_LEN :
-                    rc_config->super.rx.cq_len;
-    init_attr->seg_size              = rc_config->super.seg_size;
-    iface->tm.mp.num_strides         = 1;
+            uct_rc_mlx5_iface_get_rx_cq_length(iface, rc_config);
 
 #if IBV_HW_TM
 out_mp_disabled:
@@ -792,7 +803,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     init_attr->flags |= UCT_IB_CQ_IGNORE_OVERRUN;
     uct_ib_mlx5_parse_cqe_zipping(md, &mlx5_config->super, init_attr);
 
-    self->super.super.config.max_message_size_strides =
+    self->msg_based.max_message_size_strides =
             mlx5_config->super.max_message_size_strides;
 
     status = uct_rc_mlx5_iface_preinit(self, tl_md, rc_config, mlx5_config,

@@ -467,13 +467,6 @@ typedef struct uct_ib_mlx5_md {
     } msg_based_srq;
 } uct_ib_mlx5_md_t;
 
-enum {
-    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_RC = UCS_BIT(0),
-    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_UC = UCS_BIT(1),
-    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_DC = UCS_BIT(2),
-    UCT_IB_MLX5_MSG_BASED_SRQ_TLS_UD = UCS_BIT(3)
-};
-
 typedef enum {
     UCT_IB_MLX5_MMIO_MODE_BF_POST,    /* BF without flush, can be used only from
                                          one thread */
@@ -653,7 +646,8 @@ typedef struct uct_ib_mlx5_qp_attr {
     int                         full_handshake;
     int                         rdma_wr_disabled;
     uint8_t                     log_num_dci_stream_channels;
-    int                         msg_based_srq_associated;
+    int                         is_srq_msg_based;
+    unsigned                    max_msg_size_strides;
 } uct_ib_mlx5_qp_attr_t;
 
 

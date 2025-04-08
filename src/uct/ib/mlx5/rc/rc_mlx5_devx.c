@@ -222,7 +222,8 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 void *wq)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
-    int num_sges        =  uct_rc_mlx5_num_sge(iface, config->super.stride_size);
+    int num_sges        = uct_rc_mlx5_max_num_messages_in_single_wqe(
+            iface, config->super.stride_size);
     int len, max, stride, log_num_of_strides, wq_type;
 
     stride = uct_rc_mlx5_iface_stride_size(iface);

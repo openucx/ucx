@@ -288,7 +288,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
     init_attr.rx_hdr_len            = sizeof(uct_rc_hdr_t);
     init_attr.qp_type               = IBV_QPT_RC;
-    init_attr.cq_len[UCT_IB_DIR_RX] = ib_config->rx.cq_len;
+    init_attr.cq_len[UCT_IB_DIR_RX] = uct_ib_iface_get_rx_cq_length(ib_config);
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.seg_size              = ib_config->seg_size;
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);

@@ -66,7 +66,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
         UCT_IB_MLX5DV_SET(dctc, dctc, receive_send_cqe_granularity,
                           UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
         UCT_IB_MLX5DV_SET(dctc, dctc, max_receive_send_message_size,
-                          iface->super.config.max_message_size_strides);
+                          iface->super.msg_based.max_message_size_strides);
     }
 
     UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->rx.port_affinity);

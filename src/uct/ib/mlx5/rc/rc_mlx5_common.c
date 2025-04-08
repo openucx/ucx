@@ -300,7 +300,8 @@ ucs_status_t uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     attr.super.srq_num            = iface->rx.srq.srq_num;
     attr.super.port               = dev->first_port;
     attr.mmio_mode                = iface->tx.mmio_mode;
-    attr.msg_based_srq_associated = uct_rc_mlx5_iface_is_srq_msg_based(iface);
+    attr.is_srq_msg_based         = uct_rc_mlx5_iface_is_srq_msg_based(iface);
+    attr.max_msg_size_strides     = iface->msg_based.max_message_size_strides;
     status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
                                         &iface->cq[UCT_IB_DIR_RX],
                                         &iface->cq[UCT_IB_DIR_RX],
@@ -1139,12 +1140,13 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
 
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                     uct_iface_attr_t *iface_attr,
-                                    size_t max_inline, size_t max_tag_eager_iov)
+                                    size_t max_inline, size_t max_tag_eager_iov,
+                                    unsigned max_message_size_strides)
 {
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_device_t *dev  = uct_ib_iface_device(ib_iface);
-    unsigned max_msg_size = ib_iface->config.max_message_size_strides *
+    unsigned max_msg_size = max_message_size_strides *
                             ib_iface->config.stride_size;
 
     /* Atomics */

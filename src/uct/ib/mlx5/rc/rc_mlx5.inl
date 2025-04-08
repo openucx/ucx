@@ -2019,8 +2019,8 @@ uct_rc_mlx5_iface_is_srq_msg_based(const uct_rc_mlx5_iface_common_t *iface)
     return iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST;
 }
 
-static UCS_F_ALWAYS_INLINE int
-uct_rc_mlx5_num_sge(const uct_rc_mlx5_iface_common_t *iface, int stride_size)
+static UCS_F_ALWAYS_INLINE int uct_rc_mlx5_max_num_messages_in_single_wqe(
+        const uct_rc_mlx5_iface_common_t *iface, int stride_size)
 {
     if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
         return (stride_size - sizeof(struct mlx5_wqe_srq_next_seg)) /

@@ -412,10 +412,10 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        log_ack_req_freq;
         uint8_t                        dp_ordering;
         uint8_t                        dp_ordering_force;
-        unsigned                       max_message_size_strides;
     } config;
 
     struct {
+        unsigned                       max_message_size_strides;
         unsigned                       num_strides;
     } msg_based;
     UCS_STATS_NODE_DECLARE(stats)
@@ -599,7 +599,8 @@ void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                     uct_iface_attr_t *iface_attr,
-                                    size_t max_inline, size_t max_tag_eager_iov);
+                                    size_t max_inline, size_t max_tag_eager_iov,
+                                    unsigned max_message_size_strides);
 
 ucs_status_t
 uct_rc_mlx5_iface_common_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,

@@ -128,7 +128,7 @@ static int
 uct_ib_mlx5_devx_is_msg_based_srq_enabled(const uct_ib_mlx5_md_t *md,
                                           const uct_ib_mlx5_qp_attr_t *attr)
 {
-    return (attr->msg_based_srq_associated) &&
+    return attr->is_srq_msg_based &&
            (md->flags & UCT_IB_MLX5_MD_FLAG_QP_CTX_EXTENSION) &&
            (((md->msg_based_srq.supported_tls &
               UCT_IB_MLX5_MSG_BASED_SRQ_SUPPORT_RC) &&
@@ -214,7 +214,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
             UCT_IB_MLX5DV_SET(qpc_ext, qpce, receive_send_cqe_granularity,
                               UCT_IB_MLX5_CQE_GRANULARITY_PER_MESSAGE);
             UCT_IB_MLX5DV_SET(qpc_ext, qpce, max_receive_send_message_size,
-                              iface->config.max_message_size_strides);
+                              attr->max_msg_size_strides);
         }
     } else {
         ucs_error("create qp failed: unknown type %d", attr->super.qp_type);
