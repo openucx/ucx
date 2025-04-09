@@ -5,6 +5,7 @@
  */
 
 #include <uct/uct_test.h>
+#include <uct/ib/efa/srd/srd_ep.h>
 
 
 // FIXME: Add SRD transport to UCT_TEST_IB_TLS when possible
@@ -83,7 +84,7 @@ protected:
 
     void progress_ctl()
     {
-        for (auto count = 10; count > 0; count--) {
+        while (!((uct_srd_ep_t *)m_e1->ep(0))->ah_added) {
             short_progress_loop();
         }
     }
@@ -421,10 +422,9 @@ UCS_TEST_P(test_srd, am_short_no_resource_with_pending)
     ASSERT_UCS_STATUS_EQ(UCS_ERR_NO_RESOURCE,
                          uct_ep_am_short(m_e1->ep(0), 31, 0x1, &c, 1));
 
-    /* Cannot post: CTL_RESP received, pending is drained */
+    /* Can post as CTL_RESP received and pending is drained */
     progress_ctl();
-    ASSERT_UCS_STATUS_EQ(UCS_OK,
-                         uct_ep_am_short(m_e1->ep(0), 31, 0x1, &c, 1));
+    ASSERT_UCS_STATUS_EQ(UCS_OK, uct_ep_am_short(m_e1->ep(0), 31, 0x1, &c, 1));
 }
 
 UCS_TEST_P(test_srd, pending_ok_if_no_resource)

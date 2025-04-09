@@ -72,7 +72,7 @@ typedef struct uct_srd_iface {
         ucs_mpool_t                  send_desc_mp;
         uct_srd_am_short_hdr_t       am_inl_hdr;
         ucs_list_link_t              outstanding_list;
-        ucs_list_link_t              ctl_list;   /* pending CTL messages */
+        ucs_list_link_t              ctl_list; /* pending CTL messages */
     } tx;
 
     struct {
@@ -150,8 +150,8 @@ static UCS_F_ALWAYS_INLINE void
 uct_srd_iface_check_pending(uct_srd_iface_t *iface, ucs_arbiter_group_t *group)
 {
     ucs_assertv(iface->tx.in_pending || ucs_arbiter_group_is_empty(group),
-                "iface=%p in_pending=%d arb_group_empty=%d",
-                iface, iface->tx.in_pending, ucs_arbiter_group_is_empty(group));
+                "iface=%p in_pending=%d arb_group_empty=%d", iface,
+                iface->tx.in_pending, ucs_arbiter_group_is_empty(group));
 }
 
 END_C_DECLS

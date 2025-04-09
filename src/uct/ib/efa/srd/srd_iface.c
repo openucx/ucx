@@ -91,8 +91,7 @@ ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
     const char *err_msg;
 
     /* Construct a control operation to be queued */
-    ctl_op = ucs_malloc(sizeof(*ctl_op) + sizeof(*hdr) +
-                        iface->super.addr_size,
+    ctl_op = ucs_malloc(sizeof(*ctl_op) + sizeof(*hdr) + iface->super.addr_size,
                         "uct_srd_ctl_op_t");
     if (ctl_op == NULL) {
         status  = UCS_ERR_NO_MEMORY;
@@ -100,18 +99,17 @@ ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
         goto err;
     }
 
-    ctl_op->ah           = ah;
-    ctl_op->dest_qpn     = dest_qpn;
+    ctl_op->ah       = ah;
+    ctl_op->dest_qpn = dest_qpn;
 
-    hdr          = (uct_srd_ctl_hdr_t *)(ctl_op + 1);
+    hdr          = (uct_srd_ctl_hdr_t*)(ctl_op + 1);
     hdr->id      = id;
     hdr->ep_uuid = ep_uuid;
     uct_ib_pack_uint24(hdr->qpn, iface->qp->qp_num);
 
     if (id == UCT_SRD_CTL_ID_REQ) {
-        status = uct_ib_iface_get_device_address(
-                                         &iface->super.super.super,
-                                         (uct_device_addr_t *)(hdr + 1));
+        status = uct_ib_iface_get_device_address(&iface->super.super.super,
+                                                 (uct_device_addr_t*)(hdr + 1));
         if (status != UCS_OK) {
             err_msg = "failed to get device address";
             ucs_free(ctl_op);
@@ -123,15 +121,15 @@ ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
     return UCS_OK;
 
 err:
-    ucs_error("iface=%p id=%d ep_uuid=%"PRIx64" ah=%p dest_qpn=%d %s",
-              iface, id, ep_uuid, ah, dest_qpn, err_msg);
+    ucs_error("iface=%p id=%d ep_uuid=%" PRIx64 " ah=%p dest_qpn=%d %s", iface,
+              id, ep_uuid, ah, dest_qpn, err_msg);
     return status;
 }
 
 static ucs_status_t
 uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
 {
-    uct_srd_ctl_hdr_t *hdr = (uct_srd_ctl_hdr_t *)(ctl_op + 1);
+    uct_srd_ctl_hdr_t *hdr = (uct_srd_ctl_hdr_t*)(ctl_op + 1);
     uct_srd_send_op_t *send_op;
 
     if (!uct_srd_iface_can_tx(iface)) {

@@ -29,6 +29,7 @@ static void uct_srd_dump_ctl_hdr(char *p, char *endp, uct_srd_ctl_hdr_t *ctl)
                  uct_srd_ctl_id_to_string(ctl->id),
                  uct_ib_unpack_uint24(ctl->qpn), ctl->ep_uuid);
     ucs_assertv((n > 0) && (n < (endp - p)), "n=%zd max=%zu", n, endp - p);
+    p += strlen(p);
 
     if (ctl->id == UCT_SRD_CTL_ID_REQ) {
         uct_ib_address_str((uct_ib_address_t*)(ctl + 1), p, endp - p);
@@ -48,7 +49,7 @@ void uct_srd_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
     endp = buffer + max;
 
     if ((hdr->id == UCT_SRD_CTL_ID_REQ) || (hdr->id == UCT_SRD_CTL_ID_RESP)) {
-        uct_srd_dump_ctl_hdr(p, endp, (uct_srd_ctl_hdr_t *)hdr);
+        uct_srd_dump_ctl_hdr(p, endp, (uct_srd_ctl_hdr_t*)hdr);
         return;
     }
 
@@ -59,7 +60,7 @@ void uct_srd_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
 
     if (hdr->id < UCT_AM_ID_MAX) {
         am_id = hdr->id;
-        n = snprintf(p, endp - p, " am %d ", am_id);
+        n     = snprintf(p, endp - p, " am %d ", am_id);
         ucs_assertv((n > 0) && (n < (endp - p)), "n=%zd max=%zu", n, endp - p);
         p += strlen(p);
         uct_iface_dump_am(iface, type, am_id, hdr + 1, length - sizeof(*hdr), p,

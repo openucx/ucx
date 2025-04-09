@@ -125,8 +125,8 @@ uct_srd_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req, unsigned flags)
 
     uct_pending_req_arb_group_push(&ep->pending_group, req);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->pending_group);
-    ucs_trace_data("iface=%p ep=%p: added pending req=%p psn=%u",
-                   iface, ep, req, ep->psn);
+    ucs_trace_data("iface=%p ep=%p: added pending req=%p psn=%u", iface, ep,
+                   req, ep->psn);
     UCT_TL_EP_STAT_PEND(&ep->super);
     return UCS_OK;
 }
@@ -142,24 +142,18 @@ uct_srd_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_status_t status;
 
-    /*
-     * If remote did not add AH yet, endpoint cannot guarantee all operations
-     * will succeed.
-     */
-    if (!ep->ah_added) {
-        /* Only at next progress() this state can be updated for this group */
-        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
-    }
-
-    /* No TX available: no dispatch can progress before next tx cqe progress */
     if (!uct_srd_ep_can_tx(ep, iface)) {
+        if (!ep->ah_added) {
+            return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+        }
+
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
     ucs_trace_data("iface=%p ep=%p progressing pending request %p", iface, ep,
                    req);
     iface->tx.in_pending = 1;
-    status = req->func(req);
+    status               = req->func(req);
     iface->tx.in_pending = 0;
     ucs_trace_data("iface=%p ep=%p status returned from progress pending: %s",
                    iface, ep, ucs_status_string(status));
@@ -388,7 +382,7 @@ ucs_status_t uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     desc->super.comp_cb   = uct_srd_ep_send_op_user_completion;
     desc->super.ep        = ep;
 
-    hdr = (uct_srd_hdr_t *)(desc + 1);
+    hdr = (uct_srd_hdr_t*)(desc + 1);
     uct_srd_ep_hdr_set(ep, hdr, id);
     memcpy(hdr + 1, header, header_length);
     iface->tx.wr_desc.num_sge = 1 + uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1,
@@ -584,5 +578,5 @@ ucs_status_t uct_srd_ep_get_bcopy(uct_ep_h tl_ep,
         UCT_TL_EP_STAT_OP(&ep->super, GET, BCOPY, length);
     }
 
-    return UCS_INPROGRESS;
+    return status;
 }
