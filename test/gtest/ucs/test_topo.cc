@@ -81,13 +81,30 @@ UCS_TEST_F(test_topo, print_info) {
 
 UCS_TEST_F(test_topo, bdf_name) {
     static const char *bdf_name = "0002:8f:5c.0";
+    static const char *dev_name = "test_bdf_name";
+    static const uintptr_t user_value = 1337;
+
     ucs_sys_device_t sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     ucs_status_t status = ucs_topo_find_device_by_bdf_name(bdf_name, &sys_dev);
     ASSERT_UCS_OK(status);
     ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
-    status = ucs_topo_sys_device_set_name(sys_dev, "test_bdf_name", 10);
+
+    status = ucs_topo_sys_device_set_name(sys_dev, dev_name, 10);
     ASSERT_UCS_OK(status);
+
+    status = ucs_topo_sys_device_set_user_value(sys_dev, user_value);
+    ASSERT_UCS_OK(status);
+
+    const char *result_name = ucs_topo_sys_device_get_name(sys_dev);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(std::string(dev_name), std::string(result_name));
+    UCS_TEST_MESSAGE << "name: " << result_name;
+
+    uintptr_t result_user_value = ucs_topo_sys_device_get_user_value(sys_dev);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(user_value, result_user_value);
+    UCS_TEST_MESSAGE << "user value: " << result_user_value;
 
     char name_buffer[UCS_SYS_BDF_NAME_MAX];
     const char *found_name = ucs_topo_sys_device_bdf_name(sys_dev, name_buffer,

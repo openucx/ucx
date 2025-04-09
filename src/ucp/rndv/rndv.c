@@ -1179,6 +1179,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     mpriv            = ucs_mpool_priv(mpool);
     mpriv->worker    = worker;
     mpriv->mem_type  = key.mem_type;
+    mpriv->sys_dev   = sys_dev;
 
 out_mp_get:
     return ucp_worker_mpool_get(mpool);

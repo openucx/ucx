@@ -171,8 +171,9 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
 }
 
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
-                                     const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                     void **handle_p)
+                                     const void *rkey_buffer,
+                                     const uct_rkey_unpack_params_t *params,
+                                     uct_rkey_t *rkey_p, void **handle_p)
 {
     *rkey_p   = 0xdeadbeef;
     *handle_p = NULL;
@@ -343,11 +344,24 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
     return md->ops->mem_attach(md, mkey_buffer, params, memh_p);
 }
 
+ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
+                                const void *rkey_buffer,
+                                const uct_rkey_unpack_params_t *params,
+                                uct_rkey_bundle_t *rkey_ob)
+{
+
+    return component->rkey_unpack(component, rkey_buffer, params,
+                                  &rkey_ob->rkey, &rkey_ob->handle);
+}
+
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
                              uct_rkey_bundle_t *rkey_ob)
 {
-    return component->rkey_unpack(component, rkey_buffer, &rkey_ob->rkey,
-                                  &rkey_ob->handle);
+    uct_rkey_unpack_params_t params = {
+        .field_mask = 0
+    };
+
+    return uct_rkey_unpack_v2(component, rkey_buffer, &params, rkey_ob);
 }
 
 ucs_status_t uct_rkey_ptr(uct_component_h component, uct_rkey_bundle_t *rkey_ob,
@@ -539,10 +553,11 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
 }
 
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              ucs_memory_type_t mem_type, unsigned flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, unsigned flags,
                               const char *alloc_name, uct_mem_h *memh_p)
 {
-    return md->ops->mem_alloc(md, length_p, address_p, mem_type, flags,
+    return md->ops->mem_alloc(md, length_p, address_p, mem_type, sys_dev, flags,
                               alloc_name, memh_p);
 }
 

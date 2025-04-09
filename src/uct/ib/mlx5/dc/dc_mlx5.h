@@ -412,7 +412,8 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
 
 ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
                                           uct_dci_index_t dci_index,
-                                          uint8_t num_dci_channels);
+                                          uint8_t num_dci_channels,
+                                          uct_dc_dci_t **dci_p);
 
 ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
                                                     uint16_t size);
@@ -429,7 +430,7 @@ uct_dc_mlx5_dci_pool_get_or_create(uct_dc_mlx5_iface_t *iface,
 uint32_t
 uct_dc_mlx5_dci_config_hash(const uct_dc_mlx5_dci_config_t *dci_config);
 
-void uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uint16_t dci_index);
+void uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci);
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_dc_mlx5_is_dci_valid(const uct_dc_dci_t *dci)
 {
@@ -439,6 +440,9 @@ static UCS_F_ALWAYS_INLINE uint8_t uct_dc_mlx5_is_dci_valid(const uct_dc_dci_t *
 static UCS_F_ALWAYS_INLINE uct_dc_dci_t *
 uct_dc_mlx5_iface_dci(uct_dc_mlx5_iface_t *iface, uct_dci_index_t dci_index)
 {
+    ucs_assertv(dci_index < ucs_array_length(&iface->tx.dcis),
+                "dci_index=%d dcis_length=%d", dci_index,
+                ucs_array_length(&iface->tx.dcis));
     return ucs_array_elem(&iface->tx.dcis, dci_index);
 }
 

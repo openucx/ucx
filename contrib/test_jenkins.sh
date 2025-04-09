@@ -1128,12 +1128,9 @@ run_release_mode_tests() {
 # Run nt_buffer_transfer tests
 #
 run_nt_buffer_transfer_tests() {
-    if lscpu | grep -q 'AuthenticAMD'
-    then
-	    build release --enable-gtest --enable-optimizations
-	    echo "==== Running nt_buffer_transfer tests ===="
-	    ./test/gtest/gtest --gtest_filter="test_arch.nt_buffer_transfer_*"
-    fi
+    build release --enable-gtest --enable-optimizations
+    echo "==== Running test_arch tests with optimizations ===="
+    ./test/gtest/gtest --gtest_filter="test_arch.*"
 }
 
 set_ucx_common_test_env() {

@@ -186,6 +186,8 @@ UCS_TEST_P(test_dc, dcs_single) {
                            0;
 
     EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+    status = uct_ep_fence(m_e1->ep(0), 0);
+    EXPECT_UCS_OK(status);
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
     EXPECT_UCS_OK(status);
     /* dci 0 must be assigned to the ep */

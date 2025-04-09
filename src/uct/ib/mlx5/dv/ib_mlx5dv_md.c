@@ -1988,8 +1988,8 @@ static void uct_ib_mlx5_md_port_counter_set_id_init(uct_ib_mlx5_md_t *md)
 ucs_status_t
 uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
                                   void **address_p, ucs_memory_type_t mem_type,
-                                  unsigned flags, const char *alloc_name,
-                                  uct_mem_h *memh_p)
+                                  ucs_sys_device_t sys_dev, unsigned flags,
+                                  const char *alloc_name, uct_mem_h *memh_p)
 {
 #if HAVE_IBV_DM
     uct_ib_md_t *md           = ucs_derived_of(uct_md, uct_ib_md_t);
@@ -2145,7 +2145,8 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
     }
 
     status = uct_ib_mlx5_devx_device_mem_alloc(uct_md, &length, &address,
-                                               UCS_MEMORY_TYPE_RDMA, 0,
+                                               UCS_MEMORY_TYPE_RDMA,
+                                               UCS_SYS_DEVICE_ID_UNKNOWN, 0,
                                                "check dm ksm registration",
                                                &memh);
     if (status != UCS_OK) {

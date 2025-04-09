@@ -320,7 +320,7 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
 
     data->size = size;
     ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(rkey_ptr_md_index), 0,
-                                &data->rkey);
+                                UCS_SYS_DEVICE_ID_UNKNOWN, &data->rkey);
     rkey_index = ucs_bitmap2idx(data->rkey->md_map, rkey_ptr_md_index);
     status     = uct_rkey_ptr(data->rkey->tl_rkey[rkey_index].cmpt,
                               &data->rkey->tl_rkey[rkey_index].rkey, address,

@@ -157,6 +157,11 @@ uct_gdr_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
                                            iface->config.put_bw;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        perf_attr->path_bandwidth = is_get_op ? iface->config.get_bw :
+                                                iface->config.put_bw;
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
         perf_attr->send_pre_overhead = UCT_GDR_COPY_IFACE_OVERHEAD;
     }

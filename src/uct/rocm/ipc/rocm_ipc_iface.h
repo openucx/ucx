@@ -14,9 +14,10 @@
 #define UCT_ROCM_IPC_TL_NAME "rocm_ipc"
 
 typedef struct uct_rocm_ipc_iface_config_params {
-    size_t min_zcopy;
-    double latency;
-    int    enable_ipc_handle_cache;
+    size_t   min_zcopy;
+    double   latency;
+    int      enable_ipc_handle_cache;
+    unsigned sigpool_max_elems;
 } uct_rocm_ipc_iface_config_params_t;
 
 typedef struct uct_rocm_ipc_iface {

@@ -87,7 +87,7 @@ typedef ucs_status_t (*uct_component_cm_open_func_t)(
  * @param [in]  component               Unpack the remote key buffer on this
  *                                      component.
  * @param [in]  rkey_buffer             Remote key buffer to unpack.
- * @param [in]  config                  Memory domain configuration.
+ * @param [in]  params                  Unpack operation parameters.
  * @param [out] rkey_p                  Filled with a pointer to the unpacked
  *                                      remote key.
  * @param [out] handle_p                Filled with an additional handle which
@@ -99,6 +99,7 @@ typedef ucs_status_t (*uct_component_cm_open_func_t)(
  */
 typedef ucs_status_t (*uct_component_rkey_unpack_func_t)(
                 uct_component_t *component, const void *rkey_buffer,
+                const uct_rkey_unpack_params_t *params,
                 uct_rkey_t *rkey_p, void **handle_p);
 
 

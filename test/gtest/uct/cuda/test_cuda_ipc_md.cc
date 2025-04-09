@@ -12,6 +12,7 @@
 
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
+#include <uct/cuda/base/cuda_iface.h>
 }
 
 class test_cuda_ipc_md : public test_md {
@@ -31,8 +32,10 @@ protected:
 
         /* cuIpcOpenMemHandle used by cuda_ipc_cache does not allow to open
          * handle that was created by the same process */
+        uct_rkey_unpack_params_t unpack_params = { 0 };
         EXPECT_EQ(UCS_ERR_UNREACHABLE,
-                  md->component->rkey_unpack(md->component, &rkey, NULL, NULL));
+                  uct_rkey_unpack_v2(md->component, &rkey, &unpack_params,
+                                     NULL));
 
         uct_md_mem_dereg_params_t params;
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
@@ -98,6 +101,59 @@ protected:
         return rkey;
     }
 #endif
+
+    void test_mkey_pack_on_thread(void *ptr, size_t size)
+    {
+       uct_md_mem_reg_params_t reg_params = {};
+       uct_mem_h memh;
+       ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), ptr, size, &reg_params, &memh));
+
+       std::exception_ptr thread_exception;
+       std::thread([&]() {
+           try {
+               uct_md_mkey_pack_params_t pack_params = {};
+               std::vector<uint8_t> rkey(md_attr().rkey_packed_size);
+               ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, ptr, size,
+                                                 &pack_params, rkey.data()));
+
+               // No context and sys_dev is not provided
+               uct_rkey_unpack_params_t unpack_params = {};
+               ucs_status_t status = uct_rkey_unpack_v2(
+                                         md()->component, rkey.data(),
+                                         &unpack_params, NULL);
+               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+
+               // No context and unknown sys_dev is provided
+               unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
+               unpack_params.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+               status = uct_rkey_unpack_v2(md()->component, rkey.data(),
+                                           &unpack_params, NULL);
+               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+
+               // No context and some valid sys_dev is provided, but
+               // cuIpcOpenMemHandle used by cuda_ipc_cache does not allow to
+               // open a handle that was created by the same process
+               ucs_sys_device_t sys_dev;
+               uct_cuda_base_get_sys_dev(0, &sys_dev);
+
+               unpack_params.sys_device = sys_dev;
+               status = uct_rkey_unpack_v2(md()->component, rkey.data(),
+                                           &unpack_params, NULL);
+               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+           } catch (...) {
+               thread_exception = std::current_exception();
+           }
+       }).join();
+
+       if (thread_exception) {
+           std::rethrow_exception(thread_exception);
+       }
+
+       uct_md_mem_dereg_params_t dereg_params;
+       dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+       dereg_params.memh       = memh;
+       EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+    }
 };
 
 UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
@@ -122,7 +178,8 @@ UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
     // Unpack without a CUDA device context
     std::thread t([&md, &rkey, &status]() {
         rkey.dev_num = ~rkey.dev_num;
-        status = md->component->rkey_unpack(md->component, &rkey, NULL, NULL);
+        uct_rkey_unpack_params_t params = { 0 };
+        status = uct_rkey_unpack_v2(md->component, &rkey, &params, NULL);
     });
     t.join();
 
@@ -130,66 +187,55 @@ UCS_TEST_P(test_cuda_ipc_md, missing_device_context)
     EXPECT_NE(dev_num, rkey.dev_num); // rkey was not updated
 }
 
-UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds, 8)
+UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
 {
-    cuda_context cuda_ctx;
+    constexpr size_t size = 4096;
     ucs::handle<uct_md_h> md;
-    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
-                           GetParam().component, GetParam().md_name.c_str(),
-                           m_md_config);
-
-    {
-        /* Create and destroy temporary MD */
-        ucs::handle<uct_md_h> tmp_md;
-        UCS_TEST_CREATE_HANDLE(uct_md_h, tmp_md, uct_md_close, uct_md_open,
-                               GetParam().component, GetParam().md_name.c_str(),
-                               m_md_config);
-    }
-
-    for (int64_t i = 0; i < 64; ++i) {
-        /* We get unique dev_num on new UUID */
-        uct_cuda_ipc_rkey_t rkey = unpack(md, i + 1);
-        EXPECT_EQ(i, rkey.dev_num);
-        /* Subsequent call with the same UUID returns value from cache */
-        rkey = unpack(md, i + 1);
-        EXPECT_EQ(i, rkey.dev_num);
-    }
-}
-
-#if HAVE_CUDA_FABRIC
-UCS_MT_TEST_P(test_cuda_ipc_md, multiple_mds_mempool, 8)
-{
-    cuda_context cuda_ctx;
-    ucs::handle<uct_md_h> md;
-    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
-                           GetParam().component, GetParam().md_name.c_str(),
-                           m_md_config);
-
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey;
     CUdeviceptr ptr;
-    CUmemoryPool mpool, q_mpool;
-    CUstream cu_stream;
-    CUmemFabricHandle fabric_handle;
-    CUresult cu_err;
 
-    alloc_mempool(&ptr, &mpool, &cu_stream, 64);
-    EXPECT_EQ(CUDA_SUCCESS, (cuPointerGetAttribute((void*)&q_mpool,
-                    CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE, ptr)));
+    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, size));
+    EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
+    EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
+                                     &rkey));
 
-    cu_err = cuMemPoolExportToShareableHandle((void*)&fabric_handle, q_mpool,
-                                              CU_MEM_HANDLE_TYPE_FABRIC, 0);
-    free_mempool(&ptr, &mpool, &cu_stream);
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, rkey.ph.handle_type);
 
-    if (cu_err == CUDA_SUCCESS) {
-        for (int64_t i = 0; i < 64; ++i) {
-            /* We get unique dev_num on new UUID */
-            uct_cuda_ipc_rkey_t rkey = unpack_masync(md, i + 1);
-            EXPECT_EQ(i, rkey.dev_num);
-            /* Subsequent call with the same UUID returns value from cache */
-            rkey = unpack_masync(md, i + 1);
-            EXPECT_EQ(i, rkey.dev_num);
-        }
-    }
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md->ops->mem_dereg(md, &params));
+    cuMemFree(ptr);
 }
+
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_legacy)
+{
+    size_t size = 4 * UCS_MBYTE;
+    CUdeviceptr ptr;
+
+    EXPECT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, size));
+    test_mkey_pack_on_thread((void*)ptr, size);
+    EXPECT_EQ(CUDA_SUCCESS, cuMemFree(ptr));
+}
+
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
+{
+#if HAVE_CUDA_FABRIC
+    size_t size = 4 * UCS_MBYTE;
+    CUdeviceptr ptr;
+    CUmemoryPool mpool;
+    CUstream cu_stream;
+
+    alloc_mempool(&ptr, &mpool, &cu_stream, size);
+    test_mkey_pack_on_thread((void*)ptr, size);
+    free_mempool(&ptr, &mpool, &cu_stream);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
 #endif
+}
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);

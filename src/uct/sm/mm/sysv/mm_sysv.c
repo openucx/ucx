@@ -68,8 +68,8 @@ static ucs_status_t uct_sysv_mem_attach_common(int shmid, void **address_p)
 
 static ucs_status_t
 uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                   ucs_memory_type_t mem_type, unsigned flags,
-                   const char *alloc_name, uct_mem_h *memh_p)
+                   ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
+                   unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
     uct_mm_md_t *md = ucs_derived_of(tl_md, uct_mm_md_t);
     ucs_status_t status;
@@ -169,8 +169,9 @@ static void uct_sysv_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_sysv_rkey_unpack,
-                 (component, rkey_buffer, rkey_p, handle_p),
+                 (component, rkey_buffer, params, rkey_p, handle_p),
                  uct_component_t *component, const void *rkey_buffer,
+                 const uct_rkey_unpack_params_t *params,
                  uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_sysv_packed_rkey_t *packed_rkey = rkey_buffer;

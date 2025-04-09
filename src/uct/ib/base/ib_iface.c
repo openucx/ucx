@@ -28,7 +28,22 @@
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
+#include <float.h>
 
+
+/**
+ * Maximum bandwidth of NDR single path with PCIe Gen5 and RDMA_READ operation.
+ */
+#define UCT_IB_NDR_PATH_BANDWIDTH 38e9
+
+/**
+ * Minimal NDR single path ratio.
+ * The minimal ratio is used to calculate the ratio for the first device path,
+ * when the full interface bandwidth is capped by PCI distance. With PCIe Gen4
+ * single path still does not consume the full interface bandwidth for RDMA_READ
+ * operations, but around 95% of it according to measurements.
+ */
+#define UCT_IB_NDR_PATH_RATIO 0.95
 
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
@@ -664,25 +679,22 @@ static void uct_ib_iface_log_subnet_info(const struct sockaddr *sa1,
 }
 
 static int
-uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, int gid_index,
+uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
                               struct sockaddr *sa_remote,
                               const uct_iface_is_reachable_params_t *params)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
-    char ndev_name[IFNAMSIZ];
     char remote_str[128];
-    ucs_status_t status;
+    int ndev_index;
 
-    status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
-                                              ndev_name, sizeof(ndev_name));
-    if (status != UCS_OK) {
-        uct_iface_fill_info_str_buf(params,
-                                    "couldn't get network interface name");
+    if (uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index,
+                                          &ndev_index) != UCS_OK) {
+        uct_iface_fill_info_str_buf(params, "iface index is not found");
         return 0;
     }
 
-    if (!ucs_netlink_route_exists(ndev_name, sa_remote)) {
+    if (!ucs_netlink_route_exists(ndev_index, sa_remote)) {
         uct_iface_fill_info_str_buf(params, "remote address %s is not routable",
                                     ucs_sockaddr_str(sa_remote, remote_str, 128));
         return 0;
@@ -1948,6 +1960,8 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
                                               OPERATION, UCT_EP_OP_LAST);
     const uct_ib_iface_send_overhead_t *send_overhead =
             &ib_iface->config.send_overhead;
+    double max_path_bandwidth                         = DBL_MAX;
+    double path_ratio;
     uct_iface_attr_t iface_attr;
     ucs_status_t status;
 
@@ -1976,6 +1990,26 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth = iface_attr.bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        if (uct_ib_iface_is_roce(ib_iface) &&
+            (uct_ib_iface_roce_lag_level(ib_iface) > 1)) {
+            path_ratio = 1.0 / iface_attr.dev_num_paths;
+        } else if (((op == UCT_EP_OP_GET_BCOPY) ||
+                    (op == UCT_EP_OP_GET_ZCOPY)) &&
+                   (uct_ib_iface_port_attr(ib_iface)->active_speed ==
+                    UCT_IB_SPEED_NDR)) {
+            max_path_bandwidth = UCT_IB_NDR_PATH_BANDWIDTH;
+            path_ratio         = UCT_IB_NDR_PATH_RATIO;
+        } else {
+            path_ratio = 1.0;
+        }
+
+        perf_attr->path_bandwidth.dedicated = 0;
+        perf_attr->path_bandwidth.shared    =
+            ucs_min(iface_attr.bandwidth.shared * path_ratio,
+                    max_path_bandwidth);
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {

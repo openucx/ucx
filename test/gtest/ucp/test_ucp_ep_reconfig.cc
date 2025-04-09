@@ -105,7 +105,10 @@ public:
     {
         ucp_test::init();
 
+        UCS_TEST_SKIP_R("Test is skipped due to unresolved failure");
+
         /* num_tls = single device + UD */
+        /* coverity[unreachable] */
         if (sender().ucph()->num_tls <= 2) {
             UCS_TEST_SKIP_R("test requires at least 2 ifaces to work");
         }

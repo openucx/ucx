@@ -463,9 +463,10 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
     return UCS_OK;
 }
 
-static ucs_status_t uct_self_md_rkey_unpack(uct_component_t *component,
-                                            const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                            void **handle_p)
+static ucs_status_t
+uct_self_md_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                        const uct_rkey_unpack_params_t *params,
+                        uct_rkey_t *rkey_p, void **handle_p)
 {
     /**
      * Pseudo stub function for the key unpacking
