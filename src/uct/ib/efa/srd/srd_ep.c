@@ -127,7 +127,8 @@ uct_srd_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req, unsigned flags)
     ep->pending++;
     uct_pending_req_arb_group_push(&ep->pending_group, req);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->pending_group);
-    ucs_trace_data("ep=%p: added pending req=%p psn=%u", ep, req, ep->psn);
+    ucs_trace_data("iface=%p ep=%p: added pending req=%p psn=%u",
+                   iface, ep, req, ep->psn);
     UCT_TL_EP_STAT_PEND(&ep->super);
     return UCS_OK;
 }
@@ -167,7 +168,8 @@ uct_srd_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
 
     if (status == UCS_OK) {
         ep->pending--;
-        ucs_assertv(ep->pending > -1, "ep=%p pending=%d", ep, ep->pending);
+        ucs_assertv(ep->pending > -1, "iface=%p ep=%p pending=%d",
+                    iface, ep, ep->pending);
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
@@ -201,7 +203,7 @@ void uct_srd_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
     uct_srd_iface_t *iface   = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
     uct_purge_cb_args_t args = {cb, cb_arg};
 
-    ucs_trace_func("ep=%p", ep);
+    ucs_trace_func("ep=%p cb=%p cb_arg=%p", ep, cb, cb_arg);
 
     ucs_arbiter_group_purge(&iface->tx.pending_q, &ep->pending_group,
                             uct_srd_ep_pending_purge_cb, &args);
@@ -217,8 +219,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
     if (self->inflight != 0) {
         uct_srd_ep_send_op_purge(self);
         ucs_assertv(self->inflight == 0,
-                    "ep=%p failed to complete %u send operations",
-                    self, self->inflight);
+                    "iface=%p ep=%p failed to complete %u send operations",
+                    iface, self, self->inflight);
     }
 
     uct_srd_iface_remove_ep(iface, self);
@@ -454,7 +456,7 @@ ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     length = pack_cb(hdr + 1, arg);
     ucs_assertv((sizeof(uct_srd_hdr_t) + length) <=
                     iface->super.config.seg_size,
-                "ep=%p am_bcopy_length=%zu seg_size=%d", ep,
+                "iface=%p ep=%p am_bcopy_length=%zu seg_size=%d", iface, ep,
                 sizeof(uct_srd_hdr_t) + length, iface->super.config.seg_size);
 
     desc->super.comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
