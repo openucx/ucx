@@ -96,10 +96,11 @@ ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
 {
     ucs_status_t status;
     uct_srd_ctl_op_t *ctl_op;
+    uct_srd_ctl_hdr_t *hdr;
     const char *err_msg;
 
     /* Construct a control operation to be queued */
-    ctl_op = ucs_malloc(sizeof(*ctl_op) + sizeof(*ctl_op->hdr) +
+    ctl_op = ucs_malloc(sizeof(*ctl_op) + sizeof(*hdr) +
                             iface->super.addr_size,
                         "uct_srd_ctl_op_t");
     if (ctl_op == NULL) {
@@ -110,14 +111,16 @@ ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
 
     ctl_op->ah           = ah;
     ctl_op->dest_qpn     = dest_qpn;
-    ctl_op->hdr->id      = id;
-    ctl_op->hdr->ep_uuid = ep_uuid;
-    uct_ib_pack_uint24(ctl_op->hdr->qpn, iface->qp->qp_num);
+
+    hdr          = (uct_srd_ctl_hdr_t *)(ctl_op + 1);
+    hdr->id      = id;
+    hdr->ep_uuid = ep_uuid;
+    uct_ib_pack_uint24(hdr->qpn, iface->qp->qp_num);
 
     if (id == UCT_SRD_CTL_ID_REQ) {
         status = uct_ib_iface_get_device_address(
                                          &iface->super.super.super,
-                                         (uct_device_addr_t *)(ctl_op->hdr + 1));
+                                         (uct_device_addr_t *)(hdr + 1));
         if (status != UCS_OK) {
             err_msg = "failed to get device address";
             ucs_free(ctl_op);
@@ -137,6 +140,7 @@ err:
 static ucs_status_t
 uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
 {
+    uct_srd_ctl_hdr_t *hdr = (uct_srd_ctl_hdr_t *)(ctl_op + 1);
     uct_srd_send_op_t *send_op;
 
     /* Post the request, no action required on TX completion */
@@ -149,9 +153,9 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
     send_op->ep      = NULL;
     send_op->comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
 
-    iface->tx.sge[0].addr   = (uintptr_t)ctl_op->hdr;
-    iface->tx.sge[0].length = sizeof(*ctl_op->hdr);
-    if (ctl_op->hdr->id == UCT_SRD_CTL_ID_REQ) {
+    iface->tx.sge[0].addr   = (uintptr_t)hdr;
+    iface->tx.sge[0].length = sizeof(*hdr);
+    if (hdr->id == UCT_SRD_CTL_ID_REQ) {
         iface->tx.sge[0].length += iface->super.addr_size;
     }
 

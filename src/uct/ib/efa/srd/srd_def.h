@@ -31,8 +31,8 @@ typedef struct uct_srd_hdr {
 
 
 typedef enum uct_srd_ctl_id {
-    UCT_SRD_CTL_ID_REQ  = UCT_AM_ID_MAX,
-    UCT_SRD_CTL_ID_RESP = UCT_SRD_CTL_ID_REQ + 1,
+    UCT_SRD_CTL_ID_REQ = UCT_AM_ID_MAX,
+    UCT_SRD_CTL_ID_RESP
 } uct_srd_ctl_id_t;
 
 
@@ -49,7 +49,6 @@ typedef struct uct_srd_ctl_op {
     ucs_list_link_t   list;     /* Entry in iface tx pending control list */
     struct ibv_ah     *ah;
     int               dest_qpn;
-    uct_srd_ctl_hdr_t hdr[];
 } uct_srd_ctl_op_t;
 
 
@@ -88,7 +87,6 @@ struct uct_srd_send_desc {
     uct_unpack_callback_t unpack_cb;
     void                  *unpack_arg;
     size_t                length;
-    uct_srd_hdr_t         hdr[];
 } UCS_V_ALIGNED(UCT_SRD_SEND_DESC_ALIGN);
 
 
