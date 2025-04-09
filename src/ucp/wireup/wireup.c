@@ -37,7 +37,7 @@
 #define UCP_WIREUP_MSG_CHECK(_msg, _ep, _msg_type) \
     do { \
         ucs_assert((_msg)->type == (_msg_type)); \
-        if (ucp_wireup_msg_is_request(_msg_type)) { \
+        if (ucp_wireup_msg_can_create_ep(_msg_type)) { \
             ucs_assert(((_msg)->dst_ep_id == UCS_PTR_MAP_KEY_INVALID) != \
                        ((_ep) != NULL)); \
         } else { \
@@ -50,10 +50,18 @@
     (UCP_EP_FLAG_CONNECT_REQ_QUEUED | UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED)
 
 /* Wireup request and promote both require handling new connections */
-static int ucp_wireup_msg_is_request(unsigned msg_type)
+static int ucp_wireup_msg_can_create_ep(unsigned msg_type)
 {
     return (msg_type == UCP_WIREUP_MSG_REQUEST) ||
            (msg_type == UCP_WIREUP_MSG_PROMOTE);
+}
+
+/* Wireup request and promote/demote can all initiate a new wireup flow */
+static int ucp_wireup_msg_is_request(unsigned msg_type)
+{
+    return (msg_type == UCP_WIREUP_MSG_REQUEST) ||
+           (msg_type == UCP_WIREUP_MSG_PROMOTE) ||
+           (msg_type == UCP_WIREUP_MSG_DEMOTE);
 }
 
 size_t ucp_wireup_msg_pack(void *dest, void *arg)
@@ -800,10 +808,10 @@ ucp_wireup_resolve_request(ucp_ep_h ep, uint64_t remote_uuid, uint8_t msg_type)
     if ((ep->flags & flag_to_test) && (remote_uuid > ep->worker->uuid)) {
         ucs_trace("ep %p: ignoring simultaneous %s request", ep,
                   ucp_wireup_msg_str(msg_type));
-        return 1;
+        return 0;
     }
 
-    return 0;
+    return 1;
 }
 
 static UCS_F_NOINLINE void
@@ -841,7 +849,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         }
 
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
-        if (ucp_wireup_resolve_request(ep, remote_uuid, msg->type)) {
+        if (!ucp_wireup_resolve_request(ep, remote_uuid, msg->type)) {
             return;
         }
     }
@@ -942,7 +950,7 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
     /* Prevent redundant promotion if request was sent */
     if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
         /* Prevent a race between 2 simultaneous requests */
-        ucp_wireup_resolve_request(ep, remote_address->uuid,
+        !ucp_wireup_resolve_request(ep, remote_address->uuid,
                                    UCP_WIREUP_MSG_PROMOTE)) {
         return;
     }
@@ -971,10 +979,17 @@ ucp_wireup_process_demote_request(ucp_worker_h worker, ucp_ep_h ep,
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_DEMOTE);
 
+    /* Prevent redundant demotion if request was sent */
+    if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
+        /* Prevent a race between 2 simultaneous requests */
+        !ucp_wireup_resolve_request(ep, remote_address->uuid,
+                                   UCP_WIREUP_MSG_DEMOTE)) {
+        return;
+    }
+
     ucs_debug("ep %p: demotion request from 0x%"PRIx64" accepted (score: %.2f)",
               ep, msg->src_ep_id, score);
 
-    ucs_assert_always(worker->usage_tracker.handle != NULL);
     ucs_usage_tracker_remove(worker->usage_tracker.handle, ep);
     ucp_wireup_process_pre_msg(ep, remote_address, UCP_EP_INIT_CREATE_AM_LANE,
                                msg->src_ep_id);
