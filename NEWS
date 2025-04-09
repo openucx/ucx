@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.18.1-rc2 (April 2, 2025)
+## 1.18.1-rc2 (April 9, 2025)
 ### Features:
 #### CUDA
  * Added config keys to update cuda_copy bandwidth for coherent platforms
