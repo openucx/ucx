@@ -1572,14 +1572,37 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
 }
 
 static int
-ucp_proto_select_info_score_compare(const void *e1, const void *e2)
+ucp_proto_select_info_score_compare_local(const void *e1, const void *e2)
 {
     const ucp_wireup_select_info_t *info1 = e1;
     const ucp_wireup_select_info_t *info2 = e2;
+    int score_cmp;
 
-    /* reverse the value of ucp_score_cmp to sort scores in descending order */
-    return -ucp_score_prio_cmp(info1->score, info1->priority,
-                               info2->score, info2->priority);
+    score_cmp = ucp_score_cmp(info1->score, info2->score);
+    if (score_cmp != 0) {
+        return -score_cmp;
+    }
+    if (info1->rsc_index != info2->rsc_index) {
+        return info1->rsc_index - info2->rsc_index;
+    }
+    return info1->addr_index - info2->addr_index;
+}
+
+static int
+ucp_proto_select_info_score_compare_remote(const void *e1, const void *e2)
+{
+    const ucp_wireup_select_info_t *info1 = e1;
+    const ucp_wireup_select_info_t *info2 = e2;
+    int score_cmp;
+
+    score_cmp = ucp_score_cmp(info1->score, info2->score);
+        if (score_cmp != 0) {
+        return -score_cmp;
+    }
+    if (info1->addr_index != info2->addr_index) {
+        return info1->addr_index - info2->addr_index;
+    }
+    return info1->rsc_index - info2->rsc_index;
 }
 
 static unsigned
@@ -1602,9 +1625,38 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
         return 0;
     }
 
-    qsort(sinfo_array->buffer, sinfo_array->length,
-          sizeof(ucp_wireup_select_info_t),
-          ucp_proto_select_info_score_compare);
+    ucs_debug("ep %p: before sorting a2a lanes", select_params->ep);
+    for (int i = 0; i < sinfo_array->length; i++) {
+        ucs_debug("ep %p: i = %d " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
+                  " -> md[%d] score %.2f rsc_index %d addr_index %d",
+                  select_params->ep, i,
+                  UCT_TL_RESOURCE_DESC_ARG(
+                    &context->tl_rscs[sinfo_array->buffer[i].rsc_index].tl_rsc),
+                  context->tl_rscs[sinfo_array->buffer[i].rsc_index].md_index,
+                  select_params->address->address_list[
+                    sinfo_array->buffer[i].addr_index].md_index,
+                  sinfo_array->buffer[i].score,
+                  sinfo_array->buffer[i].rsc_index,
+                  sinfo_array->buffer[i].addr_index);
+    }
+
+    /*
+     * Ensure deterministic and symmetric lane lists on both sides:
+     * - Local side: sort by score, then rsc_index.   local[i] = md[X] -> md[Y]
+     * - Remote side: sort by score, then addr_index. remote[i] = md[Y] -> md[X]
+     *
+     * The asymmetry in sorting reflects the direction of the connection
+     * and guarantees that local[i] matches remote[i].
+     */
+    if (select_params->ep->worker->uuid < select_params->address->uuid) {
+        qsort(sinfo_array->buffer, sinfo_array->length,
+              sizeof(ucp_wireup_select_info_t),
+              ucp_proto_select_info_score_compare_local);
+    } else {
+        qsort(sinfo_array->buffer, sinfo_array->length,
+              sizeof(ucp_wireup_select_info_t),
+              ucp_proto_select_info_score_compare_remote);
+    }
 
     /* The fastest lane by score must have (close to) maximal BW */
     max_bw = ucp_wireup_get_lane_bw(worker, ucs_array_begin(sinfo_array),
@@ -1613,6 +1665,21 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
     ucs_array_set_length(sinfo_array,
                          ucs_min(max_lanes, ucs_array_length(sinfo_array)));
     /* Compare each element to max BW and filter only fast lanes */
+
+    ucs_debug("ep %p: after sorting a2a lanes", select_params->ep);
+    for (int i = 0; i < sinfo_array->length; i++) {
+        ucs_debug("ep %p: i = %d " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
+                  " -> md[%d] score %.2f rsc_index %d addr_index %d",
+                  select_params->ep, i,
+                  UCT_TL_RESOURCE_DESC_ARG(
+                    &context->tl_rscs[sinfo_array->buffer[i].rsc_index].tl_rsc),
+                  context->tl_rscs[sinfo_array->buffer[i].rsc_index].md_index,
+                  select_params->address->address_list[
+                    sinfo_array->buffer[i].addr_index].md_index,
+                  sinfo_array->buffer[i].score,
+                  sinfo_array->buffer[i].rsc_index,
+                  sinfo_array->buffer[i].addr_index);
+    }
 
     ucs_array_for_each(sinfo, sinfo_array) {
         lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, select_params->address);
@@ -1658,36 +1725,18 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
     ucs_status_t status;
     ucp_rsc_index_t local_dev_index, remote_dev_index;
 
-    if (ep->worker->uuid < select_params->address->uuid) {
-        ucs_for_each_bit(local_dev_index, local_dev_bitmap) {
-            ucs_for_each_bit(remote_dev_index, remote_dev_bitmap) {
-                sinfo  = ucs_array_append(&sinfo_array, break);
-                status = ucp_wireup_select_transport(select_ctx, select_params,
-                                                     &bw_info->criteria,
-                                                     tl_bitmap, UINT64_MAX,
-                                                     UCS_BIT(local_dev_index),
-                                                     UCS_BIT(remote_dev_index),
-                                                     0, sinfo, NULL, 0);
-                if (status != UCS_OK) {
-                    ucs_array_pop_back(&sinfo_array);
-                    continue;
-                }
-            }
-        }
-    } else {
+    ucs_for_each_bit(local_dev_index, local_dev_bitmap) {
         ucs_for_each_bit(remote_dev_index, remote_dev_bitmap) {
-            ucs_for_each_bit(local_dev_index, local_dev_bitmap) {
-                sinfo  = ucs_array_append(&sinfo_array, break);
-                status = ucp_wireup_select_transport(select_ctx, select_params,
-                                                     &bw_info->criteria,
-                                                     tl_bitmap, UINT64_MAX,
-                                                     UCS_BIT(local_dev_index),
-                                                     UCS_BIT(remote_dev_index),
-                                                     0, sinfo, NULL, 0);
-                if (status != UCS_OK) {
-                    ucs_array_pop_back(&sinfo_array);
-                    continue;
-                }
+            sinfo  = ucs_array_append(&sinfo_array, break);
+            status = ucp_wireup_select_transport(select_ctx, select_params,
+                                                 &bw_info->criteria,
+                                                 tl_bitmap, UINT64_MAX,
+                                                 UCS_BIT(local_dev_index),
+                                                 UCS_BIT(remote_dev_index),
+                                                 0, sinfo, NULL, 0);
+            if (status != UCS_OK) {
+                ucs_array_pop_back(&sinfo_array);
+                continue;
             }
         }
     }
