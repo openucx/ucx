@@ -616,7 +616,8 @@ static ucs_status_t uct_cuda_copy_mem_free(uct_md_h md, uct_mem_h memh)
     if (alloc_handle->is_vmm) {
         status = uct_cuda_copy_mem_release_fabric(alloc_handle);
     } else {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemFree(alloc_handle->ptr));
+        UCT_CUDADRV_FUNC(cuMemFree(alloc_handle->ptr), UCS_LOG_LEVEL_DIAG);
+        status = UCS_OK;
     }
 
     ucs_free(alloc_handle);
