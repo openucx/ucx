@@ -1142,21 +1142,21 @@ run_gtest_bullseye() {
 	esac
 
 	# Create a local Bullseye copy due to NFS instability
-	DEST_PATH="${WORKSPACE}/BS_LOCAL"
+	DEST_PATH="${WORKSPACE}/bullseye"
 	mkdir -p "$DEST_PATH"
 	rsync -az "$SRC_PATH/" "$DEST_PATH/" || true
 
 	export PATH="$DEST_PATH/bin:$PATH"
 
-	if ! command -v cov01 &> /dev/null; then
-		azure_log_warning "=== Skipping Bullseye: cov01 not found ==="
-	else
+	if command -v cov01 &> /dev/null; then
 		echo "=== Enable Bullseye instrumentation ==="
 		BULLSEYE_ENABLED=true
 		COV_DIR=/hpc/scrap/azure/bullseye/${BUILD_BUILDID}-${BUILD_BUILDNUMBER}
 		mkdir -p "$COV_DIR"
 		export COVFILE=$COV_DIR/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov
 		cov01 --on
+	else
+		azure_log_warning "=== Skipping Bullseye: cov01 not found ==="
 	fi
 
 	# Always run Gtest
