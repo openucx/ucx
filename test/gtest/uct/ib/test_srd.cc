@@ -86,6 +86,18 @@ protected:
         }
     }
 
+    int pending_purge(uct_ep_h ep)
+    {
+        int count = 0;
+
+        uct_ep_pending_purge(ep,
+                             [](uct_pending_req_t*, void *arg) {
+                                 (*reinterpret_cast<int*>(arg))++;
+                             },
+                             &count);
+        return count;
+    }
+
     completion                m_comp;
     static constexpr uint64_t m_seed = 0x54321;
 
@@ -410,7 +422,6 @@ UCS_TEST_P(test_srd, am_short_no_resource_with_pending)
 
 UCS_TEST_P(test_srd, pending_ok_if_no_resource)
 {
-    int count = 0;
     uint8_t c = 23;
     ucs_status_t status;
 
@@ -428,15 +439,7 @@ UCS_TEST_P(test_srd, pending_ok_if_no_resource)
     ASSERT_LT(i, 400);
     ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[0], 0));
     ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[1], 0));
-    ASSERT_EQ(0, count);
-
-    uct_ep_pending_purge(
-            m_e1->ep(0),
-            [](uct_pending_req_t*, void *arg) {
-                (*reinterpret_cast<int*>(arg))++;
-            },
-            &count);
-    ASSERT_EQ(2, count);
+    ASSERT_EQ(2, pending_purge(m_e1->ep(0)));
 }
 
 UCS_TEST_P(test_srd, pending_busy_if_ready_to_send)
@@ -448,17 +451,9 @@ UCS_TEST_P(test_srd, pending_busy_if_ready_to_send)
 
 UCS_TEST_P(test_srd, pending_purge_dispatch)
 {
-    int count = 0;
-
     ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[0], 0));
     ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[1], 0));
-    uct_ep_pending_purge(
-            m_e1->ep(0),
-            [](uct_pending_req_t*, void *arg) {
-                (*reinterpret_cast<int*>(arg))++;
-            },
-            &count);
-    ASSERT_EQ(2, count);
+    ASSERT_EQ(2, pending_purge(m_e1->ep(0)));
 }
 
 UCS_TEST_P(test_srd, pending_dispatch)
@@ -481,15 +476,7 @@ UCS_TEST_P(test_srd, pending_dispatch)
     }
 
     wait_for_value(&count, 5, true);
-
-    count = 0;
-    uct_ep_pending_purge(
-            m_e1->ep(0),
-            [](uct_pending_req_t*, void *arg) {
-                (*reinterpret_cast<int*>(arg))++;
-            },
-            &count);
-    ASSERT_EQ(0, count);
+    ASSERT_EQ(0, pending_purge(m_e1->ep(0)));
 }
 
 UCS_TEST_P(test_srd, get_bcopy_no_resource_ah)
