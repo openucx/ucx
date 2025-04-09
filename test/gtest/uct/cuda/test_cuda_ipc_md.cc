@@ -238,4 +238,11 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
 #endif
 }
 
+UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
+{
+    /* Currently MNNVL is always disabled in CI */
+    uct_cuda_ipc_md_t *cuda_ipc_md = ucs_derived_of(md(), uct_cuda_ipc_md_t);
+    EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
+}
+
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);
