@@ -13,9 +13,16 @@
  * Added config keys to update cuda_copy bandwidth for coherent platforms
  * Improved cache invalidation of memory allocated using CUDA memory pool
 ### Bugfixes:
+#### UCP
+ * Fixed assertion failure when maximum lane fragment is smaller than AM header
 #### CUDA
  * Fixed registration of CUDA Fabric memory allocated by UCT
  * Fixed VA recycling check of memory allocated using VMM and CUDA memory pool
+#### RDMA CORE (IB, ROCE, etc.)
+ * Do not use ConnectX-8 SMI subdevices for communication
+ * Fixed remote access error by disabling ODP when the device supports DDP
+ * Fixed configuration logic by disabling DDP when AR is disabled
+
 
 ## 1.18.1-rc1 (February 20, 2025)
 ### Features:
