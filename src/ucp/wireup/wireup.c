@@ -951,7 +951,7 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
     if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
         /* Prevent a race between 2 simultaneous requests */
         !ucp_wireup_resolve_request(ep, remote_address->uuid,
-                                   UCP_WIREUP_MSG_PROMOTE)) {
+                                    UCP_WIREUP_MSG_PROMOTE)) {
         return;
     }
 
@@ -983,7 +983,7 @@ ucp_wireup_process_demote_request(ucp_worker_h worker, ucp_ep_h ep,
     if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
         /* Prevent a race between 2 simultaneous requests */
         !ucp_wireup_resolve_request(ep, remote_address->uuid,
-                                   UCP_WIREUP_MSG_DEMOTE)) {
+                                    UCP_WIREUP_MSG_DEMOTE)) {
         return;
     }
 
