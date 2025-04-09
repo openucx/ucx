@@ -15,7 +15,6 @@ typedef struct uct_srd_ep {
     uint64_t            ep_uuid;       /* Random EP identifier */
     uint32_t            dest_qpn;      /* Remote QP */
     uint32_t            inflight;      /* Entries outstanding list */
-    int32_t             pending;       /* Count requests in pending queue */
     struct ibv_ah       *ah;           /* Remote peer */
     int                 ah_added;      /* true if remote has added our AH */
     uct_srd_psn_t       psn;           /* Next PSN to send */

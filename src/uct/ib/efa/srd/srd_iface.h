@@ -63,7 +63,7 @@ typedef struct uct_srd_iface {
 
     struct {
         int32_t                      available;
-        int                          in_pending; /* true if invoked from arbiter dispatch */
+        int                          in_pending;
         ucs_arbiter_t                pending_q;
         struct ibv_sge               sge[UCT_IB_MAX_IOV];
         struct ibv_send_wr           wr_inl;
@@ -133,33 +133,25 @@ uct_srd_iface_can_tx(const uct_srd_iface_t *iface)
 }
 
 
-static UCS_F_ALWAYS_INLINE uct_srd_send_op_t *
-uct_srd_iface_get_send_op(uct_srd_iface_t *iface)
-{
-    if (ucs_unlikely(!uct_srd_iface_can_tx(iface))) {
-        return NULL;
-    }
-
-    return ucs_mpool_get(&iface->tx.send_op_mp);
-}
-
-
 static UCS_F_ALWAYS_INLINE uct_srd_send_desc_t *
 uct_srd_iface_get_send_desc(uct_srd_iface_t *iface)
 {
     uct_srd_send_desc_t *send_desc;
 
-    if (ucs_unlikely(!uct_srd_iface_can_tx(iface))) {
-        return NULL;
-    }
-
     send_desc = ucs_mpool_get(&iface->tx.send_desc_mp);
-    if (ucs_unlikely(send_desc == NULL)) {
-        return NULL;
+    if (ucs_likely(send_desc != NULL)) {
+        VALGRIND_MAKE_MEM_DEFINED(&send_desc->lkey, sizeof(send_desc->lkey));
     }
 
-    VALGRIND_MAKE_MEM_DEFINED(&send_desc->lkey, sizeof(send_desc->lkey));
     return send_desc;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_srd_iface_check_pending(uct_srd_iface_t *iface, ucs_arbiter_group_t *group)
+{
+    ucs_assertv(iface->tx.in_pending || ucs_arbiter_group_is_empty(group),
+                "iface=%p in_pending=%d arb_group_empty=%d",
+                iface, iface->tx.in_pending, ucs_arbiter_group_is_empty(group));
 }
 
 END_C_DECLS

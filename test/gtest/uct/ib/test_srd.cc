@@ -41,6 +41,8 @@ protected:
             uint64_t hdr;
         } stats = {}, expect = {};
 
+        progress_ctl();
+
         auto counter_func = [](void *arg, void *data, size_t length,
                                unsigned flags) {
             struct stats *stats = reinterpret_cast<struct stats*>(arg);
@@ -126,6 +128,8 @@ UCS_TEST_P(test_srd, am_short_outstanding)
     uint64_t header = 0x1234567843210987;
     char payload[]  = "the payload";
 
+    progress_ctl();
+
     while (count-- > 0) {
         ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 31, header++, payload,
                                       sizeof(payload)));
@@ -191,6 +195,8 @@ UCS_TEST_P(test_srd, am_zcopy)
 
         return UCS_OK;
     };
+
+    progress_ctl();
 
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), id, check_func,
                                            dstbuf.ptr(), 0));
@@ -391,6 +397,8 @@ UCS_TEST_P(test_srd, am_short_no_resource)
     int i;
     ucs_status_t status;
 
+    progress_ctl();
+
     for (i = 0; i < count; i++) {
         status = uct_ep_am_short(m_e1->ep(0), 30, 0x0, "test", 4);
         if (status != UCS_OK) {
@@ -407,16 +415,15 @@ UCS_TEST_P(test_srd, am_short_no_resource_with_pending)
 {
     uint8_t c = 23;
 
-    m_req[0].func = [](uct_pending_req_t*) { return UCS_ERR_BUSY; };
+    m_req[0].func = [](uct_pending_req_t*) { return UCS_OK; };
 
-    /* Can be added to pending because remote did not respond to CTL_REQ */
     ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[0], 0));
     ASSERT_UCS_STATUS_EQ(UCS_ERR_NO_RESOURCE,
                          uct_ep_am_short(m_e1->ep(0), 31, 0x1, &c, 1));
 
-    /* Cannot post: CTL_RESP received, but pending is not empty */
+    /* Cannot post: CTL_RESP received, pending is drained */
     progress_ctl();
-    ASSERT_UCS_STATUS_EQ(UCS_ERR_NO_RESOURCE,
+    ASSERT_UCS_STATUS_EQ(UCS_OK,
                          uct_ep_am_short(m_e1->ep(0), 31, 0x1, &c, 1));
 }
 

@@ -134,15 +134,19 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
     uct_srd_ctl_hdr_t *hdr = (uct_srd_ctl_hdr_t *)(ctl_op + 1);
     uct_srd_send_op_t *send_op;
 
+    if (!uct_srd_iface_can_tx(iface)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     /* Post the request, no action required on TX completion */
-    send_op = uct_srd_iface_get_send_op(iface);
+    send_op = ucs_mpool_get(&iface->tx.send_op_mp);
     if (send_op == NULL) {
         ucs_error("iface=%p send_op allocationd failed for ctl op send", iface);
         return UCS_ERR_NO_MEMORY;
     }
 
-    send_op->ep      = NULL;
     send_op->comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
+    send_op->ep      = NULL;
 
     iface->tx.sge[0].addr   = (uintptr_t)hdr;
     iface->tx.sge[0].length = sizeof(*hdr);
