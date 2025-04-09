@@ -178,9 +178,9 @@ struct ucp_request {
             } state;
 
             union {
-                /* This field can converted to ucp_wireup_msg_extended_t in
-                 * order to allow promote/demote messages */
-                ucp_wireup_msg_t  wireup;
+                /* This field can be converted to ucp_wireup_msg_t in order to
+                 * use for wireup requests */
+                ucp_wireup_msg_extended_t wireup;
 
                 struct {
                     /* Used to identify matching parts of a large message */

@@ -46,7 +46,7 @@
         } \
     } while (0)
 
-#define UCP_EP_REQUEST_MSG_QUEUED \
+#define UCP_EP_MASK_WIREUP_REQ_QUEUED \
     (UCP_EP_FLAG_CONNECT_REQ_QUEUED | UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED)
 
 /* Wireup request and promote both require handling new connections */
@@ -148,23 +148,23 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
 
-    if (req->send.wireup.type == UCP_WIREUP_MSG_REQUEST) {
+    if (req->send.wireup.super.type == UCP_WIREUP_MSG_REQUEST) {
         if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
             ucs_trace("ep %p: not sending wireup message - remote already connected",
                       ep);
             status = UCS_OK;
             goto out_free_req;
         }
-    } else if (req->send.wireup.type == UCP_WIREUP_MSG_PRE_REQUEST) {
+    } else if (req->send.wireup.super.type == UCP_WIREUP_MSG_PRE_REQUEST) {
         ucs_assert (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED));
     }
 
     /* send the active message */
-    req->send.lane = ucp_wireup_get_msg_lane(ep, req->send.wireup.type);
+    req->send.lane = ucp_wireup_get_msg_lane(ep, req->send.wireup.super.type);
 
     am_flags = 0;
-    if ((req->send.wireup.type == UCP_WIREUP_MSG_REQUEST) ||
-        (req->send.wireup.type == UCP_WIREUP_MSG_PRE_REQUEST)) {
+    if ((req->send.wireup.super.type == UCP_WIREUP_MSG_REQUEST) ||
+        (req->send.wireup.super.type == UCP_WIREUP_MSG_PRE_REQUEST)) {
         am_flags |= UCT_SEND_FLAG_SIGNALED;
     }
 
@@ -172,7 +172,8 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     VALGRIND_CHECK_MEM_IS_DEFINED(req->send.buffer, req->send.length);
 
     wireup_msg_iov[0].iov_base = &req->send.wireup;
-    wireup_msg_iov[0].iov_len  = ucp_wireup_get_msg_size(&req->send.wireup);
+    wireup_msg_iov[0].iov_len  = ucp_wireup_get_msg_size(
+            &req->send.wireup.super);
 
     wireup_msg_iov[1].iov_base = req->send.buffer;
     wireup_msg_iov[1].iov_len  = req->send.length;
@@ -195,7 +196,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         status = UCS_OK;
     }
 
-    switch (req->send.wireup.type) {
+    switch (req->send.wireup.super.type) {
     case UCP_WIREUP_MSG_PRE_REQUEST:
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_PRE_REQ_SENT, 0);
         break;
@@ -297,7 +298,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
 
     status = ucp_wireup_msg_prepare(ep, type, tl_bitmap, lanes2remote,
-                                    &req->send.wireup, &req->send.buffer,
+                                    &req->send.wireup.super, &req->send.buffer,
                                     &req->send.length);
     if (status != UCS_OK) {
         ucp_request_mem_free(req);
@@ -588,7 +589,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED, 0);
         if (ucp_context_usage_tracker_enabled(ep->worker->context)) {
             /* Reset flags that mark wireup is in progress */
-            ucp_ep_update_flags(ep, 0, UCP_EP_REQUEST_MSG_QUEUED);
+            ucp_ep_update_flags(ep, 0, UCP_EP_MASK_WIREUP_REQ_QUEUED);
         }
     }
 
@@ -610,7 +611,7 @@ static void ucp_wireup_send_priority_update(ucp_ep_h ep, uint8_t type)
 {
     ucs_status_t status;
 
-    if (ep->flags & UCP_EP_REQUEST_MSG_QUEUED) {
+    if (ep->flags & UCP_EP_MASK_WIREUP_REQ_QUEUED) {
         return;
     }
 
@@ -747,14 +748,16 @@ err_set_ep_failed:
     return status;
 }
 
-static int ucp_wireup_should_ignore_request(ucp_ep_h ep, uint64_t remote_uuid,
-                                            uint8_t msg_type)
+static int
+ucp_wireup_resolve_request(ucp_ep_h ep, uint64_t remote_uuid, uint8_t msg_type)
 {
-    unsigned flag_to_test = (msg_type == UCP_WIREUP_MSG_REQUEST) ?
-                                    UCP_EP_FLAG_CONNECT_REQ_QUEUED :
-                                    UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED;
+    unsigned flag_to_test;
 
     ucs_assert_always(ucp_wireup_msg_is_request(msg_type));
+
+    flag_to_test = (msg_type == UCP_WIREUP_MSG_REQUEST) ?
+                           UCP_EP_FLAG_CONNECT_REQ_QUEUED :
+                           UCP_EP_FLAG_PRIORITY_UPDATE_QUEUED;
 
     /*
      * If the current endpoint already sent a connection request, we have a
@@ -810,7 +813,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         }
 
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
-        if (ucp_wireup_should_ignore_request(ep, remote_uuid, msg->type)) {
+        if (ucp_wireup_resolve_request(ep, remote_uuid, msg->type)) {
             return;
         }
     }
@@ -901,9 +904,9 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
         status = ucp_wireup_get_ep_by_conn_sn(worker, remote_address, msg,
                                               ep_init_flags, &ep);
         if (status != UCS_OK) {
-            ucs_debug("ep %p: promotion request from 0x%"PRIx64" failed with"
-                      " the following error: %s", ep, msg->src_ep_id,
-                      ucs_status_string(status));
+            ucs_error("ep %p: promotion request from 0x%" PRIx64 " failed with"
+                      " the following error: %s",
+                      ep, msg->src_ep_id, ucs_status_string(status));
             return;
         }
     }
@@ -911,8 +914,8 @@ ucp_wireup_process_promote_request(ucp_worker_h worker, ucp_ep_h msg_ep,
     /* Prevent redundant promotion if request was sent */
     if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
         /* Prevent a race between 2 simultaneous requests */
-        ucp_wireup_should_ignore_request(ep, remote_address->uuid,
-                                         UCP_WIREUP_MSG_PROMOTE)) {
+        ucp_wireup_resolve_request(ep, remote_address->uuid,
+                                   UCP_WIREUP_MSG_PROMOTE)) {
         return;
     }
 
@@ -1134,6 +1137,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     ucp_ep_h ep           = NULL;
     ucp_unpacked_address_t remote_address;
     ucs_status_t status;
+    void *packed_address;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -1151,10 +1155,9 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         }
     }
 
-    status = ucp_address_unpack(worker,
-                                (char*)msg + ucp_wireup_get_msg_size(msg),
-                                UCP_ADDRESS_PACK_FLAGS_ALL,
-                                &remote_address);
+    packed_address = UCS_PTR_BYTE_OFFSET(msg, ucp_wireup_get_msg_size(msg));
+    status         = ucp_address_unpack(worker, packed_address,
+                                        UCP_ADDRESS_PACK_FLAGS_ALL, &remote_address);
     if (status != UCS_OK) {
         ucs_error("failed to unpack address: %s", ucs_status_string(status));
         goto out;
@@ -2242,7 +2245,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     ucp_wireup_ep_set_next_ep(ucp_ep_get_lane(ep, lane), uct_ep,
                               ucp_ep_get_rsc_index(ep, lane));
 
-    if (!(ep->flags & UCP_EP_REQUEST_MSG_QUEUED)) {
+    if (!(ep->flags & UCP_EP_MASK_WIREUP_REQ_QUEUED)) {
         status = ucp_wireup_send_request(ep);
         if (status != UCS_OK) {
             goto err_destroy_wireup_ep;
