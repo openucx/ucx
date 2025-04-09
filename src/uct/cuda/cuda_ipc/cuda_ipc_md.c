@@ -539,6 +539,7 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
     nvmlDevice_t device;
     ucs_status_t status;
     char buf[64];
+    int64_t *cluster_uuid;
 
     if (mnnvl_supported != -1) {
         goto out;
@@ -573,8 +574,10 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
                                NVML_GPU_FABRIC_UUID_LEN, buf, sizeof(buf),
                                SIZE_MAX));
 
+    cluster_uuid = (int64_t*)fabric_info.clusterUuid;
     if ((fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
-        (fabric_info.status == NVML_SUCCESS)) {
+        (fabric_info.status == NVML_SUCCESS) &&
+        (cluster_uuid[0] | cluster_uuid[1]) != 0) {
         mnnvl_supported = 1;
         goto out_sd;
     }
@@ -587,6 +590,9 @@ out:
 #endif
     if ((mnnvl_enable == UCS_YES) && !mnnvl_supported) {
         ucs_error("multi-node NVLINK support is requested but not supported");
+    } else {
+        ucs_debug("multi-node NVLINK support is %s", mnnvl_supported ?
+                  "enabled" : "disabled");
     }
 
     return mnnvl_supported;
