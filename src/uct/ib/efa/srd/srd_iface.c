@@ -53,26 +53,17 @@ ucs_status_t uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 {
     int ret;
     khiter_t iter;
-    ucs_status_t status;
 
-    iter = kh_get(uct_srd_ep_hash, &iface->ep_hash, ep->ep_uuid);
-    if (iter == kh_end(&iface->ep_hash)) {
-        iter = kh_put(uct_srd_ep_hash, &iface->ep_hash, ep->ep_uuid, &ret);
-        if (iter == kh_end(&iface->ep_hash)) {
-            status  = UCS_ERR_IO_ERROR;
-            goto err;
-        }
-
-        kh_value(&iface->ep_hash, iter) = ep;
-        return UCS_OK;
+    iter = kh_put(uct_srd_ep_hash, &iface->ep_hash, ep->ep_uuid, &ret);
+    if (ucs_unlikely((ret == UCS_KH_PUT_FAILED) ||
+                     (ret == UCS_KH_PUT_KEY_PRESENT))) {
+        ucs_error("iface=%p ep=%p ep_uuid=%"PRIx64" add ep to hash err=%d",
+                  iface, ep, ep->ep_uuid, ret);
+        return UCS_ERR_IO_ERROR;
     }
 
-    status = UCS_ERR_ALREADY_EXISTS;
-
-err:
-    ucs_error("iface=%p ep=%p ep_uuid=%"PRIx64" add ep to hash status=%s",
-              iface, ep, ep->ep_uuid, ucs_status_string(status));
-    return status;
+    kh_value(&iface->ep_hash, iter) = ep;
+    return UCS_OK;
 }
 
 void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)

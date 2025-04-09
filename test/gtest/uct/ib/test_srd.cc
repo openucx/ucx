@@ -458,14 +458,15 @@ UCS_TEST_P(test_srd, pending_purge_dispatch)
 
 UCS_TEST_P(test_srd, pending_dispatch)
 {
-    static int count = 0;
+    static int req_count;
 
+    req_count = 0;
     for (auto i = 0; i < 3; i++) {
         m_req[i].func = [](uct_pending_req_t*) {
-            count++;
-            if (count == 1) {
+            req_count++;
+            if (req_count == 1) {
                 return UCS_ERR_NO_RESOURCE;
-            } else if (count == 2) {
+            } else if (req_count == 2) {
                 return UCS_INPROGRESS;
             } else {
                 return UCS_OK;
@@ -475,7 +476,7 @@ UCS_TEST_P(test_srd, pending_dispatch)
         ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[i], 0));
     }
 
-    wait_for_value(&count, 5, true);
+    wait_for_value(&req_count, 5, true);
     ASSERT_EQ(0, pending_purge(m_e1->ep(0)));
 }
 
