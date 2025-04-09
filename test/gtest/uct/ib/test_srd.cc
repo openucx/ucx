@@ -88,18 +88,14 @@ protected:
 
     completion                m_comp;
     static constexpr uint64_t m_seed = 0x54321;
-    static int                m_count;
 
     uct_pending_req_t         m_req[3];
     entity *m_e1, *m_e2, *m_e3;
 };
 
-int test_srd::m_count = 0;
-
 void test_srd::init()
 {
     uct_test::init();
-    m_count = 0;
 
     m_e1 = uct_test::create_entity(0, NULL);
     m_e2 = uct_test::create_entity(0, NULL);
@@ -467,12 +463,14 @@ UCS_TEST_P(test_srd, pending_purge_dispatch)
 
 UCS_TEST_P(test_srd, pending_dispatch)
 {
+    static int count = 0;
+
     for (auto i = 0; i < 3; i++) {
         m_req[i].func = [](uct_pending_req_t*) {
-            m_count++;
-            if (m_count == 1) {
+            count++;
+            if (count == 1) {
                 return UCS_ERR_NO_RESOURCE;
-            } else if (m_count == 2) {
+            } else if (count == 2) {
                 return UCS_INPROGRESS;
             } else {
                 return UCS_OK;
@@ -482,8 +480,9 @@ UCS_TEST_P(test_srd, pending_dispatch)
         ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &m_req[i], 0));
     }
 
-    wait_for_value(&m_count, 5, true);
-    int count = 0;
+    wait_for_value(&count, 5, true);
+
+    count = 0;
     uct_ep_pending_purge(
             m_e1->ep(0),
             [](uct_pending_req_t*, void *arg) {

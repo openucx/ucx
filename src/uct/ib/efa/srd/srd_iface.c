@@ -101,7 +101,7 @@ ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
 
     /* Construct a control operation to be queued */
     ctl_op = ucs_malloc(sizeof(*ctl_op) + sizeof(*hdr) +
-                            iface->super.addr_size,
+                        iface->super.addr_size,
                         "uct_srd_ctl_op_t");
     if (ctl_op == NULL) {
         status  = UCS_ERR_NO_MEMORY;
@@ -735,7 +735,7 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
     ucs_assertv(ctl->id == UCT_SRD_CTL_ID_REQ, "iface=%p id=%u", iface,
                 ctl->id);
     ucs_assertv((sizeof(*ctl) + iface->super.addr_size) == length,
-                "req size mismatched expected=%zu received=%u",
+                "req size mismatch expected=%zu received=%u",
                 sizeof(*ctl) + iface->super.addr_size, length);
 
     /* TODO do we need an actual non-zero path index ? */
@@ -744,25 +744,24 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
     status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH", &ah);
     if (status != UCS_OK) {
         err_msg = "failed to create AH";
-        goto err;
+    } else {
+        status = uct_srd_iface_ctl_trigger(iface, UCT_SRD_CTL_ID_RESP,
+                                           ctl->ep_uuid, ah, qpn);
+        if (status != UCS_OK) {
+            err_msg = "failed to trigger ctl response";
+        }
     }
 
-    status = uct_srd_iface_ctl_trigger(iface, UCT_SRD_CTL_ID_RESP, ctl->ep_uuid,
-                                       ah, qpn);
+
     if (status != UCS_OK) {
-        err_msg = "failed to trigger ctl response";
-        goto err;
+        ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%d %s status=%s",
+                  iface, ctl->id, ctl->ep_uuid, qpn, err_msg,
+                  ucs_status_string(status));
     }
 
 out:
     ucs_mpool_put(desc);
     return;
-
-err:
-    ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%d %s status=%s",
-              iface, ctl->id, ctl->ep_uuid, qpn, err_msg,
-              ucs_status_string(status));
-    goto out;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
@@ -783,13 +782,11 @@ uct_srd_iface_poll_rx(uct_srd_iface_t *iface)
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super, i, packet, wc, num_wcs) {
         uct_ib_log_recv_completion(&iface->super, &wc[i], packet,
                                    wc[i].byte_len, uct_srd_dump_packet);
-        if ((*(uint8_t*)packet < UCT_AM_ID_MAX)) {
-            uct_srd_iface_process_rx(iface, (uct_srd_hdr_t*)packet,
-                                     wc[i].byte_len,
+        if (ucs_likely(*(uint8_t*)packet < UCT_AM_ID_MAX)) {
+            uct_srd_iface_process_rx(iface, packet, wc[i].byte_len,
                                      (uct_srd_recv_desc_t*)wc[i].wr_id);
         } else {
-            uct_srd_iface_process_ctl(iface, (uct_srd_ctl_hdr_t*)packet,
-                                      wc[i].byte_len,
+            uct_srd_iface_process_ctl(iface, packet, wc[i].byte_len,
                                       (uct_srd_recv_desc_t*)wc[i].wr_id);
         }
     }
