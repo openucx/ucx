@@ -207,6 +207,7 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
     ucs_log_level_t log_level   = (md->config.enable_fabric == UCS_YES) ?
                                   UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DEBUG;
     ucs_status_t status;
+    int allowed_types;
 
     if (!(flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) &&
         (md->config.enable_fabric == UCS_YES)) {
@@ -215,10 +216,11 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
         log_level = UCS_LOG_LEVEL_DEBUG;
     }
 
-    prop.type                 = CU_MEM_ALLOCATION_TYPE_PINNED;
-    prop.requestedHandleTypes = CU_MEM_HANDLE_TYPE_FABRIC;
-    prop.location.type        = CU_MEM_LOCATION_TYPE_DEVICE;
-    prop.location.id          = cu_device;
+    prop.type                            = CU_MEM_ALLOCATION_TYPE_PINNED;
+    prop.requestedHandleTypes            = CU_MEM_HANDLE_TYPE_FABRIC;
+    prop.location.type                   = CU_MEM_LOCATION_TYPE_DEVICE;
+    prop.location.id                     = cu_device;
+    prop.allocFlags.gpuDirectRDMACapable = 1;
 
     if (md->granularity == SIZE_MAX) {
         status = UCT_CUDADRV_FUNC(cuMemGetAllocationGranularity(
@@ -264,9 +266,24 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
         goto err_mem_unmap;
     }
 
+    status = UCT_CUDADRV_FUNC(
+            cuPointerGetAttribute(&allowed_types,
+                                  CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES,
+                                  alloc_handle->ptr),
+            log_level);
+    if (status != UCS_OK) {
+        goto err_mem_unmap;
+    } else if (!(allowed_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
+        ucs_log(log_level,
+                "allocated memory at %p of size %ld does not have fabric "
+                "property",
+                (void*)alloc_handle->ptr, alloc_handle->length);
+        goto err_mem_unmap;
+    }
+
     alloc_handle->is_vmm = 1;
 
-    ucs_trace("allocated vmm fabric memory at %p of size %ld\n",
+    ucs_trace("allocated vmm fabric memory at %p of size %ld",
               (void*)alloc_handle->ptr, alloc_handle->length);
     return UCS_OK;
 
