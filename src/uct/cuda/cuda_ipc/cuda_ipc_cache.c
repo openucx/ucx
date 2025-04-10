@@ -111,29 +111,67 @@ uct_cuda_ipc_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
     ucs_list_add_tail(list, &region->list);
 }
 
-static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *region)
+static ucs_status_t
+uct_cuda_ipc_primary_ctx_retain_and_push(CUdevice cuda_device)
 {
+    CUcontext cuda_ctx;
     ucs_status_t status;
 
-#if HAVE_CUDA_FABRIC
-    if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
-        status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(
-                    (CUdeviceptr)region->mapped_addr, region->key.b_len));
-        if (status == UCS_OK) {
-            return UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(
-                        (CUdeviceptr)region->mapped_addr, region->key.b_len));
-        }
-    } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
-        return UCT_CUDADRV_FUNC_LOG_WARN(
-                cuMemFree((CUdeviceptr)region->mapped_addr));
-    } else
-#endif
-    {
-        return UCT_CUDADRV_FUNC_LOG_WARN(cuIpcCloseMemHandle(
-                    (CUdeviceptr)region->mapped_addr));
+    status = uct_cuda_primary_ctx_retain(cuda_device, 0, &cuda_ctx);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+    if (status != UCS_OK) {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
     }
 
     return status;
+}
+
+static void uct_cuda_ipc_primary_ctx_pop_and_release(CUdevice cuda_device)
+{
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+}
+
+static ucs_status_t
+uct_cuda_ipc_close_memhandle_legacy(uct_cuda_ipc_cache_region_t *region)
+{
+    ucs_status_t status;
+
+    status = uct_cuda_ipc_primary_ctx_retain_and_push(region->key.dev_num);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_WARN(
+            cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+    uct_cuda_ipc_primary_ctx_pop_and_release(region->key.dev_num);
+    return status;
+}
+
+static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *region)
+{
+#if HAVE_CUDA_FABRIC
+    ucs_status_t status;
+
+    if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+        status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(
+                    (CUdeviceptr)region->mapped_addr, region->key.b_len));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        return UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(
+                (CUdeviceptr)region->mapped_addr, region->key.b_len));
+    } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
+        return UCT_CUDADRV_FUNC_LOG_WARN(
+                cuMemFree((CUdeviceptr)region->mapped_addr));
+    }
+#endif
+    return uct_cuda_ipc_close_memhandle_legacy(region);
 }
 
 static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
@@ -159,17 +197,11 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
                                    CUdeviceptr *mapped_addr)
 {
     CUresult cuerr;
-    CUcontext cuda_ctx;
     ucs_status_t status;
 
-    status = uct_cuda_primary_ctx_retain(cu_dev, 1, &cuda_ctx);
+    status = uct_cuda_ipc_primary_ctx_retain_and_push(cu_dev);
     if (status != UCS_OK) {
         return status;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
-    if (status != UCS_OK) {
-        goto ctx_release;
     }
 
     cuerr = cuIpcOpenMemHandle(mapped_addr, memh,
@@ -181,10 +213,7 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
             UCS_ERR_ALREADY_EXISTS : UCS_ERR_INVALID_PARAM;
     }
 
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-
-ctx_release:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cu_dev));
+    uct_cuda_ipc_primary_ctx_pop_and_release(cu_dev);
     return status;
 }
 
