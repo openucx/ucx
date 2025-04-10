@@ -54,15 +54,14 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
         return status;
     }
 
-    ucs_arbiter_group_init(&self->pending_group);
-
     status = uct_srd_iface_ctl_trigger(iface, UCT_SRD_CTL_ID_REQ, self->ep_uuid,
                                        self->ah, self->dest_qpn);
     if (status != UCS_OK) {
         uct_srd_iface_remove_ep(iface, self);
-        ucs_arbiter_group_cleanup(&self->pending_group);
         return status;
     }
+
+    ucs_arbiter_group_init(&self->pending_group);
 
     ucs_debug(UCT_IB_IFACE_FMT
               " ep=%p gid=%s qpn=0x%x ep_uuid=0x%"PRIx64" connected "
@@ -152,9 +151,13 @@ uct_srd_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
 
     ucs_trace_data("iface=%p ep=%p progressing pending request %p", iface, ep,
                    req);
+#if UCS_ENABLE_ASSERT
     iface->tx.in_pending = 1;
+#endif
     status               = req->func(req);
+#if UCS_ENABLE_ASSERT
     iface->tx.in_pending = 0;
+#endif
     ucs_trace_data("iface=%p ep=%p status returned from progress pending: %s",
                    iface, ep, ucs_status_string(status));
 
