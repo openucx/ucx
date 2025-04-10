@@ -1599,7 +1599,7 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
                               ucp_lane_type_t lane_type, unsigned max_lanes,
                               ucp_wireup_select_context_t *select_ctx)
 {
-    unsigned success               = 0;
+    int show_error                 = 1;
     ucp_lane_index_t pre_num_lanes = select_ctx->num_lanes;
     double max_bw                  = 0;
     double lane_bw                 = 0;
@@ -1648,12 +1648,12 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
             /* The rest won't be added, loop continues for logging */
         } else {
             status = ucp_wireup_add_lane(select_params, sinfo, lane_type,
-                                         success == 0, select_ctx);
+                                         show_error, select_ctx);
             if (status != UCS_OK) {
                 break;
             }
 
-            ++success;
+            show_error = 0;
         }
     }
 
@@ -1705,7 +1705,7 @@ static unsigned ucp_wireup_add_fast_lanes_pairwise(
         const ucp_proto_select_info_array_t *sinfo_array,
         ucp_lane_type_t lane_type, ucp_wireup_select_context_t *select_ctx)
 {
-    unsigned success               = 0;
+    int show_error                 = 1;
     ucp_lane_index_t pre_num_lanes = select_ctx->num_lanes;
     double max_bw                  = 0;
     ucp_context_h context          = worker->context;
@@ -1735,12 +1735,12 @@ static unsigned ucp_wireup_add_fast_lanes_pairwise(
         }
 
         status = ucp_wireup_add_lane(select_params, sinfo, lane_type,
-                                     success == 0, select_ctx);
+                                     show_error, select_ctx);
         if (status != UCS_OK) {
             break;
         }
 
-        ++success;
+        show_error = 0;
     }
 
     return select_ctx->num_lanes - pre_num_lanes;
