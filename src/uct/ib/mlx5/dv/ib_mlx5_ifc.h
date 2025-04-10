@@ -1030,6 +1030,7 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         ece[0x20];
 
     uint8_t         max_receive_send_message_size[0x10];
+
     uint8_t         reserved_at_230[0x150];
 };
 
@@ -1147,6 +1148,7 @@ struct uct_ib_mlx5_wq_bits {
     uint8_t         wq_umem_id[0x20];
 
     uint8_t         reserved_at_180[0x90];
+
     uint8_t         enh_strwq_profile_id[0x10];
 
     uint8_t         reserved_at_220[0x3e0];
@@ -1588,8 +1590,10 @@ struct uct_ib_mlx5_qpc_ext_bits {
     uint8_t         qos_queue_group_id_responder[0x20];
 
     uint8_t         error_syndrom[0x20];
+
     uint8_t         max_receive_send_message_size[0x10];
     uint8_t         mmo_type[0x10];
+
     uint8_t         path_select_obj_id[0x20];
 
     uint8_t         reserved_at_c0[0x540];

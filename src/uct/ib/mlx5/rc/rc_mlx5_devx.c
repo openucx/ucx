@@ -222,12 +222,11 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 void *wq)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
-    int num_sges        = uct_rc_mlx5_max_num_messages_in_single_wqe(
-            iface, config->super.stride_size);
     int len, max, stride, log_num_of_strides, wq_type;
 
     stride = uct_rc_mlx5_iface_stride_size(iface);
-    max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len, num_sges);
+    max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len,
+                                     iface->tm.mp.num_strides);
     max    = ucs_roundup_pow2(max);
     len    = max * stride;
 
@@ -281,12 +280,11 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                     "stride_size=%d, seg_size=%d",
                     iface->super.super.config.stride_size,
                     iface->super.super.config.seg_size);
-        iface->msg_based.num_strides = iface->super.super.config.seg_size /
-                                       iface->super.super.config.stride_size;
+        iface->msg_based.num_strides = (iface->super.super.config.seg_size /
+                                        iface->super.super.config.stride_size);
         log_num_of_strides = ucs_ilog2(iface->msg_based.num_strides) - 9;
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,
                           log_num_of_strides & 0xF);
-
         UCT_IB_MLX5DV_SET(wq, wq, two_byte_shift_en, 0);
         ucs_assertv_always((md->msg_based_srq.min_stride_size <=
                             iface->super.super.config.stride_size) &&

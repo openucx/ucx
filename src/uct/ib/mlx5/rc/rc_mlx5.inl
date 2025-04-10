@@ -84,10 +84,9 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
     int stride_idx;
     int desc_offset;
 
-    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) {
-        seg->srq.ptr_mask &= ~1;
-        seg->srq.desc      = NULL;
-    } else if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+    ucs_assert(!(poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED));
+
+    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* stride_idx is valid in non inline CQEs only.
          * We can assume that stride_idx is correct here, because CQE
          * with data would always force upper layer to save the data and

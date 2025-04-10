@@ -14,7 +14,6 @@
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
-#include <ucs/datastruct/dynamic_bitmap.h>
 #include <ucs/profile/profile.h>
 
 
@@ -558,9 +557,14 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
 
 int uct_rc_mlx5_iface_stride_size(uct_rc_mlx5_iface_common_t *iface)
 {
-    return uct_rc_mlx5_iface_is_srq_msg_based(iface) ?
-                   iface->super.super.config.stride_size :
-                   uct_ib_mlx5_srq_stride(uct_rc_mlx5_num_strides(iface));
+    if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
+        ucs_assert((iface->super.super.config.stride_size > 0) &&
+                   (iface->super.super.config.stride_size %
+                    UCS_SYS_CACHE_LINE_SIZE) == 0);
+        return iface->super.super.config.stride_size;
+    }
+
+    return uct_ib_mlx5_srq_stride(uct_rc_mlx5_num_strides(iface));
 }
 
 ucs_status_t

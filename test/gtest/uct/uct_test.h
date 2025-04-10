@@ -212,8 +212,6 @@ protected:
 
         ucs_async_context_t &async() const;
 
-        void is_srq_msg_based() const;
-
         size_t                   max_conn_priv;
 
     private:

@@ -15,7 +15,6 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/arch/cpu.h>
-#include <ucs/datastruct/dynamic_bitmap.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/status.h>
 

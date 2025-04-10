@@ -150,7 +150,6 @@ static unsigned uct_rc_mlx5_iface_progress_striding_ll(void *arg)
     return uct_rc_mlx5_iface_progress(
             arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
                          UCT_IB_MLX5_POLL_FLAG_LINKED_LIST |
-                         UCT_IB_MLX5_POLL_FLAG_CQE_ZIP |
                          UCT_IB_MLX5_POLL_FLAG_MSG_BASED);
 }
 
