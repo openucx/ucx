@@ -1589,6 +1589,7 @@ ucp_proto_select_info_score_compare(const void *e1, const void *e2,
         return key_cmp2;
     }
 
+    /* TODO: support multi-path for a2a lanes */
     return info1->path_index - info2->path_index;
 }
 
@@ -1633,8 +1634,8 @@ ucp_wireup_add_fast_lanes_a2a(ucp_worker_h worker,
 
     ucs_array_set_length(sinfo_array,
                          ucs_min(max_lanes, ucs_array_length(sinfo_array)));
-    /* Compare each element to max BW and filter only fast lanes */
 
+    /* Compare each element to max BW and filter only fast lanes */
     ucs_array_for_each(sinfo, sinfo_array) {
         lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, select_params->address);
         if (lane_bw < (max_bw * max_ratio)) {
@@ -1675,6 +1676,8 @@ ucp_wireup_add_bw_lanes_a2a(const ucp_wireup_select_params_t *select_params,
     unsigned num_lanes;
     ucs_status_t status;
     ucp_rsc_index_t local_dev_index, remote_dev_index;
+
+    /* TODO: support multi-path for a2a lanes */
 
     ucs_for_each_bit(local_dev_index, local_dev_bitmap) {
         ucs_for_each_bit(remote_dev_index, remote_dev_bitmap) {
