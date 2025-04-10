@@ -387,8 +387,6 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
 void uct_ib_md_ece_check(uct_ib_md_t *md);
 
 /* Check if IB MD supports nonblocking registration */
-void uct_ib_md_check_odp(uct_ib_md_t *md);
-
 int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr);
 
 ucs_status_t
@@ -413,8 +411,9 @@ ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                                     void *mkey_buffer);
 
 ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
-                                const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                void **handle_p);
+                                const void *rkey_buffer,
+                                const uct_rkey_unpack_params_t *params,
+                                uct_rkey_t *rkey_p, void **handle_p);
 
 ucs_status_t
 uct_ib_base_query_md_resources(uct_md_resource_desc_t **resources_p,

@@ -17,7 +17,7 @@
 #include <ucs/profile/profile.h>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
-#include <ucp/proto/proto_single.h>
+#include <ucp/proto/proto_single.inl>
 
 
 static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
@@ -376,6 +376,7 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
                                                             send.uct);
+    ucp_ep_h ep                          = req->send.ep;
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucp_datatype_iter_t next_iter;
     ucs_status_t status;
@@ -383,14 +384,20 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         if (!(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
             ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
-                                        req->send.ep->worker, SIZE_MAX,
+                                        ep->worker, SIZE_MAX,
                                         &next_iter, &req->send.amo.value);
             req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
         }
 
-        status = ucp_ep_resolve_remote_id(req->send.ep, spriv->super.lane);
+        status = ucp_ep_resolve_remote_id(ep, spriv->super.lane);
         if (status != UCS_OK) {
             return status;
+        }
+
+        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;

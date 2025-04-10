@@ -71,6 +71,12 @@ void __uct_ib_log_post_send(const char *file, int line, const char *function,
                             struct ibv_send_wr *wr, int max_sge,
                             uct_log_data_dump_func_t packet_dump_cb);
 
+void __uct_ib_log_post_send_one(const char *file, int line,
+                                const char *function, uct_ib_iface_t *iface,
+                                struct ibv_qp *qp, struct ibv_send_wr *wr,
+                                struct ibv_ah *ah, int remote_qn, int max_sge,
+                                uct_log_data_dump_func_t data_dump_cb);
+
 void __uct_ib_log_recv_completion(const char *file, int line, const char *function,
                                   uct_ib_iface_t *iface, uint32_t l_qp,
                                   uint32_t r_qp, uint16_t slid, void *data,

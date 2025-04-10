@@ -622,7 +622,7 @@ UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)
 
 const unsigned uct_p2p_am_misc::RX_MAX_BUFS  = 1024; /* due to hard coded 'grow'
                                                         parameter in uct_ib_iface_recv_mpool_init */
-const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 128;
+const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 256;
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs,
                      (RUNNING_ON_VALGRIND || m_rx_buf_limit_failed ||

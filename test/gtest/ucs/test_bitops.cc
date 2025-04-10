@@ -138,6 +138,42 @@ UCS_TEST_F(test_bitops, is_equal) {
     test_bitops::check_bitwise_equality(buffer1, buffer2, indices, 0);
 }
 
+template<typename T> void test_clz()
+{
+    constexpr int bits = sizeof(T) * 8;
+    T v                = 1;
+
+    for (int i = bits - 1; v != 0; v <<= 1, --i) {
+        ASSERT_EQ(i, ucs_count_leading_zero_bits(v));
+    }
+
+    ASSERT_EQ(bits, ucs_count_leading_zero_bits(v));
+}
+
+UCS_TEST_F(test_bitops, clz) {
+    test_clz<uint32_t>();
+    test_clz<uint64_t>();
+    test_clz<int32_t>();
+    test_clz<int64_t>();
+    test_clz<size_t>();
+    test_clz<ssize_t>();
+}
+
+UCS_TEST_F(test_bitops, clz_type)
+{
+    EXPECT_GT(0, ucs_count_leading_zero_bits(~0LLU) - 1);
+
+    EXPECT_EQ(UINT32_MAX, ucs_count_leading_zero_bits(~0LLU) - 1);
+    EXPECT_EQ(UINT32_MAX, ucs_count_leading_zero_bits(0LLU) - 65);
+    EXPECT_EQ(UINT32_MAX, ucs_count_leading_zero_bits(~0U) - 1);
+    EXPECT_EQ(UINT32_MAX, ucs_count_leading_zero_bits(0U) - 33);
+
+    EXPECT_EQ(UINT32_MAX, ucs_count_leading_zero_bits(~0LL) - 1);
+    EXPECT_EQ(UINT32_MAX, ucs_count_leading_zero_bits(0LL) - 65);
+    EXPECT_EQ(UINT32_MAX, ucs_count_leading_zero_bits(~0) - 1);
+    EXPECT_EQ(UINT32_MAX, ucs_count_leading_zero_bits(0) - 33);
+}
+
 template<typename Type> void test_mask()
 {
     Type expected = 0;

@@ -409,6 +409,10 @@ ucs_status_t uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev,
                                               uint8_t gid_index,
                                               char *ndev_name, size_t max);
 
+ucs_status_t
+uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
+                                  uint8_t gid_index, int *ndev_index_p);
+
 unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev,
                                           uint8_t port_num,
                                           uint8_t gid_index);
@@ -501,5 +505,7 @@ static inline void uct_ib_destroy_cq(struct ibv_cq *cq, const char *desc)
 }
 
 void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event);
+
+int uct_ib_device_is_smi(struct ibv_device *ibv_device);
 
 #endif

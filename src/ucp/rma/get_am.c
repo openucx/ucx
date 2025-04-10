@@ -42,12 +42,13 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t                   *req = ucs_container_of(self, ucp_request_t,
                                                             send.uct);
+    ucp_ep_h                          ep = req->send.ep;
     ucp_worker_h                  worker = req->send.ep->worker;
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_ep_resolve_remote_id(req->send.ep, spriv->super.lane);
+        status = ucp_ep_resolve_remote_id(ep, spriv->super.lane);
         if (status != UCS_OK) {
             return status;
         }
@@ -58,6 +59,12 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
         req->send.length = req->send.state.dt_iter.length;
         req->flags      |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
         ucp_send_request_id_alloc(req);
+
+        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
     }
 
     ucp_worker_flush_ops_count_add(worker, +1);

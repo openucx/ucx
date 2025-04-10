@@ -333,3 +333,25 @@ UCS_TEST_F(frag_list, random_arrival) {
         last_sn = out->sn;
     }
 }
+
+UCS_TEST_F(frag_list, cleanup) {
+    pkt pkts[10];
+    std::vector<std::pair<int, int>> ranges = {{4, 6}, {7, 10}, {1, 2}};
+    ucs_frag_list_ooo_type_t ret;
+    ucs_frag_list_elem_t *elem;
+
+    init_pkts(pkts, 10);
+    for (auto r : ranges) {
+        for (auto i = r.first; i < r.second; ++i) {
+            ret = ucs_frag_list_insert(&m_frags, &pkts[i].elem, i);
+            EXPECT_NE(UCS_FRAG_LIST_INSERT_FAIL, ret);
+        }
+    }
+
+    uint32_t last_sn = 0;
+    while ((elem = ucs_frag_list_remove(&m_frags, 1)) != NULL) {
+        auto out = ucs_container_of(elem, pkt, elem);
+        EXPECT_LT(last_sn, out->sn);
+        last_sn = out->sn;
+    }
+}

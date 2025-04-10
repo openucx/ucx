@@ -81,7 +81,6 @@ typedef uint16_t                   ucp_ep_flags_t;
 #define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
     ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
 
-
 #define UCP_SA_DATA_HEADER_VERSION_SHIFT 5
 
 
@@ -545,6 +544,11 @@ typedef struct ucp_ep_ext {
                                                      arrived before the first one */
     } am;
 
+    ucp_lane_map_t                unflushed_lanes; /* Bitmap of lanes which have
+                                                      unflushed operations */
+    uint64_t                      fence_seq;       /* Sequence number for fence
+                                                      detection */
+
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
      * structure. TODO allocate this array dynamically.
@@ -712,7 +716,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const ucp_request_param_t *param,
                                        ucp_request_t *worker_req,
                                        ucp_request_callback_t flushed_cb,
-                                       const char *debug_name);
+                                       const char *debug_name,
+                                       unsigned uct_flags);
 
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
@@ -749,12 +754,21 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                      const ucp_ep_config_key_t *key2,
                                      ucp_lane_index_t lane2);
 
-void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_ep_config_key_t *key2,
+ucp_lane_index_t
+ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *old_key,
+                              ucp_lane_index_t old_lane,
+                              const ucp_ep_config_key_t *new_key);
+
+void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *old_key,
+                                   const ucp_ep_config_key_t *new_key,
                                    const ucp_ep_h ep,
                                    const ucp_unpacked_address_t *remote_address,
                                    const unsigned *addr_indices,
                                    ucp_lane_index_t *lane_map);
+
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);

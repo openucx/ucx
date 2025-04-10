@@ -645,6 +645,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     }
 
     rpriv->frag_mem_type = init_params->super.reg_mem_info.type;
+    rpriv->frag_sys_dev  = init_params->super.reg_mem_info.sys_dev;
 
     if (rpriv->super.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */
@@ -707,6 +708,31 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
     ucp_proto_multi_query_config(&multi_query_params, attr);
 }
 
+/* If we don't know the system device of the user buffer, unpack the remote key
+ * on the system device that pipeline protocols would use for staging. */
+static UCS_F_ALWAYS_INLINE ucs_sys_device_t
+ucp_proto_rndv_ppln_frag_sys_dev(ucp_context_h context,
+                                 ucs_memory_type_t mem_type,
+                                 ucs_sys_device_t sys_dev)
+{
+    ucs_status_t status;
+    ucp_md_index_t md_index;
+    ucp_memory_info_t mem_info;
+
+    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return sys_dev;
+    }
+
+    status = ucp_mm_get_alloc_md_index(context, mem_type,
+                                       UCS_SYS_DEVICE_ID_UNKNOWN, &md_index,
+                                       &mem_info);
+    if ((status == UCS_OK) && (md_index != UCP_NULL_RESOURCE)) {
+        return mem_info.sys_dev;
+    }
+
+    return UCS_SYS_DEVICE_ID_UNKNOWN;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
                  (worker, req, op_id, op_attr_mask, length, rkey_buffer,
                   rkey_length, sg_count),
@@ -719,6 +745,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
+    ucs_sys_device_t sys_dev;
     ucs_status_t status;
     ucp_rkey_h rkey;
 
@@ -726,6 +753,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
                (op_id < UCP_OP_ID_RNDV_LAST));
 
     if (rkey_length > 0) {
+        sys_dev = ucp_proto_rndv_ppln_frag_sys_dev(
+                      worker->context, UCS_MEMORY_TYPE_CUDA,
+                      req->send.state.dt_iter.mem_info.sys_dev);
+
         ucs_assert(rkey_buffer != NULL);
         /* Do not unpack rkeys from MDs with rkey_ptr capability, except
          * rkey_ptr_lane. Examples are: sysv and posix. Such keys, if packed,
@@ -734,7 +765,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
          */
         status = ucp_ep_rkey_unpack_internal(
                   ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
-                  ep_config->rndv.proto_rndv_rkey_skip_mds, &rkey);
+                  ep_config->rndv.proto_rndv_rkey_skip_mds, sys_dev, &rkey);
         if (status != UCS_OK) {
             goto err;
         }
