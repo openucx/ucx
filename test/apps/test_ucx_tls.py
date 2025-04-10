@@ -124,42 +124,44 @@ def exec_cmd(cmd):
 
     return status, output
 
-def find_ka_transport(neps=1, override=0, tls="ib"):
+def find_transport(dev=None, neps=1, override=0, tls="ib", protocol="am"):
     if (override):
         os.putenv("UCX_NUM_EPS", "2")
 
-    with _override_env("UCX_TLS", tls):
-        status, output = exec_cmd(f"{ucx_info}{ucx_info_eh_args}{neps} | "
-                                   "grep keepalive")
+    env_vars = [("UCX_TLS", tls)]
+
+    # Set up environment variables based on protocol type
+    if protocol == "am" and dev:
+        env_vars.append(("UCX_NET_DEVICES", dev))
+
+    # Use context manager for all environment variables
+    with contextlib.ExitStack() as stack:
+        for var_name, var_value in env_vars:
+            stack.enter_context(_override_env(var_name, var_value))
+
+        # Choose the appropriate arguments and grep pattern based on protocol type
+        if protocol == "keepalive":
+            args = ucx_info_eh_args
+            grep_pattern = "keepalive"
+        else:  # am transport
+            args = ucx_info_args
+            grep_pattern = "am"
+
+        status, output = exec_cmd(f"{ucx_info}{args}{neps} | grep {grep_pattern}")
 
     match = re.search(r'\d+:(\S+)/\S+', output)
     if match:
-        am_tls = match.group(1)
-        if (override):
+        proto_tls = match.group(1)
+        if override:
             os.unsetenv("UCX_NUM_EPS")
 
-        return am_tls
+        return proto_tls
     else:
         return None
 
 def find_am_transport(dev, neps=1, override=0, tls="ib"):
-    if (override):
-        os.putenv("UCX_NUM_EPS", "2")
-    
-    with _override_env("UCX_TLS", tls), \
-         _override_env("UCX_NET_DEVICES", dev):
-
-        status, output = exec_cmd(f"{ucx_info}{ucx_info_args}{neps} | grep am")
-
-    match = re.search(r'\d+:(\S+)/\S+', output)
-    if match:
-        am_tls = match.group(1)
-        if (override):
-            os.unsetenv("UCX_NUM_EPS")
-
-        return am_tls
-    else:
-        return None
+    return find_transport(dev=dev, neps=neps, override=override,
+                          tls=tls, protocol="am")
 
 def test_fallback_from_rc(dev, neps) :
 
@@ -204,30 +206,30 @@ def test_ucx_tls_positive(tls):
     print("Found TL doesn't belong to the allowed UCX_TLS")
     sys.exit(1)
 
-def test_ucx_tls_negative(tls):
-    # Use TLS list in "negate" mode and verify that the found tl is not in the list
-    found_tl = find_am_transport(None, tls="^"+tls)
-    print(f"Using UCX_TLS=^{tls}, found TL: {found_tl}")
+def test_ucx_tls_negative(tls, protocol="am", forbidden_tls=None):
+    # Use TLS list in "negate" mode
+    found_tl = find_transport(tls="^"+tls, protocol=protocol)
+    print(f"Using UCX_TLS=^{tls}, found {protocol} TL: {found_tl}")
+    if not found_tl:
+        print("No available TL found")
+        sys.exit(1)
+
+    # If forbidden_tls is provided, verify that the found tl is not in that list
+    if forbidden_tls is not None:
+        for tl in forbidden_tls:
+            if found_tl == tl:
+                print("No available TL found")
+                sys.exit(1)
+        return
+
+    # Otherwise, check against the tls list
     tls = tls.split(',')
-    if not found_tl or found_tl in tls:
+    if found_tl in tls:
         print("No available TL found")
         sys.exit(1)
     for tl in tls:
         if tl in tl_aliases and found_tl in tl_aliases[tl]:
             print("Found TL belongs to the forbidden UCX_TLS")
-            sys.exit(1)
-
-def test_ucx_aux_negative(tls, forbidden_tls):
-    found_tl = find_ka_transport(tls="^"+tls)
-    print(f"Using UCX_TLS=^{tls}, found keepalive TL: {found_tl}")
-
-    if not found_tl:
-        print("No available TL found")
-        sys.exit(1)
-
-    for tl in forbidden_tls:
-        if found_tl == tl:
-            print("No available TL found")
             sys.exit(1)
 
 def _powerset(iterable, with_empty_set=True):
@@ -256,12 +258,18 @@ def test_tls_allow_list(ucx_info):
         itertools.product(tls_variants, test_funcs):
         test_func(",".join(tls_variant))
 
-    test_ucx_aux_negative("ib", {"ud_mlx5", "ud_verbs"})
-    test_ucx_aux_negative("ud,ud:aux", {"ud_mlx5", "ud_verbs"})
-    test_ucx_aux_negative("ud_v,ud_v:aux", {"ud_verbs"})
-    test_ucx_aux_negative("ud_x,ud_x:aux", {"ud_mlx5"})
-    test_ucx_aux_negative("ud_verbs,ud_verbs:aux", {"ud_verbs"})
-    test_ucx_aux_negative("ud_mlx5,ud_mlx5:aux", {"ud_mlx5"})
+    # Test auxiliary transport negation
+    test_cases = [
+        ("ib", {"ud_mlx5", "ud_verbs"}),
+        ("ud,ud:aux", {"ud_mlx5", "ud_verbs"}),
+        ("ud_v,ud_v:aux", {"ud_verbs"}),
+        ("ud_x,ud_x:aux", {"ud_mlx5"}),
+        ("ud_verbs,ud_verbs:aux", {"ud_verbs"}),
+        ("ud_mlx5,ud_mlx5:aux", {"ud_mlx5"})
+    ]
+
+    for tls, forbidden_tls in test_cases:
+        test_ucx_tls_negative(tls, protocol="keepalive", forbidden_tls=forbidden_tls)
 
 parser = OptionParser()
 parser.add_option("-p", "--prefix", metavar="PATH", help = "root UCX directory")
