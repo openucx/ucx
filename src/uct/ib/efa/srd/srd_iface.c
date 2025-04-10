@@ -745,7 +745,6 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
         }
     }
 
-
     if (status != UCS_OK) {
         ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%d %s status=%s",
                   iface, ctl->id, ctl->ep_uuid, qpn, err_msg,
