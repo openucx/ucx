@@ -101,17 +101,18 @@ tl_aliases = {
 }
 
 @contextlib.contextmanager
-def _override_env(var_name, value):
-    if value is None:
-        yield
-        return
+def _override_env(env_vars):
+    prev_values = []
+    for var_name, value in env_vars:
+        if value is not None:
+            prev_values.append((var_name, os.getenv(var_name)))
+            os.putenv(var_name, value)
 
-    prev_value = os.getenv(var_name)
-    os.putenv(var_name, value)
     try:
         yield
     finally:
-        os.putenv(var_name, prev_value) if prev_value else os.unsetenv(var_name)
+        for var_name, prev_value in prev_values:
+            os.putenv(var_name, prev_value) if prev_value else os.unsetenv(var_name)
 
 def exec_cmd(cmd):
     if options.verbose:
@@ -135,10 +136,7 @@ def find_transport(dev=None, neps=1, override=0, tls="ib", protocol="am"):
         env_vars.append(("UCX_NET_DEVICES", dev))
 
     # Use context manager for all environment variables
-    with contextlib.ExitStack() as stack:
-        for var_name, var_value in env_vars:
-            stack.enter_context(_override_env(var_name, var_value))
-
+    with _override_env(env_vars):
         # Choose the appropriate arguments and grep pattern based on protocol type
         if protocol == "keepalive":
             args = ucx_info_eh_args
