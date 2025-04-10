@@ -23,7 +23,7 @@ const char *uct_srd_ctl_id_to_string(uct_srd_ctl_id_t id)
 
 static void uct_srd_dump_ctl_hdr(char *p, char *endp, uct_srd_ctl_hdr_t *ctl)
 {
-    ssize_t n;
+    ssize_t UCS_V_UNUSED n;
 
     n = snprintf(p, endp - p, " %s qpn %d ep_uuid %" PRIx64 " ",
                  uct_srd_ctl_id_to_string(ctl->id),
@@ -43,7 +43,7 @@ void uct_srd_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
     uct_srd_hdr_t *hdr = data;
     char *p, *endp;
     int am_id;
-    ssize_t n;
+    ssize_t UCS_V_UNUSED n;
 
     p    = buffer;
     endp = buffer + max;
