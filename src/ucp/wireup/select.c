@@ -1573,7 +1573,7 @@ ucp_proto_select_info_score_compare(const void *e1, const void *e2,
         return -score_cmp;
     }
 
-    if (*(int *)is_local) {
+    if (*(int*)is_local) {
         key_cmp1 = info1->rsc_index - info2->rsc_index;
         key_cmp2 = info1->addr_index - info2->addr_index;
     } else {
