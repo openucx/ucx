@@ -1566,7 +1566,7 @@ ucp_proto_select_info_score_compare(const void *e1, const void *e2,
 {
     const ucp_wireup_select_info_t *info1 = e1;
     const ucp_wireup_select_info_t *info2 = e2;
-    int score_cmp;
+    int score_cmp, key_cmp1, key_cmp2;
 
     score_cmp = ucp_score_cmp(info1->score, info2->score);
     if (score_cmp != 0) {
@@ -1574,16 +1574,22 @@ ucp_proto_select_info_score_compare(const void *e1, const void *e2,
     }
 
     if (*(int *)is_local) {
-        if (info1->rsc_index != info2->rsc_index) {
-            return info1->rsc_index - info2->rsc_index;
-        }
+        key_cmp1 = info1->rsc_index - info2->rsc_index;
+        key_cmp2 = info1->addr_index - info2->addr_index;
     } else {
-        if (info1->addr_index != info2->addr_index) {
-            return info1->addr_index - info2->addr_index;
-        }
+        key_cmp1 = info1->addr_index - info2->addr_index;
+        key_cmp2 = info1->rsc_index - info2->rsc_index;
     }
 
-    return 0;
+    if (key_cmp1 != 0) {
+        return key_cmp1;
+    }
+
+    if (key_cmp2 != 0) {
+        return key_cmp2;
+    }
+
+    return info1->path_index - info2->path_index;
 }
 
 static unsigned
