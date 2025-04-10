@@ -468,6 +468,10 @@ int main(int argc, char **argv)
         CUDA_CALL(cuDevicePrimaryCtxRetain(&cu_ctx, cu_dev));
     }
 
+    if ((rank == 1) && (dev_count > 1)) {
+        CUDA_CALL(cuDeviceGet(&cu_dev, 1));
+    }
+
     ucs_log_push_handler(ucx_errors_and_warnings_counter);
 
     for (i = 0; i < array_size(tests); ++i) {
