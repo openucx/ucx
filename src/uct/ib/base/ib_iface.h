@@ -663,17 +663,17 @@ uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
 #define UCT_IB_IFACE_VERBS_COMPLETION_ERR(_type, _iface, _i,  _wc) \
     ucs_fatal("%s completion[%d] with error on %s/%p: %s, vendor_err 0x%x wr_id 0x%lx", \
               _type, _i, uct_ib_device_name(uct_ib_iface_device(_iface)), _iface, \
-              uct_ib_wc_status_str(_wc[i].status), _wc[i].vendor_err, \
-              _wc[i].wr_id);
+              uct_ib_wc_status_str(_wc[_i].status), _wc[_i].vendor_err, \
+              _wc[_i].wr_id);
 
 #define UCT_IB_IFACE_VERBS_FOREACH_RXWQE(_iface, _i, _hdr, _wc, _wc_count) \
     for (_i = 0; _i < _wc_count && ({ \
-        if (ucs_unlikely(_wc[i].status != IBV_WC_SUCCESS)) { \
+        if (ucs_unlikely(_wc[_i].status != IBV_WC_SUCCESS)) { \
             UCT_IB_IFACE_VERBS_COMPLETION_ERR("receive", _iface, _i, _wc); \
         } \
         _hdr = (typeof(_hdr))uct_ib_iface_recv_desc_hdr(_iface, \
-                                                      (uct_ib_iface_recv_desc_t *)(uintptr_t)_wc[i].wr_id); \
-        VALGRIND_MAKE_MEM_DEFINED(_hdr, _wc[i].byte_len); \
+                                                      (uct_ib_iface_recv_desc_t *)(uintptr_t)_wc[_i].wr_id); \
+        VALGRIND_MAKE_MEM_DEFINED(_hdr, _wc[_i].byte_len); \
                1; }); ++_i)
 
 #define UCT_IB_MAX_ZCOPY_LOG_SGE(_iface) \
