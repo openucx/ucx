@@ -1081,7 +1081,7 @@ run_gtest_bullseye() {
 	# Create a local Bullseye copy due to NFS instability
 	DEST_PATH="${WORKSPACE}/bullseye"
 	mkdir -p "$DEST_PATH"
-	rsync -az "$SRC_PATH/" "$DEST_PATH/" || true
+	cp -a "$SRC_PATH/." "$DEST_PATH/" || true
 
 	export PATH="$DEST_PATH/bin:$PATH"
 
@@ -1091,6 +1091,13 @@ run_gtest_bullseye() {
 		COV_DIR=/hpc/scrap/azure/bullseye/${BUILD_BUILDID}-${BUILD_BUILDNUMBER}
 		mkdir -p "$COV_DIR"
 		export COVFILE=$COV_DIR/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov
+		covselect --add '!*/test/**:*'	# Exclude /test directory
+
+		# Export Bullseye library path for linking
+		export LD_LIBRARY_PATH="$DEST_PATH/lib:$LD_LIBRARY_PATH"
+		# Set LDFLAGS to include Bullseye's library
+		export LDFLAGS="-L$DEST_PATH/lib -lcov $LDFLAGS"
+
 		cov01 --on
 	else
 		azure_log_warning "=== Skipping Bullseye: cov01 not found ==="
@@ -1102,7 +1109,9 @@ run_gtest_bullseye() {
 
 	if $BULLSEYE_ENABLED; then
 		cov01 --off
-		if ! covfn -f "${COVFILE}"; then
+		# Normalize workdir path to de-dup reports
+		sed -Ei 's|agent-[0-9]+|agent-00|g; s|/AZP_WORKSPACE/[0-9]+|/AZP_WORKSPACE/0|g' "${COVFILE}"
+		if ! covsrc -f "${COVFILE}"; then
 			azure_log_error "Bullseye report validation failed!"
 		fi
 	fi
