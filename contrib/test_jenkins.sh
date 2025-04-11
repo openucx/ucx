@@ -1070,6 +1070,53 @@ run_gtest_armclang() {
 	fi
 }
 
+run_gtest_bullseye() {
+	local BULLSEYE_ENABLED=false
+
+	case "$AGENT_OSARCHITECTURE" in
+		"ARM64") SRC_PATH="/auto/app/BullsEye/BullseyeCoverage-Latest-arm64" ;;
+		*)       SRC_PATH="/auto/app/BullsEye/BullseyeCoverage-Latest-x86" ;;
+	esac
+
+	# Create a local Bullseye copy due to NFS instability
+	DEST_PATH="${WORKSPACE}/bullseye"
+	mkdir -p "$DEST_PATH"
+	cp -a "$SRC_PATH/." "$DEST_PATH/" || true
+
+	export PATH="$DEST_PATH/bin:$PATH"
+
+	if command -v cov01 &> /dev/null; then
+		echo "=== Enable Bullseye instrumentation ==="
+		BULLSEYE_ENABLED=true
+		COV_DIR=/hpc/scrap/azure/bullseye/${BUILD_BUILDID}-${BUILD_BUILDNUMBER}
+		mkdir -p "$COV_DIR"
+		export COVFILE=$COV_DIR/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov
+		covselect --add '!*/test/**:*'	# Exclude /test directory
+
+		# Export Bullseye library path for linking
+		export LD_LIBRARY_PATH="$DEST_PATH/lib:$LD_LIBRARY_PATH"
+		# Set LDFLAGS to include Bullseye's library
+		export LDFLAGS="-L$DEST_PATH/lib -lcov $LDFLAGS"
+
+		cov01 --on
+	else
+		azure_log_warning "=== Skipping Bullseye: cov01 not found ==="
+	fi
+
+	# Always run Gtest
+	build devel --enable-gtest
+	run_gtest "default"
+
+	if $BULLSEYE_ENABLED; then
+		cov01 --off
+		# Normalize workdir path to de-dup reports
+		sed -Ei 's|agent-[0-9]+|agent-00|g; s|/AZP_WORKSPACE/[0-9]+|/AZP_WORKSPACE/0|g' "${COVFILE}"
+		if ! covsrc -f "${COVFILE}"; then
+			azure_log_error "Bullseye report validation failed!"
+		fi
+	fi
+}
+
 #
 # Run the test suite (gtest) in release configuration with small subset of tests
 #
@@ -1266,6 +1313,8 @@ then
         run_asan_check
     elif [[ "$VALGRIND_CHECK" == "yes" ]]; then
         run_valgrind_check
+    elif [[ "$RUN_BULLSEYE" == "yes" ]]; then
+        run_gtest_bullseye
     else
         run_tests
     fi
