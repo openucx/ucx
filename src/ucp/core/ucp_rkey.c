@@ -125,6 +125,7 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
     distance->bandwidth = UCS_FP8_UNPACK(BANDWIDTH, packed_distance->bandwidth);
 }
 
+/* context->mt_lock must be held */
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                  (context, md_map, memh, address, length, mem_info, sys_dev_map,
                   sys_distance, uct_flags, buffer),
@@ -641,7 +642,7 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
         return UCS_OK;
     }
 
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
+    UCP_THREAD_CS_ENTER(&context->mt_lock); // TODO
 
     size = ucp_memh_packed_size(memh, flags, rkey_compat);
 
