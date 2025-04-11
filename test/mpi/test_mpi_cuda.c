@@ -65,7 +65,7 @@ typedef struct {
 typedef struct {
     CUdeviceptr d_send;
     CUdeviceptr d_recv;
-    size_t size;
+    size_t      size;
 } thread_arg_t;
 
 const size_t sizes[] = {SIZE_S, SIZE_M, SIZE_L};
