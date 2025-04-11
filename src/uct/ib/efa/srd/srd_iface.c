@@ -19,17 +19,18 @@ static uct_iface_ops_t uct_srd_iface_tl_ops;
 
 
 void uct_srd_iface_post_send(uct_srd_iface_t *iface, struct ibv_ah *ah,
-                             int dest_qpn, struct ibv_send_wr *wr,
+                             int remote_qpn, struct ibv_send_wr *wr,
                              unsigned send_flags)
 {
     struct ibv_send_wr *bad_wr;
     int ret;
 
     wr->wr.ud.ah         = ah;
-    wr->wr.ud.remote_qpn = dest_qpn;
+    wr->wr.ud.remote_qpn = remote_qpn;
     wr->send_flags       = send_flags;
 
-    uct_ib_log_post_send(&iface->super, iface->qp, wr, 2, uct_srd_dump_packet);
+    uct_ib_log_post_send_one(&iface->super, iface->qp, wr, ah, remote_qpn, 2,
+                             uct_srd_dump_packet);
 
     ret = ibv_post_send(iface->qp, wr, &bad_wr);
     if (ucs_unlikely(ret != 0)) {
@@ -83,7 +84,7 @@ void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 /* Request the remote interface to create the address handler */
 ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
                                        uct_srd_ctl_id_t id, uint64_t ep_uuid,
-                                       struct ibv_ah *ah, int dest_qpn)
+                                       struct ibv_ah *ah, int remote_qpn)
 {
     ucs_status_t status;
     uct_srd_ctl_op_t *ctl_op;
@@ -99,8 +100,8 @@ ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
         goto err;
     }
 
-    ctl_op->ah       = ah;
-    ctl_op->dest_qpn = dest_qpn;
+    ctl_op->ah         = ah;
+    ctl_op->remote_qpn = remote_qpn;
 
     hdr          = (uct_srd_ctl_hdr_t*)(ctl_op + 1);
     hdr->id      = id;
@@ -121,8 +122,8 @@ ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
     return UCS_OK;
 
 err:
-    ucs_error("iface=%p id=%d ep_uuid=%" PRIx64 " ah=%p dest_qpn=%d %s", iface,
-              id, ep_uuid, ah, dest_qpn, err_msg);
+    ucs_error("iface=%p id=%d ep_uuid=%" PRIx64 " ah=%p remote_qpn=%d %s",
+              iface, id, ep_uuid, ah, remote_qpn, err_msg);
     return status;
 }
 
@@ -155,7 +156,7 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
     iface->tx.wr_inl.wr_id   = (uintptr_t)send_op;
     iface->tx.wr_inl.num_sge = 1;
 
-    uct_srd_iface_post_send(iface, ctl_op->ah, ctl_op->dest_qpn,
+    uct_srd_iface_post_send(iface, ctl_op->ah, ctl_op->remote_qpn,
                             &iface->tx.wr_inl, IBV_SEND_INLINE);
     iface->tx.available--;
     ucs_list_add_tail(&iface->tx.outstanding_list, &send_op->list);

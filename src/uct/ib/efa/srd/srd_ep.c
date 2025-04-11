@@ -38,6 +38,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     self->psn        = UCT_SRD_INITIAL_PSN;
     self->inflight   = 0;
     self->ah_added   = 0;
+    ucs_arbiter_group_init(&self->pending_group);
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
                                         self->path_index, &ah_attr, &path_mtu);
@@ -60,8 +61,6 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
         uct_srd_iface_remove_ep(iface, self);
         return status;
     }
-
-    ucs_arbiter_group_init(&self->pending_group);
 
     ucs_debug(UCT_IB_IFACE_FMT
               " ep=%p gid=%s qpn=0x%x ep_uuid=0x%"PRIx64" connected "
@@ -106,24 +105,17 @@ static void uct_srd_ep_send_op_purge(uct_srd_ep_t *ep)
     }
 }
 
-/* Use for each send API, dispatch processing and pending add. */
-static int uct_srd_ep_can_tx(uct_srd_ep_t *ep, uct_srd_iface_t *iface)
-{
-    return ep->ah_added && uct_srd_iface_can_tx(iface);
-}
-
 ucs_status_t
 uct_srd_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req, unsigned flags)
 {
     uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
     uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
 
-    if (uct_srd_ep_can_tx(ep, iface)) {
+    if (ep->ah_added && uct_srd_iface_can_tx(iface)) {
         return UCS_ERR_BUSY;
     }
 
     uct_pending_req_arb_group_push(&ep->pending_group, req);
-    ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->pending_group);
     ucs_trace_data("iface=%p ep=%p: added pending req=%p psn=%u", iface, ep,
                    req, ep->psn);
     UCT_TL_EP_STAT_PEND(&ep->super);
@@ -141,11 +133,11 @@ uct_srd_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_status_t status;
 
-    if (!uct_srd_ep_can_tx(ep, iface)) {
-        if (!ep->ah_added) {
-            return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
-        }
+    if (!ep->ah_added) {
+        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+    }
 
+    if (!uct_srd_iface_can_tx(iface)) {
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
@@ -237,7 +229,7 @@ uct_srd_ep_hdr_set(const uct_srd_ep_t *ep, uct_srd_hdr_t *neth, uint8_t id)
 }
 
 #define UCT_SRD_CHECK_RES_OR_RETURN(_ep, _iface) \
-    if (!uct_srd_ep_can_tx(_ep, _iface)) { \
+    if (!(_ep)->ah_added || !uct_srd_iface_can_tx(_iface)) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return UCS_ERR_NO_RESOURCE; \
     } \

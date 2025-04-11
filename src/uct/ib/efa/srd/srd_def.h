@@ -48,7 +48,7 @@ typedef struct uct_srd_ctl_hdr {
 typedef struct uct_srd_ctl_op {
     ucs_list_link_t list;     /* Entry in iface tx pending control list */
     struct ibv_ah   *ah;
-    int             dest_qpn;
+    uint32_t        remote_qpn;
 } uct_srd_ctl_op_t;
 
 
