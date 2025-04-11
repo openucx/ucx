@@ -24,10 +24,32 @@ typedef struct uct_srd_send_desc uct_srd_send_desc_t;
 
 
 typedef struct uct_srd_hdr {
+    uint8_t         id;      /* AM and flags */
     uint64_t        ep_uuid; /* Sender EP's random identifier */
     uct_srd_psn_t   psn;     /* Sender EP's packet sequence number */
-    uint8_t         id;      /* AM and flags */
 } UCS_S_PACKED uct_srd_hdr_t;
+
+
+typedef enum uct_srd_ctl_id {
+    UCT_SRD_CTL_ID_REQ = UCT_AM_ID_MAX,
+    UCT_SRD_CTL_ID_RESP
+} uct_srd_ctl_id_t;
+
+
+typedef struct uct_srd_ctl_hdr {
+    uint8_t         id;      /* Shared with @ref uct_srd_hdr_t::id */
+    uct_ib_uint24_t qpn;     /* Sender qpn */
+    uint64_t        ep_uuid;
+
+    /* packed device address follows */
+} UCS_S_PACKED uct_srd_ctl_hdr_t;
+
+
+typedef struct uct_srd_ctl_op {
+    ucs_queue_elem_t queue; /* Entry in iface tx pending control queue */
+    struct ibv_ah    *ah;
+    uint32_t         remote_qpn;
+} uct_srd_ctl_op_t;
 
 
 typedef struct uct_srd_am_short_hdr {
@@ -65,7 +87,6 @@ struct uct_srd_send_desc {
     uct_unpack_callback_t unpack_cb;
     void                  *unpack_arg;
     size_t                length;
-    uct_srd_hdr_t         hdr[];
 } UCS_V_ALIGNED(UCT_SRD_SEND_DESC_ALIGN);
 
 
