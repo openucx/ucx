@@ -535,23 +535,29 @@ public:
 
     enum op_type_t { OP_PUT, OP_GET, OP_ATOMIC };
 
-    void perform_nbx(op_type_t op, void *sbuf, size_t size, uint64_t target,
-                     ucp_rkey_h rkey) {
+    using fence_func_t = void (test_ucp_ep_based_fence::*)(op_type_t, void*,
+                                                           size_t, void*,
+                                                           ucp_rkey_h);
+
+    void do_rma_op(op_type_t op, void *sbuf, size_t size, void *target,
+                   ucp_rkey_h rkey) {
         ucp_request_param_t param = {0};
         ucs_status_ptr_t sptr;
 
         switch (op) {
         case OP_PUT:
-            sptr = ucp_put_nbx(sender().ep(), sbuf, size, target, rkey, &param);
+            sptr = ucp_put_nbx(sender().ep(), sbuf, size, (uint64_t)target,
+                               rkey, &param);
             break;
         case OP_GET:
-            sptr = ucp_get_nbx(sender().ep(), sbuf, size, target, rkey, &param);
+            sptr = ucp_get_nbx(sender().ep(), sbuf, size, (uint64_t)target,
+                               rkey, &param);
             break;
         case OP_ATOMIC:
             param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
             param.datatype = ucp_dt_make_contig(size);
             sptr = ucp_atomic_op_nbx(sender().ep(), UCP_ATOMIC_OP_ADD, sbuf, 1,
-                                     target, rkey, &param);
+                                     (uint64_t)target, rkey, &param);
             break;
         default:
             UCS_TEST_ABORT("Invalid operation type");
@@ -562,14 +568,15 @@ public:
         request_release(sptr);
     }
 
-    void perform_nbx_with_fence(op_type_t op, void *sbuf, size_t size,
-                                void *target, ucp_rkey_h rkey) {
-        perform_nbx(op, sbuf, size, (uint64_t)target, rkey);
+    void do_rma_op_with_fence(op_type_t op, void *sbuf, size_t size,
+                              void *target, ucp_rkey_h rkey) {
+        do_rma_op(op, sbuf, size, target, rkey);
         do_fence();
-        perform_nbx(op, sbuf, size, (uint64_t)target, rkey);
+        do_rma_op(op, sbuf, size, target, rkey);
     }
 
-    void test_ep_based_fence_common(op_type_t op) {
+    void test_ep_based_fence_common(op_type_t op,
+                                   fence_func_t fence_func) {
         mem_buffer sbuf(TEST_BUF_SIZE, UCS_MEMORY_TYPE_HOST);
         mapped_buffer rbuf(TEST_BUF_SIZE, receiver());
         rbuf.memset(0);
@@ -579,32 +586,67 @@ public:
         rbuf.rkey(sender(), rkey);
 
         if (op == OP_ATOMIC) {
-            perform_nbx_with_fence(op, sbuf.ptr(), sizeof(uint32_t), rbuf.ptr(),
-                                   rkey);
-            perform_nbx_with_fence(op, sbuf.ptr(), sizeof(uint64_t), rbuf.ptr(),
-                                   rkey);
+            (this->*fence_func)(op, sbuf.ptr(), sizeof(uint32_t), rbuf.ptr(),
+                                rkey);
+            (this->*fence_func)(op, sbuf.ptr(), sizeof(uint64_t), rbuf.ptr(),
+                                rkey);
         } else {
             for (size_t size = 1; size <= TEST_BUF_SIZE; size *= 10) {
-                perform_nbx_with_fence(op, sbuf.ptr(), size, rbuf.ptr(), rkey);
+                (this->*fence_func)(op, sbuf.ptr(), size, rbuf.ptr(), rkey);
             }
         }
 
         flush_workers();
+    }
+
+    void do_rma_op_with_fence_before(op_type_t op, void *sbuf, size_t size,
+                                     void *target, ucp_rkey_h rkey) {
+        do_fence();
+        do_rma_op(op, sbuf, size, target, rkey);
+
+        flush_worker(sender());
+        /*
+         * flush_worker() doesn't reset unflushed_lanes yet (planned).
+         * Manually clear unflushed_lanes to simulate a fence-before-op scenario
+         * (seen in verification).
+         * Multiple message sizes are used to trigger both weak and strong
+         * fences, requiring reset of unflushed_lanes after flush between
+         * iterations.
+         */
+        sender().ep()->ext->unflushed_lanes = 0;
     }
 private:
     static constexpr size_t TEST_BUF_SIZE = 1000000;
 };
 
 UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_put) {
-    test_ep_based_fence_common(OP_PUT);
+    test_ep_based_fence_common(
+        OP_PUT, &test_ucp_ep_based_fence::do_rma_op_with_fence);
 }
 
 UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_get) {
-    test_ep_based_fence_common(OP_GET);
+    test_ep_based_fence_common(
+        OP_GET, &test_ucp_ep_based_fence::do_rma_op_with_fence);
 }
 
 UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_atomic) {
-    test_ep_based_fence_common(OP_ATOMIC);
+    test_ep_based_fence_common(
+        OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_fence);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_put) {
+    test_ep_based_fence_common(
+        OP_PUT, &test_ucp_ep_based_fence::do_rma_op_with_fence_before);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_get) {
+    test_ep_based_fence_common(
+        OP_GET, &test_ucp_ep_based_fence::do_rma_op_with_fence_before);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
+    test_ep_based_fence_common(
+        OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_fence_before);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
