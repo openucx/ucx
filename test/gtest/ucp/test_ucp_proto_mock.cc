@@ -64,7 +64,7 @@ public:
             }
         }
 
-        FAIL() << "Transport " << tl_name << " not found";
+        UCS_TEST_SKIP_R("Transport " + std::string(tl_name) + " not found");
     }
 
 private:
@@ -507,13 +507,10 @@ protected:
 
 class test_ucp_proto_mock_rcx : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_rcx()
+    void init() override
     {
         mock_transport("rc_mlx5");
-    }
 
-    virtual void init() override
-    {
         /* Device with higher BW and latency */
         add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 2000;
@@ -633,13 +630,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
 
 class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_rcx2()
+    void init() override
     {
         mock_transport("rc_mlx5");
-    }
 
-    virtual void init() override
-    {
         /* Device with high BW and lower latency */
         add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
@@ -680,13 +674,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx2, rcx, "rc_x")
 
 class test_ucp_proto_mock_cma : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_cma()
-    {
-        mock_transport("cma");
-    }
-
     virtual void init() override
     {
+        mock_transport("cma");
         add_mock_iface();
         test_ucp_proto_mock::init();
     }
@@ -709,13 +699,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_cma, mm_cma, "posix,cma")
 
 class test_ucp_proto_mock_tcp : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_tcp()
-    {
-        mock_transport("tcp");
-    }
-
     virtual void init() override
     {
+        mock_transport("tcp");
         add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
             iface_attr.bandwidth.dedicated = 0;
             iface_attr.bandwidth.shared    = 100e9 / 8; /* 100Gb/s */
@@ -744,13 +730,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_tcp, tcp, "tcp")
 
 class test_ucp_proto_mock_self : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_self()
-    {
-        mock_transport("self");
-    }
-
     virtual void init() override
     {
+        mock_transport("self");
         add_mock_iface();
         test_ucp_proto_mock::init();
     }
@@ -772,13 +754,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_self, self, "self")
 
 class test_ucp_proto_mock_gpu : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_gpu()
-    {
-        mock_transport("rc_mlx5");
-    }
-
     virtual void init() override
     {
+        mock_transport("rc_mlx5");
         add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 28e9;
