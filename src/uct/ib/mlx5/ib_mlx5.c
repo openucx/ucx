@@ -81,6 +81,19 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zip_enable[UCT_IB_DIR_RX]),
      UCS_CONFIG_TYPE_BOOL},
 
+    {"MAX_MESSAGE_SIZE_STRIDES", "64",
+     "Max number of strides in a message received by a striding message-based SRQ.\n"
+     "This value may affect max_bcopy and max_zcopy values when message-based SRQ is used.",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, max_message_size_strides),
+     UCS_CONFIG_TYPE_UINT},
+
+    {"RX_CQ_LEN", "auto",
+     "Length of receive completion queue in the QPs.\n"
+     "Defaults to the same value as RX_QUEUE_LEN.\n"
+     "When striding message-based receive queue is used, it should be set to\n"
+     "the number of receive buffers multiplied by the number of strides.",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, rx_cq_len), UCS_CONFIG_TYPE_ULUNITS},
+
     {NULL}
 };
 
@@ -890,12 +903,11 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
 
 ucs_status_t
 uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                           size_t sg_byte_count, int sge_num)
+                           size_t sg_byte_count, int sge_num, int stride_size)
 {
     uct_ib_mlx5dv_srq_t srq_info = {};
     uct_ib_mlx5dv_t obj          = {};
     ucs_status_t status;
-    uint16_t stride;
 
     obj.dv.srq.in         = verbs_srq;
     obj.dv.srq.out        = &srq_info.dv;
@@ -919,10 +931,9 @@ uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
         return UCS_ERR_NO_DEVICE;
     }
 
-    stride = uct_ib_mlx5_srq_stride(sge_num);
-    if (srq_info.dv.stride != stride) {
-        ucs_error("SRQ stride is not %u (%d), sgenum %d",
-                  stride, srq_info.dv.stride, sge_num);
+    if (srq_info.dv.stride != stride_size) {
+        ucs_error("SRQ stride is not %u (%d), sgenum %d", stride_size,
+                  srq_info.dv.stride, sge_num);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -934,13 +945,14 @@ uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
     srq->buf = srq_info.dv.buf;
     srq->db  = srq_info.dv.dbrec;
     uct_ib_mlx5_srq_buff_init(srq, srq_info.dv.head, srq_info.dv.tail,
-                              sg_byte_count, sge_num);
+                              sg_byte_count, sge_num, sge_num, stride_size);
 
     return UCS_OK;
 }
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
-                               uint32_t tail, size_t sg_byte_count, int sge_num)
+                               uint32_t tail, size_t sg_byte_count, int sge_num,
+                               unsigned num_strides, int stride_size)
 {
     uct_ib_mlx5_srq_seg_t *seg;
     unsigned i, j;
@@ -949,7 +961,7 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     srq->ready_idx = UINT16_MAX;
     srq->sw_pi     = UINT16_MAX;
     srq->mask      = tail;
-    srq->stride    = uct_ib_mlx5_srq_stride(sge_num);
+    srq->stride    = stride_size;
 
     for (i = head; i <= tail; ++i) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, i);
@@ -957,7 +969,7 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
         seg->srq.ptr_mask       = 0;
         seg->srq.free           = 0;
         seg->srq.desc           = NULL;
-        seg->srq.strides        = sge_num;
+        seg->srq.strides        = num_strides;
         for (j = 0; j < sge_num; ++j) {
             seg->dptr[j].byte_count = htonl(sg_byte_count);
         }
