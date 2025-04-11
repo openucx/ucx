@@ -43,7 +43,7 @@ static uct_srd_ep_t *
 uct_srd_iface_get_ep(uct_srd_iface_t *iface, uint64_t ep_uuid)
 {
     khiter_t iter = kh_get(uct_srd_ep_hash, &iface->ep_hash, ep_uuid);
-    if (iter != kh_end(&iface->ep_hash)) {
+    if (ucs_unlikely(iter != kh_end(&iface->ep_hash))) {
         return kh_val(&iface->ep_hash, iter);
     }
 
@@ -82,9 +82,9 @@ void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 }
 
 /* Request the remote interface to create the address handler */
-ucs_status_t uct_srd_iface_ctl_trigger(uct_srd_iface_t *iface,
-                                       uct_srd_ctl_id_t id, uint64_t ep_uuid,
-                                       struct ibv_ah *ah, int remote_qpn)
+ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface,
+                                   uct_srd_ctl_id_t id, uint64_t ep_uuid,
+                                   struct ibv_ah *ah, int remote_qpn)
 {
     ucs_status_t status;
     uct_srd_ctl_op_t *ctl_op;
@@ -739,10 +739,10 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
     if (status != UCS_OK) {
         err_msg = "failed to create AH";
     } else {
-        status = uct_srd_iface_ctl_trigger(iface, UCT_SRD_CTL_ID_RESP,
-                                           ctl->ep_uuid, ah, qpn);
+        status = uct_srd_iface_ctl_add(iface, UCT_SRD_CTL_ID_RESP,
+                                       ctl->ep_uuid, ah, qpn);
         if (status != UCS_OK) {
-            err_msg = "failed to trigger ctl response";
+            err_msg = "failed to add ctl response";
         }
     }
 
