@@ -83,48 +83,46 @@ void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 
 /* Request the remote interface to create the address handler */
 ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface,
-                                   uct_srd_ctl_id_t id, uint64_t ep_uuid,
+                                   uct_srd_ctl_id_t ctl_id, uint64_t ep_uuid,
                                    struct ibv_ah *ah, int remote_qpn)
 {
     ucs_status_t status;
     uct_srd_ctl_op_t *ctl_op;
     uct_srd_ctl_hdr_t *hdr;
-    const char *err_msg;
 
     /* Construct a control operation to be queued */
     ctl_op = ucs_malloc(sizeof(*ctl_op) + sizeof(*hdr) + iface->super.addr_size,
                         "uct_srd_ctl_op_t");
     if (ctl_op == NULL) {
-        status  = UCS_ERR_NO_MEMORY;
-        err_msg = "failed to allocate ctl_op";
-        goto err;
+        ucs_error("iface=%p ctl_id=%d ep_uuid=%" PRIx64 " ah=%p remote_qpn=%d "
+                  "failed to allocate ctl_op",
+                  iface, ctl_id, ep_uuid, ah, remote_qpn);
+        return UCS_ERR_NO_MEMORY;
     }
 
     ctl_op->ah         = ah;
     ctl_op->remote_qpn = remote_qpn;
 
     hdr          = (uct_srd_ctl_hdr_t*)(ctl_op + 1);
-    hdr->id      = id;
+    hdr->id      = ctl_id;
     hdr->ep_uuid = ep_uuid;
     uct_ib_pack_uint24(hdr->qpn, iface->qp->qp_num);
 
-    if (id == UCT_SRD_CTL_ID_REQ) {
+    if (ctl_id == UCT_SRD_CTL_ID_REQ) {
         status = uct_ib_iface_get_device_address(&iface->super.super.super,
                                                  (uct_device_addr_t*)(hdr + 1));
         if (status != UCS_OK) {
-            err_msg = "failed to get device address";
+            ucs_error("iface=%p ctl_id=%d ep_uuid=%" PRIx64
+                      " ah=%p remote_qpn=%d failed to get device address %s",
+                      iface, ctl_id, ep_uuid, ah, remote_qpn,
+                      ucs_status_string(status));
             ucs_free(ctl_op);
-            goto err;
+            return status;
         }
     }
 
-    ucs_list_add_tail(&iface->tx.ctl_list, &ctl_op->list);
+    ucs_queue_push(&iface->tx.ctl_queue, &ctl_op->queue);
     return UCS_OK;
-
-err:
-    ucs_error("iface=%p id=%d ep_uuid=%" PRIx64 " ah=%p remote_qpn=%d %s",
-              iface, id, ep_uuid, ah, remote_qpn, err_msg);
-    return status;
 }
 
 static ucs_status_t
@@ -166,15 +164,18 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
 static void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface)
 {
     ucs_status_t status;
-    uct_srd_ctl_op_t *ctl_op, *next;
+    uct_srd_ctl_op_t *ctl_op;
 
-    ucs_list_for_each_safe(ctl_op, next, &iface->tx.ctl_list, list) {
+    while (!ucs_queue_is_empty(&iface->tx.ctl_queue)) {
+        ctl_op = ucs_queue_head_elem_non_empty(&iface->tx.ctl_queue,
+                                               uct_srd_ctl_op_t,
+                                               queue);
         status = uct_srd_iface_ctl_op_send(iface, ctl_op);
         if (status != UCS_OK) {
             break;
         }
 
-        ucs_list_del(&ctl_op->list);
+        ucs_queue_pull_non_empty(&iface->tx.ctl_queue);
         ucs_free(ctl_op);
     }
 }
@@ -350,9 +351,10 @@ static void uct_srd_iface_ctl_op_purge(uct_srd_iface_t *iface)
 {
     uct_srd_ctl_op_t *ctl_op;
 
-    while (!ucs_list_is_empty(&iface->tx.ctl_list)) {
-        ctl_op = ucs_list_extract_head(&iface->tx.ctl_list, uct_srd_ctl_op_t,
-                                       list);
+    while (!ucs_queue_is_empty(&iface->tx.ctl_queue)) {
+        ctl_op = ucs_queue_pull_elem_non_empty(&iface->tx.ctl_queue,
+                                               uct_srd_ctl_op_t,
+                                               queue);
         ucs_free(ctl_op);
     }
 }
@@ -447,7 +449,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_arbiter_init(&self->tx.pending_q);
     ucs_list_head_init(&self->tx.outstanding_list);
-    ucs_list_head_init(&self->tx.ctl_list);
+    ucs_queue_head_init(&self->tx.ctl_queue);
 
     status = uct_srd_iface_create_qp(self, config, &efa_attr);
     if (status != UCS_OK) {

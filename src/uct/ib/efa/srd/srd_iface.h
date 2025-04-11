@@ -72,7 +72,7 @@ typedef struct uct_srd_iface {
         ucs_mpool_t                  send_desc_mp;
         uct_srd_am_short_hdr_t       am_inl_hdr;
         ucs_list_link_t              outstanding_list;
-        ucs_list_link_t              ctl_list; /* pending CTL messages */
+        ucs_queue_head_t             ctl_queue; /* pending CTL messages */
     } tx;
 
     struct {
