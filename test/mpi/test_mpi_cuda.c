@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <mpi.h>
 #include <cuda.h>
+#include <pthread.h>
 
 #define SIZE_S 8
 #define SIZE_M 4 * 1024 * 1024
@@ -57,9 +58,15 @@ typedef struct {
 typedef struct {
     const char     *description;
     const unsigned min_gpus;
-    int (*func)(const allocator_t*, const allocator_t*, size_t, CUdevice);
+    const int      mthread_support;
+    const int (*func)(const allocator_t*, const allocator_t*, size_t, CUdevice);
 } test_t;
 
+typedef struct {
+    CUdeviceptr d_send;
+    CUdeviceptr d_recv;
+    size_t size;
+} thread_arg_t;
 
 const size_t sizes[] = {SIZE_S, SIZE_M, SIZE_L};
 
@@ -104,6 +111,17 @@ static int mpi_pingpong(CUdeviceptr d_send, CUdeviceptr d_recv, size_t size)
 
     res  = mpi_send_recv(0, d_send, d_recv, size);
     res += mpi_send_recv(1, d_send, d_recv, size);
+
+    return res;
+}
+
+static void *mpi_pingpong_thread(void *arg)
+{
+    thread_arg_t *thread_arg = arg;
+    int *res                 = malloc(sizeof(int));
+
+    *res = mpi_pingpong(thread_arg->d_send, thread_arg->d_recv,
+                        thread_arg->size);
 
     return res;
 }
@@ -313,6 +331,37 @@ static int test_alloc_prim_send_no(const allocator_t *allocator_send,
     return res;
 }
 
+static int test_alloc_prim_send_thread(const allocator_t *allocator_send,
+                                       const allocator_t *allocator_recv,
+                                       size_t size, CUdevice cu_dev)
+{
+    alloc_mem_t alloc_mem_send, alloc_mem_recv;
+    pthread_t thread;
+    thread_arg_t thread_arg;
+    void *thread_retval;
+    int res;
+
+    retain_and_push_primary_context(cu_dev);
+
+    alloc_mem_send = allocator_send->alloc(size);
+    alloc_mem_recv = allocator_recv->alloc(size);
+
+    thread_arg.d_send = alloc_mem_send.ptr;
+    thread_arg.d_recv = alloc_mem_recv.ptr;
+    thread_arg.size   = size;
+    pthread_create(&thread, NULL, mpi_pingpong_thread, &thread_arg);
+    pthread_join(thread, &thread_retval);
+    res = *(int*)thread_retval;
+    free(thread_retval);
+
+    allocator_send->free(&alloc_mem_send);
+    allocator_recv->free(&alloc_mem_recv);
+
+    pop_and_release_primary_context(cu_dev);
+
+    return res;
+}
+
 static int test_alloc_prim_send_user(const allocator_t *allocator_send,
                                      const allocator_t *allocator_recv,
                                      size_t size, CUdevice cu_dev)
@@ -403,19 +452,22 @@ static int test_alloc_prim_send_others_prim(const allocator_t *allocator_send,
 const test_t tests[] = {
     {"MPI pingpong, memory allocation and communication are performed with the "
      "same primary context set",
-     1, test_alloc_prim_send_prim},
+     1, 0, test_alloc_prim_send_prim},
     {"MPI pingpong, memory is allocated with the primary context set, "
      "communication is done with no context set",
-     1, test_alloc_prim_send_no},
+     1, 0,test_alloc_prim_send_no},
+    {"MPI pingpong, memory is allocated with the primary context set, "
+     "communication is done from a thread with no context set",
+     1, 1, test_alloc_prim_send_thread},
     {"MPI pingpong, memory is allocated with the primary context set, "
      "communication is done with the user context set",
-     1, test_alloc_prim_send_user},
+     1, 0, test_alloc_prim_send_user},
     {"MPI pingpong, memory is allocated with the user context set, "
      "communication is done with the primary context set",
-     1, test_alloc_user_send_prim},
+     1, 0,test_alloc_user_send_prim},
     {"MPI pingpong, memory is allocated with the primary context of GPU 0, "
      "communication is done with the primary contexts of all other GPUs",
-     2, test_alloc_prim_send_others_prim}
+     2, 0,test_alloc_prim_send_others_prim}
 };
 
 static int check_allocator(const allocator_t *allocator, CUdevice cu_dev)
@@ -436,6 +488,7 @@ static int check_allocator(const allocator_t *allocator, CUdevice cu_dev)
 
 int main(int argc, char **argv)
 {
+    int provided;
     int comm_size;
     int rank;
     int dev_count, dev_idx;
@@ -446,7 +499,7 @@ int main(int argc, char **argv)
     const allocator_t *allocator_send, *allocator_recv;
     int res;
 
-    MPI_Init(&argc, &argv);
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
     if (comm_size != 2) {
         PRINT_ROOT("This test requires 2 processes, not %d\n", comm_size);
@@ -484,7 +537,13 @@ int main(int argc, char **argv)
             continue;
         }
 
-        res = 0;
+        if (test->mthread_support && (provided != MPI_THREAD_MULTIPLE)) {
+            PRINT_ROOT("TEST[%d]: SKIP (multi-thread is not provided)\n", i);
+            continue;
+        }
+
+        res                           = 0;
+        total_ucx_errors_and_warnings = 0;
         for (j = 0; j < array_size(allocators); ++j) {
             allocator_send = allocators + j;
             if (!check_allocator(allocator_send, cu_dev)) {
@@ -522,6 +581,8 @@ int main(int argc, char **argv)
 
         PRINT_ROOT("TEST[%d]: %s\n", i, (res ? "FAIL" : "PASS"));
     }
+
+    ucs_log_pop_handler();
 
     for (dev_idx = 0; dev_idx < dev_count; ++dev_idx) {
         CUDA_CALL(cuDeviceGet(&cu_dev, dev_idx));
