@@ -171,7 +171,7 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
         if (ucs_unlikely(ep->ext->unflushed_lanes == 0)) {
             status = UCS_OK;
         } else if (ucs_likely(
-            ucs_is_pow2(ep->ext->unflushed_lanes | lane_map))) {
+            ucs_is_pow2_or_zero(ep->ext->unflushed_lanes | lane_map))) {
             status = ucp_ep_fence_weak(ep);
         } else {
             status = ucp_ep_fence_strong(ep);
