@@ -59,7 +59,7 @@ typedef struct {
     const char     *description;
     const unsigned min_gpus;
     const int      mthread_support;
-    const int (*func)(const allocator_t*, const allocator_t*, size_t, CUdevice);
+    int (*func)(const allocator_t*, const allocator_t*, size_t, CUdevice);
 } test_t;
 
 typedef struct {
@@ -455,7 +455,7 @@ const test_t tests[] = {
      1, 0, test_alloc_prim_send_prim},
     {"MPI pingpong, memory is allocated with the primary context set, "
      "communication is done with no context set",
-     1, 0,test_alloc_prim_send_no},
+     1, 0, test_alloc_prim_send_no},
     {"MPI pingpong, memory is allocated with the primary context set, "
      "communication is done from a thread with no context set",
      1, 1, test_alloc_prim_send_thread},
@@ -464,10 +464,10 @@ const test_t tests[] = {
      1, 0, test_alloc_prim_send_user},
     {"MPI pingpong, memory is allocated with the user context set, "
      "communication is done with the primary context set",
-     1, 0,test_alloc_user_send_prim},
+     1, 0, test_alloc_user_send_prim},
     {"MPI pingpong, memory is allocated with the primary context of GPU 0, "
      "communication is done with the primary contexts of all other GPUs",
-     2, 0,test_alloc_prim_send_others_prim}
+     2, 0, test_alloc_prim_send_others_prim}
 };
 
 static int check_allocator(const allocator_t *allocator, CUdevice cu_dev)
