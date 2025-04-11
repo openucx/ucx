@@ -141,6 +141,9 @@ typedef struct {
 
     /* Map of used lanes */
     ucp_lane_map_t lane_map;
+
+    /* Selections count */
+    unsigned       selections;
 } ucp_proto_query_attr_t;
 
 
