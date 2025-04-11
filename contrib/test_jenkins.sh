@@ -672,7 +672,7 @@ run_mpi_tests() {
 			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
 			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
-			build release --disable-gtest --with-mpi
+			build release-mt --with-mpi
 
 			# check whether installation is valid (it compiles examples at least)
 			$MAKEP installcheck

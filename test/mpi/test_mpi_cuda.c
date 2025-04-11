@@ -488,6 +488,11 @@ static int check_allocator(const allocator_t *allocator, CUdevice cu_dev)
 
 int main(int argc, char **argv)
 {
+#if ENABLE_MT
+    int required = MPI_THREAD_MULTIPLE;
+#else
+    int required = MPI_THREAD_SINGLE;
+#endif
     int provided;
     int comm_size;
     int rank;
@@ -499,7 +504,7 @@ int main(int argc, char **argv)
     const allocator_t *allocator_send, *allocator_recv;
     int res;
 
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    MPI_Init_thread(&argc, &argv, required, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
     if (comm_size != 2) {
         PRINT_ROOT("This test requires 2 processes, not %d\n", comm_size);
