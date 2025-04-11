@@ -168,8 +168,7 @@ static void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface)
 
     while (!ucs_queue_is_empty(&iface->tx.ctl_queue)) {
         ctl_op = ucs_queue_head_elem_non_empty(&iface->tx.ctl_queue,
-                                               uct_srd_ctl_op_t,
-                                               queue);
+                                               uct_srd_ctl_op_t, queue);
         status = uct_srd_iface_ctl_op_send(iface, ctl_op);
         if (status != UCS_OK) {
             break;
@@ -353,8 +352,7 @@ static void uct_srd_iface_ctl_op_purge(uct_srd_iface_t *iface)
 
     while (!ucs_queue_is_empty(&iface->tx.ctl_queue)) {
         ctl_op = ucs_queue_pull_elem_non_empty(&iface->tx.ctl_queue,
-                                               uct_srd_ctl_op_t,
-                                               queue);
+                                               uct_srd_ctl_op_t, queue);
         ucs_free(ctl_op);
     }
 }

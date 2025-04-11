@@ -122,9 +122,9 @@ ucs_status_t uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
 
 void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
 
-ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface,
-                                   uct_srd_ctl_id_t id, uint64_t ep_uuid,
-                                   struct ibv_ah *ah, int dest_qpn);
+ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface, uct_srd_ctl_id_t id,
+                                   uint64_t ep_uuid, struct ibv_ah *ah,
+                                   int dest_qpn);
 
 
 static UCS_F_ALWAYS_INLINE int

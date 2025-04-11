@@ -116,6 +116,7 @@ uct_srd_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req, unsigned flags)
     }
 
     uct_pending_req_arb_group_push(&ep->pending_group, req);
+    ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->pending_group);
     ucs_trace_data("iface=%p ep=%p: added pending req=%p psn=%u", iface, ep,
                    req, ep->psn);
     UCT_TL_EP_STAT_PEND(&ep->super);
@@ -407,7 +408,7 @@ ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
         return UCS_ERR_NO_MEMORY;
     }
 
-    hdr    = (uct_srd_hdr_t *)(desc + 1);
+    hdr    = (uct_srd_hdr_t*)(desc + 1);
     length = pack_cb(hdr + 1, arg);
     ucs_assertv((sizeof(uct_srd_hdr_t) + length) <=
                     iface->super.config.seg_size,

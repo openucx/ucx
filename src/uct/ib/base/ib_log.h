@@ -97,9 +97,8 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
 #define uct_ib_log_post_send_one(_iface, _qp, _wr, _ah, _remote_qpn, _max_sge, \
                                  _dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_log_post_send_one(__FILE__, __LINE__, __func__, \
-                                   _iface, _qp, _wr, _ah, _remote_qpn, \
-                                   _max_sge, _dump_cb); \
+        __uct_ib_log_post_send_one(__FILE__, __LINE__, __func__, _iface, _qp, \
+                                   _wr, _ah, _remote_qpn, _max_sge, _dump_cb); \
     }
 
 #define uct_ib_log_post_send(_iface, _qp, _wr, _max_sge, _dump_cb) \

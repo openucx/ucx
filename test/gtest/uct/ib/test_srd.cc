@@ -84,7 +84,7 @@ protected:
 
     void progress_ctl()
     {
-        while (!((uct_srd_ep_t *)m_e1->ep(0))->ah_added) {
+        while (!((uct_srd_ep_t*)m_e1->ep(0))->ah_added) {
             short_progress_loop();
         }
     }
