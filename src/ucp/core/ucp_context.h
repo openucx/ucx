@@ -277,7 +277,7 @@ typedef struct ucp_tl_resource_desc {
  */
 typedef struct ucp_tl_alias {
     const char                    *alias;   /* Alias name */
-    const char*                   tls[8];   /* Transports which are selected by the alias */
+    const char*                   tls[10];   /* Transports which are selected by the alias */
 } ucp_tl_alias_t;
 
 
