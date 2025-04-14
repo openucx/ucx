@@ -606,13 +606,12 @@ struct uct_ib_mlx5_odp_cap_bits {
 struct uct_ib_mlx5_adv_rdma_cap_bits {
     uint8_t   reserved_at_0[0x40];
 
-    uint8_t   mp_max_num_queues[0x8];
-    uint8_t   ps_user_context_max_log_size[0x8];
+    uint8_t   reserved_at_40[0x10];
     uint8_t   message_based_qp_and_striding_wq[0x8];
-    uint8_t   rx_ooo_psn_win_size[0x8];
+    uint8_t   reserved_at_58[0x8];
 
     uint8_t   max_receive_send_message_size_stride[0x10];
-    uint8_t   rdma_ctrl_max_num[0x10];
+    uint8_t   reserved_at_70[0x10];
 
     uint8_t   max_receive_send_message_size_byte[0x20];
 
