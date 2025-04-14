@@ -335,6 +335,47 @@ UCS_TEST_P(test_srd, get_bcopy)
     dstbuf.pattern_check(m_seed);
 }
 
+UCS_TEST_P(test_srd, put_zcopy)
+{
+    mapped_buffer srcbuf(4096, 0ul, *m_e1);
+    mapped_buffer dstbuf(4096, 0ul, *m_e2);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, srcbuf.ptr(), srcbuf.length(),
+                            srcbuf.memh(), 1);
+
+    progress_ctl();
+    srcbuf.pattern_fill(m_seed);
+    ucs_status_t status = uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt,
+                                           dstbuf.addr(), dstbuf.rkey(),
+                                           &m_comp);
+    ASSERT_UCS_STATUS_EQ(UCS_INPROGRESS, status);
+    wait_for_value(&m_comp.m_count, 1, true);
+    dstbuf.pattern_check(m_seed);
+}
+
+UCS_TEST_P(test_srd, put_bcopy)
+{
+    ssize_t size = 4096;
+    mapped_buffer srcbuf(size, 0ul, *m_e1);
+    mapped_buffer dstbuf(size, 0ul, *m_e2);
+
+    auto pack_put_bcopy = [](void *dest, void *arg) {
+        size_t length = 4096;
+        memcpy(dest, arg, length);
+        return length;
+    };
+
+    progress_ctl();
+    srcbuf.pattern_fill(m_seed);
+    ssize_t length = uct_ep_put_bcopy(m_e1->ep(0),
+                                      pack_put_bcopy,
+                                      srcbuf.ptr(),
+                                      dstbuf.addr(), dstbuf.rkey());
+    ASSERT_EQ(size, length);
+    short_progress_loop();
+    dstbuf.pattern_check(m_seed);
+}
+
 UCS_TEST_P(test_srd, get_bcopy_no_resource)
 {
     int i, count = 400;

@@ -401,22 +401,14 @@ uct_srd_ep_post_rma(uct_srd_iface_t *iface, uct_srd_ep_t *ep, int is_read,
 #endif
 }
 
-ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
-                                  size_t iovcnt, uint64_t remote_addr,
-                                  uct_rkey_t rkey, uct_completion_t *comp)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_srd_ep_rma_zcopy(uct_srd_ep_t *ep, uct_srd_iface_t *iface,
+                     const uct_iov_t *iov, size_t iovcnt,
+                     uint64_t remote_addr, uct_rkey_t rkey,
+                     uct_completion_t *comp, int is_read)
 {
-    uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
-    uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
-    size_t length          = uct_iov_total_length(iov, iovcnt);
-    size_t num_sge;
     uct_srd_send_op_t *send_op;
-    ucs_status_t status;
-
-    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_rdma_sge,
-                       "uct_srd_ep_get_zcopy");
-
-    UCT_CHECK_LENGTH(length, iface->super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
-                     iface->config.max_get_zcopy, "get_zcopy");
+    size_t num_sge;
 
     send_op = uct_srd_ep_get_send_op(iface, ep);
     if (send_op == NULL) {
@@ -427,8 +419,28 @@ ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     send_op->comp_cb   = uct_srd_ep_send_op_user_completion;
 
     num_sge = uct_ib_verbs_sge_fill_iov(iface->tx.sge, iov, iovcnt);
-    status = uct_srd_ep_post_rma(iface, ep, 1, send_op, iface->tx.sge, num_sge,
-                                 remote_addr, uct_ib_md_direct_rkey(rkey));
+    return uct_srd_ep_post_rma(iface, ep, is_read, send_op, iface->tx.sge,
+                               num_sge, remote_addr,
+                               uct_ib_md_direct_rkey(rkey));
+}
+
+ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp)
+{
+    uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
+    uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
+    size_t length          = uct_iov_total_length(iov, iovcnt);
+    ucs_status_t status;
+
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_rdma_sge,
+                       "uct_srd_ep_get_zcopy");
+    UCT_CHECK_LENGTH(length, iface->super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
+                     iface->config.max_get_zcopy, "get_zcopy");
+    UCT_SRD_CHECK_RMA_RES_OR_RETURN(ep, iface);
+
+    status = uct_srd_ep_rma_zcopy(ep, iface, iov, iovcnt, remote_addr, rkey,
+                                  comp, 1);
     if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(&ep->super, GET, ZCOPY, length);
     }
@@ -542,6 +554,68 @@ ssize_t uct_srd_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     iface->tx.sge[0].addr   = (uintptr_t)desc->hdr;
     iface->tx.sge[0].length = length;
     iface->tx.sge[0].lkey   = desc->lkey;
+
+    status = uct_srd_ep_post_rma(iface, ep, 0, &desc->super, iface->tx.sge, 1,
+                                 remote_addr, uct_ib_md_direct_rkey(rkey));
+    if (UCS_STATUS_IS_ERR(status)) {
+        return status;
+    }
+
+    UCT_TL_EP_STAT_OP(&ep->super, PUT, BCOPY, length);
+    return length;
+}
+
+ucs_status_t uct_srd_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp)
+{
+    uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
+    uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
+    size_t length          = uct_iov_total_length(iov, iovcnt);
+    ucs_status_t status;
+
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_rdma_sge,
+                       "uct_srd_ep_put_zcopy");
+    UCT_CHECK_LENGTH(length, 0,
+                     iface->config.max_put_zcopy, "put_zcopy");
+    UCT_SRD_CHECK_RMA_RES_OR_RETURN(ep, iface);
+
+    status = uct_srd_ep_rma_zcopy(ep, iface, iov, iovcnt, remote_addr, rkey,
+                                  comp, 0);
+    if (!UCS_STATUS_IS_ERR(status)) {
+        UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY, length);
+    }
+
+    return status;
+}
+
+ssize_t uct_srd_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                             void *arg, uint64_t remote_addr, uct_rkey_t rkey)
+{
+    uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
+    uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
+    uct_srd_send_desc_t *desc;
+    size_t length;
+    ucs_status_t status;
+
+    UCT_SRD_CHECK_RMA_RES_OR_RETURN(ep, iface);
+
+    desc = uct_srd_iface_get_send_desc(iface);
+    if (desc == NULL) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    length = pack_cb(desc + 1, arg);
+    ucs_assertv(length <= iface->super.config.seg_size,
+                "ep=%p put_bcopy_length=%zu seg_size=%d", ep, length,
+                iface->super.config.seg_size);
+
+    desc->super.comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
+    desc->super.ep      = ep;
+
+    iface->tx.sge[0].lkey   = desc->lkey;
+    iface->tx.sge[0].length = length;
+    iface->tx.sge[0].addr   = (uintptr_t)(desc + 1);
 
     status = uct_srd_ep_post_rma(iface, ep, 0, &desc->super, iface->tx.sge, 1,
                                  remote_addr, uct_ib_md_direct_rkey(rkey));

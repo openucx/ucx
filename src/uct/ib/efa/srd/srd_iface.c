@@ -625,6 +625,14 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.max_iov   = iface->config.max_rdma_sge;
     iface_attr->cap.put.min_zcopy = 0;
 
+    if (iface_attr->cap.put.max_bcopy > 0) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_PUT_BCOPY;
+    }
+
+    if (iface_attr->cap.put.max_zcopy > 0) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_PUT_ZCOPY;
+    }
+
     return status;
 }
 
