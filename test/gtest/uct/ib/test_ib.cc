@@ -805,6 +805,7 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
     for (int i = 0; i < num_devices; ++i) {
         const char *dev_name = ibv_get_device_name(ib_device_list[i]);
         uct_md_config_t *md_config;
+        uct_ib_md_t *ib_md;
         uct_ib_mlx5_md_t *ib_mlx5_md;
         uct_ib_device_t *dev;
         uct_md_h md;
@@ -824,6 +825,11 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
         EXPECT_UCS_OK(status);
         if (status != UCS_OK) {
             goto out_md_config_release;
+        }
+
+        ib_md = ucs_derived_of(md, uct_ib_md_t);
+        if (strcmp(ib_md->name, UCT_IB_MD_NAME(mlx5))) {
+            goto out_md_close; /* MD is not derived mlx5 md */
         }
 
         ib_mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
@@ -847,6 +853,7 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
             ucs_string_buffer_cleanup(&strb);
         }
 
+out_md_close:
         uct_md_close(md);
 
 out_md_config_release:
