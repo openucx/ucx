@@ -518,8 +518,7 @@ struct uct_ib_mlx5_cmd_hca_cap_2_bits {
     uint8_t    reserved_at_80[0x3];
     uint8_t    max_num_prog_sample_field[0x5];
     uint8_t    dp_ordering_force[0x1];
-    uint8_t    fw_cpu_monitoring[0x1];
-    uint8_t    enh_eth_striding_wq[0x1];
+    uint8_t    reserved_at_89[0x2];
     uint8_t    log_max_num_reserved_qpn[0x5];
     uint8_t    atomic_rate_pa[0x1];
     uint8_t    introspection_mkey_access_allowed[0x1];
@@ -1569,8 +1568,7 @@ struct uct_ib_mlx5_qpc_ext_bits {
     uint8_t         delay_drop_en[0x1];
     uint8_t         vl15[0x1];
     uint8_t         mmo[0x1];
-    uint8_t         error_syndrome_origin[0x1];
-    uint8_t         path_select_obj_id_valid[0x1];
+    uint8_t         reserved_at_3[0x2];
     uint8_t         receive_send_cqe_granularity[0x3];
     uint8_t         reserved_at_7[0x8];
     uint8_t         dci_stream_channel_id[0x10];
@@ -1579,14 +1577,12 @@ struct uct_ib_mlx5_qpc_ext_bits {
 
     uint8_t         qos_queue_group_id_responder[0x20];
 
-    uint8_t         error_syndrom[0x20];
+    uint8_t         reserved_at_80[0x20];
 
     uint8_t         max_receive_send_message_size[0x10];
-    uint8_t         mmo_type[0x10];
+    uint8_t         reserved_at_90[0x10];
 
-    uint8_t         path_select_obj_id[0x20];
-
-    uint8_t         reserved_at_c0[0x540];
+    uint8_t         reserved_at_a0[0x560];
 };
 
 struct uct_ib_mlx5_create_qp_out_bits {
