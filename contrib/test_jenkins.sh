@@ -1134,27 +1134,23 @@ run_gtest_armclang() {
 }
 
 run_gtest_bullseye() {
-	local BULLSEYE_ENABLED=false
-
 	case "$AGENT_OSARCHITECTURE" in
-		"ARM64") SRC_PATH="/auto/app/BullsEye/BullseyeCoverage-Latest-arm64" ;;
-		*)       SRC_PATH="/auto/app/BullsEye/BullseyeCoverage-Latest-x86" ;;
+		"ARM64") SRC_PATH="/auto/sw_tools/Bullseye/linux/linux64/9.14.2/aarch64/" ;;
+		*)       SRC_PATH="/auto/sw_tools/Bullseye/linux/linux64/9.14.2/amd64/" ;;
 	esac
 
 	# Create a local Bullseye copy due to NFS instability
 	DEST_PATH="${WORKSPACE}/bullseye"
 	mkdir -p "$DEST_PATH"
-	rsync -az "$SRC_PATH/" "$DEST_PATH/" || true
+	cp -a "$SRC_PATH/." "$DEST_PATH/" || true
 
 	export PATH="$DEST_PATH/bin:$PATH"
 
 	if command -v cov01 &> /dev/null; then
 		echo "=== Enable Bullseye instrumentation ==="
-		BULLSEYE_ENABLED=true
-		COV_DIR=/hpc/scrap/azure/bullseye/${BUILD_BUILDID}-${BUILD_BUILDNUMBER}
-		mkdir -p "$COV_DIR"
-		export COVFILE=$COV_DIR/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov
+		export COVFILE="$BUILD_ARTIFACTSTAGINGDIRECTORY/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov"
 		cov01 --on
+		covselect --add '!**/test/**:*'	# Exclude /test directory
 	else
 		azure_log_warning "=== Skipping Bullseye: cov01 not found ==="
 	fi
@@ -1163,11 +1159,12 @@ run_gtest_bullseye() {
 	build devel --enable-gtest
 	run_gtest "default"
 
-	if $BULLSEYE_ENABLED; then
+	if covsrc -f "${COVFILE}"; then
 		cov01 --off
-		if ! covfn -f "${COVFILE}"; then
-			azure_log_error "Bullseye report validation failed!"
-		fi
+		# Normalize workdir path to de-dup reports
+		sed -Ei 's|agent-[0-9]+|agent-00|g; s|/AZP_WORKSPACE/[0-9]+|/AZP_WORKSPACE/0|g' "${COVFILE}"
+	else
+		azure_log_error "Bullseye report validation failed!"
 	fi
 }
 
