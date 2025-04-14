@@ -146,8 +146,7 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    null_mkey[0x1];
     uint8_t    log_max_klm_list_size[0x6];
 
-    uint8_t    non_wire_sq[0x1];
-    uint8_t    ats_ro_dependence[0x1];
+    uint8_t    reserved_at_120[0x2];
     uint8_t    qpc_extension[0x1];
     uint8_t    reserved_at_123[0x7];
     uint8_t    log_max_ra_req_dc[0x6];
