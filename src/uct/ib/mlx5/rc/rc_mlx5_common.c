@@ -99,19 +99,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
                               uct_ib_mlx5_srq_seg_t *seg)
 {
-    int num_strides = iface->tm.mp.num_strides;
     uct_ib_iface_recv_desc_t *desc;
     uint64_t desc_map;
     void *hdr;
     int i;
 
-    ucs_assertv((iface->tm.mp.num_strides == 1) ||
-                        !uct_rc_mlx5_iface_is_srq_msg_based(iface),
-                "tm.mp.num_strides %d != 1, HW tag matching is not supported "
-                "when message-based srq is used",
-                iface->tm.mp.num_strides);
-
-    desc_map = ~seg->srq.ptr_mask & UCS_MASK(num_strides);
+    desc_map = ~seg->srq.ptr_mask & UCS_MASK(iface->tm.mp.num_strides);
     ucs_for_each_bit(i, desc_map) {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, return UCS_ERR_NO_MEMORY);
@@ -555,23 +548,12 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
     qp_attr->super.srq_num = srq->srq_num;
 }
 
-int uct_rc_mlx5_iface_stride_size(uct_rc_mlx5_iface_common_t *iface)
-{
-    if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
-        ucs_assert((iface->super.super.config.stride_size > 0) &&
-                   (iface->super.super.config.stride_size %
-                    UCS_SYS_CACHE_LINE_SIZE) == 0);
-        return iface->super.super.config.stride_size;
-    }
-
-    return uct_ib_mlx5_srq_stride(uct_rc_mlx5_num_strides(iface));
-}
-
 ucs_status_t
 uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                  const uct_rc_iface_common_config_t *rc_config)
 {
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
+    int num_strides;
     ucs_status_t status;
 
     ucs_assert(iface->config.srq_topo != UCT_RC_MLX5_SRQ_TOPO_CYCLIC);
@@ -582,10 +564,11 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
         goto err;
     }
 
+    num_strides = uct_rc_mlx5_num_strides(iface);
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        uct_rc_mlx5_num_strides(iface),
-                                        uct_rc_mlx5_iface_stride_size(iface));
+                                        num_strides,
+                                        uct_ib_mlx5_srq_stride(num_strides));
 
     if (status != UCS_OK) {
         goto err_free_srq;
@@ -960,6 +943,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     unsigned rndv_hdr_len)
 {
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
+    int num_strides;
     ucs_status_t status;
 
     ucs_assert(iface->config.srq_topo != UCT_RC_MLX5_SRQ_TOPO_CYCLIC);
@@ -992,11 +976,11 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     }
 
     iface->super.rx.srq.quota = srq_attr->attr.max_wr;
-
+    num_strides               = uct_rc_mlx5_num_strides(iface);
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        uct_rc_mlx5_num_strides(iface),
-                                        uct_rc_mlx5_iface_stride_size(iface));
+                                        num_strides,
+                                        uct_ib_mlx5_srq_stride(num_strides));
     if (status != UCS_OK) {
         goto err_free_srq;
     }

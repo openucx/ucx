@@ -224,7 +224,15 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     int len, max, stride, log_num_of_strides, wq_type;
 
-    stride = uct_rc_mlx5_iface_stride_size(iface);
+    if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
+        ucs_assert((iface->super.super.config.stride_size > 0) &&
+                   (iface->super.super.config.stride_size %
+                    UCS_SYS_CACHE_LINE_SIZE) == 0);
+        stride = iface->super.super.config.stride_size;
+    } else {
+        stride = uct_ib_mlx5_srq_stride(uct_rc_mlx5_num_strides(iface));
+    }
+
     max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len,
                                      iface->tm.mp.num_strides);
     max    = ucs_roundup_pow2(max);

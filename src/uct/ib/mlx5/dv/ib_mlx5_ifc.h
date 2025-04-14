@@ -410,21 +410,11 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
 
     uint8_t    num_of_uars_per_page[0x20];
 
-    uint8_t    flex_parser_protocols[0x20];
+    uint8_t    reserved_at_540[0x20];
 
-    uint8_t    max_geneve_tlv_options[0x8];
-    uint8_t    geneve_tlv_sample[0x1];
-    uint8_t    geneve_tlv_option_offset[0x1];
-    uint8_t    reserved_at_56a[0x1];
-    uint8_t    max_geneve_tlv_option_data_len[0x5];
-    uint8_t    flex_parser_header_modify[0x1];
+    uint8_t    reserved_at_560[0x11];
     uint8_t    adv_rdma_cap[0x1];
-    uint8_t    path_select_prov_cap[0x1];
-    uint8_t    log_max_guaranteed_connections[0x5];
-    uint8_t    driver_version_before_init_hca[0x1];
-    uint8_t    adv_virtualization[0x1];
-    uint8_t    driver_metadata_ptr[0x1];
-    uint8_t    log_max_dct_connections[0x5];
+    uint8_t    reserved_at_572[0xe];
 
     uint8_t    reserved_at_580[0xb];
     uint8_t    log_max_dci_stream_channels[0x5];
@@ -628,7 +618,7 @@ struct uct_ib_mlx5_adv_rdma_cap_bits {
 
     uint8_t   max_receive_send_message_size_byte[0x20];
 
-    uint8_t   reserved_at_a0[0x4e0];
+    uint8_t   reserved_at_a0[0x760];
 };
 
 union uct_ib_mlx5_hca_cap_union_bits {
@@ -1147,8 +1137,9 @@ struct uct_ib_mlx5_wq_bits {
 
     uint8_t         wq_umem_id[0x20];
 
-    uint8_t         reserved_at_180[0x90];
+    uint8_t         reserved_at_180[0x80];
 
+    uint8_t         reserved_at_200[0x10];
     uint8_t         enh_strwq_profile_id[0x10];
 
     uint8_t         reserved_at_220[0x3e0];
@@ -1612,31 +1603,31 @@ struct uct_ib_mlx5_create_qp_out_bits {
 };
 
 struct uct_ib_mlx5_create_qp_in_bits {
-    uint8_t                         opcode[0x10];
-    uint8_t                         uid[0x10];
+    uint8_t         opcode[0x10];
+    uint8_t         uid[0x10];
 
-    uint8_t                         reserved_at_20[0x10];
-    uint8_t                         op_mod[0x10];
+    uint8_t         reserved_at_20[0x10];
+    uint8_t         op_mod[0x10];
 
-    uint8_t                         qpc_ext[0x1];
-    uint8_t                         reserved_at_41[0x3f];
+    uint8_t         qpc_ext[0x1];
+    uint8_t         reserved_at_41[0x3f];
 
-    uint8_t                         opt_param_mask[0x20];
+    uint8_t         opt_param_mask[0x20];
 
-    uint8_t                         ece[0x20];
+    uint8_t         ece[0x20];
 
-    struct uct_ib_mlx5_qpc_bits     qpc;
+    struct uct_ib_mlx5_qpc_bits qpc;
 
-    uint8_t                         reserved_at_800[0x40];
+    uint8_t         reserved_at_800[0x40];
 
-    uint8_t                         wq_umem_id[0x20];
+    uint8_t         wq_umem_id[0x20];
 
-    uint8_t                         wq_umem_valid[0x1];
-    uint8_t                         reserved_at_861[0x1f];
+    uint8_t         wq_umem_valid[0x1];
+    uint8_t         reserved_at_861[0x1f];
 
     struct uct_ib_mlx5_qpc_ext_bits qpc_data_extension;
 
-    uint8_t                         pas_ext[0][0x40];
+    uint8_t         pas_ext[0][0x40];
 };
 
 struct uct_ib_mlx5_init2init_qp_out_bits {
