@@ -51,3 +51,8 @@ jobs:
           VALGRIND_CHECK: ${{ parameters.valgrind_check }}
           RUN_BULLSEYE: ${{ parameters.run_bullseye }}
           RUNNING_IN_AZURE: yes
+
+      - ${{ if eq(parameters.run_bullseye, 'yes') }}:
+        - publish: $(Build.ArtifactStagingDirectory)
+          artifact: Bullseye_partial_${{ parameters.name }}_$(worker_id)
+          displayName: Publish Bullseye coverage files
