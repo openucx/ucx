@@ -347,13 +347,14 @@ ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     return length;
 }
 
-#define UCT_SRD_EP_LOG_RMA(_iface, _ep, _send_op, _sge, _num_sge, \
+#define UCT_SRD_EP_LOG_RMA(_iface, _ep, _is_read, _send_op, _sge, _num_sge, \
                            _remote_addr, _rkey) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
         struct ibv_send_wr __wr = { \
             .wr_id               = (uintptr_t)(_send_op), \
             .send_flags          = 0, \
-            .opcode              = IBV_WR_RDMA_READ, \
+            .opcode              = (_is_read)? IBV_WR_RDMA_READ : \
+                                               IBV_WR_RDMA_WRITE, \
             .wr.rdma.remote_addr = (_remote_addr), \
             .wr.rdma.rkey        = (_rkey), \
             .sg_list             = (struct ibv_sge*)(_sge), \
@@ -366,18 +367,24 @@ ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_srd_ep_post_rma(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
+uct_srd_ep_post_rma(uct_srd_iface_t *iface, uct_srd_ep_t *ep, int is_read,
                     uct_srd_send_op_t *send_op, const struct ibv_sge *sge,
                     size_t num_sge, uint64_t remote_addr, uct_rkey_t rkey)
 {
-#ifdef HAVE_DECL_EFADV_DEVICE_ATTR_CAPS_RDMA_READ
+#ifdef HAVE_EFA_RMA
     struct ibv_qp_ex *qp_ex = iface->qp_ex;
 
-    UCT_SRD_EP_LOG_RMA(iface, ep, send_op, sge, num_sge, remote_addr, rkey);
+    UCT_SRD_EP_LOG_RMA(iface, ep, is_read, send_op, sge, num_sge, remote_addr,
+                       rkey);
 
     ibv_wr_start(qp_ex);
     qp_ex->wr_id = (uintptr_t)send_op;
-    ibv_wr_rdma_read(qp_ex, rkey, remote_addr);
+    if (is_read) {
+        ibv_wr_rdma_read(qp_ex, rkey, remote_addr);
+    } else {
+        ibv_wr_rdma_write(qp_ex, rkey, remote_addr);
+    }
+
     ibv_wr_set_sge_list(qp_ex, num_sge, sge);
     ibv_wr_set_ud_addr(qp_ex, ep->ah, ep->dest_qpn, UCT_IB_KEY);
     if (ibv_wr_complete(qp_ex)) {
@@ -405,7 +412,7 @@ ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     uct_srd_send_op_t *send_op;
     ucs_status_t status;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_recv_sge,
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_rdma_sge,
                        "uct_srd_ep_get_zcopy");
 
     UCT_CHECK_LENGTH(length, iface->super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
@@ -420,8 +427,8 @@ ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     send_op->comp_cb   = uct_srd_ep_send_op_user_completion;
 
     num_sge = uct_ib_verbs_sge_fill_iov(iface->tx.sge, iov, iovcnt);
-    status  = uct_srd_ep_post_rma(iface, ep, send_op, iface->tx.sge, num_sge,
-                                  remote_addr, uct_ib_md_direct_rkey(rkey));
+    status = uct_srd_ep_post_rma(iface, ep, 1, send_op, iface->tx.sge, num_sge,
+                                 remote_addr, uct_ib_md_direct_rkey(rkey));
     if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(&ep->super, GET, ZCOPY, length);
     }
@@ -468,11 +475,80 @@ ucs_status_t uct_srd_ep_get_bcopy(uct_ep_h tl_ep,
     iface->tx.sge[0].length = length;
     iface->tx.sge[0].addr   = (uintptr_t)(desc + 1);
 
-    status = uct_srd_ep_post_rma(iface, ep, &desc->super, iface->tx.sge, 1,
+    status = uct_srd_ep_post_rma(iface, ep, 1, &desc->super, iface->tx.sge, 1,
                                  remote_addr, uct_ib_md_direct_rkey(rkey));
     if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(&ep->super, GET, BCOPY, length);
     }
 
     return UCS_INPROGRESS;
+}
+
+ucs_status_t uct_srd_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp)
+{
+    uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
+    uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
+    size_t length          = uct_iov_total_length(iov, iovcnt);
+    uct_srd_send_op_t *send_op;
+    int num_sge;
+    ucs_status_t status;
+
+    UCT_CHECK_IOV_SIZE(iovcnt,
+                       ucs_min(UCT_IB_MAX_IOV, iface->config.max_rdma_sge),
+                       "uct_srd_ep_put_zcopy");
+    UCT_CHECK_LENGTH(length, 0, iface->config.max_put_zcopy, "put_zcopy");
+
+    send_op = uct_srd_ep_get_send_op(iface, ep);
+    if (send_op == NULL) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    send_op->user_comp = comp;
+    send_op->comp_cb   = uct_srd_ep_send_op_user_completion;
+    num_sge            = uct_ib_verbs_sge_fill_iov(iface->tx.sge, iov, iovcnt);
+
+    status = uct_srd_ep_post_rma(iface, ep, 0, send_op, iface->tx.sge, num_sge,
+                                 remote_addr, uct_ib_md_direct_rkey(rkey));
+    if (!UCS_STATUS_IS_ERR(status)) {
+        UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY, length);
+    }
+
+    return status;
+}
+
+ssize_t uct_srd_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                             void *arg, uint64_t remote_addr, uct_rkey_t rkey)
+{
+    uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
+    uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
+    uct_srd_send_desc_t *desc;
+    size_t length;
+    ucs_status_t status;
+
+    desc = uct_srd_ep_get_send_desc(iface, ep);
+    if (desc == NULL) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    length = pack_cb(desc->hdr, arg);
+    ucs_assertv(length <= iface->super.config.seg_size,
+                "ep=%p put_bcopy_length=%zu seg_size=%d", ep, length,
+                iface->super.config.seg_size);
+
+    desc->super.comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
+
+    iface->tx.sge[0].addr   = (uintptr_t)desc->hdr;
+    iface->tx.sge[0].length = length;
+    iface->tx.sge[0].lkey   = desc->lkey;
+
+    status = uct_srd_ep_post_rma(iface, ep, 0, &desc->super, iface->tx.sge, 1,
+                                 remote_addr, uct_ib_md_direct_rkey(rkey));
+    if (UCS_STATUS_IS_ERR(status)) {
+        return status;
+    }
+
+    UCT_TL_EP_STAT_OP(&ep->super, PUT, BCOPY, length);
+    return length;
 }

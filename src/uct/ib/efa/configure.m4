@@ -31,8 +31,14 @@ AS_IF([test "x$with_efa" != xno],
                     [AC_SUBST(EFA_LIB, [-lefa])],
                     [have_efa=no])
 
-       AC_CHECK_DECLS([EFADV_DEVICE_ATTR_CAPS_RDMA_READ],
-                      [], [], [#include <infiniband/efadv.h>])
+       have_efa_rma=no
+       AC_CHECK_DECLS([EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE,
+                       EFADV_DEVICE_ATTR_CAPS_RDMA_READ],
+                      [have_efa_rma=yes], [],
+                      [#include <infiniband/efadv.h>])
+
+       AS_IF([test "x$have_efa_rma" = xyes],
+             [AC_DEFINE([HAVE_EFA_RMA], 1, [EFA RMA operations])])
 
        AS_IF([test "x$have_efa" = xyes],
              [

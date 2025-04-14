@@ -44,7 +44,7 @@ KHASH_MAP_INIT_INT64(uct_srd_rx_ctx_hash, uct_srd_rx_ctx_t*);
 typedef struct uct_srd_iface {
     uct_ib_iface_t                   super;
     struct ibv_qp                    *qp;
-#ifdef HAVE_DECL_EFADV_DEVICE_ATTR_CAPS_RDMA_READ
+#ifdef HAVE_EFA_RMA
     struct ibv_qp_ex                 *qp_ex;
 #endif
     UCS_STATS_NODE_DECLARE(stats);
@@ -75,8 +75,11 @@ typedef struct uct_srd_iface {
         unsigned                     max_inline;
         size_t                       max_send_sge;
         size_t                       max_recv_sge;
+        size_t                       max_rdma_sge;
         size_t                       max_get_zcopy;
         size_t                       max_get_bcopy;
+        size_t                       max_put_zcopy;
+        size_t                       max_put_bcopy;
     } config;
 } uct_srd_iface_t;
 
