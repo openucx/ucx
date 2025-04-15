@@ -207,7 +207,7 @@ UCS_TEST_P(test_rc_iface_address, size_no_flush_remote)
     map_size_t sizes = {
         {"rc_mlx5", {7, 1}},
         {"dc_mlx5", {0, 5}},
-        {"rc_verbs", {7, 0}},
+        {"rc_verbs", {4, 0}},
         {"gga_mlx5", {7, 8}},
     };
     check_sizes(m_entity, sizes);
