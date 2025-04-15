@@ -172,7 +172,7 @@ static void uct_ib_dump_wr_opcode(struct ibv_qp *qp, uint64_t wr_id,
 
 static void uct_ib_dump_wr(struct ibv_qp *qp, uct_ib_opcode_t *op,
                            struct ibv_send_wr *wr, struct ibv_ah *ah,
-                           int remote_qpn, char *buf, size_t max)
+                           uint32_t remote_qpn, char *buf, size_t max)
 {
     char *s    = buf;
     char *ends = buf + max;
@@ -208,8 +208,8 @@ static void uct_ib_dump_wr(struct ibv_qp *qp, uct_ib_opcode_t *op,
 static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
                                 struct ibv_send_wr *wr, int max_sge,
                                 uct_log_data_dump_func_t data_dump,
-                                struct ibv_ah *ah, int remote_qpn, char *buf,
-                                size_t max)
+                                struct ibv_ah *ah, uint32_t remote_qpn,
+                                char *buf, size_t max)
 {
     static uct_ib_opcode_t opcodes[] = {
         [IBV_WR_RDMA_WRITE]           = { "RDMA_WRITE", UCT_IB_OPCODE_FLAG_HAS_RADDR },
@@ -256,7 +256,8 @@ void uct_ib_memlock_limit_msg(ucs_string_buffer_t *message, int sys_errno)
 void __uct_ib_log_post_send_one(const char *file, int line,
                                 const char *function, uct_ib_iface_t *iface,
                                 struct ibv_qp *qp, struct ibv_send_wr *wr,
-                                struct ibv_ah *ah, int remote_qpn, int max_sge,
+                                struct ibv_ah *ah, uint32_t remote_qpn,
+                                int max_sge,
                                 uct_log_data_dump_func_t data_dump_cb)
 {
     char buf[256] = {0};
@@ -272,7 +273,7 @@ void __uct_ib_log_post_send(const char *file, int line, const char *function,
                             uct_log_data_dump_func_t data_dump_cb)
 {
     struct ibv_ah *ah;
-    int remote_qpn;
+    uint32_t remote_qpn;
 
     for (; wr != NULL; wr = wr->next) {
         if (qp->qp_type == IBV_QPT_UD) {
