@@ -553,7 +553,6 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                  const uct_rc_iface_common_config_t *rc_config)
 {
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
-    int num_strides;
     ucs_status_t status;
 
     ucs_assert(iface->config.srq_topo != UCT_RC_MLX5_SRQ_TOPO_CYCLIC);
@@ -564,11 +563,9 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
         goto err;
     }
 
-    num_strides = uct_rc_mlx5_num_strides(iface);
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        num_strides,
-                                        uct_ib_mlx5_srq_stride(num_strides));
+                                        iface->tm.mp.num_strides);
 
     if (status != UCS_OK) {
         goto err_free_srq;
@@ -943,7 +940,6 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     unsigned rndv_hdr_len)
 {
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
-    int num_strides;
     ucs_status_t status;
 
     ucs_assert(iface->config.srq_topo != UCT_RC_MLX5_SRQ_TOPO_CYCLIC);
@@ -976,11 +972,9 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     }
 
     iface->super.rx.srq.quota = srq_attr->attr.max_wr;
-    num_strides               = uct_rc_mlx5_num_strides(iface);
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
-                                        num_strides,
-                                        uct_ib_mlx5_srq_stride(num_strides));
+                                        iface->tm.mp.num_strides);
     if (status != UCS_OK) {
         goto err_free_srq;
     }

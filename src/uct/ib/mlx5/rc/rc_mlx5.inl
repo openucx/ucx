@@ -120,7 +120,8 @@ uct_rc_mlx5_stride_offset(uct_rc_mlx5_iface_common_t *iface,
                           struct mlx5_cqe64 *cqe, int poll_flags)
 {
     if (poll_flags & UCT_IB_MLX5_POLL_FLAG_MSG_BASED) {
-        return uct_ib_mlx5_cqe_stride_index(cqe) * iface->rx.srq.stride;
+        return uct_ib_mlx5_cqe_stride_index(cqe) *
+               iface->super.super.config.stride_size;
     }
 
     return 0;

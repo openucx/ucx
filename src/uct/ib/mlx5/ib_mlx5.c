@@ -901,13 +901,14 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
     return UCS_OK;
 }
 
-ucs_status_t
-uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                           size_t sg_byte_count, int sge_num, int stride_size)
+ucs_status_t uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq,
+                                        struct ibv_srq *verbs_srq,
+                                        size_t sg_byte_count, int sge_num)
 {
     uct_ib_mlx5dv_srq_t srq_info = {};
     uct_ib_mlx5dv_t obj          = {};
     ucs_status_t status;
+    uint16_t stride;
 
     obj.dv.srq.in         = verbs_srq;
     obj.dv.srq.out        = &srq_info.dv;
@@ -931,8 +932,9 @@ uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (srq_info.dv.stride != stride_size) {
-        ucs_error("SRQ stride is not %u (%d), sgenum %d", stride_size,
+    stride = uct_ib_mlx5_srq_stride(sge_num);
+    if (srq_info.dv.stride != stride) {
+        ucs_error("SRQ stride is not %u (%d), sgenum %d", stride,
                   srq_info.dv.stride, sge_num);
         return UCS_ERR_NO_DEVICE;
     }
@@ -945,7 +947,7 @@ uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
     srq->buf = srq_info.dv.buf;
     srq->db  = srq_info.dv.dbrec;
     uct_ib_mlx5_srq_buff_init(srq, srq_info.dv.head, srq_info.dv.tail,
-                              sg_byte_count, sge_num, sge_num, stride_size);
+                              sg_byte_count, sge_num, sge_num, stride);
 
     return UCS_OK;
 }
