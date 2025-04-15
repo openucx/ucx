@@ -186,6 +186,9 @@ resources:
     - container: centos10stream
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/centos10stream/builder:inbox
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu24_cuda_12_9
+      image: nvidia/cuda:12.9.0-devel-ubuntu24.04
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
 
 stages:
   - stage: Codestyle
