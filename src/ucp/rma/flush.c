@@ -243,7 +243,8 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
              * wireup is done because connect2iface does not create wireup_ep
              * without cm mode */
             ucs_assertv(!(req->send.flush.started_lanes &
-                          ucp_ep_config(ep)->p2p_lanes),
+                          ucp_ep_config(ep)->p2p_lanes) ||
+                        ep->worker->context->config.ext.on_demand_wireup,
                         "req=%p flush started_lanes=0x%" PRIx64
                         " p2p_lanes=0x%" PRIx64,
                         req, req->send.flush.started_lanes,
@@ -279,10 +280,10 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     ucs_assertv(lane != UCP_NULL_LANE, "ep=%p flush_req=%p lane=%d",
                 ep, req, lane);
 
-    status = uct_ep_flush(ucp_ep_get_lane(ep, lane), req->send.flush.uct_flags,
+    status = uct_ep_flush(ucp_ep_get_lane_raw(ep, lane), req->send.flush.uct_flags,
                           &req->send.state.uct_comp);
     ucp_trace_req(req, "flush ep %p lane[%d]=%p: %s", ep, lane,
-                  ucp_ep_get_lane(ep, lane), ucs_status_string(status));
+                  ucp_ep_get_lane_raw(ep, lane), ucs_status_string(status));
     if (status == UCS_OK) {
         ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
     } else if (status == UCS_INPROGRESS) {
@@ -300,7 +301,8 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     /* If the operation has not completed, and not started on all lanes, add
      * slow-path progress to resume */
     if (!completed &&
-        (req->send.flush.started_lanes != UCS_MASK(ucp_ep_num_lanes(ep)))) {
+        (req->send.flush.started_lanes !=
+         UCS_MASK(ucp_ep_num_valid_lanes(ep)))) {
         ucp_ep_flush_request_resched(ep, req);
     }
 

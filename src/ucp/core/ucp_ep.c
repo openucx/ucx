@@ -1301,7 +1301,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep)) {
             num_failed_tl_ep++;
         }
@@ -1324,7 +1324,7 @@ ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps, uct_ep_h failed_ep)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep        = ucp_ep_get_lane(ep, lane);
+        uct_ep        = ucp_ep_get_lane_raw(ep, lane);
         uct_eps[lane] = uct_ep;
 
         /* Set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
@@ -1949,9 +1949,7 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->dst_md_index == config_lane2->dst_md_index) &&
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types) &&
-           (config_lane1->seg_size == config_lane2->seg_size) &&
-           (1 || (flags & 0 /*UCP_EP_CONFIG_CMP_IGNORE_ADDR_INDEX*/) ||
-            (config_lane1->addr_index == config_lane2->addr_index));
+           (config_lane1->seg_size == config_lane2->seg_size);
 }
 
 static int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,

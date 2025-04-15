@@ -704,7 +704,9 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         goto out_free_addr;
     }
 
-    status = ucp_wireup_connect_local(ucp_ep, &addr, NULL, NULL);
+    status = ucp_wireup_connect_local(ucp_ep,
+                                      UCS_MASK(ucp_ep_num_lanes(ucp_ep)), &addr,
+                                      NULL, NULL);
     if (status != UCS_OK) {
         ucs_debug("ep %p: failed to connect lanes: %s", ucp_ep,
                   ucs_status_string(status));
@@ -1260,7 +1262,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         goto out_free_request;
     }
 
-    status = ucp_wireup_connect_local(ep, remote_addr, NULL, NULL);
+    status = ucp_wireup_connect_local(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
+                                      remote_addr, NULL, NULL);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to connect to remote address on "
                  "device %s, tl_bitmap " UCT_TL_BITMAP_FMT ", status %s",
@@ -1420,7 +1423,7 @@ ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
     uct_ep_h uct_ep;
     ucs_status_t status;
 
-    ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
+    ucs_assert(ucp_ep_get_lane_raw(ep, lane) == NULL);
 
     ucp_unpacked_address_for_each(ae, remote_address) {
         max_num_paths = ucs_max(max_num_paths, ae->dev_num_paths);
