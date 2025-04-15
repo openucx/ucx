@@ -10,8 +10,8 @@ extern "C" {
 }
 #include <list>
 
-#if HAVE_MLX5_DV
 #include <uct/ib/base/ib_md.h>
+#if HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
 #endif
 
@@ -153,18 +153,21 @@ public:
     }
 
     void check_skip_test_flush_remote() {
-#ifdef HAVE_MLX4_DV
         auto md = sender().md();
         if (std::string(md->component->name) == "ib") {
             auto ib_md = ucs_derived_of(md, uct_ib_md_t);
-            if (ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
-                auto mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
-                if (!(mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_KSM)) {
-                    UCS_TEST_SKIP_R("not supported");
-                }
+            if (!(ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
+                UCS_TEST_SKIP_R("mlx5 PRM not supported");
+            }
+
+#if HAVE_MLX5_DV
+            auto mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
+            if (!(mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_KSM))
+#endif
+            {
+                UCS_TEST_SKIP_R("mlx5 KSM not supported");
             }
         }
-#endif
 
         m_flush_flags = UCT_FLUSH_FLAG_REMOTE;
     }
