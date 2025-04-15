@@ -20,8 +20,8 @@ protected:
     static uct_cuda_ipc_rkey_t
     unpack_common(uct_md_h md, int64_t uuid, CUdeviceptr ptr, size_t size)
     {
+        uct_cuda_ipc_rkey_t rkey = {};
         uct_mem_h memh;
-        uct_cuda_ipc_rkey_t rkey;
         EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
         EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
                                          &rkey));
