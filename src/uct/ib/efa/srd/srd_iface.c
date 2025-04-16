@@ -161,7 +161,7 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
     return UCS_OK;
 }
 
-static void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface)
+void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface)
 {
     ucs_status_t status;
     uct_srd_ctl_op_t *ctl_op;
@@ -648,6 +648,12 @@ uct_srd_iface_poll_tx(uct_srd_iface_t *iface)
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
             status = uct_srd_wc_to_ucs_status(&wc[i]);
             iface->super.ops->handle_failure(&iface->super, &wc[i], status);
+
+            /*
+             * Purging send_op in failure handler could have released the
+             * EP fencing.
+             */
+            uct_srd_iface_pending_ctl_progress(iface);
         }
 
         uct_srd_ep_send_op_completion(send_op);
@@ -780,6 +786,7 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
             ep->flags |= UCT_SRD_EP_FLAG_AH_ADDED;
             ucs_arbiter_group_schedule(&iface->tx.pending_q,
                                        &ep->pending_group);
+            uct_srd_iface_pending_ctl_progress(iface);
         } else {
             ucs_debug("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%u received ctl "
                       "response without a local endpoint",
@@ -867,8 +874,8 @@ static unsigned uct_srd_iface_progress(uct_iface_h tl_iface)
         count = uct_srd_iface_poll_tx(iface);
     }
 
-    uct_srd_iface_ctl_op_progress(iface);
-    ucs_arbiter_dispatch(&iface->tx.pending_q, 1, uct_srd_ep_do_pending, NULL);
+    /* Poll RX might schedule CTL_RESP */
+    uct_srd_iface_pending_ctl_progress(iface);
     return count;
 }
 

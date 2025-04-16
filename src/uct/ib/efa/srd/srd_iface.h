@@ -131,6 +131,8 @@ ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface, uct_srd_ctl_id_t id,
                                    uint64_t ep_uuid, struct ibv_ah *ah,
                                    uint32_t dest_qpn);
 
+void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface);
+
 
 static UCS_F_ALWAYS_INLINE int
 uct_srd_iface_can_tx(const uct_srd_iface_t *iface)
@@ -157,8 +159,19 @@ static UCS_F_ALWAYS_INLINE void
 uct_srd_iface_check_pending(uct_srd_iface_t *iface, ucs_arbiter_group_t *group)
 {
     ucs_assertv(iface->tx.in_pending || ucs_arbiter_group_is_empty(group),
-                "iface=%p in_pending=%d arb_group_empty=%d", iface,
-                iface->tx.in_pending, ucs_arbiter_group_is_empty(group));
+                "iface=%p in_pending=%d arb_group_empty=%d tx_avail=%d "
+                "iface_in_fence=%d",
+                iface, iface->tx.in_pending, ucs_arbiter_group_is_empty(group),
+                iface->tx.available, iface->tx.in_fence);
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_srd_iface_pending_ctl_progress(uct_srd_iface_t *iface)
+{
+    /* Give priority to control message */
+    uct_srd_iface_ctl_op_progress(iface);
+    ucs_arbiter_dispatch(&iface->tx.pending_q, 1, uct_srd_ep_do_pending, NULL);
 }
 
 END_C_DECLS

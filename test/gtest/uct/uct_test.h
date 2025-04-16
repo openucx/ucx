@@ -473,7 +473,8 @@ protected:
     rc_verbs,           \
     dc_mlx5,            \
     ud_verbs,           \
-    ud_mlx5
+    ud_mlx5,            \
+    srd
 
 
 #define UCT_TEST_IB_AND_GGA_TLS \

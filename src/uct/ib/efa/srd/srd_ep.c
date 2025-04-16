@@ -135,6 +135,12 @@ void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
     ucs_list_del(&send_op->list);
 
     if (ep != NULL) {
+        if ((ep->flags & UCT_SRD_EP_FLAG_FENCE) &&
+            ucs_list_is_empty(&ep->outstanding_list)) {
+            iface = ucs_derived_of(ep->super.super.iface, uct_srd_iface_t);
+            uct_srd_iface_pending_ctl_progress(iface);
+        }
+
         comp_status = (ep->flags & UCT_SRD_EP_FLAG_CANCELED)?
                       UCS_ERR_CANCELED : UCS_OK;
 
@@ -145,8 +151,8 @@ void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
             flush_op = ucs_list_head(&ep->outstanding_list, uct_srd_send_op_t,
                                      list);
 
-            ucs_assertv(ep == flush_op->ep, "ep=%p send_op=%p send_op_ep=%p",
-                        ep, send_op, send_op->ep);
+            ucs_assertv(ep == flush_op->ep, "ep=%p send_op=%p flush_op_ep=%p",
+                        ep, send_op, flush_op->ep);
 
             if (flush_op->comp_cb != uct_srd_ep_send_op_flush_completion) {
                 break; /* Not a flush operation */
@@ -167,6 +173,10 @@ void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
             iface = ucs_derived_of(ep->super.super.iface, uct_srd_iface_t);
             iface->tx.in_fence--;
             ep->flags &= ~UCT_SRD_EP_FLAG_IFACE_FENCE;
+
+            if (iface->tx.in_fence == 0) {
+                uct_srd_iface_pending_ctl_progress(iface);
+            }
         }
     }
 
@@ -228,6 +238,14 @@ uct_srd_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req, unsigned flags)
     if (uct_srd_ep_can_tx(ep, iface)) {
         return UCS_ERR_BUSY;
     }
+
+    /*
+     * To avoid following case:
+     *  - AM short without resource available, pending_add but not scheduled
+     *    as there is no AH added ACK, resources become available, and later
+     *    AM short erroneously succeeds.
+     */
+    ep->flags |= UCT_SRD_EP_FLAG_RMA;
 
     uct_pending_req_arb_group_push(&ep->pending_group, req);
     if (ucs_likely(ep->flags & UCT_SRD_EP_FLAG_AH_ADDED)) {

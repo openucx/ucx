@@ -739,6 +739,8 @@ UCS_TEST_P(test_srd, iface_fence_outstanding)
     m_e1->connect_to_iface(2, *m_e2);
     m_e1->connect_to_iface(3, *m_e3);
 
+    progress_ctl();
+
     int c = 1, count = 0;
     auto counter_func = [](void *arg, void *data, size_t length,
                            unsigned flags) {
