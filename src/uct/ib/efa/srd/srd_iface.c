@@ -138,7 +138,7 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
     /* Post the request, no action required on TX completion */
     send_op = ucs_mpool_get(&iface->tx.send_op_mp);
     if (send_op == NULL) {
-        ucs_debug("iface=%p send_op allocationd failed for ctl op send", iface);
+        ucs_error("iface=%p send_op allocationd failed for ctl op send", iface);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -157,7 +157,7 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
     uct_srd_iface_post_send(iface, ctl_op->ah, ctl_op->remote_qpn,
                             &iface->tx.wr_inl, IBV_SEND_INLINE);
     iface->tx.available--;
-    ucs_list_add_tail(&iface->tx.op_list, &send_op->list);
+    ucs_list_add_tail(&iface->tx.outstanding_list, &send_op->list);
     return UCS_OK;
 }
 
@@ -376,8 +376,9 @@ static void uct_srd_iface_send_op_purge(uct_srd_iface_t *iface)
 {
     uct_srd_send_op_t *send_op;
 
-    while (!ucs_list_is_empty(&iface->tx.op_list)) {
-        send_op = ucs_list_extract_head(&iface->tx.op_list, uct_srd_send_op_t,
+    while (!ucs_list_is_empty(&iface->tx.outstanding_list)) {
+        send_op = ucs_list_extract_head(&iface->tx.outstanding_list,
+                                        uct_srd_send_op_t,
                                         list);
 
         ucs_assertv(send_op->ep == NULL, "send_op_ep=%p", send_op->ep);
@@ -486,7 +487,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_arbiter_init(&self->tx.pending_q);
     ucs_queue_head_init(&self->tx.ctl_queue);
-    ucs_list_head_init(&self->tx.op_list);
+    ucs_list_head_init(&self->tx.outstanding_list);
 
     status = uct_srd_iface_create_qp(self, config, &efa_attr);
     if (status != UCS_OK) {

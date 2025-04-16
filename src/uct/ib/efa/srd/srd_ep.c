@@ -25,10 +25,6 @@ int uct_srd_ep_is_connected(const uct_ep_h tl_ep,
                                                   params->device_addr;
     const uct_srd_iface_addr_t *if_addr = (const uct_srd_iface_addr_t*)
                                                   params->iface_addr;
-    struct ibv_ah_attr ah_attr;
-    struct ibv_ah *ah;
-    enum ibv_mtu path_mtu;
-    ucs_status_t status;
 
     UCT_EP_IS_CONNECTED_CHECK_DEV_IFACE_ADDRS(params);
 
@@ -36,16 +32,7 @@ int uct_srd_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ep->path_index,
-                                        &ah_attr, &path_mtu);
-
-    status = uct_ib_device_get_ah_cached(uct_ib_iface_device(ib_iface),
-                                         &ah_attr, &ah);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    return ah == ep->ah;
+    return uct_ib_iface_is_connected(ib_iface, ib_addr, ep->path_index, ep->ah);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
@@ -210,7 +197,7 @@ void uct_srd_ep_send_op_purge(uct_srd_ep_t *ep)
         }
     }
 
-    ucs_list_splice_tail(&iface->tx.op_list, &ep->outstanding_list);
+    ucs_list_splice_tail(&iface->tx.outstanding_list, &ep->outstanding_list);
     ucs_list_head_init(&ep->outstanding_list);
     if (ep->flags & UCT_SRD_EP_FLAG_IFACE_FENCE) {
         iface->tx.in_fence--;
@@ -703,7 +690,7 @@ uct_srd_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         /* Empty the pending */
-        uct_ep_pending_purge(tl_ep, NULL, 0);
+        uct_srd_ep_pending_purge(tl_ep, NULL, 0);
 
         /*
          * Cancel the endpoint, but flush send_op will still wait for existing
@@ -716,7 +703,9 @@ uct_srd_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     if (ucs_list_is_empty(&ep->outstanding_list)) {
         UCT_TL_EP_STAT_FLUSH(&ep->super);
         return UCS_OK;
-    } else if (comp == NULL) {
+    }
+
+    if (comp == NULL) {
         goto out;
     }
 
