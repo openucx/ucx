@@ -64,6 +64,7 @@ typedef struct uct_srd_iface {
     struct {
         int32_t                      available;
         int                          in_pending;
+        int                          in_fence;   /* Number of EP under iface_fence */
         ucs_arbiter_t                pending_q;
         struct ibv_sge               sge[UCT_IB_MAX_IOV];
         struct ibv_send_wr           wr_inl;
@@ -71,8 +72,12 @@ typedef struct uct_srd_iface {
         ucs_mpool_t                  send_op_mp;
         ucs_mpool_t                  send_desc_mp;
         uct_srd_am_short_hdr_t       am_inl_hdr;
-        ucs_list_link_t              outstanding_list;
-        ucs_queue_head_t             ctl_queue; /* pending CTL messages */
+
+        /* Pending control messages */
+        ucs_queue_head_t             ctl_queue;
+
+        /* Send operations without an endpoint, order does not matter here */
+        ucs_list_link_t              op_list;
     } tx;
 
     struct {
