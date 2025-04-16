@@ -79,7 +79,7 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
 {
     uct_ib_iface_recv_desc_t *desc;
     uct_rc_hdr_t *hdr;
-    unsigned i;
+    int i;
     ucs_status_t status;
     unsigned num_wcs = iface->super.super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
