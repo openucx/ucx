@@ -678,6 +678,53 @@ UCS_TEST_P(test_ucp_proto_mock_rcx2, rndv_send_recv_small_frag,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx2, rcx, "rc_x")
 
+class test_ucp_proto_mock_rcx3 : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx3()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        /* Device with high BW and lower latency, but 0 get_zcopy.
+         * This use case is similar to cuda_ipc when NVLink is not available. */
+        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.cap.get.max_zcopy = 0;
+        });
+        /* Device with lower BW and higher latency */
+        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 24e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=2", "RNDV_THRESH=0")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    /* Check that get_zcopy is selected on slower device */
+    check_ep_config(sender(), {
+        {1,    3662,  "rendezvous fragmented copy-in copy-out", "rc_mlx5/mock_0:1"},
+        {3663, 53753, "rendezvous zero-copy read from remote",  "rc_mlx5/mock_1:1"},
+        {53754, INF,  "rendezvous zero-copy fenced write to remote",
+         "54% on rc_mlx5/mock_0:1 and 46% on rc_mlx5/mock_1:1"},
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx3, rcx, "rc_x")
+
 class test_ucp_proto_mock_cma : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_cma()
