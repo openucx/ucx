@@ -37,16 +37,29 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->psn        = UCT_SRD_INITIAL_PSN;
     self->inflight   = 0;
+    self->ah_added   = 0;
+    self->dest_qpn   = uct_ib_unpack_uint24(if_addr->qp_num);
+
+    ucs_arbiter_group_init(&self->pending_group);
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
                                         self->path_index, &ah_attr, &path_mtu);
     status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH",
                                     &self->ah);
     if (status != UCS_OK) {
-        return status;
+        goto err_arb_cleanup;
     }
 
-    self->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
+    status = uct_srd_iface_add_ep(iface, self);
+    if (status != UCS_OK) {
+        goto err_arb_cleanup;
+    }
+
+    status = uct_srd_iface_ctl_add(iface, UCT_SRD_CTL_ID_REQ, self->ep_uuid,
+                                   self->ah, self->dest_qpn);
+    if (status != UCS_OK) {
+        goto err_remove_ep;
+    }
 
     ucs_debug(UCT_IB_IFACE_FMT
               " ep=%p gid=%s qpn=0x%x ep_uuid=0x%"PRIx64" connected "
@@ -57,6 +70,12 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(if_addr->qp_num));
     return UCS_OK;
+
+err_remove_ep:
+    uct_srd_iface_remove_ep(iface, self);
+err_arb_cleanup:
+    ucs_arbiter_group_cleanup(&self->pending_group);
+    return status;
 }
 
 void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
@@ -91,16 +110,113 @@ static void uct_srd_ep_send_op_purge(uct_srd_ep_t *ep)
     }
 }
 
+ucs_status_t
+uct_srd_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req, unsigned flags)
+{
+    uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
+    uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
+
+    if (ep->ah_added && uct_srd_iface_can_tx(iface)) {
+        return UCS_ERR_BUSY;
+    }
+
+    uct_pending_req_arb_group_push(&ep->pending_group, req);
+    if (ucs_likely(ep->ah_added)) {
+        ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->pending_group);
+    }
+
+    ucs_trace_data("iface=%p ep=%p: added pending req=%p psn=%u ah_added=%d",
+                   iface, ep, req, ep->psn, ep->ah_added);
+    UCT_TL_EP_STAT_PEND(&ep->super);
+    return UCS_OK;
+}
+
+ucs_arbiter_cb_result_t
+uct_srd_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                      ucs_arbiter_elem_t *elem, void *arg)
+{
+    uct_srd_ep_t *ep       = ucs_container_of(group, uct_srd_ep_t,
+                                              pending_group);
+    uct_srd_iface_t *iface = ucs_container_of(arbiter, uct_srd_iface_t,
+                                              tx.pending_q);
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    ucs_status_t status;
+
+    if (!ep->ah_added) {
+        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+    }
+
+    if (!uct_srd_iface_can_tx(iface)) {
+        return UCS_ARBITER_CB_RESULT_STOP;
+    }
+
+    ucs_trace_data("iface=%p ep=%p progressing pending request %p", iface, ep,
+                   req);
+#if UCS_ENABLE_ASSERT
+    iface->tx.in_pending = 1;
+#endif
+    status               = req->func(req);
+#if UCS_ENABLE_ASSERT
+    iface->tx.in_pending = 0;
+#endif
+    ucs_trace_data("iface=%p ep=%p status returned from progress pending: %s",
+                   iface, ep, ucs_status_string(status));
+
+    if (status == UCS_OK) {
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    } else if (status == UCS_INPROGRESS) {
+        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+    }
+
+    return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+}
+
+static ucs_arbiter_cb_result_t
+uct_srd_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                            ucs_arbiter_elem_t *elem, void *priv)
+{
+    uct_purge_cb_args_t *cb_args = priv;
+    uct_pending_req_t *req       = ucs_container_of(elem, uct_pending_req_t,
+                                                    priv);
+
+    if (cb_args->cb != NULL) {
+        cb_args->cb(req, cb_args->arg);
+    }
+
+    return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+}
+
+void uct_srd_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
+                              void *cb_arg)
+{
+    uct_srd_ep_t *ep         = ucs_derived_of(tl_ep, uct_srd_ep_t);
+    uct_srd_iface_t *iface   = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
+    uct_purge_cb_args_t args = {cb, cb_arg};
+
+    ucs_trace_func("ep=%p cb=%p cb_arg=%p", ep, cb, cb_arg);
+
+    ucs_arbiter_group_purge(&iface->tx.pending_q, &ep->pending_group,
+                            uct_srd_ep_pending_purge_cb, &args);
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
 {
+    uct_srd_iface_t *iface = ucs_derived_of(self->super.super.iface,
+                                            uct_srd_iface_t);
+
     ucs_trace_func("");
 
     if (self->inflight != 0) {
         uct_srd_ep_send_op_purge(self);
-        ucs_assertv(self->inflight == 0,
-                    "ep=%p failed to complete %u send operations",
-                    self, self->inflight);
+        if (ucs_unlikely(self->inflight != 0)) {
+            ucs_warn("iface=%p ep=%p failed to complete %u send operations",
+                     iface, self, self->inflight);
+        }
     }
+
+    uct_srd_iface_remove_ep(iface, self);
+    uct_srd_ep_pending_purge(&self->super.super, NULL, NULL);
+    ucs_arbiter_group_cleanup(&self->pending_group);
 }
 
 UCS_CLASS_DEFINE(uct_srd_ep_t, uct_base_ep_t);
@@ -115,61 +231,6 @@ uct_srd_ep_posted(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_srd_ep_post_send(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
-                     struct ibv_send_wr *wr, unsigned send_flags)
-{
-    struct ibv_send_wr *bad_wr;
-    int ret;
-
-    wr->wr.ud.remote_qpn = ep->dest_qpn;
-    wr->wr.ud.ah         = ep->ah;
-    wr->send_flags       = send_flags;
-
-    uct_ib_log_post_send(&iface->super, iface->qp, wr, 2, uct_srd_dump_packet);
-
-    ret = ibv_post_send(iface->qp, wr, &bad_wr);
-    if (ucs_unlikely(ret != 0)) {
-        ucs_fatal("ibv_post_send(iface=%p) returned %d bad_wr=%p (%m)", iface,
-                  ret, bad_wr);
-    }
-
-    uct_srd_ep_posted(iface, ep);
-    ep->psn++;
-}
-
-static UCS_F_ALWAYS_INLINE uct_srd_send_op_t *
-uct_srd_ep_get_send_op(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
-{
-    uct_srd_send_op_t *send_op = uct_srd_iface_get_send_op(iface);
-
-    if (ucs_unlikely(send_op == NULL)) {
-        ucs_trace_poll("iface=%p ep=%p has no send_op resource (psn=%u)",
-                       iface, ep, ep->psn);
-        UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-        return NULL;
-    }
-
-    send_op->ep = ep;
-    return send_op;
-}
-
-static UCS_F_ALWAYS_INLINE uct_srd_send_desc_t *
-uct_srd_ep_get_send_desc(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
-{
-    uct_srd_send_desc_t *send_desc = uct_srd_iface_get_send_desc(iface);
-
-    if (ucs_unlikely(send_desc == NULL)) {
-        ucs_trace_poll("iface=%p ep=%p has no send_desc resource (psn=%u)",
-                       iface, ep, ep->psn);
-        UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-        return NULL;
-    }
-
-    send_desc->super.ep = ep;
-    return send_desc;
-}
-
-static UCS_F_ALWAYS_INLINE void
 uct_srd_ep_hdr_set(const uct_srd_ep_t *ep, uct_srd_hdr_t *neth, uint8_t id)
 {
     neth->ep_uuid = ep->ep_uuid;
@@ -177,36 +238,55 @@ uct_srd_ep_hdr_set(const uct_srd_ep_t *ep, uct_srd_hdr_t *neth, uint8_t id)
     neth->id      = id;
 }
 
+#define UCT_SRD_CHECK_RES_OR_RETURN(_ep, _iface) \
+    if (!(_ep)->ah_added || !uct_srd_iface_can_tx(_iface)) { \
+        UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
+        return UCS_ERR_NO_RESOURCE; \
+    } \
+    uct_srd_iface_check_pending(_iface, &(_ep)->pending_group);
+
+
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_srd_ep_am_short_prepare(
         uct_srd_iface_t *iface, uct_srd_ep_t *ep, uint8_t id, size_t am_length)
 {
     uct_srd_am_short_hdr_t *am = &iface->tx.am_inl_hdr;
     uct_srd_send_op_t *send_op;
 
+    UCT_SRD_CHECK_RES_OR_RETURN(ep, iface);
+
     /* Use an internal send_op for am_short to track completion ordering */
-    send_op = uct_srd_ep_get_send_op(iface, ep);
+    send_op = ucs_mpool_get(&iface->tx.send_op_mp);
     if (send_op == NULL) {
-        return UCS_ERR_NO_RESOURCE;
+        return UCS_ERR_NO_MEMORY;
     }
 
     uct_srd_ep_hdr_set(ep, &am->srd_hdr, id);
-    send_op->comp_cb         = (uct_srd_send_op_comp_t)ucs_empty_function;
-    iface->tx.sge[0].addr    = (uintptr_t)am;
-    iface->tx.sge[0].length  = am_length;
-    iface->tx.wr_inl.wr_id   = (uintptr_t)send_op;
+    send_op->comp_cb        = (uct_srd_send_op_comp_t)ucs_empty_function;
+    send_op->ep             = ep;
+    iface->tx.sge[0].addr   = (uintptr_t)am;
+    iface->tx.sge[0].length = am_length;
+    iface->tx.wr_inl.wr_id  = (uintptr_t)send_op;
 
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_srd_ep_post_send(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
+                     struct ibv_send_wr *wr, unsigned send_flags)
+{
+    uct_srd_send_op_t *send_op = (uct_srd_send_op_t*)wr->wr_id;
+
+    uct_srd_iface_post_send(iface, ep->ah, ep->dest_qpn, wr, send_flags);
+    uct_srd_ep_posted(iface, ep);
+    ep->psn++;
+    ucs_list_add_tail(&iface->tx.outstanding_list, &send_op->list);
 }
 
 static UCS_F_ALWAYS_INLINE void uct_srd_ep_am_short_post(uct_srd_iface_t *iface,
                                                          uct_srd_ep_t *ep,
                                                          size_t length)
 {
-    uct_srd_send_op_t *send_op = (uct_srd_send_op_t*)iface->tx.wr_inl.wr_id;
-
     uct_srd_ep_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE);
-    ucs_list_add_tail(&iface->tx.outstanding_list, &send_op->list);
-
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, length);
 }
 
@@ -271,14 +351,12 @@ static void uct_srd_ep_send_op_user_completion(uct_srd_send_op_t *send_op,
 static void uct_srd_ep_send_desc_tx(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
                                     uct_srd_send_desc_t *desc, size_t length)
 {
-    iface->tx.sge[0].addr   = (uintptr_t)desc->hdr;
-    iface->tx.sge[0].length = sizeof(*desc->hdr) + length;
+    iface->tx.sge[0].addr   = (uintptr_t)(desc + 1);
+    iface->tx.sge[0].length = sizeof(uct_srd_hdr_t) + length;
     iface->tx.sge[0].lkey   = desc->lkey;
     iface->tx.wr_desc.wr_id = (uintptr_t)&desc->super;
 
     uct_srd_ep_post_send(iface, ep, &iface->tx.wr_desc, 0);
-
-    ucs_list_add_tail(&iface->tx.outstanding_list, &desc->super.list);
 }
 
 ucs_status_t uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
@@ -288,6 +366,7 @@ ucs_status_t uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
 {
     uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
     uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
+    uct_srd_hdr_t *hdr;
     size_t length;
     uct_srd_send_desc_t *desc;
 
@@ -295,18 +374,22 @@ ucs_status_t uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                        ucs_min(UCT_IB_MAX_IOV, iface->config.max_send_sge) - 1,
                        "uct_srd_ep_am_zcopy");
     length = uct_iov_total_length(iov, iovcnt);
-    UCT_SRD_CHECK_AM_ZCOPY(iface, id, header_length, length);
 
-    desc = uct_srd_ep_get_send_desc(iface, ep);
+    UCT_SRD_CHECK_AM_ZCOPY(iface, id, header_length, length);
+    UCT_SRD_CHECK_RES_OR_RETURN(ep, iface);
+
+    desc = uct_srd_iface_get_send_desc(iface);
     if (desc == NULL) {
-        return UCS_ERR_NO_RESOURCE;
+        return UCS_ERR_NO_MEMORY;
     }
 
     desc->super.user_comp = comp;
     desc->super.comp_cb   = uct_srd_ep_send_op_user_completion;
+    desc->super.ep        = ep;
 
-    uct_srd_ep_hdr_set(ep, desc->hdr, id);
-    memcpy(desc->hdr + 1, header, header_length);
+    hdr = (uct_srd_hdr_t*)(desc + 1);
+    uct_srd_ep_hdr_set(ep, hdr, id);
+    memcpy(hdr + 1, header, header_length);
     iface->tx.wr_desc.num_sge = 1 + uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1,
                                                               iov, iovcnt);
     uct_srd_ep_send_desc_tx(iface, ep, desc, header_length);
@@ -323,23 +406,27 @@ ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_srd_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
     uct_srd_send_desc_t *desc;
     size_t length;
+    uct_srd_hdr_t *hdr;
 
     UCT_CHECK_AM_ID(id);
+    UCT_SRD_CHECK_RES_OR_RETURN(ep, iface);
 
-    desc = uct_srd_ep_get_send_desc(iface, ep);
+    desc = uct_srd_iface_get_send_desc(iface);
     if (desc == NULL) {
-        return UCS_ERR_NO_RESOURCE;
+        return UCS_ERR_NO_MEMORY;
     }
 
-    length = pack_cb(desc->hdr + 1, arg);
+    hdr    = (uct_srd_hdr_t*)(desc + 1);
+    length = pack_cb(hdr + 1, arg);
     ucs_assertv((sizeof(uct_srd_hdr_t) + length) <=
                     iface->super.config.seg_size,
-                "ep=%p am_bcopy_length=%zu seg_size=%d", ep,
+                "iface=%p ep=%p am_bcopy_length=%zu seg_size=%d", iface, ep,
                 sizeof(uct_srd_hdr_t) + length, iface->super.config.seg_size);
 
     desc->super.comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
+    desc->super.ep      = ep;
 
-    uct_srd_ep_hdr_set(ep, desc->hdr, id);
+    uct_srd_ep_hdr_set(ep, hdr, id);
     iface->tx.wr_desc.num_sge = 1;
     uct_srd_ep_send_desc_tx(iface, ep, desc, length);
 
@@ -410,14 +497,16 @@ ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 
     UCT_CHECK_LENGTH(length, iface->super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
                      iface->config.max_get_zcopy, "get_zcopy");
+    UCT_SRD_CHECK_RES_OR_RETURN(ep, iface);
 
-    send_op = uct_srd_ep_get_send_op(iface, ep);
+    send_op = ucs_mpool_get(&iface->tx.send_op_mp);
     if (send_op == NULL) {
-        return UCS_ERR_NO_RESOURCE;
+        return UCS_ERR_NO_MEMORY;
     }
 
     send_op->user_comp = comp;
     send_op->comp_cb   = uct_srd_ep_send_op_user_completion;
+    send_op->ep        = ep;
 
     num_sge = uct_ib_verbs_sge_fill_iov(iface->tx.sge, iov, iovcnt);
     status  = uct_srd_ep_post_rma(iface, ep, send_op, iface->tx.sge, num_sge,
@@ -452,10 +541,11 @@ ucs_status_t uct_srd_ep_get_bcopy(uct_ep_h tl_ep,
     ucs_status_t status;
 
     UCT_CHECK_LENGTH(length, 0, iface->config.max_get_bcopy, "get_bcopy");
+    UCT_SRD_CHECK_RES_OR_RETURN(ep, iface);
 
-    desc = uct_srd_ep_get_send_desc(iface, ep);
+    desc = uct_srd_iface_get_send_desc(iface);
     if (desc == NULL) {
-        return UCS_ERR_NO_RESOURCE;
+        return UCS_ERR_NO_MEMORY;
     }
 
     desc->unpack_arg      = arg;
@@ -463,6 +553,7 @@ ucs_status_t uct_srd_ep_get_bcopy(uct_ep_h tl_ep,
     desc->length          = length;
     desc->super.user_comp = comp;
     desc->super.comp_cb   = uct_srd_send_op_get_bcopy_completion;
+    desc->super.ep        = ep;
 
     iface->tx.sge[0].lkey   = desc->lkey;
     iface->tx.sge[0].length = length;
@@ -474,5 +565,5 @@ ucs_status_t uct_srd_ep_get_bcopy(uct_ep_h tl_ep,
         UCT_TL_EP_STAT_OP(&ep->super, GET, BCOPY, length);
     }
 
-    return UCS_INPROGRESS;
+    return status;
 }

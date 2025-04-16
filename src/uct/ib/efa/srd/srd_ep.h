@@ -11,13 +11,15 @@
 
 
 typedef struct uct_srd_ep {
-    uct_base_ep_t   super;
-    uint64_t        ep_uuid;          /* Random EP identifier */
-    uint32_t        dest_qpn;         /* Remote QP */
-    uint32_t        inflight;         /* Entries outstanding list */
-    struct ibv_ah   *ah;              /* Remote peer */
-    uct_srd_psn_t   psn;              /* Next PSN to send */
-    uint8_t         path_index;
+    uct_base_ep_t       super;
+    uint64_t            ep_uuid;       /* Random EP identifier */
+    uint32_t            dest_qpn;      /* Remote QP */
+    uint32_t            inflight;      /* Entries outstanding list */
+    struct ibv_ah       *ah;           /* Remote peer */
+    int                 ah_added;      /* true if remote has added our AH */
+    uct_srd_psn_t       psn;           /* Next PSN to send */
+    uint8_t             path_index;
+    ucs_arbiter_group_t pending_group; /* Queue of pending requests */
 } uct_srd_ep_t;
 
 
@@ -45,5 +47,13 @@ ucs_status_t uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                                  uct_completion_t *comp);
 
 void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op);
+
+ucs_status_t
+uct_srd_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req, unsigned flags);
+void uct_srd_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
+                              void *arg);
+ucs_arbiter_cb_result_t
+uct_srd_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                      ucs_arbiter_elem_t *elem, void *arg);
 
 #endif
