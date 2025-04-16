@@ -74,7 +74,8 @@ void __uct_ib_log_post_send(const char *file, int line, const char *function,
 void __uct_ib_log_post_send_one(const char *file, int line,
                                 const char *function, uct_ib_iface_t *iface,
                                 struct ibv_qp *qp, struct ibv_send_wr *wr,
-                                struct ibv_ah *ah, int remote_qn, int max_sge,
+                                struct ibv_ah *ah, uint32_t remote_qn,
+                                int max_sge,
                                 uct_log_data_dump_func_t data_dump_cb);
 
 void __uct_ib_log_recv_completion(const char *file, int line, const char *function,
@@ -93,6 +94,13 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
         ucs_log(_level, "%s: %s", ibv_get_device_name((_ibv_context)->device), \
                 ucs_string_buffer_cstr(&_msg)); \
     })
+
+#define uct_ib_log_post_send_one(_iface, _qp, _wr, _ah, _remote_qpn, _max_sge, \
+                                 _dump_cb) \
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
+        __uct_ib_log_post_send_one(__FILE__, __LINE__, __func__, _iface, _qp, \
+                                   _wr, _ah, _remote_qpn, _max_sge, _dump_cb); \
+    }
 
 #define uct_ib_log_post_send(_iface, _qp, _wr, _max_sge, _dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \

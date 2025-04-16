@@ -721,6 +721,7 @@ public:
             iface_attr.bandwidth.shared    = 100e9 / 8; /* 100Gb/s */
             iface_attr.latency.c           = 20e-6;
             iface_attr.latency.m           = 0;
+            iface_attr.cap.am.max_zcopy    = 64 * UCS_KBYTE;
         });
         test_ucp_proto_mock::init();
     }
