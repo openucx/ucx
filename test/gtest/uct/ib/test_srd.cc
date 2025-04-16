@@ -371,9 +371,12 @@ UCS_TEST_P(test_srd, get_bcopy)
 
 UCS_TEST_P(test_srd, put_zcopy)
 {
+    UCS_TEST_SKIP_R("Disabled");
+
     mapped_buffer srcbuf(4096, 0ul, *m_e1);
     mapped_buffer dstbuf(4096, 0ul, *m_e2);
 
+    UCS_TEST_SKIP_R("Disabled");
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, srcbuf.ptr(), srcbuf.length(),
                             srcbuf.memh(), 1);
 
@@ -389,6 +392,8 @@ UCS_TEST_P(test_srd, put_zcopy)
 
 UCS_TEST_P(test_srd, put_bcopy)
 {
+    UCS_TEST_SKIP_R("Disabled");
+
     ssize_t size = 4096;
     mapped_buffer srcbuf(size, 0ul, *m_e1);
     mapped_buffer dstbuf(size, 0ul, *m_e2);

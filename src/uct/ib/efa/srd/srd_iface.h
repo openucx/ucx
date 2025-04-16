@@ -79,7 +79,6 @@ typedef struct uct_srd_iface {
         unsigned                     tx_qp_len;
         unsigned                     max_inline;
         size_t                       max_send_sge;
-        size_t                       max_recv_sge;
         size_t                       max_rdma_sge;
         size_t                       max_get_zcopy;
         size_t                       max_get_bcopy;

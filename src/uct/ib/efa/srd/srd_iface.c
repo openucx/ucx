@@ -279,7 +279,6 @@ uct_srd_iface_create_qp(uct_srd_iface_t *iface,
 
     iface->config.max_send_sge  = qp_init_attr.cap.max_send_sge;
     iface->config.max_rdma_sge  = IBV_DEV_ATTR(&md->super.dev, max_sge_rd);
-    iface->config.max_recv_sge  = qp_init_attr.cap.max_recv_sge;
     iface->config.max_get_zcopy = efa_attr->max_rdma_size;
     iface->config.max_get_bcopy = ucs_min(iface->super.config.seg_size,
                                           efa_attr->max_rdma_size);
