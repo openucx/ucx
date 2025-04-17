@@ -104,8 +104,8 @@ run_gtests() {
     ./install/bin/ucx_info -d
 
     # Try the faster approach before valgrind
-    make -C contrib/test/gtest test GTEST_FILTER=*ud*:*test_srd*
-    make -C contrib/test/gtest test_valgrind GTEST_FILTER=*ud*:*test_srd*:-*test_uct_perf.envelope*
+    make -C contrib/test/gtest test GTEST_FILTER=*ud*:srd/*
+    make -C contrib/test/gtest test_valgrind GTEST_FILTER=*ud*:srd/*:-*test_uct_perf.envelope*
 }
 
 test_ucx_rpm() {

@@ -304,21 +304,21 @@ uct_srd_iface_create_qp(uct_srd_iface_t *iface,
         return UCS_ERR_IO_ERROR;
     }
 
+    if (uct_ib_efadv_has_rdma_read(efa_attr)) {
+        iface->config.max_get_zcopy = efa_attr->max_rdma_size;
+        iface->config.max_get_bcopy = ucs_min(iface->super.config.seg_size,
+                                              efa_attr->max_rdma_size);
+    } else {
+        iface->config.max_get_zcopy = 0;
+        iface->config.max_get_bcopy = 0;
+    }
+
     iface->config.max_send_sge  = qp_init_attr.cap.max_send_sge;
     iface->config.max_recv_sge  = qp_init_attr.cap.max_recv_sge;
     iface->config.max_inline    = qp_init_attr.cap.max_inline_data;
     iface->config.tx_qp_len     = qp_init_attr.cap.max_send_wr;
     iface->tx.available         = qp_init_attr.cap.max_send_wr;
     iface->rx.available         = qp_init_attr.cap.max_recv_wr;
-
-    if (uct_ib_efadv_has_rdma_read(efa_attr)) {
-        iface->config.max_get_zcopy = efa_attr->max_rdma_size;
-        iface->config.max_get_bcopy = ucs_min(iface->super.config.seg_size,
-                                              efa_attr->max_rdma_size);
-    } else {
-        iface->config.max_get_bcopy = 0;
-        iface->config.max_get_zcopy = 0;
-    }
 
     ucs_debug("iface=%p: created SRD QP 0x%x on " UCT_IB_IFACE_FMT
               " TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
@@ -902,7 +902,11 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                                  UCT_IFACE_FLAG_PENDING |
                                  UCT_IFACE_FLAG_CB_SYNC |
                                  UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
-                                 UCT_IFACE_FLAG_INTER_NODE;
+                                 UCT_IFACE_FLAG_INTER_NODE |
+                                 UCT_IFACE_FLAG_AM_BCOPY |
+                                 UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_AM_ZCOPY;
+
     iface_attr->iface_addr_len = sizeof(uct_srd_iface_addr_t);
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
@@ -929,23 +933,8 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.get.min_zcopy =
             iface->super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1;
 
-    if (iface_attr->cap.am.max_bcopy > 0) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_BCOPY;
-    }
-
-    if (iface_attr->cap.am.max_zcopy > 0) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_ZCOPY;
-    }
-
-    if (iface_attr->cap.am.max_short > 0) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;
-    }
-
-    if (iface_attr->cap.get.max_bcopy > 0) {
+    if (iface->config.max_get_zcopy > 0) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_GET_BCOPY;
-    }
-
-    if (iface_attr->cap.get.max_zcopy > 0) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_GET_ZCOPY;
     }
 

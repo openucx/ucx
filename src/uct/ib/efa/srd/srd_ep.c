@@ -716,7 +716,7 @@ uct_srd_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 
         /*
          * Cancel the endpoint, but flush send_op will still wait for existing
-         * outstanding operations to complete, as the device could be still be
+         * outstanding operations to complete, as the device could still be
          * using user resources (zcopy send or receive).
          */
         ep->flags |= UCT_SRD_EP_FLAG_CANCELED;
