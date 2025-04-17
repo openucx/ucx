@@ -665,17 +665,18 @@ uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
     uct_ib_iface_is_roce(_iface) ? "RoCE" : "IB"
 
 
-#define UCT_IB_IFACE_VERBS_COMPLETION_LOG(_log_lvl, _type, _iface, _i, _wc) \
-    ucs_log(_log_lvl, \
+#define UCT_IB_IFACE_VERBS_COMPLETION_MSG(_type, _iface, _i, _wc) \
             "%s completion[%d] with error on %s/%p: %s," \
             " vendor_err 0x%x wr_id 0x%lx", \
             _type, _i, uct_ib_device_name(uct_ib_iface_device(_iface)), \
             _iface, uct_ib_wc_status_str(_wc[_i].status), _wc[_i].vendor_err, \
-            _wc[_i].wr_id);
+            _wc[_i].wr_id
+
+#define UCT_IB_IFACE_VERBS_COMPLETION_LOG(_log_lvl, _type, _iface, _i, _wc) \
+    ucs_log(_log_lvl, UCT_IB_IFACE_VERBS_COMPLETION_MSG(_type,  _iface, _i, _wc)
 
 #define UCT_IB_IFACE_VERBS_COMPLETION_FATAL(_type, _iface, _i, _wc) \
-    UCT_IB_IFACE_VERBS_COMPLETION_LOG(UCS_LOG_LEVEL_FATAL, _type, _iface, _i, \
-                                      _wc)
+    ucs_fatal(UCT_IB_IFACE_VERBS_COMPLETION_MSG(_type,  _iface, _i, _wc))
 
 #define UCT_IB_IFACE_VERBS_FOREACH_RXWQE(_iface, _i, _hdr, _wc, _wc_count) \
     for (_i = 0; _i < _wc_count && ({ \
