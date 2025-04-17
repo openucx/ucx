@@ -720,6 +720,9 @@ uct_srd_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
          * using user resources (zcopy send or receive).
          */
         ep->flags |= UCT_SRD_EP_FLAG_CANCELED;
+
+    } else if (!uct_srd_ep_can_tx(ep, iface)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
     if (ucs_list_is_empty(&ep->outstanding_list)) {
@@ -733,7 +736,7 @@ uct_srd_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 
     send_op = ucs_mpool_get(&iface->tx.send_op_mp);
     if (send_op == NULL) {
-        return UCS_ERR_NO_RESOURCE;
+        return UCS_ERR_NO_MEMORY;
     }
 
     send_op->ep        = ep;
