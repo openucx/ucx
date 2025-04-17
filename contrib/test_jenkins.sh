@@ -1135,27 +1135,29 @@ run_gtest_armclang() {
 
 run_gtest_bullseye() {
 	case "$AGENT_OSARCHITECTURE" in
-		"ARM64") SRC_PATH="/auto/sw_tools/Bullseye/linux/linux64/9.14.2/aarch64/" ;;
-		*)       SRC_PATH="/auto/sw_tools/Bullseye/linux/linux64/9.14.2/amd64/" ;;
+		"ARM64") bullseye="/auto/sw_tools/Bullseye/linux/linux64/9.14.2/aarch64" ;;
+		*)       bullseye="/auto/sw_tools/Bullseye/linux/linux64/9.14.2/amd64" ;;
 	esac
 
-	# Create a local Bullseye copy due to NFS instability
-	DEST_PATH="${WORKSPACE}/bullseye"
-	mkdir -p "$DEST_PATH"
-	cp -a "$SRC_PATH/." "$DEST_PATH/" || true
-
-	export PATH="$DEST_PATH/bin:$PATH"
+	export PATH="${bullseye}/bin:$PATH"
 
 	if command -v cov01 &> /dev/null; then
 		echo "=== Enable Bullseye instrumentation ==="
 		export COVFILE="$BUILD_ARTIFACTSTAGINGDIRECTORY/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov"
+		export COVBUILDZONE="${BUILD_NUMBER:-$$}_${worker:-0}"
+		export LIBRARY_PATH=${bullseye}/lib:$LIBRARY_PATH
+		export LD_LIBRARY_PATH=${bullseye}/lib:$LD_LIBRARY_PATH
+		export CPATH=${bullseye}/include:$CPATH
+		export LD_RUN_PATH="${bullseye}/lib:$LD_RUN_PATH"
+		export C_INCLUDE_PATH=${bullseye}/include:$C_INCLUDE_PATH
 		cov01 --on
-		covselect --add '!**/test/**:*'	# Exclude /test directory
+		covselect --import "${WORKSPACE}/buildlib/BullseyeCoverageExclusions"
 	else
 		azure_log_warning "=== Skipping Bullseye: cov01 not found ==="
 	fi
 
 	# Always run Gtest
+	echo "=== Building with Bullseye instrumentation ==="
 	build devel --enable-gtest
 	run_gtest "default"
 
