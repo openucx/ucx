@@ -532,9 +532,10 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     uct_ud_send_wr_init(&self->tx.wr_inl, self->tx.sge, 1);
     uct_ud_send_wr_init(&self->tx.wr_desc, self->tx.sge, 0);
 
-    self->tx.in_pending   = 0;
-    self->tx.in_fence     = 0;
-    self->super.config.sl = uct_ib_iface_config_select_sl(&config->super);
+    self->tx.in_pending     = 0;
+    self->tx.ep_outstanding = 0;
+    self->flags             = 0;
+    self->super.config.sl   = uct_ib_iface_config_select_sl(&config->super);
 
     while (self->rx.available >= self->super.config.rx_max_batch) {
         uct_srd_iface_post_recv(self);
@@ -586,8 +587,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_iface_t)
     ucs_mpool_cleanup(&self->tx.send_op_mp, 1);
     ucs_mpool_cleanup(&self->tx.send_desc_mp, 1);
     UCS_STATS_NODE_FREE(self->stats);
-    ucs_assertv(self->tx.in_fence == 0, "iface=%p tx_in_fence=%d", self,
-                self->tx.in_fence);
 }
 
 UCS_CLASS_DEFINE(uct_srd_iface_t, uct_ib_iface_t);
@@ -875,7 +874,7 @@ static unsigned uct_srd_iface_progress(uct_iface_h tl_iface)
         count = uct_srd_iface_poll_tx(iface);
     }
 
-    /* Poll RX might schedule CTL_RESP */
+    /* Poll RX might schedule CTL_RESP, or TX might have resources */
     uct_srd_iface_pending_ctl_progress(iface);
     return count;
 }
@@ -987,15 +986,8 @@ static ucs_status_t uct_srd_iface_flush(uct_iface_h tl_iface, unsigned flags,
 static ucs_status_t uct_srd_iface_fence(uct_iface_h tl_iface, unsigned flags)
 {
     uct_srd_iface_t *iface = ucs_derived_of(tl_iface, uct_srd_iface_t);
-    uct_srd_ep_t *ep;
 
-    kh_foreach_value(&iface->ep_hash, ep, {
-        if (!(ep->flags & UCT_SRD_EP_FLAG_IFACE_FENCE) &&
-            !ucs_list_is_empty(&ep->outstanding_list)) {
-            ep->flags |= UCT_SRD_EP_FLAG_IFACE_FENCE;
-            iface->tx.in_fence++;
-        }
-    });
+    iface->flags |= UCT_SRD_IFACE_FENCE;
 
     UCT_TL_IFACE_STAT_FENCE(&iface->super.super);
     return UCS_OK;

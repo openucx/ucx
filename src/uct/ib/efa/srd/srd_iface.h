@@ -43,6 +43,11 @@ KHASH_MAP_INIT_INT64(uct_srd_rx_ctx_hash, uct_srd_rx_ctx_t*);
 KHASH_MAP_INIT_INT64(uct_srd_ep_hash, uct_srd_ep_t*);
 
 
+typedef enum uct_srd_iface_flag {
+    UCT_SRD_IFACE_FENCE = UCS_BIT(0) /* Fence requested when set */
+} uct_srd_iface_flag_t;
+
+
 typedef struct uct_srd_iface {
     uct_ib_iface_t                   super;
     struct ibv_qp                    *qp;
@@ -51,6 +56,8 @@ typedef struct uct_srd_iface {
 #endif
     UCS_STATS_NODE_DECLARE(stats);
     khash_t(uct_srd_ep_hash)         ep_hash;
+
+    unsigned                         flags;
 
     struct {
         /* Pre-posted receive buffers */
@@ -64,7 +71,8 @@ typedef struct uct_srd_iface {
     struct {
         int32_t                      available;
         int                          in_pending;
-        int                          in_fence;   /* Number of EP under iface_fence */
+        /* Number of endpoint operations in progress including flush */
+        int                          ep_outstanding;
         ucs_arbiter_t                pending_q;
         struct ibv_sge               sge[UCT_IB_MAX_IOV];
         struct ibv_send_wr           wr_inl;
@@ -160,9 +168,9 @@ uct_srd_iface_check_pending(uct_srd_iface_t *iface, ucs_arbiter_group_t *group)
 {
     ucs_assertv(iface->tx.in_pending || ucs_arbiter_group_is_empty(group),
                 "iface=%p in_pending=%d arb_group_empty=%d tx_avail=%d "
-                "iface_in_fence=%d",
+                "ep_outstanding=%d",
                 iface, iface->tx.in_pending, ucs_arbiter_group_is_empty(group),
-                iface->tx.available, iface->tx.in_fence);
+                iface->tx.available, iface->tx.ep_outstanding);
 }
 
 

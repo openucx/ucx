@@ -115,56 +115,64 @@ static void uct_srd_ep_send_op_flush_completion(uct_srd_send_op_t *send_op,
 void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
 {
     uct_srd_ep_t *ep = send_op->ep;
+    uct_srd_iface_t *iface;
     uct_srd_send_op_t *flush_op;
     ucs_status_t comp_status;
-    uct_srd_iface_t *iface;
 
+    if (ep == NULL) {
+        ucs_list_del(&send_op->list);
+        ucs_mpool_put(send_op);
+        return;
+    }
+
+    iface       = ucs_derived_of(ep->super.super.iface, uct_srd_iface_t);
+    comp_status = (ep->flags & UCT_SRD_EP_FLAG_CANCELED)?
+                  UCS_ERR_CANCELED : UCS_OK;
+
+    /* Call user completion before changing any transmit state */
+    send_op->comp_cb(send_op, comp_status);
+
+    /*
+     * If any flush_op, it holds TX resource, so this release below cannot
+     * change transmit state.
+     */
     ucs_list_del(&send_op->list);
+    iface->tx.ep_outstanding--;
 
-    if (ep != NULL) {
-        if ((ep->flags & UCT_SRD_EP_FLAG_FENCE) &&
-            ucs_list_is_empty(&ep->outstanding_list)) {
-            iface = ucs_derived_of(ep->super.super.iface, uct_srd_iface_t);
-            uct_srd_iface_pending_ctl_progress(iface);
+    /* Trigger all front line flush completions */
+    while (!ucs_list_is_empty(&ep->outstanding_list)) {
+        flush_op = ucs_list_head(&ep->outstanding_list, uct_srd_send_op_t,
+                                 list);
+
+        ucs_assertv(ep == flush_op->ep, "ep=%p send_op=%p flush_op_ep=%p",
+                    ep, send_op, flush_op->ep);
+
+        if (flush_op->comp_cb != uct_srd_ep_send_op_flush_completion) {
+            break; /* Not a flush operation */
         }
 
-        comp_status = (ep->flags & UCT_SRD_EP_FLAG_CANCELED)?
-                      UCS_ERR_CANCELED : UCS_OK;
+        /*
+         * Flush(CANCEL) with see itself reported as CANCEL. Flush()
+         * followed immediately by Flush(CANCEL) will both be reported as
+         * CANCEL.
+         *
+         * State update in iface and ep must be done after user completion.
+         */
+        flush_op->comp_cb(flush_op, comp_status);
+        ucs_list_del(&flush_op->list);
+        iface->tx.ep_outstanding--;
+        ucs_mpool_put(flush_op);
+    }
 
-        send_op->comp_cb(send_op, comp_status);
-
-        /* Trigger all front line flush completions */
-        while (!ucs_list_is_empty(&ep->outstanding_list)) {
-            flush_op = ucs_list_head(&ep->outstanding_list, uct_srd_send_op_t,
-                                     list);
-
-            ucs_assertv(ep == flush_op->ep, "ep=%p send_op=%p flush_op_ep=%p",
-                        ep, send_op, flush_op->ep);
-
-            if (flush_op->comp_cb != uct_srd_ep_send_op_flush_completion) {
-                break; /* Not a flush operation */
-            }
-
-            /*
-             * Flush(CANCEL) with see itself reported as CANCEL. Flush()
-             * followed immediately by Flush(CANCEL) will both be reported as
-             * CANCEL.
-             */
-            ucs_list_del(&flush_op->list);
-            flush_op->comp_cb(flush_op, comp_status);
-            ucs_mpool_put(flush_op);
-        }
-
-        if ((ep->flags & UCT_SRD_EP_FLAG_IFACE_FENCE) &&
-            ucs_list_is_empty(&ep->outstanding_list)) {
-            iface = ucs_derived_of(ep->super.super.iface, uct_srd_iface_t);
-            iface->tx.in_fence--;
-            ep->flags &= ~UCT_SRD_EP_FLAG_IFACE_FENCE;
-
-            if (iface->tx.in_fence == 0) {
-                uct_srd_iface_pending_ctl_progress(iface);
-            }
-        }
+    /*
+     * In case of any fence unblocking, try running pending before any
+     * future user completion under the same progress.
+     */
+    if (((ep->flags & UCT_SRD_EP_FLAG_FENCE) &&
+         ucs_list_is_empty(&ep->outstanding_list)) ||
+        ((iface->flags & UCT_SRD_IFACE_FENCE) &&
+         (iface->tx.ep_outstanding == 0))) {
+        uct_srd_iface_pending_ctl_progress(iface);
     }
 
     ucs_mpool_put(send_op);
@@ -195,23 +203,26 @@ void uct_srd_ep_send_op_purge(uct_srd_ep_t *ep)
         } else {
             send_op->ep = NULL;
         }
+
+        iface->tx.ep_outstanding--;
     }
 
     ucs_list_splice_tail(&iface->tx.outstanding_list, &ep->outstanding_list);
     ucs_list_head_init(&ep->outstanding_list);
-    if (ep->flags & UCT_SRD_EP_FLAG_IFACE_FENCE) {
-        iface->tx.in_fence--;
-        ep->flags &= ~UCT_SRD_EP_FLAG_IFACE_FENCE;
-    }
 }
 
 static UCS_F_ALWAYS_INLINE int
 uct_srd_ep_can_tx(uct_srd_ep_t *ep, uct_srd_iface_t *iface)
 {
-    return (ucs_likely(ep->flags & UCT_SRD_EP_FLAG_AH_ADDED) ||
+    return /* AH adding ACK received if we have to wait for it */
+           (ucs_likely(ep->flags & UCT_SRD_EP_FLAG_AH_ADDED) ||
             !(ep->flags & UCT_SRD_EP_FLAG_RMA)) &&
+           /* TX queue available to post to QP */
            uct_srd_iface_can_tx(iface) &&
-           (iface->tx.in_fence == 0) &&
+           /* Interface level fencing */
+           (!(iface->flags & UCT_SRD_IFACE_FENCE) ||
+            (iface->tx.ep_outstanding == 0)) &&
+           /* Endpoint fencing */
            (!(ep->flags & UCT_SRD_EP_FLAG_FENCE) ||
              ucs_list_is_empty(&ep->outstanding_list));
 }
@@ -335,9 +346,20 @@ static UCS_F_ALWAYS_INLINE void uct_srd_ep_posted(uct_srd_iface_t *iface,
                                                   uct_srd_ep_t *ep,
                                                   uct_srd_send_op_t *send_op)
 {
-    iface->tx.available--;
+    ucs_assertv((!(iface->flags & UCT_SRD_IFACE_FENCE) ||
+                 (iface->tx.ep_outstanding == 0)) &&
+                (!(ep->flags & UCT_SRD_EP_FLAG_FENCE) ||
+                 ucs_list_is_empty(&ep->outstanding_list)),
+                "iface=%p ep=%p iface_flags=%x ep_flags=%x ep_outstanding=%d "
+                "outstanding_is_empty=%d",
+                iface, ep, iface->flags, ep->flags, iface->tx.ep_outstanding,
+                ucs_list_is_empty(&ep->outstanding_list));
+
     ucs_list_add_tail(&ep->outstanding_list, &send_op->list);
-    ep->flags &= ~UCT_SRD_EP_FLAG_FENCE;
+    iface->flags &= ~UCT_SRD_IFACE_FENCE;
+    ep->flags    &= ~UCT_SRD_EP_FLAG_FENCE;
+    iface->tx.ep_outstanding++;
+    iface->tx.available--;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -718,6 +740,9 @@ uct_srd_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     send_op->user_comp = comp;
     send_op->comp_cb   = uct_srd_ep_send_op_flush_completion;
     ucs_list_add_tail(&ep->outstanding_list, &send_op->list);
+    iface->flags &= ~UCT_SRD_IFACE_FENCE;
+    ep->flags    &= ~UCT_SRD_EP_FLAG_FENCE;
+    iface->tx.ep_outstanding++;
     ucs_trace_data("ep=%p added flush psn=%u send_op=%p with user_comp=%p", ep,
                    ep->psn, send_op, send_op->user_comp);
 
