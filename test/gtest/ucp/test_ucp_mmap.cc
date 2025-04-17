@@ -388,8 +388,6 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
                 EXPECT_EQ(&ucp_rma_sw_proto,
                           UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
             } else {
-                ucs_assert(&ucp_rma_basic_proto ==
-                           UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
                 EXPECT_EQ(&ucp_rma_basic_proto,
                           UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
             }
