@@ -673,7 +673,7 @@ uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
             _wc[_i].wr_id
 
 #define UCT_IB_IFACE_VERBS_COMPLETION_LOG(_log_lvl, _type, _iface, _i, _wc) \
-    ucs_log(_log_lvl, UCT_IB_IFACE_VERBS_COMPLETION_MSG(_type,  _iface, _i, _wc)
+    ucs_log(_log_lvl, UCT_IB_IFACE_VERBS_COMPLETION_MSG(_type,  _iface, _i, _wc))
 
 #define UCT_IB_IFACE_VERBS_COMPLETION_FATAL(_type, _iface, _i, _wc) \
     ucs_fatal(UCT_IB_IFACE_VERBS_COMPLETION_MSG(_type,  _iface, _i, _wc))
