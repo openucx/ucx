@@ -504,6 +504,14 @@ UCS_TEST_P(test_srd, pending_busy_if_ready_to_send)
                          uct_ep_pending_add(m_e1->ep(0), &m_req[0], 0));
 }
 
+UCS_TEST_P(test_srd, am_no_res_after_rma_no_resource)
+{
+    int c = 1;
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_NO_RESOURCE, test_get_bcopy());
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_NO_RESOURCE,
+                        uct_ep_am_short(m_e1->ep(0), 31, 0x1, &c, 1));
+}
+
 UCS_TEST_P(test_srd, pending_dispatch)
 {
     uint8_t c = 23;
