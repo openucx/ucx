@@ -340,7 +340,7 @@ stages:
         demands: ucx_gpu -equals yes
         test_perf: 1
         container: ubuntu2404_doca31_gpunetio
-        run_bullseye: no
+        run_bullseye: yes
     - template: tests.yml
       parameters:
         name: new
@@ -352,7 +352,7 @@ stages:
         name: roce
         demands: ucx_roce -equals yes
         test_perf: 0
-        run_bullseye: yes
+        run_bullseye: no
     - template: tests.yml
       parameters:
         name: roce_proto_disable
@@ -373,7 +373,7 @@ stages:
       dependsOn: 
         - tests_althca
         - tests_new
-        - tests_roce
+        - tests_gpu
       condition: succeededOrFailed()
       pool:
         name: MLNX
@@ -393,13 +393,16 @@ stages:
           covsrc -f "$REPORT_FILE"
 
           # Generate HTML report
-          REPORT_DIR="$BUILD_ARTIFACTSTAGINGDIRECTORY/coverage_html"
+          REPORT_DIR="$PIPELINE_WORKSPACE/coverage_html"
           mkdir -p "$REPORT_DIR"
           covhtml -n -f "$REPORT_FILE" "$REPORT_DIR"
 
-          # Strip out workdir path from HTML reports
+          # Strip out workdir path from HTML files
           find "$REPORT_DIR" -type f -name '*.html' -exec \
             sed -i 's|\.\./\.\./\.\./\.\./\.\./scrap/azure/agent-00/AZP_WORKSPACE/0/s/|./|g' {} +
+
+          # Compress for faster upload
+          tar -czf "$BUILD_ARTIFACTSTAGINGDIRECTORY/coverage_html.tar.gz" -C "$REPORT_DIR" .
         displayName: Merge Bullseye files
       - task: PublishBuildArtifacts@1
         inputs:
