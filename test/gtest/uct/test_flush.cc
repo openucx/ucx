@@ -155,9 +155,9 @@ public:
     }
 
     void check_skip_test_flush_remote() {
+#if HAVE_IB
         auto md = sender().md();
         if (std::string(md->component->name) == "ib") {
-#if HAVE_IB
             auto ib_md = ucs_derived_of(md, uct_ib_md_t);
             if (!(ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
                 UCS_TEST_SKIP_R("mlx5 PRM not supported");
@@ -167,11 +167,11 @@ public:
             auto mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
             if (!(mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_KSM))
 #endif
-#endif
             {
                 UCS_TEST_SKIP_R("mlx5 KSM not supported");
             }
         }
+#endif
 
         m_flush_flags = UCT_FLUSH_FLAG_REMOTE;
     }
