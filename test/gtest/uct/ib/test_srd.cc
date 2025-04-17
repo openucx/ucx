@@ -376,7 +376,6 @@ UCS_TEST_P(test_srd, put_zcopy)
     mapped_buffer srcbuf(4096, 0ul, *m_e1);
     mapped_buffer dstbuf(4096, 0ul, *m_e2);
 
-    UCS_TEST_SKIP_R("Disabled");
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, srcbuf.ptr(), srcbuf.length(),
                             srcbuf.memh(), 1);
 
