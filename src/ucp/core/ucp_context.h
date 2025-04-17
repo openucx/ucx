@@ -212,6 +212,8 @@ typedef struct ucp_context_config {
     /** Extend endpoint lanes connections of each local device to all remote
      *  devices */
     int                                    connect_all_to_all;
+    /** On demand lanes wireup */
+    int                                    on_demand_wireup;
 } ucp_context_config_t;
 
 

@@ -768,10 +768,13 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *old_key,
 
 int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
                                 const ucp_ep_config_key_t *key2,
-                                ucp_lane_index_t lane);
+                                ucp_lane_index_t lane, unsigned flags);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
+
+int ucp_ep_config_is_equal2(const ucp_ep_config_key_t *key1,
+                            const ucp_ep_config_key_t *key2, unsigned flags);
 
 void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
                         ucs_string_buffer_t *strb);
