@@ -1,4 +1,4 @@
-#!/usr/bin/bash -eEx
+#!/usr/bin/bash -eE
 #
 # Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # See file LICENSE for terms.
@@ -84,6 +84,12 @@ install_rdma_core() {
     cd -
 }
 
+setup_env() {
+    # Setup ibmock library
+    ${1:-} export LD_LIBRARY_PATH=$(pwd)/contrib/ibmock/build:$(pwd)/$rdma_core/build/lib:$LD_LIBRARY_PATH
+    ${1:-} export CLOUD_TYPE=aws
+}
+
 run_gtests() {
     if [ ! -d /dev/infiniband ]
     then
@@ -93,9 +99,7 @@ run_gtests() {
         chmod ugo+rw /dev/infiniband/uver*
     fi
 
-    # Setup ibmock library
-    export LD_LIBRARY_PATH=$(pwd)/contrib/ibmock/build:$(pwd)/$rdma_core/build/lib:$LD_LIBRARY_PATH
-    export CLOUD_TYPE=aws
+    setup_env
 
     # Check basic ibmock functionality, error if mocked interface is not found
     UCX_LOG_LEVEL=trace \
@@ -117,21 +121,24 @@ test_ucx_rpm() {
 }
 
 case "${1-:}" in
-    install_rdma_core_efa)
+    install_rdma_core)
         install_rdma_core
         ;;
     test_rpm_efa)
         build_ucx_efa
         test_ucx_rpm
         ;;
-    build_efa)
+    build)
         build_rdma_core_efa
         build_ucx_efa
         ;;
-    gtest_efa)
+    gtest)
         run_gtests
         ;;
+    env)
+        setup_env echo
+        ;;
     *)
-        echo "error: invalid argument"
+        echo "error: invalid argument, use either (env|gtest|build|test_rpm_efa|install_rdma_core)"
         exit 1
 esac

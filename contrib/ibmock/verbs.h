@@ -18,4 +18,7 @@ void dev_qp_wr_set_sge_list(struct ibv_qp_ex *qp, size_t num_sge,
 void(dev_qp_wr_set_ud_addr)(struct ibv_qp_ex *qp, struct ibv_ah *ah,
                             uint32_t remote_qpn, uint32_t remote_qkey);
 int dev_qp_wr_complete(struct ibv_qp_ex *qp);
+
+struct fake_qp *create_fqp(struct ibv_pd *pd,
+                           struct ibv_qp_init_attr *attr);
 #endif /* __VERBS_H */
