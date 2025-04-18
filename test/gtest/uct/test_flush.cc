@@ -855,7 +855,9 @@ protected:
     void check_skip_test_tl() {
         if ((GetParam()->tl_name != "dc_mlx5") &&
             (GetParam()->tl_name != "rc_verbs") &&
-            (GetParam()->tl_name != "rc_mlx5")) {
+            (GetParam()->tl_name != "rc_mlx5") &&
+            (GetParam()->tl_name != "srd")) {
+
             UCS_TEST_SKIP_R("not supported yet");
         }
 
