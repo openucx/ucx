@@ -10,7 +10,6 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/compiler_def.h>
-#include <errno.h>
 
 /**
  * The ucs_rw_spinlock_t type.
@@ -37,6 +36,13 @@
 #define UCS_RWLOCK_READ  UCS_BIT(2) /* Reader increment */
 
 #define UCS_RWLOCK_STATIC_INITIALIZER {0}
+
+
+#define ucs_rw_spinlock_assert(_lock, _cond, _desc) \
+    ucs_assertv((_lock)->state _cond, "lock=%p " _desc " state=0x%x%s%s", \
+                (_lock), (_lock)->state, \
+                (_lock)->state & UCS_RWLOCK_WAIT ? " WAIT" : "", \
+                (_lock)->state & UCS_RWLOCK_WRITE ? " WRITE" : "")
 
 
 /**
@@ -71,8 +77,7 @@ ucs_rw_spinlock_read_lock(ucs_rw_spinlock_t *lock)
 static UCS_F_ALWAYS_INLINE void
 ucs_rw_spinlock_read_unlock(ucs_rw_spinlock_t *lock)
 {
-    ucs_assertv(lock->state >= UCS_RWLOCK_READ, "lock underrun state:%u",
-                lock->state);
+    ucs_rw_spinlock_assert(lock, >= UCS_RWLOCK_READ, "read underrun");
     __atomic_fetch_sub(&lock->state, UCS_RWLOCK_READ, __ATOMIC_RELEASE);
 }
 
@@ -82,19 +87,24 @@ ucs_rw_spinlock_write_lock(ucs_rw_spinlock_t *lock)
 {
     uint32_t x;
 
+    x = __atomic_load_n(&lock->state, __ATOMIC_RELAXED);
+    if (ucs_unlikely(x > UCS_RWLOCK_WAIT)) {
+        goto wait;
+    }
+
     for (;;) {
-        x = __atomic_load_n(&lock->state, __ATOMIC_RELAXED);
-        if ((x < UCS_RWLOCK_WRITE) &&
-            (__atomic_compare_exchange_n(&lock->state, &x, UCS_RWLOCK_WRITE, 0,
-                                         __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))) {
+        if (__atomic_compare_exchange_n(&lock->state, &x, UCS_RWLOCK_WRITE, 0,
+                                        __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
             return;
         }
 
-        if (!(x & UCS_RWLOCK_WAIT)) {
+wait:
+        if (ucs_likely(!(x & UCS_RWLOCK_WAIT))) {
             __atomic_fetch_or(&lock->state, UCS_RWLOCK_WAIT, __ATOMIC_RELAXED);
         }
 
-        while (__atomic_load_n(&lock->state, __ATOMIC_RELAXED) > UCS_RWLOCK_WAIT) {
+        while ((x = __atomic_load_n(&lock->state, __ATOMIC_RELAXED)) >
+               UCS_RWLOCK_WAIT) {
             ucs_cpu_relax();
         }
     }
@@ -108,7 +118,7 @@ ucs_rw_spinlock_write_trylock(ucs_rw_spinlock_t *lock)
 
     x = __atomic_load_n(&lock->state, __ATOMIC_RELAXED);
     if ((x < UCS_RWLOCK_WRITE) &&
-        (__atomic_compare_exchange_n(&lock->state, &x, x + UCS_RWLOCK_WRITE, 1,
+        (__atomic_compare_exchange_n(&lock->state, &x, x | UCS_RWLOCK_WRITE, 1,
                                      __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))) {
         return 1;
     }
@@ -120,8 +130,7 @@ ucs_rw_spinlock_write_trylock(ucs_rw_spinlock_t *lock)
 static UCS_F_ALWAYS_INLINE void
 ucs_rw_spinlock_write_unlock(ucs_rw_spinlock_t *lock)
 {
-    ucs_assertv(lock->state >= UCS_RWLOCK_WRITE, "lock underrun state:%u",
-                lock->state);
+    ucs_rw_spinlock_assert(lock, >= UCS_RWLOCK_WRITE, "write underrun");
     __atomic_fetch_sub(&lock->state, UCS_RWLOCK_WRITE, __ATOMIC_RELEASE);
 }
 
@@ -134,7 +143,7 @@ static UCS_F_ALWAYS_INLINE void ucs_rw_spinlock_init(ucs_rw_spinlock_t *lock)
 
 static UCS_F_ALWAYS_INLINE void ucs_rw_spinlock_cleanup(ucs_rw_spinlock_t *lock)
 {
-    ucs_assertv(lock->state == 0, "lock no released state:%u", lock->state);
+    ucs_rw_spinlock_assert(lock, == 0, "not released");
 }
 
 #endif
