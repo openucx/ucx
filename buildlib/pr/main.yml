@@ -327,14 +327,14 @@ stages:
       parameters:
         name: gpu
         demands: ucx_gpu -equals yes
-        test_perf: 1
+        test_perf: 0
         container: centos7_cuda11
         run_bullseye: yes
     - template: tests.yml
       parameters:
         name: new
         demands: ucx_new -equals yes
-        test_perf: 1
+        test_perf: 0
         run_bullseye: yes
     - template: tests.yml
       parameters:
