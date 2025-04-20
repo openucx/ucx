@@ -385,7 +385,8 @@ stages:
         displayName: Download partial reports
       - bash: |
           set -xe
-          export PATH="/auto/sw_tools/Bullseye/linux/linux64/9.14.2/amd64/bin/:$PATH"
+          source ./buildlib/az-helpers.sh
+          az_module_load tools/bullseyecov-9.14.2
 
           # Merge all .cov files
           REPORT_FILE="$BUILD_ARTIFACTSTAGINGDIRECTORY/bullseye_report.cov"
