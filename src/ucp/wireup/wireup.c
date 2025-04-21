@@ -2149,7 +2149,9 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     }
 
-    *config_changed_p = (prev_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    /* Consider configuration changed if prev != curr and they aren't 'null' */
+    *config_changed_p = (prev_cfg_index != ep->cfg_index) &&
+                        (prev_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
     ucp_worker_keepalive_add_ep(ep);
     status = UCS_OK;
 
