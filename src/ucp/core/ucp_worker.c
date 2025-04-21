@@ -2784,7 +2784,7 @@ static void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
             req, ucp_worker_discard_uct_ep_destroy_progress);
 }
 
-ucs_status_t ucp_worker_flush_uct_ep_internal(uct_pending_req_t *self)
+static ucs_status_t ucp_worker_flush_uct_ep_internal(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
@@ -3630,14 +3630,11 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 ucs_status_t ucp_worker_flush_uct_ep_nb(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                         ucp_request_t **req_p)
 {
-    ucp_worker_h worker = ucp_ep->worker;
-    ucp_request_t *req;
+    ucp_request_t *req = ucp_request_get(ucp_ep->worker);
 
-    req = ucp_request_get(worker);
     if (ucs_unlikely(req == NULL)) {
-        ucs_error("unable to allocate request for discarding UCT EP %p "
-                  "on UCP worker %p",
-                  uct_ep, worker);
+        ucs_error("unable to allocate request for flushing UCT EP %p on UCP "
+                  "worker %p", uct_ep, ucp_ep->worker);
         return UCS_ERR_NO_MEMORY;
     }
 

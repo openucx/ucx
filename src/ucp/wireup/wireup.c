@@ -554,23 +554,29 @@ unsigned ucp_wireup_eps_progress(void *arg)
         ucp_proxy_ep_replace(&wireup_ep->super);
     }
 
-    /* Replay deferred requests */
-    info = ucp_wireup_get_deferred_info(ucp_ep);
-    ucp_wireup_replay_pending_requests(ucp_ep, &info->pending_q);
-
-    /* Replay all other requests */
+    /* Replay pending requests */
     ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
 
-    /* Release flush requests */
-    ucs_queue_for_each_extract(req, &info->flush_requests, send.uct.priv, 1) {
-        uct_ep_destroy(req->send.discard_uct_ep.uct_ep);
-        ucp_request_release(req);
-    }
-
-    /* Delete entry */
+    /* Check whether deferred data exists */
     iter = kh_get(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash,
                   ucp_ep);
-    kh_del(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash, iter);
+
+    if (iter != kh_end(&worker->deferred_ep_hash)) {
+        info = &kh_value(&worker->deferred_ep_hash, iter);
+
+        /* Replay deferred requests */
+        ucp_wireup_replay_pending_requests(ucp_ep, &info->pending_q);
+
+        /* Release flush requests and destroy discarded uct EPs */
+        ucs_queue_for_each_extract(req, &info->flush_requests, send.uct.priv,
+                                   1) {
+            uct_ep_destroy(req->send.discard_uct_ep.uct_ep);
+            ucp_request_put(req);
+        }
+
+        kh_del(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash, iter);
+    }
+
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
 
@@ -1733,6 +1739,34 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
     return UCS_OK;
 }
 
+static void ucp_wireup_handle_discarded_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep)
+{
+    ucp_worker_deferred_ep_data_t *info;
+    ucp_request_t *req;
+    ucs_status_t status;
+    uct_pending_purge_callback_t do_assert;
+
+    /* Discard wireup EP */
+    if (ucp_wireup_ep_test(uct_ep)) {
+        do_assert = (uct_pending_purge_callback_t)
+                ucs_empty_function_do_assert_void;
+        ucp_worker_discard_uct_ep(ep, uct_ep, UCP_NULL_RESOURCE,
+                                  UCT_FLUSH_FLAG_LOCAL, do_assert, NULL,
+                                  (ucp_send_nbx_callback_t)ucs_empty_function,
+                                  NULL);
+        return;
+    }
+
+    /* Start non-blocking flush of outstanding messages */
+    status = ucp_worker_flush_uct_ep_nb(ep, uct_ep, &req);
+    ucs_assert_always(status == UCS_OK);
+
+    /* Put in queue for tracking */
+    info = ucp_wireup_get_deferred_info(ep);
+    ucs_queue_push(&info->flush_requests,
+                   (ucs_queue_elem_t*)&req->send.uct.priv);
+}
+
 static ucs_status_t
 ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                                   const ucp_unpacked_address_t *remote_address,
@@ -1744,8 +1778,6 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     uct_ep_h new_uct_eps[UCP_MAX_LANES]            = {NULL};
     ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES] = {UCP_NULL_LANE};
     ucp_ep_config_key_t *old_key;
-    ucp_worker_deferred_ep_data_t *info;
-    ucp_request_t *req;
     ucp_lane_index_t lane, reuse_lane, wireup_lane;
     uct_ep_h uct_ep;
     ucs_status_t status;
@@ -1818,11 +1850,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         if (reuse_lane == UCP_NULL_LANE) {
             if (uct_ep != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
-                status = ucp_worker_flush_uct_ep_nb(ep, uct_ep, &req);
-                ucs_assert_always(status == UCS_OK);
-                info = ucp_wireup_get_deferred_info(ep);
-                ucs_queue_push(&info->flush_requests,
-                               (ucs_queue_elem_t*)&req->send.uct.priv);
+                ucp_wireup_handle_discarded_uct_ep(ep, uct_ep);
                 ucp_ep_set_lane(ep, lane, NULL);
             }
         } else if (uct_ep != NULL) {
@@ -1940,7 +1968,8 @@ ucp_wireup_handle_pending_requests(ucp_ep_h ep, ucs_queue_head_t *ordered_q,
     ucp_worker_deferred_ep_data_t *info;
     uct_pending_req_t *uct_req;
 
-    if (!config_changed) {
+    /* No need to defer if config didn't change */
+    if (!config_changed || ucp_ep_has_cm_lane(ep)) {
         ucp_wireup_replay_pending_requests(ep, ordered_q);
         ucp_wireup_replay_pending_requests(ep, unordered_q);
         return;
