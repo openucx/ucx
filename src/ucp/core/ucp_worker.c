@@ -2987,6 +2987,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     UCS_PTR_MAP_DESTROY(request, &worker->request_map);
     UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
+    kh_destroy_inplace(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
