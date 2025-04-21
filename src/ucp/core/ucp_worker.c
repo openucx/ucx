@@ -2504,6 +2504,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->internal_eps);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
+    kh_init_inplace(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
@@ -2711,6 +2712,7 @@ err_destroy_ep_map:
     UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
+    kh_destroy_inplace(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
@@ -2780,6 +2782,30 @@ static void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
      * a progress callback on the main thread to destroy UCT EP */
     ucp_worker_discard_uct_ep_progress_register(
             req, ucp_worker_discard_uct_ep_destroy_progress);
+}
+
+ucs_status_t ucp_worker_flush_uct_ep_internal(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
+    ucs_status_t status;
+
+    ++req->send.state.uct_comp.count;
+    status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
+                          &req->send.state.uct_comp);
+    if (status == UCS_INPROGRESS) {
+        return UCS_OK;
+    }
+
+    --req->send.state.uct_comp.count;
+    ucs_assert(req->send.state.uct_comp.count == 0);
+
+    if (status == UCS_ERR_NO_RESOURCE) {
+        status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);
+        ucs_assert(status == UCS_OK);
+    }
+
+    return status;
 }
 
 ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
@@ -3599,6 +3625,34 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
             ucp_worker_keepalive_complete(worker, ucs_get_time());
         }
     }
+}
+
+ucs_status_t ucp_worker_flush_uct_ep_nb(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                        ucp_request_t **req_p)
+{
+    ucp_worker_h worker = ucp_ep->worker;
+    ucp_request_t *req;
+
+    req = ucp_request_get(worker);
+    if (ucs_unlikely(req == NULL)) {
+        ucs_error("unable to allocate request for discarding UCT EP %p "
+                  "on UCP worker %p",
+                  uct_ep, worker);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_assert(!ucp_wireup_ep_test(uct_ep));
+    req->send.ep                            = ucp_ep;
+    req->send.uct.func                      = ucp_worker_flush_uct_ep_internal;
+    req->send.state.uct_comp.func           = 
+            (uct_completion_callback_t)ucs_empty_function;
+    req->send.state.uct_comp.count          = 0;
+    req->send.state.uct_comp.status         = UCS_OK;
+    req->send.discard_uct_ep.uct_ep         = uct_ep;
+    req->send.discard_uct_ep.ep_flush_flags = UCT_FLUSH_FLAG_LOCAL;
+
+    *req_p = req;
+    return ucp_worker_flush_uct_ep_internal(&req->send.uct);
 }
 
 static ucs_status_t

@@ -218,6 +218,22 @@ KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 
+typedef struct ucp_worker_deferred_ep_data {
+    ucs_queue_head_t pending_q;
+    ucs_queue_head_t flush_requests;
+    struct {
+        ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
+        ucp_tl_bitmap_t  tl_bitmap;
+    } reply;
+} ucp_worker_deferred_ep_data_t;
+
+
+/* Hash map of EPs that are being flushed on UCP Worker */
+KHASH_TYPE(ucp_worker_deferred_ep_hash, ucp_ep_h,
+           ucp_worker_deferred_ep_data_t);
+typedef khash_t(ucp_worker_deferred_ep_hash) ucp_worker_deferred_ep_hash_t;
+
+
 typedef struct ucp_worker_mpool_key {
     ucs_memory_type_t mem_type;  /* memory type of the buffer pool */
     ucs_sys_device_t  sys_dev;   /* identifier for the device,
@@ -338,6 +354,7 @@ typedef struct ucp_worker {
 
     ucp_worker_rkey_config_hash_t    rkey_config_hash;    /* RKEY config key -> index */
     ucp_worker_discard_uct_ep_hash_t discard_uct_ep_hash; /* Hash of discarded UCT EPs */
+    ucp_worker_deferred_ep_hash_t    deferred_ep_hash;    /* Hash of deferred EP data */
     UCS_PTR_MAP_T(ep)                ep_map;              /* UCP ep key to ptr
                                                              mapping */
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
@@ -446,6 +463,10 @@ ucs_status_t ucp_worker_iface_estimate_perf(const ucp_worker_iface_t *wiface,
 
 void ucp_worker_iface_add_bandwidth(uct_ppn_bandwidth_t *ppn_bandwidth,
                                     double bandwidth);
+
+
+ucs_status_t ucp_worker_flush_uct_ep_nb(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                        ucp_request_t **req_p);
 
 
 /* must be called with async lock held */

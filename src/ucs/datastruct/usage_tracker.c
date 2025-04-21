@@ -217,23 +217,43 @@ static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker)
             continue;
         }
 
-        item->promoted = 1;
-        params->promote_cb(item->key, params->promote_arg);
+        item->promoted = params->promote_cb(item->key, params->promote_arg);
     }
 
     for (elem_index = params->promote_capacity; elem_index < elems_count;
          ++elem_index) {
         item = elems_array[elem_index];
-        ucs_usage_tracker_remove(usage_tracker, item->key);
         if (!item->promoted) {
             continue;
         }
 
-        params->demote_cb(item->key, params->demote_arg);
-        item->promoted = 0;
+        item->promoted = !params->demote_cb(item->key, params->demote_arg);
+        if (!item->promoted) {
+            ucs_usage_tracker_remove(usage_tracker, item->key);
+        }
     }
 
     ucs_free(elems_array);
+}
+
+int ucs_usage_tracker_is_promotable(ucs_usage_tracker_h usage_tracker,
+                                    double score)
+{
+    ucs_usage_tracker_params_t *params = &usage_tracker->params;
+    ucs_usage_tracker_element_t item   = {0};
+    unsigned count                     = 0;
+    ucs_usage_tracker_element_t value, *value_p, *item_p;
+
+    item.score = score;
+    item_p     = &item;
+
+    kh_foreach_value(&usage_tracker->hash, value,
+        value_p = &value;
+        count  += (ucs_usage_tracker_compare(&value_p, &item_p, params) > 0);
+    )
+
+    return (kh_size(&usage_tracker->hash) <= params->promote_thresh) ||
+           (count >= (kh_size(&usage_tracker->hash) - params->promote_thresh));
 }
 
 void ucs_usage_tracker_set_min_score(ucs_usage_tracker_h usage_tracker,
@@ -244,8 +264,8 @@ void ucs_usage_tracker_set_min_score(ucs_usage_tracker_h usage_tracker,
     elem            = ucs_usage_tracker_put(usage_tracker, key);
     elem->min_score = score;
 
-    if (elem->min_score > elem->score) {
-        ucs_usage_tracker_promote(usage_tracker);
+    if (ucs_usage_tracker_is_promotable(usage_tracker, score)) {
+        elem->promoted = 1;
     }
 }
 

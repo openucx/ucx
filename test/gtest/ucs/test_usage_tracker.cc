@@ -33,10 +33,11 @@ protected:
         }
     }
 
-    static void update_cb(void *entry, void *arg)
+    static int update_cb(void *entry, void *arg)
     {
         auto results = reinterpret_cast<entries_vec_t*>(arg);
         results->push_back((uint64_t)entry);
+        return 1;
     }
 
     void verify_rank(const entries_vec_t &expected, const entries_vec_t &actual,
