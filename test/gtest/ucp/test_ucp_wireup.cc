@@ -1953,21 +1953,20 @@ protected:
 
 UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
            "IB_NUM_PATHS?=6", "MAX_RMA_LANES?=6") {
-    size_t max_rma_lanes = 6;
-    ucp_request_param_t params = { 0 };
-    const size_t msg_size = 1 * UCS_GBYTE;
+    size_t max_rma_lanes          = 6;
+    ucp_request_param_t params    = { 0 };
+    const size_t msg_size         = 1 * UCS_GBYTE;
+    const unsigned ucp_am_id_test = 1;
     mem_buffer sbuf(msg_size, UCS_MEMORY_TYPE_HOST, 0);
     mapped_buffer rbuf(msg_size, receiver());
-    const unsigned ucp_am_id_test = 1;
+    ucp_am_handler_param_t am_handler_params;
 
-    ucp_am_handler_param_t am_handler_params = {
-        .field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
-                      UCP_AM_HANDLER_PARAM_FIELD_CB |
-                      UCP_AM_HANDLER_PARAM_FIELD_ARG,
-        .id         = ucp_am_id_test,
-        .cb         = am_recv_callback,
-        .arg        = this
-    };
+    am_handler_params.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                                   UCP_AM_HANDLER_PARAM_FIELD_CB |
+                                   UCP_AM_HANDLER_PARAM_FIELD_ARG;
+    am_handler_params.id         = ucp_am_id_test;
+    am_handler_params.cb         = am_recv_callback;
+    am_handler_params.arg        = this;
     ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(receiver().worker(),
                                                  &am_handler_params));
     sender().connect(&receiver(), get_ep_params());
