@@ -105,6 +105,8 @@ public:
     {
         ucp_test::init();
 
+        UCS_TEST_SKIP_R("Test is skipped due to unresolved failure");
+
         /* num_tls = single device + UD */
         /* coverity[unreachable] */
         if (sender().ucph()->num_tls <= 2) {

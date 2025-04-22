@@ -1969,7 +1969,7 @@ ucp_wireup_handle_pending_requests(ucp_ep_h ep, ucs_queue_head_t *ordered_q,
     uct_pending_req_t *uct_req;
 
     /* No need to defer if config didn't change */
-    if (!config_changed || ucp_ep_has_cm_lane(ep)) {
+    if (!config_changed) {
         ucp_wireup_replay_pending_requests(ep, ordered_q);
         ucp_wireup_replay_pending_requests(ep, unordered_q);
         return;
@@ -2151,7 +2151,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     /* Consider configuration changed if prev != curr and they aren't 'null' */
     *config_changed_p = (prev_cfg_index != ep->cfg_index) &&
-                        (prev_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+                        (prev_cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+                        !ucp_ep_has_cm_lane(ep);
     ucp_worker_keepalive_add_ep(ep);
     status = UCS_OK;
 
