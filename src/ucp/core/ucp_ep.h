@@ -768,7 +768,7 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *old_key,
 
 int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
                                 const ucp_ep_config_key_t *key2,
-                                ucp_lane_index_t lane, unsigned flags);
+                                ucp_lane_index_t lane);
 
 /**
  * @brief Compare two endpoint configurations.
