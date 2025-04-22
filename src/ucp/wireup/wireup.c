@@ -930,6 +930,9 @@ static unsigned ucp_ep_restore_init_flags(ucp_ep_h ep)
 {
     unsigned init_flags = 0;
 
+    /* suppress clang warning */
+    ucs_assert(ep != NULL);
+
     if (ucp_ep_has_cm_lane(ep)) {
         /* TODO: check if the flags matters */
         init_flags |= UCP_EP_INIT_CM_WIREUP_CLIENT |
