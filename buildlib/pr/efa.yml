@@ -9,7 +9,7 @@ jobs:
       demands: ${{ parameters.demands }}
     displayName: ${{ parameters.name }} on ${{ parameters.container }}
     container: ${{ parameters.container }}
-    timeoutInMinutes: 90
+    timeoutInMinutes: 120
     workspace:
       clean: outputs
     steps:

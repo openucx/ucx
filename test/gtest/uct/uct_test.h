@@ -383,6 +383,7 @@ protected:
     bool get_config(const std::string& name, std::string& value) const;
 
     virtual bool has_ud() const;
+    virtual bool has_srd() const;
     virtual bool has_rc() const;
     virtual bool has_rc_or_dc() const;
     virtual bool has_ib() const;
@@ -473,7 +474,8 @@ protected:
     rc_verbs,           \
     dc_mlx5,            \
     ud_verbs,           \
-    ud_mlx5
+    ud_mlx5,            \
+    srd
 
 
 #define UCT_TEST_IB_AND_GGA_TLS \
