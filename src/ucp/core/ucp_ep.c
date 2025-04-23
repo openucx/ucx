@@ -3466,9 +3466,9 @@ int ucp_ep_is_local_connected(ucp_ep_h ep)
         /* For CM case need to check all wireup lanes because transport lanes
          * can be not connected yet. */
         for (i = 0; is_local_connected && (i < ucp_ep_num_lanes(ep)); ++i) {
-            uct_ep             = ucp_ep_get_lane_raw(ep, i);
-            if ((uct_ep == NULL) &&
-                (ep->worker->context->config.ext.on_demand_wireup)) {
+            uct_ep = ucp_ep_get_lane_raw(ep, i);
+            if (uct_ep == NULL) {
+                ucs_assert(ep->worker->context->config.ext.on_demand_wireup);
                 ucs_assert(!ucp_ep_is_lane_p2p(ep, i));
                 continue;
             }
