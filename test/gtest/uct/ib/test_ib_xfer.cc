@@ -60,7 +60,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp64,
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_zcopy_inlresp0,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY),
                      "IB_TX_INLINE_RESP=0") {
-    EXPECT_EQ(1u, sender().iface_attr().cap.get.min_zcopy);
+    EXPECT_EQ(has_transport("srd") ? 0u : 1u,
+              sender().iface_attr().cap.get.min_zcopy);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
                     sender().iface_attr().cap.get.min_zcopy,
                     sender().iface_attr().cap.get.max_zcopy,
