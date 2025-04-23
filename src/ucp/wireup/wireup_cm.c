@@ -379,7 +379,7 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep)
         /* During discarding, UCT EP's pending queues 
          * are expected to be empty */
         ucp_worker_discard_uct_ep(
-                ucp_ep, ucp_ep_get_lane(ucp_ep, lane_idx),
+                ucp_ep, ucp_ep_get_lane_raw(ucp_ep, lane_idx),
                 ucp_ep_get_rsc_index(ucp_ep, lane_idx), UCT_FLUSH_FLAG_CANCEL,
                 (uct_pending_purge_callback_t)ucs_empty_function_do_assert_void,
                 NULL, (ucp_send_nbx_callback_t)ucs_empty_function, NULL);
@@ -405,6 +405,12 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
 
         rsc_idx = ucp_ep_get_rsc_index(ep, lane_idx);
         if (rsc_idx == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        if (worker->context->config.ext.on_demand_wireup &&
+            (lane_idx >= UCP_MAX_FAST_PATH_LANES) &&
+            !ucp_ep_is_lane_p2p(ep, lane_idx)) {
             continue;
         }
 

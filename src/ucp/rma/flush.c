@@ -111,6 +111,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         lane   = ucs_ffs64(all_lanes & ~req->send.flush.started_lanes);
         uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if (uct_ep == NULL) {
+            ucs_info("ep %p flush not connected lane %d", ep, lane);
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
             continue;
         }
@@ -383,7 +384,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const char *debug_name,
                                        unsigned uct_flags)
 {
-    ucp_lane_index_t num_lanes = ucp_ep_num_valid_lanes(ep);
+    ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep);
     ucs_status_t status;
     ucp_request_t *req;
 

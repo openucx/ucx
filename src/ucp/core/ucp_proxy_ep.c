@@ -208,7 +208,7 @@ void ucp_proxy_ep_replace(ucp_proxy_ep_t *proxy_ep)
         if (uct_ep == &proxy_ep->super) {
             ucs_assert(proxy_ep->uct_ep != NULL);    /* make sure there is only one match */
             ucp_ep_set_lane(ucp_ep, lane, proxy_ep->uct_ep);
-            proxy_ep->uct_ep      = NULL;
+            proxy_ep->uct_ep = NULL;
         }
     }
 

@@ -452,7 +452,7 @@ ucp_wireup_connect_local(ucp_ep_h ep, uint64_t lanes_bitmap,
         }
 
         if (!ucp_ep_is_lane_p2p(ep, lane)) {
-            if (addr_indices == NULL) {
+            if ((lanes2remote == NULL) && (addr_indices == NULL)) {
                 /* TODO: need to handle only addr_reply case */
                 continue;
             }
@@ -1908,7 +1908,9 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
+        ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL ||
+                   (ep->worker->context->config.ext.on_demand_wireup &&
+                    !ucp_ep_is_lane_p2p(ep, lane)));
     }
 
     old_key = &ucp_ep_config(ep)->key;
@@ -2031,6 +2033,7 @@ ucp_wireup_gather_pending_requests(ucp_ep_h ep,
 {
     ucp_request_t *req;
     ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
 
     /* Handle wireup EPs */
     ucp_wireup_eps_pending_extract(ep, replay_pending_queue);
@@ -2050,12 +2053,16 @@ ucp_wireup_gather_pending_requests(ucp_ep_h ep,
 
     /* Fully connected lanes */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
+        if (uct_ep == NULL) {
             continue;
         }
 
-        uct_ep_pending_purge(ucp_ep_get_lane(ep, lane),
-                             ucp_request_purge_enqueue_cb,
+        if (ucp_wireup_ep_test(uct_ep)) {
+            continue;
+        }
+
+        uct_ep_pending_purge(uct_ep, ucp_request_purge_enqueue_cb,
                              replay_pending_queue);
     }
 }
@@ -2401,12 +2408,16 @@ ucp_wireup_get_remote_p2p_lane(ucp_ep_h ep, ucp_lane_index_t lane,
 int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *addr_entry)
 {
-    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep_h uct_ep = ucp_ep_get_lane_raw(ep, lane);
     uct_ep_is_connected_params_t params;
 
     ucp_wireup_fill_is_connected_params(addr_entry, &params);
 
     if (!ucp_ep_is_lane_p2p(ep, lane)) {
+        if (uct_ep == NULL) {
+            return 0;
+        }
+
         /* Check if lane is connected to remote iface */
         ucs_assertv(addr_entry->num_ep_addrs == 0, "num_ep_addrs=%u",
                     addr_entry->num_ep_addrs);

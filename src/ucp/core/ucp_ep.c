@@ -3459,13 +3459,21 @@ int ucp_ep_is_local_connected(ucp_ep_h ep)
 {
     int is_local_connected = !!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
     ucp_wireup_ep_t *wireup_ep;
+    uct_ep_h uct_ep;
     ucp_lane_index_t i;
 
     if (ucp_ep_has_cm_lane(ep)) {
         /* For CM case need to check all wireup lanes because transport lanes
          * can be not connected yet. */
         for (i = 0; is_local_connected && (i < ucp_ep_num_lanes(ep)); ++i) {
-            wireup_ep          = ucp_wireup_ep(ucp_ep_get_lane(ep, i));
+            uct_ep             = ucp_ep_get_lane_raw(ep, i);
+            if ((uct_ep == NULL) &&
+                (ep->worker->context->config.ext.on_demand_wireup)) {
+                ucs_assert(!ucp_ep_is_lane_p2p(ep, i));
+                continue;
+            }
+
+            wireup_ep          = ucp_wireup_ep(uct_ep);
             is_local_connected = (wireup_ep == NULL) ||
                                  (wireup_ep->flags &
                                   UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);
