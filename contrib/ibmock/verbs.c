@@ -183,9 +183,11 @@ static enum ibv_wc_opcode dev_wc_opcode(enum ibv_wr_opcode opcode)
         return IBV_WC_SEND;
     } else if (opcode == IBV_WR_RDMA_READ) {
         return IBV_WC_RDMA_READ;
+    } else if (opcode == IBV_WR_RDMA_WRITE) {
+        return IBV_WC_RDMA_WRITE;
     }
 
-    return IBV_WC_RDMA_READ;
+    return -1;
 }
 
 static int
@@ -253,9 +255,10 @@ rx_rdma(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
     struct {
         void     *addr;
         uint32_t len;
-    } __attribute__((packed)) dest[hdr->rdma.count];
+    } __attribute__((packed)) data[hdr->rdma.count];
     int i;
     size_t src_off, dst_off, total, len;
+    void *dst, *src;
 
     array_foreach(mr, &fqp->fpd->mrs) {
         if ((*mr)->mr.lkey == hdr->rdma.rkey) {
@@ -273,7 +276,7 @@ rx_rdma(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
     i       = 0;
     src_off = sizeof(*hdr);
     dst_off = 0;
-    for (dst_off = 0; dst_off < sizeof(dest);) {
+    for (dst_off = 0; dst_off < sizeof(data);) {
         while (i < count && src_off >= iov[i].iov_len) {
             src_off = 0;
             i++;
@@ -284,16 +287,25 @@ rx_rdma(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
             return 0;
         }
 
-        len = min(sizeof(dest) - dst_off, iov[i].iov_len - src_off);
-        memcpy((void*)dest + dst_off, iov[i].iov_base + src_off, len);
+        len = min(sizeof(data) - dst_off, iov[i].iov_len - src_off);
+        memcpy((void*)data + dst_off, iov[i].iov_base + src_off, len);
         dst_off += len;
         src_off += len;
     }
 
     total = 0;
     for (i = 0; i < hdr->rdma.count; i++) {
-        memcpy(dest[i].addr, (void*)hdr->rdma.addr + total, dest[i].len);
-        total += dest[i].len;
+        if (hdr->opcode == IBV_WR_RDMA_READ) {
+            dst = data[i].addr;
+            src = (void*)hdr->rdma.addr + total;
+        } else {
+            assert(hdr->opcode == IBV_WR_RDMA_WRITE);
+            src = data[i].addr;
+            dst = (void*)hdr->rdma.addr + total;
+        }
+
+        memcpy(dst, src, data[i].len);
+        total += data[i].len;
     }
 
     assert(total == hdr->rdma.len);
@@ -326,8 +338,11 @@ static int dev_rx_cb(struct iovec *iov, int count)
 
     if (hdr->opcode == IBV_WR_SEND) {
         ret = rx_send(fqp, hdr, iov, count);
-    } else if (hdr->opcode == IBV_WR_RDMA_READ) {
+    } else if ((hdr->opcode == IBV_WR_RDMA_READ) ||
+               (hdr->opcode == IBV_WR_RDMA_WRITE)) {
         ret = rx_rdma(fqp, hdr, iov, count);
+    } else {
+        ret = 1;
     }
 
     return ret;
@@ -359,7 +374,9 @@ static int dev_wr_send_serialize(struct ibv_qp *qp, struct ibv_send_wr *wr,
     struct ibv_wc *wc;
     int i, ret, count;
 
-    if ((wr->opcode != IBV_WR_SEND) && (wr->opcode != IBV_WR_RDMA_READ)) {
+    if ((wr->opcode != IBV_WR_SEND) &&
+        (wr->opcode != IBV_WR_RDMA_READ) &&
+        (wr->opcode != IBV_WR_RDMA_WRITE)) {
         return -1;
     }
 
@@ -383,7 +400,7 @@ static int dev_wr_send_serialize(struct ibv_qp *qp, struct ibv_send_wr *wr,
             iov[1 + i].iov_len  = wr->sg_list[i].length;
 
             total += iov[1 + i].iov_len;
-        } else if (wr->opcode == IBV_WR_RDMA_READ) {
+        } else {
             iov[1 + (2 * i)].iov_base = &wr->sg_list[i].addr;
             iov[1 + (2 * i)].iov_len  = sizeof(wr->sg_list[i].addr);
             iov[2 + (2 * i)].iov_base = &wr->sg_list[i].length;
@@ -394,7 +411,7 @@ static int dev_wr_send_serialize(struct ibv_qp *qp, struct ibv_send_wr *wr,
     }
 
     count = wr->num_sge + 1;
-    if (wr->opcode == IBV_WR_RDMA_READ) {
+    if (wr->opcode != IBV_WR_SEND) {
         hdr->rdma.rkey  = wr->wr.rdma.rkey;
         hdr->rdma.addr  = wr->wr.rdma.remote_addr;
         hdr->rdma.len   = total;
@@ -892,14 +909,27 @@ void dev_qp_wr_start(struct ibv_qp_ex *qp_ex)
     memset(&fqp->sr, 0, sizeof(fqp->sr));
 }
 
-void dev_qp_wr_rdma_read(struct ibv_qp_ex *qp_ex, uint32_t rkey,
-                         uint64_t remote_addr)
+void dev_qp_wr_rdma(struct ibv_qp_ex *qp_ex, int opcode,
+                    uint32_t rkey,
+                    uint64_t remote_addr)
 {
     struct fake_qp *fqp = (struct fake_qp*)qp_ex;
 
-    fqp->sr.opcode              = IBV_WR_RDMA_READ;
+    fqp->sr.opcode              = opcode;
     fqp->sr.wr.rdma.rkey        = rkey;
     fqp->sr.wr.rdma.remote_addr = remote_addr;
+}
+
+void dev_qp_wr_rdma_read(struct ibv_qp_ex *qp_ex, uint32_t rkey,
+                         uint64_t remote_addr)
+{
+    dev_qp_wr_rdma(qp_ex, IBV_WR_RDMA_READ, rkey, remote_addr);
+}
+
+void dev_qp_wr_rdma_write(struct ibv_qp_ex *qp_ex, uint32_t rkey,
+                          uint64_t remote_addr)
+{
+    dev_qp_wr_rdma(qp_ex, IBV_WR_RDMA_WRITE, rkey, remote_addr);
 }
 
 void dev_qp_wr_set_sge_list(struct ibv_qp_ex *qp_ex, size_t num_sge,

@@ -57,6 +57,11 @@ ucs_status_t uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                                  unsigned header_length, const uct_iov_t *iov,
                                  size_t iovcnt, unsigned flags,
                                  uct_completion_t *comp);
+ucs_status_t uct_srd_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp);
+ssize_t uct_srd_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                             void *arg, uint64_t remote_addr, uct_rkey_t rkey);
 ucs_status_t uct_srd_ep_fence(uct_ep_h ep, unsigned flags);
 ucs_status_t uct_srd_ep_flush(uct_ep_h ep_h, unsigned flags,
                               uct_completion_t *comp);

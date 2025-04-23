@@ -246,7 +246,7 @@ uct_srd_iface_create_qp(uct_srd_iface_t *iface,
                         const uct_srd_iface_config_t *config,
                         struct efadv_device_attr *efa_attr)
 {
-#ifdef HAVE_DECL_EFADV_DEVICE_ATTR_CAPS_RDMA_READ
+#ifdef HAVE_EFA_RMA
     struct efadv_qp_init_attr efa_qp_init_attr = {0};
     struct ibv_qp_init_attr_ex qp_init_attr    = {0};
 #else
@@ -273,13 +273,17 @@ uct_srd_iface_create_qp(uct_srd_iface_t *iface,
     qp_init_attr.cap.max_inline_data = ucs_min(config->super.tx.min_inline,
                                                md->super.dev.max_inline_data);
 
-#ifdef HAVE_DECL_EFADV_DEVICE_ATTR_CAPS_RDMA_READ
+#ifdef HAVE_EFA_RMA
     qp_init_attr.pd             = pd;
     qp_init_attr.comp_mask      = IBV_QP_INIT_ATTR_PD |
                                   IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
     qp_init_attr.send_ops_flags = IBV_QP_EX_WITH_SEND;
     if (uct_ib_efadv_has_rdma_read(efa_attr)) {
         qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+    }
+
+    if (uct_ib_efadv_has_rdma_write(efa_attr)) {
+        qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
     }
 
     efa_qp_init_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
@@ -304,17 +308,19 @@ uct_srd_iface_create_qp(uct_srd_iface_t *iface,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (uct_ib_efadv_has_rdma_read(efa_attr)) {
-        iface->config.max_get_zcopy = efa_attr->max_rdma_size;
-        iface->config.max_get_bcopy = ucs_min(iface->super.config.seg_size,
-                                              efa_attr->max_rdma_size);
+    if (uct_ib_efadv_has_rdma_read(efa_attr) ||
+        uct_ib_efadv_has_rdma_write(efa_attr)) {
+        iface->config.max_rdma_zcopy = efa_attr->max_rdma_size;
+        iface->config.max_rdma_bcopy = ucs_min(iface->super.config.seg_size,
+                                               efa_attr->max_rdma_size);
     } else {
-        iface->config.max_get_zcopy = 0;
-        iface->config.max_get_bcopy = 0;
+        iface->config.max_rdma_zcopy = 0;
+        iface->config.max_rdma_bcopy = 0;
     }
 
     iface->config.max_send_sge  = qp_init_attr.cap.max_send_sge;
-    iface->config.max_recv_sge  = qp_init_attr.cap.max_recv_sge;
+    /* efa provider in rmda-core uses max_sge_rd for RDMA_READ and RDMA_WRITE */
+    iface->config.max_rdma_sge  = IBV_DEV_ATTR(&md->super.dev, max_sge_rd);
     iface->config.max_inline    = qp_init_attr.cap.max_inline_data;
     iface->config.tx_qp_len     = qp_init_attr.cap.max_send_wr;
     iface->tx.available         = qp_init_attr.cap.max_send_wr;
@@ -863,20 +869,28 @@ ucs_status_t
 uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_srd_iface_t *iface = ucs_derived_of(tl_iface, uct_srd_iface_t);
+    uct_ib_md_t *ib_md     = uct_ib_iface_md(&iface->super);
     size_t active_mtu      = uct_ib_mtu_value(
             uct_ib_iface_port_attr(&iface->super)->active_mtu);
     ucs_status_t status;
+    struct efadv_device_attr efa_attr;
+    int ret;
 
     /* Common parameters */
     status = uct_ib_iface_query(&iface->super,
                                 UCT_IB_DETH_LEN + sizeof(uct_srd_hdr_t),
                                 iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     /* General attributes */
     iface_attr->cap.am.align_mtu        = active_mtu;
     iface_attr->cap.get.align_mtu       = active_mtu;
+    iface_attr->cap.put.align_mtu       = active_mtu;
     iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
 
     iface_attr->cap.flags      = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                  UCT_IFACE_FLAG_PENDING |
@@ -886,7 +900,6 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                                  UCT_IFACE_FLAG_AM_BCOPY |
                                  UCT_IFACE_FLAG_AM_SHORT |
                                  UCT_IFACE_FLAG_AM_ZCOPY;
-
     iface_attr->iface_addr_len = sizeof(uct_srd_iface_addr_t);
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
@@ -906,16 +919,29 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_short = uct_ib_iface_hdr_size(
             iface->config.max_inline, sizeof(uct_srd_hdr_t));
 
-    /* GET */
-    iface_attr->cap.get.max_bcopy = iface->config.max_get_bcopy;
-    iface_attr->cap.get.max_zcopy = iface->config.max_get_zcopy;
-    iface_attr->cap.get.max_iov   = iface->config.max_recv_sge;
-    iface_attr->cap.get.min_zcopy =
-            iface->super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1;
+    ret = efadv_query_device(ib_md->pd->context, &efa_attr, sizeof(efa_attr));
+    if (ret != 0) {
+        return UCS_ERR_IO_ERROR;
+    }
 
-    if (iface->config.max_get_zcopy > 0) {
+    if (uct_ib_efadv_has_rdma_read(&efa_attr)) {
+        iface_attr->cap.get.max_bcopy = iface->config.max_rdma_bcopy;
+        iface_attr->cap.get.max_zcopy = iface->config.max_rdma_zcopy;
+        iface_attr->cap.get.max_iov   = iface->config.max_rdma_sge;
+        iface_attr->cap.get.min_zcopy = 0;
+
         iface_attr->cap.flags |= UCT_IFACE_FLAG_GET_BCOPY |
                                  UCT_IFACE_FLAG_GET_ZCOPY;
+    }
+
+    if (uct_ib_efadv_has_rdma_write(&efa_attr)) {
+        iface_attr->cap.put.max_bcopy = iface->config.max_rdma_bcopy;
+        iface_attr->cap.put.max_zcopy = iface->config.max_rdma_zcopy;
+        iface_attr->cap.put.max_iov   = iface->config.max_rdma_sge;
+        iface_attr->cap.put.min_zcopy = 0;
+
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_PUT_BCOPY |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY;
     }
 
     return status;
@@ -999,6 +1025,8 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_srd_ep_t),
     .ep_am_bcopy              = uct_srd_ep_am_bcopy,
     .ep_am_zcopy              = uct_srd_ep_am_zcopy,
+    .ep_put_zcopy             = uct_srd_ep_put_zcopy,
+    .ep_put_bcopy             = uct_srd_ep_put_bcopy,
     .ep_get_zcopy             = uct_srd_ep_get_zcopy,
     .ep_get_bcopy             = uct_srd_ep_get_bcopy,
     .ep_am_short              = uct_srd_ep_am_short,

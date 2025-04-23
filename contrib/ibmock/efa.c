@@ -47,6 +47,7 @@ struct ibv_qp *efadv_create_driver_qp_impl(struct ibv_pd           *pd,
 
     fqp->qp_ex.wr_start        = dev_qp_wr_start;
     fqp->qp_ex.wr_rdma_read    = dev_qp_wr_rdma_read;
+    fqp->qp_ex.wr_rdma_write   = dev_qp_wr_rdma_write;
     fqp->qp_ex.wr_set_sge_list = dev_qp_wr_set_sge_list;
     fqp->qp_ex.wr_set_ud_addr  = dev_qp_wr_set_ud_addr;
     fqp->qp_ex.wr_complete     = dev_qp_wr_complete;
