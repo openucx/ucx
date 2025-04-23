@@ -1887,8 +1887,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (context->config.ext.proto_enable &&
         (select_params->address->dst_version > UCP_RELEASE_LEGACY)) {
-        bw_info.max_lanes = ucp_wireup_max_lanes(select_params,
-                                                 bw_info.criteria.lane_type);
+        bw_info.max_lanes = MIN(
+                context->config.ext.max_rndv_lanes,
+                ucp_wireup_max_lanes(select_params, bw_info.criteria.lane_type));
     } else {
         bw_info.max_lanes = context->config.ext.max_rndv_lanes;
     }
