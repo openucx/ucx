@@ -103,9 +103,12 @@ run_gtests() {
         ./install/bin/ucx_perftest -l -t tag_bw
     ./install/bin/ucx_info -d
 
+    IBMOCK_FILTER='srd/uct_p2p_am_misc.no_rx_buffs*:srd/test_uct_peer_failure.purge_failed_peer*'
     # Try the faster approach before valgrind
-    make -C contrib/test/gtest test GTEST_FILTER=*ud*:*test_srd*
-    make -C contrib/test/gtest test_valgrind GTEST_FILTER=*ud*:*test_srd*:-*test_uct_perf.envelope*
+    make -C contrib/test/gtest test \
+        GTEST_FILTER=*ud*:srd/*-$IBMOCK_FILTER
+    make -C contrib/test/gtest test_valgrind \
+        GTEST_FILTER=*ud*:srd/*:-*test_uct_perf.envelope*:$IBMOCK_FILTER
 }
 
 test_ucx_rpm() {
