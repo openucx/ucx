@@ -1918,19 +1918,38 @@ protected:
         return m_used_lanes.insert(lane).second;
     }
 
-    void check_lane_value(ucp_lane_index_t lane, const std::string& type,
+    bool check_lane_value(ucp_lane_index_t lane, const std::string& type,
                           bool is_valid = true) {
         bool result       = ucp_ep_get_lane_raw(sender().ep(), lane);
         bool is_fast_path = (lane < UCP_MAX_FAST_PATH_LANES);
+
         /* fast path lanes must be always initialized */
-        ASSERT_EQ(result, is_valid || is_fast_path)
-                << type << (is_fast_path ? " fast" : " slow")
-                << " lane[" << size_t(lane) << "] check failed " << is_valid;
+        return is_fast_path ? result : (is_valid == result);
     }
 
     void check_lanes_arr_value(const ucp_lane_index_t *lanes, size_t num_lanes,
-                               const std::string& type,
-                               bool is_valid = true) {
+                               const std::string& type, bool is_valid = true,
+                               bool check_all_lanes = true) {
+        bool result = check_all_lanes ? true : false;
+
+        UCS_TEST_MESSAGE << "testing" << type << " lanes array["
+            << num_lanes << "]: "
+            << [](const ucp_lane_index_t* arr, size_t size) -> std::string {
+            if (size == 0) {
+                return "[]";
+            }
+
+            std::string arr_str = "[";
+            for (size_t i = 0; i < size; ++i) {
+                arr_str += std::to_string(arr[i]);
+                if (i < size - 1) {
+                    arr_str += ", ";
+                }
+            }
+
+            return arr_str + ']';
+        } (lanes, num_lanes);
+
         for (size_t i = 0; i < num_lanes; ++i) {
             ucp_lane_index_t lane_idx = lanes[i];
 
@@ -1942,8 +1961,22 @@ protected:
                 continue;
             }
 
-            check_lane_value(lane_idx, type, is_valid);
+            if (check_all_lanes) {
+                result &= check_lane_value(lane_idx, type, is_valid);
+                if (!result) {
+                    break;
+                }
+            } else {
+                if (lane_idx < UCP_MAX_FAST_PATH_LANES) {
+                    // Ignore fast path lanes
+                    continue;
+                }
+
+                result |= check_lane_value(lane_idx, type, is_valid);
+            }
         }
+
+        EXPECT_TRUE(result) << "lanes array check failed " << type;
     }
 
     bool m_am_recvd = false;
@@ -1971,7 +2004,7 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
                                                  &am_handler_params));
     sender().connect(&receiver(), get_ep_params());
 
-    // checks before wireup
+    // Checks before wireup
     ucp_ep_h ep = sender().ep();
 
     if (ucp_ep_num_lanes(ep) <= UCP_MAX_FAST_PATH_LANES) {
@@ -2004,28 +2037,30 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
     check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, ep_cfg_key(ep).num_lanes,
                           "rma_bw", false);
 
-    // complete first step of wireup
+    // Complete first step of wireup
     flush_workers();
 
-    // fast lanes must be initialized
+    // Fast lanes must be initialized
     void *req = ucp_am_send_nbx(ep, ucp_am_id_test, sbuf.ptr(), 1, NULL, 0,
                                 &params);
     ASSERT_UCS_OK(request_wait(req));
     wait_for_value(&m_am_recvd, true);
 
-    //check lanes state is the same
+    // Check lanes state is the same
     check_lanes_arr_value(ep_cfg_key(ep).am_bw_lanes, ep_cfg_key(ep).num_lanes,
                           "am_bw", false);
     check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, ep_cfg_key(ep).num_lanes,
                           "rma_bw", false);
 
-    // do RMA, then all rma_bw lanes must be initialized
+    // Do RMA, then at least one slow lane lane should be initialized.
+    // NOTE: number of initialized lanes depends on HW setup and protocol
+    // selection logic and may change in future
     ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
     req = ucp_put_nbx(ep, sbuf.ptr(), sbuf.size(), (uintptr_t)rbuf.ptr(),
                       rkey.get(), &params);
     ASSERT_UCS_OK(request_wait(req));
     check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, max_rma_lanes, "rma_bw",
-                          true);
+                          /*is_valid:*/ true, /*check_all_lanes:*/ false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_ondemand);
