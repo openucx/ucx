@@ -1986,7 +1986,6 @@ protected:
 
 UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
            "IB_NUM_PATHS?=6", "MAX_RMA_LANES?=6") {
-    size_t max_rma_lanes          = 6;
     ucp_request_param_t params    = { 0 };
     const size_t msg_size         = 1 * UCS_GBYTE;
     const unsigned ucp_am_id_test = 1;
@@ -2059,7 +2058,8 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
     req = ucp_put_nbx(ep, sbuf.ptr(), sbuf.size(), (uintptr_t)rbuf.ptr(),
                       rkey.get(), &params);
     ASSERT_UCS_OK(request_wait(req));
-    check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, max_rma_lanes, "rma_bw",
+    check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes,
+                          ep_cfg_key(ep).num_lanes, "rma_bw",
                           /*is_valid:*/ true, /*check_all_lanes:*/ false);
 }
 
