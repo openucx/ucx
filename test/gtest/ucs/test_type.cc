@@ -230,13 +230,11 @@ UCS_TEST_F(test_rwlock, lock) {
     EXPECT_FALSE(read_taken); /* read lock should wait while write lock is waiting */
 
     ucs_rw_spinlock_read_unlock(&lock);
-    sleep();
-    EXPECT_TRUE(write_taken); /* write lock should be taken */
     w.join();
+    EXPECT_TRUE(write_taken); /* write lock should be taken */
 
-    sleep();
-    EXPECT_TRUE(read_taken); /* read lock should be taken */
     r1.join();
+    EXPECT_TRUE(read_taken); /* read lock should be taken */
 
     EXPECT_TRUE(ucs_rw_spinlock_write_trylock(&lock));
     read_taken = false;
@@ -249,9 +247,8 @@ UCS_TEST_F(test_rwlock, lock) {
     EXPECT_FALSE(read_taken); /* read lock should wait for write lock release */
 
     ucs_rw_spinlock_write_unlock(&lock);
-    sleep();
-    EXPECT_TRUE(read_taken); /* read lock should be taken */
     r2.join();
+    EXPECT_TRUE(read_taken); /* read lock should be taken */
 
     ucs_rw_spinlock_cleanup(&lock);
 }
