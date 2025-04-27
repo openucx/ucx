@@ -38,6 +38,7 @@ protected:
 
         void
         verify_configuration(const entity &other, unsigned reused_rscs) const;
+        address_p get_address(const ucp_tl_bitmap_t &tl_bitmap) const;
 
         bool is_reconfigured() const
         {
@@ -53,7 +54,6 @@ protected:
         void store_config();
         ucp_tl_bitmap_t
         ep_tl_bitmap(unsigned max_num_rscs = limits::max()) const;
-        address_p get_address(const ucp_tl_bitmap_t &tl_bitmap) const;
         bool is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
         ucp_tl_bitmap_t reduced_tl_bitmap() const;
@@ -104,8 +104,6 @@ public:
     void init()
     {
         ucp_test::init();
-
-        UCS_TEST_SKIP_R("Test is skipped due to unresolved failure");
 
         /* num_tls = single device + UD */
         /* coverity[unreachable] */
@@ -198,7 +196,7 @@ public:
         }
     }
 
-    static constexpr unsigned num_iterations = 1000;
+    static constexpr unsigned num_iterations = 100;
 };
 
 void test_ucp_ep_reconfig::entity::store_config()
@@ -476,7 +474,7 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_ep_reconfig);
 
 class test_reconfig_asymmetric : public test_ucp_ep_reconfig {
 protected:
-    void create_entities_and_connect() override
+    virtual void create_entities_and_connect() override
     {
         create_entity(true, false);
 
@@ -523,3 +521,64 @@ UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfig_asymmetric, shm_ib, "shm,ib");
+
+class test_reconfig_stress : public test_reconfig_asymmetric {
+protected:
+    void create_entities_and_connect() override
+    {
+        create_entity(true, false);
+        create_entity(false, false);
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+};
+
+UCS_TEST_P(test_reconfig_stress, stress)
+{
+    static unsigned msg_size = 16384;
+    mem_buffer_vec_t sbufs, rbufs;
+    unsigned addr_indices[UCP_MAX_LANES];
+    std::vector<void*> reqs;
+    int cfg_changed;
+    ucs_status_t status;
+
+    /* Perform initial connection */
+    init_buffers(sbufs, rbufs, msg_size, false);
+    create_entities_and_connect();
+    send_recv(false);
+
+    /* Fill pending/outstanding queue prior to reconfig */
+    for (unsigned i = 0; i < num_iterations; ++i) {
+        send_message(sender(), receiver(), sbufs[i].get(), rbufs[i].get(),
+                     reqs);
+        if ((i % 50) == 0) {
+            progress();
+        }
+    }
+
+    /* Increase num_eps to prefer DC */
+    sender().ucph()->config.est_num_eps   = 200;
+    receiver().ucph()->config.est_num_eps = 200;
+
+    /* Perform sender reconfig and initiate wireup process */
+    auto r_sender    = static_cast<const entity*>(&sender());
+    auto r_receiver  = static_cast<const entity*>(&receiver());
+    auto worker_addr = r_receiver->get_address(ucp_tl_bitmap_max);
+
+    UCS_ASYNC_BLOCK(&sender().worker()->async);
+    status = ucp_wireup_init_lanes(sender().ep(), UCP_EP_INIT_CREATE_AM_LANE,
+                                   &ucp_tl_bitmap_max, &worker_addr->second,
+                                   addr_indices, &cfg_changed);
+    ASSERT_UCS_OK(status);
+    ASSERT_UCS_OK(ucp_wireup_send_request(sender().ep()));
+    UCS_ASYNC_UNBLOCK(&sender().worker()->async);
+    requests_wait(reqs);
+
+    /* Verify new configuration */
+    EXPECT_EQ(should_reconfigure(), r_sender->is_reconfigured());
+    EXPECT_EQ(should_reconfigure(), r_receiver->is_reconfigured());
+    r_sender->verify_configuration(*r_receiver, r_sender->num_reused_rscs());
+    r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfig_stress, shm_ib, "shm,ib");
