@@ -791,3 +791,34 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
     ep->ext->fence_seq       = ep->worker->fence_seq;
     return UCS_OK;
 }
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_fence, (ep), ucp_ep_h ep)
+{
+    ucs_status_t status = UCS_OK;
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+
+    switch (ep->worker->context->config.worker_fence_mode) {
+    case UCP_FENCE_MODE_EP_BASED:
+        /* Decrement the EP's fence_seq to make it appear as requiring a fence
+         * in ucp_ep_rma_is_fence_required().
+         */
+        if (ep->ext->fence_seq == ep->worker->fence_seq) {
+            ep->ext->fence_seq--;
+        }
+        break;
+    case UCP_FENCE_MODE_STRONG:
+        status = ucp_ep_fence_strong(ep);
+        break;
+    case UCP_FENCE_MODE_WEAK:
+        status = ucp_ep_fence_weak(ep);
+        break;
+    default:
+        ucs_error("invalid fence mode %d",
+                  ep->worker->context->config.worker_fence_mode);
+        status = UCS_ERR_INVALID_PARAM;
+    }
+
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+    return status;
+}

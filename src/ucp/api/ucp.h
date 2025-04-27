@@ -2747,6 +2747,31 @@ ucs_status_ptr_t ucp_ep_flush_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 
 /**
  * @ingroup UCP_ENDPOINT
+ *
+ * @brief Ensures ordering between non-blocking operations on the @ref
+ * ucp_ep_h "endpoint".
+ *
+ * This routine ensures ordering of non-blocking communication operations on the
+ * @ref ucp_ep_h "endpoint". Communication operations issued on the @a ep prior
+ * to this call are guaranteed to be completed before any communication operations
+ * issued on the same endpoint after this call.
+ *
+ * @note The primary difference between @ref ucp_ep_fence "ucp_ep_fence()" and
+ * @ref ucp_ep_flush_nbx "ucp_ep_flush_nbx()" is the fact the fence routine does
+ * not guarantee completion of the operations on the call return but only
+ * ensures the order between communication operations. The @ref
+ * ucp_ep_flush_nbx "flush" operation on return guarantees that all operations
+ * are completed and corresponding memory regions were updated.
+ *
+ * @param [in] ep UCP endpoint.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_fence(ucp_ep_h ep);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
  * @brief Estimate performance characteristics of a specific endpoint.
  *
  * This routine fetches information about the endpoint.
