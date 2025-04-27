@@ -525,11 +525,17 @@ public:
         return sender().ep()->ext->fence_seq;
     }
 
-    void do_fence() {
+    void do_worker_fence() {
         uint64_t worker_fence_seq_before = worker_fence_seq();
         sender().fence();
 
         EXPECT_EQ(worker_fence_seq_before + 1, worker_fence_seq());
+        EXPECT_GT(worker_fence_seq(), ep_fence_seq());
+    }
+
+    void do_ep_fence() {
+        ucp_ep_fence(sender().ep());
+
         EXPECT_GT(worker_fence_seq(), ep_fence_seq());
     }
 
@@ -568,15 +574,15 @@ public:
         request_release(sptr);
     }
 
-    void do_rma_op_with_fence(op_type_t op, void *sbuf, size_t size,
-                              void *target, ucp_rkey_h rkey) {
+    void do_rma_op_with_worker_fence(op_type_t op, void *sbuf, size_t size,
+                                     void *target, ucp_rkey_h rkey) {
         do_rma_op(op, sbuf, size, target, rkey);
-        do_fence();
+        do_worker_fence();
         do_rma_op(op, sbuf, size, target, rkey);
     }
 
     void test_ep_based_fence_common(op_type_t op,
-                                   fence_func_t fence_func) {
+                                    fence_func_t fence_func) {
         mem_buffer sbuf(TEST_BUF_SIZE, UCS_MEMORY_TYPE_HOST);
         mapped_buffer rbuf(TEST_BUF_SIZE, receiver());
         rbuf.memset(0);
@@ -627,38 +633,59 @@ public:
         flush_worker(sender());
         flush_sender_cleanup();
     }
+
+    void do_rma_op_with_ep_fence(op_type_t op, void *sbuf, size_t size,
+                                 void *target, ucp_rkey_h rkey) {
+        do_ep_fence();
+        do_rma_op(op, sbuf, size, target, rkey);
+    }
 private:
     static constexpr size_t TEST_BUF_SIZE = 1000000;
 };
 
-UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_put) {
+UCS_TEST_P(test_ucp_ep_based_fence, test_worker_fence_put) {
     test_ep_based_fence_common(
-        OP_PUT, &test_ucp_ep_based_fence::do_rma_op_with_fence);
+        OP_PUT, &test_ucp_ep_based_fence::do_rma_op_with_worker_fence);
 }
 
-UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_get) {
+UCS_TEST_P(test_ucp_ep_based_fence, test_worker_fence_get) {
     test_ep_based_fence_common(
-        OP_GET, &test_ucp_ep_based_fence::do_rma_op_with_fence);
+        OP_GET, &test_ucp_ep_based_fence::do_rma_op_with_worker_fence);
 }
 
-UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_atomic) {
+UCS_TEST_P(test_ucp_ep_based_fence, test_worker_fence_atomic) {
     test_ep_based_fence_common(
-        OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_fence);
+        OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_worker_fence);
 }
 
-UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_put) {
+UCS_TEST_P(test_ucp_ep_based_fence, test_worker_fence_before_put) {
     test_ep_based_fence_common(
-        OP_PUT, &test_ucp_ep_based_fence::do_rma_op_with_fence_before);
+        OP_PUT, &test_ucp_ep_based_fence::do_rma_op_with_worker_fence_before);
 }
 
-UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_get) {
+UCS_TEST_P(test_ucp_ep_based_fence, test_worker_fence_before_get) {
     test_ep_based_fence_common(
-        OP_GET, &test_ucp_ep_based_fence::do_rma_op_with_fence_before);
+        OP_GET, &test_ucp_ep_based_fence::do_rma_op_with_worker_fence_before);
 }
 
-UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
+UCS_TEST_P(test_ucp_ep_based_fence, test_worker_fence_before_atomic) {
     test_ep_based_fence_common(
-        OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_fence_before);
+        OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_worker_fence_before);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_fence_put) {
+    test_ep_based_fence_common(
+        OP_PUT, &test_ucp_ep_based_fence::do_rma_op_with_ep_fence);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_fence_get) {
+    test_ep_based_fence_common(
+        OP_GET, &test_ucp_ep_based_fence::do_rma_op_with_ep_fence);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_fence_atomic) {
+    test_ep_based_fence_common(
+        OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_ep_fence);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
