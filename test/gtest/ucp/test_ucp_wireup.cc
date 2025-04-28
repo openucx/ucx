@@ -1932,7 +1932,7 @@ protected:
                                bool check_all_lanes = true) {
         bool result = check_all_lanes ? true : false;
 
-        UCS_TEST_MESSAGE << "testing" << type << " lanes array["
+        UCS_TEST_MESSAGE << "testing " << type << " lanes array["
             << num_lanes << "]: "
             << [](const ucp_lane_index_t* arr, size_t size) -> std::string {
             if (size == 0) {
@@ -1942,7 +1942,7 @@ protected:
             std::string arr_str = "[";
             for (size_t i = 0; i < size; ++i) {
                 arr_str += std::to_string(arr[i]);
-                if (i < size - 1) {
+                if (i < (size - 1)) {
                     arr_str += ", ";
                 }
             }
@@ -2024,7 +2024,8 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
     }
 
     check_lane_value(ucp_ep_get_wireup_msg_lane(ep), "wireup_msg");
-    UCS_TEST_MESSAGE << "add wireup lane " << ucp_ep_get_wireup_msg_lane(ep);
+    UCS_TEST_MESSAGE << "add wireup lane "
+                     << int(ucp_ep_get_wireup_msg_lane(ep));
     add_uniq_lane(ucp_ep_get_wireup_msg_lane(ep));
 
     check_lane_value(ep_cfg_key(ep).am_lane, "am");
