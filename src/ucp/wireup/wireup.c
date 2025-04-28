@@ -1854,8 +1854,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ucs_queue_head_init(&replay_pending_queue);
-    ucp_wireup_gather_pending_requests(ep, &replay_pending_queue);
-
     status = ucp_wireup_try_select_lanes(ep, ep_init_flags, &tl_bitmap,
                                          remote_address, addr_indices, &key,
                                          dst_mds_mem);
@@ -1893,6 +1891,11 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         if (status != UCS_OK) {
             goto out;
         }
+    }
+
+    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key)) {
+        ucp_wireup_gather_pending_requests(ep, &replay_pending_queue);
     }
 
     status = ucp_wireup_check_config_intersect(ep, &key, remote_address,
