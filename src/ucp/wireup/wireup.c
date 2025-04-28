@@ -986,15 +986,7 @@ ucp_wireup_process_addr_reply(ucp_worker_h worker, ucp_ep_h ep,
 
     ep_key = ucp_ep_config(ep)->key;
 
-    /* NOTE: we need only lanes layout here */
-    /* TODO: temporary HACK, check if can avoid */
-    key.reachable_md_map = ep_key.reachable_md_map;
-    memcpy(key.dst_md_cmpts, ep_key.dst_md_cmpts,
-           ucs_popcount(ep_key.reachable_md_map) * sizeof(key.dst_md_cmpts[0]));
-    key.wireup_msg_lane = ep_key.wireup_msg_lane;
-    key.flags           = ep_key.flags;
-
-    ucs_assert(ucp_ep_config_is_equal(&ep_key, &key));
+    ucs_assert(ucp_ep_config_lanes_layout_is_equal(&ep_key, &key));
     status = ucp_wireup_connect_local(ep, UCS_MASK(ucp_ep_num_lanes(ep)) &
                                           ~ucp_ep_config(ep)->p2p_lanes,
                                       remote_address, NULL, addr_indices);

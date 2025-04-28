@@ -192,6 +192,17 @@ enum {
 };
 
 
+/**
+ * Endpoint configuration comparison flags
+ */
+enum {
+    /* Compare lanes only */
+    UCP_EP_CONFIG_CMP_FLAG_LANES = UCS_BIT(0),
+
+    /* Strong compare all fields */
+    UCP_EP_CONFIG_CMP_FLAG_ALL   = UCS_MASK(8)
+};
+
 #define UCP_EP_STAT_TAG_OP(_ep, _op) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
 
@@ -770,6 +781,9 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
                                 const ucp_ep_config_key_t *key2,
                                 ucp_lane_index_t lane);
 
+int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,
+                                        const ucp_ep_config_key_t *key2);
+
 /**
  * @brief Compare two endpoint configurations.
  *
@@ -780,9 +794,6 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
  */
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
-
-int ucp_ep_config_is_equal2(const ucp_ep_config_key_t *key1,
-                            const ucp_ep_config_key_t *key2, unsigned flags);
 
 void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
                         ucs_string_buffer_t *strb);
