@@ -817,7 +817,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     if ((rc_config->fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         ((rc_config->fence_mode == UCT_RC_FENCE_MODE_AUTO) &&
-         (uct_ib_device_has_pci_atomics(dev) || md->super.relaxed_order))) {
+         (uct_ib_device_has_pci_atomics(dev) || md->super.relaxed_order ||
+          (self->config.put_fence_flag != 0)))) {
         if (uct_ib_device_has_pci_atomics(dev)) {
             self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
         } else {
