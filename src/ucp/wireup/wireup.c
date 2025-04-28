@@ -965,7 +965,7 @@ ucp_wireup_process_addr_reply(ucp_worker_h worker, ucp_ep_h ep,
     unsigned ep_init_flags = ucp_ep_restore_init_flags(ep);
     unsigned addr_indices[UCP_MAX_LANES] = {0};
     ucp_rsc_index_t dst_mds_mem[UCP_MAX_MDS] = {0};
-    ucp_ep_config_key_t key, ep_key;
+    ucp_ep_config_key_t key;
     ucs_status_t status;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_ADDR_REPLY);
@@ -984,9 +984,9 @@ ucp_wireup_process_addr_reply(ucp_worker_h worker, ucp_ep_h ep,
         return;
     }
 
-    ep_key = ucp_ep_config(ep)->key;
+    ucs_assert_always(
+            ucp_ep_config_lanes_layout_is_equal(&ucp_ep_config(ep)->key, &key));
 
-    ucs_assert(ucp_ep_config_lanes_layout_is_equal(&ep_key, &key));
     status = ucp_wireup_connect_local(ep, UCS_MASK(ucp_ep_num_lanes(ep)) &
                                           ~ucp_ep_config(ep)->p2p_lanes,
                                       remote_address, NULL, addr_indices);
