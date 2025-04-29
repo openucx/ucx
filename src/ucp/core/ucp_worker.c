@@ -3696,6 +3696,14 @@ ucp_worker_deferred_ep_t *ucp_worker_get_deferred_ep(ucp_ep_h ep)
     return &kh_value(&worker->deferred_ep_hash, iter);
 }
 
+int ucp_worker_deferred_flush_in_progress(ucp_ep_h ep)
+{
+    ucp_worker_deferred_ep_t *deferred = ucp_worker_get_deferred_ep(ep);
+
+    return !ucs_array_is_empty(&deferred->flush.uct_eps) &&
+    (deferred->flush.req->status == UCS_INPROGRESS);
+}
+
 /* Perform non-blocking flush on discarded uct EPs */
 ucs_status_t ucp_worker_flush_deferred_ep(ucp_ep_h ep)
 {

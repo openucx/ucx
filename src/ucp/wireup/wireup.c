@@ -643,8 +643,8 @@ static unsigned ucp_wireup_send_reply_sched(void *arg)
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
 
-    /* Reschedule sending of reply message while flush not completed */
-    if (ucp_worker_get_deferred_ep(ep)->flush.req->status == UCS_INPROGRESS) {
+    /* Reschedule sending of reply message while flush isn't completed */
+    if (ucp_worker_deferred_flush_in_progress(ep)) {
         ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
                                   ucp_wireup_send_reply_sched, ep);
         UCS_ASYNC_UNBLOCK(&ep->worker->async);

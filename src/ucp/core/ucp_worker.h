@@ -484,6 +484,8 @@ ucp_worker_deferred_ep_t *ucp_worker_get_deferred_ep(ucp_ep_h ep);
 
 ucs_status_t ucp_worker_flush_deferred_ep(ucp_ep_h ucp_ep);
 
+int ucp_worker_deferred_flush_in_progress(ucp_ep_h ep);
+
 
 /* must be called with async lock held */
 static UCS_F_ALWAYS_INLINE void
