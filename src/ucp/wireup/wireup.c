@@ -484,13 +484,12 @@ static void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep)
  */
 unsigned ucp_wireup_eps_progress(void *arg)
 {
-    ucp_ep_h ucp_ep     = arg;
-    ucp_worker_h worker = ucp_ep->worker;
+    ucp_ep_h ucp_ep = arg;
     ucp_wireup_ep_t *wireup_ep;
     ucs_queue_head_t tmp_pending_queue, *deferred_q;
     ucp_lane_index_t lane;
 
-    UCS_ASYNC_BLOCK(&worker->async);
+    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
 
     /* If we still have pending wireup messages, send them out first */
     if (ucp_ep_has_wireup_msg_pending(ucp_ep)) {
@@ -537,11 +536,11 @@ unsigned ucp_wireup_eps_progress(void *arg)
     /* Release deferred data */
     ucp_worker_release_deferred_ep(ucp_ep);
 
-    UCS_ASYNC_UNBLOCK(&worker->async);
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
     return 1;
 
 out_unblock:
-    UCS_ASYNC_UNBLOCK(&worker->async);
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
     return 0;
 }
 
