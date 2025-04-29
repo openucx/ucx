@@ -218,19 +218,33 @@ KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 
-typedef struct ucp_worker_deferred_ep_data {
+/* Array of UCT EPs */
+UCS_ARRAY_DECLARE_TYPE(ucp_worker_uct_ep_array_t, unsigned, uct_ep_h);
+
+
+/* Deferred operations data. Used for tracking resources that needs to be
+ * processed after a flush operation is completed */
+typedef struct ucp_worker_deferred_ep {
+    /* Pending requests queue which needs to be replayed after flush */
     ucs_queue_head_t pending_q;
-    ucs_queue_head_t flush_requests;
+    struct {
+        /* UCT EPs to be destroyed after flush */
+        ucp_worker_uct_ep_array_t uct_eps;
+        /* Iterator for uct_eps array */
+        uct_ep_h                 *curr;
+        /* Flush request */
+        ucp_request_t            *req;
+    } flush;
+    /* Wireup reply message related data */
     struct {
         ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
         ucp_tl_bitmap_t  tl_bitmap;
     } reply;
-} ucp_worker_deferred_ep_data_t;
+} ucp_worker_deferred_ep_t;
 
 
-/* Hash map of EPs that are being flushed on UCP Worker */
-KHASH_TYPE(ucp_worker_deferred_ep_hash, ucp_ep_h,
-           ucp_worker_deferred_ep_data_t);
+/* Hash map of EPs that has pending operations and wait for flush completion */
+KHASH_TYPE(ucp_worker_deferred_ep_hash, ucp_ep_h, ucp_worker_deferred_ep_t);
 typedef khash_t(ucp_worker_deferred_ep_hash) ucp_worker_deferred_ep_hash_t;
 
 
@@ -464,9 +478,11 @@ ucs_status_t ucp_worker_iface_estimate_perf(const ucp_worker_iface_t *wiface,
 void ucp_worker_iface_add_bandwidth(uct_ppn_bandwidth_t *ppn_bandwidth,
                                     double bandwidth);
 
+void ucp_worker_release_deferred_ep(ucp_ep_h ep);
 
-ucs_status_t ucp_worker_flush_uct_ep_nb(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                                        ucp_request_t **req_p);
+ucp_worker_deferred_ep_t *ucp_worker_get_deferred_ep(ucp_ep_h ep);
+
+ucs_status_t ucp_worker_flush_deferred_ep(ucp_ep_h ucp_ep);
 
 
 /* must be called with async lock held */
