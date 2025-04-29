@@ -3668,6 +3668,7 @@ void ucp_worker_release_deferred_ep(ucp_ep_h ep)
 
     /* Destroy uct_eps array and delete hash entry */
     ucs_array_cleanup_dynamic(&deferred->flush.uct_eps);
+    ucs_free(deferred->pending_q);
     kh_del(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash, iter);
 }
 
@@ -3685,8 +3686,10 @@ ucp_worker_deferred_ep_t *ucp_worker_get_deferred_ep(ucp_ep_h ep)
     }
 
     if (ret != UCS_KH_PUT_KEY_PRESENT) {
-        deferred = &kh_value(&worker->deferred_ep_hash, iter);
-        ucs_queue_head_init(&deferred->pending_q);
+        deferred            = &kh_value(&worker->deferred_ep_hash, iter);
+        deferred->pending_q = ucs_malloc(sizeof(*deferred->pending_q),
+                                         "deferred_queue");
+        ucs_queue_head_init(deferred->pending_q);
         ucs_array_init_dynamic(&deferred->flush.uct_eps);
     }
 

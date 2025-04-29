@@ -530,7 +530,7 @@ unsigned ucp_wireup_eps_progress(void *arg)
 
     /* Replay pending requests from both regular and deferred queue */
     ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
-    deferred_q = &ucp_worker_get_deferred_ep(ucp_ep)->pending_q;
+    deferred_q = ucp_worker_get_deferred_ep(ucp_ep)->pending_q;
     ucp_wireup_replay_pending_requests(ucp_ep, deferred_q);
 
     /* Release deferred data */
@@ -1873,7 +1873,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 {
     ucp_worker_h worker         = ep->worker;
     ucp_rsc_index_t cm_idx      = UCP_NULL_RESOURCE;
-    ucs_queue_head_t *pending_q = &ucp_worker_get_deferred_ep(ep)->pending_q;
+    ucs_queue_head_t *pending_q = ucp_worker_get_deferred_ep(ep)->pending_q;
     ucp_tl_bitmap_t tl_bitmap, current_tl_bitmap;
     ucp_rsc_index_t rsc_idx;
     ucp_lane_map_t connect_lane_bitmap;

@@ -226,7 +226,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_worker_uct_ep_array_t, unsigned, uct_ep_h);
  * processed after a flush operation is completed */
 typedef struct ucp_worker_deferred_ep {
     /* Pending requests queue which needs to be replayed after flush */
-    ucs_queue_head_t pending_q;
+    ucs_queue_head_t *pending_q;
     struct {
         /* UCT EPs to be destroyed after flush */
         ucp_worker_uct_ep_array_t uct_eps;
