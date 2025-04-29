@@ -2052,9 +2052,9 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
     check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes, ep_cfg_key(ep).num_lanes,
                           "rma_bw", false);
 
-    // Do RMA, then at least one slow lane lane should be initialized.
+    // Do RMA, then at least one slow lane  should be initialized.
     // NOTE: number of initialized lanes depends on HW setup and protocol
-    // selection logic and may change in future
+    //       selection logic, which may be changed in future
     ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
     req = ucp_put_nbx(ep, sbuf.ptr(), sbuf.size(), (uintptr_t)rbuf.ptr(),
                       rkey.get(), &params);
@@ -2062,6 +2062,10 @@ UCS_TEST_P(test_ucp_wireup_ondemand, slow_lanes,
     check_lanes_arr_value(ep_cfg_key(ep).rma_bw_lanes,
                           ep_cfg_key(ep).num_lanes, "rma_bw",
                           /*is_valid:*/ true, /*check_all_lanes:*/ false);
+
+    // Flush receiver worker to avoid accessing destroyed rbuf from test cleanup
+    short_progress_loop();
+    flush_workers();
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_ondemand);
