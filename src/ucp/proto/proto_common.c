@@ -655,15 +655,19 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
     ucp_lane_index_t lane_index, lane, num_lanes, num_valid_lanes;
     const uct_iface_attr_t *iface_attr;
     size_t tl_min_frag, tl_max_frag;
+    ucp_lane_index_t tmp_lanes[UCP_PROTO_MAX_LANES];
 
+    /* TODO: Request more lanes than needed in order to avoid skipping protocol
+     * if the first found candidate is filtered out. Refactor this code to pass
+     * filter callback to ucp_proto_common_find_lanes() */
     num_lanes = ucp_proto_common_find_lanes(
                    &params->super, params->flags, params->max_iov_offs,
                    params->min_iov, lane_type, params->reg_mem_info.type,
-                   tl_cap_flags, max_lanes, exclude_map, lanes);
+                   tl_cap_flags, ucs_max(max_lanes, 4), exclude_map, tmp_lanes);
 
     num_valid_lanes = 0;
     for (lane_index = 0; lane_index < num_lanes; ++lane_index) {
-        lane       = lanes[lane_index];
+        lane       = tmp_lanes[lane_index];
         iface_attr = ucp_proto_common_get_iface_attr(&params->super, lane);
 
         ucp_proto_common_get_frag_size(params, iface_attr, lane, &tl_min_frag,
@@ -685,6 +689,9 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
         }
 
         lanes[num_valid_lanes++] = lane;
+        if (num_valid_lanes >= max_lanes) {
+            break;
+        }
     }
 
     if (num_valid_lanes != num_lanes) {

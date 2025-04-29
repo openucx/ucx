@@ -180,17 +180,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
                  (md, params),
                  uct_md_h md, const uct_md_mem_dereg_params_t *params)
 {
-    ucs_status_t status;
-
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
-    if (params->memh == &uct_cuda_dummy_memh) {
-        return UCS_OK;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemHostUnregister((void*)params->memh));
-    if (status != UCS_OK) {
-        return status;
+    if (params->memh != &uct_cuda_dummy_memh) {
+        UCT_CUDADRV_FUNC(cuMemHostUnregister((void*)params->memh),
+                         UCS_LOG_LEVEL_DIAG);
     }
 
     return UCS_OK;

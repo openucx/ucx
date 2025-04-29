@@ -602,13 +602,14 @@ static ucs_config_field_t ucp_config_table[] = {
    " - sm/shm  : all shared memory transports (mm, cma, knem).\n"
    " - mm      : shared memory transports - only memory mappers.\n"
    " - ugni    : ugni_smsg and ugni_rdma (uses ugni_udt for bootstrap).\n"
-   " - ib      : all infiniband transports (rc/rc_mlx5, ud/ud_mlx5, dc_mlx5).\n"
+   " - ib      : all infiniband transports (rc/rc_mlx5, ud/ud_mlx5, dc_mlx5, srd).\n"
    " - rc_v    : rc verbs (uses ud for bootstrap).\n"
    " - rc_x    : rc with accelerated verbs (uses ud_mlx5 for bootstrap).\n"
    " - rc      : rc_v and rc_x (preferably if available).\n"
    " - ud_v    : ud verbs.\n"
    " - ud_x    : ud with accelerated verbs.\n"
    " - ud      : ud_v and ud_x (preferably if available).\n"
+   " - srd     : EFA srd reliable transport.\n"
    " - dc/dc_x : dc with accelerated verbs.\n"
    " - tcp     : sockets over TCP/IP.\n"
    " - cuda    : CUDA (NVIDIA GPU) memory support.\n"
@@ -690,7 +691,8 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
   { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
   { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5",
-               "gga_mlx5", UCP_TL_AUX("ud_mlx5"), UCP_TL_AUX("ud_verbs"), NULL } },
+               "gga_mlx5", UCP_TL_AUX("ud_mlx5"), UCP_TL_AUX("ud_verbs"),
+               "srd", NULL } },
   { "ud_v",  { "ud_verbs", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
   { "ud",    { "ud_mlx5", "ud_verbs", NULL } },

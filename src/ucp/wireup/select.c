@@ -2047,18 +2047,19 @@ static ucs_status_t
 ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                             ucp_wireup_select_context_t *select_ctx)
 {
-    unsigned allow_extra_path          = 0;
-    ucp_lane_index_t am_lane           = UCP_NULL_LANE;
-    ucp_ep_h ep                        = select_params->ep;
-    ucp_context_h context              = ep->worker->context;
-    unsigned ep_init_flags             = ucp_wireup_ep_init_flags(select_params,
-                                                                  select_ctx);
-    const ucp_rndv_mode_t rndv_modes[] = {
+    unsigned allow_extra_path           = 0;
+    ucp_lane_index_t am_lane            = UCP_NULL_LANE;
+    ucp_ep_h ep                         = select_params->ep;
+    ucp_context_h context               = ep->worker->context;
+    unsigned ep_init_flags              = ucp_wireup_ep_init_flags(
+                                              select_params, select_ctx);
+    ucp_wireup_select_bw_info_t bw_info = {{0}};
+    const ucp_rndv_mode_t rndv_modes[]  = {
         context->config.ext.rndv_mode,
         UCP_RNDV_MODE_GET_ZCOPY,
         UCP_RNDV_MODE_PUT_ZCOPY
     };
-    ucp_wireup_select_bw_info_t bw_info;
+    ucp_wireup_select_bw_info_t rkey_ptr_info;
     ucs_memory_type_t mem_type;
     int found_lane;
     ucp_tl_bitmap_t tl_bitmap, mem_type_tl_bitmap;
@@ -2100,15 +2101,19 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
          * Allow selecting additional lanes in case the remote memory will not be
          * registered with this memory domain, i.e with GPU memory.
          */
-        bw_info.criteria.title             = "obtain remote memory pointer";
-        bw_info.criteria.local_cmpt_flags |= UCT_COMPONENT_FLAG_RKEY_PTR;
-        bw_info.criteria.lane_type         = UCP_LANE_TYPE_RKEY_PTR;
-        bw_info.max_lanes                  = 1;
+        rkey_ptr_info                            = bw_info;
+        rkey_ptr_info.criteria.title             = "obtain remote memory "
+                                                   "pointer";
+        rkey_ptr_info.criteria.local_cmpt_flags |= UCT_COMPONENT_FLAG_RKEY_PTR;
+        rkey_ptr_info.criteria.lane_type         = UCP_LANE_TYPE_RKEY_PTR;
+        rkey_ptr_info.max_lanes                  = 1;
+        rkey_ptr_info.criteria.local_md_flags    = UCT_MD_FLAG_REG;
 
         ucp_context_memaccess_tl_bitmap(context, UCS_MEMORY_TYPE_HOST, 0,
                                         &tl_bitmap);
-        ucp_wireup_add_bw_lanes_pairwise(select_params, &bw_info, tl_bitmap,
-                                         UCP_NULL_LANE, select_ctx, 0);
+        ucp_wireup_add_bw_lanes_pairwise(select_params, &rkey_ptr_info,
+                                         tl_bitmap, UCP_NULL_LANE, select_ctx,
+                                         0);
     }
 
     bw_info.criteria.title            = "high-bw remote memory access";

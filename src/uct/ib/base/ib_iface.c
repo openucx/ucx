@@ -2104,3 +2104,24 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
     }
     return UCS_OK;
 }
+
+int uct_ib_iface_is_connected(uct_ib_iface_t *ib_iface,
+                              const uct_ib_address_t *ib_addr,
+                              unsigned path_index, struct ibv_ah *peer_ah)
+{
+    enum ibv_mtu path_mtu;
+    ucs_status_t status;
+    struct ibv_ah_attr ah_attr;
+    struct ibv_ah *ah;
+
+    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
+                                        &ah_attr, &path_mtu);
+
+    status = uct_ib_device_get_ah_cached(uct_ib_iface_device(ib_iface),
+                                         &ah_attr, &ah);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return ah == peer_ah;
+}

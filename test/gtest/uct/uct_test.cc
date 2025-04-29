@@ -606,6 +606,10 @@ bool uct_test::has_ud() const {
     return (has_transport("ud_verbs") || has_transport("ud_mlx5"));
 }
 
+bool uct_test::has_srd() const {
+    return has_transport("srd");
+}
+
 bool uct_test::has_rc() const {
     return (has_transport("rc_verbs") || has_transport("rc_mlx5"));
 }

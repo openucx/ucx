@@ -708,31 +708,6 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
     ucp_proto_multi_query_config(&multi_query_params, attr);
 }
 
-/* If we don't know the system device of the user buffer, unpack the remote key
- * on the system device that pipeline protocols would use for staging. */
-static UCS_F_ALWAYS_INLINE ucs_sys_device_t
-ucp_proto_rndv_ppln_frag_sys_dev(ucp_context_h context,
-                                 ucs_memory_type_t mem_type,
-                                 ucs_sys_device_t sys_dev)
-{
-    ucs_status_t status;
-    ucp_md_index_t md_index;
-    ucp_memory_info_t mem_info;
-
-    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return sys_dev;
-    }
-
-    status = ucp_mm_get_alloc_md_index(context, mem_type,
-                                       UCS_SYS_DEVICE_ID_UNKNOWN, &md_index,
-                                       &mem_info);
-    if ((status == UCS_OK) && (md_index != UCP_NULL_RESOURCE)) {
-        return mem_info.sys_dev;
-    }
-
-    return UCS_SYS_DEVICE_ID_UNKNOWN;
-}
-
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
                  (worker, req, op_id, op_attr_mask, length, rkey_buffer,
                   rkey_length, sg_count),
@@ -753,9 +728,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
                (op_id < UCP_OP_ID_RNDV_LAST));
 
     if (rkey_length > 0) {
-        sys_dev = ucp_proto_rndv_ppln_frag_sys_dev(
-                      worker->context, UCS_MEMORY_TYPE_CUDA,
-                      req->send.state.dt_iter.mem_info.sys_dev);
+        sys_dev = req->send.state.dt_iter.mem_info.sys_dev;
+        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            sys_dev = worker->context->alloc_md[UCS_MEMORY_TYPE_CUDA].sys_dev;
+        }
 
         ucs_assert(rkey_buffer != NULL);
         /* Do not unpack rkeys from MDs with rkey_ptr capability, except

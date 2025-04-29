@@ -360,7 +360,7 @@ void test_uct_peer_failure_multiple::init()
 
     if ((ucs_get_page_size() > 4096) ||
         (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) ||
-        (has_ud() && ucs::is_aws())) {
+        ((has_srd() || has_ud()) && ucs::is_aws())) {
         /* NOTE: Too many receivers may cause failure of ibv_open_device */
         m_nreceivers = 10;
     } else {

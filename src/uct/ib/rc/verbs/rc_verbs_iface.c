@@ -131,26 +131,6 @@ out:
     uct_rc_iface_arbiter_dispatch(iface);
 }
 
-static ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
-{
-    switch (status)
-    {
-    case IBV_WC_SUCCESS:
-        return UCS_OK;
-    case IBV_WC_REM_ACCESS_ERR:
-    case IBV_WC_REM_OP_ERR:
-        return UCS_ERR_CONNECTION_RESET;
-    case IBV_WC_RETRY_EXC_ERR:
-    case IBV_WC_RNR_RETRY_EXC_ERR:
-    case IBV_WC_REM_ABORT_ERR:
-        return UCS_ERR_ENDPOINT_TIMEOUT;
-    case IBV_WC_WR_FLUSH_ERR:
-        return UCS_ERR_CANCELED;
-    default:
-        return UCS_ERR_IO_ERROR;
-    }
-}
-
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
@@ -165,7 +145,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
-            status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
+            status = uct_ib_wc_to_ucs_status(wc[i].status);
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
                                                    status);
             continue;

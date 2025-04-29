@@ -43,14 +43,21 @@ KHASH_MAP_INIT_INT64(uct_srd_rx_ctx_hash, uct_srd_rx_ctx_t*);
 KHASH_MAP_INIT_INT64(uct_srd_ep_hash, uct_srd_ep_t*);
 
 
+enum {
+    UCT_SRD_IFACE_FENCE = UCS_BIT(0) /* Fence requested when set */
+};
+
+
 typedef struct uct_srd_iface {
     uct_ib_iface_t                   super;
     struct ibv_qp                    *qp;
-#ifdef HAVE_DECL_EFADV_DEVICE_ATTR_CAPS_RDMA_READ
+#ifdef HAVE_EFA_RMA
     struct ibv_qp_ex                 *qp_ex;
 #endif
     UCS_STATS_NODE_DECLARE(stats);
     khash_t(uct_srd_ep_hash)         ep_hash;
+
+    unsigned                         flags;
 
     struct {
         /* Pre-posted receive buffers */
@@ -64,6 +71,8 @@ typedef struct uct_srd_iface {
     struct {
         int32_t                      available;
         int                          in_pending;
+        /* Number of endpoint operations in progress including flush */
+        int                          outstanding;
         ucs_arbiter_t                pending_q;
         struct ibv_sge               sge[UCT_IB_MAX_IOV];
         struct ibv_send_wr           wr_inl;
@@ -71,17 +80,21 @@ typedef struct uct_srd_iface {
         ucs_mpool_t                  send_op_mp;
         ucs_mpool_t                  send_desc_mp;
         uct_srd_am_short_hdr_t       am_inl_hdr;
+
+        /* Pending control messages */
+        ucs_queue_head_t             ctl_queue;
+
+        /* Send operations without an endpoint, order does not matter here */
         ucs_list_link_t              outstanding_list;
-        ucs_queue_head_t             ctl_queue; /* pending CTL messages */
     } tx;
 
     struct {
         unsigned                     tx_qp_len;
         unsigned                     max_inline;
         size_t                       max_send_sge;
-        size_t                       max_recv_sge;
-        size_t                       max_get_zcopy;
-        size_t                       max_get_bcopy;
+        size_t                       max_rdma_sge;
+        size_t                       max_rdma_zcopy;
+        size_t                       max_rdma_bcopy;
     } config;
 } uct_srd_iface_t;
 
@@ -126,11 +139,15 @@ ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface, uct_srd_ctl_id_t id,
                                    uint64_t ep_uuid, struct ibv_ah *ah,
                                    uint32_t dest_qpn);
 
+void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface);
+
 
 static UCS_F_ALWAYS_INLINE int
 uct_srd_iface_can_tx(const uct_srd_iface_t *iface)
 {
-    return iface->tx.available > 0;
+    return (iface->tx.available > 0) &&
+           (!(iface->flags & UCT_SRD_IFACE_FENCE) ||
+            (iface->tx.outstanding == 0));
 }
 
 
@@ -152,8 +169,19 @@ static UCS_F_ALWAYS_INLINE void
 uct_srd_iface_check_pending(uct_srd_iface_t *iface, ucs_arbiter_group_t *group)
 {
     ucs_assertv(iface->tx.in_pending || ucs_arbiter_group_is_empty(group),
-                "iface=%p in_pending=%d arb_group_empty=%d", iface,
-                iface->tx.in_pending, ucs_arbiter_group_is_empty(group));
+                "iface=%p in_pending=%d arb_group_empty=%d tx_avail=%d "
+                "outstanding=%d",
+                iface, iface->tx.in_pending, ucs_arbiter_group_is_empty(group),
+                iface->tx.available, iface->tx.outstanding);
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_srd_iface_pending_ctl_progress(uct_srd_iface_t *iface)
+{
+    /* Give priority to control message */
+    uct_srd_iface_ctl_op_progress(iface);
+    ucs_arbiter_dispatch(&iface->tx.pending_q, 1, uct_srd_ep_do_pending, NULL);
 }
 
 END_C_DECLS
