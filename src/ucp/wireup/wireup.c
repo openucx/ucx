@@ -528,10 +528,10 @@ unsigned ucp_wireup_eps_progress(void *arg)
         ucp_proxy_ep_replace(&wireup_ep->super);
     }
 
-    /* Replay pending requests from both regular and deferred queue */
-    ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
+    /* Replay deferred requests and regular requests */
     deferred_q = ucp_worker_get_deferred_ep(ucp_ep)->pending_q;
     ucp_wireup_replay_pending_requests(ucp_ep, deferred_q);
+    ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
 
     /* Release deferred data */
     ucp_worker_release_deferred_ep(ucp_ep);
