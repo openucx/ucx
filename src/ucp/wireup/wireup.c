@@ -1687,11 +1687,13 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep) &&
                           reuse_lane_map[lane] != key->am_lane; ++ lane);
-    if (lane < ucp_ep_num_lanes(ep)) {
+    if (am_need_flush && (lane < ucp_ep_num_lanes(ep))) {
+        /* new AM lane is reused, set it as next_ep and mark as connected */
         ucp_wireup_ep_set_next_ep(&new_wireup_ep->super.super,
                                   ucp_ep_get_lane(ep, lane),
                                   ucp_wireup_ep_get_rsc_index(ep, lane));
         ucp_ep_set_lane(ep, lane, NULL);
+        ucs_assert(key->am_lane < UCP_MAX_LANES);
         *connect_lane_bitmap &= ~UCS_BIT(key->am_lane);
     }
 
