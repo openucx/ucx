@@ -1884,7 +1884,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_queue_head_t replay_pending_queue;
     ucp_rsc_index_t dst_mds_mem[UCP_MAX_MDS];
     int is_reconfigurable;
-    ucp_request_t *req;
+    uct_pending_req_t *req;
 
     tl_bitmap = UCS_STATIC_BITMAP_AND(*local_tl_bitmap,
                                       worker->context->tl_bitmap);
@@ -2035,10 +2035,9 @@ out:
         ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
     } else {
         /* Defer replay until wireup completion */
-        ucs_queue_for_each_extract(req, &replay_pending_queue, send.uct.priv,
-                                   1) {
+        ucs_queue_for_each_extract(req, &replay_pending_queue, priv, 1) {
             ucs_queue_push(ucp_worker_get_deferred_ep(ep)->pending_q,
-                           (ucs_queue_elem_t*)req);
+                           (ucs_queue_elem_t*)req->priv);
         }
     }
 

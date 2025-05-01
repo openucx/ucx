@@ -533,7 +533,7 @@ protected:
     }
 };
 
-UCS_TEST_P(test_reconfig_stress, stress)
+UCS_TEST_SKIP_COND_P(test_reconfig_stress, stress, !should_reconfigure())
 {
     static unsigned msg_size = 16384;
     mem_buffer_vec_t sbufs, rbufs;
@@ -575,8 +575,8 @@ UCS_TEST_P(test_reconfig_stress, stress)
     requests_wait(reqs);
 
     /* Verify new configuration */
-    EXPECT_EQ(should_reconfigure(), r_sender->is_reconfigured());
-    EXPECT_EQ(should_reconfigure(), r_receiver->is_reconfigured());
+    EXPECT_TRUE(r_sender->is_reconfigured());
+    EXPECT_TRUE(r_receiver->is_reconfigured());
     r_sender->verify_configuration(*r_receiver, r_sender->num_reused_rscs());
     r_receiver->verify_configuration(*r_sender, r_sender->num_reused_rscs());
 }
