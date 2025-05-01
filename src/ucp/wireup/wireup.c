@@ -1599,12 +1599,13 @@ static ucs_status_t
 ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
                                 uct_ep_h *new_uct_eps,
                                 const ucp_lane_index_t *reuse_lane_map,
-                                ucs_queue_head_t *replay_pending_queue)
+                                ucs_queue_head_t *replay_pending_queue,
+                                ucp_lane_map_t *connect_lane_bitmap)
 {
     uct_ep_h uct_ep   = NULL;
     int am_need_flush = ucp_wireup_is_am_need_flush(ep, key, reuse_lane_map);
     ucp_lane_index_t old_lane, new_wireup_lane, old_wireup_lane;
-    ucp_lane_index_t new_order_lane;
+    ucp_lane_index_t new_order_lane, lane;
     ucp_wireup_ep_t *new_wireup_ep, *old_ep_wrapper;
     uct_ep_h old_wireup_ep, new_aux_ep;
     ucp_rsc_index_t aux_rsc_index;
@@ -1682,6 +1683,16 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
         /* Move aux EP to new wireup lane */
         ucp_wireup_ep_set_aux(new_wireup_ep, new_aux_ep, aux_rsc_index, is_p2p);
         ucp_ep_set_lane(ep, old_lane, NULL);
+    }
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep) &&
+                          reuse_lane_map[lane] != key->am_lane; ++ lane);
+    if (lane < ucp_ep_num_lanes(ep)) {
+        ucp_wireup_ep_set_next_ep(&new_wireup_ep->super.super,
+                                  ucp_ep_get_lane(ep, lane),
+                                  ucp_wireup_ep_get_rsc_index(ep, lane));
+        ucp_ep_set_lane(ep, lane, NULL);
+        *connect_lane_bitmap &= ~UCS_BIT(key->am_lane);
     }
 
     /* In case old AM lane is flushed, the new lane waits until it finishes */
@@ -1783,7 +1794,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         /* Wireup/AM lane needs to be flushed to maintain message ordering */
         status = ucp_wireup_replace_ordered_lane(ep, new_key, new_uct_eps,
                                                  reuse_lane_map,
-                                                 replay_pending_queue);
+                                                 replay_pending_queue,
+                                                 connect_lane_bitmap);
         if (status != UCS_OK) {
             return status;
         }
@@ -1901,6 +1913,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     *config_changed_p = 0;
     prev_cfg_index    = ep->cfg_index;
+    ucs_queue_head_init(&replay_pending_queue);
 
     status = ucp_wireup_try_select_lanes(ep, ep_init_flags, &tl_bitmap,
                                          remote_address, addr_indices, &key,
@@ -2034,7 +2047,7 @@ out:
     if (ucp_ep_has_cm_lane(ep)) {
         ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
     } else {
-        /* Defer replay until wireup completion */
+        /* Defer until wireup completion */
         ucs_queue_for_each_extract(req, &replay_pending_queue, priv, 1) {
             ucs_queue_push(ucp_worker_get_deferred_ep(ep)->pending_q,
                            (ucs_queue_elem_t*)req->priv);
