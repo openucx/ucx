@@ -533,7 +533,7 @@ protected:
     }
 };
 
-UCS_TEST_SKIP_COND_P(test_reconfig_stress, stress, !should_reconfigure())
+UCS_TEST_P(test_reconfig_stress, stress)
 {
     static unsigned msg_size = 16384;
     mem_buffer_vec_t sbufs, rbufs;
@@ -541,6 +541,10 @@ UCS_TEST_SKIP_COND_P(test_reconfig_stress, stress, !should_reconfigure())
     std::vector<void*> reqs;
     int cfg_changed;
     ucs_status_t status;
+
+    if (!should_reconfigure()) {
+        UCS_TEST_SKIP_R("no reconfig scenario is not relevant for this test");
+    }
 
     /* Perform initial connection */
     init_buffers(sbufs, rbufs, msg_size, false);
