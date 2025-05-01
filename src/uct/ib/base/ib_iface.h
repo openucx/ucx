@@ -530,9 +530,12 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
  * @param [in]  ib_addr    IB address to unpack.
  * @param [out] params_p   Filled with address attributes as in
  *                         @ref uct_ib_address_pack_params_t.
+
+ * @return UCS_OK if the address was unpacked successfully, UCS_ERR_INVALID_PARAM
+ *         if the address is invalid.
  */
-void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
-                           uct_ib_address_pack_params_t *params_p);
+ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
+                                   uct_ib_address_pack_params_t *params_p);
 
 
 /**
@@ -622,11 +625,12 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             unsigned path_index,
                                             struct ibv_ah_attr *ah_attr);
 
-void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
-                                         const uct_ib_address_t *ib_addr,
-                                         unsigned path_index,
-                                         struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu *path_mtu);
+ucs_status_t
+uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
+                                    const uct_ib_address_t *ib_addr,
+                                    unsigned path_index,
+                                    struct ibv_ah_attr *ah_attr,
+                                    enum ibv_mtu *path_mtu);
 
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
