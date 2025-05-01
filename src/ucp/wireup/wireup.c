@@ -1871,9 +1871,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    unsigned *addr_indices,
                                    int *config_changed_p)
 {
-    ucp_worker_h worker         = ep->worker;
-    ucp_rsc_index_t cm_idx      = UCP_NULL_RESOURCE;
-    ucs_queue_head_t *pending_q = ucp_worker_get_deferred_ep(ep)->pending_q;
+    ucp_worker_h worker    = ep->worker;
+    ucp_rsc_index_t cm_idx = UCP_NULL_RESOURCE;
     ucp_tl_bitmap_t tl_bitmap, current_tl_bitmap;
     ucp_rsc_index_t rsc_idx;
     ucp_lane_map_t connect_lane_bitmap;
@@ -1882,8 +1881,10 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_lane_index_t lane;
     ucs_status_t status;
     char str[32];
+    ucs_queue_head_t replay_pending_queue;
     ucp_rsc_index_t dst_mds_mem[UCP_MAX_MDS];
     int is_reconfigurable;
+    ucp_request_t *req;
 
     tl_bitmap = UCS_STATIC_BITMAP_AND(*local_tl_bitmap,
                                       worker->context->tl_bitmap);
@@ -1942,12 +1943,13 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
         !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key)) {
-        ucp_wireup_eps_pending_extract(ep, pending_q);
+        ucp_wireup_eps_pending_extract(ep, &replay_pending_queue);
     }
 
     status = ucp_wireup_check_config_intersect(ep, &key, remote_address,
                                                addr_indices,
-                                               &connect_lane_bitmap, pending_q);
+                                               &connect_lane_bitmap,
+                                               &replay_pending_queue);
     if (status != UCS_OK) {
         goto out;
     }
@@ -2030,7 +2032,14 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
 out:
     if (ucp_ep_has_cm_lane(ep)) {
-        ucp_wireup_replay_pending_requests(ep, pending_q);
+        ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
+    } else {
+        /* Defer replay until wireup completion */
+        ucs_queue_for_each_extract(req, &replay_pending_queue, send.uct.priv,
+                                   1) {
+            ucs_queue_push(ucp_worker_get_deferred_ep(ep)->pending_q,
+                           (ucs_queue_elem_t*)req);
+        }
     }
 
     ucs_log_indent(-1);
