@@ -630,7 +630,11 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
         goto err_ep_set_failed;
     }
 
-    ucp_wireup_send_request(ep);
+    status = ucp_wireup_send_request(ep);
+    if (status != UCS_OK) {
+        goto err_ep_set_failed;
+    }
+
     return;
 
 err_ep_set_failed:
@@ -1829,10 +1833,12 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
     }
 
-    /* Start non-blocking flush on outstanding messages */
-    status = ucp_worker_flush_deferred_ep(ep);
-    if (status != UCS_OK) {
-        goto err;
+    if (!ucp_ep_has_cm_lane(ep)) {
+        /* Start non-blocking flush on outstanding messages */
+        status = ucp_worker_flush_deferred_ep(ep);
+        if (status != UCS_OK) {
+            goto err;
+        }
     }
 
     status = ucp_ep_realloc_lanes(ep, new_key->num_lanes);
