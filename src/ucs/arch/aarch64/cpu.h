@@ -150,7 +150,7 @@ static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
     return UCS_CPU_MODEL_ARM_AARCH64;
 }
 
-static inline int ucs_arch_get_cpu_flag()
+static inline ucs_cpu_flag_t ucs_arch_get_cpu_flag()
 {
     return UCS_CPU_FLAG_UNKNOWN;
 }
