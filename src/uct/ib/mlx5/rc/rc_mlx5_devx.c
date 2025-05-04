@@ -309,7 +309,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_mlx5_srq_buff_init(&iface->rx.srq, 0, max - 1,
                               iface->super.super.config.seg_size,
                               iface->tm.mp.num_strides,
-                              uct_rc_mlx5_num_strides(iface), stride);
+                              uct_rc_mlx5_num_strides(iface));
     iface->super.rx.srq.quota = max - 1;
 
     return UCS_OK;
