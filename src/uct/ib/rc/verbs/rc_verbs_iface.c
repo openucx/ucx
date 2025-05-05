@@ -198,6 +198,7 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface,
                                                  uct_rc_verbs_iface_t);
+    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
     ucs_status_t status;
 
     status = uct_rc_iface_query(&iface->super, iface_attr,
@@ -217,7 +218,7 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     /* Software overhead */
     iface_attr->overhead = UCT_RC_VERBS_IFACE_OVERHEAD;
 
-    iface_attr->ep_addr_len = uct_rc_iface_flush_rkey_enabled(&iface->super) ?
+    iface_attr->ep_addr_len = uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
                                       sizeof(uct_rc_verbs_ep_flush_addr_t) :
                                       sizeof(uct_rc_verbs_ep_addr_t);
 
