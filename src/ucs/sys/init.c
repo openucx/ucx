@@ -32,7 +32,7 @@ static UCS_F_NOOPTIMIZE void ucs_check_cpu_flags(void)
 {
     char str[256];
     char *p_str;
-    int cpu_flags;
+    ucs_cpu_flag_t cpu_flags;
     struct {
         const char* flag;
         ucs_cpu_flag_t value;

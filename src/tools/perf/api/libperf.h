@@ -12,12 +12,12 @@
 
 #include <ucs/sys/compiler.h>
 
+#include <uct/api/uct.h>
+#include <ucp/api/ucp.h>
+
 BEGIN_C_DECLS
 
 /** @file libperf.h */
-
-#include <uct/api/uct.h>
-#include <ucp/api/ucp.h>
 
 
 typedef enum {

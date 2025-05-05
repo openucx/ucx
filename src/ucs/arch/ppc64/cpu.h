@@ -61,7 +61,7 @@ static inline ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
     return UCS_CPU_VENDOR_GENERIC_PPC;
 }
 
-static inline int ucs_arch_get_cpu_flag()
+static inline ucs_cpu_flag_t ucs_arch_get_cpu_flag()
 {
     return UCS_CPU_FLAG_UNKNOWN;
 }
