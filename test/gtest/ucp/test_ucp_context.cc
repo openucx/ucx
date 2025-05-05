@@ -68,6 +68,7 @@ UCS_TEST_P(test_ucp_aliases, aliases) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, rcv, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ud, "ud")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, srd, "srd")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ud_mlx5, "ud_mlx5")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ugni, "ugni")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, shm, "shm")

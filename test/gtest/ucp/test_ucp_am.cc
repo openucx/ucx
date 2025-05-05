@@ -934,8 +934,8 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
     set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_hold_cb, &rx_data,
                         UCP_AM_FLAG_PERSISTENT_DATA);
 
-    static const std::string ib_tls[] = { "dc_x", "rc_v", "rc_x", "ud_v",
-                                          "ud_x", "ib" };
+    static const std::string ib_tls[] = {"dc_x", "rc_v", "rc_x", "ud_v",
+                                         "ud_x", "srd", "ib"};
 
     // UCP takes desc from mpool only for data arrived as inlined from UCT.
     // Typically, with IB, data is inlined up to 32 bytes, so use smaller range

@@ -334,9 +334,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
     test_spec test  = tests[get_variant_value(VARIANT_TEST_TYPE)];
 
     if (ucs::is_aws() && (test.wait_mode == UCX_PERF_WAIT_MODE_SLEEP) &&
-        has_transport("ud_v")) {
+        (has_transport("ud_v") || has_transport("srd"))) {
         // TODO support wakeup in UD transport without requiring IBV_SEND_SOLICITED
-        UCS_TEST_SKIP_R("wait mode sleep on EFA not available on UD");
+        UCS_TEST_SKIP_R("wait mode sleep on EFA not available");
     }
 
     if (has_transport("tcp")) {
