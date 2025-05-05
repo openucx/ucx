@@ -33,8 +33,8 @@ public:
         int variant_flags = get_variant_value() / m_mem_type_pairs.size();
 
         if (variant_flags & VARIANT_GDR_OFF) {
-            if (!has_any_transport(
-                        {"dc_x", "ud_v", "ud_x", "rc_v", "rc_x", "ib"})) {
+            if (!has_any_transport({"dc_x", "ud_v", "ud_x", "rc_v", "rc_x",
+                                    "srd", "ib"})) {
                 UCS_TEST_SKIP_R("No GPU direct RDMA");
             }
 

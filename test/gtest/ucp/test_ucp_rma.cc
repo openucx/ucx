@@ -585,6 +585,14 @@ public:
         ucs::handle<ucp_rkey_h> rkey;
         rbuf.rkey(sender(), rkey);
 
+        /*
+         * Some transports might need some bidirectional progress to be able
+         * to transmit without using their pending queue.
+         */
+        do_rma_op(op, sbuf.ptr(), sizeof(uint32_t), rbuf.ptr(), rkey);
+        flush_workers();
+        flush_sender_cleanup();
+
         if (op == OP_ATOMIC) {
             (this->*fence_func)(op, sbuf.ptr(), sizeof(uint32_t), rbuf.ptr(),
                                 rkey);
@@ -599,12 +607,7 @@ public:
         flush_workers();
     }
 
-    void do_rma_op_with_fence_before(op_type_t op, void *sbuf, size_t size,
-                                     void *target, ucp_rkey_h rkey) {
-        do_fence();
-        do_rma_op(op, sbuf, size, target, rkey);
-
-        flush_worker(sender());
+    void flush_sender_cleanup() {
         /*
          * flush_worker() doesn't reset unflushed_lanes yet (planned).
          * Manually clear unflushed_lanes to simulate a fence-before-op scenario
@@ -614,6 +617,15 @@ public:
          * iterations.
          */
         sender().ep()->ext->unflushed_lanes = 0;
+    }
+
+    void do_rma_op_with_fence_before(op_type_t op, void *sbuf, size_t size,
+                                     void *target, ucp_rkey_h rkey) {
+        do_fence();
+        do_rma_op(op, sbuf, size, target, rkey);
+
+        flush_worker(sender());
+        flush_sender_cleanup();
     }
 private:
     static constexpr size_t TEST_BUF_SIZE = 1000000;

@@ -445,6 +445,7 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,     "ud_x") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,      "rc_v") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,     "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, srd,     "srd") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib,  "shm,ib") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,    "ugni") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,    "self") \
@@ -475,6 +476,8 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
                                             "rc_v") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rcx, \
                                             "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, srd, \
+                                            "srd") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib, \
                                             "shm,ib,gdr_copy") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib_ipc, \
