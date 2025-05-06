@@ -592,8 +592,10 @@ public:
         rbuf.rkey(sender(), rkey);
 
         /*
-         * Some transports might need some bidirectional progress to be able
-         * to transmit without using their pending queue.
+         * Some transports (e.g., EFA) require an initial internal handshake
+         * before RMA operations can be transmitted. Performing a small RMA
+         * and flushing ensures that the connection is fully established and
+         * avoids fallback to the pending queue.
          */
         do_rma_op(op, sbuf.ptr(), sizeof(uint32_t), rbuf.ptr(), rkey);
         flush_workers();
@@ -625,9 +627,10 @@ public:
         sender().ep()->ext->unflushed_lanes = 0;
     }
 
-    void do_rma_op_with_fence_before(op_type_t op, void *sbuf, size_t size,
-                                     void *target, ucp_rkey_h rkey) {
-        do_fence();
+    void do_rma_op_with_worker_fence_before(op_type_t op, void *sbuf,
+                                            size_t size, void *target,
+                                            ucp_rkey_h rkey) {
+        do_worker_fence();
         do_rma_op(op, sbuf, size, target, rkey);
 
         flush_worker(sender());

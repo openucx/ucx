@@ -803,9 +803,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_fence, (ep), ucp_ep_h ep)
         /* Decrement the EP's fence_seq to make it appear as requiring a fence
          * in ucp_ep_rma_is_fence_required().
          */
-        if (ep->ext->fence_seq == ep->worker->fence_seq) {
-            ep->ext->fence_seq--;
-        }
+        ep->ext->fence_seq = ep->worker->fence_seq - 1;
         break;
     case UCP_FENCE_MODE_STRONG:
         status = ucp_ep_fence_strong(ep);
