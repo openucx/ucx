@@ -672,16 +672,18 @@ run_mpi_tests() {
 			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
 			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
-			build release --disable-gtest --with-mpi
+			build release-mt --with-mpi --enable-assertions
 
 			# check whether installation is valid (it compiles examples at least)
 			$MAKEP installcheck
 
-			MPIRUN="mpirun \
+			MPIRUN_COMMON="mpirun \
 					--allow-run-as-root \
 					--bind-to none \
 					-x UCX_ERROR_SIGNALS \
-					-x UCX_HANDLE_ERRORS \
+					-x UCX_HANDLE_ERRORS"
+
+			MPIRUN="${MPIRUN_COMMON} \
 					-mca pml ob1 \
 					-mca osc ^ucx \
 					-mca btl tcp,self \
@@ -692,6 +694,20 @@ run_mpi_tests() {
 			run_ucx_perftest 1
 
 			test_malloc_hooks_mpi
+
+			if [ "X$have_cuda" == "Xyes" ] && [ -x ./test/mpi/test_mpi_cuda ]
+			then
+				echo "==== Running MPI CUDA tests ===="
+				${MPIRUN_COMMON} -np 2 ./test/mpi/test_mpi_cuda
+
+				echo "==== Running MPI CUDA tests without cuda_ipc ===="
+				${MPIRUN_COMMON} -np 2  -x UCX_TLS=^cuda_ipc \
+						./test/mpi/test_mpi_cuda
+
+				echo "==== Running MPI CUDA tests with put_ppln ===="
+				${MPIRUN_COMMON} -np 2  -x UCX_RNDV_SCHEME=put_ppln \
+						./test/mpi/test_mpi_cuda
+			fi
 
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
 			# from installation directory
