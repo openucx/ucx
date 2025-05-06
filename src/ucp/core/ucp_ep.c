@@ -673,6 +673,13 @@ ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
     return UCS_OK;
 }
 
+ucs_status_t ucp_ep_query_cost(ucp_ep_h ep,
+                               const ucp_ep_cost_params_t *params,
+                               ucp_ep_cost_t *cost)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
+
 ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
