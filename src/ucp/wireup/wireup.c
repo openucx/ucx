@@ -1697,7 +1697,7 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
                                   ucp_ep_get_lane(ep, lane),
                                   ucp_wireup_ep_get_rsc_index(ep, lane));
         ucp_ep_set_lane(ep, lane, NULL);
-        ucs_assert(key->am_lane < UCP_MAX_LANES);
+        ucs_assert_always(key->am_lane < UCP_MAX_LANES);
         *connect_lane_bitmap &= ~UCS_BIT(key->am_lane);
     }
 

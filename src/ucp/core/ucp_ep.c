@@ -1649,7 +1649,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     /* Release deferred data */
     ucp_worker_release_deferred_ep(ep);
-
     ucp_ep_match_remove_ep(worker, ep);
     ucp_ep_destroy_internal(ep);
 }

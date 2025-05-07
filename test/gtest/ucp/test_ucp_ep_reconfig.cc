@@ -535,7 +535,7 @@ protected:
 
 UCS_TEST_P(test_reconfig_stress, stress)
 {
-    static unsigned msg_size = 16384;
+    static unsigned msg_size = 16 * UCS_KBYTE;
     mem_buffer_vec_t sbufs, rbufs;
     unsigned addr_indices[UCP_MAX_LANES];
     std::vector<void*> reqs;
