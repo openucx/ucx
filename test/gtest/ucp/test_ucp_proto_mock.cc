@@ -209,6 +209,8 @@ private:
     {
         auto it = m_self->m_distances.find(make_key(device1, device2));
         if (it != m_self->m_distances.end()) {
+            UCS_TEST_MESSAGE << "get_distance(" << (int)device1 << ", "
+                             << (int)device2 << ") = " << it->second.bandwidth;
             *distance = it->second;
         } else {
             *distance = DEFAULT_DISTANCE;
@@ -925,6 +927,7 @@ public:
 
     virtual void init() override
     {
+        modify_config("LOG_LEVEL", "trace");
         for (unsigned i = 0; i < 15; ++i) {
             /* GPU distance is decreasing with i */
             ucs_sys_dev_distance_t distance = {0, 40e9 - (i * 1e9)};
@@ -941,6 +944,12 @@ public:
             });
         }
         test_ucp_proto_mock::init();
+    }
+
+    virtual void cleanup() override
+    {
+        modify_config("LOG_LEVEL", "warn");
+        test_ucp_proto_mock::cleanup();
     }
 };
 
