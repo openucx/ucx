@@ -3648,6 +3648,7 @@ void ucp_worker_release_deferred_ep(ucp_ep_h ep)
     ucp_worker_deferred_ep_t *deferred;
     khiter_t iter;
     uct_ep_h *uct_ep_p;
+    ucp_request_t *req;
 
     iter = kh_get(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash, ep);
     if (iter == kh_end(&ep->worker->deferred_ep_hash)) {
@@ -3664,6 +3665,11 @@ void ucp_worker_release_deferred_ep(ucp_ep_h ep)
     /* Release flush request if needed */
     if (!ucs_array_is_empty(&deferred->flush.uct_eps)) {
         ucp_request_put(deferred->flush.req);
+    }
+
+    /* Abort pending requests */
+    ucs_queue_for_each_extract(req, deferred->pending_q, send.uct.priv, 1) {
+        ucp_proto_request_abort(req, UCS_ERR_CANCELED);
     }
 
     /* Destroy uct_eps array and delete hash entry */
