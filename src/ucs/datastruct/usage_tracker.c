@@ -263,10 +263,7 @@ void ucs_usage_tracker_set_min_score(ucs_usage_tracker_h usage_tracker,
 
     elem            = ucs_usage_tracker_put(usage_tracker, key);
     elem->min_score = score;
-
-    if (ucs_usage_tracker_is_promotable(usage_tracker, score)) {
-        elem->promoted = 1;
-    }
+    elem->promoted |= ucs_usage_tracker_is_promotable(usage_tracker, score);
 }
 
 void ucs_usage_tracker_progress(ucs_usage_tracker_h usage_tracker)
