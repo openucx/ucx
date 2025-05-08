@@ -44,11 +44,11 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         return res; \
     }
 
-#define UCM_DEFINE_DLSYM_FUNC(_name, _rettype, _fail_val, ...) \
+#define UCM_DEFINE_DLSYM_FUNC(_name, _rettype, ...) \
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name, ucm_override_##_name, \
-                          _rettype, _fail_val, __VA_ARGS__)
+                           _rettype, __VA_ARGS__)
 
-#define _UCM_DEFINE_DLSYM_FUNC(_name, _orig_name, _over_name, _rettype, _fail_val, ...) \
+#define _UCM_DEFINE_DLSYM_FUNC(_name, _orig_name, _over_name, _rettype, ...) \
     _rettype _over_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)); \
     \
     /* Call the original function using dlsym(RTLD_NEXT) */ \
@@ -72,7 +72,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
 
 #define UCM_DEFINE_REPLACE_DLSYM_FUNC(_name, _rettype, _fail_val, ...) \
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name, ucm_override_##_name, \
-                          _rettype, _fail_val, __VA_ARGS__) \
+                           _rettype, __VA_ARGS__) \
     _UCM_DEFINE_REPLACE_FUNC(ucm_override_##_name, ucm_##_name, \
                              _rettype, _fail_val, __VA_ARGS__)
 
@@ -85,8 +85,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
  */
 #define UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(_name, _rettype, _fail_val, ...) \
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name##_dlsym, \
-                           ucm_override_##_name, _rettype, _fail_val, \
-                           __VA_ARGS__) \
+                           ucm_override_##_name, _rettype, __VA_ARGS__) \
     \
     _rettype (*ucm_orig_##_name)(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) = \
         ucm_orig_##_name##_dlsym; \
@@ -102,9 +101,9 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     }
 
 #if UCM_BISTRO_HOOKS
-#  define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
-    _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name##_dlsym, ucm_override_##_name, \
-                          _rettype, _fail_val, __VA_ARGS__) \
+#  define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _syscall_id, ...) \
+    _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name##_dlsym, \
+                           ucm_override_##_name, _rettype, __VA_ARGS__) \
     UCM_DEFINE_SYSCALL_FUNC(_name##_syscall, _rettype, _syscall_id, __VA_ARGS__) \
     _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
@@ -113,8 +112,8 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
                ucm_orig_##_name##_dlsym(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 #else
-#  define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
-    UCM_DEFINE_DLSYM_FUNC(_name, _rettype, _fail_val, __VA_ARGS__)
+#  define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _syscall_id, ...) \
+    UCM_DEFINE_DLSYM_FUNC(_name, _rettype, __VA_ARGS__)
 #endif
 
 /*
