@@ -1257,7 +1257,8 @@ ucp_wireup_replay_pending_request(uct_pending_req_t *self, ucp_ep_h ucp_ep)
 
     if ((req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
         ((ucp_ep->cfg_index != req->send.proto_config->ep_cfg_index) ||
-         ucp_ep->worker->context->config.ext.proto_request_reset)) {
+         (ucp_ep->worker->context->config.ext.proto_request_reset &&
+          !ucp_ep->worker->context->config.ext.on_demand_wireup))) {
         ucp_trace_req(req, "replay proto %s",
                       req->send.proto_config->proto->name);
         ucp_proto_request_restart(req);
