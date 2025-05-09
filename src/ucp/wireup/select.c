@@ -614,7 +614,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             }
 
             score        = criteria->calc_score(wiface, md_attr, address, ae,
-                                                0, criteria->arg);
+                                                ucp_ep_is_prioritized(ep),
+                                                criteria->arg);
             priority     = iface_attr->priority + ae->iface_attr.priority;
             is_reachable = 1;
 
@@ -2732,7 +2733,10 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     UCS_STATIC_BITMAP_AND_INPLACE(&scalable_tl_bitmap, tl_bitmap);
 
-    if (!UCS_STATIC_BITMAP_IS_ZERO(scalable_tl_bitmap)) {
+    if (!UCS_STATIC_BITMAP_IS_ZERO(scalable_tl_bitmap) &&
+        /* For prioritized EP we don't want to filter out TLs that may have
+         * better latency than scalable TLs */
+        !ucp_ep_is_prioritized(ep)) {
         ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                       remote_address, scalable_tl_bitmap, 0);
         status = ucp_wireup_search_lanes(&select_params, key->err_mode,
