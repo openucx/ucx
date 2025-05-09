@@ -2764,6 +2764,131 @@ ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @enum ucp_op_type_t
+ * @brief UCP operation types.
+ *
+ * This enum defines the types of operations that can be performed using UCP.
+ * It covers all the routines available in the UCP API for transferring data.
+ */
+typedef enum ucp_ep_cost_op_type {
+    /** Operation corresponds to @ref ucp_put_nbx */
+    UCP_OP_PUT_NBX = 0,
+
+    /** Operation corresponds to @ref ucp_get_nbx */
+    UCP_OP_GET_NBX = 1,
+} ucp_ep_cost_op_type_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP cost estimation parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_ep_cost_params_t are
+ * present. It is used to enable backward compatibility support.
+ */
+typedef enum ucp_ep_cost_params_field {
+    /** Enables @ref ucp_ep_cost_params_t::local_buffer */
+    UCP_EP_COST_PARAM_FIELD_LOC_BUFFER   = UCS_BIT(0),
+
+    /** Enables @ref ucp_ep_cost_params_t::remote_buffer */
+    UCP_EP_COST_PARAM_FIELD_REM_BUFFER   = UCS_BIT(1),
+
+    /** Enables @ref ucp_ep_cost_params_t::message_size */
+    UCP_EP_COST_PARAM_FIELD_MESSAGE_SIZE = UCS_BIT(2),
+
+    /** Enables @ref ucp_ep_cost_params_t::op_type */
+    UCP_EP_COST_PARAM_FIELD_OP_TYPE      = UCS_BIT(3),
+} ucp_ep_cost_params_field_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @struct ucp_ep_cost_params_t
+ * @brief Parameters for the cost estimation query.
+ */
+typedef struct ucp_ep_cost_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_ep_cost_params_field_t.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Pointer to the local memory region.
+     */
+    void *local_buffer;
+
+    /**
+     * Pointer to the remote memory region.
+     */
+    void *remote_buffer;
+
+    /**
+     * Size of the message to be transferred.
+     */
+    size_t message_size;
+
+    /**
+     * Transfer operation type.
+     */
+    ucp_ep_cost_op_type_t op_type;
+} ucp_ep_cost_params_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP cost estimation result field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_ep_cost_t are
+ * present. It is used to enable backward compatibility support.
+ */
+typedef enum ucp_ep_cost_field {
+    /** Enables @ref ucp_ep_cost_t::transfer_duration */
+    UCP_EP_COST_FIELD_DURATION = UCS_BIT(0)
+} ucp_ep_cost_field_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @struct ucp_ep_cost_t
+ * @brief Cost estimation for a transfer request.
+ */
+typedef struct ucp_ep_cost {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_ep_cost_field_t.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Estimated transfer duration in seconds.
+     */
+    double transfer_duration;
+} ucp_ep_cost_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Cost estimation query for a transfer request.
+ *
+ * This routine computes a cost estimation for a transfer request based on the provided parameters.
+ *
+ * @param [in]  ep     Endpoint to query.
+ * @param [in]  params Filled by the user with request params.
+ * @param [out] cost   The cost estimation structure to be populated.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_query_cost(ucp_ep_h ep, const ucp_ep_cost_params_t *params,
+                               ucp_ep_cost_t *cost);
+
+
+/**
  * @ingroup UCP_MEM
  * @brief Map or allocate memory for zero-copy operations.
  *
