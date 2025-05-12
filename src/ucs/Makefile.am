@@ -65,6 +65,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/compiler_def.h\
 	sys/math.h \
 	sys/preprocessor.h \
+	sys/preprocessor_func.h \
 	sys/string.h \
 	sys/sock.h \
 	sys/topo/base/topo.h \
