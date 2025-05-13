@@ -1957,6 +1957,7 @@ int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,
 {
     ucp_lane_index_t lane;
 
+    /* Compare lanes layout */
     if ((key1->num_lanes != key2->num_lanes) ||
         memcmp(key1->rma_lanes, key2->rma_lanes, sizeof(key1->rma_lanes)) ||
         memcmp(key1->am_bw_lanes, key2->am_bw_lanes,

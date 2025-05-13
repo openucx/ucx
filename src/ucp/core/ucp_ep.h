@@ -192,17 +192,6 @@ enum {
 };
 
 
-/**
- * Endpoint configuration comparison flags
- */
-enum {
-    /* Compare lanes only */
-    UCP_EP_CONFIG_CMP_FLAG_LANES = UCS_BIT(0),
-
-    /* Strong compare all fields */
-    UCP_EP_CONFIG_CMP_FLAG_ALL   = UCS_MASK(8)
-};
-
 #define UCP_EP_STAT_TAG_OP(_ep, _op) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
 
