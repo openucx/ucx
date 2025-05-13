@@ -487,8 +487,6 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
             case 0x04:
                 cpu_model = UCS_CPU_MODEL_HYGON_DHARMA;
                 break;
-            default:
-                break;
             }
             break;
         /* AMD Zen3/Zen4 */
