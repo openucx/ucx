@@ -1274,7 +1274,7 @@ ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((lane == ucp_ep_get_cm_lane(ep)) || (uct_ep == NULL)) {
             continue;
         }
@@ -1301,7 +1301,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep)) {
             num_failed_tl_ep++;
         }
@@ -3406,7 +3406,7 @@ ucp_wireup_ep_t* ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
         return NULL;
     }
 
-    uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep = ucp_ep_get_lane_raw(ep, lane);
     return (uct_ep != NULL) ? ucp_wireup_ep(uct_ep) : NULL;
 }
 
@@ -3420,7 +3420,7 @@ uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
         return NULL;
     }
 
-    if (ucp_ep_get_lane(ep, lane) == NULL) {
+    if (ucp_ep_get_lane_raw(ep, lane) == NULL) {
         return NULL;
     }
 

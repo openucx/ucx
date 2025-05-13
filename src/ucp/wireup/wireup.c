@@ -1090,7 +1090,7 @@ out:
 
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep_h uct_ep = ucp_ep_get_lane_raw(ep, lane);
 
     if ((uct_ep != NULL) && ucp_wireup_ep_test(uct_ep)) {
         return ucp_wireup_ep_extract_next_ep(uct_ep);
@@ -1162,7 +1162,7 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
                                  ucp_worker_iface_t *wiface,
                                  const ucp_address_entry_t *address)
 {
-    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep_h uct_ep = ucp_ep_get_lane_raw(ep, lane);
     uct_ep_params_t uct_ep_params;
     ucs_status_t status;
     uct_ep_h wireup_ep;
@@ -1189,7 +1189,7 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
         return status;
     }
 
-    if (ucp_ep_get_lane(ep, lane) == NULL) {
+    if (ucp_ep_get_lane_raw(ep, lane) == NULL) {
         if (/* Create wireup EP in case of CM lane is used, since a WIREUP EP is
              * used to keep user's pending requests and send WIREUP MSGs (if it
              * is WIREUP MSG lane) until CM and WIREUP_MSG phases are done. The
@@ -1241,7 +1241,7 @@ ucp_wireup_connect_lane_to_ep(ucp_ep_h ep, unsigned ep_init_flags,
     uct_ep_h uct_ep;
     ucs_status_t status;
 
-    if (ucp_ep_get_lane(ep, lane) == NULL) {
+    if (ucp_ep_get_lane_raw(ep, lane) == NULL) {
         status = ucp_wireup_ep_create(ep, &uct_ep);
         if (status != UCS_OK) {
             /* coverity[leaked_storage] */
@@ -1746,7 +1746,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        ucs_assert(ucp_ep_get_lane(ep, lane) != NULL);
+        ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
     }
 
     old_key = &ucp_ep_config(ep)->key;
@@ -1796,7 +1796,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
      * could be set in case of CM, we have to not reset them */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         reuse_lane = reuse_lane_map[lane];
-        uct_ep     = ucp_ep_get_lane(ep, lane);
+        uct_ep     = ucp_ep_get_lane_raw(ep, lane);
         if (reuse_lane == UCP_NULL_LANE) {
             if (uct_ep != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
@@ -1818,7 +1818,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
             ucp_ep_set_lane(ep, lane, NULL);
         }
 
-        ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
+        ucs_assert(ucp_ep_get_lane_raw(ep, lane) == NULL);
     }
 
     status = ucp_ep_realloc_lanes(ep, new_key->num_lanes);
@@ -1994,7 +1994,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     if (ep->cfg_index == new_cfg_index) {
 #if UCS_ENABLE_ASSERT
         for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            ucs_assert(ucp_ep_get_lane(ep, lane) != NULL);
+            ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
         }
 #endif
         status = UCS_OK; /* No change */
@@ -2045,7 +2045,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
             }
         }
 
-        ucs_assert(ucp_ep_get_lane(ep, lane) != NULL);
+        ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
     }
 
     /* If we don't have a p2p transport, we're connected */
