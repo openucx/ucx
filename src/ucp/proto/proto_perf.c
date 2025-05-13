@@ -12,6 +12,9 @@
 #include "proto_debug.h"
 #include "proto_init.h"
 
+#include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_mm.h>
+#include <ucp/dt/dt.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
@@ -19,6 +22,10 @@
 #include <ucs/sys/string.h>
 
 #include <float.h>
+
+#include <ucp/core/ucp_rkey.inl>
+#include <ucp/proto/proto_select.inl>
+#include <ucp/core/ucp_ep.inl>
 
 struct ucp_proto_perf_segment {
     /* List element */
@@ -818,4 +825,83 @@ void ucp_proto_flat_perf_destroy(ucp_proto_flat_perf_t *flat_perf)
 
     ucs_array_cleanup_dynamic(flat_perf);
     ucs_free(flat_perf);
+}
+
+/**
+ * @brief Estimate the time for a UCP operation.
+ *
+ * This function selects the best protocol for the given operation parameters
+ * and message length, then estimates the time it would take.
+ *
+ * Memory information (type and system device) is determined based on available
+ * parameters with the following fallback logic:
+ * 1. If @a memh (memory handle) is provided, its properties are used.
+ * 2. Else, if @a rkey (remote key) is provided, its properties are used.
+ * 3. Else (both @a memh and @a rkey are NULL), host memory and an unknown
+ *    system device (@ref UCS_SYS_DEVICE_ID_UNKNOWN) are assumed.
+ *
+ * @param [in]  ep           Endpoint to perform the operation on.
+ * @param [in]  op_id        Operation ID (e.g., put, get, amo).
+ * @param [in]  memh         Optional UCP memory handle for the local data buffer.
+ *                           Can be NULL.
+ * @param [in]  rkey         Optional UCP remote key for the remote data buffer.
+ *                           Can be NULL.
+ * @param [in]  msg_length   Message length for the operation.
+ * @param [out] time_est     Filled with the estimated time in seconds.
+ *
+ * @return UCS_OK if successful, or an error code otherwise.
+ */
+ucs_status_t
+ucp_proto_est_perf(ucp_ep_h ep, ucp_operation_id_t op_id, ucp_mem_h memh,
+                   ucp_rkey_h rkey, size_t msg_length, double *time_est)
+{
+    const ucp_worker_h worker = ep->worker;
+    const ucp_proto_threshold_elem_t *thresh_elem;
+    ucp_proto_select_param_t select_param;
+    ucp_memory_info_t mem_info;
+    const ucp_proto_flat_perf_range_t *range;
+    ucp_proto_select_t *proto_select;
+    ucp_worker_cfg_index_t rkey_cfg_index;
+
+    if (memh != NULL) {
+        mem_info.type    = memh->mem_type;
+        mem_info.sys_dev = memh->sys_dev;
+    } else if (rkey != NULL) {
+        mem_info.type    = rkey->mem_type;
+        mem_info.sys_dev = ucp_rkey_config(worker, rkey)->key.sys_dev;
+    } else {
+        mem_info.type    = UCS_MEMORY_TYPE_HOST;
+        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    ucp_proto_select_param_init(&select_param, op_id, 0, 0,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+    if (rkey != NULL) {
+        proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
+        rkey_cfg_index = rkey->cfg_index;
+    } else {
+        proto_select   = &ucp_ep_config(ep)->proto_select;
+        rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    }
+
+    thresh_elem = ucp_proto_select_lookup(worker,
+                                          proto_select,
+                                          ep->cfg_index,
+                                          rkey_cfg_index,
+                                          &select_param,
+                                          msg_length);
+    if (thresh_elem == NULL) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    /* Find the relevant performance range */
+    range = ucp_proto_flat_perf_find_lb(thresh_elem->proto_config.init_elem->flat_perf,
+                                        msg_length);
+    if ((range == NULL) || (range->start > msg_length)) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    *time_est = ucs_linear_func_apply(range->value, msg_length);
+    return UCS_OK;
 }

@@ -635,17 +635,36 @@ ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
     const ucp_ep_config_key_t *key          = &ucp_ep_config(ep)->key;
     double max_bandwidth                    = 0;
     ucp_rsc_index_t max_bandwidth_rsc_index = 0;
+    double duration                         = 0;
     ucp_rsc_index_t rsc_index;
     double bandwidth;
     ucp_lane_index_t lane;
     ucp_worker_iface_t *wiface;
     uct_iface_attr_t *iface_attr;
     ucs_linear_func_t estimated_time;
+    ucs_status_t status;
 
-    if (!ucs_test_all_flags(attr->field_mask,
-                            UCP_EP_PERF_ATTR_FIELD_ESTIMATED_TIME &
-                            UCP_EP_PERF_PARAM_FIELD_MESSAGE_SIZE)) {
+    if (!(attr->field_mask & UCP_EP_PERF_ATTR_FIELD_ESTIMATED_TIME) ||
+        !(param->field_mask & UCP_EP_PERF_PARAM_FIELD_MESSAGE_SIZE)) {
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (param->field_mask & UCP_EP_PERF_PARAM_FIELD_OP_TYPE) {
+        if ((param->op_type == UCP_OP_PUT) || (param->op_type == UCP_OP_GET)) {
+            status = ucp_proto_est_perf(ep,
+                param->op_type,
+                UCP_PARAM_VALUE(EP_PERF, param, mem_h, MEM_H, NULL),
+                UCP_PARAM_VALUE(EP_PERF, param, rkey, RKEY, NULL),
+                param->message_size,
+                &duration);
+            if (status != UCS_OK) {
+                return status;
+            }
+            attr->estimated_time = duration;
+            return UCS_OK;
+        } else {
+            return UCS_ERR_INVALID_PARAM;
+        }
     }
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
