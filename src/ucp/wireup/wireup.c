@@ -1240,7 +1240,7 @@ out:
 
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep_h uct_ep = ucp_ep_get_lane_raw(ep, lane);
 
     if ((uct_ep != NULL) && ucp_wireup_ep_test(uct_ep)) {
         return ucp_wireup_ep_extract_next_ep(uct_ep);
@@ -2158,7 +2158,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     if (ep->cfg_index == new_cfg_index) {
 #if UCS_ENABLE_ASSERT
         for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            ucs_assert(ucp_ep_get_lane(ep, lane) != NULL);
+            ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
         }
 #endif
         status = UCS_OK; /* No change */
@@ -2224,6 +2224,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         if (status != UCS_OK) {
             goto out;
         }
+
+        ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
     }
 
     /* If we don't have a p2p transport, we're connected */
