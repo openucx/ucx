@@ -3,6 +3,7 @@
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+* Copyright (C) Hygon Information Technology Co., Ltd. 2025. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -169,7 +170,8 @@ const char *ucs_cpu_vendor_name()
         [UCS_CPU_VENDOR_GENERIC_RV64G] = "Generic RV64G",
         [UCS_CPU_VENDOR_FUJITSU_ARM]   = "Fujitsu ARM",
         [UCS_CPU_VENDOR_ZHAOXIN]       = "Zhaoxin",
-        [UCS_CPU_VENDOR_NVIDIA]        = "Nvidia"
+        [UCS_CPU_VENDOR_NVIDIA]        = "Nvidia",
+        [UCS_CPU_VENDOR_HYGON]         = "Hygon"
     };
 
     return cpu_vendor_names[ucs_arch_get_cpu_vendor()];
@@ -197,7 +199,10 @@ const char *ucs_cpu_model_name()
         [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
         [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui",
         [UCS_CPU_MODEL_RV64G]              = "RV64G",
-        [UCS_CPU_MODEL_NVIDIA_GRACE]       = "Grace"
+        [UCS_CPU_MODEL_NVIDIA_GRACE]       = "Grace",
+        [UCS_CPU_MODEL_HYGON_MOKSHA]       = "Moksha",
+        [UCS_CPU_MODEL_HYGON_MOKSHA2]      = "Moksha2",
+        [UCS_CPU_MODEL_HYGON_DHARMA]       = "Dharma"
     };
 
     return cpu_model_names[ucs_arch_get_cpu_model()];

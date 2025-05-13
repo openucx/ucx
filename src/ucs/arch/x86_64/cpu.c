@@ -2,6 +2,7 @@
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2019-2024. ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
+* Copyright (C) Hygon Information Technology Co., Ltd. 2025. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -23,6 +24,8 @@
 #define X86_CPUID_AUTHENTICAMD    "AuthcAMDenti" /* AuthenticAMD in magic notation */
 #define X86_CPUID_CENTAURHAULS    "CentaulsaurH" /* CentaurHauls in magic notation */
 #define X86_CPUID_SHANGHAI        "  Shai  angh" /* Shanghai in magic notation */
+#define X86_CPUID_HYGONGENUINE    "HygouinenGen" /* HygonGenuine in magic notation */
+
 #define X86_CPUID_GET_MODEL       0x00000001u
 #define X86_CPUID_GET_BASE_VALUE  0x00000000u
 #define X86_CPUID_GET_EXTD_VALUE  0x00000007u
@@ -472,6 +475,22 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
                 break;
             }
             break;
+        case 0x18:
+            switch (model)
+            {
+            case 0x00:
+                cpu_model = UCS_CPU_MODEL_HYGON_MOKSHA;
+                break;
+            case 0x02:
+                cpu_model = UCS_CPU_MODEL_HYGON_MOKSHA2;
+                break;
+            case 0x04:
+                cpu_model = UCS_CPU_MODEL_HYGON_DHARMA;
+                break;
+            default:
+                break;
+            }
+            break;
         /* AMD Zen3/Zen4 */
         case 0x19:
             switch (model) {
@@ -573,6 +592,9 @@ ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
     } else if (!memcmp(reg.id, X86_CPUID_CENTAURHAULS, sizeof(X86_CPUID_CENTAURHAULS) - 1) ||
                !memcmp(reg.id, X86_CPUID_SHANGHAI, sizeof(X86_CPUID_SHANGHAI) - 1)) {
         return UCS_CPU_VENDOR_ZHAOXIN;
+    }else if( !memcmp(reg.id, X86_CPUID_HYGONGENUINE, sizeof(X86_CPUID_HYGONGENUINE) - 1))
+    {
+        return UCS_CPU_VENDOR_HYGON;
     }
 
     return UCS_CPU_VENDOR_UNKNOWN;
@@ -598,11 +620,13 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 
 static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
 {
+    ucs_cpu_vendor_t vendor;
+
     if (user_val != UCS_MEMUNITS_AUTO) {
         return user_val;
     }
-
-    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD) {
+    vendor = ucs_arch_get_cpu_vendor();
+    if (vendor == UCS_CPU_VENDOR_AMD || vendor == UCS_CPU_VENDOR_HYGON) {
         return ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3) * 3 / 4;
     } else {
         return UCS_MEMUNITS_INF;
@@ -611,7 +635,9 @@ static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
 
 static size_t ucs_cpu_nt_dest_thresh()
 {
-    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD) {
+    ucs_cpu_vendor_t vendor;
+    vendor = ucs_arch_get_cpu_vendor();
+    if (vendor == UCS_CPU_VENDOR_AMD || vendor == UCS_CPU_VENDOR_HYGON) {
         return ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3) * 9 / 8;
     } else {
         return UCS_MEMUNITS_INF;
