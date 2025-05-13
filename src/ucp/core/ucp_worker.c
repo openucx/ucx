@@ -604,6 +604,10 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 
     ++worker->num_active_ifaces;
 
+    if (!(wiface->flags & UCP_WORKER_IFACE_FLAG_AM_LANE)) {
+        uct_flags |= UCT_PROGRESS_DISCARD;
+    }
+
     uct_iface_progress_enable(wiface->iface,
                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV | uct_flags);
 }
