@@ -193,6 +193,7 @@ typedef struct uct_dc_mlx5_iface_config {
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
     unsigned                            num_dci_channels;
     size_t                              dcis_initial_capacity;
+    ucs_time_t                          fhs_added_latency;
 } uct_dc_mlx5_iface_config_t;
 
 
@@ -351,6 +352,9 @@ struct uct_dc_mlx5_iface {
 
         /* used in hybrid dcs policy otherwise -1 */
         uint16_t                     hybrid_hw_dci;
+
+        /* Added latency when using FHS */
+        ucs_time_t                   fhs_added_latency;
     } tx;
 
     struct {
