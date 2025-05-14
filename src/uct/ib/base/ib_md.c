@@ -491,11 +491,11 @@ if (dm == NULL && dmabuf_fd == UCT_DMABUF_FD_INVALID &&
         
         for (size_t offset = 0; offset < length; offset += system_page_size_for_touch) {
             volatile char *ptr_to_touch = (volatile char *)address + offset;
-            *ptr_to_touch = (char)(offset & 0xFF);
+            *ptr_to_touch = 0;
         }
         if (length > 0) { // Ensure last byte is touched if length isn't page multiple
              volatile char *last_byte_ptr = (volatile char *)address + length - 1;
-             *last_byte_ptr = (char)((length - 1) & 0xFF);
+             *last_byte_ptr = 0;
         }
         ucs_debug("Finished explicitly writing to memory at %p (user buffer heuristic).", address);
     } else {
