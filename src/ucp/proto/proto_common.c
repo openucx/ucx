@@ -359,14 +359,21 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                              context->config.est_num_ppn,
                                              context->config.est_num_eps);
 
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
-                           UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_BANDWIDTH |
-                           UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
-                           UCT_PERF_ATTR_FIELD_LATENCY;
-    perf_attr.operation  = params->send_op;
+    perf_attr.field_mask        = UCT_PERF_ATTR_FIELD_OPERATION |
+                                  UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
+                                  UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+                                  UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
+                                  UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
+                                  UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                                  UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
+                                  UCT_PERF_ATTR_FIELD_LATENCY;
+    perf_attr.operation         = params->send_op;
+    perf_attr.local_memory_type = params->reg_mem_info.type;
+
+    if (params->super.rkey_config_key != NULL) {
+        perf_attr.field_mask        |= UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE;
+        perf_attr.remote_memory_type = params->super.rkey_config_key->mem_type;
+    }
 
     status = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
