@@ -2083,7 +2083,8 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
 
     /* Search for the given key in the ep_config array */
     ucs_array_for_each(ep_config, &worker->ep_config) {
-        if (ucp_ep_config_is_equal(&ep_config->key, key)) {
+        if (ucp_ep_config_is_equal(&ep_config->key, key,
+                                   UCP_EP_CONFIG_CMP_MASK_ALL)) {
             ep_cfg_index = ep_config - worker->ep_config.buffer;
             goto out;
         }
