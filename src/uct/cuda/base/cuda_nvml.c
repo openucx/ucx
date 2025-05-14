@@ -13,9 +13,10 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log_def.h>
 #include <ucs/sys/preprocessor_func.h>
+
 #include <stddef.h>
 #include <dlfcn.h>
-
+#include <pthread.h>
 
 #define UCT_CUDA_NVML_LIB_NAME "libnvidia-ml.so.1"
 #define UCT_CUDA_NVML_LIB_MODE RTLD_NOW
@@ -80,14 +81,21 @@
 #define UCT_CUDA_NVML_WRAP_IMPL(_func, ...) \
     UCT_CUDA_NVML_WRAP_DECL(_func, UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
-        ucs_status_t _nvml_init_status = uct_cuda_nvml_init(); \
+        ucs_status_t _nvml_init_status; \
+        pthread_mutex_lock(&uct_cuda_nvml_mutex); \
+        _nvml_init_status = uct_cuda_nvml_init(); \
         if (_nvml_init_status != UCS_OK) { \
-            return _nvml_init_status; \
+            goto _out; \
         } \
-        return UCT_CUDA_NVML_CALL_DEBUG(_func, \
-                                        UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        _nvml_init_status = UCT_CUDA_NVML_CALL_DEBUG( \
+                _func, UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
+    _out: \
+        pthread_mutex_unlock(&uct_cuda_nvml_mutex); \
+        return _nvml_init_status; \
     }
 
+
+pthread_mutex_t uct_cuda_nvml_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 UCT_CUDA_NVML_FOR_EACH_EXT(UCT_CUDA_NVML_FPTR_DECL);
 
