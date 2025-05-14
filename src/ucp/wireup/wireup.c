@@ -985,8 +985,8 @@ ucp_wireup_process_addr_reply(ucp_worker_h worker, ucp_ep_h ep,
     }
 
     /* Make sure that lanes layout is the same */
-    ucs_assert_always(ucp_ep_config_is_equal2(&ucp_ep_config(ep)->key, &key,
-                                              UCP_EP_CONFIG_CMP_FLAG_LANES));
+    ucs_assert_always(ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key,
+                                             UCP_EP_CONFIG_CMP_FLAG_LANES));
     status = ucp_wireup_connect_local(ep, UCS_MASK(ucp_ep_num_lanes(ep)) &
                                           ~ucp_ep_config(ep)->p2p_lanes,
                                       remote_address, NULL, addr_indices);
@@ -2107,7 +2107,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                                            addr_indices);
 
     if (!is_reconfigurable &&
-        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key)) {
+        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key,
+                                UCP_EP_CONFIG_CMP_MASK_ALL)) {
         /* Allow to choose only the lanes that were already chosen for case
          * without CM to prevent reconfiguration error.
          */
@@ -2133,7 +2134,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key)) {
+        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key,
+                                UCP_EP_CONFIG_CMP_MASK_ALL)) {
         ucp_wireup_gather_pending_requests(ep, &replay_pending_queue);
     }
 

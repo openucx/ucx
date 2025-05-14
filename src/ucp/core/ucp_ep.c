@@ -1953,19 +1953,15 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
 }
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
-                           const ucp_ep_config_key_t *key2)
-{
-    return ucp_ep_config_is_equal2(key1, key2, UCP_EP_CONFIG_CMP_FLAG_ALL);
-}
-
-int ucp_ep_config_is_equal2(const ucp_ep_config_key_t *key1,
-                            const ucp_ep_config_key_t *key2, unsigned flags)
+                           const ucp_ep_config_key_t *key2, unsigned flags)
 {
     ucp_lane_index_t lane;
     int i;
 
     ucs_assert(flags & UCP_EP_CONFIG_CMP_FLAG_LANES);
+    ucs_assert(flags <= UCP_EP_CONFIG_CMP_MASK_ALL);
 
+    /* Compare lanes layout */
     if ((key1->num_lanes != key2->num_lanes) ||
         memcmp(key1->rma_lanes, key2->rma_lanes, sizeof(key1->rma_lanes)) ||
         memcmp(key1->am_bw_lanes, key2->am_bw_lanes,
@@ -1989,10 +1985,11 @@ int ucp_ep_config_is_equal2(const ucp_ep_config_key_t *key1,
     }
 
     /* If we are comparing lanes only, we are done */
-    if (flags != UCP_EP_CONFIG_CMP_FLAG_ALL) {
+    if (flags != UCP_EP_CONFIG_CMP_MASK_ALL) {
         return 1;
     }
 
+    /* Compare all the rest */
     if ((key1->rma_bw_md_map != key2->rma_bw_md_map) ||
         (key1->rma_md_map != key2->rma_md_map) ||
         (key1->reachable_md_map != key2->reachable_md_map) ||
