@@ -40,9 +40,6 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
                                        const char *name);
 
 
-void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
-
-
 ucs_status_t
 uct_cuda_ipc_map_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                            void **mapped_addr);

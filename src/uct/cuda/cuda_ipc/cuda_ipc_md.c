@@ -318,10 +318,6 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
         }
     }
 
-    /* Save local device number, so we use it to find remote rcache when mapping
-     * mem_handle in uct_cuda_ipc_post_cuda_async_copy */
-    rkey->super.dev_num = cu_dev;
-
     pthread_mutex_lock(&component->lock);
 
     cache = uct_cuda_ipc_get_dev_cache(component, &rkey->super);

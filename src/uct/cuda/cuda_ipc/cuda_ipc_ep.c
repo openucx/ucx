@@ -144,7 +144,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     if (ucs_unlikely(stream == NULL)) {
         ucs_error("stream=%d for dev_num=%d not available", key->stream_id,
-                  key->super.dev_num);
+                  cuda_device);
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
