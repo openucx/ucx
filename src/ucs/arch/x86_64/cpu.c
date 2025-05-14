@@ -590,7 +590,7 @@ ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
     } else if (!memcmp(reg.id, X86_CPUID_CENTAURHAULS, sizeof(X86_CPUID_CENTAURHAULS) - 1) ||
                !memcmp(reg.id, X86_CPUID_SHANGHAI, sizeof(X86_CPUID_SHANGHAI) - 1)) {
         return UCS_CPU_VENDOR_ZHAOXIN;
-    }else if( !memcmp(reg.id, X86_CPUID_HYGONGENUINE, sizeof(X86_CPUID_HYGONGENUINE) - 1))
+    } else if(!memcmp(reg.id, X86_CPUID_HYGONGENUINE, sizeof(X86_CPUID_HYGONGENUINE) - 1))
     {
         return UCS_CPU_VENDOR_HYGON;
     }
