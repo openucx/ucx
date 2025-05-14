@@ -477,25 +477,11 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
 
 // <<<< START OF MODIFIED PAGE WRITING CODE >>>>
 // Only attempt to write if it looks like general host memory and is reasonably large
-// (to avoid writing to small, special device memory regions like doorbells)
-
-// Extract flags and dmabuf_fd from params if params is not NULL
-uint64_t reg_params_flags = 0;
-int dmabuf_fd_val         = UCT_DMABUF_FD_INVALID; // Default if params is NULL or field not set
-
-if (params != NULL) {
-    reg_params_flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
-    dmabuf_fd_val    = UCT_MD_MEM_REG_FIELD_VALUE(params, dmabuf_fd, FIELD_DMABUF_FD, UCT_DMABUF_FD_INVALID);
-}
-
-
-// Heuristic: Assume it's a user data buffer if dm is NULL, no dmabuf_fd, and length is substantial.
-// The length check is a heuristic to avoid dbrec-like small regions.
 // Adjust MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST as appropriate.
 // Let's set it to something clearly larger than typical control structures.
 #define MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST 1024 // 1KB, for example
 
-if (dm == NULL && dmabuf_fd_val == UCT_DMABUF_FD_INVALID &&
+if (dm == NULL && dmabuf_fd == UCT_DMABUF_FD_INVALID &&
     address != NULL && length >= MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST) {
 
     long system_page_size_for_touch = sysconf(_SC_PAGESIZE);
@@ -517,7 +503,7 @@ if (dm == NULL && dmabuf_fd_val == UCT_DMABUF_FD_INVALID &&
     }
 } else if (address != NULL && length > 0) { // Log if we skip due to heuristic
     ucs_debug("Skipping explicit write for address %p, length %zu (dm=%p, dmabuf_fd=%d, length_check_failed=%d) - likely special/device memory or too small.",
-              address, length, dm, dmabuf_fd_val, (length < MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST));
+              address, length, dm, dmabuf_fd, (length < MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST));
 }
 // <<<< END OF MODIFIED PAGE WRITING CODE >>>>
 
