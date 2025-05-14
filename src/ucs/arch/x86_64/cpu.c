@@ -476,8 +476,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
             }
             break;
         case 0x18:
-            switch (model)
-            {
+            switch (model) {
             case 0x00:
                 cpu_model = UCS_CPU_MODEL_HYGON_MOKSHA;
                 break;
