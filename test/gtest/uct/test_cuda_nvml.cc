@@ -9,8 +9,7 @@ extern "C" {
 #include <uct/cuda/base/cuda_nvml.h>
 }
 
-class test_cuda_nvml : public ucs::test
-{
+class test_cuda_nvml : public ucs::test {
 };
 
 UCS_TEST_F(test_cuda_nvml, device_get_field_values) {
@@ -26,8 +25,8 @@ UCS_TEST_F(test_cuda_nvml, device_get_field_values) {
     EXPECT_EQ(status, UCS_OK);
 
     nvmlPciInfo_t pci;
-    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetNvLinkRemotePciInfo,
-                                     device, 0, &pci);
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetNvLinkRemotePciInfo, device,
+                                     0, &pci);
     EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_IO_ERROR));
 }
 
@@ -40,8 +39,8 @@ UCS_TEST_F(test_cuda_nvml, device_get_fabric_info) {
 
     nvmlGpuFabricInfoV_t fabric_info;
     fabric_info.version = nvmlGpuFabricInfo_v2;
-    status              = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetGpuFabricInfoV,
-                                                  device, &fabric_info);
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetGpuFabricInfoV, device,
+                                     &fabric_info);
     EXPECT_EQ(status, UCS_OK);
 }
 #endif
