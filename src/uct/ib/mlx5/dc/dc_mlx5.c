@@ -1710,7 +1710,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.fc_hard_req_progress_cb_id = UCS_CALLBACKQ_ID_NULL;
     self->tx.num_dci_pools              = 0;
     self->flags                         = 0;
-    self->tx.fhs_latency          = config->fhs_latency;
+    self->tx.fhs_latency                = config->fhs_latency;
     self->tx.av_fl_mlid = self->super.super.super.path_bits[0] & 0x7f;
 
     kh_init_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
