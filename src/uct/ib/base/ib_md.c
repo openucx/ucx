@@ -29,7 +29,8 @@
 #include <pthread_np.h>
 #endif
 #include <sys/resource.h>
-
+#include <numa.h>
+#include <numaif.h>
 
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
@@ -476,8 +477,57 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
     dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
                                     DMABUF_OFFSET, 0);
 
+// <<<< START OF MODIFIED PAGE WRITING CODE >>>>
+// Only attempt to write if it looks like general host memory and is reasonably large
+// (to avoid writing to small, special device memory regions like doorbells)
+
+// Extract flags and dmabuf_fd from params if params is not NULL
+uint64_t reg_params_flags = 0;
+int dmabuf_fd_val         = UCT_DMABUF_FD_INVALID; // Default if params is NULL or field not set
+
+if (params != NULL) {
+    reg_params_flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    dmabuf_fd_val    = UCT_MD_MEM_REG_FIELD_VALUE(params, dmabuf_fd, FIELD_DMABUF_FD, UCT_DMABUF_FD_INVALID);
+}
+
+
+// Heuristic: Assume it's a user data buffer if dm is NULL, no dmabuf_fd, and length is substantial.
+// The length check is a heuristic to avoid dbrec-like small regions.
+// Adjust MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST as appropriate.
+// Let's set it to something clearly larger than typical control structures.
+#define MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST (1024 * 1024) // 1MB, for example
+
+if (dm == NULL && dmabuf_fd_val == UCT_DMABUF_FD_INVALID &&
+    address != NULL && length >= 0) {
+    //address != NULL && length >= MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST) {
+
+    long system_page_size_for_touch = sysconf(_SC_PAGESIZE);
+    if (system_page_size_for_touch > 0) {
+        ucs_debug("Explicitly writing to %zu bytes at %p (page size %ld) before ibv_reg_mr (user buffer heuristic).",
+                  length, address, system_page_size_for_touch);
+        
+        for (size_t offset = 0; offset < length; offset += system_page_size_for_touch) {
+            volatile char *ptr_to_touch = (volatile char *)address + offset;
+            *ptr_to_touch = (char)(offset & 0xFF);
+        }
+        if (length > 0) { // Ensure last byte is touched if length isn't page multiple
+             volatile char *last_byte_ptr = (volatile char *)address + length - 1;
+             *last_byte_ptr = (char)((length - 1) & 0xFF);
+        }
+        ucs_debug("Finished explicitly writing to memory at %p (user buffer heuristic).", address);
+    } else {
+        ucs_warn("Could not get system page size for explicit memory write in uct_ib_reg_mr.");
+    }
+} else if (address != NULL && length > 0) { // Log if we skip due to heuristic
+    ucs_debug("Skipping explicit write for address %p, length %zu (dm=%p, dmabuf_fd=%d, length_check_failed=%d) - likely special/device memory or too small.",
+              address, length, dm, dmabuf_fd_val, (length < MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST));
+}
+// <<<< END OF MODIFIED PAGE WRITING CODE >>>>
+
+
     if (dm != NULL) {
 #if HAVE_IBV_DM
+	printf("in ibv_reg_dm_mr");
         title = "ibv_reg_dm_mr";
         mr    = UCS_PROFILE_CALL_ALWAYS(ibv_reg_dm_mr, md->pd, dm, 0, length,
                                         access_flags | IBV_ACCESS_ZERO_BASED);
@@ -485,17 +535,81 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
         return UCS_ERR_UNSUPPORTED;
 #endif
     } else if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
+	printf("in  ibv_reg_mr\n");
         title = "ibv_reg_mr";
+//// <<<< START OF INSERTED MIGRATION CODE >>>>
+//        if (length > 0 && address != NULL) { // Basic sanity check
+//            long system_page_size = sysconf(_SC_PAGESIZE);
+//            if (system_page_size > 0) {
+//                unsigned long num_pages_in_region = (length + system_page_size - 1) / system_page_size;
+//                void **page_addr_list = (void**)malloc(num_pages_in_region * sizeof(void *));
+//                int *target_node_list = (int*)malloc(num_pages_in_region * sizeof(int));
+//                int *page_migration_status = (int*)malloc(num_pages_in_region * sizeof(int));
+//                int target_migration_node = 0; // Explicitly target NUMA Node 0
+//
+//                if (page_addr_list && target_node_list && page_migration_status) {
+//                    ucs_debug("Attempting explicit migration of %p (len %zu, %lu pages) to NUMA node %d before ibv_reg_mr",
+//                              address, length, num_pages_in_region, target_migration_node);
+//
+//                    for (unsigned long i = 0; i < num_pages_in_region; ++i) {
+//                        page_addr_list[i] = (char *)address + (i * system_page_size);
+//                        target_node_list[i] = target_migration_node;
+//                        page_migration_status[i] = -1; // Initialize status
+//                    }
+//
+//                    // Check current NUMA status of first page (optional, for logging)
+//                    int current_node_before_move = -1;
+//                    if (get_mempolicy(&current_node_before_move, NULL, 0, address, MPOL_F_NODE | MPOL_F_ADDR) == 0) {
+//                         ucs_debug("Page %p is on NUMA node %d before explicit move to node %d",
+//                                   address, current_node_before_move, target_migration_node);
+//                    }
+//
+//
+//                    long move_ret = numa_move_pages(0, num_pages_in_region, page_addr_list,
+//                                                    target_node_list, page_migration_status, MPOL_MF_MOVE);
+//
+//                    if (move_ret < 0) {
+//                        ucs_warn("numa_move_pages call to node %d failed for %p (len %zu): %s (errno %d)",
+//                                 target_migration_node, address, length, strerror(errno), errno);
+//                    } else {
+//                        int successfully_moved_count = 0;
+//                        for (unsigned long i = 0; i < num_pages_in_region; ++i) {
+//                            if (page_migration_status[i] == target_migration_node) {
+//                                successfully_moved_count++;
+//                            }
+//                        }
+//                        ucs_debug("numa_move_pages to node %d for %p (len %zu): %ld pages reported as moved, %d confirmed to target node. (move_ret: %ld)",
+//                                  target_migration_node, address, length, num_pages_in_region - move_ret, successfully_moved_count, move_ret);
+//                        // Check NUMA status of first page after move (optional)
+//                        int current_node_after_move = -1;
+//                        if (get_mempolicy(&current_node_after_move, NULL, 0, address, MPOL_F_NODE | MPOL_F_ADDR) == 0) {
+//                             ucs_debug("Page %p is on NUMA node %d after explicit move attempt to node %d",
+//                                       address, current_node_after_move, target_migration_node);
+//                        }
+//                    }
+//                } else {
+//                    ucs_warn("Failed to allocate memory for page migration arrays for %p (len %zu)", address, length);
+//                }
+//                free(page_addr_list);
+//                free(target_node_list);
+//                free(page_migration_status);
+//            } else {
+//                 ucs_warn("Could not get system page size for migration logic.");
+//            }
+//        }
+//        // <<<< END OF INSERTED MIGRATION CODE >>>>
         do {
             /* when access_flags contains IBV_ACCESS_ON_DEMAND ibv_reg_mr() may
              * fail with EAGAIN. It means prefetch failed due to collision
              * with invalidation */
             mr = UCS_PROFILE_CALL_ALWAYS(ibv_reg_mr, md->pd, address, length,
                                          access_flags);
+	printf("ibv_reg_mr on %p\n", address);
         } while ((mr == NULL) && (errno == EAGAIN) &&
                  (retry++ < md->config.reg_retry_cnt));
     } else {
 #if HAVE_DECL_IBV_REG_DMABUF_MR
+	printf("in ibv_reg_dmabuf_mr");
         title = "ibv_reg_dmabuf_mr";
         mr = UCS_PROFILE_CALL_ALWAYS(ibv_reg_dmabuf_mr, md->pd, dmabuf_offset,
                                      length, (uintptr_t)address, dmabuf_fd,
