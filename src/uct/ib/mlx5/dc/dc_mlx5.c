@@ -140,10 +140,9 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dcis_initial_capacity),
      UCS_CONFIG_TYPE_ULUNITS},
 
-    {"FULL_HANDSHAKE_ADDED_LATENCY", "140ns",
-     "Amount of latency added to performance estimation of DC due to full "
-     "handshake (used when AR is enabled).",
-     ucs_offsetof(uct_dc_mlx5_iface_config_t, fhs_added_latency),
+    {"FULL_HANDSHAKE_LATENCY", "140ns",
+     "DC Full Handshake extra latency",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, fhs_latency),
      UCS_CONFIG_TYPE_TIME_UNITS},
 
     {NULL}
@@ -214,9 +213,8 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 /* Check whether RDMA write is disabled */
 static int uct_dc_mlx5_iface_rdma_wr_disabled(uct_dc_mlx5_iface_t *iface)
 {
-    uct_ib_iface_t *ib_iface = &iface->super.super.super;
-    uct_ib_mlx5_md_t *md     = ucs_derived_of(ib_iface->super.md,
-                                              uct_ib_mlx5_md_t);
+    uct_ib_iface_t *ib_iface   = &iface->super.super.super;
+    const uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(ib_iface);
 
     return (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
            (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
@@ -290,7 +288,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     if (uct_dc_mlx5_iface_is_full_handshake(iface)) {
         /* FHS adds extra round trip */
-        iface_attr->latency.c += ucs_time_to_sec(iface->tx.fhs_added_latency);
+        iface_attr->latency.c += ucs_time_to_sec(iface->tx.fhs_latency);
     }
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
@@ -1712,7 +1710,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.fc_hard_req_progress_cb_id = UCS_CALLBACKQ_ID_NULL;
     self->tx.num_dci_pools              = 0;
     self->flags                         = 0;
-    self->tx.fhs_added_latency          = config->fhs_added_latency;
+    self->tx.fhs_latency          = config->fhs_latency;
     self->tx.av_fl_mlid = self->super.super.super.path_bits[0] & 0x7f;
 
     kh_init_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
