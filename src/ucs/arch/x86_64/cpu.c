@@ -633,8 +633,7 @@ static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
 
 static size_t ucs_cpu_nt_dest_thresh()
 {
-    ucs_cpu_vendor_t vendor;
-    vendor = ucs_arch_get_cpu_vendor();
+    ucs_cpu_vendor_t vendor = ucs_arch_get_cpu_vendor();
     if (vendor == UCS_CPU_VENDOR_AMD || vendor == UCS_CPU_VENDOR_HYGON) {
         return ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3) * 9 / 8;
     } else {
