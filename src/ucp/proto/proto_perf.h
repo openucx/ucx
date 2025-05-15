@@ -377,4 +377,12 @@ ucp_proto_buffer_copy_cpu_factor_id(int is_local)
                       UCP_PROTO_PERF_FACTOR_REMOTE_CPU;
 }
 
+
+/**
+ * Estimate the performance of a given operation.
+ */
+ucs_status_t
+ucp_proto_est_perf(ucp_ep_h ep, ucp_operation_id_t op_id, ucp_mem_h memh,
+                   ucp_rkey_h rkey, size_t msg_length, double *time_est);
+
 #endif
