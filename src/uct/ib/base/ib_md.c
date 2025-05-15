@@ -493,10 +493,6 @@ if (dm == NULL && dmabuf_fd == UCT_DMABUF_FD_INVALID &&
             volatile char *ptr_to_touch = (volatile char *)address + offset;
             *ptr_to_touch = 0;
         }
-        if (length > 0) { // Ensure last byte is touched if length isn't page multiple
-             volatile char *last_byte_ptr = (volatile char *)address + length - 1;
-             *last_byte_ptr = 0;
-        }
         ucs_debug("Finished explicitly writing to memory at %p (user buffer heuristic).", address);
     } else {
         ucs_warn("Could not get system page size for explicit memory write in uct_ib_reg_mr.");
