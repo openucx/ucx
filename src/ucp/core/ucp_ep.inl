@@ -67,15 +67,14 @@ ucp_ep_get_lane_raw(ucp_ep_h ep, ucp_lane_index_t lane_index)
 static UCS_F_ALWAYS_INLINE uct_ep_h
 ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
 {
-    uct_ep_h uct_ep;
-    ucs_assertv(lane_index < UCP_MAX_LANES, "lane=%d", lane_index);
+    uct_ep_h uct_ep = ucp_ep_get_lane_raw(ep, lane_index);
 
-    uct_ep = ucp_ep_get_lane_raw(ep, lane_index);
     if (ucs_likely(uct_ep != NULL)) {
         return uct_ep;
     }
 
     ucs_bug("ondemand wireup is not implemented yet");
+    ucs_assert(lane_index >= UCP_MAX_FAST_PATH_LANES);
     return ucp_wireup_init_slow_lane(ep, lane_index - UCP_MAX_FAST_PATH_LANES);
 }
 

@@ -142,7 +142,7 @@ typedef struct {
 } ucp_wireup_select_info_t;
 
 
-ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
+ucs_status_t ucp_wireup_send_request(ucp_ep_h ep, uint8_t msg_type);
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);
 
