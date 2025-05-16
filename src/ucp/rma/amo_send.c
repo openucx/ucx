@@ -221,13 +221,14 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
                                                          UCP_OP_ID_AMO_FETCH;
             status_p = ucp_proto_request_send_op_reply(
                     ep, &ucp_rkey_config(worker, rkey)->proto_select,
-                    rkey->cfg_index, req, op_id, buffer, 1, param->datatype,
-                    op_size, param);
+                    rkey->cfg_index, req, ucp_ep_rma_get_fence_flag(ep), op_id,
+                    buffer, 1, param->datatype, op_size, param);
         } else {
             status_p = ucp_proto_request_send_op(
                     ep, &ucp_rkey_config(worker, rkey)->proto_select,
-                    rkey->cfg_index, req, UCP_OP_ID_AMO_POST, buffer, 1,
-                    param->datatype, op_size, param, 0, 0);
+                    rkey->cfg_index, req, ucp_ep_rma_get_fence_flag(ep),
+                    UCP_OP_ID_AMO_POST, buffer, 1, param->datatype, op_size,
+                    param, 0, 0);
         }
         if (UCS_PTR_IS_PTR(status_p) &&
             ucs_likely(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {

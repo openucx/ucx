@@ -33,6 +33,9 @@ resources:
     - container: rhel90
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rhel90_ib
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
     - container: ubuntu2004
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -47,6 +50,9 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu1804
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu2404
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: debian113
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
@@ -213,6 +219,8 @@ stages:
               extra_modules: ""
             ubuntu2204:
               CONTAINER: ubuntu2204
+            ubuntu2404:
+              CONTAINER: ubuntu2404
             ubuntu2210:
               CONTAINER: ubuntu2210
             debian113:
@@ -342,6 +350,14 @@ stages:
         demands: ucx_bf -equals yes
         run_tests: yes
         test_perf: 0
+
+  - stage: EFA_Tests
+    dependsOn: [Static_check]
+    jobs:
+    - template: efa.yml
+      parameters:
+        name: EFA
+        demands: ucx_new -equals yes
 
   - stage: Namespace_Tests
     dependsOn: [Static_check]

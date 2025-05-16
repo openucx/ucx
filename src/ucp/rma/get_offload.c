@@ -56,10 +56,20 @@ static void ucp_proto_get_offload_bcopy_completion(uct_completion_t *self)
 
 static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
+                                                           send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
+
+        status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
+
         ucp_proto_completion_init(&req->send.state.uct_comp,
                                   ucp_proto_get_offload_bcopy_completion);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
@@ -94,7 +104,8 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
@@ -135,7 +146,7 @@ ucp_proto_t ucp_get_offload_bcopy_proto = {
     .probe    = ucp_proto_get_offload_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_bcopy_progress},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_request_bcopy_abort,
     .reset    = ucp_proto_get_offload_bcopy_reset
 };
 
@@ -170,7 +181,7 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, NULL,
+            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
             UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCP_DT_MASK_CONTIG_IOV,
             ucp_proto_get_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
@@ -202,7 +213,8 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
-                               UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
+                               UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
@@ -236,6 +248,6 @@ ucp_proto_t ucp_get_offload_zcopy_proto = {
     .probe    = ucp_proto_get_offload_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_zcopy_progress},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_get_offload_zcopy_reset
 };

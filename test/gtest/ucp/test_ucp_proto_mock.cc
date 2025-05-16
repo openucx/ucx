@@ -17,6 +17,7 @@ class mock_iface {
 public:
     /* Can't use std::function due to coverity errors */
     using iface_attr_func_t = void (*)(uct_iface_attr&);
+    using perf_attr_func_t = void (*)(uct_perf_attr_t&);
 
     mock_iface() : m_tl(nullptr)
     {
@@ -37,9 +38,11 @@ public:
 
     void add_mock_iface(
             const std::string &dev_name = "mock",
-            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {})
+            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
+            perf_attr_func_t perf_cb = cx7_perf_mock)
     {
         m_iface_attrs_funcs[dev_name] = cb;
+        m_perf_attrs_funcs[dev_name]  = perf_cb;
     }
 
     void mock_transport(const std::string &tl_name)
@@ -127,6 +130,7 @@ private:
         uct_base_iface_t *base      = ucs_derived_of(*iface_p, uct_base_iface_t);
         m_self->m_iface_names[base] = params->mode.device.dev_name;
         m_self->m_mock.setup(&(*iface_p)->ops.iface_query, iface_query_mock);
+        m_self->m_mock.setup(&base->internal_ops->iface_estimate_perf, perf_mock);
         return UCS_OK;
     }
 
@@ -143,6 +147,26 @@ private:
         return UCS_OK;
     }
 
+    static ucs_status_t perf_mock(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+    {
+        uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
+
+        UCS_MOCK_ORIG_FUNC(m_self->m_mock,
+                           &base->internal_ops->iface_estimate_perf, iface,
+                           perf_attr);
+
+        std::string &iface_name = m_self->m_iface_names[base];
+        auto it                 = m_self->m_perf_attrs_funcs.find(iface_name);
+        (it->second)(*perf_attr);
+        return UCS_OK;
+    }
+
+    static void cx7_perf_mock(uct_perf_attr_t& perf_attr)
+    {
+        perf_attr.path_bandwidth.shared    = 0.95 * perf_attr.bandwidth.shared;
+        perf_attr.path_bandwidth.dedicated = 0;
+    }
+
     /* We have to use singleton to mock C functions */
     static mock_iface *m_self;
 
@@ -150,6 +174,7 @@ private:
     uct_tl_t                                           *m_tl;
     std::unordered_map<uct_base_iface_t *, std::string> m_iface_names;
     std::map<std::string, iface_attr_func_t>            m_iface_attrs_funcs;
+    std::map<std::string, perf_attr_func_t>             m_perf_attrs_funcs;
     std::string                                         m_real_dev_name;
 };
 
@@ -159,7 +184,6 @@ class test_ucp_proto_mock : public ucp_test, public mock_iface {
 public:
     const static size_t INF                               = UCS_MEMUNITS_INF;
     const static uint16_t AM_ID                           = 123;
-    const static ucp_worker_cfg_index_t EP_CONFIG_INDEX   = 0;
     const static ucp_worker_cfg_index_t RKEY_CONFIG_INDEX = 0;
 
     struct proto_select_data {
@@ -209,12 +233,6 @@ public:
         }
     };
 
-    struct worker_config {
-        ucp_worker_h           worker;
-        ucp_worker_cfg_index_t ep_cfg_index;
-        ucp_worker_cfg_index_t rkey_cfg_index;
-    };
-
     using proto_select_data_vec_t = std::vector<proto_select_data>;
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -251,26 +269,21 @@ public:
         ucs_sys_topo_reset_provider();
     }
 
-    static void check_ep_config(entity &e,
+    static void check_ep_config(const entity &e,
                                 const proto_select_data_vec_t &data_vec,
                                 ucp_proto_select_key_t key)
     {
-        worker_config worker_cfg = {e.worker(), EP_CONFIG_INDEX,
-                                    UCP_WORKER_CFG_INDEX_NULL};
-        ucp_ep_config_t *config  = ucp_worker_ep_config(e.worker(),
-                                                        worker_cfg.ep_cfg_index);
-        check_proto_select(worker_cfg, config->proto_select, data_vec, key);
+        ucp_ep_config_t *config = ucp_worker_ep_config(e.worker(),
+                                                       ep_config_index(e));
+        check_proto_select(e, config->proto_select, data_vec, key);
     }
 
-    static void check_rkey_config(entity &e,
+    static void check_rkey_config(const entity &e,
                                   const proto_select_data_vec_t &data_vec,
                                   ucp_proto_select_key_t key)
     {
-        worker_config worker_cfg = {e.worker(), EP_CONFIG_INDEX,
-                                    RKEY_CONFIG_INDEX};
-        ucp_rkey_config_t *config =
-                &e.worker()->rkey_config[worker_cfg.rkey_cfg_index];
-        check_proto_select(worker_cfg, config->proto_select, data_vec, key);
+        ucp_rkey_config_t *config = &e.worker()->rkey_config[RKEY_CONFIG_INDEX];
+        check_proto_select(e, config->proto_select, data_vec, key);
     }
 
     /*
@@ -290,15 +303,7 @@ public:
     void connect()
     {
         sender().connect(&receiver(), get_ep_params());
-        wait_for_cond(
-                [this] {
-                    return (sender().worker()->ep_config.length >
-                            EP_CONFIG_INDEX);
-                },
-                [this] { progress(); });
-
-        EXPECT_EQ(1, sender().worker()->ep_config.length);
-        EXPECT_EQ(1, sender().worker()->rkey_config_count);
+        send_recv_am(1); /* Wait for connection establishment */
     }
 
 protected:
@@ -329,13 +334,13 @@ protected:
         return proto_select_data();
     }
 
-    static void dump_select_info(const worker_config &worker_cfg,
+    static void dump_select_info(const entity &e,
                                  const ucp_proto_select_param_t &select_param,
                                  const ucp_proto_select_elem_t &select_elem)
     {
         ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-        ucp_proto_select_elem_info(worker_cfg.worker, worker_cfg.ep_cfg_index,
-                                   worker_cfg.rkey_cfg_index, &select_param,
+        ucp_proto_select_elem_info(e.worker(), ep_config_index(e),
+                                   RKEY_CONFIG_INDEX, &select_param,
                                    &select_elem, 1, &strb);
 
         char *line;
@@ -346,7 +351,7 @@ protected:
     }
 
     static void
-    check_proto_select_elem(const worker_config &worker_cfg,
+    check_proto_select_elem(const entity &e,
                             const ucp_proto_select_param_t &select_param,
                             const ucp_proto_select_elem_t &select_elem,
                             const proto_select_data_vec_t &data_vec)
@@ -355,8 +360,8 @@ protected:
         unsigned range_idx = 0;
         for (auto &expected_data : data_vec) {
             size_t range_start = expected_data.range_start;
-            auto actual_data   = select_data_for_range(worker_cfg.worker,
-                                                       select_elem, range_start);
+            auto actual_data   = select_data_for_range(e.worker(), select_elem,
+                                                       range_start);
             EXPECT_EQ(expected_data, actual_data)
                     << "unexpected difference at range["
                     << (failed = true, range_idx) << "]";
@@ -364,7 +369,7 @@ protected:
             /* As we cannot get range_start directly, we assert that protocol
              * is different at that range */
             if (range_start > 0) {
-                auto prev_actual_data = select_data_for_range(worker_cfg.worker,
+                auto prev_actual_data = select_data_for_range(e.worker(),
                                                               select_elem,
                                                               range_start - 1);
                 EXPECT_NE(expected_data, prev_actual_data)
@@ -374,11 +379,11 @@ protected:
             ++range_idx;
         }
         if (failed) {
-            dump_select_info(worker_cfg, select_param, select_elem);
+            dump_select_info(e, select_param, select_elem);
         }
     }
 
-    static void check_proto_select(const worker_config &worker_cfg,
+    static void check_proto_select(const entity &e,
                                    const ucp_proto_select_t &proto_select,
                                    const proto_select_data_vec_t &data_vec,
                                    const ucp_proto_select_key_t &key)
@@ -386,12 +391,17 @@ protected:
         ucp_proto_select_elem_t select_elem;
         ucp_proto_select_key_t select_key;
 
+        bool found = false;
         kh_foreach(proto_select.hash, select_key.u64, select_elem, {
             if (key_match(key, select_key)) {
-                check_proto_select_elem(worker_cfg, select_key.param,
-                                        select_elem, data_vec);
+                check_proto_select_elem(e, select_key.param, select_elem,
+                                        data_vec);
+                found = true;
             }
         })
+        if (!found) {
+            FAIL() << "Did not find matching protocol selection keys";
+        }
     }
 
     static bool
@@ -415,10 +425,11 @@ protected:
         return true;
     }
 
-    void send_recv_am(size_t size)
+    void
+    send_recv_am(size_t size, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
         /* Prepare receiver data handler */
-        mem_buffer recv_buf(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer recv_buf(size, mem_type);
         struct ctx_t {
             mem_buffer                     *buf;
             bool                            received;
@@ -467,7 +478,7 @@ protected:
         ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(ctx.worker, &am_param));
 
         /* Send data */
-        mem_buffer buf(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer buf(size, mem_type);
         ucp_request_param_t param = {};
         auto sptr = ucp_am_send_nbx(sender().ep(), AM_ID, NULL, 0ul, buf.ptr(),
                                     buf.size(), &param);
@@ -477,6 +488,20 @@ protected:
         EXPECT_EQ(UCS_OK, request_wait(sptr));
         wait_for_flag(&ctx.received);
         EXPECT_TRUE(ctx.received);
+    }
+
+    void send_recv_am_range(size_t msg_start, size_t msg_end, size_t msg_step,
+                            ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+    {
+        for (size_t msg_size = msg_start; msg_size <= msg_end;
+             msg_size += msg_step) {
+            send_recv_am(msg_size, mem_type);
+        }
+    }
+
+    static ucp_worker_cfg_index_t ep_config_index(const entity &e)
+    {
+        return e.ep()->cfg_index;
     }
 };
 
@@ -507,6 +532,23 @@ public:
         test_ucp_proto_mock::init();
     }
 };
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, memtype_copy_enable,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1",
+           "MEMTYPE_COPY_ENABLE=n")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {0,       0, "rendezvous no data fetch", ""},
+        {1,      64, "rendezvous zero-copy fenced write to remote",
+                     "rc_mlx5/mock_0:1"},
+        {21992, INF, "rendezvous zero-copy read from remote",
+                     "rc_mlx5/mock_0:1"},
+    }, key);
+}
 
 UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_1_lane, "IB_NUM_PATHS?=1",
            "MAX_RNDV_LANES=1")
@@ -564,12 +606,124 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_2_lanes, "IB_NUM_PATHS?=2",
 UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_send_recv_small_frag,
            "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2", "RNDV_THRESH=0")
 {
-    for (size_t i = 1024; i <= 65536; i += 1024) {
-        send_recv_am(i);
-    }
+    send_recv_am_range(UCS_KBYTE, 64 * UCS_KBYTE, UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
+           "IB_NUM_PATHS?=4", "MAX_RNDV_LANES=8", "RNDV_THRESH=0")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    /* All existing IB paths should be selected. */
+    check_ep_config(sender(), {
+        {1,       5418,   "rendezvous fragmented copy-in copy-out",
+         "rc_mlx5/mock_1:1/path0"},
+        {5419,    283699, "rendezvous zero-copy read from remote",
+         "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
+         "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
+         {283700, INF,    "rendezvous zero-copy fenced write to remote",
+         "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
+         "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
+    }, key);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx2()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        /* Device with high BW and lower latency */
+        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.cap.get.max_zcopy = 16384;
+        });
+        /* Device with lower BW and higher latency */
+        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 24e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx2, rndv_send_recv_small_frag,
+           "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2", "RNDV_THRESH=0")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {1,    3724, "rendezvous fragmented copy-in copy-out",
+         "rc_mlx5/mock_0:1/path0"},
+        {3725, INF,  "rendezvous zero-copy read from remote",
+         "54% on rc_mlx5/mock_0:1/path0 and 46% on rc_mlx5/mock_1:1/path0"},
+    }, key);
+
+    send_recv_am_range(UCS_KBYTE, 64 * UCS_KBYTE, UCS_KBYTE);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx2, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx3 : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx3()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        /* Device with high BW and lower latency, but 0 get_zcopy.
+         * This use case is similar to cuda_ipc when NVLink is not available. */
+        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.cap.get.max_zcopy = 0;
+        });
+        /* Device with lower BW and higher latency */
+        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 24e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=2", "RNDV_THRESH=0")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    /* Check that get_zcopy is selected on slower device */
+    check_ep_config(sender(), {
+        {1,    3662,  "rendezvous fragmented copy-in copy-out", "rc_mlx5/mock_0:1"},
+        {3663, 53753, "rendezvous zero-copy read from remote",  "rc_mlx5/mock_1:1"},
+        {53754, INF,  "rendezvous zero-copy fenced write to remote",
+         "54% on rc_mlx5/mock_0:1 and 46% on rc_mlx5/mock_1:1"},
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx3, rcx, "rc_x")
 
 class test_ucp_proto_mock_cma : public test_ucp_proto_mock {
 public:
@@ -614,6 +768,7 @@ public:
             iface_attr.bandwidth.shared    = 100e9 / 8; /* 100Gb/s */
             iface_attr.latency.c           = 20e-6;
             iface_attr.latency.m           = 0;
+            iface_attr.cap.am.max_zcopy    = 64 * UCS_KBYTE;
         });
         test_ucp_proto_mock::init();
     }
@@ -628,8 +783,8 @@ UCS_TEST_P(test_ucp_proto_mock_tcp, am_send_1_lane)
     check_ep_config(sender(), {
         {0,      8184,   "short",                                       "tcp/mock"},
         {8185,   65528,  "zero-copy",                                   "tcp/mock"},
-        {65529,  366985, "multi-frag zero-copy",                        "tcp/mock"},
-        {366986, INF,    "rendezvous zero-copy fenced write to remote", "tcp/mock"},
+        {65529,  366864, "multi-frag zero-copy",                        "tcp/mock"},
+        {366865, INF,    "rendezvous zero-copy fenced write to remote", "tcp/mock"},
     }, key);
 }
 
@@ -662,3 +817,47 @@ UCS_TEST_P(test_ucp_proto_mock_self, rkey_ptr)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_self, self, "self")
+
+class test_ucp_proto_mock_gpu : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_gpu()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 28e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
+           "RNDV_FRAG_MEM_TYPES=host", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
+{
+    send_recv_am(1024, UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+    key.param.mem_type         = UCS_MEMORY_TYPE_CUDA_MANAGED;
+
+    check_ep_config(sender(), {
+        {0, 0,    "short",   "rc_mlx5/mock"},
+        {1, 8246, "copy-in", "rc_mlx5/mock"},
+        {8247, 512 * UCS_KBYTE,
+         "rendezvous cuda_copy, fenced write to remote, frag host, cuda_copy, frag host",
+         "rc_mlx5/mock"},
+        {(512 * UCS_KBYTE) + 1, INF,
+         "rendezvous pipeline cuda_copy, fenced write to remote, frag host, cuda_copy, frag host",
+         "rc_mlx5/mock"},
+        }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
+                              "rc_x,cuda,rocm")

@@ -106,7 +106,8 @@ ForEachMacros: ['UCS_STATIC_BITMAP_FOR_EACH_BIT',
                 'UCS_INIT_ONCE',
                 'UCS_TEST_F',
                 'UCX_PERF_TEST_FOREACH',
-		'ucs_lru_for_each']
+                'uct_dc_iface_for_each_valid_dci',
+                'ucs_lru_for_each']
 StatementMacros : []
 TypenameMacros: ['khash_t',
                  'ucs_array_s',

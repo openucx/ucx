@@ -294,4 +294,23 @@ uint8_t ucp_address_is_am_only(const void *address);
  */
 size_t ucp_address_iface_seg_size(const uct_iface_attr_t *iface_attr);
 
+/**
+ * @brief Get current API version in packed address format.
+ *
+ * @return Packed release version.
+ */
+uint8_t ucp_address_pack_release_version();
+
+/**
+ * @brief Unpack release version from packed address format.
+ *
+ * Release version is packed into 4 bits. Unpack it assuming that we do not
+ * support wire compatibility for more than 8 versions (therefore we take the
+ * value which is closest to our release version).
+ *
+ * @param [in] packed_version Packed release version.
+ * @return Unpacked release version.
+ */
+unsigned ucp_address_unpack_release_version(uint8_t packed_version);
+
 #endif

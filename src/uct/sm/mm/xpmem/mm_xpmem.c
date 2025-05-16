@@ -502,6 +502,7 @@ static void uct_xpmem_mem_detach(uct_mm_md_t *md,
 
 static ucs_status_t
 uct_xpmem_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                      const uct_rkey_unpack_params_t *params,
                       uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_xpmem_packed_rkey_t *packed_rkey = rkey_buffer;
@@ -539,8 +540,9 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
         .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg            = uct_xmpem_mem_reg,
         .mem_dereg          = uct_xmpem_mem_dereg,
-        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_xpmem_mkey_pack,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     },
     .query             = uct_xpmem_query,

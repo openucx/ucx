@@ -135,29 +135,39 @@ static uct_iface_ops_t uct_ze_copy_iface_ops = {
 static ucs_status_t
 uct_ze_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
-        perf_attr->bandwidth.dedicated = 0;
+    uct_ppn_bandwidth_t bandwidth;
+
+    if (uct_perf_attr_has_bandwidth(perf_attr->field_mask)) {
+        bandwidth.dedicated = 0;
         if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
-            perf_attr->bandwidth.shared = 0;
+            bandwidth.shared = 0;
         } else {
             switch (perf_attr->operation) {
             case UCT_EP_OP_GET_SHORT:
-                perf_attr->bandwidth.shared = 2000.0 * UCS_MBYTE;
+                bandwidth.shared = 2000.0 * UCS_MBYTE;
                 break;
             case UCT_EP_OP_GET_ZCOPY:
-                perf_attr->bandwidth.shared = 8000.0 * UCS_MBYTE;
+                bandwidth.shared = 8000.0 * UCS_MBYTE;
                 break;
             case UCT_EP_OP_PUT_SHORT:
-                perf_attr->bandwidth.shared = 10500.0 * UCS_MBYTE;
+                bandwidth.shared = 10500.0 * UCS_MBYTE;
                 break;
             case UCT_EP_OP_PUT_ZCOPY:
-                perf_attr->bandwidth.shared = 9500.0 * UCS_MBYTE;
+                bandwidth.shared = 9500.0 * UCS_MBYTE;
                 break;
             default:
-                perf_attr->bandwidth.shared = 0;
+                bandwidth.shared = 0;
                 break;
             }
         }
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth = bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        perf_attr->path_bandwidth = bandwidth;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {

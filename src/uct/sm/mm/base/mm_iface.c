@@ -538,14 +538,18 @@ static uct_iface_ops_t uct_mm_iface_ops = {
 static ucs_status_t
 uct_mm_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
-    uct_ep_operation_t op = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+    uct_mm_iface_t *iface         = ucs_derived_of(tl_iface, uct_mm_iface_t);
+    uct_ep_operation_t op         = UCT_ATTR_VALUE(PERF, perf_attr, operation,
                                            OPERATION, UCT_EP_OP_LAST);
+    uct_ppn_bandwidth_t bandwidth = {iface->super.config.bandwidth, 0};
     uct_mm_iface_op_overhead_t *overhead;
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
-        perf_attr->bandwidth.shared = 0;
-        perf_attr->bandwidth.dedicated = iface->super.config.bandwidth;
+        perf_attr->bandwidth = bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        perf_attr->path_bandwidth = bandwidth;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {

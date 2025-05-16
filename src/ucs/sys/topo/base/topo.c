@@ -71,6 +71,7 @@ typedef struct {
     char             *name;
     unsigned         name_priority;
     ucs_numa_node_t  numa_node;
+    uintptr_t        user_value;
 } ucs_topo_sys_device_info_t;
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
@@ -90,13 +91,11 @@ const ucs_sys_dev_distance_t ucs_topo_default_distance = {
 
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 
-
 /* Global list of topology detectors */
 UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 
 /* Selected topo provider */
 static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
-
 
 /* According to NUMA distance definition distances are normalized to 10
  * and the relative distance correlates with the latency.
@@ -301,6 +300,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
         ucs_topo_global_ctx.devices[*sys_dev].name_priority = 0;
         ucs_topo_global_ctx.devices[*sys_dev].numa_node     =
                 ucs_topo_read_device_numa_node(bus_id);
+        ucs_topo_global_ctx.devices[*sys_dev].user_value    = UINTPTR_MAX;
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
@@ -667,6 +667,38 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return numa_node;
+}
+
+ucs_status_t
+ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value)
+{
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_error("system device %d is invalid (max: %d)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].user_value = value;
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return UCS_OK;
+}
+
+uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev)
+{
+    uintptr_t user_value;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        user_value = UINTPTR_MAX;
+    } else {
+        user_value = ucs_topo_global_ctx.devices[sys_dev].user_value;
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return user_value;
 }
 
 void ucs_topo_print_info(FILE *stream)

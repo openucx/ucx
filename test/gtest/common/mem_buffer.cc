@@ -235,6 +235,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         if (ptr == NULL) {
             UCS_TEST_ABORT("malloc(size=" << size << ") failed");
         }
+        VALGRIND_MAKE_MEM_DEFINED(ptr, size);
         return ptr;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:

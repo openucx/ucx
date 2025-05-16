@@ -164,11 +164,13 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
     static uct_md_ops_t md_ops = {
         .close              = uct_cma_md_close,
         .query              = uct_cma_md_query,
-        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_success,
-        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_success,
-        .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
-        .mem_reg            = uct_md_dummy_mem_reg,
-        .mem_dereg          = uct_md_dummy_mem_dereg,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_reg            = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
+        .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+        .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_unsupported,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     };
@@ -196,12 +198,8 @@ ucs_status_t uct_cma_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     uct_cma_md_t *md = ucs_derived_of(uct_md, uct_cma_md_t);
 
     uct_md_base_md_query(md_attr);
-    md_attr->flags                  = UCT_MD_FLAG_REG | md->extra_caps;
-    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->reg_cost               = ucs_linear_func_make(9e-9, 0);
+    md_attr->flags            = md->extra_caps;
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     return UCS_OK;
 }
 
@@ -209,10 +207,10 @@ uct_component_t uct_cma_component = {
     .query_md_resources = uct_cma_query_md_resources,
     .md_open            = uct_cma_md_open,
     .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
-    .rkey_unpack        = uct_md_stub_rkey_unpack,
+    .rkey_unpack        = (uct_component_rkey_unpack_func_t)ucs_empty_function_return_unsupported,
     .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
     .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
-    .rkey_compare       = uct_base_rkey_compare,
+    .rkey_compare       = (uct_component_rkey_compare_func_t)ucs_empty_function_return_unsupported,
     .name               = "cma",
     .md_config          = {
         .name           = "CMA memory domain",

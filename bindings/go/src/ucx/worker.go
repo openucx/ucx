@@ -10,6 +10,7 @@ package ucx
 import "C"
 import (
 	"unsafe"
+	"sync"
 )
 
 // UCP worker is an opaque object representing the communication context. The
@@ -31,6 +32,8 @@ import (
 // optimize concurrent communications.
 type UcpWorker struct {
 	worker C.ucp_worker_h
+	recvCallbacks []PackedCallback
+	mu sync.Mutex
 }
 
 type UcpAddress struct {
@@ -52,6 +55,12 @@ type UcpWorkerAttributes struct {
 }
 
 func (w *UcpWorker) Close() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, packedCb := range w.recvCallbacks {
+		packedCb.unpackAndFree()
+	}
+
 	C.ucp_worker_destroy(w.worker)
 }
 
@@ -232,11 +241,11 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 	recvInfoPtr := (*C.ucp_tag_recv_info_t)(unsafe.Pointer(&requestParams.recv_info[0]))
 	*recvInfoPtr = recvInfo
 
-	cbId := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeGoTagRecvRequest))
+	callback := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeGoTagRecvRequest))
 	request := C.ucp_tag_recv_nbx(w.worker, address, C.size_t(size), C.ucp_tag_t(tag),
 		C.ucp_tag_t(tagMask), &requestParams)
 
-	return NewRequest(request, cbId, &UcpTagRecvInfo{
+	return newRequest(request, callback, &UcpTagRecvInfo{
 		SenderTag: uint64(recvInfo.sender_tag),
 		Length:    uint64(recvInfo.length),
 	})
@@ -244,15 +253,16 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 
 // This routine creates new UcpListener.
 func (w *UcpWorker) NewListener(listenerParams *UcpListenerParams) (*UcpListener, error) {
-	var listener C.ucp_listener_h
+	listener := &UcpListener{callback: listenerParams.callback}
 
-	if status := C.ucp_listener_create(w.worker, &listenerParams.params, &listener); status != C.UCS_OK {
+	listener.packedCb = packCallback(listener)
+	listenerParams.params.conn_handler.arg = unsafe.Pointer(listener.packedCb)
+	if status := C.ucp_listener_create(w.worker, &listenerParams.params, &listener.listener); status != C.UCS_OK {
+		listener.packedCb.unpackAndFree()
 		return nil, newUcxError(status)
 	}
 
-	connHandles2Listener[listenerParams.connHandlerId] = listener
-
-	return &UcpListener{listener, listenerParams.connHandlerId}, nil
+	return listener, nil
 }
 
 // This routine installs a user defined callback to handle incoming Active
@@ -261,23 +271,27 @@ func (w *UcpWorker) NewListener(listenerParams *UcpListenerParams) (*UcpListener
 // received on this worker.
 func (w *UcpWorker) SetAmRecvHandler(id uint, flags UcpAmCbFlags, cb UcpAmRecvCallback) error {
 	var amHandlerParams C.ucp_am_handler_param_t
-	cbId := register(cb)
-	idToWorker[cbId] = w
 
 	amHandlerParams.field_mask = C.UCP_AM_HANDLER_PARAM_FIELD_ID |
 		C.UCP_AM_HANDLER_PARAM_FIELD_FLAGS |
 		C.UCP_AM_HANDLER_PARAM_FIELD_CB |
 		C.UCP_AM_HANDLER_PARAM_FIELD_ARG
 	amHandlerParams.id = C.uint(id)
-	amHandlerParams.arg = unsafe.Pointer(uintptr(cbId))
+	packedCb := packCallback(&UcpAmRecvCallbackBundle{cb: cb, worker: w})
+	amHandlerParams.arg = unsafe.Pointer(packedCb)
 	amHandlerParams.flags = C.uint32_t(flags)
 	cbAddr := (*C.ucp_am_recv_callback_t)(unsafe.Pointer(&amHandlerParams.cb))
 	*cbAddr = (C.ucp_am_recv_callback_t)(C.ucxgo_amRecvCallback)
 
 	status := C.ucp_worker_set_am_recv_handler(w.worker, &amHandlerParams)
 	if status != C.UCS_OK {
+		packedCb.unpackAndFree()
 		return newUcxError(status)
 	}
+
+	w.mu.Lock()
+	w.recvCallbacks = append(w.recvCallbacks, packedCb)
+	w.mu.Unlock()
 
 	return nil
 }
@@ -292,8 +306,8 @@ func (w *UcpWorker) RecvAmDataNonBlocking(dataDesc *UcpAmData, recvBuffer unsafe
 	recvInfoPtr := (**C.size_t)(unsafe.Pointer(&requestParams.recv_info[0]))
 	*recvInfoPtr = &length
 
-	cbId := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeAmRecvData))
+	callback := packParams(params, &requestParams, unsafe.Pointer(C.ucxgo_completeAmRecvData))
 	request := C.ucp_am_recv_data_nbx(w.worker, dataDesc.dataPtr, recvBuffer, C.size_t(size), &requestParams)
 
-	return NewRequest(request, cbId, length)
+	return newRequest(request, callback, length)
 }

@@ -10,6 +10,7 @@ RUN apt-get update && \
         automake \
         default-jdk \
         dh-make \
+        fakeroot \
         g++ \
         git \
         openjdk-8-jdk \

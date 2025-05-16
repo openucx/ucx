@@ -188,7 +188,7 @@ void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
     }
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_eager_sync_bcopy_request_init(ucp_request_t *req)
 {
     if (!(req->flags & UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED)) {
@@ -196,6 +196,8 @@ ucp_proto_eager_sync_bcopy_request_init(ucp_request_t *req)
     }
 
     ucp_proto_msg_multi_request_init(req);
+
+    return UCS_OK;
 }
 
 static ucs_status_t

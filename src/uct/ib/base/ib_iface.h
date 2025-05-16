@@ -494,6 +494,11 @@ unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface);
 size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
 
 
+int uct_ib_iface_is_connected(uct_ib_iface_t *ib_iface,
+                              const uct_ib_address_t *ib_addr,
+                              unsigned path_index, struct ibv_ah *peer_ah);
+
+
 /**
  * Pack IB address.
  *
@@ -525,9 +530,12 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
  * @param [in]  ib_addr    IB address to unpack.
  * @param [out] params_p   Filled with address attributes as in
  *                         @ref uct_ib_address_pack_params_t.
+
+ * @return UCS_OK if the address was unpacked successfully, UCS_ERR_INVALID_PARAM
+ *         if the address is invalid.
  */
-void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
-                           uct_ib_address_pack_params_t *params_p);
+ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
+                                   uct_ib_address_pack_params_t *params_p);
 
 
 /**
@@ -617,11 +625,12 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             unsigned path_index,
                                             struct ibv_ah_attr *ah_attr);
 
-void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
-                                         const uct_ib_address_t *ib_addr,
-                                         unsigned path_index,
-                                         struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu *path_mtu);
+ucs_status_t
+uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
+                                    const uct_ib_address_t *ib_addr,
+                                    unsigned path_index,
+                                    struct ibv_ah_attr *ah_attr,
+                                    enum ibv_mtu *path_mtu);
 
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
@@ -660,20 +669,27 @@ uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
     uct_ib_iface_is_roce(_iface) ? "RoCE" : "IB"
 
 
-#define UCT_IB_IFACE_VERBS_COMPLETION_ERR(_type, _iface, _i,  _wc) \
-    ucs_fatal("%s completion[%d] with error on %s/%p: %s, vendor_err 0x%x wr_id 0x%lx", \
-              _type, _i, uct_ib_device_name(uct_ib_iface_device(_iface)), _iface, \
-              uct_ib_wc_status_str(_wc[i].status), _wc[i].vendor_err, \
-              _wc[i].wr_id);
+#define UCT_IB_IFACE_VERBS_COMPLETION_MSG(_type, _iface, _i, _wc) \
+            "%s completion[%d] with error on %s/%p: %s," \
+            " vendor_err 0x%x wr_id 0x%lx", \
+            _type, _i, uct_ib_device_name(uct_ib_iface_device(_iface)), \
+            _iface, uct_ib_wc_status_str(_wc[_i].status), _wc[_i].vendor_err, \
+            _wc[_i].wr_id
+
+#define UCT_IB_IFACE_VERBS_COMPLETION_LOG(_log_lvl, _type, _iface, _i, _wc) \
+    ucs_log(_log_lvl, UCT_IB_IFACE_VERBS_COMPLETION_MSG(_type,  _iface, _i, _wc))
+
+#define UCT_IB_IFACE_VERBS_COMPLETION_FATAL(_type, _iface, _i, _wc) \
+    ucs_fatal(UCT_IB_IFACE_VERBS_COMPLETION_MSG(_type,  _iface, _i, _wc))
 
 #define UCT_IB_IFACE_VERBS_FOREACH_RXWQE(_iface, _i, _hdr, _wc, _wc_count) \
     for (_i = 0; _i < _wc_count && ({ \
-        if (ucs_unlikely(_wc[i].status != IBV_WC_SUCCESS)) { \
-            UCT_IB_IFACE_VERBS_COMPLETION_ERR("receive", _iface, _i, _wc); \
+        if (ucs_unlikely(_wc[_i].status != IBV_WC_SUCCESS)) { \
+            UCT_IB_IFACE_VERBS_COMPLETION_FATAL("receive", _iface, _i, _wc); \
         } \
         _hdr = (typeof(_hdr))uct_ib_iface_recv_desc_hdr(_iface, \
-                                                      (uct_ib_iface_recv_desc_t *)(uintptr_t)_wc[i].wr_id); \
-        VALGRIND_MAKE_MEM_DEFINED(_hdr, _wc[i].byte_len); \
+                                                      (uct_ib_iface_recv_desc_t *)(uintptr_t)_wc[_i].wr_id); \
+        VALGRIND_MAKE_MEM_DEFINED(_hdr, _wc[_i].byte_len); \
                1; }); ++_i)
 
 #define UCT_IB_MAX_ZCOPY_LOG_SGE(_iface) \
@@ -764,5 +780,27 @@ uct_ib_fill_cq_attr(struct ibv_cq_init_attr_ex *cq_attr,
 #endif /* HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN */
 }
 #endif /* HAVE_DECL_IBV_CREATE_CQ_EX */
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_ib_wc_to_ucs_status(enum ibv_wc_status status)
+{
+    switch (status)
+    {
+    case IBV_WC_SUCCESS:
+        return UCS_OK;
+    case IBV_WC_REM_ACCESS_ERR:
+    case IBV_WC_REM_OP_ERR:
+    case IBV_WC_REM_INV_RD_REQ_ERR:
+        return UCS_ERR_CONNECTION_RESET;
+    case IBV_WC_RETRY_EXC_ERR:
+    case IBV_WC_RNR_RETRY_EXC_ERR:
+    case IBV_WC_REM_ABORT_ERR:
+        return UCS_ERR_ENDPOINT_TIMEOUT;
+    case IBV_WC_WR_FLUSH_ERR:
+        return UCS_ERR_CANCELED;
+    default:
+        return UCS_ERR_IO_ERROR;
+    }
+}
 
 #endif

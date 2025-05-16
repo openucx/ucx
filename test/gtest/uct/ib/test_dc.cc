@@ -186,6 +186,8 @@ UCS_TEST_P(test_dc, dcs_single) {
                            0;
 
     EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+    status = uct_ep_fence(m_e1->ep(0), 0);
+    EXPECT_UCS_OK(status);
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
     EXPECT_UCS_OK(status);
     /* dci 0 must be assigned to the ep */
@@ -576,12 +578,11 @@ public:
         uct_dc_mlx5_iface_t *iface      = ucs_derived_of(e->iface(),
                                                          uct_dc_mlx5_iface_t);
         uct_dc_mlx5_pool_stack_t *stack = &iface->tx.dci_pool[0].stack;
-        uct_dc_dci_t **dci;
+        uct_dci_index_t dci_index;
+        uct_dc_dci_t *dci;
 
-        ucs_array_for_each(dci, &iface->tx.dcis) {
-            if (uct_dc_mlx5_is_dci_valid(*dci)) {
-                uct_rc_txqp_available_set(&(*dci)->txqp, 0);
-            }
+        uct_dc_iface_for_each_valid_dci(dci_index, dci, iface) {
+            uct_rc_txqp_available_set(&dci->txqp, 0);
         }
 
         for (int i = ucs_array_length(stack); i < iface->tx.ndci; i++) {
@@ -593,12 +594,11 @@ public:
     virtual void enable_entity(entity *e, unsigned cq_num = 128) {
         uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->iface(),
                                                     uct_dc_mlx5_iface_t);
-        uct_dc_dci_t **dci;
+        uct_dci_index_t dci_index;
+        uct_dc_dci_t *dci;
 
-        ucs_array_for_each(dci, &iface->tx.dcis) {
-            if (uct_dc_mlx5_is_dci_valid(*dci)) {
-                uct_rc_txqp_available_set(&(*dci)->txqp, (*dci)->txwq.bb_max);
-            }
+        uct_dc_iface_for_each_valid_dci(dci_index, dci, iface) {
+            uct_rc_txqp_available_set(&dci->txqp, dci->txwq.bb_max);
         }
 
         ucs_array_length(&iface->tx.dci_pool[0].stack) = 0;

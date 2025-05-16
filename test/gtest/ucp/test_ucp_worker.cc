@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/core/ucp_request.h>
+#include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
 }
@@ -803,6 +804,25 @@ UCS_TEST_P(test_ucp_worker_address_query, query)
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_worker_address_query)
 
+class test_ucp_worker_address_version : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
+    }
+};
+
+UCS_TEST_P(test_ucp_worker_address_version, pack_unpack)
+{
+    uint8_t  current_packed   = ucp_address_pack_release_version();
+    unsigned current_unpacked = ucp_address_unpack_release_version(current_packed);
+
+    ASSERT_EQ(UCP_API_MINOR, current_unpacked);
+    ASSERT_LT(18, current_unpacked);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_address_version, self, "self")
+
 class test_ucp_modify_uct_cfg : public test_ucp_context {
 public:
     test_ucp_modify_uct_cfg() : m_seg_size((ucs::rand() & 0x3ff) + 1024) {
@@ -841,6 +861,7 @@ UCS_TEST_P(test_ucp_modify_uct_cfg, verify_seg_size)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, dcx, "dc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, rc,  "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, srd, "srd")
 
 class test_pci_bw : public ucp_test {
 public:

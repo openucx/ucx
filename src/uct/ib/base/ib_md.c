@@ -745,8 +745,9 @@ ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 }
 
 ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
-                                const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                void **handle_p)
+                                const void *rkey_buffer,
+                                const uct_rkey_unpack_params_t *params,
+                                uct_rkey_t *rkey_p, void **handle_p)
 {
     uint64_t packed_rkey = *(const uint64_t*)rkey_buffer;
 
@@ -785,17 +786,21 @@ static const char *uct_ib_device_transport_type_name(struct ibv_device *device)
 static int uct_ib_device_is_supported(struct ibv_device *device)
 {
     /* TODO: enable additional transport types when ready */
-    int ret =
-#if HAVE_DECL_IBV_TRANSPORT_UNSPECIFIED
-            (device->transport_type == IBV_TRANSPORT_UNSPECIFIED) ||
-#endif
-            (device->transport_type == IBV_TRANSPORT_IB);
-    if (!ret) {
-        ucs_debug("device %s of type %s is not supported",
-                  device->dev_name, uct_ib_device_transport_type_name(device));
+    if (!IBV_DEVICE_TRANSPORT_UNSPECIFIED(device) &&
+        (device->transport_type != IBV_TRANSPORT_IB)) {
+        ucs_debug("%s: unsupported transport type %s",
+                  ibv_get_device_name(device),
+                  uct_ib_device_transport_type_name(device));
+        return 0;
     }
 
-    return ret;
+    if (uct_ib_device_is_smi(device)) {
+        ucs_debug("%s: smi device is not supported",
+                  ibv_get_device_name(device));
+        return 0;
+    }
+
+    return 1;
 }
 
 int uct_ib_device_is_accessible(struct ibv_device *device)
@@ -1254,7 +1259,8 @@ int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
     return 1;
 }
 
-void uct_ib_md_check_odp(uct_ib_md_t *md)
+static void
+uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
     const char *device_name = uct_ib_device_name(&md->dev);
     const char *reason;
@@ -1264,8 +1270,8 @@ void uct_ib_md_check_odp(uct_ib_md_t *md)
         return;
     }
 
-    md->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    ucs_debug("%s: ODP is supported, version 1", device_name);
+    md->reg_nonblock_mem_types = md_config->ext.odp.mem_types;
+    ucs_debug("%s: ODP is supported", device_name);
 }
 
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
@@ -1313,7 +1319,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     /* Check for GPU-direct support */
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
-        /* Check peer memory driver is loaded, different driver versions use 
+        /* Check peer memory driver is loaded, different driver versions use
          * different paths */
         uct_ib_check_gpudirect_driver(
                 md, "/sys/kernel/mm/memory_peers/nv_mem/version",
@@ -1324,7 +1330,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         uct_ib_check_gpudirect_driver(
                 md, "/sys/module/nv_peer_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
-                
+
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
@@ -1533,7 +1539,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 
     uct_ib_md_ece_check(md);
     uct_ib_md_parse_relaxed_order(md, md_config, 0);
-    uct_ib_md_check_odp(md);
+    uct_ib_md_check_odp(md, md_config);
 
     *p_md = md;
     return UCS_OK;
@@ -1562,11 +1568,14 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .super = {
         .close              = uct_ib_md_close,
         .query              = uct_ib_md_query,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = uct_ib_mem_advise,
         .mem_reg            = uct_ib_verbs_mem_reg,
         .mem_dereg          = uct_ib_verbs_mem_dereg,
-        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
-        .mem_advise         = uct_ib_mem_advise,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_ib_verbs_mkey_pack,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_verbs_md_open,

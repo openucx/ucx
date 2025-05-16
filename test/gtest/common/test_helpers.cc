@@ -530,6 +530,10 @@ static std::map<std::string, std::string> get_all_rdmacm_net_devices()
     ssize_t nread;
     int port_num;
 
+    if (ucs::is_aws()) {
+        return devices;
+    }
+
     std::vector<std::string> ndevs = read_dir(sysfs_net_dir);
 
     /* Enumerate IPoIB and RoCE devices which have direct mapping to an RDMA
@@ -542,6 +546,11 @@ static std::map<std::string, std::string> get_all_rdmacm_net_devices()
 
         if (!ib_devices.empty()) {
             std::string ib_device = ib_devices.front();
+            if (ib_device.rfind("smi", 0) == 0) {
+                /* Skip SMI device */
+                continue;
+            }
+
             std::string ports_dir = infiniband_dir + "/" + ib_device +
                                     "/ports";
             std::string ib_port   = read_dir(ports_dir).front();

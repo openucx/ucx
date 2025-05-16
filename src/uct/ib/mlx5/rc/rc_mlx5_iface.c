@@ -384,6 +384,7 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
                                 ((init_attr->qp_type == UCT_IB_QPT_DCI) ?
                                          UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ :
                                          UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ);
+    ucs_string_buffer_t strb  = UCS_STRING_BUFFER_INITIALIZER;
     int i;
 
     for (i = 0; i < config->srq_topo.count; ++i) {
@@ -403,6 +404,12 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
         }
     }
 
+    ucs_string_buffer_append_array(&strb, ",", "%s", config->srq_topo.types,
+                                   config->srq_topo.count);
+    ucs_error("%s: none of the provided SRQ topology modes %s is supported",
+              uct_ib_device_name(&md->super.dev),
+              ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -638,6 +645,17 @@ static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)
                                             UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
 }
 
+static const char *uct_rc_mlx5_iface_tm_type_str(uint8_t tm_type)
+{
+    if (tm_type == UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC) {
+        return "basic";
+    } else if (tm_type == UCT_RC_MLX5_IFACE_ADDR_TYPE_TM) {
+        return "hw offload";
+    } else {
+        return "unknown";
+    }
+}
+
 static ucs_status_t uct_rc_mlx5_iface_get_address(uct_iface_h tl_iface,
                                                   uct_iface_addr_t *addr)
 {
@@ -650,7 +668,6 @@ static int
 uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                   const uct_iface_is_reachable_params_t *params)
 {
-    static const char *tm_type_to_str[] = {"basic", "tag matching"};
     uint8_t my_type = uct_rc_mlx5_iface_get_address_type(tl_iface);
     uint8_t remote_type;
     const uct_iface_addr_t *iface_addr;
@@ -661,10 +678,11 @@ uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     /* Check hardware tag matching compatibility */
     if ((iface_addr != NULL) &&
         ((remote_type = *(uint8_t*)iface_addr) != my_type)) {
-        uct_iface_fill_info_str_buf(
-                    params, "incompatible hardware tag matching. "
-                    "%s (local) vs %s (remote)",
-                    tm_type_to_str[my_type], tm_type_to_str[remote_type]);
+        uct_iface_fill_info_str_buf(params,
+                                    "incompatible hardware tag matching. "
+                                    "%s (local) vs %s (remote)",
+                                    uct_rc_mlx5_iface_tm_type_str(my_type),
+                                    uct_rc_mlx5_iface_tm_type_str(remote_type));
         return 0;
     }
 
@@ -929,18 +947,18 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
-                              tl_md, worker, params, &config->super.super,
-                              &config->rc_mlx5_common, &init_attr);
-
-    status = uct_rc_mlx5_dp_ordering_ooo_init(&self->super,
+    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap.rc,
                                               &config->rc_mlx5_common,
                                               "rc_mlx5");
     if (status != UCS_OK) {
         return status;
     }
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
+                              tl_md, worker, params, &config->super.super,
+                              &config->rc_mlx5_common, &init_attr);
 
     status = uct_rc_init_fc_thresh(&config->super, &self->super.super);
     if (status != UCS_OK) {

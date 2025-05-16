@@ -216,6 +216,7 @@ uct_knem_mkey_pack(uct_md_h md, uct_mem_h memh, void *address, size_t length,
 
 static ucs_status_t uct_knem_rkey_unpack(uct_component_t *component,
                                          const void *rkey_buffer,
+                                         const uct_rkey_unpack_params_t *params,
                                          uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_knem_key_t *packed = (uct_knem_key_t *)rkey_buffer;
@@ -247,9 +248,13 @@ static ucs_status_t uct_knem_rkey_release(uct_component_t *component,
 static uct_md_ops_t md_ops = {
     .close              = uct_knem_md_close,
     .query              = uct_knem_md_query,
-    .mkey_pack          = uct_knem_mkey_pack,
+    .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+    .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_knem_mem_reg,
     .mem_dereg          = uct_knem_mem_dereg,
+    .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+    .mkey_pack          = uct_knem_mkey_pack,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
 };

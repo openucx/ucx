@@ -442,9 +442,13 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
     static uct_md_ops_t md_ops = {
         .close              = (uct_md_close_func_t)ucs_empty_function,
         .query              = uct_self_md_query,
-        .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg            = uct_md_dummy_mem_reg,
         .mem_dereg          = uct_md_dummy_mem_dereg,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+        .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     };
@@ -459,9 +463,10 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
     return UCS_OK;
 }
 
-static ucs_status_t uct_self_md_rkey_unpack(uct_component_t *component,
-                                            const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                            void **handle_p)
+static ucs_status_t
+uct_self_md_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                        const uct_rkey_unpack_params_t *params,
+                        uct_rkey_t *rkey_p, void **handle_p)
 {
     /**
      * Pseudo stub function for the key unpacking
