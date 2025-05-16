@@ -198,8 +198,11 @@ enum {
 enum {
     /* Compare lanes layout */
     UCP_EP_CONFIG_CMP_FLAG_LANES = UCS_BIT(0),
+    /* Placeholder for all the rest, use @ref UCP_EP_CONFIG_CMP_MASK_ALL for
+     * strong comparison */
+    UCP_EP_CONFIG_CMP_FLAG_LAST  = UCS_BIT(1),
     /* Strong compare of all fields */
-    UCP_EP_CONFIG_CMP_MASK_ALL   = UCS_MASK(8)
+    UCP_EP_CONFIG_CMP_MASK_ALL   = UCS_MASK(2)
 };
 
 
