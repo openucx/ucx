@@ -168,7 +168,8 @@ UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
                            GetParam().component, GetParam().md_name.c_str(),
                            m_md_config);
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, size));
-    EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
+    uct_md_mem_reg_params_t reg_params = {};
+    EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, &reg_params, &memh));
     EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
                                      &rkey));
 
