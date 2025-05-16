@@ -931,20 +931,6 @@ out_delete_ep:
     return status;
 }
 
-static void ucp_wireup_destroy_onetime_reply_ep(ucp_ep_h ep)
-{
-    ucp_ep_cleanup_lanes(ep);
-    ucp_ep_delete(ep);
-}
-
-static ucs_status_ptr_t ucp_wireup_flush_onetime_reply_ep(ucp_ep_h ep)
-{
-    return ucp_ep_flush_internal(ep, UCP_REQUEST_FLAG_RELEASED,
-                                 &ucp_request_null_param, NULL,
-                                 ucp_ep_removed_flush_completion,
-                                 "close onetime EP", UCT_FLUSH_FLAG_LOCAL);
-}
-
 static void ucp_wireup_send_reply_on_onetime_ep(
         ucp_worker_h worker, const ucp_wireup_msg_t *msg, uint8_t msg_type,
         const ucp_unpacked_address_t *remote_address)
@@ -978,12 +964,16 @@ static void ucp_wireup_send_reply_on_onetime_ep(
         goto out_destroy_ep;
     }
 
-    if (UCS_PTR_IS_PTR(ucp_wireup_flush_onetime_reply_ep(reply_ep))) {
+    if (UCS_PTR_IS_PTR(ucp_ep_flush_internal(reply_ep,
+            UCP_REQUEST_FLAG_RELEASED, &ucp_request_null_param, NULL,
+            ucp_ep_removed_flush_completion, "close onetime EP",
+            UCT_FLUSH_FLAG_LOCAL))) {
         return;
     }
 
 out_destroy_ep:
-    ucp_wireup_destroy_onetime_reply_ep(reply_ep);
+    ucp_ep_cleanup_lanes(reply_ep);
+    ucp_ep_delete(reply_ep);
 }
 
 static UCS_F_NOINLINE
@@ -2074,7 +2064,7 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep, uint8_t msg_type)
               ucp_wireup_msg_str(msg_type), ep->flags);
     status = ucp_wireup_msg_send(ep, msg_type, &tl_bitmap, NULL);
 
-    if (msg_type == UCP_WIREUP_MSG_ADDR_REQUEST) {
+    if (msg_type == UCP_WIREUP_MSG_REQUEST) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
 
