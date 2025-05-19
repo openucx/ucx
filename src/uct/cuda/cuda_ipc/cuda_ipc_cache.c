@@ -141,14 +141,14 @@ uct_cuda_ipc_close_memhandle_legacy(uct_cuda_ipc_cache_region_t *region)
 {
     ucs_status_t status;
 
-    status = uct_cuda_ipc_primary_ctx_retain_and_push(region->key.dev_num);
+    status = uct_cuda_ipc_primary_ctx_retain_and_push(region->cu_dev);
     if (status != UCS_OK) {
         return status;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_WARN(
             cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
-    uct_cuda_ipc_primary_ctx_pop_and_release(region->key.dev_num);
+    uct_cuda_ipc_primary_ctx_pop_and_release(region->cu_dev);
     return status;
 }
 
@@ -626,6 +626,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     region->key         = *key;
     region->mapped_addr = *mapped_addr;
     region->refcount    = 1;
+    region->cu_dev      = cu_dev;
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
