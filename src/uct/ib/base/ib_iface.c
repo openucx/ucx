@@ -692,18 +692,34 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
     char remote_str[128];
-    int ndev_index;
+    unsigned ndev_index;
 
     if (uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index,
                                           &ndev_index) != UCS_OK) {
-        uct_iface_fill_info_str_buf(params, "iface index is not found");
+        uct_iface_fill_info_str_buf(params,
+                                    "iface index is not found for "
+                                    UCT_IB_IFACE_FMT ", gid index %u",
+                                    UCT_IB_IFACE_ARG(iface), gid_index);
         return 0;
     }
 
     if (!ucs_netlink_route_exists(ndev_index, sa_remote)) {
-        uct_iface_fill_info_str_buf(params, "remote address %s is not routable",
-                                    ucs_sockaddr_str(sa_remote, remote_str, 128));
-        return 0;
+        if (uct_ib_iface_get_loopback_ndev_index(&ndev_index) != UCS_OK) {
+            uct_iface_fill_info_str_buf(params,
+                                        "loopback ndev index is not found");
+            return 0;
+        }
+
+        if (!ucs_netlink_route_exists(ndev_index, sa_remote)) {
+            uct_iface_fill_info_str_buf(params,
+                                        "remote address %s is not routable "
+                                        "neither by interface "UCT_IB_IFACE_FMT
+                                        " nor by loopback interface",
+                                        ucs_sockaddr_str(sa_remote, remote_str,
+                                                         128),
+                                        UCT_IB_IFACE_ARG(iface));
+            return 0;
+        }
     }
 
     return 1;
