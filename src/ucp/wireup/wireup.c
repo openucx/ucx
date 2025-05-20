@@ -1216,10 +1216,6 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     } else if (msg->type == UCP_WIREUP_MSG_EP_CHECK) {
         ucs_assert((msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID) && (ep == NULL));
         ucp_wireup_send_ep_removed(worker, msg, &remote_address);
-    } else if (msg->type == UCP_WIREUP_MSG_ADDR_REQUEST) {
-        ucp_wireup_process_addr_request(worker, ep, msg, &remote_address);
-    } else if (msg->type == UCP_WIREUP_MSG_ADDR_REPLY) {
-        ucp_wireup_process_addr_reply(worker, ep, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
         ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
@@ -2157,8 +2153,10 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     if (ep->cfg_index == new_cfg_index) {
 #if UCS_ENABLE_ASSERT
-        for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
+        if (!worker->context->config.ext.on_demand_wireup) {
+            for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+                ucs_assert(ucp_ep_get_lane_raw(ep, lane) != NULL);
+            }
         }
 #endif
         status = UCS_OK; /* No change */
