@@ -1218,10 +1218,6 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     } else if (msg->type == UCP_WIREUP_MSG_EP_CHECK) {
         ucs_assert((msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID) && (ep == NULL));
         ucp_wireup_send_ep_removed(worker, msg, &remote_address);
-    } else if (msg->type == UCP_WIREUP_MSG_ADDR_REQUEST) {
-        ucp_wireup_process_addr_request(worker, ep, msg, &remote_address);
-    } else if (msg->type == UCP_WIREUP_MSG_ADDR_REPLY) {
-        ucp_wireup_process_addr_reply(worker, ep, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
         ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
