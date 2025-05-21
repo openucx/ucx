@@ -151,7 +151,7 @@ private:
 /* We test only ZCOPY with 4K size messages due to good PCI load and stably
  * CQE zipping reproducing on all platforms.
  */
-UCS_TEST_P(test_cqe_zipping, zcopy)
+UCS_TEST_SKIP_COND_P(test_cqe_zipping, zcopy, !is_srq_msg_based())
 {
     int deadline_seconds      = is_cqe_zipping_expected() ? 90 : 5;
     const ucs_time_t deadline = ucs::get_deadline(deadline_seconds);
