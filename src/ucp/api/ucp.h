@@ -1026,6 +1026,91 @@ typedef struct ucp_datatype_attr {
 
 
 /**
+ * @ingroup UCP_RMA
+ * @brief Type of RMA operation to perform in a batch.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref ucp_rma_batch_iov_elem_t are present. It is used to enable backward
+ * compatibility support.
+ */
+typedef enum {
+    UCP_RMA_BATCH_OPCODE_PUT, /**< Remote memory write */
+    UCP_RMA_BATCH_OPCODE_GET  /**< Remote memory read */
+} ucp_rma_batch_opcode_t;
+
+
+/**
+ * @ingroup UCP_RMA
+ * @brief Describes a single RMA operation in a batch.
+ */
+typedef struct ucp_rma_batch_iov_elem {
+    /**
+     * Operation type, as defined in @ref ucp_rma_batch_opcode_t.
+     */
+    ucp_rma_batch_opcode_t opcode;
+
+    /**
+     * Pointer to the local buffer. Must be pre-registered.
+     */
+    void                   *local_va;
+
+    /**
+     * Memory handle for the local buffer.
+     */
+    ucp_mem_h              memh;
+
+    /**
+     * Remote memory address for the data transfer.
+     */
+    uint64_t               remote_va;
+
+    /**
+     * Length of the data transfer in bytes.
+     */
+    size_t                 length;
+
+    /**
+     * Remote key for accessing the remote memory.
+     */
+    ucp_rkey_h             rkey;
+} ucp_rma_batch_iov_elem_t;
+
+
+/**
+ * @ingroup UCP_RMA
+ * @brief Describes the signal used to notify remote peer of batch completion.
+ */
+typedef struct ucp_rma_batch_signal_attr {
+    /**
+     * Pointer to the signal buffer.
+     * This buffer must be pre-registered before calling @ref ucp_ep_rma_prepare_batch,
+     * and must remain valid until the batch completes.
+     */
+    void    *buffer;
+
+    /**
+     * Length of the signal buffer in bytes.
+     */
+    size_t   length;
+} ucp_rma_batch_signal_attr_t;
+
+
+/**
+ * @ingroup UCP_RMA
+ * @brief Optional parameters for RMA batch preparation.
+ *
+ * Reserved for future extensions.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure. Fields not specified in this mask
+     * will be ignored.
+     */
+    uint64_t field_mask;
+} ucp_rma_batch_param_t;
+
+
+/**
  * @ingroup UCP_CONFIG
  * @brief Tuning parameters for UCP library.
  *
@@ -3695,6 +3780,38 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
 ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param);
+
+
+/**
+ * @ingroup UCP_RMA
+ * @brief Prepare a batch of RMA operations.
+ *
+ * @param [in]  ep          Remote endpoint handle.
+ * @param [in]  list        IOV list
+ * @param [in]  list_len    Number of elements
+ * @param [in]  signal_attr Signal attributes
+ * @param [in]  param       Optional batch parameters, see @ref
+ *                          ucp_rma_batch_param_t
+ *
+ * @return pointer to the prepared request or error status
+ */
+ucs_status_ptr_t
+ucp_ep_rma_prepare_batch(ucp_ep_h ep,
+                         const ucp_rma_batch_iov_elem_t *list,
+                         size_t list_len,
+                         const ucp_rma_batch_signal_attr_t *signal_attr,
+                         const ucp_rma_batch_param_t *param);
+
+
+/**
+ * @ingroup UCP_RMA
+ * @brief Post a batch RMA request with signaling.
+ *
+ * @param [in]  request Prepared request
+ *
+ * @return pointer to the posted request or error status
+ */
+ucs_status_ptr_t ucp_ep_rma_post_batch(void *request);
 
 
 /**

@@ -336,6 +336,20 @@ out_unlock:
     return ret;
 }
 
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_rma_prepare_batch,
+                 (ep, list, list_len, signal_attr, param),
+                 ucp_ep_h ep, const ucp_rma_batch_iov_elem_t *list,
+                 size_t list_len,
+                 const ucp_rma_batch_signal_attr_t *signal_attr,
+                 const ucp_rma_batch_param_t *param) {
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_rma_post_batch, (request),
+                 void *request) {
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
 ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey)
 {
