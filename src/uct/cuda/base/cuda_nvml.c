@@ -81,21 +81,21 @@
 #define UCT_CUDA_NVML_WRAP_IMPL(_func, ...) \
     UCT_CUDA_NVML_WRAP_DECL(_func, UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
-        ucs_status_t _nvml_init_status; \
+        ucs_status_t _status; \
         pthread_mutex_lock(&uct_cuda_nvml_mutex); \
-        _nvml_init_status = uct_cuda_nvml_init(); \
-        if (_nvml_init_status != UCS_OK) { \
+        _status = uct_cuda_nvml_init(); \
+        if (_status != UCS_OK) { \
             goto _out; \
         } \
-        _nvml_init_status = UCT_CUDA_NVML_CALL_DEBUG( \
-                _func, UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        _status = UCT_CUDA_NVML_CALL_DEBUG(_func, \
+                                           UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
     _out: \
         pthread_mutex_unlock(&uct_cuda_nvml_mutex); \
-        return _nvml_init_status; \
+        return _status; \
     }
 
 
-pthread_mutex_t uct_cuda_nvml_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t uct_cuda_nvml_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 UCT_CUDA_NVML_FOR_EACH_EXT(UCT_CUDA_NVML_FPTR_DECL);
 
