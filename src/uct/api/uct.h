@@ -550,6 +550,8 @@ enum uct_progress_types {
     UCT_PROGRESS_THREAD_SAFE = UCS_BIT(2),  /**< Enable/disable progress while
                                                  another thread may be calling
                                                  @ref ucp_worker_progress(). */
+    UCT_PROGRESS_IFACE_READY = UCS_BIT(3),  /**< This iface already received
+                                                 messages, activate now */
     UCT_PROGRESS_DISCARD     = UCS_BIT(7)   /**< The progress check on this
                                                  interface can be discarded; */
 };
