@@ -9,7 +9,7 @@
 
 #include "cuda_ipc_md.h"
 #include "cuda_ipc_cache.h"
-
+#include "cuda_ipc.inl"
 #include <string.h>
 #include <limits.h>
 #include <ucs/debug/log.h>
@@ -106,86 +106,12 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 }
 
 static ucs_status_t
-uct_cuda_ipc_mem_reg_push_ctx(CUdeviceptr address, CUdevice *cuda_device_p,
-                              int *is_ctx_pushed, int *is_ctx_retained)
-{
-#define UCT_CUDA_IPC_NUM_ATTRS 2
-    CUcontext cuda_curr_ctx, cuda_ctx;
-    CUdevice cuda_device;
-    CUpointer_attribute attr_type[UCT_CUDA_IPC_NUM_ATTRS];
-    void *attr_data[UCT_CUDA_IPC_NUM_ATTRS];
-    int cuda_device_ordinal;
-    ucs_status_t status;
-
-    attr_type[0] = CU_POINTER_ATTRIBUTE_CONTEXT;
-    attr_data[0] = &cuda_ctx;
-    attr_type[1] = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
-    attr_data[1] = &cuda_device_ordinal;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuPointerGetAttributes(UCT_CUDA_IPC_NUM_ATTRS, attr_type, attr_data,
-                                   address));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucs_assertv(cuda_device_ordinal >= 0, "cuda_device_ordinal=%d",
-                cuda_device_ordinal);
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_device,
-                                                  cuda_device_ordinal));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    *is_ctx_pushed = 0;
-    *cuda_device_p = cuda_device;
-
-    if (cuda_ctx == NULL) {
-        status = uct_cuda_primary_ctx_retain(*cuda_device_p, 0, &cuda_ctx);
-        if (status != UCS_OK) {
-           return status;
-        }
-
-        *is_ctx_retained = 1;
-    } else {
-        *is_ctx_retained = 0;
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_curr_ctx));
-        if ((status != UCS_OK) || (cuda_curr_ctx == cuda_ctx)) {
-            /* Failed to get current context or the pointer's context is
-             * already current, no need to push/pop */
-           return status;
-        }
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
-    if (status != UCS_OK) {
-        if (*is_ctx_retained) {
-            UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(*cuda_device_p));
-        }
-        return status;
-    }
-
-    *is_ctx_pushed = 1;
-    return UCS_OK;
-}
-
-static void uct_cuda_ipc_mem_reg_pop_ctx(CUdevice cuda_device,
-                                         int is_ctx_retained)
-{
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    if (is_ctx_retained) {
-        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
-    }
-}
-
-static ucs_status_t
 uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
                          uct_cuda_ipc_lkey_t **key_p)
 {
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
-    int is_ctx_pushed, is_ctx_retained;
+    int is_ctx_pushed;
     CUdevice cuda_device;
 #if HAVE_CUDA_FABRIC
 #define UCT_CUDA_IPC_QUERY_NUM_ATTRS 3
@@ -202,8 +128,8 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_cuda_ipc_mem_reg_push_ctx((CUdeviceptr)addr, &cuda_device,
-                                           &is_ctx_pushed, &is_ctx_retained);
+    status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)addr, &cuda_device,
+                                             &is_ctx_pushed);
     if (status != UCS_OK) {
         goto out;
     }
@@ -313,17 +239,15 @@ common_path:
     ucs_list_add_tail(&memh->list, &key->link);
     ucs_trace("registered addr:%p/%p length:%zd type:%u dev_num:%d "
               "buffer_id:%llu",
-              addr, (void *)key->d_bptr, key->b_len, key->ph.handle_type,
-              memh->dev_num, key->ph.buffer_id);
+              addr, (void*)key->d_bptr, key->b_len, key->ph.handle_type,
+              cuda_device, key->ph.buffer_id);
 
     memh->dev_num = cuda_device;
     *key_p        = key;
     status        = UCS_OK;
 
 out_pop_ctx:
-    if (is_ctx_pushed) {
-        uct_cuda_ipc_mem_reg_pop_ctx(memh->dev_num, is_ctx_retained);
-    }
+    uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);
 out:
     if (status != UCS_OK) {
         ucs_free(key);
@@ -393,10 +317,6 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
             return UCS_ERR_UNREACHABLE;
         }
     }
-
-    /* Save local device number, so we use it to find remote rcache when mapping
-     * mem_handle in uct_cuda_ipc_post_cuda_async_copy */
-    rkey->super.dev_num = cu_dev;
 
     pthread_mutex_lock(&component->lock);
 
