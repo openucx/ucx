@@ -170,7 +170,8 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
 
     /* Send time is representing request completion, which in case of zcopy
        waits for ACK from remote side. */
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+    if ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
         perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c += tl_perf->latency;
     }
 
