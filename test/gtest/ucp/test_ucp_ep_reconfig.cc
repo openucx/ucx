@@ -301,7 +301,7 @@ void test_ucp_ep_reconfig::entity::connect(const ucp_test_base::entity *other,
                                                           ucp_ep_destroy));
 
     if (!(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
-        ASSERT_UCS_OK(ucp_wireup_send_request(ucp_ep));
+        ASSERT_UCS_OK(ucp_wireup_send_request(ucp_ep, UCP_WIREUP_MSG_REQUEST));
     }
 
     store_config();
