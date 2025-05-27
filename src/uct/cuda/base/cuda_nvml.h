@@ -13,7 +13,7 @@
 #include <nvml.h>
 
 
-/** 
+/**
   * Wrapper for NVML functions.
   *
   * @param _func NVML function name.
