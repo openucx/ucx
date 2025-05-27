@@ -23,7 +23,7 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
     params->super.cfg_thresh   = ucp_proto_rndv_cfg_thresh(
                                          context, UCS_BIT(UCP_RNDV_MODE_AM)),
     params->super.cfg_priority = 80;
-    params->super.exclude_map  = 0;
+    params->super.exclude_map  = UCP_LANE_MAP_ZERO_INITIALIZER;
     params->super.min_length   = 0;
     params->super.max_length   = SIZE_MAX;
     params->super.overhead     = context->config.ext.proto_overhead_multi;
@@ -114,7 +114,7 @@ static void ucp_rndv_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
                                UCP_PROTO_COMMON_INIT_FLAG_RESUME,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
@@ -189,7 +189,7 @@ static void ucp_rndv_am_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY   |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,

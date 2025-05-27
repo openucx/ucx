@@ -269,14 +269,19 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
         ucp_request_t *req, ucp_lane_index_t *lane_p, ucp_lane_map_t lane_map,
         ucp_proto_multi_lane_send_func_t send_func)
 {
-    ucp_lane_map_t remaining_lane_map = lane_map & ~UCS_MASK(*lane_p);
+    ucp_lane_map_t remaining_lane_map;
     ucp_lane_index_t lane;
     ucs_status_t status;
+    int num_remaining_lanes;
 
-    ucs_assertv(remaining_lane_map != 0,
-                "req=%p *lane_p=%d lane_map=0x%" PRIx64, req, *lane_p,
-                lane_map);
-    lane = ucs_ffs64(remaining_lane_map);
+    UCS_STATIC_BITMAP_MASK(&remaining_lane_map, *lane_p);
+    remaining_lane_map = UCS_STATIC_BITMAP_AND(
+                                UCS_STATIC_BITMAP_NOT(remaining_lane_map),
+                                lane_map);
+    ucs_assertv(!UCS_STATIC_BITMAP_IS_ZERO(remaining_lane_map),
+                "req=%p *lane_p=%d lane_map=" UCP_LANE_MAP_FMT, req,
+                *lane_p, UCP_LANE_MAP_ARG(&lane_map));
+    lane = UCS_STATIC_BITMAP_FFS(remaining_lane_map);
 
     status = send_func(req, lane);
     if (ucs_likely(status == UCS_OK)) {
@@ -287,7 +292,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
         return ucp_proto_multi_handle_send_error(req, lane, status);
     }
 
-    if (ucs_is_pow2_or_zero(remaining_lane_map)) {
+    num_remaining_lanes = UCS_STATIC_BITMAP_POPCOUNT(remaining_lane_map);
+    if (num_remaining_lanes == 0 || num_remaining_lanes == 1) {
         /* This lane was the last one */
         ucp_request_invoke_uct_completion_success(req);
         return UCS_OK;

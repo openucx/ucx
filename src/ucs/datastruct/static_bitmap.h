@@ -115,6 +115,22 @@ BEGIN_C_DECLS
 
 
 /**
+ * Return a bitmap with a single bit in the given index set to 1.
+ *
+ * @param _bit_index Bit index to set.
+ * @param _bitmap_type Type of the static bitmap to return.
+ *
+ * @return Bitmap with a single bit in the given index set to 1.
+ */
+#define UCS_STATIC_BITMAP_BIT(_bit_index, _bitmap_type) \
+    ({ \
+        _bitmap_type _r_##_uid = UCS_STATIC_BITMAP_ZERO_INITIALIZER; \
+        ucs_bitmap_bits_set(UCS_STATIC_BITMAP_BITS_ARGS(&_r_##_uid), _bit_index); \
+        _r_##_uid; \
+    })
+
+
+/**
  * Set a bit in the bitmap to 0.
  *
  * @param _bitmap    Set value in this bitmap.
@@ -188,6 +204,19 @@ BEGIN_C_DECLS
     UCS_STATIC_BITMAP_FUNC_CALL(UCS_PP_UNIQUE_ID, _bitmap, \
                                 ucs_bitmap_bits_popcount_upto_index, \
                                 _bit_index)
+
+
+/**
+ * Compare two bitmaps
+ *
+ * @param [in] bitmap1   First bitmap to compare.
+ * @param [in] bitmap2   Second bitmap to compare.
+ *
+ * @return Nonzero if the bitmaps are equal, zero if they are different.
+ */
+#define UCS_STATIC_BITMAP_IS_EQUAL(_bitmap1_ptr, _bitmap2_ptr) \
+    ucs_bitmap_bits_is_equal(UCS_STATIC_BITMAP_BITS_CARGS(_bitmap1_ptr), \
+                             UCS_STATIC_BITMAP_BITS_CARGS(_bitmap2_ptr))
 
 
 /**

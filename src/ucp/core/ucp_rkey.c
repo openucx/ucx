@@ -1052,7 +1052,7 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
         lane = lanes[prio];
         if (lane == UCP_NULL_LANE) {
             return UCP_NULL_LANE; /* No more lanes */
-        } else if (ignore & UCS_BIT(lane)) {
+        } else if (UCS_STATIC_BITMAP_GET(ignore, lane)) {
             continue; /* lane is in ignore mask, do not process it */
         }
 
@@ -1095,6 +1095,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     ucp_ep_config_t *config = ucp_ep_config(ep);
     int rma_sw              = 0;
     int amo_sw              = 0;
+    ucp_lane_map_t no_lanes = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
 
@@ -1106,7 +1107,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     rkey->cache.rma_lane = ucp_rkey_find_rma_lane(context, config,
                                                   UCS_MEMORY_TYPE_HOST,
                                                   config->key.rma_lanes, rkey,
-                                                  0, &uct_rkey);
+                                                  no_lanes, &uct_rkey);
     if (rkey->cache.rma_lane == UCP_NULL_LANE) {
         rkey->cache.rma_proto_index = UCP_RKEY_SW_PROTO;
         rkey->cache.rma_rkey        = UCT_INVALID_RKEY;
@@ -1124,7 +1125,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     rkey->cache.amo_lane = ucp_rkey_find_rma_lane(context, config,
                                                   UCS_MEMORY_TYPE_HOST,
                                                   config->key.amo_lanes, rkey,
-                                                  0, &uct_rkey);
+                                                  no_lanes, &uct_rkey);
     if (rkey->cache.amo_lane == UCP_NULL_LANE) {
         rkey->cache.amo_proto_index = UCP_RKEY_SW_PROTO;
         rkey->cache.amo_rkey        = UCT_INVALID_RKEY;

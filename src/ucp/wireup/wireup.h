@@ -224,7 +224,8 @@ double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *addr_entry);
 
-static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
+static inline int
+ucp_wireup_lane_types_has_fast_path(ucp_lane_type_mask_t lane_types)
 {
     return lane_types &
            (UCS_BIT(UCP_LANE_TYPE_AM) | UCS_BIT(UCP_LANE_TYPE_RMA) |

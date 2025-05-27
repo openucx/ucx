@@ -1381,7 +1381,8 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                 ep_addr_len = iface_attr->ep_addr_len;
                 ep_lane_ptr = NULL;
 
-                ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
+                UCS_STATIC_BITMAP_FOR_EACH_BIT(lane,
+                                               &ucp_ep_config(ep)->p2p_lanes) {
                     ucs_assert(lane < UCP_MAX_LANES);
                     if (ucp_ep_get_rsc_index(ep, lane) != rsc_index) {
                         continue;

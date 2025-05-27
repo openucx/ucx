@@ -260,7 +260,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
         .super.reg_mem_info  = *reg_mem_info,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .min_chunk           = context->config.ext.min_rndv_chunk_size,
@@ -279,7 +279,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     int send_atp, use_fence;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
-    unsigned atp_map;
+    ucp_lane_map_t atp_map = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
@@ -298,7 +298,6 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     send_atp = !ucp_proto_rndv_init_params_is_ppln_frag(init_params);
 
     /* Check which lanes support sending ATP */
-    atp_map = 0;
     for (lane_idx = 0; lane_idx < rpriv.bulk.mpriv.num_lanes; ++lane_idx) {
         lane       = rpriv.bulk.mpriv.lanes[lane_idx].super.lane;
         iface_attr = ucp_proto_common_get_iface_attr(init_params, lane);
@@ -306,14 +305,14 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
              (iface_attr->cap.am.max_short >= atp_size)) ||
             ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) &&
              (iface_attr->cap.am.max_bcopy >= atp_size))) {
-            atp_map |= UCS_BIT(lane);
+            UCS_STATIC_BITMAP_SET(&atp_map, lane);
         }
     }
 
     /* Use fence only if all lanes support sending ATP and flush is not forced
      */
     use_fence = send_atp && !context->config.ext.rndv_put_force_flush &&
-                (rpriv.bulk.mpriv.lane_map == atp_map);
+                UCS_STATIC_BITMAP_IS_EQUAL(&rpriv.bulk.mpriv.lane_map, &atp_map);
 
     /* All lanes can send ATP - invalidate am_lane, to use mpriv->lanes.
      * Otherwise, would need to flush all lanes and send ATP on:
@@ -332,8 +331,8 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         rpriv.put_comp_cb     = comp_cb;
         rpriv.atp_comp_cb     = NULL;
         rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP;
-        rpriv.flush_map       = 0;
-        rpriv.atp_map         = rpriv.bulk.mpriv.lane_map;
+        UCS_STATIC_BITMAP_RESET_ALL(&rpriv.flush_map);
+        UCS_STATIC_BITMAP_COPY(&rpriv.atp_map, rpriv.bulk.mpriv.lane_map);
     } else {
         /* Flush all lanes and send ATP on all supporting lanes (or control lane
          * otherwise) */
@@ -341,22 +340,26 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
             rpriv.put_comp_cb =
                     ucp_proto_rndv_put_common_flush_completion_send_atp;
             rpriv.atp_comp_cb = comp_cb;
-            rpriv.atp_map     = (atp_map == 0) ?
-                                UCS_BIT(rpriv.bulk.super.lane) : atp_map;
+            if (UCS_STATIC_BITMAP_IS_ZERO(atp_map)) {
+                UCS_STATIC_BITMAP_COPY(&rpriv.atp_map,
+                                       UCP_LANE_MAP_BIT(rpriv.bulk.super.lane));
+            } else {
+                UCS_STATIC_BITMAP_COPY(&rpriv.atp_map, atp_map);
+            }
         } else {
             rpriv.put_comp_cb = comp_cb;
             rpriv.atp_comp_cb = NULL;
-            rpriv.atp_map     = 0;
+            UCS_STATIC_BITMAP_RESET_ALL(&rpriv.atp_map);
         }
         rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FLUSH;
-        rpriv.flush_map       = rpriv.bulk.mpriv.lane_map;
-        ucs_assert(rpriv.flush_map != 0);
+        UCS_STATIC_BITMAP_COPY(&rpriv.flush_map, rpriv.bulk.mpriv.lane_map);
+        ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(rpriv.flush_map));
     }
 
     if (send_atp) {
-        ucs_assert(rpriv.atp_map != 0);
+        ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(rpriv.atp_map));
     }
-    rpriv.atp_num_lanes = ucs_popcount(rpriv.atp_map);
+    rpriv.atp_num_lanes = UCS_STATIC_BITMAP_POPCOUNT(rpriv.atp_map);
     rpriv.stat_counter  = stat_counter;
 
     ucp_proto_select_add_proto(&params.super.super, params.super.cfg_thresh,
@@ -381,9 +384,9 @@ ucp_proto_rndv_put_common_query(const ucp_proto_query_params_t *params,
 
     ucp_proto_rndv_bulk_query(&bulk_query_params, attr);
 
-    if (rpriv->atp_map == 0) {
+    if (UCS_STATIC_BITMAP_IS_ZERO(rpriv->atp_map)) {
         return UCP_PROTO_RNDV_PUT_DESC;
-    } else if (rpriv->flush_map != 0) {
+    } else if (!UCS_STATIC_BITMAP_IS_ZERO(rpriv->flush_map)) {
         return "flushed " UCP_PROTO_RNDV_PUT_DESC;
     } else {
         return "fenced " UCP_PROTO_RNDV_PUT_DESC;

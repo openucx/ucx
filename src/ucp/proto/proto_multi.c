@@ -71,8 +71,8 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t lane, index;
 
-    ucs_assert(index_map != 0);
-    ucs_for_each_bit(index, index_map) {
+    ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(index_map));
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(index, &index_map) {
         lane      = lanes[index];
         lane_perf = &lanes_perf[lane];
         avail_bw  = ucp_proto_multi_get_avail_bw(params, lane, lane_perf,
@@ -97,7 +97,7 @@ ucp_proto_select_add_lane(ucp_proto_lane_selection_t *selection,
                 "selection num_lanes=%u max_lanes=%u", selection->num_lanes,
                 UCP_PROTO_MAX_LANES);
     selection->lanes[selection->num_lanes++] = lane;
-    selection->lane_map                     |= UCS_BIT(lane);
+    UCS_STATIC_BITMAP_SET(&selection->lane_map, lane);
     selection->dev_count[dev_index]++;
 }
 
@@ -116,11 +116,11 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
     memset(selection, 0, sizeof(*selection));
 
     /* Select all available indexes */
-    index_map = UCS_MASK(num_lanes);
+    UCS_STATIC_BITMAP_MASK(&index_map, num_lanes);
 
     if (fixed_first_lane) {
         ucp_proto_select_add_lane(selection, params, lanes[0]);
-        index_map &= ~UCS_BIT(0);
+        UCS_STATIC_BITMAP_RESET(&index_map, 0);
     }
 
     for (i = fixed_first_lane? 1 : 0; i < ucs_min(max_lanes, num_lanes); ++i) {
@@ -133,7 +133,7 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
         }
 
         ucp_proto_select_add_lane(selection, params, lanes[lane_index]);
-        index_map &= ~UCS_BIT(lane_index);
+        UCS_STATIC_BITMAP_RESET(&index_map, lane_index);
     }
 
     /* TODO: Aggregate performance:
@@ -149,7 +149,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_context_h context         = params->super.super.worker->context;
     const double max_bw_ratio     = context->config.ext.multi_lane_max_ratio;
     ucp_proto_perf_node_t *lanes_perf_nodes[UCP_PROTO_MAX_LANES];
-    ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
+    ucp_proto_common_tl_perf_t *lanes_perf;
     ucp_proto_common_tl_perf_t *lane_perf, perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     double max_bandwidth, max_frag_ratio, min_bandwidth;
@@ -183,7 +183,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     /* Find first lane */
     num_lanes = ucp_proto_common_find_lanes_with_min_frag(
             &params->super, params->first.lane_type, params->first.tl_cap_flags,
-            1, 0, lanes);
+            1, UCP_LANE_MAP_ZERO_INITIALIZER, lanes);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s",
                   ucp_proto_id_field(params->super.super.proto_id, name));
@@ -194,7 +194,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     num_lanes += ucp_proto_common_find_lanes_with_min_frag(
             &params->super, params->middle.lane_type,
             params->middle.tl_cap_flags, UCP_PROTO_MAX_LANES - 1,
-            UCS_BIT(lanes[0]), lanes + 1);
+            UCP_LANE_MAP_BIT(lanes[0]), lanes + 1);
+
+    lanes_perf = ucs_malloc(num_lanes * sizeof(*lanes_perf), "lanes_perf");
+    if (lanes_perf == NULL) {
+        ucs_error("failed to allocate lanes_perf");
+        return UCS_ERR_NO_MEMORY;
+    }
 
     /* Get bandwidth of all lanes and max_bandwidth */
     max_bandwidth = 0;
@@ -205,7 +211,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         status = ucp_proto_common_get_lane_perf(&params->super, lane, lane_perf,
                                                 &lanes_perf_nodes[lane]);
         if (status != UCS_OK) {
-            return status;
+            goto out;
         }
 
         /* Calculate maximal bandwidth of all lanes, to skip slow lanes */
@@ -284,7 +290,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     reg_md_map          = ucp_proto_common_reg_md_map(&params->super,
                                                       selection.lane_map);
     mpriv->reg_md_map   = reg_md_map | params->initial_reg_md_map;
-    mpriv->lane_map     = selection.lane_map;
     mpriv->num_lanes    = 0;
     mpriv->min_frag     = 0;
     mpriv->max_frag_sum = 0;
@@ -294,7 +299,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     weight_sum          = 0;
     min_end_offset      = 0;
 
-    ucs_for_each_bit(lane, selection.lane_map) {
+    UCS_STATIC_BITMAP_COPY(&mpriv->lane_map, selection.lane_map);
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(lane, &selection.lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
 
         lpriv     = &mpriv->lanes[mpriv->num_lanes++];
@@ -372,16 +379,16 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         lpriv->opt_align      = ucp_proto_multi_get_lane_opt_align(params, lane);
         mpriv->align_thresh   = ucs_max(mpriv->align_thresh, lpriv->opt_align);
     }
-    ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
+    ucs_assert(mpriv->num_lanes == UCS_STATIC_BITMAP_POPCOUNT(selection.lane_map));
 
     /* After this block, 'perf_node' and 'lane_perf_nodes[]' have extra ref */
     if (mpriv->num_lanes == 1) {
-        perf_node = lanes_perf_nodes[ucs_ffs64(selection.lane_map)];
+        perf_node = lanes_perf_nodes[UCS_STATIC_BITMAP_FFS(selection.lane_map)];
         ucp_proto_perf_node_ref(perf_node);
     } else {
         perf_node = ucp_proto_perf_node_new_data("multi", "%u lanes",
                                                  mpriv->num_lanes);
-        ucs_for_each_bit(lane, selection.lane_map) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(lane, &selection.lane_map) {
             ucs_assert(lane < UCP_MAX_LANES);
             ucp_proto_perf_node_add_child(perf_node, lanes_perf_nodes[lane]);
         }
@@ -396,6 +403,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
     ucp_proto_perf_node_deref(&perf_node);
 
+out:
+    ucs_free(lanes_perf);
     return status;
 }
 
@@ -495,7 +504,7 @@ void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
     }
 
     ucs_string_buffer_rtrim(&strb, NULL);
-    attr->lane_map = mpriv->lane_map;
+    UCS_STATIC_BITMAP_COPY(&attr->lane_map, mpriv->lane_map);
 }
 
 void ucp_proto_multi_query(const ucp_proto_query_params_t *params,

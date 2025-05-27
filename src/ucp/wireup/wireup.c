@@ -305,7 +305,7 @@ ucp_wireup_get_ep_tl_bitmap(ucp_ep_h ep, ucp_lane_map_t lane_map)
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_lane_index_t lane;
 
-    ucs_for_each_bit(lane, lane_map) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(lane, &lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
         if (ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE) {
             continue;
@@ -338,12 +338,12 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
                            const unsigned *addr_indices,
                            ucp_lane_index_t *lanes2remote)
 {
+    ucp_lane_map_t used_remote_lanes = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     const ucp_address_entry_t *address;
     unsigned address_index;
     ucp_lane_index_t lane, remote_lane, num_lanes;
     unsigned *ep_addr_indexes;
     unsigned ep_addr_index;
-    uint64_t used_remote_lanes;
 
     /* Initialize the counters of ep address index for each address entry */
     ep_addr_indexes = ucs_alloca(sizeof(ep_addr_index) *
@@ -358,7 +358,6 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         lanes2remote[lane] = UCP_NULL_LANE;
     }
 
-    used_remote_lanes = 0;
     num_lanes         = ucp_ep_num_lanes(ep);
     for (lane = 0; lane < num_lanes; ++lane) {
         if (!ucp_ep_is_lane_p2p(ep, lane)) {
@@ -379,11 +378,11 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         remote_lane        = address->ep_addrs[ep_addr_index].lane;
         lanes2remote[lane] = remote_lane;
 
-        if (used_remote_lanes & UCS_BIT(remote_lane)) {
+        if (UCS_STATIC_BITMAP_GET(used_remote_lanes, remote_lane)) {
             ucs_fatal("ep %p: remote lane %d is used more than once", ep,
                       remote_lane);
         }
-        used_remote_lanes |= UCS_BIT(remote_lane);
+        UCS_STATIC_BITMAP_SET(&used_remote_lanes, remote_lane);
 
         ucs_trace("ep %p: lane[%d]->remote_lane[%d] (address[%d].ep_address[%d])",
                   ep, lane, remote_lane, address_index, ep_addr_index);
@@ -644,7 +643,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
-    int has_cm_lane, am_need_flush, full_handshake_required;
+    int has_cm_lane, am_need_flush, full_handshake_required, has_p2p_lanes;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REQUEST);
     ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
@@ -727,7 +726,9 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
      * 1) CM flow (the client's EP has to be marked as REMOTE_CONNECTED)
      * 2) P2P lanes exist in EP configuration (client-server flow)
      * 3) Old AM lane was replaced (ensures message order) */
-    full_handshake_required = has_cm_lane || ucp_ep_config(ep)->p2p_lanes ||
+    has_p2p_lanes = !UCS_STATIC_BITMAP_IS_ZERO(ucp_ep_config(ep)->p2p_lanes);
+    full_handshake_required = has_cm_lane ||
+                              has_p2p_lanes ||
                               am_need_flush;
 
     /* Send a reply if remote side does not have ep_ptr (active-active flow) or
@@ -747,8 +748,8 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
             goto err_set_ep_failed;
         }
 
-        tl_bitmap  = ucp_wireup_get_ep_tl_bitmap(ep,
-                                                 ucp_ep_config(ep)->p2p_lanes);
+        tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep,
+                                                ucp_ep_config(ep)->p2p_lanes);
         ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
 
         ucs_assert(send_reply);
@@ -1122,7 +1123,7 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
             /* Create wireup EP in case of presence p2p lanes and forced proto
              * restart since pending flush can be completed out of order on
              * lanes directly connected to iface without wireup EP */
-            (ucp_ep_config(ep)->p2p_lanes &&
+            (!UCS_STATIC_BITMAP_IS_ZERO(ucp_ep_config(ep)->p2p_lanes) &&
              ep->worker->context->config.ext.proto_request_reset)) {
             status = ucp_wireup_ep_create(ep, &wireup_ep);
             if (status != UCS_OK) {
@@ -1533,16 +1534,16 @@ static ucp_lane_index_t
 ucp_wireup_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
                                 const ucp_lane_index_t *reuse_lane_map)
 {
-    ucp_lane_map_t lane_bitmap = 0;
+    ucp_lane_map_t lane_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
         if (reuse_lane_map[lane] != UCP_NULL_LANE) {
-            lane_bitmap |= UCS_BIT(reuse_lane_map[lane]);
+            UCS_STATIC_BITMAP_SET(&lane_bitmap, reuse_lane_map[lane]);
         }
     }
 
-    lane = ucs_ffs64_safe(~lane_bitmap);
+    lane = UCS_STATIC_BITMAP_FFS(UCS_STATIC_BITMAP_NOT(lane_bitmap));
     return (lane < key->num_lanes) ? lane : UCP_NULL_LANE;
 }
 
@@ -1656,8 +1657,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     ucs_status_t status;
     int should_reuse;
 
-    *connect_lane_bitmap = UCS_MASK(new_key->num_lanes);
-    *am_need_flush_p     = 0;
+    UCS_STATIC_BITMAP_MASK(connect_lane_bitmap, new_key->num_lanes);
+    *am_need_flush_p = 0;
 
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
         !ucp_wireup_check_is_reconfigurable(ep, new_key, remote_address,
@@ -1735,7 +1736,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
             if (!ucp_wireup_ep_test(uct_ep) ||
                 (ucp_wireup_ep(uct_ep)->super.uct_ep != NULL)) {
                 /* no need to connect lane */
-                *connect_lane_bitmap &= ~UCS_BIT(reuse_lane);
+                UCS_STATIC_BITMAP_RESET(connect_lane_bitmap, reuse_lane);
             }
             new_uct_eps[reuse_lane] = uct_ep;
             ucp_ep_set_lane(ep, lane, NULL);
@@ -1959,7 +1960,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
             continue;
         }
 
-        if (connect_lane_bitmap & UCS_BIT(lane)) {
+        if (UCS_STATIC_BITMAP_GET(connect_lane_bitmap, lane)) {
             status = ucp_wireup_connect_lane(ep, ep_init_flags, lane,
                                              key.lanes[lane].path_index,
                                              remote_address, addr_indices[lane]);
@@ -1972,7 +1973,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     /* If we don't have a p2p transport, we're connected */
-    if (!ucp_ep_config(ep)->p2p_lanes) {
+    if (UCS_STATIC_BITMAP_IS_ZERO(ucp_ep_config(ep)->p2p_lanes)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     }
 
@@ -1990,8 +1991,10 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
     ucp_tl_bitmap_t tl_bitmap;
+    ucp_lane_map_t lane_map;
 
-    tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, UCS_MASK(ucp_ep_num_lanes(ep)));
+    UCS_STATIC_BITMAP_MASK(&lane_map, ucp_ep_num_lanes(ep));
+    tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, lane_map);
 
     /* TODO make sure such lane would exist */
     rsc_index = ucp_wireup_ep_get_aux_rsc_index(

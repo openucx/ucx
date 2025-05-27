@@ -92,7 +92,7 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
@@ -126,9 +126,10 @@ ucp_rndv_rkey_ptr_query_common(const ucp_proto_query_params_t *params,
     ucp_proto_default_query(params, attr);
 
     ucs_assert(rpriv->spriv.super.lane != UCP_NULL_LANE);
-    attr->lane_map = UCS_BIT(rpriv->spriv.super.lane);
+    UCS_STATIC_BITMAP_COPY(&attr->lane_map,
+                           UCP_LANE_MAP_BIT(rpriv->spriv.super.lane));
     if (rpriv->ack.lane != UCP_NULL_LANE) {
-        attr->lane_map |= UCS_BIT(rpriv->ack.lane);
+        UCS_STATIC_BITMAP_SET(&attr->lane_map, rpriv->ack.lane);
     }
 }
 
@@ -271,7 +272,8 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
         .super.exclude_map   = (rkey_ptr_lane == UCP_NULL_LANE) ?
-                               0 : UCS_BIT(rkey_ptr_lane),
+                               UCP_LANE_MAP_ZERO_INITIALIZER :
+                               UCP_LANE_MAP_BIT(rkey_ptr_lane),
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_LAST,
         .tl_cap_flags        = 0

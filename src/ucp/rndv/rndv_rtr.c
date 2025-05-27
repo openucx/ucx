@@ -176,7 +176,7 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
@@ -209,7 +209,7 @@ static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
     ucp_proto_config_query(params->worker, &rpriv->remote_proto_config,
                            params->msg_length, attr);
     attr->is_estimation = 1;
-    attr->lane_map      = UCS_BIT(rpriv->lane);
+    attr->lane_map      = UCP_LANE_MAP_BIT(rpriv->lane);
 }
 
 static void ucp_proto_rndv_rtr_abort_super(void *request, ucs_status_t status,
@@ -391,7 +391,7 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
                                UCP_PROTO_COMMON_KEEP_MD_MAP,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = 0.0,
@@ -468,7 +468,8 @@ ucp_proto_rndv_rtr_mtype_query(const ucp_proto_query_params_t *params,
 
     attr->is_estimation  = 1;
     attr->max_msg_length = remote_attr.max_msg_length;
-    attr->lane_map       = UCS_BIT(rpriv->super.super.lane);
+    UCS_STATIC_BITMAP_COPY(&attr->lane_map,
+                           UCP_LANE_MAP_BIT(rpriv->super.super.lane));
     ucp_proto_rndv_mtype_query_desc(params, rpriv->frag_mem_type, attr,
                                     remote_attr.desc);
     ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));

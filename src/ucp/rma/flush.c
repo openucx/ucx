@@ -24,21 +24,26 @@ ucp_ep_flush_request_update_uct_comp(ucp_request_t *req, int diff,
                 "req=%p comp=%p count=%d diff=%d", req,
                 &req->send.state.uct_comp, req->send.state.uct_comp.count,
                 diff);
-    ucs_assertv(!(req->send.flush.started_lanes & new_started_lanes),
-                "req=%p started_lanes=0x%" PRIx64
-                " new_started_lanes=0x%" PRIx64,
-                req, req->send.flush.started_lanes, new_started_lanes);
+    ucs_assertv(UCS_STATIC_BITMAP_IS_ZERO(
+                    UCS_STATIC_BITMAP_AND(req->send.flush.started_lanes,
+                                          new_started_lanes)),
+                "req=%p started_lanes=" UCP_LANE_MAP_FMT " new_started_lanes="
+                UCP_LANE_MAP_FMT, req,
+                UCP_LANE_MAP_ARG(&req->send.flush.started_lanes),
+                UCP_LANE_MAP_ARG(&new_started_lanes));
 
     ucp_trace_req(req,
                   "flush update ep %p comp_count %d->%d num_lanes %d->%d "
-                  "started_lanes 0x%" PRIx64 "->0x%" PRIx64,
+                  "started_lanes " UCP_LANE_MAP_FMT "->" 
+                  UCP_LANE_MAP_FMT,
                   req->send.ep, req->send.state.uct_comp.count,
                   req->send.state.uct_comp.count + diff,
                   req->send.flush.num_lanes, ucp_ep_num_lanes(req->send.ep),
-                  req->send.flush.started_lanes, new_started_lanes);
+                  UCP_LANE_MAP_ARG(&req->send.flush.started_lanes),
+                  UCP_LANE_MAP_ARG(&new_started_lanes));
 
     req->send.state.uct_comp.count += diff;
-    req->send.flush.started_lanes  |= new_started_lanes;
+    UCS_STATIC_BITMAP_OR_INPLACE(&req->send.flush.started_lanes, new_started_lanes);
 }
 
 static void ucp_ep_flush_error(ucp_request_t *req, ucp_lane_index_t lane,
@@ -53,7 +58,7 @@ static void ucp_ep_flush_error(ucp_request_t *req, ucp_lane_index_t lane,
 
     req->status = status;
 
-    ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
+    ucp_ep_flush_request_update_uct_comp(req, -1, UCP_LANE_MAP_BIT(lane));
 
     ucs_log(level, "req %p: error during flush: %s", req,
             ucs_status_string(status));
@@ -68,13 +73,15 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 {
     ucp_ep_h ep              = req->send.ep;
     unsigned num_lanes       = ucp_ep_num_lanes(ep);
-    ucp_lane_map_t all_lanes = UCS_MASK(num_lanes);
+    ucp_lane_map_t all_lanes = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_ep_flush_state_t *flush_state;
     ucp_lane_index_t lane;
     ucs_status_t status;
     uct_ep_h uct_ep;
     int diff;
     ucp_lane_map_t destroyed_lanes;
+
+    UCS_STATIC_BITMAP_MASK(&all_lanes, num_lanes);
 
     ucs_assertv(!(ep->flags & UCP_EP_FLAG_BLOCK_FLUSH), "req=%p ep=%p", req,
                 ep);
@@ -84,34 +91,46 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     diff = num_lanes - req->send.flush.num_lanes;
     if (ucs_unlikely(diff != 0)) {
         if (diff > 0) {
-            ucp_ep_flush_request_update_uct_comp(req, diff, 0);
+            ucp_ep_flush_request_update_uct_comp(
+                                req, diff, UCP_LANE_MAP_ZERO_INITIALIZER);
         } else {
             /* Some lanes that we wanted to flush were destroyed. If we already
                started to flush them, they would be completed by discard flow,
                so reduce completion count only by the lanes we have not started
                to flush yet. */
-            destroyed_lanes = UCS_MASK(req->send.flush.num_lanes) & ~all_lanes &
-                              ~req->send.flush.started_lanes;
+            ucp_lane_map_t prev_all_lanes;
+            UCS_STATIC_BITMAP_MASK(&prev_all_lanes, req->send.flush.num_lanes);
+            destroyed_lanes = UCS_STATIC_BITMAP_AND(
+                    UCS_STATIC_BITMAP_AND(prev_all_lanes,
+                                          UCS_STATIC_BITMAP_NOT(all_lanes)),
+                    UCS_STATIC_BITMAP_NOT(req->send.flush.started_lanes));
             ucp_ep_flush_request_update_uct_comp(
-                    req, -ucs_popcount(destroyed_lanes), 0);
+                    req, -UCS_STATIC_BITMAP_POPCOUNT(destroyed_lanes),
+                    UCP_LANE_MAP_ZERO_INITIALIZER);
         }
 
         req->send.flush.num_lanes = num_lanes;
     }
 
     ucp_trace_req(req,
-                  "progress ep=%p flush flags=0x%x started_lanes=0x%" PRIx64
-                  " count=%d",
-                  ep, ep->flags, req->send.flush.started_lanes,
+                  "progress ep=%p flush flags=0x%x started_lanes="
+                  UCP_LANE_MAP_FMT " count=%d", ep, ep->flags,
+                  UCP_LANE_MAP_ARG(&req->send.flush.started_lanes),
                   req->send.state.uct_comp.count);
 
-    while (req->send.flush.started_lanes < all_lanes) {
+    while (UCS_STATIC_BITMAP_FFS(UCS_STATIC_BITMAP_NOT(
+                                            req->send.flush.started_lanes)) <
+           UCS_STATIC_BITMAP_FFS(UCS_STATIC_BITMAP_NOT(all_lanes))) {
 
         /* Search for next lane to start flush */
-        lane   = ucs_ffs64(all_lanes & ~req->send.flush.started_lanes);
+        lane   = UCS_STATIC_BITMAP_FFS(
+                    UCS_STATIC_BITMAP_AND(
+                        all_lanes,
+                        UCS_STATIC_BITMAP_NOT(req->send.flush.started_lanes)));
         uct_ep = ucp_ep_get_lane(ep, lane);
         if (uct_ep == NULL) {
-            ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
+            ucp_ep_flush_request_update_uct_comp(req, -1,
+                                                 UCP_LANE_MAP_BIT(lane));
             continue;
         }
 
@@ -126,9 +145,11 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                       ep, lane, uct_ep, req->send.flush.uct_flags,
                       ucs_status_string(status));
         if (status == UCS_OK) {
-            ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
+            ucp_ep_flush_request_update_uct_comp(req, -1,
+                                                 UCP_LANE_MAP_BIT(lane));
         } else if (status == UCS_INPROGRESS) {
-            ucp_ep_flush_request_update_uct_comp(req, 0, UCS_BIT(lane));
+            ucp_ep_flush_request_update_uct_comp(req, 0,
+                                                 UCP_LANE_MAP_BIT(lane));
         } else if (status == UCS_ERR_NO_RESOURCE) {
             if (req->send.lane != UCP_NULL_LANE) {
                 ucp_trace_req(req,
@@ -179,7 +200,9 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                 ucs_hlist_add_tail(&flush_state->reqs, &req->send.list);
                 ucp_trace_req(req,
                               "flush ep %p add request to ep remote completion "
-                              "queue with sn %d", ep, req->send.flush.cmpl_sn);
+                              "queue with sn %d started_lanes=" UCP_LANE_MAP_FMT,
+                              ep, req->send.flush.cmpl_sn,
+                              UCP_LANE_MAP_ARG(&req->send.flush.started_lanes));
             }
         }
 
@@ -228,26 +251,28 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
     if (ep->flags & UCP_EP_FLAG_BLOCK_FLUSH) {
         /* Request was detached from pending and should be scheduled again */
         if (ucp_ep_has_cm_lane(ep) ||
-            (ucp_ep_config(ep)->p2p_lanes &&
+            (!UCS_STATIC_BITMAP_IS_ZERO(ucp_ep_config(ep)->p2p_lanes) &&
              ep->worker->context->config.ext.proto_request_reset)) {
-            ucs_assertv(!req->send.flush.started_lanes,
-                        "req=%p flush started_lanes=0x%" PRIx64, req,
-                        req->send.flush.started_lanes);
+            ucs_assertv(UCS_STATIC_BITMAP_IS_ZERO(req->send.flush.started_lanes),
+                        "req=%p flush started_lanes=" UCP_LANE_MAP_FMT, req,
+                        UCP_LANE_MAP_ARG(&req->send.flush.started_lanes));
         } else {
-            ucs_assertv(!(UCS_BIT(req->send.lane) &
-                          req->send.flush.started_lanes),
-                        "req=%p lane=%d started_lanes=0x%" PRIx64, req,
-                        req->send.lane, req->send.flush.started_lanes);
+            ucs_assertv(UCS_STATIC_BITMAP_GET(req->send.flush.started_lanes,
+                                              req->send.lane) == 0,
+                        "req=%p lane=%d started_lanes=" UCP_LANE_MAP_FMT,
+                        req, req->send.lane,
+                        UCP_LANE_MAP_ARG(&req->send.flush.started_lanes));
 
             /* Only lanes connected to iface can be started/flushed before
              * wireup is done because connect2iface does not create wireup_ep
              * without cm mode */
-            ucs_assertv(!(req->send.flush.started_lanes &
-                          ucp_ep_config(ep)->p2p_lanes),
-                        "req=%p flush started_lanes=0x%" PRIx64
-                        " p2p_lanes=0x%" PRIx64,
-                        req, req->send.flush.started_lanes,
-                        ucp_ep_config(ep)->p2p_lanes);
+            ucs_assertv(UCS_STATIC_BITMAP_IS_ZERO(UCS_STATIC_BITMAP_AND(
+                                                req->send.flush.started_lanes,
+                                                ucp_ep_config(ep)->p2p_lanes)),
+                        "req=%p flush started_lanes=" UCP_LANE_MAP_FMT
+                        " p2p_lanes=" UCP_LANE_MAP_FMT,
+                        req, UCP_LANE_MAP_ARG(&req->send.flush.started_lanes),
+                        UCP_LANE_MAP_ARG(&ucp_ep_config(ep)->p2p_lanes));
         }
 
         ucs_assertv(!req->send.flush.sw_started, "req=%p sw_started=%d", req,
@@ -263,11 +288,12 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
 
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 {
-    ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_lane_index_t lane = req->send.lane;
-    ucp_ep_h ep           = req->send.ep;
+    ucp_request_t *req          = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_lane_index_t lane       = req->send.lane;
+    ucp_ep_h ep                 = req->send.ep;
     ucs_status_t status;
     int completed;
+    ucp_lane_map_t lane_mask;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
@@ -284,9 +310,9 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     ucp_trace_req(req, "flush ep %p lane[%d]=%p: %s", ep, lane,
                   ucp_ep_get_lane(ep, lane), ucs_status_string(status));
     if (status == UCS_OK) {
-        ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
+        ucp_ep_flush_request_update_uct_comp(req, -1, UCP_LANE_MAP_BIT(lane));
     } else if (status == UCS_INPROGRESS) {
-        ucp_ep_flush_request_update_uct_comp(req, 0, UCS_BIT(lane));
+        ucp_ep_flush_request_update_uct_comp(req, 0, UCP_LANE_MAP_BIT(lane));
     } else if (UCS_STATUS_IS_ERR(status) && (status != UCS_ERR_NO_RESOURCE)) {
         ucp_ep_flush_error(req, lane, status);
     }
@@ -299,8 +325,9 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 
     /* If the operation has not completed, and not started on all lanes, add
      * slow-path progress to resume */
+    UCS_STATIC_BITMAP_MASK(&lane_mask, ucp_ep_num_lanes(ep));
     if (!completed &&
-        (req->send.flush.started_lanes != UCS_MASK(ucp_ep_num_lanes(ep)))) {
+        !UCS_STATIC_BITMAP_IS_EQUAL(&req->send.flush.started_lanes, &lane_mask)) {
         ucp_ep_flush_request_resched(ep, req);
     }
 
@@ -350,16 +377,20 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
      * this request from its pending queue
      */
     int num_comps = req->send.flush.num_lanes -
-                    ucs_popcount(req->send.flush.started_lanes);
+                    UCS_STATIC_BITMAP_POPCOUNT(req->send.flush.started_lanes);
+    ucp_lane_map_t lanes;
+    UCS_STATIC_BITMAP_MASK(&lanes, req->send.flush.num_lanes);
 
-    ucp_trace_req(
-            req, "fast-forward flush, comp-=%d num_lanes %d started 0x%" PRIx64,
-            num_comps, req->send.flush.num_lanes,
-            req->send.flush.started_lanes);
+    ucp_trace_req(req,
+                  "fast-forward flush, comp-=%d num_lanes %d started="
+                  UCP_LANE_MAP_FMT, num_comps, req->send.flush.num_lanes,
+                  UCP_LANE_MAP_ARG(&req->send.flush.started_lanes));
 
-    ucp_ep_flush_request_update_uct_comp(req, -num_comps,
-                                         UCS_MASK(req->send.flush.num_lanes) &
-                                         ~req->send.flush.started_lanes);
+    ucp_ep_flush_request_update_uct_comp(
+                    req, -num_comps,
+                    UCS_STATIC_BITMAP_AND(
+                        lanes,
+                        UCS_STATIC_BITMAP_NOT(req->send.flush.started_lanes)));
     uct_completion_update_status(&req->send.state.uct_comp, status);
     ucp_send_request_invoke_uct_completion(req);
 }
@@ -405,12 +436,13 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     req->send.flush.sw_started      = 0;
     req->send.flush.sw_done         = 0;
     req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
-    req->send.flush.started_lanes   = 0;
     req->send.lane                  = UCP_NULL_LANE;
     req->send.uct.func              = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
     req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
     req->send.state.uct_comp.status = UCS_OK;
+
+    UCS_STATIC_BITMAP_RESET_ALL(&req->send.flush.started_lanes);
 
     ucp_request_set_super(req, worker_req);
     ucp_request_set_send_callback_param(param, req, send);
@@ -762,11 +794,11 @@ ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 
-    ucs_assertv(ucs_is_pow2(ep->ext->unflushed_lanes),
-                "ep=%p unflushed_lanes=0x%" PRIx64, ep,
-                ep->ext->unflushed_lanes);
+    ucs_assertv(UCS_STATIC_BITMAP_POPCOUNT(ep->ext->unflushed_lanes) == 1,
+                "ep=%p unflushed_lanes=" UCP_LANE_MAP_FMT,
+                ep, UCP_LANE_MAP_ARG(&ep->ext->unflushed_lanes));
 
-    lane = ucs_ffs64_safe(ep->ext->unflushed_lanes);
+    lane = UCS_STATIC_BITMAP_FFS(ep->ext->unflushed_lanes);
     return uct_ep_fence(ucp_ep_get_lane(ep, lane), 0);
 }
 
@@ -775,9 +807,9 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
     ucs_status_t status;
     void *request;
 
-    ucs_assertv(ep->ext->unflushed_lanes != 0,
-                "ep=%p unflushed_lanes=0x%" PRIx64, ep,
-                ep->ext->unflushed_lanes);
+    ucs_assertv(UCS_STATIC_BITMAP_IS_ZERO(ep->ext->unflushed_lanes),
+                "ep=%p unflushed_lanes=" UCP_LANE_MAP_FMT,
+                ep, UCP_LANE_MAP_ARG(&ep->ext->unflushed_lanes));
 
     request = ucp_ep_flush_internal(ep, 0, &ucp_request_null_param, NULL,
                                     ucp_ep_flushed_callback, "ep_fence_strong",
@@ -787,7 +819,7 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
         return status;
     }
 
-    ep->ext->unflushed_lanes = 0;
-    ep->ext->fence_seq       = ep->worker->fence_seq;
+    UCS_STATIC_BITMAP_RESET_ALL(&ep->ext->unflushed_lanes);
+    ep->ext->fence_seq = ep->worker->fence_seq;
     return UCS_OK;
 }
