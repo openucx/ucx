@@ -1180,6 +1180,25 @@ run_configure_tests() {
 		azure_log_error "some modules were not disabled without verbs"
 		exit 1
 	fi
+
+    if lscpu | grep -q 'x86_64'
+    then
+        ../contrib/configure-release --with-mcpu=generic
+        base_cflags=$(grep ^BASE_CFLAGS config.log)
+        if ! (echo "$base_cflags" | grep -q '\-mcpu=generic')
+        then
+            azure_log_error "error in detecting --with-mcpu"
+            exit 1
+        fi
+
+        ../contrib/configure-release --with-march=x86-64
+        base_cflags=$(grep ^BASE_CFLAGS config.log)
+        if ! (echo "$base_cflags" | grep -q '\-march=x86\-64')
+        then
+            azure_log_error "error in detecting --with-march"
+            exit 1
+        fi
+    fi
 }
 
 #
