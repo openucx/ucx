@@ -278,6 +278,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
     remaining_lane_map = UCS_STATIC_BITMAP_AND(
                                 UCS_STATIC_BITMAP_NOT(remaining_lane_map),
                                 lane_map);
+
     ucs_assertv(!UCS_STATIC_BITMAP_IS_ZERO(remaining_lane_map),
                 "req=%p *lane_p=%d lane_map=" UCP_LANE_MAP_FMT, req,
                 *lane_p, UCP_LANE_MAP_ARG(&lane_map));

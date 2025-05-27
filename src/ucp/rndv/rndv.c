@@ -537,11 +537,9 @@ static ucp_lane_index_t ucp_rndv_zcopy_get_lane(ucp_request_t *rndv_req,
 
 static void ucp_rndv_zcopy_next_lane(ucp_request_t *rndv_req)
 {
-    ucp_lane_map_t lanes_map_all;
+    ucp_lane_map_t lanes_map_all = rndv_req->send.rndv.zcopy.lanes_map_all;
     ucp_lane_map_t lane_map;
 
-    UCS_STATIC_BITMAP_COPY(&lanes_map_all,
-                           rndv_req->send.rndv.zcopy.lanes_map_all);
     UCS_STATIC_BITMAP_MASK(&lane_map, rndv_req->send.multi_lane_idx + 1);
     lane_map = UCS_STATIC_BITMAP_AND(UCS_STATIC_BITMAP_NOT(lane_map),
                                      lanes_map_all);
@@ -725,8 +723,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_put_completion, (self), uct_completion_t *self)
 static void ucp_rndv_req_init_lanes(ucp_request_t *req,
                                     ucp_lane_map_t lanes_map)
 {
-    UCS_STATIC_BITMAP_COPY(&req->send.rndv.zcopy.lanes_map_all, lanes_map);
-    req->send.multi_lane_idx = UCS_STATIC_BITMAP_FFS(lanes_map);
+    req->send.rndv.zcopy.lanes_map_all = lanes_map;
+    req->send.multi_lane_idx           = UCS_STATIC_BITMAP_FFS(lanes_map);
 }
 
 static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,

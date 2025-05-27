@@ -229,7 +229,7 @@ static void ucp_proto_amo_query(const ucp_proto_query_params_t *params,
 
     attr->max_msg_length = SIZE_MAX;
     attr->is_estimation  = 0;
-    UCS_STATIC_BITMAP_COPY(&attr->lane_map, UCP_LANE_MAP_BIT(spriv->super.lane));
+    attr->lane_map       = UCP_LANE_MAP_BIT(spriv->super.lane);
     ucp_proto_common_lane_priv_str(params, &spriv->super, 1, 1, &config_strb);
 }
 

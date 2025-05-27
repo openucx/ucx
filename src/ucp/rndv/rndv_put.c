@@ -331,8 +331,8 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         rpriv.put_comp_cb     = comp_cb;
         rpriv.atp_comp_cb     = NULL;
         rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP;
-        UCS_STATIC_BITMAP_RESET_ALL(&rpriv.flush_map);
-        UCS_STATIC_BITMAP_COPY(&rpriv.atp_map, rpriv.bulk.mpriv.lane_map);
+        rpriv.flush_map       = UCP_LANE_MAP_ZERO_VALUE;
+        rpriv.atp_map         = rpriv.bulk.mpriv.lane_map;
     } else {
         /* Flush all lanes and send ATP on all supporting lanes (or control lane
          * otherwise) */
@@ -341,10 +341,9 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                     ucp_proto_rndv_put_common_flush_completion_send_atp;
             rpriv.atp_comp_cb = comp_cb;
             if (UCS_STATIC_BITMAP_IS_ZERO(atp_map)) {
-                UCS_STATIC_BITMAP_COPY(&rpriv.atp_map,
-                                       UCP_LANE_MAP_BIT(rpriv.bulk.super.lane));
+                rpriv.atp_map = UCP_LANE_MAP_BIT(rpriv.bulk.super.lane);
             } else {
-                UCS_STATIC_BITMAP_COPY(&rpriv.atp_map, atp_map);
+                UCS_STATIC_BITMAP_RESET_ALL(&rpriv.atp_map);
             }
         } else {
             rpriv.put_comp_cb = comp_cb;
@@ -352,7 +351,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
             UCS_STATIC_BITMAP_RESET_ALL(&rpriv.atp_map);
         }
         rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FLUSH;
-        UCS_STATIC_BITMAP_COPY(&rpriv.flush_map, rpriv.bulk.mpriv.lane_map);
+        rpriv.flush_map       = rpriv.bulk.mpriv.lane_map;
         ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(rpriv.flush_map));
     }
 

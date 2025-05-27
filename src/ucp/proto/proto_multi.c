@@ -290,6 +290,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     reg_md_map          = ucp_proto_common_reg_md_map(&params->super,
                                                       selection.lane_map);
     mpriv->reg_md_map   = reg_md_map | params->initial_reg_md_map;
+    mpriv->lane_map     = selection.lane_map;
     mpriv->num_lanes    = 0;
     mpriv->min_frag     = 0;
     mpriv->max_frag_sum = 0;
@@ -298,8 +299,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     perf.min_length     = 0;
     weight_sum          = 0;
     min_end_offset      = 0;
-
-    UCS_STATIC_BITMAP_COPY(&mpriv->lane_map, selection.lane_map);
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(lane, &selection.lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
@@ -504,7 +503,7 @@ void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
     }
 
     ucs_string_buffer_rtrim(&strb, NULL);
-    UCS_STATIC_BITMAP_COPY(&attr->lane_map, mpriv->lane_map);
+    attr->lane_map = mpriv->lane_map;
 }
 
 void ucp_proto_multi_query(const ucp_proto_query_params_t *params,

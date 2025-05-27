@@ -126,8 +126,7 @@ ucp_rndv_rkey_ptr_query_common(const ucp_proto_query_params_t *params,
     ucp_proto_default_query(params, attr);
 
     ucs_assert(rpriv->spriv.super.lane != UCP_NULL_LANE);
-    UCS_STATIC_BITMAP_COPY(&attr->lane_map,
-                           UCP_LANE_MAP_BIT(rpriv->spriv.super.lane));
+    attr->lane_map = UCP_LANE_MAP_BIT(rpriv->spriv.super.lane);
     if (rpriv->ack.lane != UCP_NULL_LANE) {
         UCS_STATIC_BITMAP_SET(&attr->lane_map, rpriv->ack.lane);
     }

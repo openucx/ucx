@@ -221,19 +221,6 @@ BEGIN_C_DECLS
 
 
 /**
- * Compare two bitmaps
- *
- * @param [in] bitmap1   First bitmap to compare.
- * @param [in] bitmap2   Second bitmap to compare.
- *
- * @return Nonzero if the bitmaps are equal, zero if they are different.
- */
-#define UCS_STATIC_BITMAP_IS_EQUAL(_bitmap1_ptr, _bitmap2_ptr) \
-    ucs_bitmap_bits_is_equal(UCS_STATIC_BITMAP_BITS_CARGS(_bitmap1_ptr), \
-                             UCS_STATIC_BITMAP_BITS_CARGS(_bitmap2_ptr))
-
-
-/**
  * Copy from one bitmap to another. Destination size must be at least the source
  * size.
  *
@@ -244,6 +231,19 @@ BEGIN_C_DECLS
     UCS_STATIC_BITMAP_FUNC_CALL(UCS_PP_UNIQUE_ID, _src_bitmap, \
                                 ucs_bitmap_bits_copy, \
                                 UCS_STATIC_BITMAP_BITS_ARGS(_dst_bitmap_ptr))
+
+
+/**
+ * Compare two bitmaps
+ *
+ * @param [in] bitmap1   First bitmap to compare.
+ * @param [in] bitmap2   Second bitmap to compare.
+ *
+ * @return Nonzero if the bitmaps are equal, zero if they are different.
+ */
+#define UCS_STATIC_BITMAP_IS_EQUAL(_bitmap1_ptr, _bitmap2_ptr) \
+    ucs_bitmap_bits_is_equal(UCS_STATIC_BITMAP_BITS_CARGS(_bitmap1_ptr), \
+                             UCS_STATIC_BITMAP_BITS_CARGS(_bitmap2_ptr))
 
 
 /**

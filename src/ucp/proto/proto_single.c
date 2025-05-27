@@ -98,5 +98,5 @@ void ucp_proto_single_query(const ucp_proto_query_params_t *params,
 
     ucp_proto_default_query(params, attr);
     ucp_proto_common_lane_priv_str(params, &spriv->super, 1, 1, &config_strb);
-    UCS_STATIC_BITMAP_COPY(&attr->lane_map, UCP_LANE_MAP_BIT(spriv->super.lane));
+    attr->lane_map = UCP_LANE_MAP_BIT(spriv->super.lane);
 }

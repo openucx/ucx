@@ -468,8 +468,7 @@ ucp_proto_rndv_rtr_mtype_query(const ucp_proto_query_params_t *params,
 
     attr->is_estimation  = 1;
     attr->max_msg_length = remote_attr.max_msg_length;
-    UCS_STATIC_BITMAP_COPY(&attr->lane_map,
-                           UCP_LANE_MAP_BIT(rpriv->super.super.lane));
+    attr->lane_map       = UCP_LANE_MAP_BIT(rpriv->super.super.lane);
     ucp_proto_rndv_mtype_query_desc(params, rpriv->frag_mem_type, attr,
                                     remote_attr.desc);
     ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));
