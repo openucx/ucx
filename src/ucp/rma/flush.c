@@ -34,8 +34,7 @@ ucp_ep_flush_request_update_uct_comp(ucp_request_t *req, int diff,
 
     ucp_trace_req(req,
                   "flush update ep %p comp_count %d->%d num_lanes %d->%d "
-                  "started_lanes " UCP_LANE_MAP_FMT "->" 
-                  UCP_LANE_MAP_FMT,
+                  "started_lanes " UCP_LANE_MAP_FMT "->" UCP_LANE_MAP_FMT,
                   req->send.ep, req->send.state.uct_comp.count,
                   req->send.state.uct_comp.count + diff,
                   req->send.flush.num_lanes, ucp_ep_num_lanes(req->send.ep),
@@ -91,8 +90,8 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     diff = num_lanes - req->send.flush.num_lanes;
     if (ucs_unlikely(diff != 0)) {
         if (diff > 0) {
-            ucp_ep_flush_request_update_uct_comp(
-                                req, diff, UCP_LANE_MAP_ZERO_INITIALIZER);
+            ucp_ep_flush_request_update_uct_comp(req, diff,
+                                                 UCP_LANE_MAP_ZERO_VALUE);
         } else {
             /* Some lanes that we wanted to flush were destroyed. If we already
                started to flush them, they would be completed by discard flow,
@@ -106,7 +105,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                     UCS_STATIC_BITMAP_NOT(req->send.flush.started_lanes));
             ucp_ep_flush_request_update_uct_comp(
                     req, -UCS_STATIC_BITMAP_POPCOUNT(destroyed_lanes),
-                    UCP_LANE_MAP_ZERO_INITIALIZER);
+                    UCP_LANE_MAP_ZERO_VALUE);
         }
 
         req->send.flush.num_lanes = num_lanes;
@@ -200,8 +199,8 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                 ucs_hlist_add_tail(&flush_state->reqs, &req->send.list);
                 ucp_trace_req(req,
                               "flush ep %p add request to ep remote completion "
-                              "queue with sn %d started_lanes=" UCP_LANE_MAP_FMT,
-                              ep, req->send.flush.cmpl_sn,
+                              "queue with sn %d started_lanes="
+                              UCP_LANE_MAP_FMT, ep, req->send.flush.cmpl_sn,
                               UCP_LANE_MAP_ARG(&req->send.flush.started_lanes));
             }
         }

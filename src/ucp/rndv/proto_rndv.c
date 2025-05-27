@@ -508,7 +508,7 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
                                             UCP_LANE_TYPE_AM,
                                             UCS_MEMORY_TYPE_UNKNOWN,
                                             UCT_IFACE_FLAG_AM_BCOPY, 1,
-                                            UCP_LANE_MAP_ZERO_INITIALIZER,
+                                            UCP_LANE_MAP_ZERO_VALUE,
                                             &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s",

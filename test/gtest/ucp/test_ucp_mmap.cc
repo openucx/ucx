@@ -293,7 +293,7 @@ bool test_ucp_mmap::resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey)
 
     lane = ucp_rkey_find_rma_lane(e->ucph(), ep_config, UCS_MEMORY_TYPE_HOST,
                                   ep_config->rndv.get_zcopy.lanes, rkey,
-                                  UCP_LANE_MAP_ZERO_INITIALIZER,
+                                  UCP_LANE_MAP_ZERO_VALUE,
                                   &uct_rkey);
     if (lane != UCP_NULL_LANE) {
         return true;
@@ -310,7 +310,7 @@ bool test_ucp_mmap::resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey)
 
     lane = ucp_rkey_find_rma_lane(e->ucph(), ep_config, UCS_MEMORY_TYPE_HOST,
                                   ep_config->rndv.put_zcopy.lanes, rkey,
-                                  UCP_LANE_MAP_ZERO_INITIALIZER,
+                                  UCP_LANE_MAP_ZERO_VALUE,
                                   &uct_rkey);
     if (lane != UCP_NULL_LANE) {
         return true;

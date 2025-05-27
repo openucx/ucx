@@ -146,8 +146,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   ucp_proto_perf_t **perf_p,
                                   ucp_proto_multi_priv_t *mpriv)
 {
-    ucp_context_h context         = params->super.super.worker->context;
-    const double max_bw_ratio     = context->config.ext.multi_lane_max_ratio;
+    ucp_context_h context     = params->super.super.worker->context;
+    const double max_bw_ratio = context->config.ext.multi_lane_max_ratio;
     ucp_proto_perf_node_t *lanes_perf_nodes[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t *lanes_perf;
     ucp_proto_common_tl_perf_t *lane_perf, perf;
@@ -183,7 +183,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     /* Find first lane */
     num_lanes = ucp_proto_common_find_lanes_with_min_frag(
             &params->super, params->first.lane_type, params->first.tl_cap_flags,
-            1, UCP_LANE_MAP_ZERO_INITIALIZER, lanes);
+            1, UCP_LANE_MAP_ZERO_VALUE, lanes);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s",
                   ucp_proto_id_field(params->super.super.proto_id, name));

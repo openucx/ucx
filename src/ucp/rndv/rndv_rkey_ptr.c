@@ -272,7 +272,7 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
         .super.exclude_map   = (rkey_ptr_lane == UCP_NULL_LANE) ?
-                               UCP_LANE_MAP_ZERO_INITIALIZER :
+                               UCP_LANE_MAP_ZERO_VALUE :
                                UCP_LANE_MAP_BIT(rkey_ptr_lane),
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_LAST,

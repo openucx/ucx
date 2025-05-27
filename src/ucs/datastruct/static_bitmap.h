@@ -129,6 +129,20 @@ BEGIN_C_DECLS
         _r_##_uid; \
     })
 
+    
+/**
+ * Return a bitmap with all bits set to 0.
+ *
+ * @param _bitmap_type Type of the static bitmap to return.
+ *
+ * @return Bitmap with all bits set to 0.
+ */
+#define UCS_STATIC_BITMAP_ZERO_VALUE(_bitmap_type) \
+    ({ \
+        _bitmap_type _r_##_uid = UCS_STATIC_BITMAP_ZERO_INITIALIZER; \
+        _r_##_uid; \
+    })
+
 
 /**
  * Set a bit in the bitmap to 0.

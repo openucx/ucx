@@ -1090,7 +1090,7 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *freq,
                                     rreq->recv.dt_iter.mem_info.type, length,
                                     ucp_rndv_progress_rma_put_zcopy);
 
-    ucp_rndv_req_init(freq, rreq, UCP_LANE_MAP_ZERO_INITIALIZER, NULL,
+    ucp_rndv_req_init(freq, rreq, UCP_LANE_MAP_ZERO_VALUE, NULL,
                       (uintptr_t)UCS_PTR_BYTE_OFFSET(
                               rreq->recv.dt_iter.type.contig.buffer, offset));
 

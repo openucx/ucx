@@ -273,13 +273,13 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         .opt_align_offs      = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.opt_zcopy_align),
     };
+    ucp_lane_map_t atp_map = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane_idx, lane;
     ucp_proto_rndv_put_priv_t rpriv;
     int send_atp, use_fence;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
-    ucp_lane_map_t atp_map = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
