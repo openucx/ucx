@@ -213,7 +213,6 @@ ucp_memh_get_or_update(ucp_context_h context, void *address, size_t length,
         goto out;
     }
 
-    ucs_assert((*memh_p)->parent == NULL);
     ucs_assert((context->rcache == NULL) ||
                ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
 
