@@ -58,13 +58,6 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
     return ep->remote_pid == *(pid_t*)params->iface_addr;
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_cuda_primary_ctx_pop_and_release(CUdevice cuda_device)
-{
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(
         uct_cuda_ipc_iface_t *iface, uct_cuda_ipc_ctx_rsc_t **ctx_rsc_p)
 {
