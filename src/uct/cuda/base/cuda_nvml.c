@@ -23,6 +23,7 @@
 
 #define UCT_CUDA_NVML_FOR_EACH_EXT(_macro) \
     _macro(nvmlInit_v2); \
+    _macro(nvmlShutdown); \
     UCT_CUDA_NVML_FOR_EACH(_macro)
 
 #if HAVE_NVML_FABRIC_INFO
@@ -39,7 +40,7 @@
 #define UCT_CUDA_NVML_FPTR_LOAD(_func, _fail_action) \
     do { \
         UCT_CUDA_NVML_FPTR( \
-                _func) = uct_cuda_nvml_dlsym(handle, \
+                _func) = uct_cuda_nvml_dlsym(lib_handle, \
                                              UCS_PP_MAKE_STRING(_func)); \
         if (UCT_CUDA_NVML_FPTR(_func) == NULL) { \
             _fail_action; \
@@ -50,7 +51,8 @@
     _macro(nvmlInit_v2, _fail_action); \
     _macro(nvmlDeviceGetHandleByIndex, _fail_action); \
     _macro(nvmlDeviceGetFieldValues, _fail_action); \
-    _macro(nvmlDeviceGetNvLinkRemotePciInfo, _fail_action)
+    _macro(nvmlDeviceGetNvLinkRemotePciInfo, _fail_action); \
+    _macro(nvmlShutdown, _fail_action)
 
 #define UCT_CUDA_NVML_FPTR_CALL(_func, ...) \
     ({ \
@@ -95,7 +97,9 @@
     }
 
 
-static pthread_mutex_t uct_cuda_nvml_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t uct_cuda_nvml_mutex    = PTHREAD_MUTEX_INITIALIZER;
+static ucs_status_t uct_cuda_nvml_init_status = UCS_ERR_LAST;
+static void *lib_handle                       = NULL;
 
 UCT_CUDA_NVML_FOR_EACH_EXT(UCT_CUDA_NVML_FPTR_DECL);
 
@@ -143,16 +147,14 @@ static void *uct_cuda_nvml_dlsym(void *handle, const char *name)
 
 static ucs_status_t uct_cuda_nvml_init()
 {
-    static ucs_status_t uct_cuda_nvml_init_status = UCS_ERR_LAST;
-    void *handle;
     const char *error;
 
     if (uct_cuda_nvml_init_status != UCS_ERR_LAST) {
         goto out;
     }
 
-    handle = dlopen(UCT_CUDA_NVML_LIB_NAME, UCT_CUDA_NVML_LIB_MODE);
-    if (handle == NULL) {
+    lib_handle = dlopen(UCT_CUDA_NVML_LIB_NAME, UCT_CUDA_NVML_LIB_MODE);
+    if (lib_handle == NULL) {
         error = dlerror();
         ucs_debug("dlopen('%s', mode=0x%x) failed: %s", UCT_CUDA_NVML_LIB_NAME,
                   UCT_CUDA_NVML_LIB_MODE, error ? error : "unknown error");
@@ -181,12 +183,11 @@ static ucs_status_t uct_cuda_nvml_init()
     }
 
 err_dlclose:
-    dlclose(handle);
+    dlclose(lib_handle);
 err:
     uct_cuda_nvml_init_status = UCS_ERR_IO_ERROR;
     ucs_diag("failed to initialize nvml");
 out:
-    /* coverity[leaked_storage] */
     return uct_cuda_nvml_init_status;
 }
 
@@ -196,3 +197,10 @@ UCT_CUDA_NVML_FOR_EACH(UCT_CUDA_NVML_WRAP_IMPL)
 UCT_CUDA_NVML_WRAP_IMPL(nvmlDeviceGetGpuFabricInfoV, nvmlDevice_t,
                         nvmlGpuFabricInfoV_t*)
 #endif
+
+UCS_STATIC_CLEANUP {
+    if (uct_cuda_nvml_init_status == UCS_OK) {
+        UCT_CUDA_NVML_CALL_DEBUG(nvmlShutdown);
+        dlclose(lib_handle);
+    }
+}
