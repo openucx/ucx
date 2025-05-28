@@ -10,7 +10,7 @@
 
 #include <ucm/bistro/bistro.h>
 #include <ucs/datastruct/list.h>
-#include <ucs/sys/preprocessor_func.h>
+#include <ucs/sys/preprocessor.h>
 #include <ucs/type/status.h>
 #include <pthread.h>
 

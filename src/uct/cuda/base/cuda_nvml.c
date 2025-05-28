@@ -12,7 +12,7 @@
 
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log_def.h>
-#include <ucs/sys/preprocessor_func.h>
+#include <ucs/sys/preprocessor.h>
 
 #include <stddef.h>
 #include <dlfcn.h>

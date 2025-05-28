@@ -17,7 +17,7 @@
 #include <ucm/util/replace.h>
 #include <ucm/util/sys.h>
 #include <ucs/sys/compiler.h>
-#include <ucs/sys/preprocessor_func.h>
+#include <ucs/sys/preprocessor.h>
 
 #include <sys/mman.h>
 #include <string.h>
