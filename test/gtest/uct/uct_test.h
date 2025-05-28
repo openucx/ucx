@@ -420,6 +420,8 @@ protected:
     static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
                                   struct sockaddr *connect_addr, size_t size,
                                   bool init_src);
+    bool is_srq_msg_based() const;
+
     uct_test::entity *
     create_entity(size_t rx_headroom, uct_error_handler_t err_handler = NULL,
                   uct_tag_unexp_eager_cb_t eager_cb = NULL,
