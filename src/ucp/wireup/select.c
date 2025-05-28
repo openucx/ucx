@@ -2744,7 +2744,6 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                          select_ctx);
         if (status == UCS_OK) {
-            ucs_free(select_ctx);
             goto out;
         }
 
@@ -2758,16 +2757,14 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                      select_ctx);
     if (status != UCS_OK) {
-        ucs_free(select_ctx);
-        return status;
+        goto out_err;
     }
 
 out:
     status = ucp_wireup_construct_lanes(&select_params, select_ctx,
                                         addr_indices, key);
     if (status != UCS_OK) {
-        ucs_free(select_ctx);
-        return status;
+        goto out_err;
     }
 
     /* Only two lanes must be created during CM phase (CM lane and TL lane) of
@@ -2777,8 +2774,9 @@ out:
                                    UCP_EP_INIT_CM_PHASE) ||
                (key->num_lanes == 2));
 
+out_err:
     ucs_free(select_ctx);
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t
@@ -2798,6 +2796,7 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
         return UCS_ERR_NO_MEMORY;
     }
 
+    ucp_wireup_select_context_init(select_ctx);
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                   remote_address, tl_bitmap, 1);
 

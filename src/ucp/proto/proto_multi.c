@@ -196,7 +196,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
             params->middle.tl_cap_flags, UCP_PROTO_MAX_LANES - 1,
             UCP_LANE_MAP_BIT(lanes[0]), lanes + 1);
 
-    lanes_perf = ucs_malloc(num_lanes * sizeof(*lanes_perf), "lanes_perf");
+    lanes_perf = ucs_malloc(UCP_PROTO_MAX_LANES * sizeof(*lanes_perf),
+                            "lanes_perf");
     if (lanes_perf == NULL) {
         ucs_error("failed to allocate lanes_perf");
         return UCS_ERR_NO_MEMORY;
