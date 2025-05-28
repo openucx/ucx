@@ -198,7 +198,8 @@ UCT_CUDA_NVML_WRAP_IMPL(nvmlDeviceGetGpuFabricInfoV, nvmlDevice_t,
                         nvmlGpuFabricInfoV_t*)
 #endif
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP
+{
     if (uct_cuda_nvml_init_status == UCS_OK) {
         UCT_CUDA_NVML_CALL_DEBUG(nvmlShutdown);
         dlclose(lib_handle);
