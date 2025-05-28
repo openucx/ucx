@@ -198,6 +198,14 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     const double ss_factor         = zcopy ? 1 : 0.95;
     uct_ppn_bandwidth_t bandwidth  = {};
 
+    if ((src_mem_type == UCS_MEMORY_TYPE_HOST) &&
+        (dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
+        ucs_trace("src_mem_type:%s to dst_mem_type:%s is not supported",
+                  ucs_memory_type_names[src_mem_type],
+                  ucs_memory_type_names[dst_mem_type]);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if (uct_perf_attr_has_bandwidth(perf_attr->field_mask)) {
         if (uct_ep_op_is_fetch(op)) {
             ucs_swap(&src_mem_type, &dst_mem_type);
