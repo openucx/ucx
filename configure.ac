@@ -14,8 +14,6 @@ define([ucx_ver_minor], 20) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
-define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
-
 # This is the API version (see libtool library versioning)
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
 # current:rev:age
