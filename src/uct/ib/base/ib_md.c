@@ -1332,9 +1332,12 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         uct_ib_check_gpudirect_driver(
                 md, "/sys/module/nv_peer_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
-        uct_ib_check_gpudirect_driver(
-                md, "/sys/module/efa_nv_peermem/version",
-                UCS_MEMORY_TYPE_CUDA);
+
+        if (!strcmp(md->name, UCT_IB_MD_NAME(efa))) {
+            uct_ib_check_gpudirect_driver(
+                    md, "/sys/module/efa_nv_peermem/version",
+                    UCS_MEMORY_TYPE_CUDA);
+        }
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
@@ -1526,6 +1529,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     }
 
     md->super.ops = &uct_ib_verbs_md_ops.super;
+    md->name      = UCT_IB_MD_NAME(verbs);
 
     dev->mr_access_flags       = UCT_IB_MEM_ACCESS_FLAGS;
     dev->max_inline_data       = 4 * UCS_KBYTE;
@@ -1538,7 +1542,6 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     }
 
     md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
-    md->name       = UCT_IB_MD_NAME(verbs);
     md->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
     uct_ib_md_ece_check(md);
