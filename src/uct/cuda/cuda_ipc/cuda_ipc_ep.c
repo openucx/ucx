@@ -68,7 +68,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(
 
     result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
     if (ucs_unlikely(result != CUDA_SUCCESS)) {
-        UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
+        UCT_CUDA_LOG(UCS_LOG_LEVEL_ERROR, cuCtxGetId, result);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -154,15 +154,15 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     src = (CUdeviceptr)
         ((direction == UCT_CUDA_IPC_PUT) ? iov[0].buffer : mapped_rem_addr);
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyDtoDAsync(dst, src, iov[0].length,
-                                                        *stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cuMemcpyDtoDAsync, dst, src, iov[0].length,
+                                   *stream);
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         goto out;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_ipc_event->super.event,
-                                                    *stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cuEventRecord, cuda_ipc_event->super.event,
+                                   *stream);
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         goto out;
