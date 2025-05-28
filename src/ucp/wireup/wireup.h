@@ -48,6 +48,8 @@ enum {
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_REPLY_RECONFIG,
+    UCP_WIREUP_MSG_ADDR_REQUEST,
+    UCP_WIREUP_MSG_ADDR_REPLY,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -206,9 +208,10 @@ int ucp_wireup_connect_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                            int has_cm_lane);
 
 ucs_status_t
-ucp_wireup_connect_local(ucp_ep_h ep,
+ucp_wireup_connect_local(ucp_ep_h ep, uint64_t lanes_bitmap,
                          const ucp_unpacked_address_t *remote_address,
-                         const ucp_lane_index_t *lanes2remote);
+                         const ucp_lane_index_t *lanes2remote,
+                         const unsigned *addr_indices);
 
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 
@@ -223,6 +226,8 @@ double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 
 int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *addr_entry);
+
+uct_ep_h ucp_wireup_init_slow_lane(ucp_ep_h ep, ucp_lane_index_t slow_lane_idx);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {
