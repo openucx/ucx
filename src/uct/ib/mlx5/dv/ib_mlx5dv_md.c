@@ -2417,6 +2417,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     }
 
     md->super.super.ops = &uct_ib_mlx5_devx_md_ops.super;
+    md->super.name      = UCT_IB_MD_NAME(mlx5);
 
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {
@@ -2447,7 +2448,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     dev->flags          |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags           |= UCT_IB_MLX5_MD_FLAG_DEVX;
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
-    md->super.name       = UCT_IB_MD_NAME(mlx5);
     md->super.vhca_id    = vhca_id;
     md->super.uuid       = ucs_generate_uuid((uintptr_t)md);
 
@@ -3227,6 +3227,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     md->super.super.ops  = &uct_ib_mlx5_md_ops.super;
     md->max_rd_atomic_dc = IBV_DEV_ATTR(dev, max_qp_rd_atom);
+    md->super.name       = UCT_IB_MD_NAME(mlx5);
     status               = uct_ib_md_open_common(&md->super, ibv_device,
                                                  md_config);
     if (status != UCS_OK) {
@@ -3234,7 +3235,6 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     }
 
     dev->flags    |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
-    md->super.name = UCT_IB_MD_NAME(mlx5);
 
     uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
