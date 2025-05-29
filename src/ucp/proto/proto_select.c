@@ -16,6 +16,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/dt/dt.h>
 #include <ucs/datastruct/dynamic_bitmap.h>
+#include <ucs/datastruct/static_bitmap.h>
 
 #include <ucp/core/ucp_worker.inl>
 
@@ -411,7 +412,7 @@ static ucp_lane_map_t
 ucp_proto_select_get_lane_map(ucp_worker_h worker,
                               const ucp_proto_select_elem_t *select_elem)
 {
-    ucp_lane_map_t lane_map = 0;
+    ucp_lane_map_t lane_map = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     size_t range_start, range_end;
     ucp_proto_query_attr_t query_attr;
 
@@ -423,7 +424,7 @@ ucp_proto_select_get_lane_map(ucp_worker_h worker,
                                     &query_attr);
 
         range_end = query_attr.max_msg_length;
-        lane_map |= query_attr.lane_map;
+        UCS_STATIC_BITMAP_OR_INPLACE(&lane_map, query_attr.lane_map);
     } while (range_end != SIZE_MAX);
 
     return lane_map;
@@ -438,16 +439,16 @@ ucp_proto_select_wiface_activate(ucp_worker_h worker,
                                  const ucp_proto_select_elem_t *select_elem,
                                  ucp_worker_cfg_index_t ep_cfg_index)
 {
-    ucp_ep_config_t *ep_config;
-    ucp_lane_map_t lane_map;
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, ep_cfg_index);
+    ucp_lane_map_t lane_map    = ucp_proto_select_get_lane_map(worker, select_elem);
 
-    ep_config = ucp_worker_ep_config(worker, ep_cfg_index);
-    lane_map  = ucp_proto_select_get_lane_map(worker, select_elem) &
-                ~ep_config->proto_lane_map;
+    UCS_STATIC_BITMAP_AND_INPLACE(&lane_map,
+                                  UCS_STATIC_BITMAP_NOT(ep_config->proto_lane_map));
+
     ucp_wiface_process_for_each_lane(worker, ep_config, lane_map,
                                      ucp_worker_iface_progress_ep);
 
-    ep_config->proto_lane_map |= lane_map;
+    UCS_STATIC_BITMAP_OR_INPLACE(&ep_config->proto_lane_map, lane_map);
 }
 
 static ucs_status_t
