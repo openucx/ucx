@@ -754,6 +754,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     ucs_sys_dev_distance_t *lanes_distance;
     ucp_rkey_config_key_t rkey_config_key;
     khiter_t khiter;
+    ucs_status_t status;
 
     /* Avoid calling ucp_ep_resolve_remote_id() from rkey_unpack, and let
      * the APIs which are not yet using new protocols resolve the remote key
@@ -781,11 +782,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
         return UCS_OK;
     }
 
-    lanes_distance = ucs_alloca(sizeof(*lanes_distance) * UCP_MAX_LANES);
+    lanes_distance = ucs_malloc(sizeof(*lanes_distance) * UCP_MAX_LANES,
+                                "lanes_distance");
+    if (lanes_distance == NULL) {
+        ucs_error("failed to allocate lanes_distance");
+        return UCS_ERR_NO_MEMORY;
+    }
+
     ucp_rkey_unpack_lanes_distance(&ucp_ep_config(ep)->key, lanes_distance, p,
                                    buffer_end);
-    return ucp_worker_add_rkey_config(worker, &rkey_config_key, lanes_distance,
+    status = ucp_worker_add_rkey_config(worker, &rkey_config_key, lanes_distance,
                                       &rkey->cfg_index);
+    ucs_free(lanes_distance);
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
