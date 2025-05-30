@@ -151,9 +151,12 @@ static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 {
+    /* invalidate struct is in union with rkey */
+    ucs_assert(!ucp_request_is_invalidated(req));
     ucs_assert(req->send.rndv.rkey != NULL);
     ucp_rkey_destroy(req->send.rndv.rkey);
     req->send.rndv.rkey = NULL;
+    req->flags &= ~UCP_REQUEST_FLAG_RNDV_RKEY_VALID;
 }
 
 static UCS_F_ALWAYS_INLINE void

@@ -291,6 +291,7 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         freq->send.rndv.remote_address = req->send.rndv.remote_address +
                                          req->send.state.dt_iter.offset;
         freq->send.rndv.rkey           = req->send.rndv.rkey;
+        freq->flags                   |= UCP_REQUEST_FLAG_RNDV_RKEY_VALID;
         freq->send.rndv.offset         = req->send.rndv.offset +
                                          req->send.state.dt_iter.offset;
 

@@ -333,7 +333,7 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
     ucp_send_request_id_release(req);
     ucp_request_set_callback(req, send.cb,
                              ucp_proto_rndv_rtr_mtype_complete_abort);
-    if (req->send.rndv.rkey != NULL) {
+    if (!ucp_request_is_invalidated(req) && (req->send.rndv.rkey != NULL)) {
         ucp_proto_rndv_rkey_destroy(req);
     }
 
