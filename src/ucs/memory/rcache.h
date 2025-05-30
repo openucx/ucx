@@ -72,7 +72,6 @@ enum {
 
 
 extern ucs_config_field_t ucs_config_rcache_table[];
-typedef void (*ucs_rcache_invalidate_comp_func_t)(void *arg);
 
 
 /*
@@ -174,7 +173,6 @@ struct ucs_rcache_region {
     ucs_pgt_region_t       super;     /**< Base class - page table region */
     ucs_list_link_t        lru_list;  /**< LRU list element */
     ucs_list_link_t        tmp_list;  /**< Temp list element */
-    ucs_list_link_t        comp_list; /**< Completion list element */
     size_t                 alignment;
     volatile uint32_t      refcount;  /**< Reference count, including +1 if it's
                                            in the page table */
@@ -260,15 +258,9 @@ void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region);
   *
   * @param [in] rcache    Memory registration cache.
   * @param [in] region    Memory region to invalidate.
-  * @param [in] cb        Completion callback, is called when region is
-  *                       released. Callback cannot do any operations which may
-  *                       access the rcache.
-  * @param [in] arg       Completion argument passed to completion callback.
   */
 void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
-                                  ucs_rcache_region_t *region,
-                                  ucs_rcache_invalidate_comp_func_t cb,
-                                  void *arg);
+                                  ucs_rcache_region_t *region);
 
 
 /**
