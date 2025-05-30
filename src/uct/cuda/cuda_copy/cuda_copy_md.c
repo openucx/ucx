@@ -851,7 +851,7 @@ out_default_range:
 static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
 {
 #if CUDA_VERSION >= 11070
-    PFN_cuMemGetHandleForAddressRange get_handle_func;
+    PFN_cuMemGetHandleForAddressRange_v11070 get_handle_func;
     CUresult cu_err;
     int fd;
 
