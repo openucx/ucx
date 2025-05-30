@@ -34,6 +34,9 @@ typedef struct uct_mm_ep {
        it is not always updated with the actual remote tail value */
     uint64_t                   cached_tail;
 
+    /* the sender's reserved slot in the receiver's FIFO */
+    uint64_t                   reserved_head;
+
     /* mapped remote memory chunks to which remote descriptors belong to.
      * (after attaching to them) */
     khash_t(uct_mm_remote_seg) remote_segs;
