@@ -135,7 +135,6 @@ typedef struct {
     pid_t                     pid;     /* PID as key to resolve peer_map hash */
     CUdeviceptr               d_bptr;  /* Allocation base address */
     size_t                    b_len;   /* Allocation size */
-    int                       dev_num; /* GPU Device number */
     CUuuid                    uuid;    /* GPU Device UUID */
 } uct_cuda_ipc_rkey_t;
 
