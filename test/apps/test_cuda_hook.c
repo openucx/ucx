@@ -14,6 +14,16 @@
 #include <getopt.h>
 #include <cuda.h>
 
+#define SIZE 4096
+
+#define CUDA_CHECK(_func, _action) \
+    do { \
+        CUresult _err = (_func); \
+        if (_err != CUDA_SUCCESS) { \
+            printf("%s failed: %d\n", #_func, _err); \
+            _action; \
+        } \
+    } while (0)
 
 static void event_cb(ucm_event_type_t event_type, ucm_event_t *event, void *arg)
 {
@@ -40,31 +50,20 @@ static void alloc_driver_api()
     CUdeviceptr dptr = 0;
     CUcontext context;
     CUdevice device;
-    CUresult res;
 
-    res = cuInit(0);
-    if (res != CUDA_SUCCESS) {
-        printf("cuInit() failed: %d\n", res);
-        return;
-    }
+    CUDA_CHECK(cuInit(0), return);
+    CUDA_CHECK(cuDeviceGet(&device, 0), return);
+    CUDA_CHECK(cuDevicePrimaryCtxRetain(&context, device), return);
+    CUDA_CHECK(cuCtxPushCurrent(context), goto out_ctx_release);
 
-    res = cuDeviceGet(&device, 0);
-    if (res != CUDA_SUCCESS) {
-        printf("cuDeviceGet(0) failed: %d\n", res);
-        return;
-    }
+    CUDA_CHECK(cuMemAlloc(&dptr, SIZE), goto out_ctx_pop);
+    printf("cuMemAlloc() returned 0x%lx\n", (uintptr_t)dptr);
+    CUDA_CHECK(cuMemFree(dptr), );
 
-    res = cuCtxCreate(&context, 0, device);
-    if (res != CUDA_SUCCESS) {
-        printf("cuCtxCreate() failed: %d\n", res);
-        return;
-    }
-
-    res = cuMemAlloc(&dptr, 4096);
-    printf("cuMemAlloc() returned 0x%lx result %d\n", (uintptr_t)dptr, res);
-    cuMemFree(dptr);
-
-    cuCtxDestroy(context);
+out_ctx_pop:
+    CUDA_CHECK(cuCtxPopCurrent(NULL), );
+out_ctx_release:
+    CUDA_CHECK(cuDevicePrimaryCtxRelease(device), );
 }
 
 static void alloc_runtime_api()
@@ -72,8 +71,13 @@ static void alloc_runtime_api()
     void *dptr = NULL;
     cudaError_t res;
 
-    res = cudaMalloc(&dptr, 4096);
-    printf("cudaMalloc() returned %p result %d\n", dptr, res);
+    res = cudaMalloc(&dptr, SIZE);
+    if (res != cudaSuccess) {
+        printf("cudaMalloc() failed: %d\n", res);
+        return;
+    }
+
+    printf("cudaMalloc() returned %p\n", dptr);
     cudaFree(dptr);
 }
 
