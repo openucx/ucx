@@ -433,6 +433,10 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
                                unsigned mem_flags, size_t memh_base_size,
                                size_t mr_size, uct_ib_mem_t **memh_p);
 
+void uct_ib_check_gpudirect_driver(uct_ib_md_t *md,
+                                   const char *file,
+                                   ucs_memory_type_t mem_type);
+
 static UCS_F_ALWAYS_INLINE size_t
 uct_ib_memh_alloc_size(uct_ib_md_t *md, size_t memh_base_size, size_t mr_size)
 {
