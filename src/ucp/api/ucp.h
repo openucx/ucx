@@ -2747,6 +2747,28 @@ ucs_status_ptr_t ucp_ep_flush_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 
 /**
  * @ingroup UCP_ENDPOINT
+ *
+ * @brief Ensures ordering between non-blocking RMA operations on the @ref
+ * ucp_ep_h "endpoint".
+ *
+ * This routine ensures ordering of non-blocking RMA communication operations on
+ * the @ref ucp_ep_h "endpoint". RMA operations issued on the @a ep prior
+ * to this call are guaranteed to be completed before any RMA operations
+ * issued on the same endpoint after this call.
+ *
+ * @note This call only ensures ordering and does not guarantee completion of
+ * the operations. For a detailed comparison between fence and flush, please see
+ * @ref ucp_worker_fence.
+ *
+ * @param [in] ep UCP endpoint.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_fence(ucp_ep_h ep);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
  * @brief Estimate performance characteristics of a specific endpoint.
  *
  * This routine fetches information about the endpoint.
@@ -3994,20 +4016,22 @@ ucs_status_t ucp_dt_query(ucp_datatype_t datatype, ucp_datatype_attr_t *attr);
 /**
  * @ingroup UCP_WORKER
  *
- * @brief Assures ordering between non-blocking operations
+ * @brief Ensures ordering between non-blocking operations on the @ref
+ * ucp_worker_h "UCP worker".
  *
  * This routine ensures ordering of non-blocking communication operations on
- * the @ref ucp_worker_h "UCP worker". Communication operations issued on a
- * particular endpoint created on the @a worker prior to this call are
- * guaranteed to be completed before any communication operations issued on the
- * same endpoint after this call.
+ * the @ref ucp_worker_h "UCP worker". Communication operations issued on any
+ * endpoint associated with the @a worker prior to this call are guaranteed to
+ * be ordered before any communication operations issued on the same endpoint
+ * after this call.
  *
- * @note The primary difference between @ref ucp_worker_fence "ucp_worker_fence()"
- * and the @ref ucp_worker_flush_nb "ucp_worker_flush_nb()" is the fact the fence
- * routine does not guarantee completion of the operations on the call return but
- * only ensures the order between communication operations. The
- * @ref ucp_worker_flush_nb "flush" operation on return guarantees that all
- * operations are completed and corresponding memory regions were updated.
+ * @note The primary difference between @ref ucp_worker_fence
+ * "ucp_worker_fence()" and the @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
+ * is the fact the fence routine does not guarantee completion of the operations
+ * on the call return but only ensures the order between communication
+ * operations. The @ref ucp_worker_flush_nb "flush" operation on return
+ * guarantees that all operations are completed and corresponding memory regions
+ * were updated.
  *
  * @param [in] worker        UCP worker.
  *
