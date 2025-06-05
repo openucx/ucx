@@ -1499,9 +1499,9 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     ucs_assert_always(uct_ib_device_is_port_roce(dev, port_num));
 
     /* get the network device name which corresponds to a RoCE port */
-    nread = ucs_read_file_str(ndev_name, max, 1,
-                              UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
-                              uct_ib_device_name(dev), port_num, gid_index);
+    nread = ucs_read_file(ndev_name, max, 1,
+                          UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
+                          uct_ib_device_name(dev), port_num, gid_index);
     if (nread < 0) {
         ucs_diag("failed to read " UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT": %m",
                  uct_ib_device_name(dev), port_num, 0);
