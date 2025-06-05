@@ -92,6 +92,11 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Size of bounce buffers used for post_send and post_recv.",
    ucs_offsetof(uct_ib_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"STRIDE_SIZE", "256",
+   "SRQ stride size, used for striding message-based receive queue only.\n"
+   "for optimal performance, value should be aligned to the cache line size.",
+   ucs_offsetof(uct_ib_iface_config_t, stride_size), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"TX_QUEUE_LEN", "256",
    "Length of send queue in the QP.",
    ucs_offsetof(uct_ib_iface_config_t, tx.queue_len), UCS_CONFIG_TYPE_UINT},
@@ -1702,6 +1707,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.rx_headroom_offset = self->config.rx_payload_offset -
                                       rx_headroom;
     self->config.seg_size           = init_attr->seg_size;
+    self->config.stride_size        = config->stride_size;
     self->config.roce_path_factor   = config->roce_path_factor;
     self->config.tx_max_poll        = config->tx.max_poll;
     self->config.rx_max_poll        = config->rx.max_poll;
