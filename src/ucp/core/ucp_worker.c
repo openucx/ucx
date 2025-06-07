@@ -15,6 +15,7 @@
 #include "ucp_rkey.h"
 #include "ucp_request.inl"
 
+#include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
@@ -337,8 +338,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
      */
     if ((events & UCP_WAKEUP_TAG_SEND) ||
         ((events & UCP_WAKEUP_TAG_RECV) &&
-         ((context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
-          (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF))))
+         ucp_context_rndv_is_enabled(context)))
     {
         worker->uct_events |= UCT_EVENT_SEND_COMP;
     }
