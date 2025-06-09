@@ -287,9 +287,9 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
 
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 {
-    ucp_request_t *req          = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_lane_index_t lane       = req->send.lane;
-    ucp_ep_h ep                 = req->send.ep;
+    ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_lane_index_t lane = req->send.lane;
+    ucp_ep_h ep           = req->send.ep;
     ucs_status_t status;
     int completed;
     ucp_lane_map_t lane_mask;
@@ -806,7 +806,7 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
     ucs_status_t status;
     void *request;
 
-    ucs_assertv(UCS_STATIC_BITMAP_IS_ZERO(ep->ext->unflushed_lanes),
+    ucs_assertv(!UCS_STATIC_BITMAP_IS_ZERO(ep->ext->unflushed_lanes),
                 "ep=%p unflushed_lanes=" UCP_LANE_MAP_FMT,
                 ep, UCP_LANE_MAP_ARG(&ep->ext->unflushed_lanes));
 

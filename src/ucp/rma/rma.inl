@@ -168,11 +168,10 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
 
     /* Apply a fence if EP's sequence is behind worker's */
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
-        size_t num_unflushed_lanes = UCS_STATIC_BITMAP_POPCOUNT(
-                    UCS_STATIC_BITMAP_OR(ep->ext->unflushed_lanes, lane_map));
-        if (ucs_unlikely(num_unflushed_lanes == 0)) {
+        if (ucs_unlikely(UCS_STATIC_BITMAP_IS_ZERO(ep->ext->unflushed_lanes))) {
             status = UCS_OK;
-        } else if (ucs_likely(num_unflushed_lanes <= 1)) {
+        } else if (ucs_likely(UCS_STATIC_BITMAP_POPCOUNT(UCS_STATIC_BITMAP_OR(
+                                   ep->ext->unflushed_lanes, lane_map)) <= 1)) {
             status = ucp_ep_fence_weak(ep);
         } else {
             status = ucp_ep_fence_strong(ep);
