@@ -343,7 +343,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
             if (UCS_STATIC_BITMAP_IS_ZERO(atp_map)) {
                 rpriv.atp_map = UCP_LANE_MAP_BIT(rpriv.bulk.super.lane);
             } else {
-                UCS_STATIC_BITMAP_RESET_ALL(&rpriv.atp_map);
+                rpriv.atp_map = atp_map;
             }
         } else {
             rpriv.put_comp_cb = comp_cb;
