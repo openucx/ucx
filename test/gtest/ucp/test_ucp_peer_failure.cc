@@ -496,6 +496,7 @@ class test_ucp_peer_failure_inval : public ucp_test {
     {
         ucp_ep_params_t params;
 
+        memset(&params, 0, sizeof(params));
         params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
         params.err_mode   = UCP_ERR_HANDLING_MODE_PEER;
         return params;
