@@ -1868,7 +1868,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                                            addr_indices);
 
     if (!is_reconfigurable &&
-        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key)) {
+        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key,
+                                UCP_EP_CONFIG_CMP_MASK_ALL)) {
         /* Allow to choose only the lanes that were already chosen for case
          * without CM to prevent reconfiguration error.
          */
@@ -1894,7 +1895,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key)) {
+        !ucp_ep_config_is_equal(&ucp_ep_config(ep)->key, &key,
+                                UCP_EP_CONFIG_CMP_MASK_ALL)) {
         ucp_wireup_gather_pending_requests(ep, &replay_pending_queue);
     }
 
