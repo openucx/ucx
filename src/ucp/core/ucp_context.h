@@ -127,6 +127,9 @@ typedef struct ucp_context_config {
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;
+    /** Minimum allowed chunk size when splitting rma message over multiple
+     *  lanes */
+    size_t                                 min_rma_chunk_size;
     /** Estimated number of endpoints */
     size_t                                 estimated_num_eps;
     /** Estimated number of processes per node */
