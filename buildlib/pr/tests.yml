@@ -8,6 +8,7 @@ parameters:
   proto_enable: yes
   asan_check: no
   valgrind_check: no
+  run_bullseye: no
 
 jobs:
   - job: tests_${{ parameters.name }}
@@ -50,4 +51,10 @@ jobs:
           PROTO_ENABLE: ${{ parameters.proto_enable }}
           ASAN_CHECK: ${{ parameters.asan_check }}
           VALGRIND_CHECK: ${{ parameters.valgrind_check }}
+          RUN_BULLSEYE: ${{ parameters.run_bullseye }}
           RUNNING_IN_AZURE: yes
+
+      - ${{ if eq(parameters.run_bullseye, 'yes') }}:
+        - publish: $(Build.ArtifactStagingDirectory)
+          artifact: Bullseye_partial_${{ parameters.name }}_$(worker_id)
+          displayName: Publish Bullseye coverage files
