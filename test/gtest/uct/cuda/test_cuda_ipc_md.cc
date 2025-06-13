@@ -6,7 +6,6 @@
 
 #include <thread>
 
-#include <common/cuda_context.h>
 #include <uct/test_md.h>
 #include <cuda.h>
 
