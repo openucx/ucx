@@ -239,7 +239,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "multiple rails. Must be greater than 0.",
    ucs_offsetof(ucp_context_config_t, min_rndv_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"MIN_RMA_CHUNK_SIZE", "16k",
+  {"MIN_RMA_CHUNK_SIZE", "8k",
    "Minimum chunk size to split the message sent with RMA protocol on\n"
    "multiple rails. Must be greater than 0.",
    ucs_offsetof(ucp_context_config_t, min_rma_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
