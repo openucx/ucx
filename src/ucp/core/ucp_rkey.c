@@ -754,6 +754,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     ucs_sys_dev_distance_t *lanes_distance;
     ucp_rkey_config_key_t rkey_config_key;
     khiter_t khiter;
+    ucs_status_t status;
 
     /* Avoid calling ucp_ep_resolve_remote_id() from rkey_unpack, and let
      * the APIs which are not yet using new protocols resolve the remote key
@@ -781,11 +782,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
         return UCS_OK;
     }
 
-    lanes_distance = ucs_alloca(sizeof(*lanes_distance) * UCP_MAX_LANES);
+    lanes_distance = ucs_malloc(sizeof(*lanes_distance) * UCP_MAX_LANES,
+                                "lanes_distance");
+    if (lanes_distance == NULL) {
+        ucs_error("failed to allocate lanes_distance");
+        return UCS_ERR_NO_MEMORY;
+    }
+
     ucp_rkey_unpack_lanes_distance(&ucp_ep_config(ep)->key, lanes_distance, p,
                                    buffer_end);
-    return ucp_worker_add_rkey_config(worker, &rkey_config_key, lanes_distance,
+    status = ucp_worker_add_rkey_config(worker, &rkey_config_key, lanes_distance,
                                       &rkey->cfg_index);
+    ucs_free(lanes_distance);
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
@@ -1052,7 +1061,7 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
         lane = lanes[prio];
         if (lane == UCP_NULL_LANE) {
             return UCP_NULL_LANE; /* No more lanes */
-        } else if (ignore & UCS_BIT(lane)) {
+        } else if (UCS_STATIC_BITMAP_GET(ignore, lane)) {
             continue; /* lane is in ignore mask, do not process it */
         }
 
@@ -1106,7 +1115,8 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     rkey->cache.rma_lane = ucp_rkey_find_rma_lane(context, config,
                                                   UCS_MEMORY_TYPE_HOST,
                                                   config->key.rma_lanes, rkey,
-                                                  0, &uct_rkey);
+                                                  UCP_LANE_MAP_ZERO_VALUE,
+                                                  &uct_rkey);
     if (rkey->cache.rma_lane == UCP_NULL_LANE) {
         rkey->cache.rma_proto_index = UCP_RKEY_SW_PROTO;
         rkey->cache.rma_rkey        = UCT_INVALID_RKEY;
@@ -1124,7 +1134,8 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     rkey->cache.amo_lane = ucp_rkey_find_rma_lane(context, config,
                                                   UCS_MEMORY_TYPE_HOST,
                                                   config->key.amo_lanes, rkey,
-                                                  0, &uct_rkey);
+                                                  UCP_LANE_MAP_ZERO_VALUE,
+                                                  &uct_rkey);
     if (rkey->cache.amo_lane == UCP_NULL_LANE) {
         rkey->cache.amo_proto_index = UCP_RKEY_SW_PROTO;
         rkey->cache.amo_rkey        = UCT_INVALID_RKEY;
