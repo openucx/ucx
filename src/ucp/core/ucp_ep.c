@@ -651,7 +651,7 @@ ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
 
     if (param->field_mask & UCP_EP_PERF_PARAM_FIELD_OP_TYPE) {
         if ((param->op_type == UCP_OP_PUT) || (param->op_type == UCP_OP_GET)) {
-            status = ucp_proto_est_perf(ep,
+            status = ucp_proto_estimate_perf(ep,
                 param->op_type,
                 UCP_PARAM_VALUE(EP_PERF, param, mem_h, MEM_H, NULL),
                 UCP_PARAM_VALUE(EP_PERF, param, rkey, RKEY, NULL),
