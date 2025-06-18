@@ -210,16 +210,6 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     }
 }
 
-/* Check whether RDMA write is disabled */
-static int uct_dc_mlx5_iface_rdma_wr_disabled(uct_dc_mlx5_iface_t *iface)
-{
-    uct_ib_iface_t *ib_iface   = &iface->super.super.super;
-    const uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(ib_iface);
-
-    return (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
-           (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
-}
-
 static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
 {
     uct_ib_iface_t *ib_iface          = &iface->super.super.super;
@@ -238,15 +228,21 @@ static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
     }
 #endif
 
-    /* AR is enabled if OOO semantics is used and selected SL supports OOO */
-    return (iface->super.config.dp_ordering >=
-            UCT_IB_MLX5_DP_ORDERING_OOO_RW) &&
-           (UCS_BIT(ib_iface->config.sl) & ooo_sl_mask) &&
-           /* If DevX isn't used for DCI, driver sets default value for
-            * 'rdma_wr_disabled' */
-           (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI) ||
-            /* RDMA write should be enabled for FHS to be used */
-            !uct_dc_mlx5_iface_rdma_wr_disabled(iface));
+    /* AR/DDP is disabled */
+    if ((iface->super.config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_IBTA) ||
+        !(UCS_BIT(ib_iface->config.sl) & ooo_sl_mask)) {
+        return 0;
+    }
+
+    /* rdma_wr_disabled is not supported */
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED)) {
+        return 1;
+    }
+
+    /* RDMA write is required */
+    return !(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) ||
+           /* DevX isn't used for DCI, driver sets rdma_wr_disabled = 0 */
+           !(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI);
 }
 
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -442,8 +438,8 @@ ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
         attr.uidx                        = htonl(dci_index) >> UCT_IB_UIDX_SHIFT;
         attr.full_handshake              = iface->flags &
                                            UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE;
-        attr.rdma_wr_disabled            = uct_dc_mlx5_iface_rdma_wr_disabled(
-                                                   iface);
+        attr.rdma_wr_disabled            = (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
+                                           (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
         attr.log_num_dci_stream_channels = ucs_ilog2(num_dci_channels);
         status = uct_ib_mlx5_devx_create_qp(ib_iface,
                                             &iface->super.cq[UCT_IB_DIR_TX],

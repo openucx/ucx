@@ -40,14 +40,8 @@ do
 
       old_caps=$(echo "$old_tl_caps" | grep -A 7 "Device: $device" || true)
       new_caps=$(echo "$new_tl_caps" | grep -A 7 "Device: $device" || true)
-      for cap in bandwidth latency overhead
+      for cap in bandwidth overhead
       do
-        # DC latency was modified to account for FHS since v1.20 
-        if [ "$cap" = "latency" ] && [ "$tl_name" = "dc_mlx5" ]
-        then
-          continue;
-        fi
-            
         old_cap=$(echo "$old_caps" | grep $cap | sed -e "s/^[^:]*:[ \t]*//" || true)
         new_cap=$(echo "$new_caps" | grep $cap | sed -e "s/^[^:]*:[ \t]*//" || true)
         if [ "$old_cap" != "$new_cap" ]
