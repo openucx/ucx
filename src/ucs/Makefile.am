@@ -136,6 +136,7 @@ noinst_HEADERS = \
 	time/timerq.h \
 	time/timer_wheel.h \
 	type/serialize.h \
+	type/rwlock.h \
 	type/float8.h \
 	async/async.h \
 	async/pipe.h \
