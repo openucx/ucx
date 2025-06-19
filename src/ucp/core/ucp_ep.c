@@ -227,7 +227,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 #endif
     ep->ext->peer_mem                     = NULL;
     ep->ext->unflushed_lanes              = 0;
-    ep->ext->fence_seq                    = 0;
+    ep->ext->fence_seq                    = 1;
     ep->ext->uct_eps                      = NULL;
 
     UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
@@ -3714,8 +3714,8 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
                                     lane_index * attr->transports.entry_size);
 
         /* Each field updated in the following block must have its ending offset
-         * compared to attr->transports.entry_size before the field is 
-         * updated. If the field's ending offset is greater than the 
+         * compared to attr->transports.entry_size before the field is
+         * updated. If the field's ending offset is greater than the
          * attr->transports.entry_size value, the field cannot be updated because
          * that will cause a storage overlay.
          */
