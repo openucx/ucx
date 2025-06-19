@@ -41,6 +41,7 @@ Description: Unified Communication X - XPMEM support
 Package: ucx-cuda
 Section: libs
 Depends: ${misc:Depends}, ${shlibs:Depends}
+Recommends: ${shlibs:Recommends}
 Architecture: any
 Build-Profiles: <cuda>
 Description: Unified Communication X - CUDA support
