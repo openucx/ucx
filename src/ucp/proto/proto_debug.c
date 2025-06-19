@@ -64,6 +64,7 @@ struct ucp_proto_perf_node {
 
 /* Protocol information table */
 typedef struct {
+    char counter_str[32];
     char range_str[32];
     char desc[UCP_PROTO_DESC_STR_MAX];
     char config[UCP_PROTO_CONFIG_STR_MAX];
@@ -156,10 +157,15 @@ static void ucp_proto_table_row_separator(ucs_string_buffer_t *strb,
 }
 
 static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
-                                           const char *select_param_str)
+                                           const char *select_param_str,
+                                           int show_used)
 {
     const char *proto_info_config = context->config.ext.proto_info;
     int bool_value;
+
+    if (show_used) {
+        return context->config.trace_used_proto_selections;
+    }
 
     if (ucs_config_sscanf_bool(proto_info_config, &bool_value, NULL)) {
         return bool_value;
@@ -168,16 +174,49 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
     return fnmatch(proto_info_config, select_param_str, FNM_CASEFOLD) == 0;
 }
 
-void ucp_proto_select_elem_info(ucp_worker_h worker,
-                                ucp_worker_cfg_index_t ep_cfg_index,
-                                ucp_worker_cfg_index_t rkey_cfg_index,
-                                const ucp_proto_select_param_t *select_param,
-                                const ucp_proto_select_elem_t *select_elem,
-                                int show_all, ucs_string_buffer_t *strb)
+static inline int
+ucp_proto_select_elem_has_selections(const ucp_proto_select_elem_t *select_elem)
+{
+    const ucp_proto_threshold_elem_t *thresh_elem = select_elem->thresholds;
+
+    do {
+        if (thresh_elem->proto_config.selections > 0) {
+            return 1;
+        }
+    } while ((thresh_elem++)->max_msg_length < SIZE_MAX);
+
+    return 0;
+}
+
+static void
+ucp_proto_selections_dump(const ucp_proto_query_attr_t *proto_attr,
+                          char *counter_str, size_t size, int show_used)
+{
+    unsigned max_selections;
+
+    if (!show_used) {
+        *counter_str = '\0';
+        return;
+    }
+
+    max_selections = (strstr(proto_attr->desc, "short") != NULL) ?
+                            1 : UCP_PROTO_SELECTIONS_COUNT_MAX;
+
+    ucs_snprintf_safe(counter_str, size, "%u%s  ", proto_attr->selections,
+                      (proto_attr->selections >= max_selections ? "+" : ""));
+}
+
+void
+ucp_proto_select_elem_info(ucp_worker_h worker,
+                           ucp_worker_cfg_index_t ep_cfg_index,
+                           ucp_worker_cfg_index_t rkey_cfg_index,
+                           const ucp_proto_select_param_t *select_param,
+                           const ucp_proto_select_elem_t *select_elem,
+                           int show_all, int show_used, ucs_string_buffer_t *strb)
 {
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);
-    static const char *info_row_fmt = "| %*s | %-*s | %-*s |\n";
+    static const char *info_row_fmt = "| %s%*s | %-*s | %-*s |\n";
     ucp_proto_info_table_t table;
     int hdr_col_width[2], col_width[3];
     ucp_proto_query_attr_t proto_attr;
@@ -185,12 +224,17 @@ void ucp_proto_select_elem_info(ucp_worker_h worker,
     size_t range_start, range_end;
     int proto_valid;
 
+    if (show_used && !ucp_proto_select_elem_has_selections(select_elem)) {
+        return;
+    }
+
     ucp_proto_select_param_dump(worker, ep_cfg_index, rkey_cfg_index,
                                 select_param, ucp_operation_descs, &ep_cfg_strb,
                                 &sel_param_strb);
     if (!show_all &&
         !ucp_proto_debug_is_info_enabled(
-                worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
+                worker->context, ucs_string_buffer_cstr(&sel_param_strb),
+                show_used)) {
         return;
     }
 
@@ -221,7 +265,11 @@ void ucp_proto_select_elem_info(ucp_worker_h worker,
         ucs_memunits_range_str(range_start, range_end, row_elem->range_str,
                                sizeof(row_elem->range_str));
 
-        col_width[0] = ucs_max(col_width[0], strlen(row_elem->range_str));
+        ucp_proto_selections_dump(&proto_attr, row_elem->counter_str,
+                                  sizeof(row_elem->counter_str), show_used);
+
+        col_width[0] = ucs_max(col_width[0], strlen(row_elem->counter_str) +
+                                             strlen(row_elem->range_str));
         col_width[1] = ucs_max(col_width[1], strlen(row_elem->desc));
         col_width[2] = ucs_max(col_width[2], strlen(row_elem->config));
     } while (range_end != SIZE_MAX);
@@ -243,7 +291,8 @@ void ucp_proto_select_elem_info(ucp_worker_h worker,
     /* Print contents */
     ucp_proto_table_row_separator(strb, col_width, 3);
     ucs_array_for_each(row_elem, &table) {
-        ucs_string_buffer_appendf(strb, info_row_fmt, col_width[0],
+        ucs_string_buffer_appendf(strb, info_row_fmt, row_elem->counter_str,
+                                  col_width[0] - strlen(row_elem->counter_str),
                                   row_elem->range_str, col_width[1],
                                   row_elem->desc, col_width[2],
                                   row_elem->config);
@@ -264,7 +313,7 @@ void ucp_proto_select_info(ucp_worker_h worker,
 
     kh_foreach(proto_select->hash, key.u64, select_elem,
                ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
-                                          &key.param, &select_elem, show_all,
+                                          &key.param, &select_elem, show_all, 0,
                                           strb);
                ucs_string_buffer_appendf(strb, "\n"))
 }
@@ -966,7 +1015,7 @@ ucp_proto_select_write_info(ucp_worker_h worker,
                                 ucp_operation_names, &ep_cfg_strb,
                                 &sel_param_strb);
     if (!ucp_proto_debug_is_info_enabled(
-                worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
+                worker->context, ucs_string_buffer_cstr(&sel_param_strb), 0)) {
         goto out;
     }
 
@@ -1031,17 +1080,19 @@ out:
 }
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,
-                                 ucp_worker_cfg_index_t ep_cfg_index,
-                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                  const ucp_proto_select_param_t *select_param,
-                                 ucp_proto_select_elem_t *select_elem)
+                                 const ucp_proto_select_elem_t *select_elem,
+                                 int show_used)
 {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    const ucp_proto_config_t *proto_config = &select_elem->thresholds[0].proto_config;
+    ucp_worker_cfg_index_t ep_cfg_index    = proto_config->ep_cfg_index;
+    ucp_worker_cfg_index_t rkey_cfg_index  = proto_config->rkey_cfg_index;
+    ucs_string_buffer_t strb               = UCS_STRING_BUFFER_INITIALIZER;
     char *line;
 
     /* Print human-readable protocol selection table to the log */
     ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
-                               select_param, select_elem, 0, &strb);
+                               select_param, select_elem, 0, show_used, &strb);
     ucs_string_buffer_for_each_token(line, &strb, "\n") {
         ucs_log_print_compact(line);
     }
