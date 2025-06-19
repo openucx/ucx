@@ -15,6 +15,7 @@
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.inl>
+#include <ucs/datastruct/static_bitmap.h>
 
 
 static size_t ucp_proto_get_am_bcopy_pack(void *dest, void *arg)
@@ -60,7 +61,8 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
         req->flags      |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
         ucp_send_request_id_alloc(req);
 
-        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        status = ucp_ep_rma_handle_fence(ep, req,
+                                         UCP_LANE_MAP_BIT(spriv->super.lane));
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
@@ -101,7 +103,7 @@ ucp_proto_get_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE     |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
