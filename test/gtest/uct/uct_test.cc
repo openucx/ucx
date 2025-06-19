@@ -646,6 +646,21 @@ bool uct_test::has_gpu() const {
             has_transport("rocm_copy"));
 }
 
+bool uct_test::is_srq_msg_based() const
+{
+    std::string srq_topo_config;
+    bool has_srq_topo_config = get_config("SRQ_TOPO", srq_topo_config);
+    if (!has_srq_topo_config) {
+        return false;
+    }
+
+    size_t delimiter_index = srq_topo_config.find(",");
+
+    return has_rc_or_dc() &&
+           (srq_topo_config.substr(0, delimiter_index).compare("msg_based") ==
+            0);
+}
+
 uct_test::entity *
 uct_test::create_entity(size_t rx_headroom, uct_error_handler_t err_handler,
                         uct_tag_unexp_eager_cb_t eager_cb,
