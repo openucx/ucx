@@ -13,6 +13,7 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/type/rwlock.h>
 
 
 #define ucs_rcache_region_log_lvl(_level, _message, ...) \
@@ -66,7 +67,7 @@ typedef struct ucs_rcache_distribution {
 struct ucs_rcache {
     ucs_rcache_params_t params;          /**< rcache parameters (immutable) */
 
-    pthread_rwlock_t    pgt_lock;        /**< Protects the page table and all
+    ucs_rw_spinlock_t   pgt_lock;        /**< Protects the page table and all
                                               regions whose refcount is 0 */
     ucs_pgtable_t       pgtable;         /**< page table to hold the regions */
 

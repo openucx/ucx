@@ -54,9 +54,9 @@ static void ucs_rcache_vfs_show_primitive(void *obj, ucs_string_buffer_t *strb,
 {
     ucs_rcache_t *rcache = obj;
 
-    pthread_rwlock_rdlock(&rcache->pgt_lock);
+    ucs_rw_spinlock_read_lock(&rcache->pgt_lock);
     ucs_vfs_show_primitive(obj, strb, arg_ptr, arg_u64);
-    pthread_rwlock_unlock(&rcache->pgt_lock);
+    ucs_rw_spinlock_read_unlock(&rcache->pgt_lock);
 }
 
 static void ucs_rcache_vfs_init_regions_distribution(ucs_rcache_t *rcache)

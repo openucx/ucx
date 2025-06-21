@@ -972,9 +972,9 @@ UCS_TEST_F(test_rcache_stats, unmap_dereg_with_lock) {
      * We can have more unmap events if releasing the region structure triggers
      * releasing memory back to the OS.
      */
-    pthread_rwlock_wrlock(&m_rcache->pgt_lock);
+    ucs_rw_spinlock_write_lock(&m_rcache->pgt_lock);
     munmap(mem, size1);
-    pthread_rwlock_unlock(&m_rcache->pgt_lock);
+    ucs_rw_spinlock_write_unlock(&m_rcache->pgt_lock);
 
     EXPECT_GE(get_counter(UCS_RCACHE_UNMAPS), 1);
     EXPECT_EQ(0, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
@@ -1026,9 +1026,9 @@ UCS_TEST_F(test_rcache_stats, hits_slow) {
     r1 = get(mem2, size1);
 
     /* generate unmap event under lock, to roce using invalidation queue */
-    pthread_rwlock_rdlock(&m_rcache->pgt_lock);
+    ucs_rw_spinlock_read_lock(&m_rcache->pgt_lock);
     munmap(mem1, size1);
-    pthread_rwlock_unlock(&m_rcache->pgt_lock);
+    ucs_rw_spinlock_read_unlock(&m_rcache->pgt_lock);
 
     EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
 
