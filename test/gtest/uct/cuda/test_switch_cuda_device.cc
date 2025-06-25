@@ -199,7 +199,11 @@ void test_p2p_create_destroy_ctx::test_xfer(send_func_t send, size_t length,
     ASSERT_EQ(cuDeviceGet(&device, 0), CUDA_SUCCESS);
 
     CUcontext ctx;
+#if CUDA_VERSION >= 12050
+    ASSERT_EQ(cuCtxCreate_v4(&ctx, NULL, 0, device), CUDA_SUCCESS);
+#else
     ASSERT_EQ(cuCtxCreate(&ctx, 0, device), CUDA_SUCCESS);
+#endif
     uct_p2p_rma_test::test_xfer(send, length, flags, mem_type);
     EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
 }
