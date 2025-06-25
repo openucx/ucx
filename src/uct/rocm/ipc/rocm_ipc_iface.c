@@ -147,13 +147,12 @@ uct_rocm_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (ucs_queue_is_empty(&iface->signal_queue)) {
-        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
-        return UCS_OK;
+    while (!ucs_queue_is_empty(&iface->signal_queue)) {
+        uct_rocm_base_progress(&iface->signal_queue);
     }
 
-    UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
-    return UCS_INPROGRESS;
+    UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
+    return UCS_OK;
 }
 
 static unsigned uct_rocm_ipc_iface_progress(uct_iface_h tl_iface)
