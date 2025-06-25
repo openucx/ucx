@@ -86,6 +86,7 @@ EXTRA_DIST += debian/ucx-cuda.install
 EXTRA_DIST += debian/rules
 EXTRA_DIST += debian/source/format
 EXTRA_DIST += ucx.pc.in
+EXTRA_DIST += ucx.spec
 EXTRA_DIST += LICENSE
 
 endif #!DOCS_ONLY
