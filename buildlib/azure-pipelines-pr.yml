@@ -23,6 +23,8 @@ pr:
     - buildlib/azure-pipelines-perf.yml
     - buildlib/tools/perf_results.py
     - buildlib/tools/perf-common.yml
+    - buildlib/az-github-draft.yml
+    - buildlib/azure-pipelines-release.yml
 
 extends:
   template: pr/main.yml
