@@ -13,12 +13,12 @@
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
+#include <uct/cuda/base/cuda_nvml.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/assert.h>
 #include <ucs/async/eventfd.h>
 #include <pthread.h>
-#include <nvml.h>
 
 
 typedef enum {
@@ -191,8 +191,6 @@ static double uct_cuda_ipc_iface_get_bw()
     }
 }
 
-/* calls nvmlInit_v2 and nvmlShutdown which are expensive but
- * get_device_nvlinks should be outside critical path */
 static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
 {
     static int num_nvlinks = -1;
@@ -206,19 +204,14 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
         return num_nvlinks;
     }
 
-    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(ordinal, &device));
-    if (status != UCS_OK) {
-        goto err_sd;
-    }
-
     value.fieldId = NVML_FI_DEV_NVLINK_LINK_COUNT;
 
-    UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetFieldValues(device, 1, &value));
+    UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 1, &value);
 
     num_nvlinks = ((value.nvmlReturn == NVML_SUCCESS) &&
                    (value.valueType == NVML_VALUE_TYPE_UNSIGNED_INT)) ?
@@ -227,20 +220,16 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
     /* not enough to check number of nvlinks; need to check if links are active
      * by seeing if remote info can be obtained */
     for (link = 0; link < num_nvlinks; ++link) {
-        status = UCT_NVML_FUNC(nvmlDeviceGetNvLinkRemotePciInfo(device, link,
-                                                                &pci),
-                               UCS_LOG_LEVEL_DEBUG);
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetNvLinkRemotePciInfo,
+                                         device, link, &pci);
         if (status != UCS_OK) {
             ucs_debug("could not find remote end info for link %u", link);
-            goto err_sd;
+            goto err;
         }
     }
 
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
     return num_nvlinks;
 
-err_sd:
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 err:
     return 0;
 }
