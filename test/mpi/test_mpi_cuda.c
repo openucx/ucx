@@ -468,6 +468,9 @@ static int test_alloc_prim_send_user(const test_params_t *params)
     alloc_mem_t alloc_mem_send, alloc_mem_recv;
     CUcontext primary_ctx, user_ctx;
     int res;
+#if CUDA_VERSION >= 12050
+    CUctxCreateParams ctx_create_params = {};
+#endif
 
     retain_and_push_primary_context(params->cu_dev);
 
@@ -475,7 +478,7 @@ static int test_alloc_prim_send_user(const test_params_t *params)
 
     CUDA_CHECK(cuCtxPopCurrent(&primary_ctx));
 #if CUDA_VERSION >= 12050
-    CUDA_CHECK(cuCtxCreate_v4(&user_ctx, NULL, 0, params->cu_dev));
+    CUDA_CHECK(cuCtxCreate_v4(&user_ctx, &ctx_create_params, 0, params->cu_dev));
 #else
     CUDA_CHECK(cuCtxCreate(&user_ctx, 0, params->cu_dev));
 #endif
@@ -500,7 +503,8 @@ static int test_alloc_user_send_prim(const test_params_t *params)
     int res;
 
 #if CUDA_VERSION >= 12050
-    CUDA_CHECK(cuCtxCreate_v4(&user_ctx, NULL, 0, params->cu_dev));
+    CUctxCreateParams ctx_create_params = {};
+    CUDA_CHECK(cuCtxCreate_v4(&user_ctx, &ctx_create_params, 0, params->cu_dev));
 #else
     CUDA_CHECK(cuCtxCreate(&user_ctx, 0, params->cu_dev));
 #endif

@@ -200,7 +200,8 @@ void test_p2p_create_destroy_ctx::test_xfer(send_func_t send, size_t length,
 
     CUcontext ctx;
 #if CUDA_VERSION >= 12050
-    ASSERT_EQ(cuCtxCreate_v4(&ctx, NULL, 0, device), CUDA_SUCCESS);
+    CUctxCreateParams ctx_create_params = {};
+    ASSERT_EQ(cuCtxCreate_v4(&ctx, &ctx_create_params, 0, device), CUDA_SUCCESS);
 #else
     ASSERT_EQ(cuCtxCreate(&ctx, 0, device), CUDA_SUCCESS);
 #endif
