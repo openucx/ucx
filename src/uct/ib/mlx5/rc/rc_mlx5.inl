@@ -30,10 +30,11 @@ uct_rc_mlx5_ep_fence_put(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *
                          uint8_t *fm_ce_se)
 {
     if (uct_rc_ep_fm(&iface->super, &txwq->fi, 1)) {
-        *fm_ce_se |= iface->config.put_fence_flag;
-        *rkey      = uct_ib_resolve_atomic_rkey(*rkey, offset, addr);
+        *fm_ce_se = iface->config.put_fence_flag;
+        *rkey     = uct_ib_resolve_atomic_rkey(*rkey, offset, addr);
     } else {
-        *rkey = uct_ib_md_direct_rkey(*rkey);
+        *fm_ce_se = 0;
+        *rkey     = uct_ib_md_direct_rkey(*rkey);
     }
 }
 
