@@ -48,6 +48,8 @@ enum {
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_REPLY_RECONFIG,
+    UCP_WIREUP_MSG_PROMOTE,
+    UCP_WIREUP_MSG_DEMOTE,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -129,6 +131,17 @@ typedef struct ucp_wireup_msg {
                                          UCS_PTR_MAP_KEY_INVALID */
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
+
+
+/**
+ * Packet structure for promote/demote requests.
+ */
+typedef struct ucp_wireup_msg_extended {
+    ucp_wireup_msg_t super;
+    double           score; /* Peer score determinted by amount of
+                               traffic that flows through it */
+    /* packed addresses follow */
+} UCS_S_PACKED ucp_wireup_msg_extended_t;
 
 
 typedef struct {
@@ -223,6 +236,10 @@ double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 
 int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *addr_entry);
+
+void ucp_wireup_send_promote_request(void *entry, void *arg);
+
+void ucp_wireup_send_demote_request(void *entry, void *arg);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {
