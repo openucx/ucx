@@ -72,6 +72,7 @@ typedef struct {
     unsigned         name_priority;
     ucs_numa_node_t  numa_node;
     uintptr_t        user_value;
+    ucs_sys_device_t sys_dev_aux;
 } ucs_topo_sys_device_info_t;
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
@@ -301,6 +302,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
         ucs_topo_global_ctx.devices[*sys_dev].numa_node     =
                 ucs_topo_read_device_numa_node(bus_id);
         ucs_topo_global_ctx.devices[*sys_dev].user_value    = UINTPTR_MAX;
+        ucs_topo_global_ctx.devices[*sys_dev].sys_dev_aux   = UCS_SYS_DEVICE_ID_UNKNOWN;
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
@@ -389,9 +391,85 @@ ucs_topo_is_same_numa_node(ucs_sys_device_t device1,
 }
 
 static ucs_status_t
-ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
-                            ucs_sys_device_t device2,
-                            ucs_sys_dev_distance_t *distance)
+ucs_topo_get_common_path(ucs_sys_device_t device1,
+                         ucs_sys_device_t device2,
+                         char **path1,
+                         char **path2,
+                         char **common_path)
+{
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(path1, "path1");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_sys_dev_to_sysfs_path(device1, *path1, PATH_MAX);
+    if (status != UCS_OK) {
+        ucs_debug("failed to get sysfs path for %s",
+                  ucs_topo_sys_device_get_name(device1));
+        goto err_free_path1;
+    }
+
+    status = ucs_string_alloc_path_buffer(path2, "path2");
+    if (status != UCS_OK) {
+        goto err_free_path1;
+    }
+
+    status = ucs_topo_sys_dev_to_sysfs_path(device2, *path2, PATH_MAX);
+    if (status != UCS_OK) {
+        ucs_debug("failed to get sysfs path for %s",
+                  ucs_topo_sys_device_get_name(device2));
+        goto err_free_path2;
+    }
+
+    status = ucs_string_alloc_path_buffer(common_path, "common_path");
+    if (status != UCS_OK) {
+        goto err_free_path2;
+    }
+
+    ucs_path_get_common_parent(*path1, *path2, *common_path);
+    return UCS_OK;
+
+err_free_path2:
+    ucs_free(path2);
+err_free_path1:
+    ucs_free(path1);
+    return status;
+}
+
+int ucs_topo_is_pci_bridge(ucs_sys_device_t device1,
+                           ucs_sys_device_t device2)
+{
+    ucs_status_t status;
+    char *path1, *path2, *common_path;
+    int result;
+
+    if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
+           return 0;
+    }
+
+    status = ucs_topo_get_common_path(device1, device2, &path1, &path2,
+                                      &common_path);
+
+    if (status != UCS_OK) {
+           return 0;
+    }
+
+    result = !ucs_topo_is_sys_root(common_path) &&
+            !ucs_topo_is_pci_root(common_path);
+
+    ucs_free(common_path);
+    ucs_free(path1);
+    ucs_free(path2);
+    return result;
+}
+
+static ucs_status_t
+ucs_topo_get_distance_sysfs_internal(ucs_sys_device_t device1,
+                                     ucs_sys_device_t device2,
+                                     ucs_sys_dev_distance_t *distance)
 {
     ucs_status_t status;
     char *path1, *path2, *common_path;
@@ -402,36 +480,12 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
         goto err_default_distance;
     }
 
-    status = ucs_string_alloc_path_buffer(&path1, "path1");
+    status = ucs_topo_get_common_path(device1, device2, &path1, &path2,
+                                      &common_path);
     if (status != UCS_OK) {
         goto err_default_distance;
     }
 
-    status = ucs_topo_sys_dev_to_sysfs_path(device1, path1, PATH_MAX);
-    if (status != UCS_OK) {
-        ucs_debug("failed to get sysfs path for %s",
-                  ucs_topo_sys_device_get_name(device1));
-        goto err_free_path1;
-    }
-
-    status = ucs_string_alloc_path_buffer(&path2, "path2");
-    if (status != UCS_OK) {
-        goto err_free_path1;
-    }
-
-    status = ucs_topo_sys_dev_to_sysfs_path(device2, path2, PATH_MAX);
-    if (status != UCS_OK) {
-        ucs_debug("failed to get sysfs path for %s",
-                  ucs_topo_sys_device_get_name(device2));
-        goto err_free_path2;
-    }
-
-    status = ucs_string_alloc_path_buffer(&common_path, "common_path");
-    if (status != UCS_OK) {
-        goto err_free_path2;
-    }
-
-    ucs_path_get_common_parent(path1, path2, common_path);
     if (ucs_topo_is_pci_root(common_path)) {
         ucs_topo_set_distance(&ucs_global_opts.dist.phb,
                               ucs_topo_pci_root_bw(path1, path2), distance);
@@ -450,9 +504,7 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
 
     /* Report best perf for common PCI bridge or sysfs parsing error */
     ucs_free(common_path);
-err_free_path2:
     ucs_free(path2);
-err_free_path1:
     ucs_free(path1);
 err_default_distance:
     return ucs_topo_get_distance_default(device1, device2, distance);
@@ -460,6 +512,49 @@ out:
     ucs_free(common_path);
     ucs_free(path2);
     ucs_free(path1);
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
+                            ucs_sys_device_t device2,
+                            ucs_sys_dev_distance_t *distance)
+{
+    ucs_status_t status;
+    ucs_sys_device_t aux_device1, aux_device2;
+    ucs_sys_dev_distance_t best_dist, aux_dist;
+
+    status = ucs_topo_get_distance_sysfs_internal(device1, device2, &best_dist);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (device2 == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+           goto done;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    aux_device1 = ucs_topo_global_ctx.devices[device1].sys_dev_aux;
+    aux_device2 = ucs_topo_global_ctx.devices[device2].sys_dev_aux;
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    if (aux_device1 != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        status = ucs_topo_get_distance_sysfs_internal(aux_device1, device2, &aux_dist);
+        if ((status == UCS_OK) && (aux_dist.bandwidth > best_dist.bandwidth)) {
+            best_dist = aux_dist;
+        }
+    }
+
+    if (aux_device2 != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        status = ucs_topo_get_distance_sysfs_internal(device1, aux_device2, &aux_dist);
+        if ((status == UCS_OK) && (aux_dist.bandwidth > best_dist.bandwidth)) {
+            best_dist = aux_dist;
+        }
+    }
+
+done:
+    *distance = best_dist;
     return UCS_OK;
 }
 
@@ -667,6 +762,24 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return numa_node;
+}
+
+ucs_status_t
+ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
+                                    ucs_sys_device_t sys_dev_aux)
+{
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_error("system device %d is invalid (max: %d)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux = sys_dev_aux;
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return UCS_OK;
 }
 
 ucs_status_t

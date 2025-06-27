@@ -560,12 +560,15 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     reg_params.flags         = uct_flags | memh->uct_flags;
     reg_params.dmabuf_fd     = UCT_DMABUF_FD_INVALID;
     reg_params.dmabuf_offset = 0;
+    reg_params.sys_dev       = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     if ((dmabuf_prov_md_index != UCP_NULL_RESOURCE) &&
         (reg_md_map & context->dmabuf_reg_md_map)) {
         /* Query dmabuf file descriptor and offset */
         mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+                              UCT_MD_MEM_ATTR_FIELD_DMABUF_FD_PCIE |
+                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
         status = uct_md_mem_query(context->tl_mds[dmabuf_prov_md_index].md,
                                   address, length, &mem_attr);
         if (status != UCS_OK) {
@@ -574,12 +577,17 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     address, length, ucs_status_string(status));
         } else {
             ucs_trace("uct_md_mem_query(dmabuf address %p length %zu) returned "
-                      "fd %d offset %zu",
+                      "fd %d fd_pcie %d offset %zu sys_dev %u",
                       address, length, mem_attr.dmabuf_fd,
-                      mem_attr.dmabuf_offset);
-            dmabuf_md_map            = context->dmabuf_reg_md_map;
-            reg_params.dmabuf_fd     = mem_attr.dmabuf_fd;
-            reg_params.dmabuf_offset = mem_attr.dmabuf_offset;
+                      mem_attr.dmabuf_fd_pcie,
+                      mem_attr.dmabuf_offset,
+                      mem_attr.sys_dev);
+
+            dmabuf_md_map             = context->dmabuf_reg_md_map;
+            reg_params.dmabuf_fd      = mem_attr.dmabuf_fd;
+            reg_params.dmabuf_offset  = mem_attr.dmabuf_offset;
+            reg_params.dmabuf_fd_pcie = mem_attr.dmabuf_fd_pcie;
+            reg_params.sys_dev        = mem_attr.sys_dev;
         }
     }
 
@@ -597,7 +605,9 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         if (dmabuf_md_map & UCS_BIT(md_index)) {
             /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
-                                     UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+                                     UCT_MD_MEM_REG_FIELD_DMABUF_FD_PCIE |
+                                     UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET |
+                                    UCT_MD_MEM_REG_FIELD_SYS_DEV;
         }
 
         reg_address = address;
