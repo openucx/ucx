@@ -263,6 +263,23 @@ ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
  */
 uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev);
 
+/**
+ * Set an auxiliary system device value.
+ *
+ * @param [in] sys_dev     System device index.
+ * @param [in] sys_dev_aux Auxiliary system device index.
+ *
+ * @return UCS_OK on success, error otherwise.
+ */
+ucs_status_t
+ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
+                                    ucs_sys_device_t sys_dev_aux);
+
+/**
+ * True if both devices have a common non-root PCI bridge
+ */
+int ucs_topo_is_pci_bridge(ucs_sys_device_t device1,
+                           ucs_sys_device_t device2);
 
 /**
  * Get the number of registered system devices.

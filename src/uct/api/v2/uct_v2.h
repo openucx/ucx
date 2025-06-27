@@ -223,9 +223,11 @@ typedef struct {
  * @brief MD memory registration operation flags.
  */
 typedef enum {
-    UCT_MD_MEM_REG_FIELD_FLAGS         = UCS_BIT(0),
-    UCT_MD_MEM_REG_FIELD_DMABUF_FD     = UCS_BIT(1),
-    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2)
+    UCT_MD_MEM_REG_FIELD_FLAGS          = UCS_BIT(0),
+    UCT_MD_MEM_REG_FIELD_DMABUF_FD      = UCS_BIT(1),
+    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET  = UCS_BIT(2),
+    UCT_MD_MEM_REG_FIELD_SYS_DEV        = UCS_BIT(3),
+    UCT_MD_MEM_REG_FIELD_DMABUF_FD_PCIE = UCS_BIT(4)
 } uct_md_mem_reg_field_mask_t;
 
 
@@ -490,6 +492,19 @@ typedef struct uct_md_mem_reg_params {
      * dmabuf region, then this field must be omitted or set to 0.
      */
     size_t                       dmabuf_offset;
+
+    /**
+     * Provide the device where the memory resides. It can be used by the
+     * memory domain to perform specific registrations.
+     */
+    ucs_sys_device_t             sys_dev;
+
+    /**
+     * Similarly as dmabuf_fd, but created with an explicit request to export
+     * PCIe window.
+     */
+    int                          dmabuf_fd_pcie;
+
 } uct_md_mem_reg_params_t;
 
 
