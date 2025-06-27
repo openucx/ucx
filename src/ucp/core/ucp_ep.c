@@ -1952,11 +1952,10 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->seg_size == config_lane2->seg_size);
 }
 
-int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
-                           const ucp_ep_config_key_t *key2)
+static int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,
+                                               const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane;
-    int i;
 
     if ((key1->num_lanes != key2->num_lanes) ||
         memcmp(key1->rma_lanes, key2->rma_lanes, sizeof(key1->rma_lanes)) ||
@@ -1965,18 +1964,12 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         memcmp(key1->rma_bw_lanes, key2->rma_bw_lanes,
                sizeof(key1->rma_bw_lanes)) ||
         memcmp(key1->amo_lanes, key2->amo_lanes, sizeof(key1->amo_lanes)) ||
-        (key1->rma_bw_md_map != key2->rma_bw_md_map) ||
-        (key1->rma_md_map != key2->rma_md_map) ||
-        (key1->reachable_md_map != key2->reachable_md_map) ||
         (key1->am_lane != key2->am_lane) ||
         (key1->tag_lane != key2->tag_lane) ||
         (key1->wireup_msg_lane != key2->wireup_msg_lane) ||
         (key1->cm_lane != key2->cm_lane) ||
         (key1->keepalive_lane != key2->keepalive_lane) ||
-        (key1->rkey_ptr_lane != key2->rkey_ptr_lane) ||
-        (key1->err_mode != key2->err_mode) ||
-        (key1->flags != key2->flags) ||
-        (key1->dst_version != key2->dst_version)) {
+        (key1->rkey_ptr_lane != key2->rkey_ptr_lane)) {
         return 0;
     }
 
@@ -1984,6 +1977,27 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         if (!ucp_ep_config_lane_is_equal(key1, key2, lane)) {
             return 0;
         }
+    }
+
+    return 1;
+}
+
+int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
+                           const ucp_ep_config_key_t *key2)
+{
+    int i;
+
+    if (!ucp_ep_config_lanes_layout_is_equal(key1, key2)) {
+        return 0;
+    }
+
+    if ((key1->rma_bw_md_map != key2->rma_bw_md_map) ||
+        (key1->rma_md_map != key2->rma_md_map) ||
+        (key1->reachable_md_map != key2->reachable_md_map) ||
+        (key1->err_mode != key2->err_mode) ||
+        (key1->flags != key2->flags) ||
+        (key1->dst_version != key2->dst_version)) {
+        return 0;
     }
 
     for (i = 0; i < ucs_popcount(key1->reachable_md_map); ++i) {

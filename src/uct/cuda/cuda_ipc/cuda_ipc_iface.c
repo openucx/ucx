@@ -481,6 +481,12 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return status;
     }
 
+    if (config->params.max_streams > UCT_CUDA_IPC_MAX_PEERS) {
+        ucs_error("invalid max streams value (%u > %u)",
+                  config->params.max_streams, UCT_CUDA_IPC_MAX_PEERS);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     self->config = config->params;
     if (UCS_CONFIG_DBL_IS_AUTO(config->params.bandwidth)) {
         self->config.bandwidth = uct_cuda_ipc_iface_get_bw() ;

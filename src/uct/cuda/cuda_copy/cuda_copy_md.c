@@ -571,20 +571,20 @@ uct_cuda_copy_mem_release_fabric(uct_cuda_copy_alloc_handle_t *alloc_handle)
 #endif
 }
 
-static int uct_cuda_copy_detect_vmm(void *address,
+static int uct_cuda_copy_detect_vmm(const void *address,
                                     ucs_memory_type_t *vmm_mem_type,
                                     CUdevice *cuda_device)
 {
 #ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
-    ucs_status_t status      = UCS_OK;
-    CUmemAllocationProp prop = {};
     CUmemGenericAllocationHandle alloc_handle;
+    CUresult cu_result;
+    CUmemAllocationProp prop;
+    ucs_status_t status;
 
     /* Check if memory is allocated using VMM API and see if host memory needs
      * to be treated as pinned device memory */
-    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
-            cuMemRetainAllocationHandle(&alloc_handle, (void*)address));
-    if (status != UCS_OK) {
+    cu_result = cuMemRetainAllocationHandle(&alloc_handle, (void*)address);
+    if (cu_result != CUDA_SUCCESS) {
         return 0;
     }
 
@@ -594,7 +594,7 @@ static int uct_cuda_copy_detect_vmm(void *address,
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuMemGetAllocationPropertiesFromHandle(&prop, alloc_handle));
     if (status != UCS_OK) {
-        goto err;
+        goto out;
     }
 
     *cuda_device = (CUdevice)prop.location.id;
@@ -610,8 +610,8 @@ static int uct_cuda_copy_detect_vmm(void *address,
         *vmm_mem_type = UCS_MEMORY_TYPE_CUDA;
     }
 
-err:
-    UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemRelease(alloc_handle));
+out:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(alloc_handle));
     return 1;
 #else
     return 0;
@@ -738,23 +738,23 @@ out_ctx_pop:
 }
 
 static ucs_status_t
-uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
-                                  size_t length, ucs_memory_info_t *mem_info)
+uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
+                                  const void *address, size_t length,
+                                  ucs_memory_info_t *mem_info)
 {
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 4
     CUmemorytype cuda_mem_type = CU_MEMORYTYPE_HOST;
     uint32_t is_managed        = 0;
-    CUdevice cuda_device       = -1;
     CUcontext cuda_mem_ctx     = NULL;
     CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
+    CUdevice cuda_device;
     int32_t pref_loc;
     int is_vmm;
     CUresult cu_err;
     ucs_status_t status;
 
-    is_vmm = uct_cuda_copy_detect_vmm((void*)address, &mem_info->type,
-                                      &cuda_device);
+    is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device);
     if (is_vmm) {
         if (mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) {
             return UCS_ERR_INVALID_ADDR;
@@ -851,7 +851,7 @@ out_default_range:
 static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
 {
 #if CUDA_VERSION >= 11070
-    PFN_cuMemGetHandleForAddressRange get_handle_func;
+    PFN_cuMemGetHandleForAddressRange_v11070 get_handle_func;
     CUresult cu_err;
     int fd;
 

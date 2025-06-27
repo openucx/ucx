@@ -48,16 +48,14 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
 
 #define UCT_CUDADRV_FUNC(_func, _log_level) \
     ({ \
-        ucs_status_t _status = UCS_OK; \
-        do { \
-            CUresult _result = (_func); \
-            if (CUDA_ERROR_NOT_READY == _result) { \
-                _status = UCS_INPROGRESS; \
-            } else if (CUDA_SUCCESS != _result) { \
-                UCT_CUDADRV_LOG(_func, _log_level, _result); \
-                _status = UCS_ERR_IO_ERROR; \
-            } \
-        } while (0); \
+        CUresult _result = (_func); \
+        ucs_status_t _status; \
+        if (ucs_likely(_result == CUDA_SUCCESS)) { \
+            _status = UCS_OK; \
+        } else { \
+            UCT_CUDADRV_LOG(_func, _log_level, _result); \
+            _status = UCS_ERR_IO_ERROR; \
+        } \
         _status; \
     })
 

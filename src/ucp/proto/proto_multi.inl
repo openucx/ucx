@@ -63,7 +63,8 @@ ucp_proto_multi_max_payload(ucp_request_t *req,
                             const ucp_proto_multi_lane_priv_t *lpriv,
                             size_t hdr_size)
 {
-    size_t length   = req->send.state.dt_iter.length;
+    size_t length = req->send.state.dt_iter.length;
+    size_t offset = length - req->send.state.dt_iter.offset;
     size_t max_frag;
     size_t max_payload;
 
@@ -77,7 +78,7 @@ ucp_proto_multi_max_payload(ucp_request_t *req,
 
     /* Do not split very small sends to chunks, it's not worth it, and
        generic datatype may not be able to pack to a smaller buffer */
-    if (length < UCP_MIN_BCOPY) {
+    if (offset < lpriv->min_end_offset) {
         return max_frag;
     }
 
@@ -85,8 +86,7 @@ ucp_proto_multi_max_payload(ucp_request_t *req,
                           max_frag);
     ucs_assertv(max_payload > 0,
                 "length=%zu weight=%zu%% lpriv->max_frag=%zu hdr_size=%zu",
-                req->send.state.dt_iter.length,
-                ucp_proto_multi_scaled_length(lpriv->weight, 100),
+                length, ucp_proto_multi_scaled_length(lpriv->weight, 100),
                 lpriv->max_frag, hdr_size);
     return max_payload;
 }

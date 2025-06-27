@@ -7,15 +7,15 @@ package ucx
 
 // #include <ucp/api/ucp.h>
 import "C"
-import "net"
+import (
+	"net"
+)
 
 type UcpListener struct {
-	listener      C.ucp_listener_h
-	connHandlerId uint64
+	listener C.ucp_listener_h
+	callback UcpListenerConnectionHandler
+	packedCb PackedCallback
 }
-
-// Needed to call connHandler.Reject() rather than listener.Reject(connHandler)
-var connHandles2Listener = make(map[uint64]C.ucp_listener_h)
 
 type UcpListenerAttributes struct {
 	Address *net.TCPAddr
@@ -23,8 +23,7 @@ type UcpListenerAttributes struct {
 
 func (l *UcpListener) Close() {
 	C.ucp_listener_destroy(l.listener)
-	deregister(l.connHandlerId)
-	delete(connHandles2Listener, l.connHandlerId)
+	l.packedCb.unpackAndFree()
 }
 
 func (l *UcpListener) Query(attrs ...UcpListenerAttribute) (*UcpListenerAttributes, error) {

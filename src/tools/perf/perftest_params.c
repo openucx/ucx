@@ -106,7 +106,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -N             use numeric formatting (thousands separator)\n");
     printf("     -f             print only final numbers\n");
     printf("     -v             print CSV-formatted output\n");
-    printf("     -I             print extra information about the operation\n");
+    printf("     -X             print extra information about the operation\n");
     printf("     -q             do not print error messages\n");
     printf("\n");
     printf("  UCT only:\n");
@@ -649,7 +649,7 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
 
     optind = 1;
     while ((c = getopt_long(argc, argv,
-                            "p:b:6NfvIc:P:hK:g:G:k" TEST_PARAMS_ARGS,
+                            "p:b:6NfvXc:P:hK:g:G:k" TEST_PARAMS_ARGS,
                             TEST_PARAMS_ARGS_LONG, NULL)) != -1) {
         switch (c) {
         case 'p':
@@ -675,7 +675,7 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
         case 'v':
             ctx->flags |= TEST_FLAG_PRINT_CSV;
             break;
-        case 'I':
+        case 'X':
             ctx->flags |= TEST_FLAG_PRINT_EXTRA_INFO;
             break;
         case 'c':

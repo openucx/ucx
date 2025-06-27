@@ -30,6 +30,8 @@
 #include <rdma/rdma_netlink.h>
 #endif
 
+#define UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID 0
+
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
@@ -109,7 +111,7 @@ uct_ib_device_to_ndev_cache_hash_equal(uct_ib_device_to_ndev_key_t key1,
            (key1.guid == key2.guid);
 }
 
-KHASH_INIT(uct_ib_device_to_ndev, uct_ib_device_to_ndev_key_t, int, 1,
+KHASH_INIT(uct_ib_device_to_ndev, uct_ib_device_to_ndev_key_t, unsigned, 1,
            uct_ib_device_to_ndev_cache_hash_func,
            uct_ib_device_to_ndev_cache_hash_equal);
 
@@ -1497,9 +1499,9 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     ucs_assert_always(uct_ib_device_is_port_roce(dev, port_num));
 
     /* get the network device name which corresponds to a RoCE port */
-    nread = ucs_read_file_str(ndev_name, max, 1,
-                              UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
-                              uct_ib_device_name(dev), port_num, gid_index);
+    nread = ucs_read_file(ndev_name, max, 1,
+                          UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
+                          uct_ib_device_name(dev), port_num, gid_index);
     if (nread < 0) {
         ucs_diag("failed to read " UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT": %m",
                  uct_ib_device_name(dev), port_num, 0);
@@ -1510,9 +1512,25 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     return UCS_OK;
 }
 
+ucs_status_t uct_ib_iface_get_loopback_ndev_index(unsigned *ndev_index_p)
+{
+    static unsigned loopback_ndev_index = UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID;
+    ucs_status_t status;
+
+    if (loopback_ndev_index == UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID) {
+        status = ucs_ifname_to_index("lo", &loopback_ndev_index);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    *ndev_index_p = loopback_ndev_index;
+    return UCS_OK;
+}
+
 ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
-                                  uint8_t gid_index, int *ndev_index_p)
+                                  uint8_t gid_index, unsigned *ndev_index_p)
 {
     uct_ib_device_to_ndev_key_t ib_dev = {.guid = IBV_DEV_ATTR(dev, node_guid),
                                           .port_num = port_num,
@@ -1521,9 +1539,9 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
                                           PTHREAD_MUTEX_INITIALIZER;
     ucs_status_t status;
     char ndev_name[IFNAMSIZ];
-    int ndev_index;
+    unsigned ndev_index;
     khiter_t iter;
-    int khret;
+    unsigned khret;
 
     pthread_mutex_lock(&uct_ib_device_to_ndev_cache_lock);
     iter = kh_put(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev, &khret);
@@ -1539,11 +1557,8 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
             goto out_unlock;
         }
 
-        ndev_index = if_nametoindex(ndev_name);
-        if (ndev_index == 0) {
-            ucs_error("failed to get interface index for %s (errno %d)",
-                      ndev_name, errno);
-            status = UCS_ERR_IO_ERROR;
+        status = ucs_ifname_to_index(ndev_name, &ndev_index);
+        if (status != UCS_OK) {
             goto out_unlock;
         }
 
