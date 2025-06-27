@@ -2125,11 +2125,14 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         bw_info.max_lanes = context->config.ext.max_rndv_lanes;
     }
 
-    /* If error handling is requested and we have RNDV, we require memory
-     * invalidation support to provide correct data integrity in case of error.
+    /* With error handling requested on the endpoint, we make sure that lanes
+     * support RMA invalidation. It is only when RNDV is disabled or that we
+     * want to enable pipelined RNDV without actual error handling support,
+     * that we can allow lanes without RMA invalidation.
      */
     if ((ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
-        ucp_context_rndv_is_enabled(context)) {
+        ucp_context_rndv_is_enabled(context) &&
+        !context->config.ext.rndv_errh_ppln_enable) {
         bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE_RMA;
     }
 
