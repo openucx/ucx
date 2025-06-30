@@ -849,7 +849,7 @@ out_default_range:
 }
 
 /* Assume uniformity of the GPU devices here */
-static int uct_cuda_copy_md_has_c2c(void)
+static UCS_F_MAYBE_UNUSED int uct_cuda_copy_md_has_c2c(void)
 {
 #if CUDA_VERSION >= 12080
     ucs_status_t status;
