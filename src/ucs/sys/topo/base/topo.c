@@ -432,9 +432,9 @@ ucs_topo_get_common_path(ucs_sys_device_t device1,
     return UCS_OK;
 
 err_free_path2:
-    ucs_free(path2);
+    ucs_free(*path2);
 err_free_path1:
-    ucs_free(path1);
+    ucs_free(*path1);
     return status;
 }
 
