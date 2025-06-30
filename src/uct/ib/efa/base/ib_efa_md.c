@@ -75,6 +75,12 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
      */
     dev->req_notify_cq_support = 0;
 
+    if (md_config->enable_gpudirect_rdma != UCS_NO) {
+        uct_ib_check_gpudirect_driver(
+                &md->super, "/sys/module/efa_nv_peermem/version",
+                UCS_MEMORY_TYPE_CUDA);
+    }
+
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {
         goto err_md_free;

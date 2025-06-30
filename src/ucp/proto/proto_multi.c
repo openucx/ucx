@@ -311,9 +311,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         /* Make sure fragment is not zero */
         ucs_assert(max_frag > 0);
 
-        /* Min chunk is scaled, but must be within HW limits */
-        min_chunk       = ucs_min(lane_perf->bandwidth * params->min_chunk /
-                                  min_bandwidth, lane_perf->max_frag);
+        /* Min chunk is scaled, but must be within HW limits.
+           Min chunk cannot be less than UCP_MIN_BCOPY, as it's not worth to
+           split tiny messages. */
+        min_chunk       = ucs_min(lane_perf->max_frag,
+                                  ucs_max(UCP_MIN_BCOPY,
+                                          lane_perf->bandwidth *
+                                          params->min_chunk / min_bandwidth));
         max_frag        = ucs_max(max_frag, min_chunk);
         lpriv->max_frag = max_frag;
         perf.max_frag  += max_frag;

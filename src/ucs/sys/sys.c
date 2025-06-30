@@ -165,6 +165,18 @@ uint32_t ucs_file_checksum(const char *filename)
     return crc;
 }
 
+ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p)
+{
+    unsigned ndev_index = if_nametoindex(ndev_name);
+    if (ndev_index == 0) {
+        ucs_error("failed to get interface index for %s: %m", ndev_name);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *ndev_index_p = ndev_index;
+    return UCS_OK;
+}
+
 static uint64_t ucs_get_mac_address()
 {
     static uint64_t mac_address = 0;
@@ -448,9 +460,7 @@ static ssize_t ucs_read_file_vararg(char *buffer, size_t max, int silent,
         goto out_close;
     }
 
-    if (read_bytes < max) {
-        buffer[read_bytes] = '\0';
-    }
+    buffer[read_bytes] = '\0';
 
 out_close:
     close(fd);

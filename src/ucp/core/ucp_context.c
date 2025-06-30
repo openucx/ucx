@@ -239,6 +239,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "multiple rails. Must be greater than 0.",
    ucs_offsetof(ucp_context_config_t, min_rndv_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"MIN_RMA_CHUNK_SIZE", "8k",
+   "Minimum chunk size to split the message sent with RMA protocol on\n"
+   "multiple rails. Must be greater than 0.",
+   ucs_offsetof(ucp_context_config_t, min_rma_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"RMA_ZCOPY_MAX_SEG_SIZE", "auto",
    "Max size of a segment for rma/rndv zcopy.",
    ucs_offsetof(ucp_context_config_t, rma_zcopy_max_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
@@ -2123,6 +2128,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (context->config.ext.min_rndv_chunk_size == 0) {
         ucs_error("minimum chunk size for rendezvous protocol must be greater"
+                  " than 0");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (context->config.ext.min_rma_chunk_size == 0) {
+        ucs_error("minimum chunk size for RMA protocol must be greater"
                   " than 0");
         return UCS_ERR_INVALID_PARAM;
     }

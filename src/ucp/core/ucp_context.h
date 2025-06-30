@@ -127,6 +127,9 @@ typedef struct ucp_context_config {
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;
+    /** Minimum allowed chunk size when splitting rma message over multiple
+     *  lanes */
+    size_t                                 min_rma_chunk_size;
     /** Estimated number of endpoints */
     size_t                                 estimated_num_eps;
     /** Estimated number of processes per node */
@@ -730,6 +733,13 @@ static UCS_F_ALWAYS_INLINE int
 ucp_context_usage_tracker_enabled(ucp_context_h context)
 {
     return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_rndv_is_enabled(ucp_context_h context)
+{
+    return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
+           (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
 }
 
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,

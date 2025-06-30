@@ -10,6 +10,7 @@
 #include "cuda_ipc_ep.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
+#include "cuda_ipc.inl"
 
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
@@ -57,56 +58,27 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
     return ep->remote_pid == *(pid_t*)params->iface_addr;
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_cuda_primary_ctx_pop_and_release(CUdevice cuda_device)
-{
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_ipc_ctx_rsc_get(uct_cuda_ipc_iface_t *iface, CUdevice cuda_device,
-                         uct_cuda_ipc_ctx_rsc_t **ctx_rsc_p)
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(
+        uct_cuda_ipc_iface_t *iface, uct_cuda_ipc_ctx_rsc_t **ctx_rsc_p)
 {
     unsigned long long ctx_id;
     ucs_status_t status;
     CUresult result;
-    CUcontext cuda_ctx;
     uct_cuda_ctx_rsc_t *ctx_rsc;
-
-    status = uct_cuda_primary_ctx_retain(cuda_device, 0, &cuda_ctx);
-    if (ucs_unlikely(status != UCS_OK)) {
-        goto err;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
-    if (ucs_unlikely(status != UCS_OK)) {
-        /* To workaround gcc 4.8.5 compiler error */
-        status = UCS_ERR_IO_ERROR;
-        goto err_release;
-    }
 
     result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
     if (ucs_unlikely(result != CUDA_SUCCESS)) {
         UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
-        status = UCS_ERR_IO_ERROR;
-        goto err_pop;
+        return UCS_ERR_IO_ERROR;
     }
 
     status = uct_cuda_base_ctx_rsc_get(&iface->super, ctx_id, &ctx_rsc);
     if (ucs_unlikely(status != UCS_OK)) {
-        goto err_pop;
+        return status;
     }
 
     *ctx_rsc_p = ucs_derived_of(ctx_rsc, uct_cuda_ipc_ctx_rsc_t);
     return UCS_OK;
-
-err_pop:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-err_release:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
-err:
-    return status;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -117,6 +89,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     uct_cuda_ipc_iface_t *iface       = ucs_derived_of(tl_ep->iface,
                                                        uct_cuda_ipc_iface_t);
     uct_cuda_ipc_unpacked_rkey_t *key = (uct_cuda_ipc_unpacked_rkey_t *)rkey;
+    CUdevice cuda_device;
+    int is_ctx_pushed;
     void *mapped_rem_addr;
     void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
@@ -133,15 +107,20 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_OK;
     }
 
-    status = uct_cuda_ipc_map_memhandle(&key->super, key->super.dev_num,
-                                        &mapped_addr);
+    status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)iov[0].buffer,
+                                             &cuda_device, &is_ctx_pushed);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
 
-    status = uct_cuda_ipc_ctx_rsc_get(iface, key->super.dev_num, &ctx_rsc);
+    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device, &mapped_addr);
     if (ucs_unlikely(status != UCS_OK)) {
-        return status;
+        goto out;
+    }
+
+    status = uct_cuda_ipc_ctx_rsc_get(iface, &ctx_rsc);
+    if (ucs_unlikely(status != UCS_OK)) {
+        goto out;
     }
 
     offset          = (uintptr_t)remote_addr - (uintptr_t)key->super.d_bptr;
@@ -158,7 +137,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     if (ucs_unlikely(stream == NULL)) {
         ucs_error("stream=%d for dev_num=%d not available", key->stream_id,
-                  key->super.dev_num);
+                  cuda_device);
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
@@ -198,13 +177,13 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     cuda_ipc_event->mapped_addr = mapped_addr;
     cuda_ipc_event->d_bptr      = (uintptr_t)key->super.d_bptr;
     cuda_ipc_event->pid         = key->super.pid;
-    cuda_ipc_event->cuda_device = key->super.dev_num;
+    cuda_ipc_event->cuda_device = cuda_device;
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
     status = UCS_INPROGRESS;
 
 out:
-    uct_cuda_primary_ctx_pop_and_release(key->super.dev_num);
+    uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);
     return status;
 }
 

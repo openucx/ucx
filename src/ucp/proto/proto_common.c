@@ -319,6 +319,21 @@ static void ucp_proto_common_tl_perf_reset(ucp_proto_common_tl_perf_t *tl_perf)
     tl_perf->max_frag           = SIZE_MAX;
 }
 
+static void ucp_proto_common_perf_attr_set_mem_type(
+        const ucp_proto_common_init_params_t *params,
+        uct_perf_attr_t *perf_attr)
+{
+    const ucp_rkey_config_key_t *rkey_config_key = params->super.rkey_config_key;
+
+    perf_attr->field_mask       |= UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE;
+    perf_attr->local_memory_type = params->reg_mem_info.type;
+
+    if (rkey_config_key != NULL) {
+        perf_attr->field_mask        |= UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE;
+        perf_attr->remote_memory_type = rkey_config_key->mem_type;
+    }
+}
+
 ucs_status_t
 ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
@@ -359,14 +374,15 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                              context->config.est_num_ppn,
                                              context->config.est_num_eps);
 
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
-                           UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_BANDWIDTH |
-                           UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
-                           UCT_PERF_ATTR_FIELD_LATENCY;
-    perf_attr.operation  = params->send_op;
+    perf_attr.field_mask        = UCT_PERF_ATTR_FIELD_OPERATION |
+                                  UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+                                  UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
+                                  UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
+                                  UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                                  UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
+                                  UCT_PERF_ATTR_FIELD_LATENCY;
+    perf_attr.operation         = params->send_op;
+    ucp_proto_common_perf_attr_set_mem_type(params, &perf_attr);
 
     status = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
@@ -647,6 +663,22 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
     return reg_md_map;
 }
 
+static int ucp_proto_common_find_lanes_check_mem_type(
+        const ucp_proto_common_init_params_t *params, ucp_lane_index_t lane)
+{
+    uct_perf_attr_t perf_attr = {0};
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
+
+    ucp_proto_common_perf_attr_set_mem_type(params, &perf_attr);
+
+    rsc_index = ucp_proto_common_get_rsc_index(&params->super, lane);
+    wiface    = ucp_worker_iface(params->super.worker, rsc_index);
+    /* TODO: Use memory reachability UCT API, when available, to check memory
+       type support */
+    return uct_iface_estimate_perf(wiface->iface, &perf_attr) == UCS_OK;
+}
+
 ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
         const ucp_proto_common_init_params_t *params, ucp_lane_type_t lane_type,
         uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
@@ -685,6 +717,10 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
         if (tl_max_frag <= params->hdr_size) {
             ucs_trace("lane[%d]: max fragment is too small %zu, need > %zu",
                       lane, tl_max_frag, params->hdr_size);
+            continue;
+        }
+
+        if (!ucp_proto_common_find_lanes_check_mem_type(params, lane)) {
             continue;
         }
 
