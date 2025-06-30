@@ -337,10 +337,9 @@ out_unlock:
 }
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_rma_prepare_batch,
-                 (ep, list, list_len, signal_attr, param),
+                 (ep, list, list_len, param),
                  ucp_ep_h ep, const ucp_rma_batch_iov_elem_t *list,
                  size_t list_len,
-                 const ucp_rma_batch_signal_attr_t *signal_attr,
                  const ucp_rma_batch_param_t *param) {
     return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }

@@ -675,6 +675,55 @@ typedef ucs_status_t (*ucp_am_recv_callback_t)(void *arg, const void *header,
 
 /**
  * @ingroup UCP_ENDPOINT
+ * @brief Callback to process incoming RMA batch sent by
+ * @ref ucp_ep_rma_post_batch routine.
+ *
+ * The callback is always called from the progress context, therefore calling
+ * @ref ucp_worker_progress() is not allowed. It is recommended to define
+ * callbacks with relatively short execution time to avoid blocking of
+ * communication progress.
+ *
+ * @param [in]  arg                       User-defined argument.
+ * @param [in]  completion_message        Points to the received message buffer
+ *                                        if @a UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE
+ *                                        flag is set in @ref
+ *                                        ucp_rma_batch_param_t.field_mask.
+ *                                        Otherwise, it points to the internal
+ *                                        UCP descriptor which can further be
+ *                                        used for initiating data receive by
+ *                                        using @ref ucp_ep_rma_post_batch
+ *                                        routine.
+ * @param [in]  completion_message_length Length of message.
+ * @param [in]  param                     RMA batch parameters.
+ *
+ * @return UCS_OK        @a data will not persist after the callback returns.
+ *
+ * @return UCS_INPROGRESS Can only be returned if @a param->field_mask contains
+ *                        UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE. The @a
+ *                        completion_message will persist after the callback
+ *                        has returned. To free the memory, a pointer to the
+ *                        completion_message must be passed into
+ *                        @ref ucp_am_data_release or data receive is initiated
+ *                        by @ref ucp_am_recv_data_nbx.
+ *
+ * @return otherwise      Can only be returned if @a param->field_mask contains
+ *                        UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE. In this case
+ *                        data descriptor @a completion_message will be dropped
+ *                        and the corresponding @ref ucp_ep_rma_post_batch call
+ *                        on the sender side will complete with the status
+ *                        returned from the callback.
+ *
+ * @note This callback should be set and released
+ *       by @ref ucp_worker_set_rma_batch_handler function.
+ *
+ */
+typedef ucs_status_t (*ucp_rma_batch_callback_t)(void *arg, void *data,
+                                                 size_t length,
+                                                 const ucp_rma_batch_param_t *param);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
  * @brief Tuning parameters for the UCP endpoint.
  *
  * The structure defines the parameters that are used for the
