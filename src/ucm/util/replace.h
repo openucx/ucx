@@ -10,6 +10,7 @@
 
 #include <ucm/bistro/bistro.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/sys/preprocessor.h>
 #include <ucs/type/status.h>
 #include <pthread.h>
 
@@ -30,7 +31,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
 #define _UCM_DEFINE_REPLACE_FUNC(_over_name, _ucm_name, _rettype, _fail_val, ...) \
     \
     /* Define a symbol which goes to the replacement - in case we are loaded first */ \
-    _rettype _over_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    _rettype _over_name(UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
         _rettype res; \
         UCM_BISTRO_PROLOGUE; \
@@ -39,7 +40,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         if (ucs_unlikely(ucm_reloc_get_orig_thread == pthread_self())) { \
             return (_rettype)_fail_val; \
         } \
-        res = _ucm_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        res = _ucm_name(UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
         UCM_BISTRO_EPILOGUE; \
         return res; \
     }
@@ -48,11 +49,12 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name, ucm_override_##_name, \
                            _rettype, __VA_ARGS__)
 
+
 #define _UCM_DEFINE_DLSYM_FUNC(_name, _orig_name, _over_name, _rettype, ...) \
-    _rettype _over_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)); \
+    _rettype _over_name(UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)); \
     \
     /* Call the original function using dlsym(RTLD_NEXT) */ \
-    _rettype _orig_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    _rettype _orig_name(UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
         typedef _rettype (*func_ptr_t) (__VA_ARGS__); \
         static func_ptr_t orig_func_ptr = NULL; \
@@ -67,7 +69,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
             ucm_reloc_get_orig_thread = (pthread_t)-1; \
             pthread_mutex_unlock(&ucm_reloc_get_orig_lock); \
         } \
-        return orig_func_ptr(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        return orig_func_ptr(UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
 #define UCM_DEFINE_REPLACE_DLSYM_FUNC(_name, _rettype, _fail_val, ...) \
@@ -87,7 +89,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name##_dlsym, \
                            ucm_override_##_name, _rettype, __VA_ARGS__) \
     \
-    _rettype (*ucm_orig_##_name)(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) = \
+    _rettype (*ucm_orig_##_name)(UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) = \
         ucm_orig_##_name##_dlsym; \
     \
     _UCM_DEFINE_REPLACE_FUNC(ucm_override_##_name, ucm_##_name, \
@@ -95,9 +97,9 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
 
 #define UCM_DEFINE_SYSCALL_FUNC(_name, _rettype, _syscall_id, ...) \
     /* Call syscall */ \
-    _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    _rettype ucm_orig_##_name(UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
-        return (_rettype)syscall(_syscall_id, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        return (_rettype)syscall(_syscall_id, UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
 #if UCM_BISTRO_HOOKS
@@ -105,40 +107,15 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name##_dlsym, \
                            ucm_override_##_name, _rettype, __VA_ARGS__) \
     UCM_DEFINE_SYSCALL_FUNC(_name##_syscall, _rettype, _syscall_id, __VA_ARGS__) \
-    _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    _rettype ucm_orig_##_name(UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
         return (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO) ? \
-               ucm_orig_##_name##_syscall(UCM_FUNC_PASS_ARGS(__VA_ARGS__)) : \
-               ucm_orig_##_name##_dlsym(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+               ucm_orig_##_name##_syscall(UCS_FUNC_PASS_ARGS(__VA_ARGS__)) : \
+               ucm_orig_##_name##_dlsym(UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 #else
 #  define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _syscall_id, ...) \
     UCM_DEFINE_DLSYM_FUNC(_name, _rettype, __VA_ARGS__)
 #endif
-
-/*
- * Define argument list with given types.
- */
-#define UCM_FUNC_DEFINE_ARGS(...) \
-    UCS_PP_FOREACH_SEP(_UCM_FUNC_ARG_DEFINE, _, \
-                       UCS_PP_ZIP((UCS_PP_SEQ(UCS_PP_NUM_ARGS(__VA_ARGS__))), \
-                                  (__VA_ARGS__)))
-
-/*
- * Pass auto-generated arguments to a function call.
- */
-#define UCM_FUNC_PASS_ARGS(...) \
-    UCS_PP_FOREACH_SEP(_UCM_FUNC_ARG_PASS, _, UCS_PP_SEQ(UCS_PP_NUM_ARGS(__VA_ARGS__)))
-
-
-/*
- * Helpers
- */
-#define _UCM_FUNC_ARG_DEFINE(_, _bundle) \
-    __UCM_FUNC_ARG_DEFINE(_, UCS_PP_TUPLE_0 _bundle, UCS_PP_TUPLE_1 _bundle)
-#define __UCM_FUNC_ARG_DEFINE(_, _index, _type) \
-    _type UCS_PP_TOKENPASTE(arg, _index)
-#define _UCM_FUNC_ARG_PASS(_, _index) \
-    UCS_PP_TOKENPASTE(arg, _index)
 
 #endif
