@@ -696,7 +696,8 @@ typedef ucs_status_t (*ucp_am_recv_callback_t)(void *arg, const void *header,
  * @param [in]  completion_message_length Length of message.
  * @param [in]  param                     RMA batch parameters.
  *
- * @return UCS_OK        @a data will not persist after the callback returns.
+ * @return UCS_OK        @a completion_message will not persist after the
+ *                       callback returns.
  *
  * @return UCS_INPROGRESS Can only be returned if @a param->field_mask contains
  *                        UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE. The @a
@@ -717,8 +718,8 @@ typedef ucs_status_t (*ucp_am_recv_callback_t)(void *arg, const void *header,
  *       by @ref ucp_worker_set_rma_batch_handler function.
  *
  */
-typedef ucs_status_t (*ucp_rma_batch_callback_t)(void *arg, void *data,
-                                                 size_t length,
+typedef ucs_status_t (*ucp_rma_batch_callback_t)(void *arg, void *completion_message,
+                                                 size_t completion_message_length,
                                                  const ucp_rma_batch_param_t *param);
 
 

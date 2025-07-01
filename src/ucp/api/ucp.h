@@ -1027,17 +1027,20 @@ typedef struct ucp_datatype_attr {
 
 
 /**
- * @ingroup UCP_RMA
- * @brief Type of RMA operation to perform in a batch.
+ * @ingroup UCP_ENDPOINT
+ * @enum ucp_op_type_t
+ * @brief UCP operation types.
  *
- * The enumeration allows specifying which fields in
- * @ref ucp_rma_batch_iov_elem_t are present. It is used to enable backward
- * compatibility support.
+ * This enum defines the types of operations for which cost estimation
+ * is available.
  */
-typedef enum {
-    UCP_RMA_BATCH_OPCODE_PUT, /**< Remote memory write */
-    UCP_RMA_BATCH_OPCODE_GET  /**< Remote memory read */
-} ucp_rma_batch_opcode_t;
+typedef enum ucp_op_type {
+    /** Operation corresponds to @ref ucp_put_nbx */
+    UCP_OP_PUT = 0,
+
+    /** Operation corresponds to @ref ucp_get_nbx */
+    UCP_OP_GET = 1
+} ucp_op_type_t;
 
 
 /**
@@ -1046,12 +1049,12 @@ typedef enum {
  */
 typedef struct ucp_rma_batch_iov_elem {
     /**
-     * Operation type, as defined in @ref ucp_rma_batch_opcode_t.
+     * Operation type, as defined in @ref ucp_op_type_t.
      */
-    ucp_rma_batch_opcode_t opcode;
+    ucp_op_type_t opcode;
 
     /**
-     * Pointer to the local buffer. Must be pre-registered.
+     * Pointer to the local buffer.
      */
     void                   *local_va;
 
@@ -1114,8 +1117,8 @@ typedef struct {
     uint64_t field_mask;
 
     /**
-     * Pointer to the completion message buffer before calling @ref
-     * ucp_ep_rma_prepare_batch, and must remain valid until the batch
+     * Pointer to the completion message buffer, which must be set before
+     * calling @ref ucp_ep_rma_prepare_batch and remain valid until the batch
      * completes. This field is optional. If @ref
      * UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE is not set in @ref field_mask,
      * this field defaults to @e NULL.
