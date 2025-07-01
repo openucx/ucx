@@ -294,16 +294,6 @@ ucp_rkey_packed_mem_type(const void *rkey_buffer)
     return (ucs_memory_type_t)(*(uint8_t *)((const ucp_md_map_t*)rkey_buffer + 1));
 }
 
-static UCS_F_ALWAYS_INLINE uct_mem_h
-ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
-{
-    if (!(md_map & UCS_BIT(md_idx))) {
-        return UCT_MEM_HANDLE_NULL;
-    }
-
-    return uct[ucs_bitmap2idx(md_map, md_idx)];
-}
-
 static UCS_F_ALWAYS_INLINE void *ucp_memh_address(const ucp_mem_h memh)
 {
     return (void*)memh->super.super.start;

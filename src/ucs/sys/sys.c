@@ -460,9 +460,7 @@ static ssize_t ucs_read_file_vararg(char *buffer, size_t max, int silent,
         goto out_close;
     }
 
-    if (read_bytes < max) {
-        buffer[read_bytes] = '\0';
-    }
+    buffer[read_bytes] = '\0';
 
 out_close:
     close(fd);

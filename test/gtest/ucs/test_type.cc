@@ -11,9 +11,14 @@ extern "C" {
 #include <ucs/type/serialize.h>
 #include <ucs/type/status.h>
 #include <ucs/type/float8.h>
+#include <ucs/type/rwlock.h>
 }
 
 #include <time.h>
+#include <thread>
+#include <chrono>
+#include <vector>
+#include <atomic>
 
 class test_type : public ucs::test {
 };
@@ -136,6 +141,207 @@ UCS_TEST_F(test_type, pack_float) {
     /* Above max -> max */
     EXPECT_EQ(UCS_FP8_PACK_UNPACK(TEST_LATENCY, UCS_BIT(20)),
               UCS_FP8_PACK_UNPACK(TEST_LATENCY, 200000000));
+}
+
+class test_rwlock : public ucs::test {
+protected:
+    using run_func_t = const std::function<void()>&;
+
+    void sleep()
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    void measure_one(int iter_count, int thread_count, int writers,
+                     run_func_t reader, run_func_t writer,
+                     const std::string &name)
+    {
+        std::vector<std::thread> threads;
+
+        threads.reserve(thread_count);
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int c = 0; c < thread_count; c++) {
+            threads.emplace_back([&]() {
+                unsigned seed = time(0);
+                for (int i = 0; i < iter_count / thread_count; i++) {
+                    if ((rand_r(&seed) % 100) < writers) {
+                        writer();
+                    } else {
+                        reader();
+                    }
+                }
+            });
+        }
+
+
+        for (auto &t : threads) {
+            t.join();
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+
+        UCS_TEST_MESSAGE << elapsed.count() * 1000 << " ms " << name << " "
+                         << std::to_string(thread_count) << " threads "
+                         << std::to_string(writers) << "% of writers";
+    }
+
+    void measure(int iter_count, std::vector<int> &threads, run_func_t reader,
+                 run_func_t writer, const std::string &name)
+    {
+        std::vector<int> writers_percent = {0, 1, 10, 50, 98};
+
+        for (auto thread_count : threads) {
+            for (auto writers : writers_percent) {
+                measure_one(iter_count, thread_count, writers, reader, writer,
+                            name);
+            }
+        }
+    }
+};
+
+UCS_TEST_F(test_rwlock, lock) {
+    ucs_rw_spinlock_t lock = UCS_RWLOCK_STATIC_INITIALIZER;
+
+    ucs_rw_spinlock_read_lock(&lock);
+    EXPECT_FALSE(ucs_rw_spinlock_write_trylock(&lock));
+
+    ucs_rw_spinlock_read_lock(&lock); /* second read lock should pass */
+
+    bool write_taken = 0;
+    std::thread w([&]() {
+        ucs_rw_spinlock_write_lock(&lock);
+        write_taken = 1;
+        ucs_rw_spinlock_write_unlock(&lock);
+    });
+    sleep();
+    EXPECT_FALSE(write_taken); /* write lock should wait for read lock release */
+
+    ucs_rw_spinlock_read_unlock(&lock);
+    sleep();
+    EXPECT_FALSE(write_taken); /* first read lock still holding lock */
+
+    bool read_taken = false;
+    std::thread r1([&]() {
+        ucs_rw_spinlock_read_lock(&lock);
+        read_taken = true;
+        ucs_rw_spinlock_read_unlock(&lock);
+    });
+    sleep();
+    EXPECT_FALSE(read_taken); /* read lock should wait while write lock is waiting */
+
+    ucs_rw_spinlock_read_unlock(&lock);
+    w.join();
+    EXPECT_TRUE(write_taken); /* write lock should be taken */
+
+    r1.join();
+    EXPECT_TRUE(read_taken); /* read lock should be taken */
+
+    EXPECT_TRUE(ucs_rw_spinlock_write_trylock(&lock));
+    read_taken = false;
+    std::thread r2([&]() {
+        ucs_rw_spinlock_read_lock(&lock);
+        read_taken = true;
+        ucs_rw_spinlock_read_unlock(&lock);
+    });
+    sleep();
+    EXPECT_FALSE(read_taken); /* read lock should wait for write lock release */
+
+    ucs_rw_spinlock_write_unlock(&lock);
+    r2.join();
+    EXPECT_TRUE(read_taken); /* read lock should be taken */
+
+    ucs_rw_spinlock_cleanup(&lock);
+}
+
+UCS_TEST_F(test_rwlock, perf) {
+    int m = std::thread::hardware_concurrency();
+    std::vector<int> threads = {1, 2, 4, m};
+    ucs_rw_spinlock_t lock = UCS_RWLOCK_STATIC_INITIALIZER;
+    measure(1000000, threads,
+            [&]() {
+                ucs_rw_spinlock_read_lock(&lock);
+                ucs_rw_spinlock_read_unlock(&lock);
+            },
+            [&]() {
+                ucs_rw_spinlock_write_lock(&lock);
+                ucs_rw_spinlock_write_unlock(&lock);
+            },
+            "rw_spinlock");
+    ucs_rw_spinlock_cleanup(&lock);
+}
+
+UCS_TEST_F(test_rwlock, pthread) {
+    int m = std::thread::hardware_concurrency();
+    std::vector<int> threads = {1, 2, 4, m};
+    pthread_rwlock_t plock;
+    pthread_rwlock_init(&plock, NULL);
+    measure(1000000, threads,
+            [&]() {
+                pthread_rwlock_rdlock(&plock);
+                pthread_rwlock_unlock(&plock);
+            },
+            [&]() {
+                pthread_rwlock_wrlock(&plock);
+                pthread_rwlock_unlock(&plock);
+            },
+            "pthread");
+    pthread_rwlock_destroy(&plock);
+}
+
+UCS_TEST_F(test_rwlock, shared_state) {
+    int m = std::thread::hardware_concurrency();
+    std::vector<int> threads = {16, m, m * 4};
+    ucs_rw_spinlock_t lock = UCS_RWLOCK_STATIC_INITIALIZER;
+    int x1 = 1;
+    int x2 = 2;
+    measure(1000000, threads,
+            [&]() {
+                ucs_rw_spinlock_read_lock(&lock);
+                EXPECT_EQ(x1 * 2, x2);
+                ucs_rw_spinlock_read_unlock(&lock);
+            },
+            [&]() {
+                ucs_rw_spinlock_write_lock(&lock);
+                x1 += 1;
+                x2 += 2;
+                ucs_rw_spinlock_write_unlock(&lock);
+            },
+            "shared_state");
+    ucs_rw_spinlock_cleanup(&lock);
+}
+
+typedef struct {
+    int64_t counter[128];
+} data_t;
+
+UCS_TEST_F(test_rwlock, memory_barriers) {
+    int m = std::thread::hardware_concurrency();
+    std::vector<int> threads = {16, m, m * 4};
+    ucs_rw_spinlock_t lock = UCS_RWLOCK_STATIC_INITIALIZER;
+    data_t data1 = {0};
+    data_t data2 = {0};
+    measure(10000000, threads,
+            [&]() {
+                ucs_rw_spinlock_read_lock(&lock);
+                data_t d1 = data1;
+                data_t d2 = data2;
+                ucs_rw_spinlock_read_unlock(&lock);
+
+                int64_t x1 = d1.counter[ucs::rand() % 128];
+                int64_t x2 = d2.counter[ucs::rand() % 128];
+                EXPECT_LE(x1, x2);
+            },
+            [&]() {
+                ucs_rw_spinlock_write_lock(&lock);
+                for (int i = 0; i < 128; ++i) {
+                    data1.counter[i]++;
+                }
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+                data2 = data1;
+                ucs_rw_spinlock_write_unlock(&lock);
+            },
+            "membariers");
+    ucs_rw_spinlock_cleanup(&lock);
 }
 
 class test_init_once: public test_type {

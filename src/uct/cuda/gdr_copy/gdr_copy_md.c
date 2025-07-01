@@ -17,6 +17,7 @@
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/time/time.h>
+#include <ucs/memory/rcache.inl>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
 #include <ucm/api/ucm.h>
@@ -357,12 +358,19 @@ uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     ucs_status_t status;
     uct_gdr_copy_mem_t *memh;
 
+    rregion = ucs_rcache_lookup(md->rcache, address, length, GPU_PAGE_SIZE,
+                                PROT_READ | PROT_WRITE);
+    if (rregion != NULL) {
+        goto out;
+    }
+
     status = ucs_rcache_get(md->rcache, address, length, GPU_PAGE_SIZE,
                             PROT_READ | PROT_WRITE, &flags, &rregion);
     if (status != UCS_OK) {
         return status;
     }
 
+out:
     ucs_assert(rregion->refcount > 0);
     memh    = &ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t)->memh;
     *memh_p = memh;
