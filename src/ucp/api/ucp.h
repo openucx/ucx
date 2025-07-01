@@ -186,7 +186,8 @@ enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6), /**< Worker name */
     UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT = UCS_BIT(7), /**< Alignment of active
                                                            messages on the receiver */
-    UCP_WORKER_PARAM_FIELD_CLIENT_ID    = UCS_BIT(8)  /**< Client id */
+    UCP_WORKER_PARAM_FIELD_CLIENT_ID    = UCS_BIT(8), /**< Client id */
+    UCP_WORKER_PARAM_FIELD_RMA_BATCH_CB = UCS_BIT(9)  /**< RMA batch callback */
 };
 
 
@@ -1026,6 +1027,115 @@ typedef struct ucp_datatype_attr {
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @enum ucp_op_type_t
+ * @brief UCP operation types.
+ *
+ * This enum defines the types of operations for which cost estimation
+ * is available.
+ */
+typedef enum ucp_op_type {
+    /** Operation corresponds to @ref ucp_put_nbx */
+    UCP_OP_PUT = 0,
+
+    /** Operation corresponds to @ref ucp_get_nbx */
+    UCP_OP_GET = 1
+} ucp_op_type_t;
+
+
+/**
+ * @ingroup UCP_RMA
+ * @brief Describes a single RMA operation in a batch.
+ */
+typedef struct ucp_rma_batch_iov_elem {
+    /**
+     * Operation type, as defined in @ref ucp_op_type_t.
+     */
+    ucp_op_type_t opcode;
+
+    /**
+     * Pointer to the local buffer.
+     */
+    void                   *local_va;
+
+    /**
+     * Memory handle for the local buffer.
+     */
+    ucp_mem_h              memh;
+
+    /**
+     * Remote memory address for the data transfer.
+     */
+    uint64_t               remote_va;
+
+    /**
+     * Length of the data transfer in bytes.
+     */
+    size_t                 length;
+
+    /**
+     * Remote key for accessing the remote memory.
+     */
+    ucp_rkey_h             rkey;
+} ucp_rma_batch_iov_elem_t;
+
+
+/**
+ * @ingroup UCP_RMA
+ * @brief RMA batch parameter fields and flags
+ *
+ * The enumeration allows specifying which fields in @ref ucp_rma_batch_param_t
+ * are present and RMA batch operation flags are used. It is used to enable
+ * backward compatibility support.
+ */
+typedef enum {
+    /**
+     * Indicates that @ref ucp_rma_batch_param_t.completion_message field is
+     * valid.
+     */
+    UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE        = UCS_BIT(0),
+
+    /**
+     * Indicates that @ref ucp_rma_batch_param_t.completion_message_length
+     * field is valid.
+     */
+    UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE_LENGTH = UCS_BIT(1)
+} ucp_rma_batch_field_t;
+
+/**
+ * @ingroup UCP_RMA
+ * @brief Optional parameters for RMA batch preparation.
+ *
+ * Reserved for future extensions.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from @ref
+     * ucp_rma_batch_field_t. Fields not specified in this mask will be
+     * ignored. Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Pointer to the completion message buffer, which must be set before
+     * calling @ref ucp_ep_rma_prepare_batch and remain valid until the batch
+     * completes. This field is optional. If @ref
+     * UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE is not set in @ref field_mask,
+     * this field defaults to @e NULL.
+     */
+    void    *completion_message;
+
+    /**
+     * Length of the message buffer in bytes.
+     * This field is optional. If @ref
+     * UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE_LENGTH is not set in @ref
+     * field_mask, this field defaults to 0.
+     */
+    size_t   completion_message_length;
+} ucp_rma_batch_param_t;
+
+
+/**
  * @ingroup UCP_CONFIG
  * @brief Tuning parameters for UCP library.
  *
@@ -1393,6 +1503,29 @@ typedef struct ucp_worker_params {
     * using @ref ucp_conn_request_query.
     */
     uint64_t                client_id;
+
+    /**
+     * RMA batch completion callback. This callback is invoked on the remote
+     * side whenever an RMA batch posted with @ref ucp_ep_rma_post_batch
+     * completes and a completion message is received.
+     *
+     * The callback provides access to optional completion message data sent by
+     * the sender, notification that all RMA operations in the batch have
+     * completed, and user-defined argument for context.
+     *
+     * @note The callback is always called from the progress context, therefore
+     *       calling @ref ucp_worker_progress is not allowed from within the
+     *       callback.
+     * @note It is recommended to define callbacks with relatively short
+     *       execution time to avoid blocking communication progress.
+     * @note To enable batch completion detection, set @ref
+     *       UCP_WORKER_PARAM_FIELD_RMA_BATCH_CB in the field_mask when creating
+     *       the worker.
+     * @note If @ref UCP_WORKER_PARAM_FIELD_RMA_BATCH_CB is not set in the
+     *       field_mask, the callback will default to NULL and remote batch
+     *       completion detection will be disabled.
+     */
+    ucp_rma_batch_callback_t rma_batch_callback;
 } ucp_worker_params_t;
 
 
@@ -3695,6 +3828,62 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
 ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param);
+
+
+/**
+ * @ingroup UCP_RMA
+ * @brief Prepare a batch of RMA operations.
+ *
+ * This routine prepares a batch of RMA operations for efficient execution.
+ * The batch can contain multiple PUT and GET operations that will be
+ * executed together when posted with @ref ucp_ep_rma_post_batch.
+ *
+ * @param [in]  ep            Remote endpoint handle.
+ * @param [in]  list          Array of RMA operations to include in the batch.
+ *                            Each element specifies an operation type (PUT/GET),
+ *                            local buffer, remote address, and memory handles.
+ * @param [in]  list_len      Number of operations in the batch.
+ * @param [in]  param         Optional batch parameters. Can specify a completion
+ *                            message that will be sent to the remote side when
+ *                            the batch completes. The remote side can detect
+ *                            completion through the RMA batch callback registered
+ *                            with @ref ucp_worker_create.
+ *
+ * @return Pointer to the prepared request handle, or error status if preparation failed.
+ *
+ * @note The local buffers specified in @a list must remain valid until the
+ *       batch operation completes.
+ * @note All memory handles in @a list must be obtained from @ref ucp_mem_map.
+ */
+ucs_status_ptr_t
+ucp_ep_rma_prepare_batch(ucp_ep_h ep,
+                         const ucp_rma_batch_iov_elem_t *list,
+                         size_t list_len,
+                         const ucp_rma_batch_param_t *param);
+
+/**
+ * @ingroup UCP_RMA
+ * @brief Post a prepared RMA batch operation.
+ *
+ * This routine initiates execution of a prepared RMA batch. When the batch
+ * completes on the remote side, the completion can be detected through:
+ * 1. A completion message sent to the remote peer (if specified in prepare)
+ * 2. The RMA batch callback registered on the remote worker
+ *
+ * @param [in]  request       Request handle returned by @ref ucp_ep_rma_prepare_batch.
+ *
+ * @return UCS_OK               - The batch completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
+ * @return otherwise            - The batch was posted and will complete
+ *                                asynchronously. Use standard UCP completion
+ *                                mechanisms to detect local completion.
+ *
+ * @note Remote completion detection requires the remote worker to have an
+ *       RMA batch callback registered via @ref ucp_worker_create.
+ * @note The callback on the remote side will be invoked from the progress
+ *       context when @ref ucp_worker_progress is called.
+ */
+ucs_status_ptr_t ucp_ep_rma_post_batch(void *request);
 
 
 /**
