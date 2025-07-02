@@ -490,6 +490,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     ucp_lane_map_t lane_map;
     char lane_desc[64];
     size_t max_iov;
+    ucs_sys_device_t lane_sys_dev;
 
     if (max_lanes == 0) {
         return 0;
@@ -580,6 +581,16 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                  */
                 ucs_trace("%s: no access to mem type %s", lane_desc,
                           ucs_memory_type_names[reg_mem_type]);
+                continue;
+            }
+
+            /* The two devices must also have internal reachability */
+            lane_sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
+            if (!ucs_topo_is_memory_reachable(lane_sys_dev,
+                                              select_param->sys_dev)) {
+                ucs_trace("%s: no reachability between sys_dev=%u and "
+                          "lane_sys_dev=%u",
+                          lane_desc, select_param->sys_dev, sys_dev);
                 continue;
             }
         }
