@@ -15,6 +15,48 @@
 #include <cuda.h>
 
 
+/* Assume uniformity of the GPU devices here */
+int uct_cuda_base_has_c2c(void)
+{
+#if CUDA_VERSION >= 12080
+    ucs_status_t status;
+    nvmlDevice_t device;
+    nvmlFieldValue_t fv[2];
+    unsigned i, links;
+
+    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(0, &device));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    /* Check if any C2C between GPU to CPU */
+    fv->fieldId = NVML_FI_DEV_C2C_LINK_COUNT;
+    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetFieldValues(device, 1, fv));
+    if ((status != UCS_OK) || (fv->nvmlReturn != NVML_SUCCESS)) {
+        return 0;
+    }
+
+    /* Check availability of a C2C */
+    links = fv->value.uiVal;
+    for (i = 0; i < links; i++) {
+        fv[0].fieldId = NVML_FI_DEV_C2C_LINK_GET_STATUS;
+        fv[0].scopeId = i;
+        fv[1].fieldId = NVML_FI_DEV_C2C_LINK_GET_MAX_BW;
+        fv[1].scopeId = i;
+        status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetFieldValues(device, 2, fv));
+        if ((status == UCS_OK) &&
+            (fv[0].nvmlReturn == NVML_SUCCESS) &&
+            (fv[0].value.uiVal == 1) &&
+            (fv[1].nvmlReturn == NVML_SUCCESS)) {
+
+            ucs_debug("GPUs have C2C link UP links=%d", links);
+            return 1;
+        }
+    }
+#endif
+    return 0;
+}
+
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                                ucs_sys_device_t *sys_dev_p)
 {
@@ -60,6 +102,14 @@ void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
         goto err;
     }
 
+
+    if (uct_cuda_base_has_c2c()) {
+        status = ucs_topo_sys_device_enable_aux_path(*sys_dev_p);
+        if (status != UCS_OK) {
+            goto err;
+        }
+    }
+
     return;
 
 err:
@@ -99,6 +149,11 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
     if ((status != UCS_OK) || (num_gpus == 0)) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    }
+
+    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        return status;
     }
 
     for (i = 0; i < num_gpus; ++i) {

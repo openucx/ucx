@@ -588,9 +588,9 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
             lane_sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
             if (!ucs_topo_is_memory_reachable(lane_sys_dev,
                                               select_param->sys_dev)) {
-                ucs_trace("%s: no reachability between sys_dev=%u and "
-                          "lane_sys_dev=%u",
-                          lane_desc, select_param->sys_dev, sys_dev);
+                ucs_trace("%s: no reachability between lane_sys_dev=%u and "
+                          "sys_dev=%u",
+                          lane_desc, lane_sys_dev, select_param->sys_dev);
                 continue;
             }
         }

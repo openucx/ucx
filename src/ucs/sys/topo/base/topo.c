@@ -73,6 +73,7 @@ typedef struct {
     ucs_numa_node_t  numa_node;
     uintptr_t        user_value;
     ucs_sys_device_t sys_dev_aux;
+    int              aux_path;
 } ucs_topo_sys_device_info_t;
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
@@ -303,6 +304,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                 ucs_topo_read_device_numa_node(bus_id);
         ucs_topo_global_ctx.devices[*sys_dev].user_value    = UINTPTR_MAX;
         ucs_topo_global_ctx.devices[*sys_dev].sys_dev_aux   = UCS_SYS_DEVICE_ID_UNKNOWN;
+        ucs_topo_global_ctx.devices[*sys_dev].aux_path      = 0;
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
@@ -558,6 +560,30 @@ done:
     return UCS_OK;
 }
 
+/* Non-transitive memory and reachablity checks */
+int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
+                                 ucs_sys_device_t mem_device)
+{
+    int aux_path;
+    ucs_sys_device_t sys_dev;
+
+    if ((device == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (mem_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        return 1; /* Reachable by default */
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    sys_dev  = ucs_topo_global_ctx.devices[device].sys_dev_aux;
+    aux_path = ucs_topo_global_ctx.devices[mem_device].aux_path;
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    /*
+     * Either the device of the memory does not mandate auxiliary path or they
+     * they have a comon PCI bridge.
+     */
+    return !aux_path || ucs_topo_is_pci_bridge(mem_device, sys_dev);
+}
+
 static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
                                                ucs_sys_dev_distance_t *distance)
 {
@@ -762,6 +788,23 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return numa_node;
+}
+
+ucs_status_t
+ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
+{
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_error("system device %d is invalid (max: %d)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].aux_path = 1;
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return UCS_OK;
 }
 
 ucs_status_t
