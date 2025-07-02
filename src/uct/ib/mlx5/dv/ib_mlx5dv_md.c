@@ -732,7 +732,7 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
     }
 
     dmabuf_fd_pcie = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params,
-                                     dmabuf_fd_pcie, DMABUF_FD_PCIE,
+                                     dmabuf_fd, DMABUF_FD,
                                      UCT_DMABUF_FD_INVALID);
     if (dmabuf_fd_pcie == UCT_DMABUF_FD_INVALID) {
         return UCS_ERR_UNSUPPORTED;
@@ -2273,6 +2273,7 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
     } else {
         sys_path[0]            = '\0';
         md->direct_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev, dev->sys_dev);
     }
 
     ucs_debug("%s: Direct NIC %s supported ret=%d sys_path='%s%s' "

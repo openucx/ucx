@@ -578,10 +578,13 @@ int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     /*
-     * Either the device of the memory does not mandate auxiliary path or they
-     * they have a comon PCI bridge.
+     * Reachable if:
+     * - Memory device does not mandate using the auxiliary path
+     * - Device can never be eligible of auxiliary paths
+     * - Device supports auxiliary path and is under same PCI bridge
      */
-    return !aux_path || ucs_topo_is_pci_bridge(mem_device, sys_dev);
+    return !aux_path || (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+           ucs_topo_is_pci_bridge(mem_device, sys_dev);
 }
 
 static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
