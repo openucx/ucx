@@ -212,7 +212,7 @@ uct_rocm_copy_get_default_bandwidth(const uct_perf_attr_t *perf_attr)
 }
 
 static UCS_F_ALWAYS_INLINE double
-uct_rocm_copy_get_mi300a_bandwidth(const uct_perf_attr_t *perf_attr)
+uct_rocm_copy_get_mi300_bandwidth(const uct_perf_attr_t *perf_attr)
 {
     switch (perf_attr->operation) {
     case UCT_EP_OP_GET_SHORT:
@@ -250,9 +250,8 @@ uct_rocm_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
         if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
             bandwidth.shared = 0;
         } else {
-            if (gpu_product == UCT_ROCM_AMD_GPU_MI300A ||
-                gpu_product == UCT_ROCM_AMD_GPU_MI300X) {
-                bandwidth.shared = uct_rocm_copy_get_mi300a_bandwidth(perf_attr);
+            if (gpu_product == UCT_ROCM_AMD_GPU_MI300) {
+                bandwidth.shared = uct_rocm_copy_get_mi300_bandwidth(perf_attr);
             } else {
                 bandwidth.shared = uct_rocm_copy_get_default_bandwidth(perf_attr);
             }

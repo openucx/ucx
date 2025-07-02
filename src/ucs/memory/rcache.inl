@@ -8,6 +8,7 @@
 #define UCS_RCACHE_INL_
 
 #include "rcache_int.h"
+#include <ucs/profile/profile.h>
 
 static UCS_F_ALWAYS_INLINE int
 ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment)
@@ -80,6 +81,17 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
     return region;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_rcache_region_t *
+ucs_rcache_lookup(ucs_rcache_t *rcache, void *address, size_t length,
+                  size_t alignment, int prot)
+{
+    ucs_rcache_region_t *region;
+
+    ucs_rw_spinlock_read_lock(&rcache->pgt_lock);
+    region = ucs_rcache_lookup_unsafe(rcache, address, length, alignment, prot);
+    ucs_rw_spinlock_read_unlock(&rcache->pgt_lock);
+    return region;
+}
 
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_put_unsafe(ucs_rcache_t *rcache, ucs_rcache_region_t *region)

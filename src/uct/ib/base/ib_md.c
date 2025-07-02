@@ -1203,8 +1203,8 @@ void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
               uct_ib_device_name(&md->dev), md->relaxed_order ? "en" : "dis");
 }
 
-static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
-                                          ucs_memory_type_t mem_type)
+void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
+                                   ucs_memory_type_t mem_type)
 {
     if (md->reg_mem_types & UCS_BIT(mem_type)) {
         return;
@@ -1316,8 +1316,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         md->check_subnet_filter = 1;
     }
 
-    md->reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                        md->reg_nonblock_mem_types;
+    md->reg_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                         md->reg_nonblock_mem_types;
 
     /* Check for GPU-direct support */
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
@@ -1332,7 +1332,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         uct_ib_check_gpudirect_driver(
                 md, "/sys/module/nv_peer_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
-
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);

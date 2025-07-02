@@ -181,9 +181,10 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     /* Find first lane */
-    num_lanes = ucp_proto_common_find_lanes_with_min_frag(
-            &params->super, params->first.lane_type, params->first.tl_cap_flags,
-            1, UCP_LANE_MAP_ZERO_VALUE, lanes);
+    num_lanes = ucp_proto_common_find_lanes(
+            &params->super.super, params->super.flags, params->first.lane_type,
+            params->first.tl_cap_flags, 1, UCP_LANE_MAP_ZERO_VALUE,
+            ucp_proto_common_filter_min_frag, lanes);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s",
                   ucp_proto_id_field(params->super.super.proto_id, name));
@@ -191,10 +192,11 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     /* Find rest of the lanes */
-    num_lanes += ucp_proto_common_find_lanes_with_min_frag(
-            &params->super, params->middle.lane_type,
+    num_lanes += ucp_proto_common_find_lanes(
+            &params->super.super, params->super.flags, params->middle.lane_type,
             params->middle.tl_cap_flags, UCP_PROTO_MAX_LANES - 1,
-            UCP_LANE_MAP_BIT(lanes[0]), lanes + 1);
+            UCP_LANE_MAP_BIT(lanes[0]), ucp_proto_common_filter_min_frag,
+            lanes + 1);
 
     lanes_perf = ucs_malloc(UCP_PROTO_MAX_LANES * sizeof(*lanes_perf),
                             "lanes_perf");
@@ -318,9 +320,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         /* Make sure fragment is not zero */
         ucs_assert(max_frag > 0);
 
-        /* Min chunk is scaled, but must be within HW limits */
-        min_chunk       = ucs_min(lane_perf->bandwidth * params->min_chunk /
-                                  min_bandwidth, lane_perf->max_frag);
+        /* Min chunk is scaled, but must be within HW limits.
+           Min chunk cannot be less than UCP_MIN_BCOPY, as it's not worth to
+           split tiny messages. */
+        min_chunk       = ucs_min(lane_perf->max_frag,
+                                  ucs_max(UCP_MIN_BCOPY,
+                                          lane_perf->bandwidth *
+                                          params->min_chunk / min_bandwidth));
         max_frag        = ucs_max(max_frag, min_chunk);
         lpriv->max_frag = max_frag;
         perf.max_frag  += max_frag;

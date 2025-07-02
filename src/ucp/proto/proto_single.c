@@ -35,9 +35,10 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    num_lanes = ucp_proto_common_find_lanes_with_min_frag(
-            &params->super, params->lane_type, params->tl_cap_flags, 1,
-            params->super.exclude_map, &lane);
+    num_lanes = ucp_proto_common_find_lanes(
+            &params->super.super, params->super.flags, params->lane_type,
+            params->tl_cap_flags, 1, params->super.exclude_map,
+            ucp_proto_common_filter_min_frag, &lane);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s",
                   ucp_proto_id_field(params->super.super.proto_id, name));
