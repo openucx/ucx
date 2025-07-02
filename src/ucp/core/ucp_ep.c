@@ -3577,7 +3577,7 @@ static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
     ucs_assertv(UCS_STATUS_IS_ERR(status), "req %p: status %s", req,
                 ucs_status_string(status));
 
-    if (ucp_request_memh_invalidate(req, status)) {
+    if (ucp_request_memh_invalidate(req, status, 0)) {
         return;
     }
 
@@ -3647,7 +3647,7 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
 
         if (req->send.uct.func == ucp_proto_progress_rndv_rtr) {
             if (req->send.rndv.mdesc != NULL) {
-                ucs_mpool_put_inline(req->send.rndv.mdesc);
+                ucp_mem_desc_put(req->send.rndv.mdesc);
             }
         } else {
             /* SW RMA/PUT and AMO/Post operations don't allocate local request ID
