@@ -83,6 +83,9 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      ucs_offsetof(uct_cuda_copy_md_config_t, retain_primary_ctx),
      UCS_CONFIG_TYPE_BOOL},
 
+    {"DIRECT_NIC", "n", "Enable Direct NIC support if available.",
+     ucs_offsetof(uct_cuda_copy_md_config_t, direct_nic), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -848,17 +851,92 @@ out_default_range:
     return UCS_OK;
 }
 
-static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
+/* Assume uniformity of the GPU devices here */
+static int uct_cuda_copy_md_has_c2c_impl(void)
+{
+    unsigned links = 0;
+    int result     = 0;
+#if CUDA_VERSION >= 12080
+    ucs_status_t status;
+    nvmlDevice_t device;
+    nvmlFieldValue_t fv[2];
+    unsigned i;
+
+    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(0, &device));
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    /* Check if any C2C between GPU to CPU */
+    fv->fieldId = NVML_FI_DEV_C2C_LINK_COUNT;
+    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetFieldValues(device, 1, fv));
+    if ((status != UCS_OK) || (fv->nvmlReturn != NVML_SUCCESS)) {
+        goto out;
+    }
+
+    /* Check availability of a C2C */
+    links = fv->value.uiVal;
+    for (i = 0; i < links; i++) {
+        fv[0].fieldId = NVML_FI_DEV_C2C_LINK_GET_STATUS;
+        fv[0].scopeId = i;
+        fv[1].fieldId = NVML_FI_DEV_C2C_LINK_GET_MAX_BW;
+        fv[1].scopeId = i;
+        status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetFieldValues(device, 2, fv));
+        if ((status == UCS_OK) &&
+            (fv[0].nvmlReturn == NVML_SUCCESS) &&
+            (fv[0].value.uiVal == 1) &&
+            (fv[1].nvmlReturn == NVML_SUCCESS)) {
+
+            result = 1;
+            goto out;
+        }
+    }
+
+out:
+    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
+#endif
+
+    ucs_debug("GPUs have C2C link %s links=%d", ((result > 0) ? "UP" : "DOWN"),
+              links);
+    return result;
+}
+
+static UCS_F_MAYBE_UNUSED int uct_cuda_copy_md_has_c2c(void)
+{
+    static int has_c2c = -1;
+
+    if (has_c2c < 0) {
+        has_c2c = uct_cuda_copy_md_has_c2c_impl();
+    }
+
+    return has_c2c;
+}
+
+static int uct_cuda_copy_md_get_dmabuf_fd(uct_cuda_copy_md_t *md,
+                                          uintptr_t address, size_t length,
+                                          int explicit_pci_export)
 {
 #if CUDA_VERSION >= 11070
     PFN_cuMemGetHandleForAddressRange_v11070 get_handle_func;
     CUresult cu_err;
+    unsigned long long flags;
     int fd;
 
     /* Get fxn ptr for cuMemGetHandleForAddressRange in case installed libcuda
      * does not have the definition for it even though 11.7 header includes the
      * declaration and avoid link error */
 #if CUDA_VERSION >= 12000
+#if CUDA_VERSION >= 12080
+    static unsigned long long pcie_export_flags =
+            CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+#else
+    static unsigned long long pcie_export_flags = 0;
+#endif
     CUdriverProcAddressQueryResult proc_addr_res;
     cu_err = cuGetProcAddress("cuMemGetHandleForAddressRange",
                               (void**)&get_handle_func, 12000,
@@ -878,17 +956,29 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
     }
 #endif
 
+    if (explicit_pci_export) {
+        if (!md->config.direct_nic || !pcie_export_flags ||
+            !uct_cuda_copy_md_has_c2c()) {
+            return UCT_DMABUF_FD_INVALID;
+        }
+
+        flags = pcie_export_flags;
+    } else {
+        flags = 0;
+    }
+
     cu_err = get_handle_func((void*)&fd, address, length,
-                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
+                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, flags);
     if (cu_err == CUDA_SUCCESS) {
-        ucs_trace("dmabuf for address 0x%lx length %zu is fd %d", address,
-                  length, fd);
+        ucs_trace("dmabuf for address 0x%lx length %zu flags %llx is fd %d",
+                  address, length, flags, fd);
         return fd;
     }
 
     ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
-              "DMA_BUF_FD) failed: %s",
-              address, length, uct_cuda_base_cu_get_error_string(cu_err));
+              "flags=%llx DMA_BUF_FD) failed: %s",
+              address, length, flags,
+              uct_cuda_base_cu_get_error_string(cu_err));
 #endif
     return UCT_DMABUF_FD_INVALID;
 }
@@ -904,7 +994,7 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
         .alloc_length = length
     };
     uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
-    uintptr_t base_address, aligned_start, aligned_end;
+    uintptr_t base_address, aligned_start, aligned_end = 0;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
 
@@ -950,13 +1040,21 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
     base_address  = (uintptr_t)addr_mem_info.base_address;
     aligned_start = ucs_align_down_pow2(base_address, ucs_get_page_size());
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+    if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD_PCIE) ||
+        (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD)) {
         aligned_end = ucs_align_up_pow2(base_address +
                                                 addr_mem_info.alloc_length,
                                         ucs_get_page_size());
+    }
 
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD_PCIE) {
+        mem_attr->dmabuf_fd_pcie = uct_cuda_copy_md_get_dmabuf_fd(
+                md, aligned_start, aligned_end - aligned_start, 1);
+    }
+
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
         mem_attr->dmabuf_fd = uct_cuda_copy_md_get_dmabuf_fd(
-                aligned_start, aligned_end - aligned_start);
+                md, aligned_start, aligned_end - aligned_start, 0);
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
@@ -1024,6 +1122,7 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     md->config.enable_fabric      = config->enable_fabric;
     md->config.dmabuf_supported   = 0;
     md->config.retain_primary_ctx = config->retain_primary_ctx;
+    md->config.direct_nic         = config->direct_nic;
     md->granularity               = SIZE_MAX;
 
     if ((config->cuda_async_mem_type != UCS_MEMORY_TYPE_CUDA) &&
