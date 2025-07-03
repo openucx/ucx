@@ -341,28 +341,14 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 static ucs_status_t
 ucs_topo_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
 {
-    ucs_status_t status;
-
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
         ucs_error("system device %d is invalid (max: %d)", sys_dev,
                   ucs_topo_global_ctx.num_devices);
-        status = UCS_ERR_INVALID_PARAM;
-        goto out_unlock;
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    status = ucs_topo_bus_id_to_sysfs_path(
-            &ucs_topo_global_ctx.devices[sys_dev].bus_id, path, max);
-    if (status != UCS_OK) {
-        goto out_unlock;
-    }
-
-    status = UCS_OK;
-
-out_unlock:
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-    return status;
+    return ucs_topo_bus_id_to_sysfs_path(
+               &ucs_topo_global_ctx.devices[sys_dev].bus_id, path, max);
 }
 
 static int ucs_topo_is_sys_root(const char *path)
@@ -513,7 +499,9 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     ucs_sys_device_t sibling1, sibling2;
     int mem_path1, mem_path2;
 
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_get_distance_sysfs_internal(device1, device2, distance);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     if (status != UCS_OK) {
         return status;
     }
