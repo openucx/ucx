@@ -72,8 +72,18 @@ typedef struct {
     unsigned         name_priority;
     ucs_numa_node_t  numa_node;
     uintptr_t        user_value;
-    ucs_sys_device_t sys_dev_aux;
-    int              aux_path;
+
+    /* Secondary device for the current device */
+    ucs_sys_device_t aux_sys_dev;
+
+    /* Memory sibling path */
+    struct {
+        /* True if current device can have an horizontal path for its memory */
+        int mem_path;
+
+        /* Identified sibling device for auxiliary path, when set */
+        ucs_sys_device_t sys_dev;
+    } sibling;
 } ucs_topo_sys_device_info_t;
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
@@ -303,8 +313,13 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
         ucs_topo_global_ctx.devices[*sys_dev].numa_node     =
                 ucs_topo_read_device_numa_node(bus_id);
         ucs_topo_global_ctx.devices[*sys_dev].user_value    = UINTPTR_MAX;
-        ucs_topo_global_ctx.devices[*sys_dev].sys_dev_aux   = UCS_SYS_DEVICE_ID_UNKNOWN;
-        ucs_topo_global_ctx.devices[*sys_dev].aux_path      = 0;
+        ucs_topo_global_ctx.devices[*sys_dev].sibling.mem_path
+            = 0;
+        ucs_topo_global_ctx.devices[*sys_dev].sibling.sys_dev 
+            = UCS_SYS_DEVICE_ID_UNKNOWN;
+        ucs_topo_global_ctx.devices[*sys_dev].aux_sys_dev
+            = UCS_SYS_DEVICE_ID_UNKNOWN;
+
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
@@ -449,18 +464,18 @@ int ucs_topo_is_pci_bridge(ucs_sys_device_t device1,
 
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
-           return 0;
+        return 0;
     }
 
     status = ucs_topo_get_common_path(device1, device2, &path1, &path2,
                                       &common_path);
 
     if (status != UCS_OK) {
-           return 0;
+        return 0;
     }
 
     result = !ucs_topo_is_sys_root(common_path) &&
-            !ucs_topo_is_pci_root(common_path);
+        !ucs_topo_is_pci_root(common_path);
 
     ucs_free(common_path);
     ucs_free(path1);
@@ -537,8 +552,8 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    aux_device1 = ucs_topo_global_ctx.devices[device1].sys_dev_aux;
-    aux_device2 = ucs_topo_global_ctx.devices[device2].sys_dev_aux;
+    aux_device1 = ucs_topo_global_ctx.devices[device1].aux_sys_dev;
+    aux_device2 = ucs_topo_global_ctx.devices[device2].aux_sys_dev;
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     if (aux_device1 != UCS_SYS_DEVICE_ID_UNKNOWN) {
@@ -564,27 +579,27 @@ done:
 int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
                                  ucs_sys_device_t mem_device)
 {
-    int aux_path;
-    ucs_sys_device_t sys_dev;
+    ucs_sys_device_t sibling, aux;
 
     if ((device == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (mem_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        return 1; /* Reachable by default */
+        return 1; /* Reachable by default if any is missing */
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    sys_dev  = ucs_topo_global_ctx.devices[device].sys_dev_aux;
-    aux_path = ucs_topo_global_ctx.devices[mem_device].aux_path;
+    aux     = ucs_topo_global_ctx.devices[device].aux_sys_dev;
+    sibling = ucs_topo_global_ctx.devices[mem_device].sibling.sys_dev;
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     /*
      * Reachable if:
      * - Memory device does not mandate using the auxiliary path
-     * - Device can never be eligible of auxiliary paths
+     * - Device can never be eligible of auxiliary paths (cuda_ipc...)
      * - Device supports auxiliary path and is under same PCI bridge
      */
-    return !aux_path || (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-           ucs_topo_is_pci_bridge(mem_device, sys_dev);
+    return (sibling == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+           (aux == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+           (sibling == device);
 }
 
 static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
@@ -796,6 +811,8 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
 ucs_status_t
 ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
 {
+    ucs_sys_device_t dev, aux_sys_dev;
+
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
         ucs_error("system device %d is invalid (max: %d)", sys_dev,
@@ -804,7 +821,19 @@ ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].aux_path = 1;
+    ucs_topo_global_ctx.devices[sys_dev].sibling.mem_path = 1;
+
+    for (dev = 0; dev < ucs_topo_global_ctx.num_devices; ++dev) {
+        aux_sys_dev = ucs_topo_global_ctx.devices[dev].sibling.sys_dev;
+        if (ucs_topo_is_pci_bridge(sys_dev, aux_sys_dev)) {
+            ucs_debug("sibling path matched for sys_dev=%u: dev=%u with "
+                      "aux_sys_dev=%u", sys_dev, dev, aux_sys_dev);
+
+            ucs_topo_global_ctx.devices[sys_dev].sibling.sys_dev = dev;
+            break;
+        }
+    }
+
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return UCS_OK;
@@ -812,8 +841,10 @@ ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
 
 ucs_status_t
 ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
-                                    ucs_sys_device_t sys_dev_aux)
+                                    ucs_sys_device_t aux_sys_dev)
 {
+    ucs_sys_device_t dev;
+
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
         ucs_error("system device %d is invalid (max: %d)", sys_dev,
@@ -822,7 +853,25 @@ ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux = sys_dev_aux;
+    ucs_topo_global_ctx.devices[sys_dev].aux_sys_dev = aux_sys_dev;
+    if (sys_dev == aux_sys_dev) {
+        goto out;
+    }
+
+    for (dev = 0; dev < ucs_topo_global_ctx.num_devices; ++dev) {
+        if (!ucs_topo_global_ctx.devices[dev].sibling.mem_path) {
+            continue;
+        }
+
+        if (ucs_topo_is_pci_bridge(dev, aux_sys_dev)) {
+            ucs_topo_global_ctx.devices[dev].sibling.sys_dev = sys_dev;
+            ucs_debug("sys_dev=%u with aux_sys_dev=%u has matched with dev=%u",
+                      sys_dev, aux_sys_dev, dev);
+            break;
+        }
+    }
+
+out:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return UCS_OK;
