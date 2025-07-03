@@ -579,8 +579,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             ucs_trace("uct_md_mem_query(dmabuf address %p length %zu) returned "
                       "fd %d fd_pcie %d offset %zu sys_dev %u",
                       address, length, mem_attr.dmabuf_fd,
-                      mem_attr.dmabuf_fd_pcie,
-                      mem_attr.dmabuf_offset,
+                      mem_attr.dmabuf_fd_pcie, mem_attr.dmabuf_offset,
                       mem_attr.sys_dev);
 
             dmabuf_md_map             = context->dmabuf_reg_md_map;

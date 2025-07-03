@@ -714,11 +714,10 @@ uct_ib_mlx5_devx_symmetric_rkey(const uct_ib_mlx5_md_t *md, unsigned flags)
            (md->flags & UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length,
-                              const uct_md_mem_reg_params_t *params,
-                              uint64_t access_flags,
-                              struct ibv_mr **mr_p)
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_ib_mlx5_direct_nic_reg_mr(
+        uct_ib_mlx5_md_t *md, void *address, size_t length,
+        const uct_md_mem_reg_params_t *params, uint64_t access_flags,
+        struct ibv_mr **mr_p)
 {
 #ifdef HAVE_DIRECT_NIC
     int dmabuf_fd_pcie;
@@ -738,8 +737,8 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
         return UCS_ERR_UNSUPPORTED;
     }
 
-    sys_dev = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, sys_dev,
-                              SYS_DEV, UCS_SYS_DEVICE_ID_UNKNOWN);
+    sys_dev = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, sys_dev, SYS_DEV,
+                              UCS_SYS_DEVICE_ID_UNKNOWN);
 
     /* Both devices have a non-root PCI path? */
     if (!ucs_topo_is_pci_bridge(md->direct_nic_sys_dev, sys_dev)) {
@@ -751,12 +750,10 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
                                     DMABUF_OFFSET, 0);
     start_time    = ucs_get_time();
 
-    mr = UCS_PROFILE_CALL_ALWAYS(mlx5dv_reg_dmabuf_mr, md->super.pd,
-                                 0,
+    mr = UCS_PROFILE_CALL_ALWAYS(mlx5dv_reg_dmabuf_mr, md->super.pd, 0,
                                  length + dmabuf_offset,
                                  (uintptr_t)address - dmabuf_offset,
-                                 dmabuf_fd_pcie,
-                                 access_flags,
+                                 dmabuf_fd_pcie, access_flags,
                                  MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT);
     if (mr == NULL) {
         ucs_debug("mlx5dv_reg_dmabuf_mr() failed with errno=%d", errno);
@@ -814,8 +811,8 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
         /* Fallback if multi-thread registration is unsupported */
     }
 
-    status = uct_ib_mlx5_direct_nic_reg_mr(md, address, length,
-                                           params, access_flags,
+    status = uct_ib_mlx5_direct_nic_reg_mr(md, address, length, params,
+                                           access_flags,
                                            &memh->mrs[mr_type].super.ib);
     if (status == UCS_OK) {
         goto out;
@@ -2247,10 +2244,9 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
-static void
-uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
-                               uct_ib_device_t *dev,
-                               uct_ib_mlx5_md_t *md)
+static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
+                                           uct_ib_device_t *dev,
+                                           uct_ib_mlx5_md_t *md)
 {
 #ifdef HAVE_DIRECT_NIC
     char sys_path[PATH_MAX];

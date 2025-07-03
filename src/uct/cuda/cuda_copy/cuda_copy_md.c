@@ -83,10 +83,8 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      ucs_offsetof(uct_cuda_copy_md_config_t, retain_primary_ctx),
      UCS_CONFIG_TYPE_BOOL},
 
-    {"DIRECT_NIC", "n",
-     "Enable Direct NIC support if available.",
-     ucs_offsetof(uct_cuda_copy_md_config_t, direct_nic),
-     UCS_CONFIG_TYPE_BOOL},
+    {"DIRECT_NIC", "n", "Enable Direct NIC support if available.",
+     ucs_offsetof(uct_cuda_copy_md_config_t, direct_nic), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -857,7 +855,7 @@ out_default_range:
 static int uct_cuda_copy_md_has_c2c_impl(void)
 {
     unsigned links = 0;
-    int result = 0;
+    int result     = 0;
 #if CUDA_VERSION >= 12080
     ucs_status_t status;
     nvmlDevice_t device;
@@ -903,8 +901,8 @@ out:
     UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 #endif
 
-    ucs_debug("GPUs have C2C link %s links=%d",
-              ((result > 0)? "UP" : "DOWN"), links);
+    ucs_debug("GPUs have C2C link %s links=%d", ((result > 0) ? "UP" : "DOWN"),
+              links);
     return result;
 }
 
@@ -934,8 +932,8 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uct_cuda_copy_md_t *md,
      * declaration and avoid link error */
 #if CUDA_VERSION >= 12000
 #if CUDA_VERSION >= 12080
-    static unsigned long long pcie_export_flags
-        = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+    static unsigned long long pcie_export_flags =
+            CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
 #else
     static unsigned long long pcie_export_flags = 0;
 #endif
@@ -970,8 +968,7 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uct_cuda_copy_md_t *md,
     }
 
     cu_err = get_handle_func((void*)&fd, address, length,
-                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
-                             flags);
+                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, flags);
     if (cu_err == CUDA_SUCCESS) {
         ucs_trace("dmabuf for address 0x%lx length %zu flags %llx is fd %d",
                   address, length, flags, fd);

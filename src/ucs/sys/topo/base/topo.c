@@ -391,11 +391,8 @@ ucs_topo_is_same_numa_node(ucs_sys_device_t device1,
 }
 
 static ucs_status_t
-ucs_topo_get_common_path(ucs_sys_device_t device1,
-                         ucs_sys_device_t device2,
-                         char **path1,
-                         char **path2,
-                         char **common_path)
+ucs_topo_get_common_path(ucs_sys_device_t device1, ucs_sys_device_t device2,
+                         char **path1, char **path2, char **common_path)
 {
     ucs_status_t status;
 
@@ -445,8 +442,7 @@ static int ucs_topo_has_distinct_devices(ucs_sys_device_t device1,
             (device2 != UCS_SYS_DEVICE_ID_UNKNOWN) && (device1 != device2));
 }
 
-int ucs_topo_is_pci_bridge(ucs_sys_device_t device1,
-                           ucs_sys_device_t device2)
+int ucs_topo_is_pci_bridge(ucs_sys_device_t device1, ucs_sys_device_t device2)
 {
     ucs_status_t status;
     char *path1, *path2, *common_path;
@@ -463,7 +459,7 @@ int ucs_topo_is_pci_bridge(ucs_sys_device_t device1,
     }
 
     result = !ucs_topo_is_sys_root(common_path) &&
-            !ucs_topo_is_pci_root(common_path);
+             !ucs_topo_is_pci_root(common_path);
 
     ucs_free(common_path);
     ucs_free(path1);
@@ -520,8 +516,7 @@ out:
 }
 
 static ucs_status_t
-ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
-                            ucs_sys_device_t device2,
+ucs_topo_get_distance_sysfs(ucs_sys_device_t device1, ucs_sys_device_t device2,
                             ucs_sys_dev_distance_t *distance)
 {
     ucs_status_t status;
@@ -535,7 +530,7 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
 
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (device2 == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-           goto done;
+        goto done;
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
@@ -544,14 +539,16 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     if (aux_device1 != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        status = ucs_topo_get_distance_sysfs_internal(aux_device1, device2, &aux_dist);
+        status = ucs_topo_get_distance_sysfs_internal(aux_device1, device2,
+                                                      &aux_dist);
         if ((status == UCS_OK) && (aux_dist.bandwidth > best_dist.bandwidth)) {
             best_dist = aux_dist;
         }
     }
 
     if (aux_device2 != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        status = ucs_topo_get_distance_sysfs_internal(device1, aux_device2, &aux_dist);
+        status = ucs_topo_get_distance_sysfs_internal(device1, aux_device2,
+                                                      &aux_dist);
         if ((status == UCS_OK) && (aux_dist.bandwidth > best_dist.bandwidth)) {
             best_dist = aux_dist;
         }
@@ -768,9 +765,8 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
     return numa_node;
 }
 
-ucs_status_t
-ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
-                                    ucs_sys_device_t sys_dev_aux)
+ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
+                                                 ucs_sys_device_t sys_dev_aux)
 {
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
