@@ -16,13 +16,15 @@
 
 
 /* Assume uniformity of the GPU devices here */
-int uct_cuda_base_has_c2c(void)
+static int uct_cuda_base_has_c2c_impl(void)
 {
+    unsigned links = 0;
+    int found      = 0;
 #if CUDA_VERSION >= 12080
     ucs_status_t status;
     nvmlDevice_t device;
     nvmlFieldValue_t fv[2];
-    unsigned i, links;
+    unsigned i;
 
     status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(0, &device));
     if (status != UCS_OK) {
@@ -49,12 +51,26 @@ int uct_cuda_base_has_c2c(void)
             (fv[0].value.uiVal == 1) &&
             (fv[1].nvmlReturn == NVML_SUCCESS)) {
 
-            ucs_debug("GPUs have C2C link UP links=%d", links);
-            return 1;
+            found = 1;
+            break;
         }
     }
 #endif
-    return 0;
+
+    ucs_debug("GPUs have C2C link %s links=%d",
+              ((found > 0)? "UP" : "DOWN"), links);
+    return found;
+}
+
+int uct_cuda_base_has_c2c(void)
+{
+    static int has_c2c = -1;
+
+    if (has_c2c < 0) {
+        has_c2c = uct_cuda_base_has_c2c_impl();
+    }
+
+    return has_c2c;
 }
 
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
