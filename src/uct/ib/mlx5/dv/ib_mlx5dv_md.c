@@ -725,7 +725,7 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
     size_t dmabuf_offset;
     struct ibv_mr *mr;
     ucs_time_t start_time;
-    ucs_sys_device_t sys_dev;
+    ucs_sys_device_t mem_sys_dev;
 
     if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_DIRECT_NIC)) {
         return UCS_ERR_UNSUPPORTED;
@@ -738,12 +738,11 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
         return UCS_ERR_UNSUPPORTED;
     }
 
-    sys_dev = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, sys_dev,
-                              SYS_DEV, UCS_SYS_DEVICE_ID_UNKNOWN);
+    mem_sys_dev = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, sys_dev,
+                                  SYS_DEV, UCS_SYS_DEVICE_ID_UNKNOWN);
 
-    /* Both devices have a non-root PCI path? */
-    if (!ucs_topo_is_pci_bridge(md->direct_nic_sys_dev, sys_dev)) {
-        /* Can only register with the matched DMA PF */
+    /* Both devices are siblings with a non-root PCI path */
+    if (!ucs_topo_is_memory_sibling(md->super.dev.sys_dev, mem_sys_dev)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -2285,6 +2284,9 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
               sys_path,
               dev->sys_dev,
               md->direct_nic_sys_dev);
+#else
+    (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev, dev->sys_dev);
+    ucs_debug("%s: Direct NIC support not built", uct_ib_device_name(&md->super.dev));
 #endif
 }
 
