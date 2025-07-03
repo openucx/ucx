@@ -528,6 +528,7 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     return UCS_OK;
 }
 
+/* After restricting with NET_DEVICES, we can still return true here */
 int ucs_topo_memory_has_sibling(ucs_sys_device_t mem_device)
 {
     int result = 0;
@@ -591,7 +592,6 @@ int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
            (aux == UCS_SYS_DEVICE_ID_UNKNOWN) ||
            (sibling == device);
 }
-
 static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
                                                ucs_sys_dev_distance_t *distance)
 {
@@ -615,7 +615,9 @@ static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
         full_affinity = 1;
     }
 
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
     dev_node = ucs_topo_sys_device_get_numa_node(device);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     if (dev_node == UCS_NUMA_NODE_UNDEFINED) {
         dev_node = UCS_NUMA_NODE_DEFAULT;
     }
@@ -787,13 +789,11 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
         return UCS_NUMA_NODE_UNDEFINED;
     }
 
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev < ucs_topo_global_ctx.num_devices) {
         numa_node = ucs_topo_global_ctx.devices[sys_dev].numa_node;
     } else {
         numa_node = UCS_NUMA_NODE_UNDEFINED;
     }
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return numa_node;
 }
