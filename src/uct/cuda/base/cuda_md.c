@@ -151,11 +151,6 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 
-    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     for (i = 0; i < num_gpus; ++i) {
         status = UCT_CUDADRV_FUNC(cuDeviceGet(&cuda_device, i),
                                   UCS_LOG_LEVEL_DIAG);
@@ -213,11 +208,19 @@ ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
 
 UCS_STATIC_INIT
 {
+    ucs_status_t status;
+
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+
+    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        ucs_fatal("Could not initialize NVML: %s", ucs_status_string(status));
+    }
 }
 
 UCS_STATIC_CLEANUP
 {
+    nvmlShutdown();
 }
 
 UCS_MODULE_INIT() {
