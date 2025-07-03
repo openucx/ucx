@@ -11,6 +11,7 @@
 #include "tcp.h"
 
 #include <ucs/async/async.h>
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/string.h>
 #include <ucs/config/types.h>
 #include <sys/socket.h>
@@ -201,6 +202,9 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_iface_local_addr_ns_t *local_addr_ns;
     uct_tcp_device_addr_t *tcp_dev_addr;
     int is_local_loopback, is_remote_loopback;
+    struct sockaddr_storage remote_addr;
+    unsigned ndev_index;
+    ucs_status_t status;
 
     if (!uct_iface_is_reachable_params_valid(
                 params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
@@ -238,7 +242,24 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     /* Later connect() call can still fail if the peer is actually unreachable
      * at UCT/TCP EP creation time */
-    return uct_iface_scope_is_reachable(tl_iface, params);
+    if (!uct_iface_scope_is_reachable(tl_iface, params)) {
+        return 0;
+    }
+
+    status = ucs_ifname_to_index(iface->if_name, &ndev_index);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    remote_addr.ss_family = tcp_dev_addr->sa_family;
+    status = ucs_sockaddr_set_inet_addr((struct sockaddr *)&remote_addr,
+                                        tcp_dev_addr + 1);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return ucs_netlink_route_exists(ndev_index,
+                                    (const struct sockaddr *)&remote_addr);
 }
 
 static const char *
