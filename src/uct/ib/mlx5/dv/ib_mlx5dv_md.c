@@ -2285,7 +2285,7 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
               dev->sys_dev,
               md->direct_nic_sys_dev);
 #else
-    ucs_debug("%s: Direct NIC suport not built",
+    ucs_debug("%s: Direct NIC support not built",
               uct_ib_device_name(&md->super.dev));
 #endif
 }
