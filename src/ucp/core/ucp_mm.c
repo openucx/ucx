@@ -607,7 +607,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
                                      UCT_MD_MEM_REG_FIELD_DMABUF_FD_PCIE |
                                      UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET |
-                                    UCT_MD_MEM_REG_FIELD_SYS_DEV;
+                                     UCT_MD_MEM_REG_FIELD_SYS_DEV;
         }
 
         reg_address = address;

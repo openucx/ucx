@@ -438,6 +438,13 @@ err_free_path1:
     return status;
 }
 
+static int ucs_topo_has_distinct_devices(ucs_sys_device_t device1,
+                                         ucs_sys_device_t device2)
+{
+    return ((device1 != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+            (device2 != UCS_SYS_DEVICE_ID_UNKNOWN) && (device1 != device2));
+}
+
 int ucs_topo_is_pci_bridge(ucs_sys_device_t device1,
                            ucs_sys_device_t device2)
 {
@@ -445,16 +452,14 @@ int ucs_topo_is_pci_bridge(ucs_sys_device_t device1,
     char *path1, *path2, *common_path;
     int result;
 
-    if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
-           return 0;
+    if (!ucs_topo_has_distinct_devices(device1, device2)) {
+        return 0;
     }
 
     status = ucs_topo_get_common_path(device1, device2, &path1, &path2,
                                       &common_path);
-
     if (status != UCS_OK) {
-           return 0;
+        return 0;
     }
 
     result = !ucs_topo_is_sys_root(common_path) &&
@@ -475,8 +480,7 @@ ucs_topo_get_distance_sysfs_internal(ucs_sys_device_t device1,
     char *path1, *path2, *common_path;
 
     /* If one of the devices is unknown, we assume near topology */
-    if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
+    if (!ucs_topo_has_distinct_devices(device1, device2)) {
         goto err_default_distance;
     }
 

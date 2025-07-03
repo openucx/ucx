@@ -817,12 +817,12 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
     status = uct_ib_mlx5_direct_nic_reg_mr(md, address, length,
                                            params, access_flags,
                                            &memh->mrs[mr_type].super.ib);
-    if (status == UCS_ERR_INVALID_PARAM) {
-        return status;
-    }
-
     if (status == UCS_OK) {
         goto out;
+    }
+
+    if (status != UCS_ERR_UNSUPPORTED) {
+        return status;
     }
 
     status = uct_ib_reg_mr(&md->super, address, length, params, access_flags,
@@ -2284,6 +2284,9 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
               sys_path,
               dev->sys_dev,
               md->direct_nic_sys_dev);
+#else
+    ucs_debug("%s: Direct NIC suport not built",
+              uct_ib_device_name(&md->super.dev));
 #endif
 }
 
