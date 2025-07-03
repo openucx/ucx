@@ -848,7 +848,8 @@ out_default_range:
     return UCS_OK;
 }
 
-static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
+static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
+                                          ucs_sys_device_t sys_dev)
 {
 #if CUDA_VERSION >= 11070
     PFN_cuMemGetHandleForAddressRange_v11070 get_handle_func;
@@ -884,7 +885,8 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
     }
 #endif
 
-    if (flags && !uct_cuda_base_has_c2c()) {
+    /* Only request PCIe window when sibling Direct NIC HCA is identified */
+    if (flags && !ucs_topo_memory_has_sibling(sys_dev)) {
         flags = 0;
     }
 
@@ -967,7 +969,8 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
                                                 addr_mem_info.alloc_length,
                                         ucs_get_page_size());
         mem_attr->dmabuf_fd = uct_cuda_copy_md_get_dmabuf_fd(
-                aligned_start, aligned_end - aligned_start);
+                aligned_start, aligned_end - aligned_start,
+                addr_mem_info.sys_dev);
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {

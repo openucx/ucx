@@ -277,23 +277,29 @@ ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
 
 
 /**
- * Check if device can reach the device of the memory
+ * Check if device can reach the device of the memory.
  */
 int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
                                  ucs_sys_device_t mem_device);
 
 
 /**
- * Enable forcing the use of auxiliary path for reachability checks
+ * Enable forcing the use of auxiliary path for reachability checks.
  */
 ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev);
 
 
 /**
- * True if the memory device is paired with a sibling device
+ * True if the memory device is paired with a sibling device.
  */
 int ucs_topo_is_memory_sibling(ucs_sys_device_t device,
                                ucs_sys_device_t mem_device);
+
+
+/*
+ * True if the memory device has a sibling.
+ */
+int ucs_topo_memory_has_sibling(ucs_sys_device_t mem_device);
 
 
 /**

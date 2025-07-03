@@ -540,6 +540,24 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     return UCS_OK;
 }
 
+int ucs_topo_memory_has_sibling(ucs_sys_device_t mem_device)
+{
+    int result = 0;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (mem_device >= ucs_topo_global_ctx.num_devices) {
+        goto out;
+    }
+
+    result =
+        (ucs_topo_global_ctx.devices[mem_device].sibling.sys_dev !=
+         UCS_SYS_DEVICE_ID_UNKNOWN);
+
+out:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return result;
+}
+
 int ucs_topo_is_memory_sibling(ucs_sys_device_t device,
                                ucs_sys_device_t mem_device)
 {
@@ -548,13 +566,13 @@ int ucs_topo_is_memory_sibling(ucs_sys_device_t device,
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if ((device >= ucs_topo_global_ctx.num_devices) ||
         (mem_device >= ucs_topo_global_ctx.num_devices)) {
-        goto done;
+        goto out;
     }
 
     result =
         (ucs_topo_global_ctx.devices[mem_device].sibling.sys_dev == device);
 
-done:
+out:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     return result;
 }
