@@ -524,7 +524,7 @@ static int ucp_memh_sys_dev_reachable(ucp_md_index_t md_index,
 {
     ucs_sys_device_t sys_dev;
 
-    if ((mem_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN) || (sys_dev_map == 0)) {
+    if ((mem_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) || (sys_dev_map == 0)) {
         return 1;
     }
 
@@ -877,7 +877,7 @@ static ucs_status_t ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
             goto err;
         }
 
-        ucp_memh_init_from_parent(memh, cache_md_map);
+        ucp_memh_init_from_parent(memh, memh->parent->md_map);
 
         status = ucp_memh_register(context, memh, reg_md_map, uct_flags,
                                    alloc_name);
