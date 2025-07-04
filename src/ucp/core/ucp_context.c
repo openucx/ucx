@@ -1190,6 +1190,7 @@ static void ucp_add_tl_resource_if_enabled(
         const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
         uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
 {
+    ucp_tl_md_t *md = &context->tl_mds[md_index];
     uint8_t rsc_flags;
     ucp_rsc_index_t dev_index, i;
 
@@ -1219,6 +1220,10 @@ static void ucp_add_tl_resource_if_enabled(
             }
         }
         context->tl_rscs[context->num_tls].dev_index = dev_index;
+
+        if (resource->sys_device < UCP_MAX_SYS_DEVICES) {
+            md->sys_dev_map |= UCS_BIT(resource->sys_device);
+        }
 
         ++context->num_tls;
         ++(*num_resources_p);
@@ -1280,7 +1285,6 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
         ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
                                        &tl_resources[i], num_resources_p,
                                        dev_cfg_masks, tl_cfg_mask);
-        md->sys_dev_map |= tl_resources[i].sys_device;
     }
 
     status = UCS_OK;
