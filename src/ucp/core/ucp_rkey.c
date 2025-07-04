@@ -26,6 +26,7 @@
 
 typedef struct {
     uint8_t   sys_dev;
+    uint8_t   flags;
     ucs_fp8_t latency;
     ucs_fp8_t bandwidth;
 } UCS_S_PACKED ucp_rkey_packed_distance_t;
@@ -104,6 +105,7 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
 
 static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
                                    const ucs_sys_dev_distance_t *distance,
+                                   ucs_sys_device_t mem_sys_dev,
                                    ucp_rkey_packed_distance_t *packed_distance)
 {
     double latency_nsec = distance->latency * UCS_NSEC_PER_SEC;
@@ -111,6 +113,19 @@ static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
     packed_distance->sys_dev   = sys_dev;
     packed_distance->latency   = UCS_FP8_PACK(LATENCY, latency_nsec);
     packed_distance->bandwidth = UCS_FP8_PACK(BANDWIDTH, distance->bandwidth);
+
+    /* Set flush flag if memory's system device needs flush for this lane's system device */
+    packed_distance->flags = 0;
+
+    /* The flush flag should be set when:
+     * 1. The lane's system device is a memory sibling of the memory's system device
+     * 2. This indicates that the device needs explicit cache management operations
+     */
+    if ((sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        ucs_topo_is_memory_sibling(sys_dev, mem_sys_dev)) {
+        packed_distance->flags |= UCP_SYS_DISTANCE_NEEDS_FLUSH;
+    }
 }
 
 static void
@@ -123,6 +138,7 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
     *sys_dev_p          = packed_distance->sys_dev;
     distance->latency   = latency_nsec / UCS_NSEC_PER_SEC;
     distance->bandwidth = UCS_FP8_UNPACK(BANDWIDTH, packed_distance->bandwidth);
+    distance->flags     = packed_distance->flags;
 }
 
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
@@ -189,6 +205,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
     /* Pack distance from sys_dev to each device in distance_dev_map */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
         ucp_rkey_pack_distance(sys_dev, sys_distance++,
+                               mem_info->sys_dev,
                                ucs_serialize_next(&p,
                                                   ucp_rkey_packed_distance_t));
     }
@@ -982,6 +999,11 @@ void ucp_rkey_dump_packed(const void *buffer, size_t length,
         ucs_string_buffer_appendf(strb, ",dev:%u:%s", sys_dev,
                                   ucs_topo_distance_str(&distance, buf,
                                                         sizeof(buf)));
+
+        /* Show flush flag if set */
+        if (distance.flags & UCP_SYS_DISTANCE_NEEDS_FLUSH) {
+            ucs_string_buffer_appendf(strb, "[flush]");
+        }
     }
 
     ucs_string_buffer_appendf(strb, "}");

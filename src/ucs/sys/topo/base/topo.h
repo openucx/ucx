@@ -52,6 +52,7 @@ typedef uint8_t ucs_sys_device_t;
 typedef struct ucs_sys_dev_distance {
     double latency;   /**< in seconds */
     double bandwidth; /**< in bytes/second */
+    uint8_t flags;    /**< flags for system device properties */
 } ucs_sys_dev_distance_t;
 
 

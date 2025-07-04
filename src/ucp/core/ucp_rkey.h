@@ -43,6 +43,13 @@ enum {
                                                    and must be returned to pool, not free */
 };
 
+/**
+ * Rkey packed distance flags
+ */
+enum {
+    UCP_SYS_DISTANCE_NEEDS_FLUSH = UCS_BIT(0)  /* Memory's system device needs flush
+                                                  for the corresponding lane system device */
+};
 
 /**
  * Rkey configuration key
