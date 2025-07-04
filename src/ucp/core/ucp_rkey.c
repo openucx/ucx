@@ -108,7 +108,15 @@ static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
                                    ucs_sys_device_t mem_sys_dev,
                                    ucp_rkey_packed_distance_t *packed_distance)
 {
-    double latency_nsec = distance->latency * UCS_NSEC_PER_SEC;
+    ucs_sys_dev_distance_t tmp;
+    double latency_nsec;
+
+    if (distance == NULL) {
+        distance = &tmp;
+        (void)ucs_topo_get_distance(sys_dev, mem_sys_dev, &tmp);
+    }
+
+    latency_nsec = distance->latency * UCS_NSEC_PER_SEC;
 
     packed_distance->sys_dev   = sys_dev;
     packed_distance->latency   = UCS_FP8_PACK(LATENCY, latency_nsec);
@@ -204,7 +212,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
 
     /* Pack distance from sys_dev to each device in distance_dev_map */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
-        ucp_rkey_pack_distance(sys_dev, sys_distance++,
+        ucp_rkey_pack_distance(sys_dev, NULL,
                                mem_info->sys_dev,
                                ucs_serialize_next(&p,
                                                   ucp_rkey_packed_distance_t));
