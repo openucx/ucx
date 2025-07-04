@@ -518,6 +518,31 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
     return UCS_OK;
 }
 
+static int ucp_memh_sys_dev_reachable(ucp_md_index_t md_index,
+                                      ucs_sys_device_t mem_sys_dev,
+                                      ucp_sys_dev_map_t sys_dev_map)
+{
+    ucs_sys_device_t sys_dev;
+
+    if ((mem_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN) || (sys_dev_map == 0)) {
+        return 1;
+    }
+
+    /*
+     * If at least one sys_dev is not reachable, do not register on it
+     * as we cannot know in advance which device is going to be used.
+     */
+    ucs_for_each_bit(sys_dev, sys_dev_map) {
+        if (!ucs_topo_is_memory_reachable(sys_dev, mem_sys_dev)) {
+            ucs_trace("md[%d] skipped: mem_sys_dev=%u cannot reach sys_dev=%u",
+                      md_index, mem_sys_dev, sys_dev);
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 static ucs_status_t
 ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map, unsigned uct_flags,
@@ -616,6 +641,13 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         if (context->rcache == NULL) {
             reg_align = context->tl_mds[md_index].attr.reg_alignment;
             ucs_align_ptr_range(&reg_address, &reg_length, reg_align);
+        }
+
+        if (!ucp_memh_sys_dev_reachable(
+                                    md_index,
+                                    reg_params.sys_dev,
+                                    context->tl_mds[md_index].sys_dev_map)) {
+            continue;
         }
 
         status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,

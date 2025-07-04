@@ -496,8 +496,6 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
                             ucs_sys_dev_distance_t *distance)
 {
     ucs_status_t status;
-    ucs_sys_device_t sibling1, sibling2;
-    int mem_path1, mem_path2;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_get_distance_sysfs_internal(device1, device2, distance);
@@ -509,20 +507,6 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (device2 == UCS_SYS_DEVICE_ID_UNKNOWN)) {
         return UCS_OK;
-    }
-
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    mem_path1 = ucs_topo_global_ctx.devices[device1].sibling.mem_path;
-    sibling1  = ucs_topo_global_ctx.devices[device1].sibling.sys_dev;
-    mem_path2 = ucs_topo_global_ctx.devices[device2].sibling.mem_path;
-    sibling2  = ucs_topo_global_ctx.devices[device2].sibling.sys_dev;
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    /* If any sibling path, it is unidirectional */
-    if ((!!mem_path1 ^ !!mem_path2) &&
-        ((mem_path1 && (sibling1 == device2)) ||
-         (mem_path2 && (sibling2 == device1)))) {
-        return ucs_topo_get_distance_default(device1, device2, distance);
     }
 
     return UCS_OK;
@@ -592,6 +576,7 @@ int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
            (aux == UCS_SYS_DEVICE_ID_UNKNOWN) ||
            (sibling == device);
 }
+
 static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
                                                ucs_sys_dev_distance_t *distance)
 {
