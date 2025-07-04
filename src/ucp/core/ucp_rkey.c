@@ -628,11 +628,27 @@ int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer)
                   sizeof(ucp_memh_dummy_buffer)) == 0;
 }
 
+/* From MD map find all applicable sys_dev */
+static ucp_sys_dev_map_t
+ucp_memh_md_map_sys_dev_map(ucp_context_h context, ucp_md_map_t md_map)
+{
+    ucp_sys_dev_map_t sys_dev_map = 0;
+    ucp_md_index_t md_index;
+
+    ucs_for_each_bit(md_index, md_map) {
+        sys_dev_map |= context->tl_mds[md_index].sys_dev_map;
+    }
+
+    return sys_dev_map;
+}
+
 static ucs_status_t
 ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
                        int rkey_compat, void **buffer_p, size_t *buffer_size_p)
 {
-    ucp_context_h context = memh->context;
+    ucp_context_h context         = memh->context;
+    ucp_sys_dev_map_t sys_dev_map = ucp_memh_md_map_sys_dev_map(context,
+                                                                memh->md_map);
     ucs_status_t status;
     ssize_t packed_size;
     void *memh_buffer;
@@ -642,9 +658,10 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
     flags = UCP_PARAM_VALUE(MEMH_PACK, params, flags, FLAGS, 0);
 
     ucs_trace("packing %smemh %p for buffer %p md_map 0x%" PRIx64
-              " export_md_map 0x%" PRIx64,
+              " sys_dev_map 0x%" PRIx64 " export_md_map 0x%" PRIx64,
               (flags & UCP_MEMH_PACK_FLAG_EXPORT) ? "exported " : "", memh,
-              ucp_memh_address(memh), memh->md_map, context->export_md_map);
+              ucp_memh_address(memh), memh->md_map, sys_dev_map,
+              context->export_md_map);
 
     if (ucp_memh_is_zero_length(memh)) {
         /* Dummy memh, return dummy key */

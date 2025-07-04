@@ -1271,6 +1271,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
 
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
+    md->sys_dev_map  = 0;
     for (i = 0; i < num_tl_resources; ++i) {
         ucs_string_set_addf(&avail_devices[tl_resources[i].dev_type],
                             "'%s'(%s)", tl_resources[i].dev_name,
@@ -1279,6 +1280,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
         ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
                                        &tl_resources[i], num_resources_p,
                                        dev_cfg_masks, tl_cfg_mask);
+        md->sys_dev_map |= tl_resources[i].sys_device;
     }
 
     status = UCS_OK;
