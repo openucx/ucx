@@ -584,7 +584,8 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
 }
 
 static size_t
-ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat)
+ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat,
+                     ucp_sys_dev_map_t sys_dev_map)
 {
     ucp_context_h context = memh->context;
 
@@ -596,14 +597,15 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat)
 
     if (rkey_compat) {
         return ucp_rkey_packed_size(context, memh->md_map,
-                                    memh->sys_dev, 0);
+                                    memh->sys_dev, sys_dev_map);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
 }
 
 static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
-                                int rkey_compat, void *memh_buffer)
+                                int rkey_compat, void *memh_buffer,
+                                ucp_sys_dev_map_t sys_dev_map)
 {
     ucp_memory_info_t mem_info;
 
@@ -616,7 +618,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
         mem_info.sys_dev = memh->sys_dev;
         return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
                                   ucp_memh_address(memh), ucp_memh_length(memh),
-                                  &mem_info, 0, NULL, 0, memh_buffer);
+                                  &mem_info, sys_dev_map, NULL, 0, memh_buffer);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
@@ -677,7 +679,7 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
-    size = ucp_memh_packed_size(memh, flags, rkey_compat);
+    size = ucp_memh_packed_size(memh, flags, rkey_compat, sys_dev_map);
 
     if ((flags & UCP_MEMH_PACK_FLAG_EXPORT) &&
         (ucp_memh_export_md_map(memh) == 0)) {
@@ -693,7 +695,8 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
         goto out;
     }
 
-    packed_size = ucp_memh_do_pack(memh, flags, rkey_compat, memh_buffer);
+    packed_size = ucp_memh_do_pack(memh, flags, rkey_compat, memh_buffer,
+                                   sys_dev_map);
     if (packed_size < 0) {
         status = (ucs_status_t)packed_size;
         goto err_destroy;
