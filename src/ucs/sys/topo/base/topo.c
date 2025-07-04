@@ -655,7 +655,7 @@ const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
     }
 
     if (distance->flags) {
-        ucs_string_buffer_appendf(&strb, "[flush]");
+        ucs_string_buffer_appendf(&strb, " [flush]");
     }
 
     return ucs_string_buffer_cstr(&strb);

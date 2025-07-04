@@ -1032,7 +1032,7 @@ void ucp_rkey_dump_packed(const void *buffer, size_t length,
 
         /* Show flush flag if set */
         if (distance.flags & UCP_SYS_DISTANCE_NEEDS_FLUSH) {
-            ucs_string_buffer_appendf(strb, "[flush]");
+            ucs_string_buffer_appendf(strb, " [flush]");
         }
     }
 
