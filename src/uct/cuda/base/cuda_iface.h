@@ -13,32 +13,9 @@
 #include <ucs/datastruct/khash.h>
 
 #include <cuda.h>
-#include <nvml.h>
 
 
 const char *uct_cuda_base_cu_get_error_string(CUresult result);
-
-
-#define UCT_NVML_FUNC(_func, _log_level) \
-    ({ \
-        ucs_status_t _status = UCS_OK; \
-        do { \
-            nvmlReturn_t _err = (_func); \
-            if (NVML_SUCCESS != _err) { \
-                ucs_log((_log_level), "%s failed: %s", \
-                        UCS_PP_MAKE_STRING(_func), \
-                        (NVML_ERROR_DRIVER_NOT_LOADED != _err) ? \
-                                nvmlErrorString(_err) : \
-                                "nvml is a stub library"); \
-                _status = UCS_ERR_IO_ERROR; \
-            } \
-        } while (0); \
-        _status; \
-    })
-
-
-#define UCT_NVML_FUNC_LOG_ERR(_func) \
-    UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
 #define UCT_CUDADRV_LOG(_func, _log_level, _result) \
