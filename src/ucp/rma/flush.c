@@ -223,6 +223,42 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
     return 0;
 }
 
+/* A request can use multiple lanes */
+void ucp_ep_flush_mem_schedule(ucp_request_t *req,
+                               ucp_lane_index_t lane,
+                               ucp_md_index_t rkey_index)
+{
+    uct_ep_h uct_ep            = ucp_ep_get_lane(req->send.ep, lane);
+    uint64_t addr              = req->send.rma.remote_addr +
+                                 req->send.state.dt_iter.offset;
+    ucp_rkey_h rkey            = req->send.rma.rkey;
+    ucp_rkey_config_t *config  = ucp_rkey_config(req->send.ep->worker, rkey);
+    ucp_ep_config_t *ep_config = ucp_ep_config(req->send.ep);
+    ucs_sys_device_t remote_sys_dev;
+    ucp_ep_flush_mem_t *entry;
+
+    /*
+     * Do not schedule if remote rkey does not need it. Assume local and remote
+     * lane indexes are identical.
+     */
+    if (!(config->lanes_distance[lane].flags & UCP_SYS_DISTANCE_NEEDS_FLUSH)) {
+        ucp_trace_req(req, "lane=%u rkey_index=%u no flush needed",
+                      lane, rkey_index);
+        return;
+    }
+
+    /* Overwrite any existing event */
+    remote_sys_dev  = ep_config->key.lanes[lane].dst_sys_dev;
+    entry           = &req->send.ep->ext->flush_state.mem.entry[remote_sys_dev];
+    entry->uct.rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, rkey_index);
+    entry->uct.ep   = uct_ep;
+    entry->address  = addr;
+    entry->req      = req;
+
+    ucp_trace_req(req, "mem flush: scheduled lane=%u rkey_index=%u "
+                  "remote_sys_dev=%u", lane, rkey_index, remote_sys_dev);
+}
+
 static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
 {
     if (ep->flags & UCP_EP_FLAG_BLOCK_FLUSH) {

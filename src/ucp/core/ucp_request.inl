@@ -227,6 +227,7 @@ ucp_request_reset_internal(ucp_request_t *req, ucp_worker_h worker)
 {
     VALGRIND_MAKE_MEM_DEFINED(&req->id, sizeof(req->id));
     VALGRIND_MAKE_MEM_DEFINED(req + 1, worker->context->config.request.size);
+    req->mem_flush.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
 }
 

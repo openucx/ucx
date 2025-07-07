@@ -138,6 +138,12 @@ struct ucp_request {
                                                  by protocols */
     };
 
+    /* Set when ucp_ep references this ucp_request_t for later flush */
+    struct {
+        ucs_sys_device_t          sys_dev;
+        ucp_ep_h                  ucp_ep;
+    } mem_flush;
+
     union {
 
         /* "send" part - used for tag_send, am_send, stream_send, put, get, and atomic

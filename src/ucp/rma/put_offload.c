@@ -125,6 +125,7 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
     };
     ssize_t packed_size;
     uct_rkey_t tl_rkey;
+    ucs_status_t status;
 
     tl_rkey     = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                        lpriv->super.rkey_index);
@@ -134,7 +135,13 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
                                    req->send.state.dt_iter.offset,
                                    tl_rkey);
 
-    return ucp_proto_bcopy_send_func_status(packed_size);
+    status = ucp_proto_bcopy_send_func_status(packed_size);
+    if (status == UCS_OK) {
+        ucp_ep_flush_mem_schedule(req,
+                                  lpriv->super.lane, lpriv->super.rkey_index);
+    }
+
+    return status;
 }
 
 static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
@@ -225,16 +232,23 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
     uct_iov_t iov;
+    ucs_status_t status;
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
-    return uct_ep_put_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                            &iov, 1,
-                            req->send.rma.remote_addr +
-                            req->send.state.dt_iter.offset,
-                            tl_rkey, &req->send.state.uct_comp);
+    status = uct_ep_put_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                              &iov, 1,
+                              req->send.rma.remote_addr +
+                              req->send.state.dt_iter.offset,
+                              tl_rkey, &req->send.state.uct_comp);
+    if (status == UCS_OK) {
+        ucp_ep_flush_mem_schedule(req,
+                                  lpriv->super.lane, lpriv->super.rkey_index);
+    }
+
+    return status;
 }
 
 static ucs_status_t

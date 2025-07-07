@@ -496,9 +496,13 @@ struct ucp_ep_config {
  * Tracks a remote memory area that needs flushing.
  */
 typedef struct ucp_ep_flush_mem {
-    uct_rkey_t       rkey;              /* Address and remote key to use */
+    struct {
+        uct_rkey_t   rkey;              /* Address and remote key to use */
+        uct_ep_t     *ep;
+    } uct;
+
     uint64_t         address;
-    ucp_request_t    *req;              /* Request using memory chunk */
+    ucp_request_t    *req;              /* Debug only, do not dereference */
 } ucp_ep_flush_mem_t;
 
 
@@ -515,7 +519,10 @@ typedef struct {
         /* Flushing in progress */
         int                 in_progress;
 
-        /* Memory areas that need specific flushing */
+        /*
+         * Memory areas that need specific flushing, track by device, not lane,
+         * as there could be many memory devices behind a given lane endpoint.
+         */
         ucp_ep_flush_mem_t  entry[UCS_SYS_DEVICE_ID_MAX];
     } mem;
 } ucp_ep_flush_state_t;
@@ -953,4 +960,19 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
  */
 void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
 
+
+/**
+ * @brief Memory operation needs specific flushing when explicitly calling
+ * flush.
+ *
+ * RMA operation details must still be valid in the request RMA section.
+ *
+ * @param [in] req        Request performing the RMA operation
+ * @param [in] lane       Lane that was used for RMA operation
+ * @param [in] rkey_index Remote key index accessed.
+ *
+ */
+void ucp_ep_flush_mem_schedule(ucp_request_t *req,
+                               ucp_lane_index_t lane,
+                               ucp_md_index_t rkey_index);
 #endif
