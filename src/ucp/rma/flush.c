@@ -257,7 +257,7 @@ void ucp_ep_flush_mem_schedule(ucp_request_t *req,
 
     ucp_trace_req(req,
               "mem flush ep=%p: scheduled lane=%u rkey_index=%u "
-              "remote_sys_dev=%u uct_ep=%p address=0x%" PRIx64
+              "remote_sys_dev=%u uct_ep=%p address=0x%" PRIx64 " "
               "uct_rkey=0x%" PRIx64,
               req->send.ep, lane, rkey_index,
               remote_sys_dev, uct_ep, addr, entry->uct.rkey);
