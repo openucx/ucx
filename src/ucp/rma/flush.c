@@ -255,8 +255,12 @@ void ucp_ep_flush_mem_schedule(ucp_request_t *req,
     entry->address  = addr;
     entry->req      = req;
 
-    ucp_trace_req(req, "mem flush: scheduled lane=%u rkey_index=%u "
-                  "remote_sys_dev=%u", lane, rkey_index, remote_sys_dev);
+    ucp_trace_req(req,
+              "mem flush ep=%p: scheduled lane=%u rkey_index=%u "
+              "remote_sys_dev=%u uct_ep=%p address=0x%" PRIx64
+              "uct_rkey=0x%" PRIx64,
+              req->send.ep, lane, rkey_index,
+              remote_sys_dev, uct_ep, addr, entry->uct.rkey);
 }
 
 static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
