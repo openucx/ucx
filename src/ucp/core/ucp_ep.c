@@ -230,9 +230,9 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
 
-    UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
+    UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) <=
                       sizeof(ep->ext->flush_state));
-    memset(&ep->ext->ep_match, 0, sizeof(ep->ext->ep_match));
+    memset(&ep->ext->flush_state, 0, sizeof(ep->ext->flush_state));
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
 
@@ -539,6 +539,7 @@ void ucp_ep_flush_state_reset(ucp_ep_h ep)
 
     flush_state->send_sn = 0;
     flush_state->cmpl_sn = 0;
+    memset(&flush_state->mem, 0, sizeof(flush_state->mem));
     ucs_hlist_head_init(&flush_state->reqs);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
 }

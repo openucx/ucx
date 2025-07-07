@@ -493,6 +493,16 @@ struct ucp_ep_config {
 
 
 /**
+ * Tracks a remote memory area that needs flushing.
+ */
+typedef struct ucp_ep_flush_mem {
+    uct_rkey_t       rkey;              /* Address and remote key to use */
+    uint64_t         address;
+    ucp_request_t    *req;              /* Request using memory chunk */
+} ucp_ep_flush_mem_t;
+
+
+/**
  * Status of protocol-level remote completions
  */
 typedef struct {
@@ -500,6 +510,14 @@ typedef struct {
                               are waiting for remote completion */
     uint32_t         send_sn; /* Sequence number of sent operations */
     uint32_t         cmpl_sn; /* Sequence number of completions */
+
+    struct {
+        /* Flushing in progress */
+        int                 in_progress;
+
+        /* Memory areas that need specific flushing */
+        ucp_ep_flush_mem_t  entry[UCS_SYS_DEVICE_ID_MAX];
+    } mem;
 } ucp_ep_flush_state_t;
 
 
