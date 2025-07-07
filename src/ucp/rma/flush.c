@@ -187,6 +187,42 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     }
 }
 
+static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
+{
+    int started               = 0;
+    ucs_status_t status       = UCS_OK;
+    ucp_ep_h ep               = req->send.ep;
+    ucp_ep_flush_mem_t *entry = ep->ext->flush_state.mem.entry;
+    int i;
+
+    /* Check if any pending flush entries */
+    for (i = 0; i < UCS_SYS_DEVICE_ID_MAX; i++) {
+        if (entry[i].uct.ep == NULL) {
+            continue;
+        }
+
+        /* Consume entry and create a get request */
+        /* Post a get nbx for each and track it in the flush request */
+        started++;
+        entry[i].uct.ep = NULL;
+    }
+
+    /* Count one more in-progress memory flush for the EP */
+    if (started > 0) {
+        ep->ext->flush_state.mem.in_progress++;
+    } else if (ep->ext->flush_state.mem.in_progress == 0) {
+        /* No other potentially related flushes on this EP */
+        return UCS_OK;
+    }
+
+    /*
+     * Update request main callback:
+     * - will need to call user on completion
+     */
+
+    return status;
+}
+
 static int
 ucp_ep_flush_slow_path_remove_filter(const ucs_callbackq_elem_t *elem,
                                      void *arg)
@@ -198,6 +234,7 @@ ucp_ep_flush_slow_path_remove_filter(const ucs_callbackq_elem_t *elem,
 static int ucp_flush_check_completion(ucp_request_t *req)
 {
     ucp_worker_h worker = req->send.ep->worker;
+    ucs_status_t status;
 
     /* Check if flushed all lanes */
     if (!ucp_ep_flush_is_completed(req)) {
@@ -207,7 +244,13 @@ static int ucp_flush_check_completion(ucp_request_t *req)
     ucp_trace_req(req, "flush ep %p completed", req->send.ep);
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, req,
                                  ucp_ep_flush_slow_path_remove_filter, req);
-    req->send.flushed_cb(req);
+
+    status = ucp_ep_flush_mem_start(req);
+    if (status == UCS_OK) {
+        /* Nothing more to perform regarding memory specific flush */
+        req->send.flushed_cb(req);
+    }
+
     return 1;
 }
 
