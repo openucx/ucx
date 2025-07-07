@@ -201,7 +201,7 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
     ucs_log_level_t log_level   = (md->config.enable_fabric == UCS_YES) ?
                                   UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DEBUG;
     ucs_status_t status;
-    int allowed_types;
+    uint64_t allowed_types;
 
     if (!(flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) &&
         (md->config.enable_fabric == UCS_YES)) {
