@@ -136,7 +136,7 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
                                    tl_rkey);
 
     status = ucp_proto_bcopy_send_func_status(packed_size);
-    if (status == UCS_OK) {
+    if ((status == UCS_INPROGRESS) || (status == UCS_OK)) {
         ucp_ep_flush_mem_schedule(req,
                                   lpriv->super.lane, lpriv->super.rkey_index);
     }
@@ -243,7 +243,7 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                               req->send.rma.remote_addr +
                               req->send.state.dt_iter.offset,
                               tl_rkey, &req->send.state.uct_comp);
-    if (status == UCS_OK) {
+    if ((status == UCS_INPROGRESS) || (status == UCS_OK)) {
         ucp_ep_flush_mem_schedule(req,
                                   lpriv->super.lane, lpriv->super.rkey_index);
     }
