@@ -1213,6 +1213,14 @@ public:
     void init() override
     {
         stats_activate();
+
+        static std::vector<std::string> devices;
+        get_devices(devices);
+
+        modify_config("NET_DEVICES", devices[0] + ":1");
+        create_entity(true);
+        create_entity(false);
+
         test_ucp_tag_xfer::init();
     }
 
@@ -1242,41 +1250,83 @@ public:
         return UCP_MAX_LANES;
     }
 
+    static void get_devices(std::vector<std::string> &devices)
+    {
+        static const char *ibdev_sysfs_dir = "/sys/class/infiniband";
+
+        DIR *dir = opendir(ibdev_sysfs_dir);
+        if (dir == NULL) {
+            UCS_TEST_SKIP_R(std::string(ibdev_sysfs_dir) + " not found");
+        }
+
+        for (;;) {
+            struct dirent *entry = readdir(dir);
+            if (entry == NULL) {
+                break;
+            }
+
+            if (entry->d_name[0] == '.') {
+                continue;
+            }
+
+            devices.push_back(entry->d_name);
+        }
+
+        closedir(dir);
+    }
+
+    void test_max_lanes(int num_paths) {
+        receiver().connect(&sender(), get_ep_params());
+        test_run_xfer(true, true, true, true, false);
+
+        auto ep_num_lanes = ucp_ep_num_lanes(sender().ep());
+        ASSERT_EQ(ep_num_lanes, ucp_ep_num_lanes(receiver().ep()));
+
+        if (is_proto_enabled()) {
+            EXPECT_EQ(num_paths, ep_num_lanes);
+        }
+
+        size_t bytes_sent = 0;
+        unsigned num_used_lanes = 0;
+        for (ucp_lane_index_t lane = 0; lane < ep_num_lanes; ++lane) {
+            size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
+            size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
+            UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
+                            << "sender " << sender_tx << " receiver " << receiver_tx;
+            if ((sender_tx > 0) || (receiver_tx > 0)) {
+                ++num_used_lanes;
+            }
+            bytes_sent += sender_tx + receiver_tx;
+        }
+
+        /* One lane could be reserved for tag offload and not selected for AM/RMA
+        bandwidth lane */
+        EXPECT_GE(num_used_lanes, ep_num_lanes - 1);
+
+        EXPECT_GE(bytes_sent, get_msg_size());
+    }
 };
 
-UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
+class multi_rail_max_64 : public multi_rail_max {
+};
+
+class multi_rail_max_128 : public multi_rail_max {
+};
+
+UCS_TEST_P(multi_rail_max_64, max_lanes_64, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
            "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
-    receiver().connect(&sender(), get_ep_params());
-    test_run_xfer(true, true, true, true, false);
-
-    auto ep_num_lanes = ucp_ep_num_lanes(sender().ep());
-    ASSERT_EQ(ep_num_lanes, ucp_ep_num_lanes(receiver().ep()));
-
-    if (is_proto_enabled()) {
-        EXPECT_EQ(num_lanes(), ep_num_lanes);
-    }
-
-    size_t bytes_sent = 0;
-    unsigned num_used_lanes = 0;
-    for (ucp_lane_index_t lane = 0; lane < ep_num_lanes; ++lane) {
-        size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
-        size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
-        UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
-                         << "sender " << sender_tx << " receiver " << receiver_tx;
-        if ((sender_tx > 0) || (receiver_tx > 0)) {
-            ++num_used_lanes;
-        }
-        bytes_sent += sender_tx + receiver_tx;
-    }
-
-    /* One lane could be reserved for tag offload and not selected for AM/RMA
-       bandwidth lane */
-    EXPECT_GE(num_used_lanes, ep_num_lanes - 1);
-
-    EXPECT_GE(bytes_sent, get_msg_size());
+    test_max_lanes(64);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rc, "rc")
+UCS_TEST_P(multi_rail_max_128, max_lanes_128, "IB_NUM_PATHS?=128", "TM_SW_RNDV=y",
+           "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
+{
+    test_max_lanes(128);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max_64, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max_64, dc, "dc")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max_128, dc, "dc")
 
 #endif
