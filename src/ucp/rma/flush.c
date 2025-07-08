@@ -200,7 +200,7 @@ static void ucp_ep_flush_mem_completion(uct_completion_t *self)
 
 static unsigned ucp_ep_flush_mem_resume_callback(void *arg);
 
-static ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
+ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_mem_flush_t *mem = &req->send.flush.mem;
@@ -408,7 +408,7 @@ void ucp_ep_flush_mem_schedule(ucp_request_t *req,
     entry->req      = req;
 
     ucp_trace_req(req,
-              "mem flush ep=%p: scheduled lane=%u rkey_index=%u "
+              "flush mem ep=%p: scheduled lane=%u rkey_index=%u "
               "remote_sys_dev=%u uct_ep=%p address=0x%" PRIx64 " "
               "uct_rkey=0x%" PRIx64,
               req->send.ep, lane, rkey_index,
