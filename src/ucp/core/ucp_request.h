@@ -120,6 +120,24 @@ enum {
     UCP_RDESC_ALL_LIST  = 1
 };
 
+/*
+ * Memory entry to start a 0-read flush for
+ */
+typedef struct ucp_mem_flush_entry {
+    uct_rkey_t uct_rkey;
+    uct_ep_t   *uct_ep;
+    uint64_t   address;
+} ucp_mem_flush_entry_t;
+
+/**
+ * Memory flush related structure
+ */
+typedef struct ucp_mem_flush {
+    int                   count;   /* Number of 0-read flush to achieve */
+    int                   started; /* Number of 0-read flush started */
+    ucp_mem_flush_entry_t *entry;
+    uct_completion_t      uct_comp;
+} ucp_mem_flush_t;
 
 /**
  * Request in progress.
@@ -137,12 +155,6 @@ struct ucp_request {
         ucp_request_t             *super_req; /* Super request that is used
                                                  by protocols */
     };
-
-    /* Set when ucp_ep references this ucp_request_t for later flush */
-    struct {
-        ucs_sys_device_t          sys_dev;
-        ucp_ep_h                  ucp_ep;
-    } mem_flush;
 
     union {
 
@@ -341,6 +353,8 @@ struct ucp_request {
                     uint8_t            sw_done;
                     uint8_t            num_lanes; /* How many lanes are being flushed */
                     ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
+
+                    ucp_mem_flush_t    mem;       /* Memory specific flushes */
                 } flush;
 
                 struct {
