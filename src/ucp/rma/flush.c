@@ -288,7 +288,7 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
         /* Consume entry and create a get request */
         /* Post a get nbx for each and track it in the flush request */
         ucp_trace_req(req, "flush mem remote_sys_dev=%d uct_rkey=0x%" PRIx64
-                      " uct_ep=%p address=%zu",
+                      " uct_ep=%p address=%zx",
                       i, entry[i].uct.rkey,
                       entry[i].uct.ep,
                       entry[i].address);
@@ -323,6 +323,7 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
         ep->ext->flush_state.mem.in_progress++;
     } else if (ep->ext->flush_state.mem.in_progress == 0) {
         /* No other potentially related flushes on this EP */
+        ucp_trace_req(req, "flush mem: no work to do");
         return UCS_OK;
     }
 
