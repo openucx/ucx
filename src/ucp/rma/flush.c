@@ -229,8 +229,10 @@ static ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
         if (status == UCS_OK) {
             req->send.flush.mem.uct_comp.count--;
             entry->uct_ep = NULL;
+            req->send.flush.mem.started++;
         } else if (status == UCS_INPROGRESS) {
             entry->uct_ep = NULL;
+            req->send.flush.mem.started++;
         }
     }
 
