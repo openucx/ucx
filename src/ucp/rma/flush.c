@@ -235,7 +235,9 @@ static ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
 
     status = UCS_OK;
 
-    if (req->send.flush.mem.uct_comp.count == 0) {
+    if ((mem->entry != NULL) && (req->send.flush.mem.uct_comp.count == 0)) {
+       ucs_free(mem->entry);
+       mem->entry = NULL;
         ep->ext->flush_state.mem.in_progress--;
         ucp_trace_req(req, "flush mem completed status=%s started=%d/%d "
                       "to_completed=%d ep_flush_in_progress=%d",
@@ -290,15 +292,9 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
         entry[i].uct.ep = NULL;
     }
 
-    size = sizeof(*req->send.flush.mem.entry) * started;
-    req->send.flush.mem.entry = ucs_malloc(size, "flush_mem_entry");
-    if (req->send.flush.mem.entry == NULL) {
-        ucs_fatal("Cannot allocate flush mem entry");
-    }
-
-    memcpy(req->send.flush.mem.entry, tmp, size);
-    req->send.flush.mem.count           = started;
-    req->send.flush.mem.started         = 0;
+    req->send.flush.mem.entry          = NULL;
+    req->send.flush.mem.count          = started;
+    req->send.flush.mem.started        = 0;
     req->send.uct.func                  = ucp_ep_flush_mem_progress;
     req->send.flush.mem.uct_comp.func   = ucp_ep_flush_mem_completion;
     req->send.flush.mem.uct_comp.count  = started;
@@ -306,7 +302,16 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 
     /* Count one more in-progress memory flush for the EP */
     if (started > 0) {
-        ep->ext->flush_state.mem.in_progress++;
+           size = sizeof(*req->send.flush.mem.entry) * started;
+
+           req->send.flush.mem.entry = ucs_malloc(size, "flush_mem_entry");
+           if (req->send.flush.mem.entry == NULL) {
+                   ucs_fatal("Cannot allocate flush mem entry");
+           }
+
+           memcpy(req->send.flush.mem.entry, tmp, size);
+
+           ep->ext->flush_state.mem.in_progress++;
     } else if (ep->ext->flush_state.mem.in_progress == 0) {
         /* No other potentially related flushes on this EP */
         return UCS_OK;
