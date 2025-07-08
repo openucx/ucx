@@ -1210,8 +1210,31 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)
 
 class multi_rail_max : public test_ucp_tag_xfer {
 public:
+    enum {
+        VARIANT_64_PATHS  = 100, /* start after parent's enum values */
+        VARIANT_128_PATHS = 101
+    };
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_64_PATHS, "64_paths");
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_128_PATHS, "128_paths");
+    }
+
     void init() override
     {
+        if ((get_variant_value() == VARIANT_128_PATHS) && has_transport("rc")) {
+            UCS_TEST_SKIP_R("128 paths tests not supported for RC transport");
+        }
+
+        if (get_variant_value() == VARIANT_64_PATHS) {
+            modify_config("IB_NUM_PATHS", "64", SETENV_IF_NOT_EXIST);
+        } else if (get_variant_value() == VARIANT_128_PATHS) {
+            modify_config("IB_NUM_PATHS", "128", SETENV_IF_NOT_EXIST);
+        }
+
         stats_activate();
 
         static std::vector<std::string> devices;
@@ -1307,26 +1330,17 @@ public:
     }
 };
 
-class multi_rail_max_64 : public multi_rail_max {
-};
-
-class multi_rail_max_128 : public multi_rail_max {
-};
-
-UCS_TEST_P(multi_rail_max_64, max_lanes_64, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
+UCS_TEST_P(multi_rail_max, max_lanes, "TM_SW_RNDV=y",
            "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
-    test_max_lanes(64);
+    if (get_variant_value() == VARIANT_64_PATHS) {
+        test_max_lanes(64);
+    } else if (get_variant_value() == VARIANT_128_PATHS) {
+        test_max_lanes(128);
+    }
 }
 
-UCS_TEST_P(multi_rail_max_128, max_lanes_128, "IB_NUM_PATHS?=128", "TM_SW_RNDV=y",
-           "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
-{
-    test_max_lanes(128);
-}
-
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max_64, rc, "rc")
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max_64, dc, "dc")
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max_128, dc, "dc")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, dc, "dc")
 
 #endif
