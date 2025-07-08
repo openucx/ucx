@@ -287,6 +287,12 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 
         /* Consume entry and create a get request */
         /* Post a get nbx for each and track it in the flush request */
+        ucp_trace_req(req, "flush mem remote_sys_dev=%d uct_rkey=0x%" PRIx64
+                      " uct_ep=%p address=%zu",
+                      i, entry[i].uct.rkey,
+                      entry[i].uct.ep,
+                      entry[i].address);
+
         tmp[started].uct_rkey = entry[i].uct.rkey;
         tmp[started].uct_ep   = entry[i].uct.ep;
         tmp[started].address  = entry[i].address;
