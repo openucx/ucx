@@ -498,13 +498,6 @@ typedef struct uct_md_mem_reg_params {
      * memory domain to perform specific registrations.
      */
     ucs_sys_device_t             sys_dev;
-
-    /**
-     * Similarly as dmabuf_fd, but created with an explicit request to export
-     * PCIe window.
-     */
-    int                          dmabuf_fd_pcie;
-
 } uct_md_mem_reg_params_t;
 
 

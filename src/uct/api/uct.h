@@ -1609,14 +1609,6 @@ typedef enum uct_md_mem_attr_field {
      * beginning of its backing dmabuf region.
      */
     UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5),
-
-    /**
-     * Request a cross-device dmabuf file descriptor that represents a memory
-     * region, and can be used to register the region with another memory
-     * domain that need an explicit PCIe BAR window.
-     */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD_PCIE = UCS_BIT(6)
-
 } uct_md_mem_attr_field_t;
 
 
@@ -1678,13 +1670,6 @@ typedef struct uct_md_mem_attr {
      * (identified by dmabuf_fd) backing the memory region being queried.
      */
     size_t            dmabuf_offset;
-
-    /**
-     * Similarly as dmabuf_fd, but created with an explicit request to export
-     * through a PCIe window.
-     */
-    int               dmabuf_fd_pcie;
-
 } uct_md_mem_attr_t;
 
 
