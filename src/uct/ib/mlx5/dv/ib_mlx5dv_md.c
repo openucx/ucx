@@ -2265,11 +2265,11 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
         ucs_assertv_always(status == UCS_OK, "set sys_dev_aux failed: %s",
                            ucs_status_string(status));
         md->super.dev.flags |= UCT_IB_DEVICE_FLAG_DIRECT_NIC;
-        }
     } else {
-        (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev, dev->sys_dev);
         sys_path[0]            = '\0';
         md->direct_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
+                                                  md->direct_nic_sys_dev);
     }
 
     ucs_debug("%s: Direct NIC %s supported ret=%d sys_path='%s%s' "
@@ -2282,7 +2282,8 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
               dev->sys_dev,
               md->direct_nic_sys_dev);
 #else
-    (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev, dev->sys_dev);
+    (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
+                                              UCS_SYS_DEVICE_ID_UNKNOWN);
     ucs_debug("%s: Direct NIC support not built", uct_ib_device_name(&md->super.dev));
 #endif
 }
