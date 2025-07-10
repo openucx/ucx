@@ -394,7 +394,8 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
             return status;
         }
 
-        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        status = ucp_ep_rma_handle_fence(ep, req,
+                                         UCP_LANE_MAP_BIT(spriv->super.lane));
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
@@ -430,7 +431,7 @@ static void ucp_proto_amo_sw_probe(const ucp_proto_init_params_t *init_params,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = 0

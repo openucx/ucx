@@ -201,7 +201,7 @@ static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
         ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
     }
 
-    attr->lane_map |= UCS_BIT(rpriv->ack.lane);
+    UCS_STATIC_BITMAP_SET(&attr->lane_map, rpriv->ack.lane);
 }
 
 static void
