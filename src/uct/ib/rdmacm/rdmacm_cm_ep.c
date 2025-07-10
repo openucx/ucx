@@ -230,6 +230,101 @@ out:
     return status;
 }
 
+static ucs_status_t
+uct_rdmacm_cm_alloc_reserved_qpn_blk(uct_rdmacm_cm_ep_t *cep,
+                                     uct_rdmacm_cm_device_context_t *ctx)
+{
+    uct_rdmacm_cm_reserved_qpn_blk_t *blk;
+    ucs_status_t status;
+
+    status = uct_rdmacm_cm_reserved_qpn_blk_alloc(ctx, cep->id->verbs,
+                                                  UCS_LOG_LEVEL_ERROR, &blk);
+    if (status == UCS_OK) {
+        ucs_list_add_tail(&ctx->blk_list, &blk->entry);
+    }
+
+    return status;
+}
+
+static ucs_status_t
+uct_rdmacm_cm_device_ctx_get_shared_qpn(uct_rdmacm_cm_ep_t *cep,
+                                        uct_rdmacm_cm_device_context_t *ctx)
+{
+    uint32_t qpns_per_obj = UCS_BIT(ctx->log_reserved_qpn_granularity);
+    uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx;
+    uct_rdmacm_cm_reserved_qpn_blk_t *blk;
+    ucs_status_t status;
+
+    status = uct_rdmacm_cm_get_peer_dev_ctx(ctx, &cep->id->route,
+                                            &peer_dev_ctx);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if ((peer_dev_ctx->ref_qpn_blk != NULL) &&
+        (peer_dev_ctx->next_avail_qpn_offset < qpns_per_obj)) {
+        blk = peer_dev_ctx->ref_qpn_blk;
+    } else {
+        if (peer_dev_ctx->ref_qpn_blk == NULL) {
+            blk = ucs_list_next(&ctx->blk_list,
+                                uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+        } else {
+            if (peer_dev_ctx->ref_qpn_blk->entry.next == &ctx->blk_list) {
+                status = uct_rdmacm_cm_alloc_reserved_qpn_blk(cep, ctx);
+                if (status != UCS_OK) {
+                    return status;
+                }
+            }
+
+            blk = ucs_list_next(&peer_dev_ctx->ref_qpn_blk->entry,
+                                uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+        }
+
+        peer_dev_ctx->ref_qpn_blk           = blk;
+        peer_dev_ctx->next_avail_qpn_offset = 0;
+    }
+
+    cep->qpn                   = blk->first_qpn +
+                                 peer_dev_ctx->next_avail_qpn_offset++;
+    blk->next_avail_qpn_offset = ucs_max(blk->next_avail_qpn_offset,
+                                         peer_dev_ctx->next_avail_qpn_offset);
+    cep->blk                   = blk;
+    blk->refcount++;
+    ucs_debug("get shared reserved qpn 0x%x on rdmacm_id %p", cep->qpn,
+              cep->id);
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_rdmacm_cm_device_ctx_get_unique_qpn(uct_rdmacm_cm_ep_t *cep,
+                                        uct_rdmacm_cm_device_context_t *ctx)
+{
+    uint32_t qpns_per_obj = UCS_BIT(ctx->log_reserved_qpn_granularity);
+    uct_rdmacm_cm_reserved_qpn_blk_t *blk;
+    ucs_status_t status;
+
+    blk = ucs_list_tail(&ctx->blk_list, uct_rdmacm_cm_reserved_qpn_blk_t,
+                        entry);
+    if (blk->next_avail_qpn_offset >= qpns_per_obj) {
+        status = uct_rdmacm_cm_alloc_reserved_qpn_blk(cep, ctx);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        blk = ucs_list_tail(&ctx->blk_list, uct_rdmacm_cm_reserved_qpn_blk_t,
+                            entry);
+    }
+
+    cep->qpn = blk->first_qpn + blk->next_avail_qpn_offset++;
+    cep->blk = blk;
+    blk->refcount++;
+    ucs_debug("get unique reserved qpn 0x%x on rdmacm_id %p", cep->qpn,
+              cep->id);
+
+    return UCS_OK;
+}
+
 /**
  * Allocate a reserved QPN either from the last FW object allocated,
  * or by allocating a new one. When find a free QPN in an object, it
@@ -240,32 +335,22 @@ static ucs_status_t
 uct_rdmacm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
                                      uct_rdmacm_cm_device_context_t *ctx)
 {
-    uint32_t qpns_per_obj = UCS_BIT(ctx->log_reserved_qpn_granularity);
-    uct_rdmacm_cm_reserved_qpn_blk_t *blk;
     ucs_status_t status;
 
     ucs_spin_lock(&ctx->lock);
 
-    blk = ucs_list_tail(&ctx->blk_list, uct_rdmacm_cm_reserved_qpn_blk_t, entry);
-    if (ucs_list_is_empty(&ctx->blk_list) ||
-        (blk->next_avail_qpn_offset >= qpns_per_obj)) {
-        status = uct_rdmacm_cm_reserved_qpn_blk_alloc(ctx, cep->id->verbs,
-                                                      UCS_LOG_LEVEL_ERROR,
-                                                      &blk);
+    if (ucs_unlikely(ucs_list_is_empty(&ctx->blk_list))) {
+        status = uct_rdmacm_cm_alloc_reserved_qpn_blk(cep, ctx);
         if (status != UCS_OK) {
             goto out;
         }
-
-        ucs_list_add_tail(&ctx->blk_list, &blk->entry);
     }
 
-    cep->qpn = blk->first_qpn + blk->next_avail_qpn_offset;
-    ucs_debug("created reserved qpn 0x%x on rdmacm_id %p",
-              cep->qpn, cep->id);
-    cep->blk = blk;
-    blk->refcount++;
-    blk->next_avail_qpn_offset++;
-    status = UCS_OK;
+    if (ctx->reuse_qpn) {
+        status = uct_rdmacm_cm_device_ctx_get_shared_qpn(cep, ctx);
+    } else {
+        status = uct_rdmacm_cm_device_ctx_get_unique_qpn(cep, ctx);
+    }
 
 out:
     ucs_spin_unlock(&ctx->lock);
