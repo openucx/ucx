@@ -2504,6 +2504,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->internal_eps);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
+    kh_init_inplace(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
@@ -2711,6 +2712,7 @@ err_destroy_ep_map:
     UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
+    kh_destroy_inplace(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
@@ -2780,6 +2782,43 @@ static void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
      * a progress callback on the main thread to destroy UCT EP */
     ucp_worker_discard_uct_ep_progress_register(
             req, ucp_worker_discard_uct_ep_destroy_progress);
+}
+
+static void ucp_worker_flush_deferred_ep_complete(uct_completion_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+    ucp_worker_deferred_ep_t *deferred;
+
+    deferred = ucp_worker_get_deferred_ep(req->send.ep);
+    if ((self->count == 0) &&
+        (deferred->flush.curr == ucs_array_end(&deferred->flush.uct_eps))) {
+        req->status = UCS_OK;
+    }
+}
+
+static ucs_status_t
+ucp_worker_flush_deferred_ep_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_worker_deferred_ep_t *deferred;
+    ucs_status_t status;
+
+    deferred = ucp_worker_get_deferred_ep(req->send.ep);
+    while (deferred->flush.curr < ucs_array_end(&deferred->flush.uct_eps)) {
+        status = uct_ep_flush(*deferred->flush.curr, UCT_FLUSH_FLAG_LOCAL,
+                              &req->send.state.uct_comp);
+
+        if (status == UCS_INPROGRESS) {
+            ++req->send.state.uct_comp.count;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        deferred->flush.curr++;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
@@ -2961,6 +3000,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     UCS_PTR_MAP_DESTROY(request, &worker->request_map);
     UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
+    kh_destroy_inplace(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
@@ -3599,6 +3639,118 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
             ucp_worker_keepalive_complete(worker, ucs_get_time());
         }
     }
+}
+
+/* Release all data related to deferred EP */
+void ucp_worker_release_deferred_ep(ucp_ep_h ep)
+{
+    ucp_worker_h worker = ep->worker;
+    ucp_worker_deferred_ep_t *deferred;
+    khiter_t iter;
+    uct_ep_h *uct_ep_p;
+    ucp_request_t *req;
+
+    iter = kh_get(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash, ep);
+    if (iter == kh_end(&ep->worker->deferred_ep_hash)) {
+        return;
+    }
+
+    deferred = &kh_value(&ep->worker->deferred_ep_hash, iter);
+
+    /* Discard uct EPs */
+    ucs_array_for_each(uct_ep_p, &deferred->flush.uct_eps) {
+        uct_ep_destroy(*uct_ep_p);
+    }
+
+    /* Release flush request if needed */
+    if (!ucs_array_is_empty(&deferred->flush.uct_eps)) {
+        ucp_request_put(deferred->flush.req);
+    }
+
+    /* Abort pending requests */
+    ucs_queue_for_each_extract(req, deferred->pending_q, send.uct.priv, 1) {
+        ucp_proto_request_abort(req, UCS_ERR_CANCELED);
+    }
+
+    /* Destroy uct_eps array and delete hash entry */
+    ucs_array_cleanup_dynamic(&deferred->flush.uct_eps);
+    ucs_free(deferred->pending_q);
+    kh_del(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash, iter);
+}
+
+ucp_worker_deferred_ep_t *ucp_worker_get_deferred_ep(ucp_ep_h ep)
+{
+    ucp_worker_h worker = ep->worker;
+    ucp_worker_deferred_ep_t *deferred;
+    khiter_t iter;
+    int ret;
+
+    iter = kh_put(ucp_worker_deferred_ep_hash, &worker->deferred_ep_hash, ep,
+                  &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        return NULL;
+    }
+
+    if (ret != UCS_KH_PUT_KEY_PRESENT) {
+        deferred            = &kh_value(&worker->deferred_ep_hash, iter);
+        deferred->pending_q = ucs_malloc(sizeof(*deferred->pending_q),
+                                         "deferred_queue");
+        ucs_queue_head_init(deferred->pending_q);
+        ucs_array_init_dynamic(&deferred->flush.uct_eps);
+    }
+
+    return &kh_value(&worker->deferred_ep_hash, iter);
+}
+
+int ucp_worker_deferred_flush_in_progress(ucp_ep_h ep)
+{
+    ucp_worker_deferred_ep_t *deferred = ucp_worker_get_deferred_ep(ep);
+
+    return !ucs_array_is_empty(&deferred->flush.uct_eps) &&
+    (deferred->flush.req->status == UCS_INPROGRESS);
+}
+
+/* Perform non-blocking flush on discarded uct EPs */
+ucs_status_t ucp_worker_flush_deferred_ep(ucp_ep_h ep)
+{
+    ucp_worker_deferred_ep_t *deferred = ucp_worker_get_deferred_ep(ep);
+    ucp_request_t *req;
+    ucs_status_t status;
+
+    if (ucs_array_is_empty(&deferred->flush.uct_eps)) {
+        return UCS_OK;
+    }
+
+    req = ucp_request_get(ep->worker);
+    if (ucs_unlikely(req == NULL)) {
+        ucs_error("unable to allocate request for deferred EP %p on UCP worker "
+                  "%p", ep, ep->worker);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    req->status                     = UCS_INPROGRESS;
+    req->send.ep                    = ep;
+    req->send.uct.func              = ucp_worker_flush_deferred_ep_progress;
+    req->send.state.uct_comp.func   = ucp_worker_flush_deferred_ep_complete;
+    req->send.state.uct_comp.count  = 0;
+    req->send.state.uct_comp.status = UCS_OK;
+
+    /* Store flush request for completion tracking */
+    deferred->flush.req = req;
+
+    /* Init iterator for uct_eps array */
+    deferred->flush.curr = ucs_array_begin(&deferred->flush.uct_eps);
+
+    /* Start flush operation */
+    status = ucp_worker_flush_deferred_ep_progress(&req->send.uct);
+
+    if (status == UCS_ERR_NO_RESOURCE) {
+        status = uct_ep_pending_add(*deferred->flush.curr, &req->send.uct, 0);
+    } else if (req->send.state.uct_comp.count == 0) {
+        req->status = UCS_OK;
+    }
+
+    return status;
 }
 
 static ucs_status_t
