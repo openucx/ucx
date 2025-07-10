@@ -563,6 +563,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     void *reg_address;
     size_t reg_length;
     size_t reg_align;
+    ucp_sys_dev_map_t sys_dev_map;
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
@@ -639,10 +640,9 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             ucs_align_ptr_range(&reg_address, &reg_length, reg_align);
         }
 
-        if (!ucp_memh_sys_dev_reachable(
-                                    md_index,
-                                    reg_params.sys_dev,
-                                    context->tl_mds[md_index].sys_dev_map)) {
+        sys_dev_map = context->tl_mds[md_index].sys_dev_map;
+        if (!ucp_memh_sys_dev_reachable(md_index, reg_params.sys_dev,
+                                        sys_dev_map)) {
             continue;
         }
 
