@@ -531,21 +531,23 @@ out:
     return result;
 }
 
+/* Check if a device is a sibling of the memory device */
 int ucs_topo_is_memory_sibling(ucs_sys_device_t device,
                                ucs_sys_device_t mem_device)
 {
-    int result = 0;
+    int result;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if ((device >= ucs_topo_global_ctx.num_devices) ||
-        (mem_device >= ucs_topo_global_ctx.num_devices)) {
-        goto out;
-    }
 
+    /*
+     * Both devices are valid and match the identified sibling of the memory
+     * device.
+     */
     result =
+        (device < ucs_topo_global_ctx.num_devices) &&
+        (mem_device < ucs_topo_global_ctx.num_devices) &&
         (ucs_topo_global_ctx.devices[mem_device].sibling.sys_dev == device);
 
-out:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     return result;
 }
