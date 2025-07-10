@@ -7,18 +7,21 @@
 #  include "config.h"
 #endif
 
-#include "cuda_ipc_md.h"
-#include "cuda_ipc_cache.h"
 #include "cuda_ipc.inl"
-#include <string.h>
-#include <limits.h>
+#include "cuda_ipc_cache.h"
+#include "cuda_ipc_md.h"
+
 #include <ucs/debug/log.h>
-#include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack_int.h>
-#include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
+#include <ucs/type/class.h>
 #include <uct/api/v2/uct_v2.h>
+#include <uct/cuda/base/cuda_nvml.h>
+
+#include <limits.h>
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -455,7 +458,7 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
     static int mnnvl_supported = 0;
 #else
     static int mnnvl_supported = -1;
-    nvmlGpuFabricInfo_t fabric_info;
+    nvmlGpuFabricInfoV_t fabric_info;
     nvmlDevice_t device;
     ucs_status_t status;
     char buf[64];
@@ -465,25 +468,19 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
         goto out;
     }
 
-    if ((mnnvl_enable == UCS_NO) ||
-        (UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG) != UCS_OK)) {
+    if (mnnvl_enable == UCS_NO) {
         mnnvl_supported = 0;
         goto out;
     }
 
-    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(0, &device));
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device);
     if (status != UCS_OK) {
         goto out_not_supported;
     }
 
-    /**
-     * nvmlDeviceGetGpuFabricInfo was deprecated in CUDA 12.4.0. The old API is
-     * used to ensure compatibility of the UCX. Thus, UCX built with CUDA 12.4.0
-     * or newer can be used on a system with older CUDA 12 versions.
-     * TODO: Replace the deprecated API along with the major CUDA release.
-     */
-    status = UCT_NVML_FUNC_LOG_ERR(
-            nvmlDeviceGetGpuFabricInfo(device, &fabric_info));
+    fabric_info.version = nvmlGpuFabricInfo_v2;
+    status              = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetGpuFabricInfoV,
+                                                  device, &fabric_info);
     if (status != UCS_OK) {
         goto out_not_supported;
     }
@@ -499,13 +496,11 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
         (fabric_info.status == NVML_SUCCESS) &&
         (cluster_uuid[0] | cluster_uuid[1]) != 0) {
         mnnvl_supported = 1;
-        goto out_sd;
+        goto out;
     }
 
 out_not_supported:
     mnnvl_supported = 0;
-out_sd:
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 out:
 #endif
     if ((mnnvl_enable == UCS_YES) && !mnnvl_supported) {
