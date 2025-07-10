@@ -606,10 +606,10 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                       mem_attr.dmabuf_offset,
                       mem_attr.sys_dev);
 
-            dmabuf_md_map             = context->dmabuf_reg_md_map;
-            reg_params.dmabuf_fd      = mem_attr.dmabuf_fd;
-            reg_params.dmabuf_offset  = mem_attr.dmabuf_offset;
-            reg_params.sys_dev        = mem_attr.sys_dev;
+            dmabuf_md_map            = context->dmabuf_reg_md_map;
+            reg_params.dmabuf_fd     = mem_attr.dmabuf_fd;
+            reg_params.dmabuf_offset = mem_attr.dmabuf_offset;
+            reg_params.sys_dev       = mem_attr.sys_dev;
         }
     }
 
