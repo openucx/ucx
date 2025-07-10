@@ -468,13 +468,20 @@ static int test_alloc_prim_send_user(const test_params_t *params)
     alloc_mem_t alloc_mem_send, alloc_mem_recv;
     CUcontext primary_ctx, user_ctx;
     int res;
+#if CUDA_VERSION >= 12050
+    CUctxCreateParams ctx_create_params = {};
+#endif
 
     retain_and_push_primary_context(params->cu_dev);
 
     alloc_mem(params, &alloc_mem_send, &alloc_mem_recv);
 
     CUDA_CHECK(cuCtxPopCurrent(&primary_ctx));
+#if CUDA_VERSION >= 12050
+    CUDA_CHECK(cuCtxCreate_v4(&user_ctx, &ctx_create_params, 0, params->cu_dev));
+#else
     CUDA_CHECK(cuCtxCreate(&user_ctx, 0, params->cu_dev));
+#endif
 
     mpi_pingpong(params->rank, alloc_mem_send.ptr, alloc_mem_recv.ptr,
                  params->size);
@@ -495,7 +502,12 @@ static int test_alloc_user_send_prim(const test_params_t *params)
     alloc_mem_t alloc_mem_send, alloc_mem_recv;
     int res;
 
+#if CUDA_VERSION >= 12050
+    CUctxCreateParams ctx_create_params = {};
+    CUDA_CHECK(cuCtxCreate_v4(&user_ctx, &ctx_create_params, 0, params->cu_dev));
+#else
     CUDA_CHECK(cuCtxCreate(&user_ctx, 0, params->cu_dev));
+#endif
 
     alloc_mem(params, &alloc_mem_send, &alloc_mem_recv);
 
