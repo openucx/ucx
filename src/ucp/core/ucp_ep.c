@@ -434,7 +434,7 @@ ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
      * not exposed to a user */
     ucs_assert(req->flags & UCP_REQUEST_FLAG_RELEASED);
     ucs_assert((req->send.uct.func == ucp_ep_flush_progress_pending) ||
-           (req->send.uct.func == ucp_ep_flush_mem_progress));
+               (req->send.uct.func == ucp_ep_flush_mem_progress));
 
     ucp_request_complete_send(req, req->status);
     return 1;

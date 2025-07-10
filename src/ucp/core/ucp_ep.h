@@ -493,16 +493,12 @@ struct ucp_ep_config {
 
 
 /**
- * Tracks a remote memory area that needs flushing.
+ * Tracks a remote memory area that needs targeted flushing.
  */
 typedef struct ucp_ep_flush_mem {
-    struct {
-        uct_rkey_t   rkey;              /* Address and remote key to use */
-        uct_ep_t     *ep;
-    } uct;
-
+    uct_rkey_t       uct_rkey;
+    uct_ep_t         *uct_ep;
     uint64_t         address;
-    ucp_request_t    *req;              /* Debug only, do not dereference */
 } ucp_ep_flush_mem_t;
 
 
@@ -510,20 +506,20 @@ typedef struct ucp_ep_flush_mem {
  * Status of protocol-level remote completions
  */
 typedef struct {
-    ucs_hlist_head_t reqs; /* Queue of flush requests which
-                              are waiting for remote completion */
-    uint32_t         send_sn; /* Sequence number of sent operations */
-    uint32_t         cmpl_sn; /* Sequence number of completions */
+    ucs_hlist_head_t       reqs;    /* Queue of flush requests which
+                                       are waiting for remote completion */
+    uint32_t               send_sn; /* Sequence number of sent operations */
+    uint32_t               cmpl_sn; /* Sequence number of completions */
 
     struct {
-        /* Flushing in progress */
-        int                 in_progress;
+        /* Track ongoing memory flushes for this endpoint */
+        int                in_progress;
 
         /*
-         * Memory areas that need specific flushing, track by device, not lane,
-         * as there could be many memory devices behind a given lane endpoint.
+         * Memory areas that need specific flushing, tracked by device as there
+         * could be many memory devices behind a given lane.
          */
-        ucp_ep_flush_mem_t  entry[UCS_SYS_DEVICE_ID_MAX];
+        ucp_ep_flush_mem_t entry[UCS_SYS_DEVICE_ID_MAX];
     } mem;
 } ucp_ep_flush_state_t;
 
@@ -962,19 +958,30 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
 
 
 /**
- * @brief Memory operation needs specific flushing when explicitly calling
- * flush.
+ * @brief Schedule a memory specific remote flushing if needed.
  *
- * RMA operation details must still be valid in the request RMA section.
+ * This call will schedule the remote memory area for remote memory specific
+ * flush, if needed. The actual flush will only be performed after all lane
+ * specific flushes have completed, to guarantee ordering.
  *
- * @param [in] req        Request performing the RMA operation
- * @param [in] lane       Lane that was used for RMA operation
+ * @param [in] req        Request that performed the RMA operation.
+ * @param [in] lane       Lane that was used for RMA operation.
  * @param [in] rkey_index Remote key index accessed.
- *
  */
 void ucp_ep_flush_mem_schedule(ucp_request_t *req,
                                ucp_lane_index_t lane,
                                ucp_md_index_t rkey_index);
 
+
+/**
+ * @brief Progress function for memory specific remote flushing.
+ *
+ * This call starts and progresses all memory specific remote flushes.
+ *
+ * @param[in] self        Pending request tracking the flush.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
 ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
+
 #endif

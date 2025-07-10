@@ -281,7 +281,7 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 
     /* Check if any pending flush entries */
     for (i = 0; i < UCS_SYS_DEVICE_ID_MAX; i++) {
-        if (entry[i].uct.ep == NULL) {
+        if (entry[i].uct_ep == NULL) {
             continue;
         }
 
@@ -289,16 +289,16 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
         /* Post a get nbx for each and track it in the flush request */
         ucp_trace_req(req, "flush mem remote_sys_dev=%d uct_rkey=0x%" PRIx64
                       " uct_ep=%p address=%zx",
-                      i, entry[i].uct.rkey,
-                      entry[i].uct.ep,
+                      i, entry[i].uct_rkey,
+                      entry[i].uct_ep,
                       entry[i].address);
 
-        tmp[started].uct_rkey = entry[i].uct.rkey;
-        tmp[started].uct_ep   = entry[i].uct.ep;
+        tmp[started].uct_rkey = entry[i].uct_rkey;
+        tmp[started].uct_ep   = entry[i].uct_ep;
         tmp[started].address  = entry[i].address;
 
         started++;
-        entry[i].uct.ep = NULL;
+        entry[i].uct_ep = NULL;
     }
 
     req->send.flush.mem.entry          = NULL;
@@ -402,17 +402,16 @@ void ucp_ep_flush_mem_schedule(ucp_request_t *req,
     /* Overwrite any existing event */
     remote_sys_dev  = ep_config->key.lanes[lane].dst_sys_dev;
     entry           = &req->send.ep->ext->flush_state.mem.entry[remote_sys_dev];
-    entry->uct.rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, rkey_index);
-    entry->uct.ep   = uct_ep;
+    entry->uct_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, rkey_index);
+    entry->uct_ep   = uct_ep;
     entry->address  = addr;
-    entry->req      = req;
 
     ucp_trace_req(req,
               "flush mem ep=%p: scheduled lane=%u rkey_index=%u "
               "remote_sys_dev=%u uct_ep=%p address=0x%" PRIx64 " "
               "uct_rkey=0x%" PRIx64,
               req->send.ep, lane, rkey_index,
-              remote_sys_dev, uct_ep, addr, entry->uct.rkey);
+              remote_sys_dev, uct_ep, addr, entry->uct_rkey);
 }
 
 static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)

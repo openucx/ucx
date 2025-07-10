@@ -534,8 +534,8 @@ static int ucp_memh_sys_dev_reachable(ucp_md_index_t md_index,
      */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
         if (!ucs_topo_is_memory_reachable(sys_dev, mem_sys_dev)) {
-            ucs_trace("md[%d] skipped: mem_sys_dev=%u cannot reach sys_dev=%u",
-                      md_index, mem_sys_dev, sys_dev);
+            ucs_trace("md[%d] skipped: sys_dev=%u cannot reach mem_sys_dev=%u",
+                      md_index, sys_dev, mem_sys_dev);
             return 0;
         }
     }
