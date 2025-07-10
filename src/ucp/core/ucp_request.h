@@ -120,24 +120,17 @@ enum {
     UCP_RDESC_ALL_LIST  = 1
 };
 
-/*
- * Memory entry to start a 0-read flush for
- */
-typedef struct ucp_mem_flush_entry {
-    uct_rkey_t uct_rkey;
-    uct_ep_t   *uct_ep;
-    uint64_t   address;
-} ucp_mem_flush_entry_t;
 
 /**
  * Memory flush related structure
  */
 typedef struct ucp_mem_flush {
-    int                   count;   /* Number of 0-read flush to achieve */
-    int                   started; /* Number of 0-read flush started */
-    ucp_mem_flush_entry_t *entry;
-    uct_completion_t      uct_comp;
+    int              count;    /* Number of 0-read flush to complete overall */
+    int              started;  /* Number of 0-read flush started */
+    uct_completion_t uct_comp; /* Shared completion to track remaining */
+    ucp_mem_area_t   *entry;   /* List of memory area to start 0-read for */
 } ucp_mem_flush_t;
+
 
 /**
  * Request in progress.

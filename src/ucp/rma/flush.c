@@ -207,7 +207,7 @@ ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
     ucp_ep_h ep          = req->send.ep;
     ucs_status_t status;
     int i;
-    ucp_mem_flush_entry_t *entry;
+    ucp_mem_area_t *entry;
 
     ucs_assert(req->send.flush.mem.uct_comp.func ==
                ucp_ep_flush_mem_completion);
@@ -272,10 +272,10 @@ static unsigned ucp_ep_flush_mem_resume_callback(void *arg)
 
 static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 {
-    int started               = 0;
-    ucp_ep_h ep               = req->send.ep;
-    ucp_ep_flush_mem_t *entry = ep->ext->flush_state.mem.entry;
-    ucp_mem_flush_entry_t tmp[UCS_SYS_DEVICE_ID_MAX];
+    int started           = 0;
+    ucp_ep_h ep           = req->send.ep;
+    ucp_mem_area_t *entry = ep->ext->flush_state.mem.entry;
+    ucp_mem_area_t tmp[UCS_SYS_DEVICE_ID_MAX];
     int i;
     size_t size;
 
@@ -387,7 +387,7 @@ void ucp_ep_flush_mem_schedule(ucp_request_t *req,
     ucp_rkey_config_t *config  = ucp_rkey_config(req->send.ep->worker, rkey);
     ucp_ep_config_t *ep_config = ucp_ep_config(req->send.ep);
     ucs_sys_device_t remote_sys_dev;
-    ucp_ep_flush_mem_t *entry;
+    ucp_mem_area_t *entry;
 
     /*
      * Do not schedule if remote rkey does not need it. Assume local and remote
