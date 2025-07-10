@@ -861,7 +861,7 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
      * declaration and avoid link error */
 #if CUDA_VERSION >= 12000
 #if CUDA_VERSION >= 12080
-    static unsigned long long flags 
+    static unsigned long long flags
         = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
 #else
     static unsigned long long flags = 0;

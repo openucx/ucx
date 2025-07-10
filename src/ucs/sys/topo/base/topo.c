@@ -497,24 +497,46 @@ out:
 }
 
 static ucs_status_t
-ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
-                            ucs_sys_device_t device2,
+ucs_topo_get_distance_sysfs(ucs_sys_device_t device1, ucs_sys_device_t device2,
                             ucs_sys_dev_distance_t *distance)
 {
     ucs_status_t status;
+    ucs_sys_device_t aux_device1, aux_device2;
+    ucs_sys_dev_distance_t best_dist, aux_dist;
 
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    status = ucs_topo_get_distance_sysfs_internal(device1, device2, distance);
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    status = ucs_topo_get_distance_sysfs_internal(device1, device2, &best_dist);
     if (status != UCS_OK) {
         return status;
     }
 
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (device2 == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        return UCS_OK;
+        goto done;
     }
 
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    aux_device1 = ucs_topo_global_ctx.devices[device1].sys_dev_aux;
+    aux_device2 = ucs_topo_global_ctx.devices[device2].sys_dev_aux;
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    if (aux_device1 != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        status = ucs_topo_get_distance_sysfs_internal(aux_device1, device2,
+                                                      &aux_dist);
+        if ((status == UCS_OK) && (aux_dist.bandwidth > best_dist.bandwidth)) {
+            best_dist = aux_dist;
+        }
+    }
+
+    if (aux_device2 != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        status = ucs_topo_get_distance_sysfs_internal(device1, aux_device2,
+                                                      &aux_dist);
+        if ((status == UCS_OK) && (aux_dist.bandwidth > best_dist.bandwidth)) {
+            best_dist = aux_dist;
+        }
+    }
+
+done:
+    *distance = best_dist;
     return UCS_OK;
 }
 
