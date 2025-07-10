@@ -74,7 +74,7 @@ typedef struct {
     uintptr_t        user_value;
 
     /* Secondary device for the current device */
-    ucs_sys_device_t aux_sys_dev;
+    ucs_sys_device_t sys_dev_aux;
 
     /* Memory sibling path */
     struct {
@@ -317,7 +317,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
             = 0;
         ucs_topo_global_ctx.devices[*sys_dev].sibling.sys_dev
             = UCS_SYS_DEVICE_ID_UNKNOWN;
-        ucs_topo_global_ctx.devices[*sys_dev].aux_sys_dev
+        ucs_topo_global_ctx.devices[*sys_dev].sys_dev_aux
             = UCS_SYS_DEVICE_ID_UNKNOWN;
 
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
@@ -562,7 +562,7 @@ int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    aux     = ucs_topo_global_ctx.devices[device].aux_sys_dev;
+    aux     = ucs_topo_global_ctx.devices[device].sys_dev_aux;
     sibling = ucs_topo_global_ctx.devices[mem_device].sibling.sys_dev;
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
@@ -818,7 +818,7 @@ static int ucs_topo_is_pci_bridge(ucs_sys_device_t device1,
 ucs_status_t
 ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
 {
-    ucs_sys_device_t dev, aux_sys_dev;
+    ucs_sys_device_t dev, sys_dev_aux;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
@@ -831,10 +831,10 @@ ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
     ucs_topo_global_ctx.devices[sys_dev].sibling.mem_path = 1;
 
     for (dev = 0; dev < ucs_topo_global_ctx.num_devices; ++dev) {
-        aux_sys_dev = ucs_topo_global_ctx.devices[dev].sibling.sys_dev;
-        if (ucs_topo_is_pci_bridge(sys_dev, aux_sys_dev)) {
+        sys_dev_aux = ucs_topo_global_ctx.devices[dev].sibling.sys_dev;
+        if (ucs_topo_is_pci_bridge(sys_dev, sys_dev_aux)) {
             ucs_debug("sibling path matched for sys_dev=%u: dev=%u with "
-                      "aux_sys_dev=%u", sys_dev, dev, aux_sys_dev);
+                      "sys_dev_aux=%u", sys_dev, dev, sys_dev_aux);
 
             ucs_topo_global_ctx.devices[sys_dev].sibling.sys_dev = dev;
             break;
@@ -847,7 +847,7 @@ ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
 
 ucs_status_t
 ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
-                                    ucs_sys_device_t aux_sys_dev)
+                                    ucs_sys_device_t sys_dev_aux)
 {
     ucs_sys_device_t dev;
 
@@ -859,8 +859,8 @@ ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].aux_sys_dev = aux_sys_dev;
-    if (sys_dev == aux_sys_dev) {
+    ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux = sys_dev_aux;
+    if (sys_dev == sys_dev_aux) {
         goto out;
     }
 
@@ -869,10 +869,10 @@ ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
             continue;
         }
 
-        if (ucs_topo_is_pci_bridge(dev, aux_sys_dev)) {
+        if (ucs_topo_is_pci_bridge(dev, sys_dev_aux)) {
             ucs_topo_global_ctx.devices[dev].sibling.sys_dev = sys_dev;
-            ucs_debug("sys_dev=%u with aux_sys_dev=%u has matched with dev=%u",
-                      sys_dev, aux_sys_dev, dev);
+            ucs_debug("sys_dev=%u with sys_dev_aux=%u has matched with dev=%u",
+                      sys_dev, sys_dev_aux, dev);
             break;
         }
     }

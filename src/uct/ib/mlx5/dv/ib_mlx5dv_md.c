@@ -2259,20 +2259,21 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
 
     ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));
     if (ret == 0) {
+        /* Create a DMA specific device from topology perspective */
         snprintf(dev_name, sizeof(dev_name), "%s_dma",
                  uct_ib_device_name(&md->super.dev));
-
         md->direct_nic_sys_dev = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
 
         status = ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
                                                      md->direct_nic_sys_dev);
-        if (status == UCS_OK) {
-            md->super.dev.flags |= UCT_IB_DEVICE_FLAG_DIRECT_NIC;
+        ucs_assertv_always(status == UCS_OK, "set sys_dev_aux failed: %s",
+                           ucs_status_string(status));
+        md->super.dev.flags |= UCT_IB_DEVICE_FLAG_DIRECT_NIC;
         }
     } else {
+        (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev, dev->sys_dev);
         sys_path[0]            = '\0';
         md->direct_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev, dev->sys_dev);
     }
 
     ucs_debug("%s: Direct NIC %s supported ret=%d sys_path='%s%s' "
