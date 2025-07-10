@@ -725,7 +725,6 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
     size_t dmabuf_offset;
     struct ibv_mr *mr;
     ucs_time_t start_time;
-    ucs_sys_device_t mem_sys_dev;
 
     if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_DIRECT_NIC)) {
         return UCS_ERR_UNSUPPORTED;
@@ -737,9 +736,6 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
     if (dmabuf_fd_pcie == UCT_DMABUF_FD_INVALID) {
         return UCS_ERR_UNSUPPORTED;
     }
-
-    mem_sys_dev = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, sys_dev,
-                                  SYS_DEV, UCS_SYS_DEVICE_ID_UNKNOWN);
 
     /* Check if we already have an identified sibling memory device sibling */
     if (!ucs_topo_device_has_sibling(md->super.dev.sys_dev)) {
