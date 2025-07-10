@@ -122,17 +122,15 @@ static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
     packed_distance->latency   = UCS_FP8_PACK(LATENCY, latency_nsec);
     packed_distance->bandwidth = UCS_FP8_PACK(BANDWIDTH, distance->bandwidth);
 
-    /* Set flush flag if memory's system device needs flush for this lane's system device */
-    packed_distance->flags = 0;
-
-    /* The flush flag should be set when:
-     * 1. The lane's system device is a memory sibling of the memory's system device
-     * 2. This indicates that the device needs explicit cache management operations
+    /*
+     * The flush flag should be set when the device of the lane is a memory
+     * sibling of the device of the memory. This will indicate to the remote
+     * that the device needs an explicit cache management operation.
      */
-    if ((sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-        (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-        ucs_topo_is_memory_sibling(sys_dev, mem_sys_dev)) {
-        packed_distance->flags |= UCP_SYS_DISTANCE_NEEDS_FLUSH;
+    if (ucs_topo_is_memory_sibling(sys_dev, mem_sys_dev)) {
+        packed_distance->flags = UCP_SYS_DISTANCE_NEEDS_FLUSH;
+    } else {
+        packed_distance->flags = 0;
     }
 }
 

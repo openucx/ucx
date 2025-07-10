@@ -885,8 +885,8 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
     }
 #endif
 
-    /* Only request PCIe window when sibling Direct NIC HCA is identified */
-    if (flags && !ucs_topo_memory_has_sibling(sys_dev)) {
+    /* Only request PCIe window when a sibling Direct NIC HCA is identified */
+    if (flags && !ucs_topo_device_has_sibling(sys_dev)) {
         flags = 0;
     }
 

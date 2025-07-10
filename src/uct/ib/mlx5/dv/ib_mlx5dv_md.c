@@ -741,8 +741,8 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
     mem_sys_dev = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, sys_dev,
                                   SYS_DEV, UCS_SYS_DEVICE_ID_UNKNOWN);
 
-    /* Both devices are siblings with a non-root PCI path */
-    if (!ucs_topo_is_memory_sibling(md->super.dev.sys_dev, mem_sys_dev)) {
+    /* Check if we already have an identified sibling memory device sibling */
+    if (!ucs_topo_device_has_sibling(md->super.dev.sys_dev)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
