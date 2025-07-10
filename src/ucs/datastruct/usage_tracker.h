@@ -125,13 +125,11 @@ void ucs_usage_tracker_set_min_score(ucs_usage_tracker_h usage_tracker,
  *
  * @param [in]  usage_tracker  Handle to the Usage Tracker object.
  * @param [in]  key            Key of the entry.
- * @param [out] score_p        Filled with the requested entry's score.
  *
- * @return UCS_OK if successful, or an error code as defined by
- * @ref ucs_status_t otherwise.
+ * @return requested entry's score, or 0 if an error occurred.
  */
-ucs_status_t ucs_usage_tracker_get_score(ucs_usage_tracker_h usage_tracker,
-                                         void *key, double *score_p);
+double
+ucs_usage_tracker_get_score(ucs_usage_tracker_h usage_tracker, void *key);
 
 
 /**
@@ -172,5 +170,17 @@ ucs_usage_tracker_touch_key(ucs_usage_tracker_h usage_tracker, void *key)
  * @return 1 if entry is promoted, 0 otherwise.
  */
 int ucs_usage_tracker_is_promoted(ucs_usage_tracker_h usage_tracker, void *key);
+
+
+/**
+ * @brief Check if a given score would get its corresponding key promoted.
+ *
+ * @param [in]  usage_tracker  Handle to the Usage Tracker object.
+ * @param [in]  score          Score to check.
+
+ * @return 1 if entry would be promoted, 0 otherwise.
+ */
+int ucs_usage_tracker_is_promotable(ucs_usage_tracker_h usage_tracker,
+                                    double score);
 
 #endif
