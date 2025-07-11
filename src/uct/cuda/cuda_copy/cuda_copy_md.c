@@ -915,7 +915,7 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
         .alloc_length = length
     };
     uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
-    uintptr_t base_address, aligned_start, aligned_end = 0;
+    uintptr_t base_address, aligned_start, aligned_end;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
 
