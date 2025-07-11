@@ -42,12 +42,4 @@ uct_cuda_base_query_devices(uct_md_h md,
  */
 ucs_status_t uct_cuda_base_check_device_name(const uct_iface_params_t *params);
 
-
-/**
- * Check if the GPU devices have C2C.
- *
- * @return 1 if C2C are found, else 0.
- */
-int uct_cuda_base_has_c2c(void);
-
 #endif
