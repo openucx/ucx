@@ -852,6 +852,7 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
                                           ucs_sys_device_t sys_dev)
 {
 #if CUDA_VERSION >= 11070
+    unsigned long long flags = 0;
     PFN_cuMemGetHandleForAddressRange_v11070 get_handle_func;
     CUresult cu_err;
     int fd;
@@ -860,12 +861,6 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
      * does not have the definition for it even though 11.7 header includes the
      * declaration and avoid link error */
 #if CUDA_VERSION >= 12000
-#if CUDA_VERSION >= 12080
-    static unsigned long long flags
-        = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
-#else
-    static unsigned long long flags = 0;
-#endif
     CUdriverProcAddressQueryResult proc_addr_res;
     cu_err = cuGetProcAddress("cuMemGetHandleForAddressRange",
                               (void**)&get_handle_func, 12000,
@@ -885,10 +880,12 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
     }
 #endif
 
-    /* Only request PCIe window when a sibling Direct NIC HCA is identified */
-    if (flags && !ucs_topo_device_has_sibling(sys_dev)) {
-        flags = 0;
+#if CUDA_VERSION >= 12080
+    /* Only request explicit PCIe when a Direct NIC HCA sibling is identified */
+    if (ucs_topo_device_has_sibling(sys_dev)) {
+        flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
     }
+#endif
 
     cu_err = get_handle_func((void*)&fd, address, length,
                              CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
