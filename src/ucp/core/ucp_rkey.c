@@ -128,7 +128,7 @@ static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
      * that the device needs an explicit cache management operation.
      */
     if (ucs_topo_is_memory_sibling(sys_dev, mem_sys_dev)) {
-        packed_distance->flags = UCP_SYS_DISTANCE_NEEDS_FLUSH;
+        packed_distance->flags = UCS_SYS_DISTANCE_NEEDS_FLUSH;
     } else {
         packed_distance->flags = 0;
     }
@@ -1029,7 +1029,7 @@ void ucp_rkey_dump_packed(const void *buffer, size_t length,
                                                         sizeof(buf)));
 
         /* Show flush flag if set */
-        if (distance.flags & UCP_SYS_DISTANCE_NEEDS_FLUSH) {
+        if (distance.flags & UCS_SYS_DISTANCE_NEEDS_FLUSH) {
             ucs_string_buffer_appendf(strb, " [flush]");
         }
     }

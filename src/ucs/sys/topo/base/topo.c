@@ -559,14 +559,13 @@ int ucs_topo_is_memory_sibling(ucs_sys_device_t device,
     int result;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-
     result =
         (device < ucs_topo_global_ctx.num_devices) &&
         (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
         (ucs_topo_global_ctx.devices[device].sibling_sys_dev ==
          mem_sys_dev);
-
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
     return result;
 }
 
@@ -582,7 +581,6 @@ int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-
     result =
         /*
          * Memory device was never matched with a sibling, it does not
@@ -595,7 +593,6 @@ int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
          UCS_TOPO_SIBLING_ROLE_DEV) ||
         /* The device is the identified sibling */
         (ucs_topo_global_ctx.devices[device].sibling_sys_dev == mem_device);
-
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
@@ -663,7 +660,7 @@ const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
         ucs_string_buffer_appendf(&strb, ">1PB/s");
     }
 
-    if (distance->flags) {
+    if (distance->flags & UCS_SYS_DISTANCE_NEEDS_FLUSH) {
         ucs_string_buffer_appendf(&strb, " [flush]");
     }
 

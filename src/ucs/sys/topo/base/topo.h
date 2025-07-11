@@ -45,14 +45,20 @@ typedef struct ucs_sys_bus_id {
 typedef uint8_t ucs_sys_device_t;
 
 
+enum {
+    /* Memory's system device needs flush */
+    UCS_SYS_DISTANCE_NEEDS_FLUSH = UCS_BIT(0)
+};
+
+
 /*
  * Captures the estimated latency and bandwidth between two system devices
  * referred by ucs_sys_device_t handle.
  */
 typedef struct ucs_sys_dev_distance {
-    double latency;   /**< in seconds */
-    double bandwidth; /**< in bytes/second */
-    uint8_t flags;    /**< flags for system device properties */
+    double  latency;   /**< in seconds */
+    double  bandwidth; /**< in bytes/second */
+    uint8_t flags;     /**< flags for system device properties */
 } ucs_sys_dev_distance_t;
 
 

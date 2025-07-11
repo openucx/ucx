@@ -393,7 +393,7 @@ void ucp_ep_flush_mem_schedule(ucp_request_t *req,
      * Do not schedule if remote rkey does not need it. Assume local and remote
      * lane indexes are identical.
      */
-    if (!(config->lanes_distance[lane].flags & UCP_SYS_DISTANCE_NEEDS_FLUSH)) {
+    if (!(config->lanes_distance[lane].flags & UCS_SYS_DISTANCE_NEEDS_FLUSH)) {
         ucp_trace_req(req, "lane=%u rkey_index=%u no flush needed",
                       lane, rkey_index);
         return;

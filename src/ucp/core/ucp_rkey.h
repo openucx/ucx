@@ -44,14 +44,6 @@ enum {
 };
 
 /**
- * Rkey packed distance flags
- */
-enum {
-    UCP_SYS_DISTANCE_NEEDS_FLUSH = UCS_BIT(0)  /* Memory's system device needs flush
-                                                  for the corresponding lane system device */
-};
-
-/**
  * Rkey configuration key
  */
 struct ucp_rkey_config_key {
