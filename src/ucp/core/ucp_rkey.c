@@ -620,7 +620,7 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat,
 
     if (rkey_compat) {
         return ucp_rkey_packed_size(context, memh->md_map,
-                                    memh->sys_dev, sys_dev_map, 1);
+                                    memh->sys_dev, sys_dev_map, 0);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
@@ -642,7 +642,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
         return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
                                   ucp_memh_address(memh), ucp_memh_length(memh),
                                   &mem_info, sys_dev_map, NULL, 0, memh_buffer,
-                                  1);
+                                  0);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
