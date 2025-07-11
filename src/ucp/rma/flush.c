@@ -252,6 +252,7 @@ ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
                   req->send.ep->ext->flush_state.mem.in_progress);
 
     if (ep->ext->flush_state.mem.in_progress > 0) {
+        /* An unrelated flush might still be executing our 0-read flush */
         ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, req,
                                   ucp_ep_flush_mem_resume_callback, req);
         return UCS_OK;

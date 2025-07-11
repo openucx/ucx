@@ -844,7 +844,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
-    /* Either we request legacy format or remote did send it anyways */
+    /* Either we request legacy format or remote did not send it */
     legacy |= (config->key.dst_version < 20);
 
     if (legacy) {
@@ -853,6 +853,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
         } else {
             rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         }
+
+       sys_dev_map = 0;
     } else {
         sys_dev_map = *ucs_serialize_next(&p, ucp_sys_dev_map_t);
         rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
