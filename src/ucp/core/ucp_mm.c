@@ -627,6 +627,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
                                      UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+            sys_dev_map = context->tl_mds[md_index].sys_dev_map;
+            if (!ucp_memh_sys_dev_reachable(md_index, mem_attr.sys_dev,
+                                            sys_dev_map)) {
+                continue;
+            }
         }
 
         reg_address = address;
@@ -635,12 +640,6 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         if (context->rcache == NULL) {
             reg_align = context->tl_mds[md_index].attr.reg_alignment;
             ucs_align_ptr_range(&reg_address, &reg_length, reg_align);
-        }
-
-        sys_dev_map = context->tl_mds[md_index].sys_dev_map;
-        if (!ucp_memh_sys_dev_reachable(md_index, mem_attr.sys_dev,
-                                        sys_dev_map)) {
-            continue;
         }
 
         status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,

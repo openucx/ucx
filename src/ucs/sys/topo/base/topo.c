@@ -591,10 +591,10 @@ int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
         (ucs_topo_global_ctx.devices[mem_device].sibling_sys_dev ==
          UCS_SYS_DEVICE_ID_UNKNOWN) ||
         /* The device itself never uses auxiliary path */
-        (ucs_topo_global_ctx.devices[device].sibling_role ==
-         UCS_TOPO_SIBLING_ROLE_NONE) ||
+        (ucs_topo_global_ctx.devices[device].sibling_role !=
+         UCS_TOPO_SIBLING_ROLE_DEV) ||
         /* The device is the identified sibling */
-        (ucs_topo_global_ctx.devices[device].sibling_role == mem_device);
+        (ucs_topo_global_ctx.devices[device].sibling_sys_dev == mem_device);
 
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
