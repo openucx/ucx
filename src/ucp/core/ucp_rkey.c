@@ -775,8 +775,9 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
 static void UCS_F_NOINLINE
 ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
                                ucs_sys_dev_distance_t *lanes_distance,
-                               const void *buffer,
-                               ucp_sys_dev_map_t exp_sys_dev_map)
+                               const void *buffer, const void *buffer_end,
+                               ucp_sys_dev_map_t exp_sys_dev_map,
+                               int legacy)
 {
     const void *p                 = buffer;
     ucp_sys_dev_map_t sys_dev_map = 0;
@@ -785,13 +786,23 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
     ucp_lane_index_t lane;
     char buf[128];
 
-    /* Unpack lane distances and update distance_by_dev lookup */
-    ucs_for_each_bit(dev, exp_sys_dev_map) {
-        ucp_rkey_unpack_distance(
-                ucs_serialize_next(&p, const ucp_rkey_packed_distance_t),
-                &sys_dev, &distance);
-        sys_dev_map |= UCS_BIT(sys_dev);
-        distance_by_dev[sys_dev] = distance;
+    if (legacy) {
+        while (p < buffer_end) {
+            ucp_rkey_unpack_distance(
+                 ucs_serialize_next(&p, const ucp_rkey_packed_distance_t),
+                 &sys_dev, &distance);
+            distance_by_dev[sys_dev] = distance;
+            sys_dev_map             |= UCS_BIT(sys_dev);
+        }
+    } else {
+        /* Unpack lane distances and update distance_by_dev lookup */
+        ucs_for_each_bit(dev, exp_sys_dev_map) {
+            ucp_rkey_unpack_distance(
+                    ucs_serialize_next(&p, const ucp_rkey_packed_distance_t),
+                    &sys_dev, &distance);
+            distance_by_dev[sys_dev] = distance;
+            sys_dev_map             |= UCS_BIT(sys_dev);
+        }
     }
 
     /* Initialize lane distances according to distance_by_dev */
@@ -807,12 +818,14 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
-                 (rkey, ep, buffer, buffer_end, unreachable_md_map),
+                 (rkey, ep, buffer, buffer_end, unreachable_md_map, legacy),
                  ucp_rkey_h rkey, ucp_ep_h ep, const void *buffer,
-                 const void *buffer_end, ucp_md_map_t unreachable_md_map)
+                 const void *buffer_end, ucp_md_map_t unreachable_md_map,
+                 int legacy)
 {
-    ucp_worker_h worker = ep->worker;
-    const void *p       = buffer;
+    ucp_worker_h worker     = ep->worker;
+    ucp_ep_config_t *config = ucp_ep_config(ep);
+    const void *p           = buffer;
     ucs_sys_dev_distance_t *lanes_distance;
     ucp_rkey_config_key_t rkey_config_key;
     khiter_t khiter;
@@ -831,8 +844,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
-    sys_dev_map = *ucs_serialize_next(&p, ucp_sys_dev_map_t);
-    rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
+    /* Either we request legacy format or remote did send it anyways */
+    legacy |= (config->key.dst_version < 20);
+
+    if (legacy) {
+        if (buffer < buffer_end) {
+            rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
+        } else {
+            rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
+    } else {
+        sys_dev_map = *ucs_serialize_next(&p, ucp_sys_dev_map_t);
+        rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
+    }
 
     khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
                     rkey_config_key);
@@ -845,7 +869,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     lanes_distance = ucs_alloc_on_stack(sizeof(*lanes_distance) * UCP_MAX_LANES,
                                         "lanes_distance");
     ucp_rkey_unpack_lanes_distance(&ucp_ep_config(ep)->key, lanes_distance, p,
-                                   sys_dev_map);
+                                   buffer_end, sys_dev_map, legacy);
     status = ucp_worker_add_rkey_config(worker, &rkey_config_key, lanes_distance,
                                         &rkey->cfg_index);
     ucs_free_on_stack(lanes_distance, sizeof(*lanes_distance) * UCP_MAX_LANES);
@@ -854,10 +878,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
                  (ep, buffer, length, unpack_md_map, skip_md_map, sys_dev,
-                  rkey_p),
+                  rkey_p, legacy),
                  ucp_ep_h ep, const void *buffer, size_t length,
                  ucp_md_map_t unpack_md_map, ucp_md_map_t skip_md_map,
-                 ucs_sys_device_t sys_dev, ucp_rkey_h *rkey_p)
+                 ucs_sys_device_t sys_dev, ucp_rkey_h *rkey_p,
+                 int legacy)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -975,7 +1000,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     if (worker->context->config.ext.proto_enable) {
         status = ucp_rkey_proto_resolve(rkey, ep, p,
                                         UCS_PTR_BYTE_OFFSET(buffer, length),
-                                        unreachable_md_map);
+                                        unreachable_md_map, legacy);
         if (status != UCS_OK) {
             goto err_destroy;
         }
