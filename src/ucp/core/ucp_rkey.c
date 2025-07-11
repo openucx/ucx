@@ -56,8 +56,7 @@ const ucp_rma_proto_t *ucp_rma_proto_list[] = {
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
                             ucs_sys_device_t sys_dev,
-                            ucp_sys_dev_map_t sys_dev_map,
-                            int legacy)
+                            ucp_sys_dev_map_t sys_dev_map, int legacy)
 {
     size_t size, tl_rkey_size;
     unsigned md_index;
@@ -78,7 +77,8 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
             size += sizeof(uint8_t);
 
             /* Distance of each device */
-            size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
+            size += ucs_popcount(sys_dev_map) *
+                    sizeof(ucp_rkey_packed_distance_t);
         }
     } else {
         size += sizeof(sys_dev_map);
@@ -227,8 +227,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
 
     /* Pack distance from sys_dev to each device in distance_dev_map */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
-        ucp_rkey_pack_distance(sys_dev, NULL,
-                               mem_info->sys_dev,
+        ucp_rkey_pack_distance(sys_dev, NULL, mem_info->sys_dev,
                                ucs_serialize_next(&p,
                                                   ucp_rkey_packed_distance_t));
     }
@@ -606,9 +605,9 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
     return UCS_OK;
 }
 
-static size_t
-ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat,
-                     ucp_sys_dev_map_t sys_dev_map)
+static size_t ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags,
+                                   int rkey_compat,
+                                   ucp_sys_dev_map_t sys_dev_map)
 {
     ucp_context_h context = memh->context;
 
@@ -619,15 +618,15 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat,
     }
 
     if (rkey_compat) {
-        return ucp_rkey_packed_size(context, memh->md_map,
-                                    memh->sys_dev, sys_dev_map, 0);
+        return ucp_rkey_packed_size(context, memh->md_map, memh->sys_dev,
+                                    sys_dev_map, 0);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
 }
 
-static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
-                                int rkey_compat, void *memh_buffer,
+static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
+                                void *memh_buffer,
                                 ucp_sys_dev_map_t sys_dev_map)
 {
     ucp_memory_info_t mem_info;
@@ -854,9 +853,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
             rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         }
 
-       sys_dev_map = 0;
+        sys_dev_map = 0;
     } else {
-        sys_dev_map = *ucs_serialize_next(&p, ucp_sys_dev_map_t);
+        sys_dev_map             = *ucs_serialize_next(&p, ucp_sys_dev_map_t);
         rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
     }
 
@@ -872,8 +871,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
                                         "lanes_distance");
     ucp_rkey_unpack_lanes_distance(&ucp_ep_config(ep)->key, lanes_distance, p,
                                    buffer_end, sys_dev_map, legacy);
-    status = ucp_worker_add_rkey_config(worker, &rkey_config_key, lanes_distance,
-                                        &rkey->cfg_index);
+    status = ucp_worker_add_rkey_config(worker, &rkey_config_key,
+                                        lanes_distance, &rkey->cfg_index);
     ucs_free_on_stack(lanes_distance, sizeof(*lanes_distance) * UCP_MAX_LANES);
     return status;
 }
@@ -883,8 +882,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
                   rkey_p, legacy),
                  ucp_ep_h ep, const void *buffer, size_t length,
                  ucp_md_map_t unpack_md_map, ucp_md_map_t skip_md_map,
-                 ucs_sys_device_t sys_dev, ucp_rkey_h *rkey_p,
-                 int legacy)
+                 ucs_sys_device_t sys_dev, ucp_rkey_h *rkey_p, int legacy)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);

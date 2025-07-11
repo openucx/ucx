@@ -603,8 +603,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             ucs_trace("uct_md_mem_query(dmabuf address %p length %zu) returned "
                       "fd %d offset %zu sys_dev %u",
                       address, length, mem_attr.dmabuf_fd,
-                      mem_attr.dmabuf_offset,
-                      mem_attr.sys_dev);
+                      mem_attr.dmabuf_offset, mem_attr.sys_dev);
 
             dmabuf_md_map            = context->dmabuf_reg_md_map;
             reg_params.dmabuf_fd     = mem_attr.dmabuf_fd;
@@ -627,7 +626,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
                                      UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
-            sys_dev_map = context->tl_mds[md_index].sys_dev_map;
+            sys_dev_map            = context->tl_mds[md_index].sys_dev_map;
             if (!ucp_memh_sys_dev_reachable(md_index, mem_attr.sys_dev,
                                             sys_dev_map)) {
                 continue;

@@ -730,9 +730,8 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
         return UCS_ERR_UNSUPPORTED;
     }
 
-    dmabuf_fd_pcie = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params,
-                                     dmabuf_fd, DMABUF_FD,
-                                     UCT_DMABUF_FD_INVALID);
+    dmabuf_fd_pcie = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
+                                     DMABUF_FD, UCT_DMABUF_FD_INVALID);
     if (dmabuf_fd_pcie == UCT_DMABUF_FD_INVALID) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -809,8 +808,8 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
         /* Fallback if multi-thread registration is unsupported */
     }
 
-    status = uct_ib_mlx5_direct_nic_reg_mr(md, address, length,
-                                           params, access_flags,
+    status = uct_ib_mlx5_direct_nic_reg_mr(md, address, length, params,
+                                           access_flags,
                                            &memh->mrs[mr_type].super.ib);
     if (status == UCS_ERR_INVALID_PARAM) {
         return status;
@@ -2242,11 +2241,10 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
-static void
-uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
-                               uct_ib_device_t *dev,
-                               uct_ib_mlx5_md_t *md,
-                               const uct_ib_md_config_t *md_config)
+static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
+                                           uct_ib_device_t *dev,
+                                           uct_ib_mlx5_md_t *md,
+                                           const uct_ib_md_config_t *md_config)
 {
 #ifdef HAVE_DIRECT_NIC
     char sys_path[PATH_MAX];
@@ -2257,7 +2255,7 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
     if (!md_config->ext.direct_nic) {
         ucs_debug("%s: Direct NIC support disabled",
                   uct_ib_device_name(&md->super.dev));
-       return;
+        return;
     }
 
     ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));

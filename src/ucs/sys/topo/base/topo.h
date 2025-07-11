@@ -278,9 +278,8 @@ uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev);
  *
  * @return UCS_OK on success, error otherwise.
  */
-ucs_status_t
-ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
-                                    ucs_sys_device_t sys_dev_aux);
+ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
+                                                 ucs_sys_device_t sys_dev_aux);
 
 
 /**

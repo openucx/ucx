@@ -888,8 +888,7 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
 #endif
 
     cu_err = get_handle_func((void*)&fd, address, length,
-                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
-                             flags);
+                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, flags);
     if (cu_err == CUDA_SUCCESS) {
         ucs_trace("dmabuf for address 0x%lx length %zu flags %llx is fd %d",
                   address, length, flags, fd);

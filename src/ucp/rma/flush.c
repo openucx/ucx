@@ -189,8 +189,8 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
 static void ucp_ep_flush_mem_completion(uct_completion_t *self)
 {
-    ucp_request_t *req  = ucs_container_of(self, ucp_request_t,
-                                           send.flush.mem.uct_comp);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.flush.mem.uct_comp);
 
     ucs_assertv(req->send.ep->ext->flush_state.mem.in_progress > 0,
                 "req=%p uct completion flush_mem_inprogress=%d", req,
@@ -221,8 +221,7 @@ ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
 
         status = uct_ep_get_bcopy(entry->uct_ep,
                                   (uct_unpack_callback_t)ucs_empty_function,
-                                  NULL, 0,
-                                  entry->address, entry->uct_rkey,
+                                  NULL, 0, entry->address, entry->uct_rkey,
                                   &req->send.flush.mem.uct_comp);
 
         /* Consume entry only when successfully submitted */
@@ -242,13 +241,12 @@ ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
         ep->ext->flush_state.mem.in_progress--;
     }
 
-    ucp_trace_req(req, "flush mem %s completed status=%s started=%d/%d "
+    ucp_trace_req(req,
+                  "flush mem %s completed status=%s started=%d/%d "
                   "to_completed=%d ep_flush_in_progress=%d",
-                  (ep->ext->flush_state.mem.in_progress > 0)? "read" : "req",
-                  ucs_status_string(req->status),
-                  req->send.flush.mem.started,
-                  req->send.flush.mem.count,
-                  req->send.flush.mem.uct_comp.count,
+                  (ep->ext->flush_state.mem.in_progress > 0) ? "read" : "req",
+                  ucs_status_string(req->status), req->send.flush.mem.started,
+                  req->send.flush.mem.count, req->send.flush.mem.uct_comp.count,
                   req->send.ep->ext->flush_state.mem.in_progress);
 
     if (ep->ext->flush_state.mem.in_progress > 0) {
@@ -288,11 +286,10 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 
         /* Consume entry and create a get request */
         /* Post a get nbx for each and track it in the flush request */
-        ucp_trace_req(req, "flush mem remote_sys_dev=%d uct_rkey=0x%" PRIx64
+        ucp_trace_req(req,
+                      "flush mem remote_sys_dev=%d uct_rkey=0x%" PRIx64
                       " uct_ep=%p address=%zx",
-                      i, entry[i].uct_rkey,
-                      entry[i].uct_ep,
-                      entry[i].address);
+                      i, entry[i].uct_rkey, entry[i].uct_ep, entry[i].address);
 
         tmp[started].uct_rkey = entry[i].uct_rkey;
         tmp[started].uct_ep   = entry[i].uct_ep;
@@ -302,9 +299,9 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
         entry[i].uct_ep = NULL;
     }
 
-    req->send.flush.mem.entry          = NULL;
-    req->send.flush.mem.count          = started;
-    req->send.flush.mem.started        = 0;
+    req->send.flush.mem.entry           = NULL;
+    req->send.flush.mem.count           = started;
+    req->send.flush.mem.started         = 0;
     req->send.uct.func                  = ucp_ep_flush_mem_progress;
     req->send.flush.mem.uct_comp.func   = ucp_ep_flush_mem_completion;
     req->send.flush.mem.uct_comp.count  = started;
@@ -395,8 +392,8 @@ void ucp_ep_flush_mem_schedule(ucp_request_t *req,
      * lane indexes are identical.
      */
     if (!(config->lanes_distance[lane].flags & UCS_SYS_DISTANCE_NEEDS_FLUSH)) {
-        ucp_trace_req(req, "lane=%u rkey_index=%u no flush needed",
-                      lane, rkey_index);
+        ucp_trace_req(req, "lane=%u rkey_index=%u no flush needed", lane,
+                      rkey_index);
         return;
     }
 
@@ -408,11 +405,11 @@ void ucp_ep_flush_mem_schedule(ucp_request_t *req,
     entry->address  = addr;
 
     ucp_trace_req(req,
-              "flush mem ep=%p: scheduled lane=%u rkey_index=%u "
-              "remote_sys_dev=%u uct_ep=%p address=0x%" PRIx64 " "
-              "uct_rkey=0x%" PRIx64,
-              req->send.ep, lane, rkey_index,
-              remote_sys_dev, uct_ep, addr, entry->uct_rkey);
+                  "flush mem ep=%p: scheduled lane=%u rkey_index=%u "
+                  "remote_sys_dev=%u uct_ep=%p address=0x%" PRIx64 " "
+                  "uct_rkey=0x%" PRIx64,
+                  req->send.ep, lane, rkey_index, remote_sys_dev, uct_ep, addr,
+                  entry->uct_rkey);
 }
 
 static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
