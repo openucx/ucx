@@ -263,10 +263,10 @@ endif # HAVE_IB
 
 if HAVE_CUDA
 gtest_SOURCES += \
-	common/cuda_context.cc \
 	ucm/cuda_hooks.cc \
 	uct/cuda/test_switch_cuda_device.cc \
-	uct/cuda/test_cuda_ipc_md.cc
+	uct/cuda/test_cuda_ipc_md.cc \
+	uct/cuda/test_cuda_nvml.cc
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
 gtest_LDFLAGS += \

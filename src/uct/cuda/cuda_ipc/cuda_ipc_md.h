@@ -135,7 +135,6 @@ typedef struct {
     pid_t                     pid;     /* PID as key to resolve peer_map hash */
     CUdeviceptr               d_bptr;  /* Allocation base address */
     size_t                    b_len;   /* Allocation size */
-    int                       dev_num; /* GPU Device number */
     CUuuid                    uuid;    /* GPU Device UUID */
 } uct_cuda_ipc_rkey_t;
 
@@ -144,23 +143,5 @@ typedef struct {
     uct_cuda_ipc_rkey_t       super;
     int                       stream_id;
 } uct_cuda_ipc_unpacked_rkey_t;
-
-
-#define UCT_CUDA_IPC_GET_DEVICE(_cu_device)                          \
-    do {                                                             \
-        if (UCS_OK !=                                                \
-            UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&_cu_device))) { \
-            return UCS_ERR_IO_ERROR;                                 \
-        }                                                            \
-    } while(0);
-
-
-#define UCT_CUDA_IPC_DEVICE_GET_COUNT(_num_device)                      \
-    do {                                                                \
-        if (UCS_OK !=                                                   \
-            UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&_num_device))) { \
-            return UCS_ERR_IO_ERROR;                                    \
-        }                                                               \
-    } while(0);
 
 #endif

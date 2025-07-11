@@ -491,6 +491,102 @@ ucs_memory_type_t test_ucp_peer_failure::memtype() const
     return UCS_MEMORY_TYPE_HOST;
 }
 
+class test_ucp_peer_failure_inval : public ucp_test {
+protected:
+    ucp_ep_params_t get_ep_params()
+    {
+        ucp_ep_params_t params;
+
+        memset(&params, 0, sizeof(params));
+        params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        params.err_mode   = UCP_ERR_HANDLING_MODE_PEER;
+        return params;
+    }
+
+public:
+    void test_invalidate_rma_bw_lane(bool force_invalidate_rma);
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "rma");
+    }
+
+    void init()
+    {
+        create_entity();
+        sender().connect(&receiver(), get_ep_params(), 0);
+    }
+};
+
+void test_ucp_peer_failure_inval::test_invalidate_rma_bw_lane(
+        bool force_invalidate_rma)
+{
+    const auto config = ucp_ep_config(sender().ep());
+
+    bool has_no_invalidate_rma = false;
+    bool has_invalidate_rma    = false;
+    for (auto i = 0; i < config->key.num_lanes; ++i) {
+        const auto lane = config->key.rma_bw_lanes[i];
+        if (lane == UCP_NULL_LANE) {
+            continue;
+        }
+
+        const auto md_attr = ucp_ep_md_attr(sender().ep(), lane);
+        if (!(md_attr->flags & UCT_MD_FLAG_INVALIDATE_RMA)) {
+            has_no_invalidate_rma = true;
+        } else {
+            has_invalidate_rma = true;
+        }
+    }
+
+    if (force_invalidate_rma) {
+        ASSERT_FALSE(has_no_invalidate_rma);
+    } else {
+        ASSERT_TRUE(!has_transport("tcp") || has_no_invalidate_rma);
+        ASSERT_TRUE(!has_transport("rc_x") || has_invalidate_rma);
+    }
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_no_invalidate_rma_inf,
+           "RNDV_THRESH=inf")
+{
+    test_invalidate_rma_bw_lane(false);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma_inf_inf,
+           "RNDV_THRESH=intra:inf,inter:inf")
+{
+    test_invalidate_rma_bw_lane(false);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma,
+           "RNDV_THRESH=1024")
+{
+    test_invalidate_rma_bw_lane(true);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma_auto_inf,
+           "RNDV_THRESH=intra:auto,inter:inf")
+{
+    test_invalidate_rma_bw_lane(true);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma_inf_auto,
+           "RNDV_THRESH=intra:inf,inter:auto")
+{
+    test_invalidate_rma_bw_lane(true);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma_value_inf,
+           "RNDV_THRESH=intra:1024,inter:inf")
+{
+    test_invalidate_rma_bw_lane(true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure_inval, tcp, "tcp")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure_inval, rc_x, "rc_x")
+
+
 UCS_TEST_P(test_ucp_peer_failure, basic) {
     do_test(UCS_KBYTE, /* msg_size */
             0, /* pre_msg_cnt */

@@ -511,46 +511,28 @@ ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *link_type)
 uct_rocm_amd_gpu_product_t uct_rocm_base_get_gpu_product(void)
 {
     uct_rocm_amd_gpu_product_t gpu_product = UCT_ROCM_AMD_GPU_MI200;
-    char product_name[64];
     char gfx_name[64];
     hsa_status_t status;
 
-    /* fetching data from GPU 0, assuming all GPUs on a node are
-       identical */
+    /* Query the gfx architecture name */
     status = hsa_agent_get_info(uct_rocm_base_agents.gpu_agents[0],
-                                (hsa_agent_info_t)
-                                        HSA_AMD_AGENT_INFO_PRODUCT_NAME,
-                                (void*)product_name);
+                                (hsa_agent_info_t)HSA_AGENT_INFO_NAME,
+                                gfx_name);
     if (status != HSA_STATUS_SUCCESS) {
-        ucs_debug("Error in hsa_agent_info %d", status);
+        ucs_debug("hsa_agent_get_info failed: %d", status);
         return gpu_product;
     }
 
-    if (NULL != strstr(product_name, "MI300A")) {
-        gpu_product = UCT_ROCM_AMD_GPU_MI300A;
-        ucs_trace("found MI300A GPU");
-    } else if (NULL != strstr(product_name, "MI300X")) {
-        gpu_product = UCT_ROCM_AMD_GPU_MI300X;
-        ucs_trace("found MI300X GPU");
+    if (NULL != strstr(gfx_name, "gfx94")) {
+        /* This is an MI300/325 GPU */
+        gpu_product = UCT_ROCM_AMD_GPU_MI300;
+        ucs_trace("found gfx94* GPU");
+    } else if (NULL != strstr(gfx_name, "gfx95")) {
+        /* This is an MI35x GPU */
+        gpu_product = UCT_ROCM_AMD_GPU_MI350;
+        ucs_trace("found gfx950 GPU");
     } else {
-        /* In case product_name is not set correctly, query the gfx
-           architecture name */
-        status = hsa_agent_get_info(uct_rocm_base_agents.gpu_agents[0],
-                                    (hsa_agent_info_t)HSA_AGENT_INFO_NAME,
-                                    (void*)gfx_name);
-        if (status != HSA_STATUS_SUCCESS) {
-            ucs_debug("error in hsa_agent_info %d", status);
-            return gpu_product;
-        }
-
-        if (NULL != strstr(gfx_name, "gfx94")) {
-            /* This is an MI300 GPU, but cannot say whether its the A or X
-               variant. Assuming A variant for now*/
-            gpu_product = UCT_ROCM_AMD_GPU_MI300A;
-            ucs_trace("found gfx94* GPU, assuming MI300A");
-        } else {
-            ucs_trace("assuming MI100/MI200 GPU");
-        }
+        ucs_trace("assuming MI100/MI200 GPU");
     }
 
     return gpu_product;
