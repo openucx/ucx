@@ -1608,7 +1608,7 @@ typedef enum uct_md_mem_attr_field {
      * Request the offset of the provided virtual address relative to the
      * beginning of its backing dmabuf region.
      */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5),
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5)
 } uct_md_mem_attr_field_t;
 
 

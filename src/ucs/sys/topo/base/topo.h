@@ -265,10 +265,10 @@ ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
 uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev);
 
 /**
- * Set an auxiliary system device value.
+ * Set an auxiliary system device.
  *
  * @param [in] sys_dev     System device index.
- * @param [in] sys_dev_aux Auxiliary system device index.
+ * @param [in] sys_dev_aux Auxiliary system device index to add.
  *
  * @return UCS_OK on success, error otherwise.
  */
@@ -278,26 +278,40 @@ ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
 
 
 /**
- * Enable forcing the use of auxiliary path for reachability checks.
+ * Enable the use of auxiliary path for memory transfers.
+ *
+ * When called, the memory on this sys_dev will be eligible for matching
+ * with an auxiliary path.
+ *
+ * @param [in] sys_dev     System device of the memory to allow auxiliary path.
+ *
+ * @return UCS_OK on success, error otherwise.
  */
 ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev);
 
 
 /*
- * True if the device has an identified sibling.
+ * True if the memory of this device has an identified sibling.
  */
 int ucs_topo_device_has_sibling(ucs_sys_device_t mem_device);
 
 
 /**
- * Check if device can reach the device of the memory.
+ * Check if a device can reach the memory of the other device.
+ *
+ * This can be used to drive memory registration.
+ *
+ * @param [in] device      System device that would access the memory
+ * @param [in] mem_device  System device where the memory resides
+ *
+ * @return UCS_OK on success, error otherwise.
  */
 int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
                                  ucs_sys_device_t mem_device);
 
 
 /**
- * True if the memory device is paired with a sibling device.
+ * True if the device is an auxiliary path for the given memory device.
  */
 int ucs_topo_is_memory_sibling(ucs_sys_device_t device,
                                ucs_sys_device_t mem_device);

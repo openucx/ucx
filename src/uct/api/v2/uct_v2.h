@@ -223,9 +223,9 @@ typedef struct {
  * @brief MD memory registration operation flags.
  */
 typedef enum {
-    UCT_MD_MEM_REG_FIELD_FLAGS          = UCS_BIT(0),
-    UCT_MD_MEM_REG_FIELD_DMABUF_FD      = UCS_BIT(1),
-    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET  = UCS_BIT(2),
+    UCT_MD_MEM_REG_FIELD_FLAGS         = UCS_BIT(0),
+    UCT_MD_MEM_REG_FIELD_DMABUF_FD     = UCS_BIT(1),
+    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2)
 } uct_md_mem_reg_field_mask_t;
 
 
