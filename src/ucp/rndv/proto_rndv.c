@@ -308,7 +308,7 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
     rpriv->lane             = lane;
     rpriv->packed_rkey_size = ucp_rkey_packed_size(
             init_params->worker->context, rpriv->md_map,
-            params->super.reg_mem_info.sys_dev, rpriv->sys_dev_map);
+            params->super.reg_mem_info.sys_dev, rpriv->sys_dev_map, 1);
 }
 
 void ucp_proto_rndv_set_variant_config(

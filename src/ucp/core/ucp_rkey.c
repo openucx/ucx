@@ -56,7 +56,8 @@ const ucp_rma_proto_t *ucp_rma_proto_list[] = {
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
                             ucs_sys_device_t sys_dev,
-                            ucp_sys_dev_map_t sys_dev_map)
+                            ucp_sys_dev_map_t sys_dev_map,
+                            int legacy)
 {
     size_t size, tl_rkey_size;
     unsigned md_index;
@@ -71,13 +72,23 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
         size += sizeof(uint8_t) + tl_rkey_size;
     }
 
-    size += sizeof(sys_dev_map);
+    if (legacy) {
+        if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            /* System device id */
+            size += sizeof(uint8_t);
 
-    /* System device id */
-    size += sizeof(uint8_t);
+            /* Distance of each device */
+            size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
+        }
+    } else {
+        size += sizeof(sys_dev_map);
 
-    /* Distance of each device */
-    size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
+        /* System device id */
+        size += sizeof(uint8_t);
+
+        /* Distance of each device */
+        size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
+    }
 
     return size;
 }
@@ -149,13 +160,13 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
 
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                  (context, md_map, memh, address, length, mem_info, sys_dev_map,
-                  sys_distance, uct_flags, buffer),
+                  sys_distance, uct_flags, buffer, legacy),
                  ucp_context_h context, ucp_md_map_t md_map,
                  const ucp_mem_h memh, void *address, size_t length,
                  const ucp_memory_info_t *mem_info,
                  ucp_sys_dev_map_t sys_dev_map,
                  const ucs_sys_dev_distance_t *sys_distance, unsigned uct_flags,
-                 void *buffer)
+                 void *buffer, int legacy)
 {
     void *p = buffer;
     uct_md_mkey_pack_params_t params;
@@ -201,8 +212,15 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                   md_index, context->tl_mds[md_index].rsc.md_name);
     }
 
-    /* Pack list of system device id */
-    *ucs_serialize_next(&p, ucp_sys_dev_map_t) = sys_dev_map;
+
+    if (legacy) {
+        if (ucs_likely(mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+            goto out_packed_size;
+        }
+    } else {
+        /* Pack list of system device id */
+        *ucs_serialize_next(&p, ucp_sys_dev_map_t) = sys_dev_map;
+    }
 
     /* Pack system device id */
     *ucs_serialize_next(&p, uint8_t) = mem_info->sys_dev;
@@ -602,7 +620,7 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat,
 
     if (rkey_compat) {
         return ucp_rkey_packed_size(context, memh->md_map,
-                                    memh->sys_dev, sys_dev_map);
+                                    memh->sys_dev, sys_dev_map, 1);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
@@ -623,7 +641,8 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
         mem_info.sys_dev = memh->sys_dev;
         return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
                                   ucp_memh_address(memh), ucp_memh_length(memh),
-                                  &mem_info, sys_dev_map, NULL, 0, memh_buffer);
+                                  &mem_info, sys_dev_map, NULL, 0, memh_buffer,
+                                  1);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
