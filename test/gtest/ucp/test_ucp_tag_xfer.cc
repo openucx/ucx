@@ -1225,7 +1225,8 @@ public:
 
     void init() override
     {
-        if ((get_variant_value() == VARIANT_128_PATHS) && has_transport("rc")) {
+        stats_activate();
+        if ((get_variant_value() == VARIANT_128_PATHS) && has_transport("rc_x")) {
             UCS_TEST_SKIP_R("128 paths tests not supported for RC transport");
         }
 
@@ -1234,8 +1235,6 @@ public:
         } else if (get_variant_value() == VARIANT_128_PATHS) {
             modify_config("IB_NUM_PATHS", "128", SETENV_IF_NOT_EXIST);
         }
-
-        stats_activate();
 
         static std::vector<std::string> devices;
         get_devices(devices);
@@ -1340,7 +1339,7 @@ UCS_TEST_P(multi_rail_max, max_lanes, "TM_SW_RNDV=y",
     }
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rc, "rc")
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, dc, "dc")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, dc,  "dc")
 
 #endif
