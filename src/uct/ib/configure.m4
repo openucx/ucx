@@ -289,12 +289,10 @@ AS_IF([test "x$with_ib" = "xyes"],
                [], [[#include <infiniband/mlx5dv.h>]])
 
            # Direct NIC support, from IB side
-           have_direct_nic=yes
            AC_CHECK_DECLS([mlx5dv_get_data_direct_sysfs_path,
-                           mlx5dv_reg_dmabuf_mr], [], [have_direct_nic=no],
+                           mlx5dv_reg_dmabuf_mr], [], [],
                           [[#include <infiniband/mlx5dv.h>]])
-           AS_IF([test "x$have_direct_nic" != xno],
-               [AC_DEFINE([HAVE_DIRECT_NIC], 1, [Have Direct NIC support])])])
+              ])
 
        # RDMA netlink support requires defines from rdma_netlink.h and the
        # ability to get netlink index from ibv_device struct.
