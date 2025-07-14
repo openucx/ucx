@@ -11,7 +11,77 @@ extern "C" {
 #include <ucs/sys/topo/base/topo.h>
 }
 
+static std::string get_sysfs_device_path(const std::string& bdf) {
+    std::string symlink = "/sys/bus/pci/devices/" + bdf;
+    char resolved[PATH_MAX];
+    if (realpath(symlink.c_str(), resolved)) {
+        return std::string(resolved);
+    } else {
+        return ""; // Not found or invalid BDF
+    }
+}
+
 class test_topo : public ucs::test {
+protected:
+    std::vector<std::string> m_hcas, m_gpus, m_dmas;
+
+    ucs_sys_device_t register_device(const std::string& name,
+                                     const std::string& bdf)
+    {
+        auto path = get_sysfs_device_path(bdf);
+        return ucs_topo_get_sysfs_dev(name.c_str(), path.c_str(), 0);
+    }
+
+    // Find a sibling DMA engine for a GPU
+    void get_siblings(const std::string& hca_bdf, std::string& gpu_bdf,
+                      std::string& dma_bdf)
+    {
+        std::string hca_path = get_sysfs_device_path(hca_bdf);
+        for (const auto& gpu : m_gpus) {
+            std::string gpu_path = get_sysfs_device_path(gpu);
+
+            for (const auto& dma : m_dmas) {
+                auto gpu_dev = register_device("gpu0", gpu);
+                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+
+                ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+
+                auto hca_dev = register_device("hca0", hca_bdf);
+                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
+
+                auto dma_dev = register_device("dma", dma);
+                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+
+                ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_dev,
+                                                                  dma_dev));
+                bool is_sibling = ucs_topo_is_memory_sibling(hca_dev, gpu_dev);
+
+                ucs_topo_cleanup();
+                ucs_topo_init();
+
+                if (is_sibling) {
+                    gpu_bdf = gpu;
+                    dma_bdf = dma;
+                    return;
+                }
+            }
+        }
+    }
+
+public:
+    virtual void init()
+    {
+        ucs_topo_cleanup();
+        ucs_topo_init();
+        ucs::test::init();
+    }
+
+    virtual void cleanup()
+    {
+        ucs_topo_cleanup();
+        ucs_topo_init();
+        ucs::test::cleanup();
+    }
 };
 
 UCS_TEST_F(test_topo, find_device_by_bus_id) {
@@ -166,5 +236,140 @@ UCS_TEST_F(test_topo, numa_distance) {
             EXPECT_LE(ucs_numa_distance(node1, node1),
                       ucs_numa_distance(node1, node2));
         }
+    }
+}
+
+// Scan and classify PCI devices
+static void read_pcie_devices(std::vector<std::string>& hcas,
+                              std::vector<std::string>& gpus,
+                              std::vector<std::string>& dmas)
+{
+    const char* path = "/sys/bus/pci/devices";
+
+    DIR* dir = opendir(path);
+    if (!dir) {
+        perror("opendir failed");
+        return;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if ((entry->d_type != DT_DIR) && (entry->d_type != DT_LNK)) {
+            continue;
+        }
+
+        std::string bdf        = entry->d_name;
+        std::string class_path = std::string(path) + "/" + bdf + "/class";
+
+        std::ifstream class_file(class_path.c_str());
+        if (!class_file.is_open()) {
+            continue;
+        }
+
+        std::string class_code;
+        class_file >> class_code;
+        class_file.close();
+
+        std::string gpu_class = "0x030200";
+        std::string hca_class = "0x020700";
+        std::string dma_class = "0x080100";
+
+        // Only keep GPUs, HCAs and their DMA PF
+        if ((class_code != hca_class) &&
+            (class_code != gpu_class) &&
+            (class_code != dma_class)) {
+            continue;
+        }
+
+        if (class_code == hca_class) {
+            hcas.push_back(bdf);
+        } else if (class_code == gpu_class) {
+            gpus.push_back(bdf);
+        } else {
+            dmas.push_back(bdf);
+        }
+
+        UCS_TEST_MESSAGE << "bdf=" << bdf << " class=" << class_code;
+    }
+
+    closedir(dir);
+}
+
+UCS_TEST_F(test_topo, sibling_error)
+{
+    scoped_log_handler slh(hide_errors_logger);
+    ASSERT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_sys_device_set_sys_dev_aux(1, 0));
+    ASSERT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_sys_device_enable_aux_path(1));
+}
+
+UCS_TEST_F(test_topo, sibling)
+{
+    std::vector<std::pair<std::string,std::string>> siblings;
+    std::string sibling_gpu, sibling_dma;
+    constexpr int count = 3;
+
+    read_pcie_devices(m_hcas, m_gpus, m_dmas);
+    if ((m_hcas.size() < count) || (m_gpus.size() == 0) ||
+        (m_dmas.size() == 0)) {
+        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
+    }
+
+    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
+
+    std::vector<ucs_sys_device_t> hca_devs;
+    for (int i = 0; i < count; ++i) {
+        hca_devs.push_back(register_device("hca" + i, m_hcas[i]));
+        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_devs.back());
+    }
+
+    auto dma = m_dmas[0];
+    auto gpu = m_gpus[0];
+    if (sibling_dma.length() > 0) {
+        dma = sibling_dma;
+        gpu = sibling_gpu;
+        UCS_TEST_MESSAGE << "Found sibling " << "dma=" << dma << " gpu=" << gpu;
+    }
+
+    auto dma_dev  = register_device("dma", dma);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+    auto gpu_dev  = register_device("gpu0", gpu);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+
+    // Link DMA with its HCA
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_devs[0], dma_dev));
+    // Link fake DMA with its HCA
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_devs[1], hca_devs[1]));
+
+    // Sanity checks
+    ASSERT_FALSE(ucs_topo_device_has_sibling(dma_dev)); // Does not make sense
+    ASSERT_FALSE(ucs_topo_device_has_sibling(hca_devs[0]));
+    ASSERT_FALSE(ucs_topo_device_has_sibling(hca_devs[1]));
+    ASSERT_FALSE(ucs_topo_device_has_sibling(hca_devs[2]));
+    ASSERT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
+
+    // Associate GPU with HCA
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+
+    // Some cannot be siblings anyways
+    ASSERT_FALSE(ucs_topo_device_has_sibling(dma_dev));
+    ASSERT_FALSE(ucs_topo_device_has_sibling(hca_devs[1]));
+    ASSERT_FALSE(ucs_topo_device_has_sibling(hca_devs[2]));
+
+    ASSERT_TRUE(ucs_topo_is_memory_reachable(hca_devs[0], gpu_dev));
+    // Reachable as there is no auxiliary capability (cuda_ipc)
+    ASSERT_TRUE(ucs_topo_is_memory_reachable(hca_devs[2], gpu_dev));
+    ASSERT_FALSE(ucs_topo_is_memory_sibling(hca_devs[1], gpu_dev));
+    ASSERT_FALSE(ucs_topo_is_memory_sibling(hca_devs[2], gpu_dev));
+
+    if (sibling_dma.length() > 0) {
+        ASSERT_TRUE(ucs_topo_device_has_sibling(hca_devs[0]));
+        ASSERT_TRUE(ucs_topo_device_has_sibling(gpu_dev));
+        ASSERT_FALSE(ucs_topo_is_memory_reachable(hca_devs[1], gpu_dev));
+        ASSERT_TRUE(ucs_topo_is_memory_sibling(hca_devs[0], gpu_dev));
+    } else {
+        ASSERT_FALSE(ucs_topo_device_has_sibling(hca_devs[0]));
+        ASSERT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
+        ASSERT_TRUE(ucs_topo_is_memory_reachable(hca_devs[1], gpu_dev));
+        ASSERT_FALSE(ucs_topo_is_memory_sibling(hca_devs[0], gpu_dev));
     }
 }
