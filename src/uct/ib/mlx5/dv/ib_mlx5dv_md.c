@@ -721,9 +721,9 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
                               struct ibv_mr **mr_p)
 {
     int dmabuf_fd;
-    size_t dmabuf_offset;
+    size_t UCS_V_UNUSED dmabuf_offset;
     struct ibv_mr *mr;
-    ucs_time_t start_time;
+    ucs_time_t UCS_V_UNUSED start_time;
 
     if (md->direct_nic_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return UCS_ERR_UNSUPPORTED;
@@ -2272,7 +2272,7 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
     }
 
     /* Create a DMA specific device from topology perspective */
-    snprintf(dev_name, sizeof(dev_name), "%s_dma",
+    snprintf(dev_name, sizeof(dev_name), "%s_direct",
              uct_ib_device_name(&md->super.dev));
     md->direct_nic_sys_dev = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
 

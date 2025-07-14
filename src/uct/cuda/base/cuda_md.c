@@ -46,7 +46,7 @@ static int uct_cuda_base_has_c2c_impl(void)
         fv[0].scopeId = i;
         fv[1].fieldId = NVML_FI_DEV_C2C_LINK_GET_MAX_BW;
         fv[1].scopeId = i;
-        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 1, fv);
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 2, fv);
         if ((status == UCS_OK) &&
             (fv[0].nvmlReturn == NVML_SUCCESS) &&
             (fv[0].value.uiVal == 1) &&
