@@ -10,10 +10,69 @@
 #include "cuda_md.h"
 #include "cuda_iface.h"
 
+#include <uct/cuda/base/cuda_nvml.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <cuda.h>
 
+
+/* Assume uniformity of the GPU devices here */
+static int uct_cuda_base_has_c2c_impl(void)
+{
+    unsigned links = 0;
+    int found      = 0;
+#if CUDA_VERSION >= 12080
+    ucs_status_t status;
+    nvmlDevice_t device;
+    nvmlFieldValue_t fv[2];
+    unsigned i;
+
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    /* Check if any C2C between GPU to CPU */
+    fv->fieldId = NVML_FI_DEV_C2C_LINK_COUNT;
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 1, fv);
+    if ((status != UCS_OK) || (fv->nvmlReturn != NVML_SUCCESS)) {
+        return 0;
+    }
+
+    /* Check availability of a C2C */
+    links = fv->value.uiVal;
+    for (i = 0; i < links; i++) {
+        fv[0].fieldId = NVML_FI_DEV_C2C_LINK_GET_STATUS;
+        fv[0].scopeId = i;
+        fv[1].fieldId = NVML_FI_DEV_C2C_LINK_GET_MAX_BW;
+        fv[1].scopeId = i;
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 1, fv);
+        if ((status == UCS_OK) &&
+            (fv[0].nvmlReturn == NVML_SUCCESS) &&
+            (fv[0].value.uiVal == 1) &&
+            (fv[1].nvmlReturn == NVML_SUCCESS)) {
+
+            found = 1;
+            break;
+        }
+    }
+#endif
+
+    ucs_debug("GPUs have C2C link %s links=%d",
+              ((found > 0)? "UP" : "DOWN"), links);
+    return found;
+}
+
+int uct_cuda_base_has_c2c(void)
+{
+    static int has_c2c = -1;
+
+    if (has_c2c < 0) {
+        has_c2c = uct_cuda_base_has_c2c_impl();
+    }
+
+    return has_c2c;
+}
 
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                                ucs_sys_device_t *sys_dev_p)
@@ -58,6 +117,14 @@ void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
     status = ucs_topo_sys_device_set_user_value(*sys_dev_p, cuda_device);
     if (status != UCS_OK) {
         goto err;
+    }
+
+
+    if (uct_cuda_base_has_c2c()) {
+        status = ucs_topo_sys_device_enable_aux_path(*sys_dev_p);
+        if (status != UCS_OK) {
+            goto err;
+        }
     }
 
     return;

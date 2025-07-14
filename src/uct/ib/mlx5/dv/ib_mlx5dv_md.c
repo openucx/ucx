@@ -714,6 +714,64 @@ uct_ib_mlx5_devx_symmetric_rkey(const uct_ib_mlx5_md_t *md, unsigned flags)
            (md->flags & UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE);
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length,
+                              const uct_md_mem_reg_params_t *params,
+                              uint64_t access_flags,
+                              struct ibv_mr **mr_p)
+{
+#ifdef HAVE_DIRECT_NIC
+    int dmabuf_fd_pcie;
+    size_t dmabuf_offset;
+    struct ibv_mr *mr;
+    ucs_time_t start_time;
+
+    if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_DIRECT_NIC)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    dmabuf_fd_pcie = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
+                                     DMABUF_FD, UCT_DMABUF_FD_INVALID);
+    if (dmabuf_fd_pcie == UCT_DMABUF_FD_INVALID) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    /* Check if we already have an identified sibling memory device sibling */
+    if (!ucs_topo_device_has_sibling(md->super.dev.sys_dev)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
+                                    DMABUF_OFFSET, 0);
+    start_time    = ucs_get_time();
+
+    mr = UCS_PROFILE_CALL_ALWAYS(mlx5dv_reg_dmabuf_mr, md->super.pd,
+                                 0,
+                                 length + dmabuf_offset,
+                                 (uintptr_t)address - dmabuf_offset,
+                                 dmabuf_fd_pcie,
+                                 access_flags,
+                                 MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT);
+    if (mr == NULL) {
+        ucs_debug("mlx5dv_reg_dmabuf_mr() failed with errno=%d", errno);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_trace("mlx5dv_reg_dmabuf_mr("
+              "pd=%p addr=%p len=%zu fd=%d offset=%zu access=0x%" PRIx64 "):"
+              " mr=%p lkey=0x%x mlx5_access=%d took %.3f ms",
+              md->super.pd, address, length, dmabuf_fd_pcie, dmabuf_offset,
+              access_flags, mr, mr->lkey, MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT,
+              ucs_time_to_msec(ucs_get_time() - start_time));
+    UCS_STATS_UPDATE_COUNTER(md->super.stats, UCT_IB_MD_STAT_MEM_REG, +1);
+
+    *mr_p = mr;
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
 static ucs_status_t
 uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
                         void *address, size_t length,
@@ -750,12 +808,24 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
         /* Fallback if multi-thread registration is unsupported */
     }
 
+    status = uct_ib_mlx5_direct_nic_reg_mr(md, address, length, params,
+                                           access_flags,
+                                           &memh->mrs[mr_type].super.ib);
+    if (status == UCS_ERR_INVALID_PARAM) {
+        return status;
+    }
+
+    if (status == UCS_OK) {
+        goto out;
+    }
+
     status = uct_ib_reg_mr(&md->super, address, length, params, access_flags,
                            NULL, &memh->mrs[mr_type].super.ib);
     if (status != UCS_OK) {
         return status;
     }
 
+out:
     *lkey_p = memh->mrs[mr_type].super.ib->lkey;
     *rkey_p = memh->mrs[mr_type].super.ib->rkey;
     return UCS_OK;
@@ -2171,6 +2241,57 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
+static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
+                                           uct_ib_device_t *dev,
+                                           uct_ib_mlx5_md_t *md,
+                                           const uct_ib_md_config_t *md_config)
+{
+#ifdef HAVE_DIRECT_NIC
+    char sys_path[PATH_MAX];
+    char dev_name[64];
+    int ret;
+    ucs_status_t status;
+
+    if (!md_config->ext.direct_nic) {
+        ucs_debug("%s: Direct NIC support disabled",
+                  uct_ib_device_name(&md->super.dev));
+        return;
+    }
+
+    ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));
+    if (ret == 0) {
+        /* Create a DMA specific device from topology perspective */
+        snprintf(dev_name, sizeof(dev_name), "%s_dma",
+                 uct_ib_device_name(&md->super.dev));
+        md->direct_nic_sys_dev = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
+
+        status = ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
+                                                     md->direct_nic_sys_dev);
+        ucs_assertv_always(status == UCS_OK, "set sys_dev_aux failed: %s",
+                           ucs_status_string(status));
+        md->super.dev.flags |= UCT_IB_DEVICE_FLAG_DIRECT_NIC;
+    } else {
+        sys_path[0]            = '\0';
+        md->direct_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
+                                                  md->direct_nic_sys_dev);
+    }
+
+    ucs_debug("%s: Direct NIC %s supported ret=%d sys_path='%s%s' "
+              "sys_dev=%u sys_dev_aux=%u",
+              uct_ib_device_name(&md->super.dev),
+              (ret == 0) ? "is" : "is not",
+              ret,
+              (sys_path[0] != 0) ? "/sys" : "",
+              sys_path,
+              dev->sys_dev,
+              md->direct_nic_sys_dev);
+#else
+    ucs_debug("%s: Direct NIC support not built",
+              uct_ib_device_name(&md->super.dev));
+#endif
+}
+
 ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
                                              struct ibv_device *ibv_device,
                                              const uct_ib_md_config_t *md_config,
@@ -2369,6 +2490,8 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     uct_ib_mlx5_devx_check_dp_ordering(md, cap, cap_2, dev);
 
     uct_ib_mlx5_devx_check_odp(md, md_config, cap);
+
+    uct_ib_mlx5dv_check_direct_nic(ctx, dev, md, md_config);
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |

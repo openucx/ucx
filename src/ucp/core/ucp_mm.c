@@ -518,6 +518,31 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
     return UCS_OK;
 }
 
+static int ucp_memh_sys_dev_reachable(ucp_md_index_t md_index,
+                                      ucs_sys_device_t mem_sys_dev,
+                                      ucp_sys_dev_map_t sys_dev_map)
+{
+    ucs_sys_device_t sys_dev;
+
+    if ((mem_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) || (sys_dev_map == 0)) {
+        return 1;
+    }
+
+    /*
+     * If at least one sys_dev is not reachable, do not register on it
+     * as we cannot know in advance which device is going to be used.
+     */
+    ucs_for_each_bit(sys_dev, sys_dev_map) {
+        if (!ucs_topo_is_memory_reachable(sys_dev, mem_sys_dev)) {
+            ucs_trace("md[%d] skipped: sys_dev=%u cannot reach mem_sys_dev=%u",
+                      md_index, sys_dev, mem_sys_dev);
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 static ucs_status_t
 ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map, unsigned uct_flags,
@@ -538,6 +563,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     void *reg_address;
     size_t reg_length;
     size_t reg_align;
+    ucp_sys_dev_map_t sys_dev_map;
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
@@ -565,7 +591,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         (reg_md_map & context->dmabuf_reg_md_map)) {
         /* Query dmabuf file descriptor and offset */
         mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
         status = uct_md_mem_query(context->tl_mds[dmabuf_prov_md_index].md,
                                   address, length, &mem_attr);
         if (status != UCS_OK) {
@@ -574,9 +601,10 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     address, length, ucs_status_string(status));
         } else {
             ucs_trace("uct_md_mem_query(dmabuf address %p length %zu) returned "
-                      "fd %d offset %zu",
+                      "fd %d offset %zu sys_dev %u",
                       address, length, mem_attr.dmabuf_fd,
-                      mem_attr.dmabuf_offset);
+                      mem_attr.dmabuf_offset, mem_attr.sys_dev);
+
             dmabuf_md_map            = context->dmabuf_reg_md_map;
             reg_params.dmabuf_fd     = mem_attr.dmabuf_fd;
             reg_params.dmabuf_offset = mem_attr.dmabuf_offset;
@@ -598,6 +626,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
                                      UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+            sys_dev_map            = context->tl_mds[md_index].sys_dev_map;
+            if (!ucp_memh_sys_dev_reachable(md_index, mem_attr.sys_dev,
+                                            sys_dev_map)) {
+                continue;
+            }
         }
 
         reg_address = address;
@@ -835,7 +868,7 @@ static ucs_status_t ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
             goto err;
         }
 
-        ucp_memh_init_from_parent(memh, cache_md_map);
+        ucp_memh_init_from_parent(memh, memh->parent->md_map);
 
         status = ucp_memh_register(context, memh, reg_md_map, uct_flags,
                                    alloc_name);
