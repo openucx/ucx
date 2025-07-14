@@ -763,9 +763,9 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
 
     ucs_trace("mlx5dv_reg_dmabuf_mr("
               "pd=%p addr=%p len=%zu fd=%d offset=%zu access=0x%" PRIx64 "):"
-              " mr=%p lkey=0x%x mlx5_access=%d took %.3f ms",
+              " mr=%p lkey=0x%x took %.3f ms",
               md->super.pd, address, length, dmabuf_fd, dmabuf_offset,
-              access_flags, mr, mr->lkey, MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT,
+              access_flags, mr, mr->lkey,
               ucs_time_to_msec(ucs_get_time() - start_time));
     UCS_STATS_UPDATE_COUNTER(md->super.stats, UCT_IB_MD_STAT_MEM_REG, +1);
 
