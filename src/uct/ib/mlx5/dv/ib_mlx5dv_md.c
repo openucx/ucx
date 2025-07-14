@@ -721,18 +721,18 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
                               struct ibv_mr **mr_p)
 {
 #ifdef HAVE_DIRECT_NIC
-    int dmabuf_fd_pcie;
+    int dmabuf_fd;
     size_t dmabuf_offset;
     struct ibv_mr *mr;
     ucs_time_t start_time;
 
-    if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_DIRECT_NIC)) {
+    if (md->direct_nic_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    dmabuf_fd_pcie = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
-                                     DMABUF_FD, UCT_DMABUF_FD_INVALID);
-    if (dmabuf_fd_pcie == UCT_DMABUF_FD_INVALID) {
+    dmabuf_fd = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
+                                DMABUF_FD, UCT_DMABUF_FD_INVALID);
+    if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -749,7 +749,7 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
                                  0,
                                  length + dmabuf_offset,
                                  (uintptr_t)address - dmabuf_offset,
-                                 dmabuf_fd_pcie,
+                                 dmabuf_fd,
                                  access_flags,
                                  MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT);
     if (mr == NULL) {
@@ -760,7 +760,7 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address, size_t length
     ucs_trace("mlx5dv_reg_dmabuf_mr("
               "pd=%p addr=%p len=%zu fd=%d offset=%zu access=0x%" PRIx64 "):"
               " mr=%p lkey=0x%x mlx5_access=%d took %.3f ms",
-              md->super.pd, address, length, dmabuf_fd_pcie, dmabuf_offset,
+              md->super.pd, address, length, dmabuf_fd, dmabuf_offset,
               access_flags, mr, mr->lkey, MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT,
               ucs_time_to_msec(ucs_get_time() - start_time));
     UCS_STATS_UPDATE_COUNTER(md->super.stats, UCT_IB_MD_STAT_MEM_REG, +1);
@@ -811,12 +811,12 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
     status = uct_ib_mlx5_direct_nic_reg_mr(md, address, length, params,
                                            access_flags,
                                            &memh->mrs[mr_type].super.ib);
-    if (status == UCS_ERR_INVALID_PARAM) {
-        return status;
-    }
-
     if (status == UCS_OK) {
         goto out;
+    }
+
+    if (status != UCS_ERR_UNSUPPORTED) {
+        return status;
     }
 
     status = uct_ib_reg_mr(&md->super, address, length, params, access_flags,
@@ -2255,41 +2255,42 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
     if (!md_config->ext.direct_nic) {
         ucs_debug("%s: Direct NIC support disabled",
                   uct_ib_device_name(&md->super.dev));
-        return;
+        goto disabled;
     }
 
     ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));
-    if (ret == 0) {
-        /* Create a DMA specific device from topology perspective */
-        snprintf(dev_name, sizeof(dev_name), "%s_dma",
-                 uct_ib_device_name(&md->super.dev));
-        md->direct_nic_sys_dev = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
-
-        status = ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
-                                                     md->direct_nic_sys_dev);
-        ucs_assertv_always(status == UCS_OK, "set sys_dev_aux failed: %s",
-                           ucs_status_string(status));
-        md->super.dev.flags |= UCT_IB_DEVICE_FLAG_DIRECT_NIC;
-    } else {
-        sys_path[0]            = '\0';
-        md->direct_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        (void)ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
-                                                  md->direct_nic_sys_dev);
+    if (ret != 0) {
+        ucs_debug("%s: mlx5dv_get_data_direct_sysfs_path() failed: ret=%d",
+                  uct_ib_device_name(&md->super.dev), ret);
+        goto disabled;
     }
 
-    ucs_debug("%s: Direct NIC %s supported ret=%d sys_path='%s%s' "
+    /* Create a DMA specific device from topology perspective */
+    snprintf(dev_name, sizeof(dev_name), "%s_dma",
+             uct_ib_device_name(&md->super.dev));
+    md->direct_nic_sys_dev = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
+
+    status = ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
+                                                 md->direct_nic_sys_dev);
+    ucs_assertv_always(status == UCS_OK, "set sys_dev_aux failed: %s",
+                       ucs_status_string(status));
+
+    ucs_debug("%s: Direct NIC is supported sys_path='%s%s' "
               "sys_dev=%u sys_dev_aux=%u",
               uct_ib_device_name(&md->super.dev),
-              (ret == 0) ? "is" : "is not",
-              ret,
               (sys_path[0] != 0) ? "/sys" : "",
               sys_path,
               dev->sys_dev,
               md->direct_nic_sys_dev);
+
+    return;
+disabled:
 #else
     ucs_debug("%s: Direct NIC support not built",
               uct_ib_device_name(&md->super.dev));
 #endif
+
+    md->direct_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
 ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
@@ -3362,6 +3363,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
     uct_ib_mlx5dv_md_check_odp(md, md_config);
+    uct_ib_mlx5dv_check_direct_nic(ctx, dev, md, md_config);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 

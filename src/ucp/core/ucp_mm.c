@@ -608,6 +608,15 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             dmabuf_md_map            = context->dmabuf_reg_md_map;
             reg_params.dmabuf_fd     = mem_attr.dmabuf_fd;
             reg_params.dmabuf_offset = mem_attr.dmabuf_offset;
+
+            /* Exclude any unreachable MD from registration */
+            ucs_for_each_bit(md_index, dmabuf_md_map) {
+                sys_dev_map = context->tl_mds[md_index].sys_dev_map;
+                if (!ucp_memh_sys_dev_reachable(md_index, mem_attr.sys_dev,
+                                                sys_dev_map)) {
+                    reg_md_map &= ~UCS_BIT(md_index);
+                }
+            }
         }
     }
 
@@ -626,11 +635,6 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
                                      UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
-            sys_dev_map            = context->tl_mds[md_index].sys_dev_map;
-            if (!ucp_memh_sys_dev_reachable(md_index, mem_attr.sys_dev,
-                                            sys_dev_map)) {
-                continue;
-            }
         }
 
         reg_address = address;

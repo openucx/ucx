@@ -1276,7 +1276,6 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
 
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
-    md->sys_dev_map  = 0;
     for (i = 0; i < num_tl_resources; ++i) {
         ucs_string_set_addf(&avail_devices[tl_resources[i].dev_type],
                             "'%s'(%s)", tl_resources[i].dev_name,
@@ -1435,8 +1434,9 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
     ucs_status_t status;
 
     /* Initialize tl_md structure */
-    tl_md->cmpt_index = cmpt_index;
-    tl_md->rsc        = *md_rsc;
+    tl_md->cmpt_index  = cmpt_index;
+    tl_md->rsc         = *md_rsc;
+    tl_md->sys_dev_map = 0;
 
     /* Read MD configuration */
     status = uct_md_config_read(context->tl_cmpts[cmpt_index].cmpt, NULL, NULL,
