@@ -2278,9 +2278,7 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
     ucs_debug("%s: Direct NIC is supported sys_path='%s%s' "
               "sys_dev=%u sys_dev_aux=%u",
               uct_ib_device_name(&md->super.dev),
-              (sys_path[0] != 0) ? "/sys" : "",
-              sys_path,
-              dev->sys_dev,
+              (sys_path[0] != 0) ? "/sys" : "", sys_path, dev->sys_dev,
               md->direct_nic_sys_dev);
 
     return;

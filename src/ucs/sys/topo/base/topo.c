@@ -88,7 +88,7 @@ typedef struct {
     /* Secondary device for the current device */
     ucs_sys_device_t        sys_dev_aux;
 
-    ucs_topo_sibling_role_t sibling_role;    /* Role of the current device */
+    ucs_topo_sibling_role_t sibling_role; /* Role of the current device */
     int                     sibling_sys_dev;
 } ucs_topo_sys_device_info_t;
 
@@ -354,7 +354,7 @@ ucs_topo_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
     }
 
     return ucs_topo_bus_id_to_sysfs_path(
-               &ucs_topo_global_ctx.devices[sys_dev].bus_id, path, max);
+            &ucs_topo_global_ctx.devices[sys_dev].bus_id, path, max);
 }
 
 static int ucs_topo_is_sys_root(const char *path)
@@ -400,11 +400,8 @@ ucs_topo_is_same_numa_node(ucs_sys_device_t device1,
 }
 
 static ucs_status_t
-ucs_topo_get_common_path(ucs_sys_device_t device1,
-                         ucs_sys_device_t device2,
-                         char **path1,
-                         char **path2,
-                         char **common_path)
+ucs_topo_get_common_path(ucs_sys_device_t device1, ucs_sys_device_t device2,
+                         char **path1, char **path2, char **common_path)
 {
     ucs_status_t status;
 
@@ -806,8 +803,8 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
     return numa_node;
 }
 
-static int ucs_topo_is_pci_bridge(ucs_sys_device_t device1,
-                                  ucs_sys_device_t device2)
+static int
+ucs_topo_is_pci_bridge(ucs_sys_device_t device1, ucs_sys_device_t device2)
 {
     ucs_status_t status;
     char *path1, *path2, *common_path;

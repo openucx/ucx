@@ -58,8 +58,8 @@ static int uct_cuda_base_has_c2c_impl(void)
     }
 #endif
 
-    ucs_debug("GPUs have C2C link %s links=%d",
-              ((found > 0)? "UP" : "DOWN"), links);
+    ucs_debug("GPUs have C2C link %s links=%d", ((found > 0) ? "UP" : "DOWN"),
+              links);
     return found;
 }
 
