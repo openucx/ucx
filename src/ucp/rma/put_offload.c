@@ -53,8 +53,9 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     ucs_assert((status == UCS_OK) || UCS_STATUS_IS_ERR(status));
 
     if (status == UCS_OK) {
-        ucp_ep_flush_mem_schedule(req,
+        ucp_ep_flush_mem_schedule(ep,
                                   uct_ep,
+                                  req->send.rma.rkey,
                                   spriv->super.lane,
                                   spriv->super.rkey_index,
                                   req->send.rma.remote_addr);
@@ -148,8 +149,7 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
 
     status = ucp_proto_bcopy_send_func_status(packed_size);
     if ((status == UCS_INPROGRESS) || (status == UCS_OK)) {
-        ucp_ep_flush_mem_schedule(req,
-                                  uct_ep,
+        ucp_ep_flush_mem_schedule(ep, uct_ep,req->send.rma.rkey,
                                   lpriv->super.lane,
                                   lpriv->super.rkey_index,
                                   addr);
@@ -260,8 +260,9 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                               addr,
                               tl_rkey, &req->send.state.uct_comp);
     if ((status == UCS_INPROGRESS) || (status == UCS_OK)) {
-        ucp_ep_flush_mem_schedule(req,
+        ucp_ep_flush_mem_schedule(req->send.ep,
                                   uct_ep,
+                                  req->send.rma.rkey,
                                   lpriv->super.lane,
                                   lpriv->super.rkey_index,
                                   addr);

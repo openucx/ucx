@@ -374,15 +374,15 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
 }
 
 /* A request can use multiple lanes */
-void ucp_ep_flush_mem_schedule(ucp_request_t *req,
+void ucp_ep_flush_mem_schedule(ucp_ep_t *ep,
                                uct_ep_h uct_ep,
+                               ucp_rkey_h rkey,
                                ucp_lane_index_t lane,
                                ucp_md_index_t rkey_index,
                                uint64_t addr)
 {
-    ucp_rkey_h rkey            = req->send.rma.rkey;
-    ucp_rkey_config_t *config  = ucp_rkey_config(req->send.ep->worker, rkey);
-    ucp_ep_config_t *ep_config = ucp_ep_config(req->send.ep);
+    ucp_rkey_config_t *config  = ucp_rkey_config(ep->worker, rkey);
+    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucs_sys_device_t remote_sys_dev;
     ucp_mem_area_t *entry;
 
@@ -391,24 +391,22 @@ void ucp_ep_flush_mem_schedule(ucp_request_t *req,
      * lane indexes are identical.
      */
     if (!(config->lanes_distance[lane].flags & UCS_SYS_DISTANCE_NEEDS_FLUSH)) {
-        ucp_trace_req(req, "lane=%u rkey_index=%u no flush needed", lane,
-                      rkey_index);
+        ucs_trace("lane=%u rkey_index=%u no flush needed", lane, rkey_index);
         return;
     }
 
     /* Overwrite any existing event */
     remote_sys_dev  = ep_config->key.lanes[lane].dst_sys_dev;
-    entry           = &req->send.ep->ext->flush_state.mem.entry[remote_sys_dev];
-    entry->uct_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, rkey_index);
+    entry           = &ep->ext->flush_state.mem.entry[remote_sys_dev];
+    entry->uct_rkey = ucp_rkey_get_tl_rkey(rkey, rkey_index);
     entry->uct_ep   = uct_ep;
     entry->address  = addr;
 
-    ucp_trace_req(req,
-                  "flush mem ep=%p: scheduled lane=%u rkey_index=%u "
-                  "remote_sys_dev=%u uct_ep=%p address=0x%" PRIx64 " "
-                  "uct_rkey=0x%" PRIx64,
-                  req->send.ep, lane, rkey_index, remote_sys_dev, uct_ep, addr,
-                  entry->uct_rkey);
+    ucs_trace("flush mem ep=%p: scheduled lane=%u rkey_index=%u "
+              "remote_sys_dev=%u uct_ep=%p address=0x%" PRIx64 " "
+              "uct_rkey=0x%" PRIx64,
+              ep, lane, rkey_index, remote_sys_dev, uct_ep, addr,
+              entry->uct_rkey);
 }
 
 static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)

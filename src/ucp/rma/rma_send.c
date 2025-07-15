@@ -221,6 +221,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
     const ucp_rkey_config_t *rkey_config;
     uct_rkey_t tl_rkey;
     ucs_status_t status;
+    uct_ep_h uct_ep;
 
     if (ucs_unlikely(param->op_attr_mask & (UCP_OP_ATTR_FIELD_DATATYPE |
                                             UCP_OP_ATTR_FLAG_NO_IMM_CMPL))) {
@@ -240,12 +241,18 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
         return UCS_ERR_NO_RESOURCE;
     }
 
+    uct_ep = ucp_ep_get_fast_lane(ep, rkey_config->put_short.lane);
     status = UCS_PROFILE_CALL(uct_ep_put_short,
-                              ucp_ep_get_fast_lane(ep,
-                                                   rkey_config->put_short.lane),
+                              uct_ep,
                               buffer, length, remote_addr, tl_rkey);
     if (status == UCS_OK) {
         ep->ext->unflushed_lanes |= UCS_BIT(rkey_config->put_short.lane);
+        ucp_ep_flush_mem_schedule(ep,
+                                  uct_ep,
+                                  rkey,
+                                  rkey_config->put_short.lane,
+                                  rkey_config->put_short.rkey_index,
+                                  remote_addr);
     }
 
     return status;
