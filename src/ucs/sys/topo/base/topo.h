@@ -302,7 +302,7 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t mem_device);
  * @param [in] device      System device that would access the memory
  * @param [in] mem_device  System device where the memory resides
  *
- * @return UCS_OK on success, error otherwise.
+ * @return True if memory is reachable
  */
 int ucs_topo_is_memory_reachable(ucs_sys_device_t device,
                                  ucs_sys_device_t mem_device);

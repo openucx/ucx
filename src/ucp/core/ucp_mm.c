@@ -518,9 +518,9 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
     return UCS_OK;
 }
 
-static int ucp_memh_sys_dev_reachable(ucp_md_index_t md_index,
-                                      ucs_sys_device_t mem_sys_dev,
-                                      ucp_sys_dev_map_t sys_dev_map)
+static int ucp_memh_sys_dev_reachable(ucs_sys_device_t mem_sys_dev,
+                                      ucp_sys_dev_map_t sys_dev_map,
+                                      ucs_sys_device_t *unreach_sys_dev)
 {
     ucs_sys_device_t sys_dev;
 
@@ -534,8 +534,7 @@ static int ucp_memh_sys_dev_reachable(ucp_md_index_t md_index,
      */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
         if (!ucs_topo_is_memory_reachable(sys_dev, mem_sys_dev)) {
-            ucs_trace("md[%d] skipped: sys_dev=%u cannot reach mem_sys_dev=%u",
-                      md_index, sys_dev, mem_sys_dev);
+            *unreach_sys_dev = sys_dev;
             return 0;
         }
     }
@@ -564,6 +563,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_length;
     size_t reg_align;
     ucp_sys_dev_map_t sys_dev_map;
+    ucs_sys_device_t unreach_sys_dev;
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
@@ -612,8 +612,12 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             /* Exclude any unreachable MD from registration */
             ucs_for_each_bit(md_index, dmabuf_md_map) {
                 sys_dev_map = context->tl_mds[md_index].sys_dev_map;
-                if (!ucp_memh_sys_dev_reachable(md_index, mem_attr.sys_dev,
-                                                sys_dev_map)) {
+                if (!ucp_memh_sys_dev_reachable(mem_attr.sys_dev,
+                                                sys_dev_map,
+                                                &unreach_sys_dev)) {
+                    ucs_trace("md[%d] skipped: sys_dev=%u cannot reach "
+                              "mem_sys_dev=%u", md_index, unreach_sys_dev,
+                              mem_attr.sys_dev);
                     reg_md_map &= ~UCS_BIT(md_index);
                 }
             }

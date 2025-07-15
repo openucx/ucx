@@ -69,13 +69,13 @@ typedef int64_t ucs_bus_id_bit_rep_t;
 /* Possible role of a current device wrt its sibling */
 typedef enum {
     /* No sibling capability */
-    UCS_TOPO_SIBLING_ROLE_NONE = 0,
+    UCS_TOPO_SIBLING_ROLE_NONE,
 
     /* Memory device, a sibling device could access its memory */
-    UCS_TOPO_SIBLING_ROLE_MEM  = 1,
+    UCS_TOPO_SIBLING_ROLE_MEM,
 
     /* Device that could access memory from its sibling */
-    UCS_TOPO_SIBLING_ROLE_DEV  = 2
+    UCS_TOPO_SIBLING_ROLE_DEV
 } ucs_topo_sibling_role_t;
 
 typedef struct {
@@ -89,7 +89,7 @@ typedef struct {
     ucs_sys_device_t        sys_dev_aux;
 
     ucs_topo_sibling_role_t sibling_role; /* Role of the current device */
-    int                     sibling_sys_dev;
+    ucs_sys_device_t        sibling_sys_dev;
 } ucs_topo_sys_device_info_t;
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
@@ -549,6 +549,7 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev)
              (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev !=
               UCS_SYS_DEVICE_ID_UNKNOWN);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
     return result;
 }
 
@@ -560,9 +561,9 @@ int ucs_topo_is_memory_sibling(ucs_sys_device_t device,
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     result = (device < ucs_topo_global_ctx.num_devices) &&
-             (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-             (ucs_topo_global_ctx.devices[device].sibling_sys_dev ==
-              mem_sys_dev);
+        (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (ucs_topo_global_ctx.devices[device].sibling_sys_dev ==
+         mem_sys_dev);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
@@ -847,7 +848,7 @@ static int ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
     if (ucs_topo_is_pci_bridge(mem_sys_dev, sys_dev_aux)) {
         ucs_topo_global_ctx.devices[mem_sys_dev].sibling_sys_dev = sys_dev;
         ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev     = mem_sys_dev;
-        ucs_debug("sys_dev=%u with sys_dev_aux=%u matched with mem_sys_dev=%u",
+        ucs_trace("sys_dev=%u with sys_dev_aux=%u matched with mem_sys_dev=%u",
                   sys_dev, sys_dev_aux, mem_sys_dev);
         return 1;
     }
@@ -859,13 +860,14 @@ static int ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
 ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
 {
     ucs_sys_device_t dev;
+    ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
         ucs_error("system device %d is invalid (max: %d)", sys_dev,
                   ucs_topo_global_ctx.num_devices);
-        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
     }
 
     ucs_topo_global_ctx.devices[sys_dev].sibling_role =
@@ -877,21 +879,25 @@ ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
         }
     }
 
+    status = UCS_OK;
+
+out:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
                                                  ucs_sys_device_t sys_dev_aux)
 {
     ucs_sys_device_t dev;
+    ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
         ucs_error("system device %d is invalid (max: %d)", sys_dev,
                   ucs_topo_global_ctx.num_devices);
-        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
     }
 
     ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux  = sys_dev_aux;
@@ -905,8 +911,11 @@ ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
         }
     }
 
+    status = UCS_OK;
+
+out:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t

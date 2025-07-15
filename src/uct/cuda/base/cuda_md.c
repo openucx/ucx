@@ -63,7 +63,7 @@ static int uct_cuda_base_has_c2c_impl(void)
     return found;
 }
 
-int uct_cuda_base_has_c2c(void)
+static int uct_cuda_base_has_c2c(void)
 {
     static int has_c2c = -1;
 

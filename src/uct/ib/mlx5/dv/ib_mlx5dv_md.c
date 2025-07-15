@@ -51,10 +51,12 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
                                            uct_ib_mlx5_md_t *md,
                                            const uct_ib_md_config_t *md_config)
 {
+#if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
     char sys_path[PATH_MAX];
     char dev_name[64];
     int ret;
     ucs_status_t status;
+#endif
 
     md->direct_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
 
@@ -66,9 +68,6 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
 
 #if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
     ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));
-#else
-    ret = -1;
-#endif
     if (ret != 0) {
         ucs_debug("%s: mlx5dv_get_data_direct_sysfs_path() failed: ret=%d",
                   uct_ib_device_name(&md->super.dev), ret);
@@ -90,6 +89,10 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
               uct_ib_device_name(&md->super.dev),
               (sys_path[0] != 0) ? "/sys" : "", sys_path, dev->sys_dev,
               md->direct_nic_sys_dev);
+#else
+    ucs_debug("%s: Direct NIC support not built",
+              uct_ib_device_name(&md->super.dev));
+#endif
 }
 
 #if HAVE_DEVX
