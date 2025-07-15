@@ -1232,8 +1232,14 @@ public:
 
         if (get_variant_value() == VARIANT_64_PATHS) {
             modify_config("IB_NUM_PATHS", "64", SETENV_IF_NOT_EXIST);
+            if (!is_proto_enabled()) {
+                modify_config("MAX_RNDV_LANES", "64", SETENV_IF_NOT_EXIST);
+            }
         } else if (get_variant_value() == VARIANT_128_PATHS) {
             modify_config("IB_NUM_PATHS", "128", SETENV_IF_NOT_EXIST);
+            if (!is_proto_enabled()) {
+                modify_config("MAX_RNDV_LANES", "128", SETENV_IF_NOT_EXIST);
+            }
         }
 
         static std::vector<std::string> devices;
