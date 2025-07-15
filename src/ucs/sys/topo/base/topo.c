@@ -458,8 +458,10 @@ ucs_topo_get_distance_sysfs_internal(ucs_sys_device_t device1,
         goto err_default_distance;
     }
 
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_get_common_path(device1, device2, &path1, &path2,
                                       &common_path);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     if (status != UCS_OK) {
         goto err_default_distance;
     }
@@ -621,9 +623,7 @@ static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
         full_affinity = 1;
     }
 
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
     dev_node = ucs_topo_sys_device_get_numa_node(device);
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     if (dev_node == UCS_NUMA_NODE_UNDEFINED) {
         dev_node = UCS_NUMA_NODE_DEFAULT;
     }
@@ -795,11 +795,13 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
         return UCS_NUMA_NODE_UNDEFINED;
     }
 
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev < ucs_topo_global_ctx.num_devices) {
         numa_node = ucs_topo_global_ctx.devices[sys_dev].numa_node;
     } else {
         numa_node = UCS_NUMA_NODE_UNDEFINED;
     }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return numa_node;
 }

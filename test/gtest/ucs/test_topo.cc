@@ -72,9 +72,9 @@ protected:
 public:
     virtual void init()
     {
+        ucs::test::init();
         ucs_topo_cleanup();
         ucs_topo_init();
-        ucs::test::init();
     }
 
     virtual void cleanup()
