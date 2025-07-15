@@ -316,7 +316,8 @@ UCS_TEST_F(test_topo, sibling) {
 
     std::vector<ucs_sys_device_t> hca_devs;
     for (int i = 0; i < count; ++i) {
-        hca_devs.push_back(register_device("hca" + i, m_hcas[i]));
+        hca_devs.push_back(register_device("hca" + std::to_string(i),
+                                           m_hcas[i]));
         ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_devs.back());
     }
 
