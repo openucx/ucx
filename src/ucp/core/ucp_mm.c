@@ -612,12 +612,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             /* Exclude any unreachable MD from registration */
             ucs_for_each_bit(md_index, dmabuf_md_map) {
                 sys_dev_map = context->tl_mds[md_index].sys_dev_map;
-                if (!ucp_memh_sys_dev_reachable(mem_attr.sys_dev,
-                                                sys_dev_map,
+                if (!ucp_memh_sys_dev_reachable(mem_attr.sys_dev, sys_dev_map,
                                                 &unreach_sys_dev)) {
                     ucs_trace("md[%d] skipped: sys_dev=%u cannot reach "
-                              "mem_sys_dev=%u", md_index, unreach_sys_dev,
-                              mem_attr.sys_dev);
+                              "mem_sys_dev=%u",
+                              md_index, unreach_sys_dev, mem_attr.sys_dev);
                     reg_md_map &= ~UCS_BIT(md_index);
                 }
             }

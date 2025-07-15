@@ -561,9 +561,9 @@ int ucs_topo_is_memory_sibling(ucs_sys_device_t device,
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     result = (device < ucs_topo_global_ctx.num_devices) &&
-        (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-        (ucs_topo_global_ctx.devices[device].sibling_sys_dev ==
-         mem_sys_dev);
+             (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+             (ucs_topo_global_ctx.devices[device].sibling_sys_dev ==
+              mem_sys_dev);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
