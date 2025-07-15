@@ -45,13 +45,20 @@ typedef struct ucs_sys_bus_id {
 typedef uint8_t ucs_sys_device_t;
 
 
+enum {
+    /* Memory's system device needs flush */
+    UCS_SYS_DISTANCE_NEEDS_FLUSH = UCS_BIT(0)
+};
+
+
 /*
  * Captures the estimated latency and bandwidth between two system devices
  * referred by ucs_sys_device_t handle.
  */
 typedef struct ucs_sys_dev_distance {
-    double latency;   /**< in seconds */
-    double bandwidth; /**< in bytes/second */
+    double  latency;   /**< in seconds */
+    double  bandwidth; /**< in bytes/second */
+    uint8_t flags;     /**< flags for system device properties */
 } ucs_sys_dev_distance_t;
 
 
@@ -263,6 +270,9 @@ ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
  */
 uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev);
 
+
+int ucs_topo_is_memory_sibling(ucs_sys_device_t sys_dev1,
+                               ucs_sys_device_t sys_dev2);
 
 /**
  * Get the number of registered system devices.

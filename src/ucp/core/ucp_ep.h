@@ -493,13 +493,34 @@ struct ucp_ep_config {
 
 
 /**
+ * Describes a remote memory, used for device targeted remote flushing.
+ */
+typedef struct ucp_mem_area {
+    uct_rkey_t uct_rkey;
+    uct_ep_t   *uct_ep;
+    uint64_t   address;
+} ucp_mem_area_t;
+
+
+/**
  * Status of protocol-level remote completions
  */
 typedef struct {
     ucs_hlist_head_t reqs; /* Queue of flush requests which
-                              are waiting for remote completion */
+                                   are waiting for remote completion */
     uint32_t         send_sn; /* Sequence number of sent operations */
     uint32_t         cmpl_sn; /* Sequence number of completions */
+
+    struct {
+        /* Track ongoing memory flushes for this endpoint */
+        int            in_progress;
+
+        /*
+         * Memory areas that need specific flushing, tracked by device as there
+         * could be many memory devices behind a given lane.
+         */
+        ucp_mem_area_t entry[UCS_SYS_DEVICE_ID_MAX];
+    } mem;
 } ucp_ep_flush_state_t;
 
 
@@ -934,5 +955,32 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
  * @param [in] cfg_index  Endpoint configuration index.
  */
 void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
+
+
+/**
+ * @brief Schedule a memory specific remote flushing if needed.
+ *
+ * This call will schedule the remote memory area for remote memory specific
+ * flush, if needed. The actual flush will only be performed after all lane
+ * specific flushes have completed, to guarantee ordering.
+ *
+ * @param [in] req        Request that performed the RMA operation.
+ * @param [in] lane       Lane that was used for RMA operation.
+ * @param [in] rkey_index Remote key index accessed.
+ */
+void ucp_ep_flush_mem_schedule(ucp_request_t *req, ucp_lane_index_t lane,
+                               ucp_md_index_t rkey_index);
+
+
+/**
+ * @brief Progress function for memory specific remote flushing.
+ *
+ * This call starts and progresses all memory specific remote flushes.
+ *
+ * @param[in] self        Pending request tracking the flush.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
 
 #endif

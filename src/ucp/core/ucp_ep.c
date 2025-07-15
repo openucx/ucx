@@ -230,9 +230,9 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
 
-    UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
+    UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) <=
                       sizeof(ep->ext->flush_state));
-    memset(&ep->ext->ep_match, 0, sizeof(ep->ext->ep_match));
+    memset(&ep->ext->flush_state, 0, sizeof(ep->ext->flush_state));
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
 
@@ -320,7 +320,7 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
 
     data->size = size;
     ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(rkey_ptr_md_index), 0,
-                                UCS_SYS_DEVICE_ID_UNKNOWN, &data->rkey);
+                                UCS_SYS_DEVICE_ID_UNKNOWN, &data->rkey, 1);
     rkey_index = ucs_bitmap2idx(data->rkey->md_map, rkey_ptr_md_index);
     status     = uct_rkey_ptr(data->rkey->tl_rkey[rkey_index].cmpt,
                               &data->rkey->tl_rkey[rkey_index].rkey, address,
@@ -433,7 +433,8 @@ ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
      * because reply UCP EP created for sending WIREUP_MSG/EP_REMOVED message is
      * not exposed to a user */
     ucs_assert(req->flags & UCP_REQUEST_FLAG_RELEASED);
-    ucs_assert(req->send.uct.func == ucp_ep_flush_progress_pending);
+    ucs_assert((req->send.uct.func == ucp_ep_flush_progress_pending) ||
+               (req->send.uct.func == ucp_ep_flush_mem_progress));
 
     ucp_request_complete_send(req, req->status);
     return 1;
@@ -539,6 +540,7 @@ void ucp_ep_flush_state_reset(ucp_ep_h ep)
 
     flush_state->send_sn = 0;
     flush_state->cmpl_sn = 0;
+    memset(&flush_state->mem, 0, sizeof(flush_state->mem));
     ucs_hlist_head_init(&flush_state->reqs);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
 }
@@ -2254,7 +2256,7 @@ size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_context_h context,
 {
     return sizeof(ucp_rndv_rts_hdr_t) +
            ucp_rkey_packed_size(context, key->rma_bw_md_map,
-                                UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                UCS_SYS_DEVICE_ID_UNKNOWN, 0, 1);
 }
 
 static void ucp_ep_config_init_short_thresh(ucp_memtype_thresh_t *thresh)
@@ -2646,7 +2648,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->rndv.put_zcopy.max          = SIZE_MAX;
     config->rndv.rkey_size              = ucp_rkey_packed_size(context,
                                                                config->key.rma_bw_md_map,
-                                                               UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                                               UCS_SYS_DEVICE_ID_UNKNOWN, 0,
+                                                               1);
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
         config->rndv.get_zcopy.lanes[lane] =
                 config->rndv.put_zcopy.lanes[lane] = UCP_NULL_LANE;
