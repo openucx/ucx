@@ -965,11 +965,16 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
  * specific flushes have completed, to guarantee ordering.
  *
  * @param [in] req        Request that performed the RMA operation.
+ * @param [in] uct_ep     UCT endpoint used for the given lane.
  * @param [in] lane       Lane that was used for RMA operation.
  * @param [in] rkey_index Remote key index accessed.
+ * @param [in] addr       Remote address accessed.
  */
-void ucp_ep_flush_mem_schedule(ucp_request_t *req, ucp_lane_index_t lane,
-                               ucp_md_index_t rkey_index);
+void ucp_ep_flush_mem_schedule(ucp_request_t *req,
+                               uct_ep_h uct_ep,
+                               ucp_lane_index_t lane,
+                               ucp_md_index_t rkey_index,
+                               uint64_t addr);
 
 
 /**

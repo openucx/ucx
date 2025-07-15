@@ -375,12 +375,11 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
 
 /* A request can use multiple lanes */
 void ucp_ep_flush_mem_schedule(ucp_request_t *req,
+                               uct_ep_h uct_ep,
                                ucp_lane_index_t lane,
-                               ucp_md_index_t rkey_index)
+                               ucp_md_index_t rkey_index,
+                               uint64_t addr)
 {
-    uct_ep_h uct_ep            = ucp_ep_get_lane(req->send.ep, lane);
-    uint64_t addr              = req->send.rma.remote_addr +
-                                 req->send.state.dt_iter.offset;
     ucp_rkey_h rkey            = req->send.rma.rkey;
     ucp_rkey_config_t *config  = ucp_rkey_config(req->send.ep->worker, rkey);
     ucp_ep_config_t *ep_config = ucp_ep_config(req->send.ep);
