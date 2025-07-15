@@ -1100,10 +1100,11 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
 
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 {
-    ucp_context_h context   = ep->worker->context;
-    ucp_ep_config_t *config = ucp_ep_config(ep);
-    int rma_sw              = 0;
-    int amo_sw              = 0;
+    ucp_context_h context          = ep->worker->context;
+    ucp_ep_config_t *config        = ucp_ep_config(ep);
+    int rma_sw                     = 0;
+    int amo_sw                     = 0;
+    ucp_lane_map_t ignore_lane_map = UCP_LANE_MAP_ZERO_VALUE;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
 
@@ -1115,7 +1116,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     rkey->cache.rma_lane = ucp_rkey_find_rma_lane(context, config,
                                                   UCS_MEMORY_TYPE_HOST,
                                                   config->key.rma_lanes, rkey,
-                                                  UCP_LANE_MAP_ZERO_VALUE,
+                                                  ignore_lane_map,
                                                   &uct_rkey);
     if (rkey->cache.rma_lane == UCP_NULL_LANE) {
         rkey->cache.rma_proto_index = UCP_RKEY_SW_PROTO;
@@ -1134,7 +1135,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     rkey->cache.amo_lane = ucp_rkey_find_rma_lane(context, config,
                                                   UCS_MEMORY_TYPE_HOST,
                                                   config->key.amo_lanes, rkey,
-                                                  UCP_LANE_MAP_ZERO_VALUE,
+                                                  ignore_lane_map,
                                                   &uct_rkey);
     if (rkey->cache.amo_lane == UCP_NULL_LANE) {
         rkey->cache.amo_proto_index = UCP_RKEY_SW_PROTO;

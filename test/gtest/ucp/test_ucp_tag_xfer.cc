@@ -1225,8 +1225,15 @@ public:
 
     void init() override
     {
+        /* TODO: 
+         *   1. Handle the MTU issue in the CI machines - increase all the MTUs
+         *      to 2k-4k and make sure it works.
+         *   2. Run this test using IB_NUM_PATHS=128 only, with both rc and dc.
+         *   3. Keep is_proto_enabled() condition for MAX_RNDV_LANES as it's
+         *      needed for dc. */
         stats_activate();
-        if ((get_variant_value() == VARIANT_128_PATHS) && has_transport("rc_x")) {
+        if ((get_variant_value() == VARIANT_128_PATHS) &&
+            (has_transport("rc_x") || has_transport("rc_v"))) {
             UCS_TEST_SKIP_R("128 paths tests not supported for RC transport");
         }
 
@@ -1345,6 +1352,7 @@ UCS_TEST_P(multi_rail_max, max_lanes, "TM_SW_RNDV=y",
     }
 }
 
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rcv, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, dc,  "dc")
 
