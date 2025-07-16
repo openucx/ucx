@@ -240,14 +240,15 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         }
     }
 
-    /* Later connect() call can still fail if the peer is actually unreachable
-     * at UCT/TCP EP creation time */
     if (!uct_iface_scope_is_reachable(tl_iface, params)) {
         return 0;
     }
 
+    /* Check if the remote address is routable */
     status = ucs_ifname_to_index(iface->if_name, &ndev_index);
     if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(
+                    params, "failed to get interface index");
         return 0;
     }
 
@@ -255,11 +256,19 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     status = ucs_sockaddr_set_inet_addr((struct sockaddr *)&remote_addr,
                                         tcp_dev_addr + 1);
     if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(
+                    params, "failed to set inet address");
         return 0;
     }
 
-    return ucs_netlink_route_exists(ndev_index,
-                                    (const struct sockaddr *)&remote_addr);
+    if (!ucs_netlink_route_exists(ndev_index,
+                                    (const struct sockaddr *)&remote_addr)) {
+        uct_iface_fill_info_str_buf(
+                    params, "route does not exist");
+        return 0;
+    }
+
+    return 1;
 }
 
 static const char *
