@@ -366,11 +366,15 @@ UCS_TEST_F(test_topo, sibling) {
         ASSERT_TRUE(ucs_topo_device_has_sibling(hca_devs[0]));
         ASSERT_TRUE(ucs_topo_device_has_sibling(gpu_dev));
         ASSERT_FALSE(ucs_topo_is_memory_reachable(hca_devs[1], gpu_dev));
+
         ASSERT_TRUE(ucs_topo_is_memory_sibling(hca_devs[0], gpu_dev));
+        ASSERT_TRUE(ucs_topo_is_memory_sibling(gpu_dev, hca_devs[0]));
     } else {
         ASSERT_FALSE(ucs_topo_device_has_sibling(hca_devs[0]));
         ASSERT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
         ASSERT_TRUE(ucs_topo_is_memory_reachable(hca_devs[1], gpu_dev));
+
         ASSERT_FALSE(ucs_topo_is_memory_sibling(hca_devs[0], gpu_dev));
+        ASSERT_FALSE(ucs_topo_is_memory_sibling(gpu_dev, hca_devs[0]));
     }
 }

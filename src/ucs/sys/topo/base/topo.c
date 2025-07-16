@@ -556,16 +556,28 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev)
 }
 
 /* Check if a device has a memory device sibling */
-int ucs_topo_is_memory_sibling(ucs_sys_device_t device,
-                               ucs_sys_device_t mem_sys_dev)
+int ucs_topo_is_memory_sibling(ucs_sys_device_t device1,
+                               ucs_sys_device_t device2)
 {
     int result;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    result = (device < ucs_topo_global_ctx.num_devices) &&
-             (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-             (ucs_topo_global_ctx.devices[device].sibling_sys_dev ==
-              mem_sys_dev);
+    result = (device1 < ucs_topo_global_ctx.num_devices) &&
+             (device2 != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+             (ucs_topo_global_ctx.devices[device1].sibling_sys_dev ==
+              device2);
+
+    ucs_assertv(!result ||
+                ((ucs_topo_global_ctx.devices[device1].sibling_role !=
+                  UCS_TOPO_SIBLING_ROLE_NONE) &&
+                 (ucs_topo_global_ctx.devices[device2].sibling_role !=
+                  UCS_TOPO_SIBLING_ROLE_NONE) &&
+                (ucs_topo_global_ctx.devices[device1].sibling_role !=
+                 ucs_topo_global_ctx.devices[device2].sibling_role)),
+                "device1=%u device2=%u role1=%d role2=%d",
+                device1, device2,
+                ucs_topo_global_ctx.devices[device1].sibling_role,
+                ucs_topo_global_ctx.devices[device2].sibling_role);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
