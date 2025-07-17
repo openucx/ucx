@@ -203,6 +203,7 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_tcp_device_addr_t *tcp_dev_addr;
     int is_local_loopback, is_remote_loopback;
     struct sockaddr_storage remote_addr;
+    uct_iface_reachability_scope_t scope;
     unsigned ndev_index;
     ucs_status_t status;
 
@@ -240,8 +241,10 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         }
     }
 
-    if (!uct_iface_scope_is_reachable(tl_iface, params)) {
-        return 0;
+    if (UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
+                        UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ==
+        UCT_IFACE_REACHABILITY_SCOPE_DEVICE) {
+        return uct_iface_scope_is_reachable(tl_iface, params);
     }
 
     /* Check if the remote address is routable */
