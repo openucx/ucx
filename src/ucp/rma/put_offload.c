@@ -53,11 +53,8 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     ucs_assert((status == UCS_OK) || UCS_STATUS_IS_ERR(status));
 
     if (status == UCS_OK) {
-        ucp_ep_flush_mem_schedule(ep,
-                                  uct_ep,
-                                  req->send.rma.rkey,
-                                  spriv->super.lane,
-                                  spriv->super.rkey_index,
+        ucp_ep_flush_mem_schedule(ep, uct_ep, req->send.rma.rkey,
+                                  spriv->super.lane, spriv->super.rkey_index,
                                   req->send.rma.remote_addr);
     }
 
@@ -143,15 +140,13 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
 
     tl_rkey     = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                        lpriv->super.rkey_index);
-    packed_size = uct_ep_put_bcopy(uct_ep,
-                                   ucp_proto_put_offload_bcopy_pack, &pack_ctx,
-                                   addr, tl_rkey);
+    packed_size = uct_ep_put_bcopy(uct_ep, ucp_proto_put_offload_bcopy_pack,
+                                   &pack_ctx, addr, tl_rkey);
 
     status = ucp_proto_bcopy_send_func_status(packed_size);
     if ((status == UCS_INPROGRESS) || (status == UCS_OK)) {
-        ucp_ep_flush_mem_schedule(ep, uct_ep,req->send.rma.rkey,
-                                  lpriv->super.lane,
-                                  lpriv->super.rkey_index,
+        ucp_ep_flush_mem_schedule(ep, uct_ep, req->send.rma.rkey,
+                                  lpriv->super.lane, lpriv->super.rkey_index,
                                   addr);
     }
 
@@ -255,16 +250,11 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
-    status = uct_ep_put_zcopy(uct_ep,
-                              &iov, 1,
-                              addr,
-                              tl_rkey, &req->send.state.uct_comp);
+    status = uct_ep_put_zcopy(uct_ep, &iov, 1, addr, tl_rkey,
+                              &req->send.state.uct_comp);
     if ((status == UCS_INPROGRESS) || (status == UCS_OK)) {
-        ucp_ep_flush_mem_schedule(req->send.ep,
-                                  uct_ep,
-                                  req->send.rma.rkey,
-                                  lpriv->super.lane,
-                                  lpriv->super.rkey_index,
+        ucp_ep_flush_mem_schedule(req->send.ep, uct_ep, req->send.rma.rkey,
+                                  lpriv->super.lane, lpriv->super.rkey_index,
                                   addr);
     }
 

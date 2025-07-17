@@ -242,15 +242,11 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     uct_ep = ucp_ep_get_fast_lane(ep, rkey_config->put_short.lane);
-    status = UCS_PROFILE_CALL(uct_ep_put_short,
-                              uct_ep,
-                              buffer, length, remote_addr, tl_rkey);
+    status = UCS_PROFILE_CALL(uct_ep_put_short, uct_ep, buffer, length,
+                              remote_addr, tl_rkey);
     if (status == UCS_OK) {
         ep->ext->unflushed_lanes |= UCS_BIT(rkey_config->put_short.lane);
-        ucp_ep_flush_mem_schedule(ep,
-                                  uct_ep,
-                                  rkey,
-                                  rkey_config->put_short.lane,
+        ucp_ep_flush_mem_schedule(ep, uct_ep, rkey, rkey_config->put_short.lane,
                                   rkey_config->put_short.rkey_index,
                                   remote_addr);
     }
