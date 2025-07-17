@@ -253,6 +253,7 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucp_context_t *context                = init_params->worker->context;
     uint64_t rndv_modes                   = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
     ucp_lane_index_t rkey_ptr_lane        = init_params->ep_config_key->rkey_ptr_lane;
+    ucp_lane_map_t zero_map               = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
         .super.overhead      = 0,
@@ -271,8 +272,7 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
         .super.exclude_map   = (rkey_ptr_lane == UCP_NULL_LANE) ?
-                               UCP_LANE_MAP_ZERO_VALUE :
-                               UCP_LANE_MAP_BIT(rkey_ptr_lane),
+                               zero_map : UCP_LANE_MAP_BIT(rkey_ptr_lane),
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_LAST,
         .tl_cap_flags        = 0
