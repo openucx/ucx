@@ -331,8 +331,8 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         rpriv.put_comp_cb     = comp_cb;
         rpriv.atp_comp_cb     = NULL;
         rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP;
-        rpriv.flush_map       = UCP_LANE_MAP_ZERO_VALUE;
         rpriv.atp_map         = rpriv.bulk.mpriv.lane_map;
+        UCS_STATIC_BITMAP_RESET_ALL(&rpriv.flush_map);
     } else {
         /* Flush all lanes and send ATP on all supporting lanes (or control lane
          * otherwise) */

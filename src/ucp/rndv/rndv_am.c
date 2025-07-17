@@ -23,7 +23,6 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
     params->super.cfg_thresh   = ucp_proto_rndv_cfg_thresh(
                                          context, UCS_BIT(UCP_RNDV_MODE_AM)),
     params->super.cfg_priority = 80;
-    params->super.exclude_map  = UCP_LANE_MAP_ZERO_VALUE;
     params->super.min_length   = 0;
     params->super.max_length   = SIZE_MAX;
     params->super.overhead     = context->config.ext.proto_overhead_multi;
@@ -33,6 +32,7 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
     params->super.hdr_size     = sizeof(ucp_request_data_hdr_t);
     params->max_lanes          = context->config.ext.max_rndv_lanes;
     params->opt_align_offs     = UCP_PROTO_COMMON_OFFSET_INVALID;
+    UCS_STATIC_BITMAP_RESET_ALL(&params->super.exclude_map);
 
     ucp_proto_multi_probe(params);
 }
