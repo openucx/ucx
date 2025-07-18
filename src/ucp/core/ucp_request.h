@@ -122,6 +122,24 @@ enum {
 
 
 /**
+ * Memory flush related structure
+ */
+typedef struct {
+    /* Number of 0-read flush to complete overall */
+    int              count;
+
+    /* Number of 0-read flush started */
+    int              started;
+
+    /* Shared completion to track remaining */
+    uct_completion_t uct_comp;
+
+    /* List of memory areas to track 0-read flush operations */
+    ucp_mem_area_t   *entries;
+} ucp_mem_flush_t;
+
+
+/**
  * Request in progress.
  */
 struct ucp_request {
@@ -331,10 +349,11 @@ struct ucp_request {
                     unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
                     uint32_t           cmpl_sn;   /* Sequence number of the remote completion
                                                      this request is waiting for */
+                    ucp_mem_flush_t    mem;       /* Memory specific flushes */
+                    ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
                     uint8_t            sw_started;
                     uint8_t            sw_done;
                     uint8_t            num_lanes; /* How many lanes are being flushed */
-                    ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
                 } flush;
 
                 struct {

@@ -523,6 +523,10 @@ const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
         ucs_string_buffer_appendf(&strb, ">1PB/s");
     }
 
+    if (distance->flags & UCS_SYS_DISTANCE_NEEDS_FLUSH) {
+        ucs_string_buffer_appendf(&strb, " [flush]");
+    }
+
     return ucs_string_buffer_cstr(&strb);
 }
 
@@ -939,4 +943,10 @@ out_detected:
               sysfs_path);
     ucs_free(device_file_path);
     return sysfs_path;
+}
+
+int ucs_topo_is_memory_sibling(ucs_sys_device_t sys_dev1,
+                               ucs_sys_device_t sys_dev2)
+{
+    return 0; /* TODO: replace with actual code */
 }
