@@ -124,11 +124,18 @@ enum {
 /**
  * Memory flush related structure
  */
-typedef struct ucp_mem_flush {
-    int              count; /* Number of 0-read flush to complete overall */
-    int              started; /* Number of 0-read flush started */
-    uct_completion_t uct_comp; /* Shared completion to track remaining */
-    ucp_mem_area_t   *entry; /* List of memory areas to start 0-read for */
+typedef struct {
+    /* Number of 0-read flush to complete overall */
+    int              count;
+
+    /* Number of 0-read flush started */
+    int              started;
+
+    /* Shared completion to track remaining */
+    uct_completion_t uct_comp;
+
+    /* List of memory areas to track 0-read flush operations */
+    ucp_mem_area_t   *entries;
 } ucp_mem_flush_t;
 
 

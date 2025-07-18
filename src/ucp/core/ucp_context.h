@@ -328,7 +328,7 @@ typedef struct ucp_tl_md {
     uct_mem_h              gva_mr;
 
     /**
-     * Set of known system devices associated to the MD
+     * Set of system devices associated with the MD
      */
     ucp_sys_dev_map_t      sys_dev_map;
 } ucp_tl_md_t;

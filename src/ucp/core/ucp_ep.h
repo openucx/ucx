@@ -493,9 +493,9 @@ struct ucp_ep_config {
 
 
 /**
- * Describes a remote memory, used for device targeted remote flushing.
+ * Remote memory to be used for device targeted remote flushing.
  */
-typedef struct ucp_mem_area {
+typedef struct {
     uct_rkey_t uct_rkey;
     uct_ep_t   *uct_ep;
     uint64_t   address;
@@ -507,7 +507,7 @@ typedef struct ucp_mem_area {
  */
 typedef struct {
     ucs_hlist_head_t reqs; /* Queue of flush requests which
-                                   are waiting for remote completion */
+                              are waiting for remote completion */
     uint32_t         send_sn; /* Sequence number of sent operations */
     uint32_t         cmpl_sn; /* Sequence number of completions */
 
@@ -519,7 +519,7 @@ typedef struct {
          * Memory areas that need specific flushing, tracked by device as there
          * could be many memory devices behind a given lane.
          */
-        ucp_mem_area_t entry[UCS_SYS_DEVICE_ID_MAX];
+        ucp_mem_area_t entries[UCS_SYS_DEVICE_ID_MAX];
     } mem;
 } ucp_ep_flush_state_t;
 

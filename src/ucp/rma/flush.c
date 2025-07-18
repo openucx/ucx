@@ -214,7 +214,7 @@ ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
 
     /* Start any remaining operation */
     for (i = 0; (i < mem->count) && (mem->started < mem->count); i++) {
-        entry = &mem->entry[i];
+        entry = &mem->entries[i];
         if (entry->uct_ep == NULL) {
             continue;
         }
@@ -235,9 +235,9 @@ ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
         }
     }
 
-    if ((mem->entry != NULL) && (req->send.flush.mem.uct_comp.count == 0)) {
-        ucs_free(mem->entry);
-        mem->entry = NULL;
+    if ((mem->entries != NULL) && (req->send.flush.mem.uct_comp.count == 0)) {
+        ucs_free(mem->entries);
+        mem->entries = NULL;
         ep->ext->flush_state.mem.in_progress--;
     }
 
@@ -271,16 +271,16 @@ static unsigned ucp_ep_flush_mem_resume_callback(void *arg)
 
 static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 {
-    int started           = 0;
-    ucp_ep_h ep           = req->send.ep;
-    ucp_mem_area_t *entry = ep->ext->flush_state.mem.entry;
+    int started             = 0;
+    ucp_ep_h ep             = req->send.ep;
+    ucp_mem_area_t *entries = ep->ext->flush_state.mem.entries;
     ucp_mem_area_t tmp[UCS_SYS_DEVICE_ID_MAX];
     int i;
     size_t size;
 
     /* Check if any pending flush entries */
     for (i = 0; i < UCS_SYS_DEVICE_ID_MAX; i++) {
-        if (entry[i].uct_ep == NULL) {
+        if (entries[i].uct_ep == NULL) {
             continue;
         }
 
@@ -289,17 +289,14 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
         ucp_trace_req(req,
                       "flush mem remote_sys_dev=%d uct_rkey=0x%" PRIx64
                       " uct_ep=%p address=%zx",
-                      i, entry[i].uct_rkey, entry[i].uct_ep, entry[i].address);
+                      i, entries[i].uct_rkey, entries[i].uct_ep,
+                      entries[i].address);
 
-        tmp[started].uct_rkey = entry[i].uct_rkey;
-        tmp[started].uct_ep   = entry[i].uct_ep;
-        tmp[started].address  = entry[i].address;
-
-        started++;
-        entry[i].uct_ep = NULL;
+        tmp[started++].address  = entries[i].address;
+        entries[i].uct_ep = NULL;
     }
 
-    req->send.flush.mem.entry           = NULL;
+    req->send.flush.mem.entries         = NULL;
     req->send.flush.mem.count           = started;
     req->send.flush.mem.started         = 0;
     req->send.uct.func                  = ucp_ep_flush_mem_progress;
@@ -309,14 +306,14 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 
     /* Count one more in-progress memory flush for the EP */
     if (started > 0) {
-        size = sizeof(*req->send.flush.mem.entry) * started;
+        size = sizeof(*req->send.flush.mem.entries) * started;
 
-        req->send.flush.mem.entry = ucs_malloc(size, "flush_mem_entry");
-        if (req->send.flush.mem.entry == NULL) {
-            ucs_fatal("Cannot allocate flush mem entry");
+        req->send.flush.mem.entries = ucs_malloc(size, "flush_mem_entries");
+        if (req->send.flush.mem.entries == NULL) {
+            ucs_fatal("Cannot allocate flush mem entries");
         }
 
-        memcpy(req->send.flush.mem.entry, tmp, size);
+        memcpy(req->send.flush.mem.entries, tmp, size);
 
         ep->ext->flush_state.mem.in_progress++;
     } else if (ep->ext->flush_state.mem.in_progress == 0) {
@@ -397,7 +394,7 @@ void ucp_ep_flush_mem_schedule(ucp_ep_t *ep,
 
     /* Overwrite any existing event */
     remote_sys_dev  = ep_config->key.lanes[lane].dst_sys_dev;
-    entry           = &ep->ext->flush_state.mem.entry[remote_sys_dev];
+    entry           = &ep->ext->flush_state.mem.entries[remote_sys_dev];
     entry->uct_rkey = ucp_rkey_get_tl_rkey(rkey, rkey_index);
     entry->uct_ep   = uct_ep;
     entry->address  = addr;
