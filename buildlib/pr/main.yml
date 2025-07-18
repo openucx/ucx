@@ -492,3 +492,4 @@ stages:
 #    dependsOn: [Static_check]
 #    jobs:
 #    - template: cuda/cuda_compatible.yml
+
