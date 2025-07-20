@@ -53,7 +53,7 @@ jobs:
           set -eE
           {
             echo -e "<settings><servers><server>"
-            echo -e "<id>ossrh</id><username>$(SONATYPE_USERNAME)</username>"
+            echo -e "<id>central</id><username>$(SONATYPE_USERNAME)</username>"
             echo -e "<password>$(SONATYPE_PASSWORD)</password>"
             echo -e "</server></servers></settings>"
           } > $(temp_cfg)
