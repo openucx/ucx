@@ -3,6 +3,7 @@
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2025. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -164,8 +165,8 @@ AC_DEFUN([DETECT_UARCH],
     cpuvar=`grep 'CPU variant' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
     cpupart=`grep 'CPU part' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
 
-    ax_cpu=""
-    ax_arch=""
+    with_mcpu=""
+    with_march=""
 
     AC_MSG_NOTICE(Detected CPU implementation: ${cpuimpl})
     AC_MSG_NOTICE(Detected CPU architecture: ${cpuarch})
@@ -176,41 +177,41 @@ AC_DEFUN([DETECT_UARCH],
       0x42) case $cpupart in
         0x516 | 0x0516)
           AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-          ax_cpu="thunderx2t99"
-          ax_arch="armv8.1-a+lse" ;;
+          with_mcpu="thunderx2t99"
+          with_march="armv8.1-a+lse" ;;
         0xaf | 0x0af)
           AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-          ax_cpu="thunderx2t99"
-          ax_arch="armv8.1-a+lse" ;;
+          with_mcpu="thunderx2t99"
+          with_march="armv8.1-a+lse" ;;
         esac
         ;;
       0x43) case $cpupart in
         0x516 | 0x0516)
           AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-          ax_cpu="thunderx2t99"
-          ax_arch="armv8.1-a+lse" ;;
+          with_mcpu="thunderx2t99"
+          with_march="armv8.1-a+lse" ;;
         0xaf | 0x0af)
           AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-          ax_cpu="thunderx2t99"
-          ax_arch="armv8.1-a+lse" ;;
+          with_mcpu="thunderx2t99"
+          with_march="armv8.1-a+lse" ;;
         0xa1 | 0x0a1)
           AC_DEFINE([HAVE_AARCH64_THUNDERX1], 1, [Cavium ThunderX1])
-          ax_cpu="thunderxt88" ;;
+          with_mcpu="thunderxt88" ;;
         esac
         ;;
       0x48) case $cpupart in
         0xd01 | 0x0d01)
           AC_DEFINE([HAVE_AARCH64_HI1620], 1, [Huawei Kunpeng 920])
-          ax_cpu="tsv110"
-          ax_arch="armv8.2-a" ;;
+          with_mcpu="tsv110"
+          with_march="armv8.2-a" ;;
         esac
         ;;
       *)
         ;;
     esac
-    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [test x$ax_cpu = xthunderx2t99])
-    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [test x$ax_cpu = xthunderxt88])
-    AM_CONDITIONAL([HAVE_AARCH64_HI1620], [test x$ax_cpu = xtsv110])
+    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [test x$with_mcpu = xthunderx2t99])
+    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [test x$with_mcpu = xthunderxt88])
+    AM_CONDITIONAL([HAVE_AARCH64_HI1620], [test x$with_mcpu = xtsv110])
 ])
 
 
@@ -364,23 +365,29 @@ AS_IF([test "x$with_avx" != xyes],
       ])
 
 
-DETECT_UARCH()
-
+# Only detect uarch if neither --with-mcpu nor --with-march is set
+AS_IF([test -z "$with_mcpu" -a -z "$with_march"], [
+    DETECT_UARCH()
+], [
+    # Always define these conditionals to avoid errors on non-ARM platforms
+    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [false])
+    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
+    AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
+])
 
 #
 # CPU tuning
 #
-AS_IF([test "x$ax_cpu" != "x"],
-      [COMPILER_CPU_OPTIMIZATION([mcpu], [CPU Model], [-mcpu=$ax_cpu],
+AS_IF([test "x$with_mcpu" != "x"],
+      [COMPILER_CPU_OPTIMIZATION([mcpu], [CPU Model], [-mcpu=$with_mcpu],
                                  [int main(int argc, char** argv) { return 0;}])
       ])
-
 
 #
 # Architecture tuning
 #
-AS_IF([test "x$ax_arch" != "x"],
-      [COMPILER_CPU_OPTIMIZATION([march], [architecture tuning], [-march=$ax_arch],
+AS_IF([test "x$with_march" != "x"],
+      [COMPILER_CPU_OPTIMIZATION([march], [architecture tuning], [-march=$with_march],
                                  [int main(int argc, char** argv) { return 0;}])
       ])
 
