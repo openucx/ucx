@@ -379,7 +379,7 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep)
         /* During discarding, UCT EP's pending queues 
          * are expected to be empty */
         ucp_worker_discard_uct_ep(
-                ucp_ep, ucp_ep_get_lane(ucp_ep, lane_idx),
+                ucp_ep, ucp_ep_get_lane_raw(ucp_ep, lane_idx),
                 ucp_ep_get_rsc_index(ucp_ep, lane_idx), UCT_FLUSH_FLAG_CANCEL,
                 (uct_pending_purge_callback_t)ucs_empty_function_do_assert_void,
                 NULL, (ucp_send_nbx_callback_t)ucs_empty_function, NULL);
@@ -405,6 +405,12 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
 
         rsc_idx = ucp_ep_get_rsc_index(ep, lane_idx);
         if (rsc_idx == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        if (worker->context->config.ext.on_demand_wireup &&
+            (lane_idx >= UCP_MAX_FAST_PATH_LANES) &&
+            !ucp_ep_is_lane_p2p(ep, lane_idx)) {
             continue;
         }
 
@@ -704,7 +710,9 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         goto out_free_addr;
     }
 
-    status = ucp_wireup_connect_local(ucp_ep, &addr, NULL);
+    status = ucp_wireup_connect_local(ucp_ep,
+                                      UCS_MASK(ucp_ep_num_lanes(ucp_ep)), &addr,
+                                      NULL, NULL);
     if (status != UCS_OK) {
         ucs_debug("ep %p: failed to connect lanes: %s", ucp_ep,
                   ucs_status_string(status));
@@ -1260,7 +1268,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         goto out_free_request;
     }
 
-    status = ucp_wireup_connect_local(ep, remote_addr, NULL);
+    status = ucp_wireup_connect_local(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
+                                      remote_addr, NULL, NULL);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to connect to remote address on "
                  "device %s, tl_bitmap " UCT_TL_BITMAP_FMT ", status %s",
@@ -1420,7 +1429,7 @@ ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
     uct_ep_h uct_ep;
     ucs_status_t status;
 
-    ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
+    ucs_assert(ucp_ep_get_lane_raw(ep, lane) == NULL);
 
     ucp_unpacked_address_for_each(ae, remote_address) {
         max_num_paths = ucs_max(max_num_paths, ae->dev_num_paths);
