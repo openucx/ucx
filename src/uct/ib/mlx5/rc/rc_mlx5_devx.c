@@ -221,7 +221,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 const uct_rc_iface_common_config_t *config,
                                 void *wq)
 {
-    ucs_status_t status  = UCS_ERR_NO_MEMORY;
+    ucs_status_t status = UCS_ERR_NO_MEMORY;
     int len, max, stride, log_num_of_strides, wq_type;
 
     stride = uct_ib_mlx5_srq_stride(iface->tm.mp.num_strides);
@@ -245,12 +245,13 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
 
     if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC) {
         wq_type = UCT_RC_MLX5_MP_ENABLED(iface) ?
-                  UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ :
-                  UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
+                          UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ :
+                          UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
+    } else if (UCT_RC_MLX5_MP_ENABLED(iface) ||
+               uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
+        wq_type = UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ;
     } else {
-        wq_type = UCT_RC_MLX5_MP_ENABLED(iface) ?
-                  UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ :
-                  UCT_IB_MLX5_SRQ_TOPO_LIST;
+        wq_type = UCT_IB_MLX5_SRQ_TOPO_LIST;
     }
 
     UCT_IB_MLX5DV_SET  (wq, wq, wq_type,       wq_type);
@@ -260,6 +261,9 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET  (wq, wq, dbr_umem_id,   iface->rx.srq.devx.dbrec->mem_id);
     UCT_IB_MLX5DV_SET64(wq, wq, dbr_addr,      iface->rx.srq.devx.dbrec->offset);
     UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem.mem->umem_id);
+    UCT_IB_MLX5DV_SET  (wq, wq, enh_strwq_profile_id, 0);
+
+    iface->msg_based.num_strides = 1;
 
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* Normalize to device's interface values (range of (-6) - 7) */
@@ -270,12 +274,42 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                           log_num_of_strides & 0xF);
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
                           (ucs_ilog2(iface->super.super.config.seg_size) - 6));
+    } else if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
+        ucs_assertv_always(iface->super.super.config.stride_size <=
+                                   iface->super.super.config.seg_size,
+                           "stride_size=%d, seg_size=%d",
+                           iface->super.super.config.stride_size,
+                           iface->super.super.config.seg_size);
+        ucs_assertv_always((iface->super.super.config.stride_size > 0) &&
+                                   (iface->super.super.config.stride_size %
+                                    UCS_SYS_CACHE_LINE_SIZE) == 0,
+                           "stride_size=%d, cache_line_size=%d",
+                           iface->super.super.config.stride_size,
+                           UCS_SYS_CACHE_LINE_SIZE);
+        ucs_assertv_always((md->msg_based_srq.min_stride_size <=
+                            iface->super.super.config.stride_size) &&
+                                   (iface->super.super.config.stride_size <=
+                                    md->msg_based_srq.max_stride_size),
+                           "stride size %d is out of range [%d, %d]",
+                           iface->super.super.config.stride_size,
+                           md->msg_based_srq.min_stride_size,
+                           md->msg_based_srq.max_stride_size);
+
+        iface->msg_based.num_strides = (iface->super.super.config.seg_size /
+                                        iface->super.super.config.stride_size);
+        log_num_of_strides = ucs_ilog2(iface->msg_based.num_strides) - 9;
+        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,
+                          log_num_of_strides & 0xF);
+        UCT_IB_MLX5DV_SET(wq, wq, two_byte_shift_en, 0);
+        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
+                          ucs_ilog2(iface->super.super.config.stride_size) - 6);
     }
 
     iface->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     uct_ib_mlx5_srq_buff_init(&iface->rx.srq, 0, max - 1,
                               iface->super.super.config.seg_size,
-                              iface->tm.mp.num_strides);
+                              iface->tm.mp.num_strides,
+                              uct_rc_mlx5_num_strides(iface));
     iface->super.rx.srq.quota = max - 1;
 
     return UCS_OK;
