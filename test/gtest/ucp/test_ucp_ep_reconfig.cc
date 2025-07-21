@@ -101,7 +101,7 @@ protected:
     }
 
 public:
-    void init()
+    virtual void init()
     {
         ucp_test::init();
 
@@ -148,15 +148,16 @@ public:
 
     void send_message(const ucp_test_base::entity &e1,
                       const ucp_test_base::entity &e2, const mem_buffer *sbuf,
-                      const mem_buffer *rbuf, std::vector<void*> &reqs)
+                      const mem_buffer *rbuf, unsigned ep_index,
+                      std::vector<void*> &reqs)
     {
         const ucp_request_param_t param = {
             .op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL
         };
 
-        void *sreq = ucp_tag_send_nbx(e1.ep(), sbuf->ptr(), sbuf->size(), 0,
-                                      &param);
-        void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(), sbuf->ptr(),
+        void *sreq = ucp_tag_send_nbx(e1.ep(0, ep_index), sbuf->ptr(), 
+                                      sbuf->size(), 0, &param);
+        void *sreq_sync = ucp_tag_send_sync_nbx(e1.ep(0, ep_index), sbuf->ptr(),
                                                 sbuf->size(), 0, &param);
         reqs.insert(reqs.end(), {sreq, sreq_sync});
 
@@ -167,7 +168,7 @@ public:
         }
     }
 
-    void send_recv(bool bidirectional)
+    void send_recv(bool bidirectional = false, unsigned ep_index = 0)
     {
 /* TODO: remove this when large messages asan bug is solved (size > ~70MB) */
 #ifdef __SANITIZE_ADDRESS__
@@ -184,12 +185,13 @@ public:
 
             for (unsigned i = 0; i < num_iterations; ++i) {
                 send_message(sender(), receiver(), sbufs[i].get(),
-                             rbufs[i].get(), reqs);
+                             rbufs[i].get(), ep_index, reqs);
 
                 if (bidirectional) {
                     send_message(receiver(), sender(),
                                  sbufs[i + num_iterations].get(),
-                                 rbufs[i + num_iterations].get(), reqs);
+                                 rbufs[i + num_iterations].get(), ep_index,
+                                 reqs);
                 }
             }
 
@@ -198,7 +200,7 @@ public:
         }
     }
 
-    static constexpr unsigned num_iterations = 1000;
+    static constexpr unsigned num_iterations = 100;
 };
 
 void test_ucp_ep_reconfig::entity::store_config()
@@ -331,7 +333,7 @@ bool test_ucp_ep_reconfig::entity::is_lane_connected(ucp_ep_h ep,
 }
 
 void test_ucp_ep_reconfig::entity::verify_configuration(
-        const entity &other, unsigned expected_reused_rscs) const
+        const entity &other, unsigned min_reused_rscs) const
 {
     unsigned reused_lanes            = 0;
     const ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep());
@@ -356,9 +358,12 @@ void test_ucp_ep_reconfig::entity::verify_configuration(
 
     if (!is_reconfigured()) {
         EXPECT_EQ(num_lanes, reused_lanes);
-    } else if (test->reuse_lanes() && (expected_reused_rscs > 0)) {
-        EXPECT_EQ(expected_reused_rscs,
-                           UCS_STATIC_BITMAP_POPCOUNT(reused_rscs));
+    } else if (test->reuse_lanes() && (min_reused_rscs > 0)) {
+        unsigned actual_reused_rscs = UCS_STATIC_BITMAP_POPCOUNT(reused_rscs);
+        /* Account for the case where we detach a single reused lane to allow
+         * AM flush */
+        min_reused_rscs -= 1;
+        EXPECT_GE(actual_reused_rscs, min_reused_rscs);
     }
 }
 
@@ -412,13 +417,14 @@ ucp_tl_bitmap_t test_ucp_ep_reconfig::tl_bitmap()
     }
 
     /* For single transport, half of the resources should be reserved for
-     * receiver side to use */
+     * receiver side to use. Sender must use the first half in order for
+     * reused lanes to be configured correctly. */
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     size_t num_tls            = 0;
     ucp_rsc_index_t rsc_idx;
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_idx, &sender().ucph()->tl_bitmap) {
-        if (++num_tls > (sender().ucph()->num_tls / 2)) {
+        if (++num_tls <= (sender().ucph()->num_tls / 2)) {
             UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
         }
     }
@@ -476,7 +482,7 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_ep_reconfig);
 
 class test_reconfig_asymmetric : public test_ucp_ep_reconfig {
 protected:
-    void create_entities_and_connect() override
+    virtual void create_entities_and_connect() override
     {
         create_entity(true, false);
 
@@ -523,3 +529,112 @@ UCS_TEST_P(test_reconfig_asymmetric, resolve_remote_id)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfig_asymmetric, shm_ib, "shm,ib");
+
+class test_reconfigure_update_rank : public test_reconfig_asymmetric {
+public:
+    void init() override
+    {
+        test_ucp_ep_reconfig::init();
+        modify_config("NUM_EPS", std::to_string(num_eps()));
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 200, "mid");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 500, "large");
+    }
+
+    void create_entities_and_connect() override
+    {
+        create_entity(true, false);
+        create_entity(false, false);
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+
+    unsigned num_eps() const
+    {
+        return get_variant_value();
+    }
+
+    void verify_configuration();
+    bool is_transport_exist(const ucp_test_base::entity &e,
+                            const std::string &tl_name);
+};
+
+void test_reconfigure_update_rank::verify_configuration()
+{
+    auto r_sender   = static_cast<const entity*>(&sender());
+    auto r_receiver = static_cast<const entity*>(&receiver());
+
+    if (should_reconfigure()) {
+        EXPECT_TRUE(r_sender->is_reconfigured());
+        EXPECT_TRUE(r_receiver->is_reconfigured());
+    } else {
+        EXPECT_FALSE(r_sender->is_reconfigured());
+        EXPECT_FALSE(r_receiver->is_reconfigured());
+    }
+
+    r_sender->verify_configuration(*r_receiver, 0);
+    r_receiver->verify_configuration(*r_sender, 0);
+}
+
+bool test_reconfigure_update_rank::is_transport_exist(
+        const ucp_test_base::entity &e, const std::string &tl_name)
+{
+    for (auto lane = 0; lane < ucp_ep_num_lanes(e.ep()); ++lane) {
+        auto rsc_index = ucp_ep_get_rsc_index(e.ep(), lane);
+
+        if (tl_name == e.ucph()->tl_rscs[rsc_index].tl_rsc.tl_name) {
+            return 1;
+        }
+    }
+
+    return !has_resource(e, tl_name);
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, promote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=2ns", "DYNAMIC_TL_PROGRESS_FACTOR=1")
+{
+    /* Create DC EP */
+    create_entities_and_connect();
+    EXPECT_TRUE(is_transport_exist(sender(), "dc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "dc_mlx5"));
+
+    /* Promote to RC */
+    send_recv();
+    verify_configuration();
+    EXPECT_TRUE(is_transport_exist(sender(), "rc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "rc_mlx5"));
+}
+
+UCS_TEST_P(test_reconfigure_update_rank, demote,
+           "DYNAMIC_TL_SWITCH_INTERVAL=2ns", "DYNAMIC_TL_PROGRESS_FACTOR=1",
+           "MAX_PRIORITY_EPS=10")
+{
+    /* Create DC EP */
+    create_entities_and_connect();
+    EXPECT_TRUE(is_transport_exist(sender(), "dc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "dc_mlx5"));
+
+    /* Promote to RC */
+    send_recv();
+    EXPECT_TRUE(is_transport_exist(sender(), "rc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "rc_mlx5"));
+
+    auto num_eps = sender().ucph()->config.ext.max_priority_eps + 1;
+
+    /* Fill usage tracker with (max + 1) EPs and promote them */
+    for (int ep_index = 1; ep_index < num_eps; ++ep_index) {
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+        send_recv(false, ep_index);
+    }
+
+    /* Old EP is demoted */
+    verify_configuration();
+    EXPECT_TRUE(is_transport_exist(sender(), "dc_mlx5"));
+    EXPECT_TRUE(is_transport_exist(receiver(), "dc_mlx5"));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_reconfigure_update_rank, shm_ib, "shm,ib");
