@@ -69,10 +69,8 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
     uint8_t proto_flags;
 
-    ack_params = ucp_proto_common_init_params(init_params);
-    if (worker->context->config.ext.rndv_errh_ppln_enable) {
-        ack_params.flags |= UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING;
-    }
+    ack_params        = ucp_proto_common_init_params(init_params);
+    ack_params.flags |= UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
@@ -293,6 +291,7 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         freq->send.rndv.remote_address = req->send.rndv.remote_address +
                                          req->send.state.dt_iter.offset;
         freq->send.rndv.rkey           = req->send.rndv.rkey;
+        freq->flags                   |= UCP_REQUEST_FLAG_RNDV_RKEY_VALID;
         freq->send.rndv.offset         = req->send.rndv.offset +
                                          req->send.state.dt_iter.offset;
 
@@ -350,7 +349,7 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
         [UCP_PROTO_RNDV_PPLN_STAGE_SEND] = ucp_proto_rndv_ppln_progress,
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_send_ppln_atp_progress,
     },
-    .abort    = ucp_proto_rndv_stub_abort,
+    .abort    = ucp_proto_rndv_common_abort,
     .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
@@ -403,6 +402,6 @@ ucp_proto_t ucp_rndv_recv_ppln_proto = {
         [UCP_PROTO_RNDV_PPLN_STAGE_SEND] = ucp_proto_rndv_ppln_progress,
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_recv_ppln_ats_progress,
     },
-    .abort    = ucp_proto_rndv_stub_abort,
+    .abort    = ucp_proto_rndv_common_abort,
     .reset    = ucp_proto_rndv_ppln_reset
 };

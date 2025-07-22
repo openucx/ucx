@@ -43,7 +43,17 @@ enum {
     /**
      * Avoid using registration cache for the particular memory region.
      */
-    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3)
+    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3),
+
+    /**
+     * TODO
+     */
+    UCP_MEMH_FLAG_DERIVED      = UCS_BIT(4),
+
+    /**
+     * TODO
+     */
+    UCP_MEMH_FLAG_INVALIDATED  = UCS_BIT(5),
 };
 
 
@@ -72,12 +82,12 @@ typedef struct ucp_mem {
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
-    ucp_md_map_t        inv_md_map;     /* Which memory handles should be invalidated
-                                           when this handle is released */
     ucp_mem_h           parent;         /* - NULL if entry was obtained via ucp_memh_get()
                                            - pointer to rcache memh if entry is a user memh
                                            - pointer to self if entry is a user memh
                                              and rcache is disabled */
+    ucp_mem_h           derived;        /* TODO */
+    ucs_list_link_t     comp_list;      /* TODO */
     uint64_t            reg_id;         /* Registration ID */
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
@@ -127,6 +137,16 @@ typedef struct {
     uct_mem_h         uct_memh; /* memh for specific MD */
     uct_rkey_bundle_t rkey_bundle; /* rkey bundle from memh */
 } ucp_mtype_pack_context_t;
+
+
+/**
+ * TODO
+ */
+typedef struct {
+    ucs_list_link_t        list;
+    ucp_request_callback_t func;
+    void                   *arg;
+} ucp_memh_invalidate_comp_t;
 
 
 extern ucp_mem_dummy_handle_t ucp_mem_dummy_handle;
@@ -194,10 +214,6 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                ucp_md_map_t md_map, unsigned uct_flags,
                                const char *alloc_name);
 
-void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                         ucs_rcache_invalidate_comp_func_t cb, void *arg,
-                         ucp_md_map_t inv_md_map);
-
 void ucp_memh_put_slow(ucp_context_h context, ucp_mem_h memh);
 
 ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
@@ -206,6 +222,44 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
 void ucp_mem_rcache_cleanup(ucp_context_h context);
 
 void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
+
+/**
+ * Return existing derived memh from the direct memh, with incremented reference
+ * count. If no valid derived memh exists, create a new one with reference count
+ * set to 1.
+ * @param [in] memh Direct memory handle to get derived from.
+ * @return Derived memory handle.
+ */
+ucp_mem_h ucp_memh_derived_get(ucp_mem_h memh);
+
+/**
+ * Put derived memh, decrementing its reference count. If the reference count
+ * reaches 0 and derived memh is marked as invalid, then derived memh is
+ * destroyed and detached from the parent.
+ * @param [in] derived Derived memory handle to put.
+ * @return Parent memory handle.
+ */
+ucp_mem_h ucp_memh_derived_put(ucp_mem_h derived);
+
+/**
+ * Invalidate derived memory handle, marking it as invalid and decrementing its
+ * reference count. If the reference count reaches 0, then derived memh is
+ * destroyed and detached from the parent.
+ * @param [in] derived Derived memory handle to invalidate.
+ * @param [in] comp    Completion to add to the list of completions to be called
+ *                     when derived memh is destroyed.
+ * @return Parent memory handle, or NULL if parent is from rcache.
+ */
+ucp_mem_h ucp_memh_derived_invalidate(ucp_mem_h derived,
+                                      ucp_memh_invalidate_comp_t *comp);
+
+/**
+ * Reset potentially existing derived memory handle of some direct original memh
+ * by marking it as invalid to prevent future usage. It does not decrement the
+ * reference count of the derived memh.
+ * @param [in] memh Direct memory handle to reset derived from.
+ */
+void ucp_memh_derived_reset(ucp_mem_h memh);
 
 /**
  * Get memory domain index that is used to allocate certain memory type.
