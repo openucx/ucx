@@ -237,7 +237,7 @@ ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
         // Different MD map means different config index on proto v2
         ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(
                         ep, rkey_buffer, rkey_size, md_map, 0,
-                        UCS_SYS_DEVICE_ID_UNKNOWN, &rkey));
+                        UCS_SYS_DEVICE_ID_UNKNOWN, &rkey, 1));
     }
 
     ucp_rkey_buffer_release(rkey_buffer);
@@ -334,7 +334,7 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(ucp_rkey_packed_size(sender().ucph(), memh->md_map,
-                                   UCS_SYS_DEVICE_ID_UNKNOWN, 0),
+                                   UCS_SYS_DEVICE_ID_UNKNOWN, 0, 1),
               rkey_size);
 
     /* Unpack remote key buffer */
@@ -459,7 +459,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
 
     /* Allocate buffer for packed rkey */
     size_t rkey_size = ucp_rkey_packed_size(sender().ucph(), memh->md_map,
-                                            mem_info.sys_dev, sys_dev_map);
+                                            mem_info.sys_dev, sys_dev_map, 1);
     std::string rkey_buffer(rkey_size, '0');
 
     /* Pack the rkey and validate packed size */
@@ -467,7 +467,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
                                              memh, ucp_memh_address(memh),
                                              ucp_memh_length(memh), &mem_info,
                                              sys_dev_map, &sys_distance[0], 0,
-                                             &rkey_buffer[0]);
+                                             &rkey_buffer[0], 1);
     ASSERT_EQ((ssize_t)rkey_size, packed_size);
 
     /* Unpack remote key buffer */

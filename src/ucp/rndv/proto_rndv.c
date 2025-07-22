@@ -308,7 +308,7 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
     rpriv->lane             = lane;
     rpriv->packed_rkey_size = ucp_rkey_packed_size(
             init_params->worker->context, rpriv->md_map,
-            params->super.reg_mem_info.sys_dev, rpriv->sys_dev_map);
+            params->super.reg_mem_info.sys_dev, rpriv->sys_dev_map, 1);
 }
 
 void ucp_proto_rndv_set_variant_config(
@@ -739,7 +739,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
          */
         status = ucp_ep_rkey_unpack_internal(
                   ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
-                  ep_config->rndv.proto_rndv_rkey_skip_mds, sys_dev, &rkey);
+                  ep_config->rndv.proto_rndv_rkey_skip_mds, sys_dev, &rkey, 1);
         if (status != UCS_OK) {
             goto err;
         }
