@@ -197,6 +197,25 @@ typedef struct {
 
 
 /**
+ * Protocol selection variants macro, used to iterate over all variants.
+ * The second argument is the message size for the variant, which is used to
+ * calculate the score for the variant. The third argument is the name of the
+ * variant, which is used to print the variant name.
+ */
+#define UCP_FOREACH_PROTO_VARIANT(_macro) \
+    _macro(UCP_PROTO_VARIANT_LAT, UCS_KBYTE, "lat") \
+    _macro(UCP_PROTO_VARIANT_BW,  UCS_GBYTE, "bw")
+
+/**
+ * Protocol selection variant enum
+ */
+#define UCP_PROTO_VARIANT_ENUMIFY(ID, MSG_SIZE, NAME) ID,
+typedef enum {
+    UCP_FOREACH_PROTO_VARIANT(UCP_PROTO_VARIANT_ENUMIFY)
+} ucp_proto_variant_t;
+
+
+/**
  * Called the first time the protocol starts sending a request, and only once
  * per request.
  *
