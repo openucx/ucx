@@ -63,3 +63,15 @@ Description: Unified Communication X - gdrcopy support
  .
  This package provides UCX support for using gdrcopy - A low-latency GPU
  memory copy library based on NVIDIA GPUDirect RDMA technology.
+
+Package: ucx-mlx5-gdaki
+Section: libs
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Architecture: any
+Build-Profiles: <gdaki>
+Description: Unified Communication X - GDAKI support
+ UCX is a communication library implementing high-performance messaging.
+ .
+ Provide GDAKI (GPU Direct Asynchronous Kernel Initiated) support for UCX.
+ GDAKI enables high-performance GPU-to-network communication using DOCA GPUNetIO
+ technology for direct data transfer between GPU memory and network devices.

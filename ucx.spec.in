@@ -2,6 +2,7 @@
 %bcond_without cma
 %bcond_with    cuda
 %bcond_with    gdrcopy
+%bcond_with    gdaki
 %bcond_without ib
 %bcond_with    knem
 %bcond_without rdmacm
@@ -74,6 +75,9 @@ BuildRequires: valgrind-devel
 %if %{with mad}
 BuildRequires: libibmad-devel libibumad-devel
 %endif
+%if %{with gdaki}
+BuildRequires: doca-sdk-gpunetio-devel
+%endif
 
 %description
 UCX is an optimized communication framework for high-performance distributed
@@ -132,6 +136,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg ugni ugni \
            %_with_arg mad mad \
            %_with_arg ze ze \
+           %_with_arg gdaki gdaki \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -207,6 +212,9 @@ Provides static libraries required for developing with UCX.
 %endif
 %if %{with vfs}
 %{_libdir}/pkgconfig/ucx-fuse.pc
+%endif
+%if %{with gdaki}
+%{_libdir}/pkgconfig/ucx-mlx5-gdaki.pc
 %endif
 
 %if %{with cma}
@@ -423,6 +431,23 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %files ze
 %{_libdir}/ucx/libuct_ze.so.*
 %{_libdir}/ucx/libucm_ze.so.*
+%endif
+
+%if %{with gdaki}
+%package mlx5-gdaki
+Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
+Requires: %{name}-ib%{?_isa} = %{version}-%{release}
+Requires: doca-sdk-gpunetio-devel
+Summary: UCX GDAKI support
+Group: System Environment/Libraries
+
+%description mlx5-gdaki
+Provide GDAKI (GPU Direct Asynchronous Kernel Initiated) support for UCX.
+GDAKI enables high-performance GPU-to-network communication using DOCA GPUNetIO
+technology for direct data transfer between GPU memory and network devices.
+
+%files mlx5-gdaki
+%{_libdir}/ucx/libuct_ib_mlx5_gdaki.so.*
 %endif
 
 %changelog
