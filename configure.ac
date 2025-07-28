@@ -199,6 +199,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_CUDA_STATIC], [false])
      AM_CONDITIONAL([HAVE_NVCC], [false])
      AM_CONDITIONAL([HAVE_GDR_COPY], [false])
+     AM_CONDITIONAL([HAVE_GPUNETIO], [false])
      AM_CONDITIONAL([HAVE_ROCM], [false])
      AM_CONDITIONAL([HAVE_HIP], [false])
      AM_CONDITIONAL([HAVE_XPMEM], [false])
@@ -342,6 +343,7 @@ AS_IF([test "x$with_docs_only" = xyes],
 build_modules="${uct_modules}"
 build_modules="${build_modules}${ucs_modules}"
 build_modules="${build_modules}${uct_ib_modules}"
+build_modules="${build_modules}${uct_ib_mlx5_modules}"
 build_modules="${build_modules}${uct_cuda_modules}"
 build_modules="${build_modules}${ucm_modules}"
 build_modules="${build_modules}${ucx_perftest_modules}"
@@ -424,6 +426,7 @@ AC_MSG_NOTICE([         UCT modules:   <$(echo ${uct_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        CUDA modules:   <$(echo ${uct_cuda_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        ROCM modules:   <$(echo ${uct_rocm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([          IB modules:   <$(echo ${uct_ib_modules}|tr ':' ' ') >])
+AC_MSG_NOTICE([        MLX5 modules:   <$(echo ${uct_ib_mlx5_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCM modules:   <$(echo ${ucm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        Perf modules:   <$(echo ${ucx_perftest_modules}|tr ':' ' ') >])
 AS_IF([test "x$enable_ucg" != "xno"], [
