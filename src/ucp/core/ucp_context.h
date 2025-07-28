@@ -184,6 +184,8 @@ typedef struct ucp_context_config {
     char                                   *select_distance_md;
     /** Directory to write protocol selection information */
     char                                   *proto_info_dir;
+    /** Enable multiple variants of UCP protocols */
+    int                                    proto_variants_enable;
     /** Memory types that perform non-blocking registration by default */
     uint64_t                               reg_nb_mem_types;
     /** Prefer native RMA transports for RMA/AMO protocols */
