@@ -183,10 +183,11 @@ typedef struct {
 
 
 typedef struct {
-    ucp_lane_map_t   lane_map;
-    ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
-    ucp_lane_index_t num_lanes;
-    uint8_t          dev_count[UCP_MAX_RESOURCES];
+    ucp_lane_map_t             lane_map;
+    ucp_lane_index_t           lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t           num_lanes;
+    uint8_t                    dev_count[UCP_MAX_RESOURCES];
+    ucp_proto_common_tl_perf_t perf;
 } ucp_proto_lane_selection_t;
 
 

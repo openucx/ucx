@@ -111,6 +111,84 @@ ucp_proto_select_add_lane(ucp_proto_lane_selection_t *selection,
 }
 
 static void
+ucp_proto_select_aggregate_perf(ucp_proto_lane_selection_t *selection,
+                                const ucp_proto_common_tl_perf_t *lanes_perf)
+{
+    ucp_proto_common_tl_perf_t *perf = &selection->perf;
+    const ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_lane_index_t lane;
+
+    /* TODO: Adjust performance estimation based on the actual resource usage,
+     * i.e. split the overall iface BW between all selected paths. */
+
+    ucs_for_each_bit(lane, selection->lane_map) {
+        lane_perf = &lanes_perf[lane];
+
+        /* Update aggregated performance metric */
+        perf->bandwidth          += lane_perf->bandwidth;
+        perf->send_pre_overhead  += lane_perf->send_pre_overhead;
+        perf->send_post_overhead += lane_perf->send_post_overhead;
+        perf->recv_overhead      += lane_perf->recv_overhead;
+        perf->latency             = ucs_max(perf->latency, lane_perf->latency);
+        perf->sys_latency         = ucs_max(perf->sys_latency,
+                                            lane_perf->sys_latency);
+    }
+
+    if (selection->num_lanes == 1) {
+        lane_perf = &lanes_perf[selection->lanes[0]];
+        ucp_proto_perf_node_ref(lane_perf->node);
+        selection->perf.node = lane_perf->node;
+    } else {
+        selection->perf.node = ucp_proto_perf_node_new_data("multi", "%u lanes",
+                                                            selection->num_lanes);
+        ucs_for_each_bit(lane, selection->lane_map) {
+            lane_perf = &lanes_perf[lane];
+            ucp_proto_perf_node_add_child(selection->perf.node, lane_perf->node);
+        }
+    }
+}
+
+static void
+ucp_proto_select_trace_lanes(const ucp_proto_init_params_t *params,
+                             const ucp_proto_lane_selection_t *selection,
+                             const ucp_proto_common_tl_perf_t *lanes_perf,
+                             const char *desc)
+{
+    ucp_context_h UCS_V_UNUSED context = params->worker->context;
+    const ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_lane_index_t i, lane;
+    ucp_rsc_index_t rsc_index;
+
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+        return;
+    }
+
+    ucs_debug("%s=%u, protocol=%s", desc, selection->num_lanes,
+              ucp_proto_id_field(params->proto_id, name));
+    ucs_log_indent(1);
+
+    for (i = 0; i < selection->num_lanes; ++i) {
+        lane      = selection->lanes[i];
+        lane_perf = &lanes_perf[lane];
+        rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+
+        ucs_debug("lane[%d] " UCT_TL_RESOURCE_DESC_FMT " bw "
+                  UCP_PROTO_PERF_FUNC_BW_FMT UCP_PROTO_TIME_FMT(latency)
+                  UCP_PROTO_TIME_FMT(send_pre_overhead)
+                  UCP_PROTO_TIME_FMT(send_post_overhead)
+                  UCP_PROTO_TIME_FMT(recv_overhead), lane,
+                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
+                  (lane_perf->bandwidth / UCS_MBYTE),
+                  UCP_PROTO_TIME_ARG(lane_perf->latency),
+                  UCP_PROTO_TIME_ARG(lane_perf->send_pre_overhead),
+                  UCP_PROTO_TIME_ARG(lane_perf->send_post_overhead),
+                  UCP_PROTO_TIME_ARG(lane_perf->recv_overhead));
+    }
+
+    ucs_log_indent(-1);
+}
+
+static void
 ucp_proto_multi_select_lanes(const ucp_proto_init_params_t *params,
                              const ucp_lane_index_t *lanes,
                              ucp_lane_index_t num_lanes,
@@ -145,10 +223,6 @@ ucp_proto_multi_select_lanes(const ucp_proto_init_params_t *params,
         ucp_proto_select_add_lane(selection, params, lanes[lane_index]);
         index_map &= ~UCS_BIT(lane_index);
     }
-
-    /* TODO: Aggregate performance:
-     * Split full iface bandwidth between selected paths, according to the total
-     * path ratio */
 }
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
@@ -159,7 +233,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_context_h context         = params->super.super.worker->context;
     const double max_bw_ratio     = context->config.ext.multi_lane_max_ratio;
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
-    ucp_proto_common_tl_perf_t *lane_perf, perf;
+    ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     double max_bandwidth, max_frag_ratio, min_bandwidth;
     ucp_lane_index_t i, lane, num_lanes, num_fast_lanes;
@@ -221,12 +295,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     /* Select the lanes to use, and calculate their aggregate performance */
-    perf.bandwidth          = 0;
-    perf.send_pre_overhead  = 0;
-    perf.send_post_overhead = 0;
-    perf.recv_overhead      = 0;
-    perf.latency            = 0;
-    perf.sys_latency        = 0;
     max_frag_ratio          = 0;
     min_bandwidth           = DBL_MAX;
 
@@ -253,20 +321,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                  params->max_lanes, lanes_perf,
                                  fixed_first_lane, UCP_PROTO_VARIANT_BW, &selection);
 
-    ucs_trace("selected %u lanes for %s", selection.num_lanes,
-              ucp_proto_id_field(params->super.super.proto_id, name));
-    ucs_log_indent(1);
+    ucp_proto_select_aggregate_perf(&selection, lanes_perf);
+    ucp_proto_select_trace_lanes(&params->super.super, &selection, lanes_perf,
+                                 ucp_proto_common_get_variant_name(UCP_PROTO_VARIANT_BW));
 
     for (i = 0; i < selection.num_lanes; ++i) {
         lane      = selection.lanes[i];
         lane_perf = &lanes_perf[lane];
-        ucs_trace(UCP_PROTO_LANE_FMT UCP_PROTO_TIME_FMT(send_pre_overhead)
-                  UCP_PROTO_TIME_FMT(send_post_overhead)
-                  UCP_PROTO_TIME_FMT(recv_overhead),
-                  UCP_PROTO_LANE_ARG(&params->super.super, lane, lane_perf),
-                  UCP_PROTO_TIME_ARG(lane_perf->send_pre_overhead),
-                  UCP_PROTO_TIME_ARG(lane_perf->send_post_overhead),
-                  UCP_PROTO_TIME_ARG(lane_perf->recv_overhead));
 
         /* Calculate maximal bandwidth-to-fragment-size ratio, which is used to
            adjust fragment sizes so they are proportional to bandwidth ratio and
@@ -275,18 +336,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                  lane_perf->bandwidth / lane_perf->max_frag);
 
         min_bandwidth = ucs_min(min_bandwidth, lane_perf->bandwidth);
-
-        /* Update aggregated performance metric */
-        perf.bandwidth          += lane_perf->bandwidth;
-        perf.send_pre_overhead  += lane_perf->send_pre_overhead;
-        perf.send_post_overhead += lane_perf->send_post_overhead;
-        perf.recv_overhead      += lane_perf->recv_overhead;
-        perf.latency             = ucs_max(perf.latency, lane_perf->latency);
-        perf.sys_latency         = ucs_max(perf.sys_latency,
-                                           lane_perf->sys_latency);
     }
-
-    ucs_log_indent(-1);
 
     /* Initialize multi-lane private data and relative weights */
     reg_md_map          = ucp_proto_common_reg_md_map(&params->super,
@@ -297,8 +347,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     mpriv->min_frag     = 0;
     mpriv->max_frag_sum = 0;
     mpriv->align_thresh = 1;
-    perf.max_frag       = 0;
-    perf.min_length     = 0;
     weight_sum          = 0;
     min_end_offset      = 0;
 
@@ -328,11 +376,11 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                           params->min_chunk / min_bandwidth));
         max_frag        = ucs_max(max_frag, min_chunk);
         lpriv->max_frag = max_frag;
-        perf.max_frag  += max_frag;
+        selection.perf.max_frag += max_frag;
 
         /* Calculate lane weight as a fixed-point fraction */
         lpriv->weight = ucs_proto_multi_calc_weight(lane_perf->bandwidth,
-                                                    perf.bandwidth);
+                                                    selection.perf.bandwidth);
         ucs_assert(lpriv->weight > 0);
         ucs_assert(lpriv->weight <= UCP_PROTO_MULTI_WEIGHT_MAX);
 
@@ -372,7 +420,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                      lpriv->weight;
         ucs_assert(ucp_proto_multi_scaled_length(lpriv->weight, min_length) >=
                    lane_perf->min_length);
-        perf.min_length = ucs_max(perf.min_length, min_length);
+        selection.perf.min_length = ucs_max(selection.perf.min_length, min_length);
 
         weight_sum           += lpriv->weight;
         min_end_offset       += min_chunk;
@@ -386,26 +434,15 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
 
-    if (mpriv->num_lanes == 1) {
-        perf.node = lanes_perf[ucs_ffs64(selection.lane_map)].node;
-        ucp_proto_perf_node_ref(perf.node);
-    } else {
-        perf.node = ucp_proto_perf_node_new_data("multi", "%u lanes",
-                                                 mpriv->num_lanes);
-        ucs_for_each_bit(lane, selection.lane_map) {
-            ucs_assert(lane < UCP_MAX_LANES);
-            ucp_proto_perf_node_add_child(perf.node, lanes_perf[lane].node);
-        }
-    }
+    status = ucp_proto_init_perf(&params->super, &selection.perf, reg_md_map,
+                                 perf_name, perf_p);
 
-    status = ucp_proto_init_perf(&params->super, &perf, reg_md_map, perf_name,
-                                 perf_p);
+    ucp_proto_perf_node_deref(&selection.perf.node);
 
     /* Deref unused nodes */
     for (i = 0; i < num_lanes; ++i) {
         ucp_proto_perf_node_deref(&lanes_perf[lanes[i]].node);
     }
-    ucp_proto_perf_node_deref(&perf.node);
 
     return status;
 }
