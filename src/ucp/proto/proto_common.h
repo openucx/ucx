@@ -182,24 +182,6 @@ typedef struct {
 } ucp_proto_common_tl_perf_t;
 
 
-typedef struct {
-    ucp_lane_map_t             lane_map;
-    ucp_lane_index_t           lanes[UCP_PROTO_MAX_LANES];
-    ucp_lane_index_t           num_lanes;
-    uint8_t                    dev_count[UCP_MAX_RESOURCES];
-    ucp_proto_common_tl_perf_t perf;
-} ucp_proto_lane_selection_t;
-
-
-/* Private data per lane */
-typedef struct {
-    ucp_lane_index_t        lane;       /* Lane index in the endpoint */
-    ucp_rsc_index_t         md_index;   /* Index of UCT memory handle (for zero copy) */
-    ucp_md_index_t          rkey_index; /* Remote key index (for remote access) */
-    uint8_t                 max_iov;    /* Maximal number of IOVs on this lane */
-} ucp_proto_common_lane_priv_t;
-
-
 /**
  * Protocol selection variants macro, used to iterate over all variants.
  * The second argument is the message size for the variant, which is used to
@@ -216,7 +198,27 @@ typedef struct {
 #define UCP_PROTO_VARIANT_ENUMIFY(ID, MSG_SIZE, NAME) ID,
 typedef enum {
     UCP_FOREACH_PROTO_VARIANT(UCP_PROTO_VARIANT_ENUMIFY)
+    UCP_PROTO_VARIANT_LAST
 } ucp_proto_variant_t;
+
+
+typedef struct {
+    ucp_lane_map_t             lane_map;
+    ucp_lane_index_t           lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t           num_lanes;
+    uint8_t                    dev_count[UCP_MAX_RESOURCES];
+    ucp_proto_common_tl_perf_t perf;
+    ucp_proto_variant_t        variant;
+} ucp_proto_lane_selection_t;
+
+
+/* Private data per lane */
+typedef struct {
+    ucp_lane_index_t        lane;       /* Lane index in the endpoint */
+    ucp_rsc_index_t         md_index;   /* Index of UCT memory handle (for zero copy) */
+    ucp_md_index_t          rkey_index; /* Remote key index (for remote access) */
+    uint8_t                 max_iov;    /* Maximal number of IOVs on this lane */
+} ucp_proto_common_lane_priv_t;
 
 
 /**
@@ -382,5 +384,22 @@ void ucp_proto_abort_fatal_not_implemented(ucp_request_t *req,
 void ucp_proto_reset_fatal_not_implemented(ucp_request_t *req);
 
 void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name);
+
+void
+ucp_proto_select_lanes(const ucp_proto_init_params_t *params,
+                       const ucp_lane_index_t *lanes, ucp_lane_index_t num_lanes,
+                       ucp_lane_index_t max_lanes,
+                       const ucp_proto_common_tl_perf_t *lanes_perf,
+                       int fixed_first_lane, ucp_proto_variant_t variant,
+                       ucp_proto_lane_selection_t *selection);
+
+void
+ucp_proto_select_trace(const ucp_proto_init_params_t *params,
+                       const ucp_proto_lane_selection_t *selection,
+                       const ucp_proto_common_tl_perf_t *lanes_perf,
+                       const char *desc, ucs_log_level_t level);
+
+size_t
+ucp_proto_select_distinct(ucp_proto_lane_selection_t *selection, size_t count);
 
 #endif
