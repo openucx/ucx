@@ -413,9 +413,10 @@ ucp_proto_common_get_variant_msg_size(ucp_proto_variant_t variant)
 #define UCP_PROTO_VARIANT_IT(ID, MSG_SIZE, _) case ID: return MSG_SIZE;
     switch (variant) {
         UCP_FOREACH_PROTO_VARIANT(UCP_PROTO_VARIANT_IT)
-        default: ucs_assert_always(0);
+        default: ucs_fatal("unexpected variant %d", variant);
     }
 #undef UCP_PROTO_VARIANT_IT
+    return 0;
 }
 
 static UCS_F_ALWAYS_INLINE const char*
@@ -424,9 +425,16 @@ ucp_proto_common_get_variant_name(ucp_proto_variant_t variant)
 #define UCP_PROTO_VARIANT_IT(ID, _, NAME) case ID: return NAME;
     switch (variant) {
         UCP_FOREACH_PROTO_VARIANT(UCP_PROTO_VARIANT_IT)
-        default: ucs_assert_always(0);
+        default: ucs_fatal("unexpected variant %d", variant);
     }
 #undef UCP_PROTO_VARIANT_IT
+    return NULL;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_common_get_variants_count(ucp_context_h context)
+{
+    return context->config.ext.proto_variants_enable ? UCP_PROTO_VARIANT_LAST : 1;
 }
 
 #endif

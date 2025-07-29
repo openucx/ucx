@@ -189,8 +189,8 @@ typedef struct {
  * variant, which is used to print the variant name.
  */
 #define UCP_FOREACH_PROTO_VARIANT(_macro) \
-    _macro(UCP_PROTO_VARIANT_LAT, UCS_KBYTE, "lat") \
-    _macro(UCP_PROTO_VARIANT_BW,  UCS_GBYTE, "bw")
+    _macro(UCP_PROTO_VARIANT_BW,  UCS_GBYTE, "bw") \
+    _macro(UCP_PROTO_VARIANT_LAT, UCS_KBYTE, "lat")
 
 /**
  * Protocol selection variant enum
