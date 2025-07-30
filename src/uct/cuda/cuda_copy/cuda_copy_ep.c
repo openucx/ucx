@@ -296,13 +296,13 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, *stream));
     if (ucs_unlikely(UCS_OK != status)) {
-        goto out_pop_and_release;
+        goto err_mpool_put;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuEventRecord(cuda_event->event, *stream));
     if (ucs_unlikely(UCS_OK != status)) {
-        goto out_pop_and_release;
+        goto err_mpool_put;
     }
 
     if (ucs_queue_is_empty(event_q)) {
@@ -324,6 +324,9 @@ out_pop_and_release:
     uct_cuda_primary_ctx_pop_and_release(cuda_device);
 out:
     return status;
+err_mpool_put:
+    ucs_mpool_put(cuda_event);
+    goto out_pop_and_release;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_zcopy,
