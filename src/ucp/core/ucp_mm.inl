@@ -10,6 +10,7 @@
 #include "ucp_mm.h"
 
 #include <ucs/memory/rcache.inl>
+#include <ucs/datastruct/mpool.inl>
 
 
 static UCS_F_ALWAYS_INLINE int
@@ -21,6 +22,39 @@ ucp_memh_is_zero_length(const ucp_mem_h memh)
 static UCS_F_ALWAYS_INLINE size_t ucp_memh_size(ucp_context_h context)
 {
     return sizeof(ucp_mem_t) + (sizeof(uct_mem_h) * context->num_mds);
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_memh_is_derived_memh(ucp_mem_h memh)
+{
+    return (memh->flags & UCP_MEMH_FLAG_DERIVED);
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_is_invalidate_cap(unsigned uct_flags)
+{
+    return uct_flags & (UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
+                        UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO);
+}
+
+static UCS_F_ALWAYS_INLINE ucp_mem_h
+ucp_memh_get_pack_memh(ucp_mem_h memh, unsigned uct_flags)
+{
+    if((memh == NULL) || ucp_memh_is_derived_memh(memh)) {
+        return memh;
+    }
+
+    if (!ucp_is_invalidate_cap(uct_flags)) {
+        return memh;
+    }
+
+    return ucp_memh_derived_get(memh);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_mem_desc_put(ucp_mem_desc_t *mdesc)
+{
+    if (ucp_memh_is_derived_memh(mdesc->memh)) {
+        mdesc->memh = ucp_memh_derived_put(mdesc->memh);
+    }
+    ucs_mpool_put_inline(mdesc);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -85,9 +119,17 @@ not_found:
  * If the memory handle @a memh is zero-length or created by @ref ucp_mem_map(),
  * do nothing and return 0. Otherwise, release the memory handle and return 1.
  */
-static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
+static UCS_F_ALWAYS_INLINE ucp_mem_h ucp_memh_put(ucp_mem_h memh)
 {
     ucp_context_h context = memh->context;
+    ucp_mem_h derived;
+
+    if (ucp_memh_is_derived_memh(memh)) {
+        derived = memh;
+        memh    = memh->parent;
+    } else {
+        derived = NULL;
+    }
 
     ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64,
               memh, ucp_memh_address(memh), ucp_memh_length(memh),
@@ -95,17 +137,20 @@ static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
 
     /* user memh or zero length memh */
     if (memh->parent != NULL) {
-        return 0;
+        ucp_memh_derived_put(derived);
+        return memh;
     }
 
     if (ucs_likely(context->rcache != NULL)) {
         UCP_THREAD_CS_ENTER(&context->mt_lock);
+        ucp_memh_derived_put(derived);
         ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
         UCP_THREAD_CS_EXIT(&context->mt_lock);
     } else {
+        ucp_memh_derived_put(derived);
         ucp_memh_put_slow(context, memh);
     }
-    return 1;
+    return NULL;
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)
@@ -168,11 +213,13 @@ ucp_memh_get_or_update(ucp_context_h context, void *address, size_t length,
         goto out;
     }
 
-    ucs_assert((*memh_p)->parent == NULL);
     ucs_assert((context->rcache == NULL) ||
                ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
 
-    status = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
+    if (ucp_memh_is_derived_memh(*memh_p)) {
+        *memh_p = ucp_memh_derived_put(*memh_p);
+    }
+    status  = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
 out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;

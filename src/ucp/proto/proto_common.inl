@@ -348,9 +348,11 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
                             const ucs_sys_dev_distance_t *dev_distance,
                             void *rkey_buffer)
 {
-    const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    ucp_mem_h memh;
+    ucp_context_h context        = req->send.ep->worker->context;
+    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
+    ucp_mem_h *memh;
     ssize_t packed_rkey_size;
+    unsigned pack_flags;
 
     /* For contiguous buffer, pack one rkey
      * TODO to support IOV datatype write N [address+length] records,
@@ -358,27 +360,32 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     ucs_assertv(dt_iter->dt_class == UCP_DATATYPE_CONTIG, "dt_class=%s",
                 ucp_datatype_class_names[dt_iter->dt_class]);
 
-    memh = dt_iter->type.contig.memh;
+    memh = &dt_iter->type.contig.memh;
 
     /* Since global VA registration doesn't support invalidation yet, and error
      * handling is enabled on this EP, we replace GVA registrations with
      * regular ones */
     if (ucp_ep_config_err_mode_eq(req->send.ep,
                                   UCP_ERR_HANDLING_MODE_PEER) &&
-        ucs_unlikely(memh->flags & UCP_MEMH_FLAG_HAS_AUTO_GVA)) {
-        ucp_memh_disable_gva(memh, md_map);
+        ucs_unlikely((*memh)->flags & UCP_MEMH_FLAG_HAS_AUTO_GVA)) {
+        ucp_memh_disable_gva(*memh, md_map);
     }
 
-    if (!ucs_test_all_flags(memh->md_map, md_map)) {
-        ucs_trace("dt_iter_md_map=0x%"PRIx64" md_map=0x%"PRIx64, memh->md_map,
-                  md_map);
+    if (!ucs_test_all_flags((*memh)->md_map, md_map)) {
+        ucs_trace("dt_iter_md_map=0x%"PRIx64" md_map=0x%"PRIx64,
+                  (*memh)->md_map, md_map);
     }
 
+    pack_flags = ucp_ep_config(req->send.ep)->uct_rkey_pack_flags;
+
+    /* TODO: Central lock is not scalable. Consider fine-grained lock per memh,
+     * immutable memh/rkey cache, RCU/COW */
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
     packed_rkey_size = ucp_rkey_pack_memh(
-            req->send.ep->worker->context, md_map & memh->md_map, memh,
+            context, md_map & (*memh)->md_map, memh,
             dt_iter->type.contig.buffer, dt_iter->length, &dt_iter->mem_info,
-            distance_dev_map, dev_distance,
-            ucp_ep_config(req->send.ep)->uct_rkey_pack_flags, rkey_buffer);
+            distance_dev_map, dev_distance, pack_flags, rkey_buffer);
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
 
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
@@ -387,7 +394,6 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     }
 
     req->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
-
     return packed_rkey_size;
 }
 
