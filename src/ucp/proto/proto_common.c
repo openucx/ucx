@@ -1099,13 +1099,13 @@ ucp_proto_lane_select_trace(const ucp_proto_init_params_t *params,
 static void
 ucp_proto_lane_select_distinct(ucp_proto_lane_select_t *select)
 {
+    ucp_lane_index_t num_distinct = 1;
     ucp_lane_index_t i, j;
     int unique;
 
-    select->num_selections = 1;
-    for (i = 1; i < UCP_PROTO_VARIANT_LAST; ++i) {
+    for (i = num_distinct; i < select->num_selections; ++i) {
         unique = 1;
-        for (j = 0; j < select->num_selections; ++j) {
+        for (j = 0; j < num_distinct; ++j) {
             if (select->selections[i].lane_map == select->selections[j].lane_map) {
                 unique = 0;
                 break;
@@ -1113,13 +1113,15 @@ ucp_proto_lane_select_distinct(ucp_proto_lane_select_t *select)
         }
 
         if (unique) {
-            if (i != select->num_selections) {
-                select->selections[select->num_selections] = select->selections[i];
+            if (i != num_distinct) {
+                select->selections[num_distinct] = select->selections[i];
             }
 
-            ++select->num_selections;
+            ++num_distinct;
         }
     }
+
+    select->num_selections = num_distinct;
 }
 
 static void
@@ -1174,7 +1176,7 @@ ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
     ucp_proto_lane_select_t *select;
     ucp_proto_lane_selection_t *selection;
     ucs_status_t status;
-    ucp_proto_variant_t variant;
+    ucp_proto_variant_t variant, max_variant;
 
     select = ucs_mpool_get(&worker->proto_select_mp);
     if (select == NULL) {
@@ -1218,18 +1220,19 @@ ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
     }
 
     /* Initialize all protocol variants */
-    for (variant = 0; variant < UCP_PROTO_VARIANT_LAST; ++variant) {
+    max_variant = context->config.ext.proto_variants_enable ?
+                                                    UCP_PROTO_VARIANT_LAST : 1;
+    for (variant = 0; variant < max_variant; ++variant) {
         selection = &select->selections[variant];
         ucp_proto_lane_select(&params->super, req, select, variant, selection);
         ucp_proto_lane_select_trace(&params->super, select, selection,
                                     "found variant", UCS_LOG_LEVEL_TRACE);
+        ++select->num_selections;
     }
 
     /* Select distinct protocol variants */
     ucp_proto_lane_select_distinct(select);
     ucs_assert(select->num_selections > 0);
-    /* TODO: remove */
-    select->num_selections = 1;
 
     /* Initialize selected distinct protocol variants */
     for (i = 0; i < select->num_selections; ++i) {
