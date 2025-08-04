@@ -189,8 +189,8 @@ typedef struct {
  * variant, which is used to print the variant name.
  */
 #define UCP_FOREACH_PROTO_VARIANT(_macro) \
-    _macro(UCP_PROTO_VARIANT_BW,  UCS_GBYTE, "bw") \
-    _macro(UCP_PROTO_VARIANT_LAT, UCS_KBYTE, "lat")
+    _macro(UCP_PROTO_VARIANT_BW,  UCS_GBYTE, "(bw)") \
+    _macro(UCP_PROTO_VARIANT_LAT, UCS_KBYTE, "(lat)")
 
 /**
  * Protocol selection variant enum
@@ -209,7 +209,26 @@ typedef struct {
     uint8_t                    dev_count[UCP_MAX_RESOURCES];
     ucp_proto_common_tl_perf_t perf;
     ucp_proto_variant_t        variant;
+    char                       name[UCP_PROTO_DESC_STR_MAX];
 } ucp_proto_lane_selection_t;
+
+
+typedef struct {
+    const char       *perf_name;
+    ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t num_lanes;
+    ucp_lane_index_t max_lanes;
+    int              fixed_first_lane;
+} ucp_proto_lane_select_req_t;
+
+
+typedef struct {
+    ucp_lane_index_t           lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t           num_lanes;
+    ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
+    ucp_proto_lane_selection_t selections[UCP_PROTO_VARIANT_LAST];
+    ucp_lane_index_t           num_selections;
+} ucp_proto_lane_select_t;
 
 
 /* Private data per lane */
@@ -385,21 +404,11 @@ void ucp_proto_reset_fatal_not_implemented(ucp_request_t *req);
 
 void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name);
 
-void
-ucp_proto_select_lanes(const ucp_proto_init_params_t *params,
-                       const ucp_lane_index_t *lanes, ucp_lane_index_t num_lanes,
-                       ucp_lane_index_t max_lanes,
-                       const ucp_proto_common_tl_perf_t *lanes_perf,
-                       int fixed_first_lane, ucp_proto_variant_t variant,
-                       ucp_proto_lane_selection_t *selection);
+ucs_status_t
+ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
+                           const ucp_proto_lane_select_req_t *req,
+                           ucp_proto_lane_select_t **select_p);
 
-void
-ucp_proto_select_trace(const ucp_proto_init_params_t *params,
-                       const ucp_proto_lane_selection_t *selection,
-                       const ucp_proto_common_tl_perf_t *lanes_perf,
-                       const char *desc, ucs_log_level_t level);
-
-size_t
-ucp_proto_select_distinct(ucp_proto_lane_selection_t *selection, size_t count);
+void ucp_proto_lane_select_destroy(ucp_proto_lane_select_t *select);
 
 #endif

@@ -57,7 +57,9 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
                                             cap.get.opt_zcopy_align),
     };
     ucp_proto_rndv_bulk_priv_t rpriv;
-    ucp_proto_perf_t *perf;
+    ucp_proto_lane_select_t *select;
+    ucp_lane_index_t i;
+    ucp_proto_perf_t *bulk_perf, *perf;
     ucs_status_t status;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
@@ -66,16 +68,31 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
         return;
     }
 
-    status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_GET_DESC,
-                                      UCP_PROTO_RNDV_ATS_NAME, &perf, &rpriv);
+    status = ucp_proto_multi_init(&params, UCP_PROTO_RNDV_GET_DESC, &select);
     if (status != UCS_OK) {
         return;
     }
 
-    ucp_proto_select_add_proto(&params.super.super, params.super.cfg_thresh,
-                               params.super.cfg_priority, perf, &rpriv,
-                               UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv,
-                                                                  mpriv));
+    for (i = 0; i < select->num_selections; ++i) {
+        status = ucp_proto_multi_init_perf(&params, select, &select->selections[i],
+                                           &bulk_perf, &rpriv.mpriv);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_ATS_NAME,
+                                          bulk_perf, &perf, &rpriv);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        ucp_proto_select_add_proto(&params.super.super, params.super.cfg_thresh,
+                                   params.super.cfg_priority, perf, &rpriv,
+                                   UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv,
+                                                                      mpriv));
+    }
+
+    ucp_proto_lane_select_destroy(select);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

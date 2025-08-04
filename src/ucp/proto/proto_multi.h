@@ -164,8 +164,15 @@ typedef ucs_status_t (*ucp_proto_multi_lane_send_func_t)(ucp_request_t *req,
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   const char *perf_name,
-                                  ucp_proto_perf_t **perf_p,
-                                  ucp_proto_multi_priv_t *mpriv);
+                                  ucp_proto_lane_select_t **select_p);
+
+
+ucs_status_t
+ucp_proto_multi_init_perf(const ucp_proto_multi_init_params_t *params,
+                          const ucp_proto_lane_select_t *select,
+                          ucp_proto_lane_selection_t *selection,
+                          ucp_proto_perf_t **perf_p,
+                          ucp_proto_multi_priv_t *mpriv);
 
 
 size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv);
