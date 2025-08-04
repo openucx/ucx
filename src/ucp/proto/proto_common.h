@@ -228,6 +228,7 @@ typedef struct {
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
     ucp_proto_lane_selection_t selections[UCP_PROTO_VARIANT_LAST];
     ucp_lane_index_t           num_selections;
+    int                        mp_alloc;
 } ucp_proto_lane_select_t;
 
 

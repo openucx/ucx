@@ -1178,12 +1178,17 @@ ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
     ucs_status_t status;
     ucp_proto_variant_t variant, max_variant;
 
-    select = ucs_mpool_get(&worker->proto_select_mp);
+    if (worker->proto_select_mp.data != NULL) {
+        select = ucs_mpool_get(&worker->proto_select_mp);
+    } else {
+        select = ucs_malloc(sizeof(*select), "ucp_proto_lane_select_t");
+    }
     if (select == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
     memset(select, 0, sizeof(*select));
+    select->mp_alloc = worker->proto_select_mp.data != NULL;
 
     /* Get bandwidth of all lanes and max_bandwidth */
     for (i = 0; i < req->num_lanes; ++i) {
@@ -1269,5 +1274,9 @@ void ucp_proto_lane_select_destroy(ucp_proto_lane_select_t *select)
         ucp_proto_perf_node_deref(&select->selections[i].perf.node);
     }
 
-    ucs_mpool_put(select);
+    if (select->mp_alloc) {
+        ucs_mpool_put(select);
+    } else {
+        ucs_free(select);
+    }
 }
