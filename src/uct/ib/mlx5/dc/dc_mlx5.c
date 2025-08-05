@@ -216,11 +216,6 @@ static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
     uct_ib_mlx5_md_t UCS_V_UNUSED *md = uct_ib_mlx5_iface_md(ib_iface);
     uint16_t ooo_sl_mask              = 0;
 
-    if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE) {
-        /* Forced full handshake */
-        return 1;
-    }
-
 #if HAVE_DEVX
     if (uct_ib_mlx5_devx_query_ooo_sl_mask(md, ib_iface->config.port_num,
                                            &ooo_sl_mask) != UCS_OK) {
@@ -228,21 +223,26 @@ static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
     }
 #endif
 
+    /* DevX isn't used for DCI */
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI)) {
+    	/* Order semantics determined by SL */
+    	return UCS_BIT(ib_iface->config.sl) & ooo_sl_mask;
+    }
+
+    if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE) {
+        /* Forced full handshake */
+    	return 1;
+    }
+
     /* AR/DDP is disabled */
-    if ((iface->super.config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_IBTA) ||
-        !(UCS_BIT(ib_iface->config.sl) & ooo_sl_mask)) {
-        return 0;
+    if (iface->super.config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_IBTA) {
+    	return 0;
     }
 
     /* rdma_wr_disabled is not supported */
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED)) {
-        return 1;
-    }
-
-    /* RDMA write is required */
-    return !(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) ||
-           /* DevX isn't used for DCI, driver sets rdma_wr_disabled = 0 */
-           !(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI);
+    return !(md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED) ||
+    		/* RDMA write is required */
+    		!(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT);
 }
 
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
