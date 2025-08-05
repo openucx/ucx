@@ -201,6 +201,7 @@ ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 
 size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv)
 {
+    ucs_assert_always(mpriv->num_lanes <= UCP_MAX_LANES);
     return ucs_offsetof(ucp_proto_multi_priv_t, lanes) +
            (mpriv->num_lanes *
             ucs_field_sizeof(ucp_proto_multi_priv_t, lanes[0]));
