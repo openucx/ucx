@@ -1004,8 +1004,8 @@ ucp_proto_lane_select_find(const ucp_proto_init_params_t *params,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_lane_select_add(ucp_proto_lane_selection_t *selection,
-                          const ucp_proto_init_params_t *params,
+ucp_proto_lane_select_add(const ucp_proto_init_params_t *params,
+                          ucp_proto_lane_selection_t *selection,
                           ucp_lane_index_t lane)
 {
     ucp_rsc_index_t dev_index = ucp_proto_common_get_dev_index(params, lane);
@@ -1035,7 +1035,7 @@ ucp_proto_lane_select(const ucp_proto_init_params_t *params,
     index_map = UCS_MASK(select->num_lanes);
 
     if (req->fixed_first_lane) {
-        ucp_proto_lane_select_add(selection, params, select->lanes[0]);
+        ucp_proto_lane_select_add(params, selection, select->lanes[0]);
         index_map &= ~UCS_BIT(0);
     }
 
@@ -1048,9 +1048,52 @@ ucp_proto_lane_select(const ucp_proto_init_params_t *params,
             break;
         }
 
-        ucp_proto_lane_select_add(selection, params, select->lanes[lane_index]);
+        ucp_proto_lane_select_add(params, selection, select->lanes[lane_index]);
         index_map &= ~UCS_BIT(lane_index);
     }
+}
+
+static void
+ucp_proto_lane_select_fast_lanes(const ucp_proto_init_params_t *params,
+                                 const ucp_proto_lane_select_req_t *req,
+                                 const ucp_proto_lane_select_t *select,
+                                 ucp_proto_lane_selection_t *selection)
+{
+    ucp_context_h context           = params->worker->context;
+    const double max_bw_ratio       = context->config.ext.multi_lane_max_ratio;
+    double max_bandwidth            = 0;
+    ucp_proto_lane_selection_t fast = {0};
+
+    const ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_lane_index_t i, lane;
+
+    /* Get bandwidth of all lanes and max_bandwidth */
+    for (i = 0; i < selection->num_lanes; ++i) {
+        lane      = selection->lanes[i];
+        lane_perf = &select->lanes_perf[lane];
+
+        /* Calculate maximal BW of all selected lanes, to skip slow lanes */
+        max_bandwidth = ucs_max(max_bandwidth, lane_perf->bandwidth);
+    }
+
+    /* Add fast lanes to the selection */
+    for (i = 0; i < selection->num_lanes; ++i) {
+        lane      = selection->lanes[i];
+        lane_perf = &select->lanes_perf[lane];
+
+        if ((req->fixed_first_lane && (i == 0)) ||
+            ((lane_perf->bandwidth * max_bw_ratio) >= max_bandwidth)) {
+            ucp_proto_lane_select_add(params, &fast, lane);
+            ucs_trace("avail " UCP_PROTO_LANE_FMT,
+                      UCP_PROTO_LANE_ARG(params, lane, lane_perf));
+        } else {
+            ucs_trace("drop " UCP_PROTO_LANE_FMT,
+                      UCP_PROTO_LANE_ARG(params, lane, lane_perf));
+        }
+    }
+
+    fast.variant = selection->variant;
+    *selection   = fast;
 }
 
 static void
@@ -1167,10 +1210,8 @@ ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_lane_select_req_t *req,
                            ucp_proto_lane_select_t **select_p)
 {
-    ucp_worker_h worker       = params->super.worker;
-    ucp_context_h context     = worker->context;
-    const double max_bw_ratio = context->config.ext.multi_lane_max_ratio;
-    double max_bandwidth      = 0;
+    ucp_worker_h worker   = params->super.worker;
+    ucp_context_h context = worker->context;
     ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t i, lane;
     ucp_proto_lane_select_t *select;
@@ -1190,7 +1231,7 @@ ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
     memset(select, 0, sizeof(*select));
     select->mp_alloc = worker->proto_select_mp.data != NULL;
 
-    /* Get bandwidth of all lanes and max_bandwidth */
+    /* Get bandwidth of all lanes */
     for (i = 0; i < req->num_lanes; ++i) {
         lane      = req->lanes[i];
         lane_perf = &select->lanes_perf[lane];
@@ -1201,27 +1242,7 @@ ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
             return status;
         }
 
-        /* Calculate maximal bandwidth of all lanes, to skip slow lanes */
-        max_bandwidth = ucs_max(max_bandwidth, lane_perf->bandwidth);
-    }
-
-    /* Add fast lanes to the selection */
-    for (i = 0; i < req->num_lanes; ++i) {
-        lane      = req->lanes[i];
-        lane_perf = &select->lanes_perf[lane];
-
-        if ((req->fixed_first_lane && (i == 0)) ||
-            ((lane_perf->bandwidth * max_bw_ratio) >= max_bandwidth)) {
-            select->lanes[select->num_lanes++] = lane;
-            ucs_trace("avail " UCP_PROTO_LANE_FMT,
-                      UCP_PROTO_LANE_ARG(&params->super, lane, lane_perf));
-        } else {
-            /* Bandwidth on this lane is too low compared to the fastest
-               available lane, so it's not worth using it */
-            ucp_proto_perf_node_deref(&lane_perf->node);
-            ucs_trace("drop " UCP_PROTO_LANE_FMT,
-                      UCP_PROTO_LANE_ARG(&params->super, lane, lane_perf));
-        }
+        select->lanes[select->num_lanes++] = lane;
     }
 
     /* Initialize all protocol variants */
@@ -1230,6 +1251,7 @@ ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
     for (variant = 0; variant < max_variant; ++variant) {
         selection = &select->selections[variant];
         ucp_proto_lane_select(&params->super, req, select, variant, selection);
+        ucp_proto_lane_select_fast_lanes(&params->super, req, select, selection);
         ucp_proto_lane_select_trace(&params->super, select, selection,
                                     "found variant", UCS_LOG_LEVEL_TRACE);
         ++select->num_selections;
