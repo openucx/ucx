@@ -225,24 +225,24 @@ static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
 
     /* DevX isn't used for DCI */
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI)) {
-    	/* Order semantics determined by SL */
-    	return UCS_BIT(ib_iface->config.sl) & ooo_sl_mask;
+        /* Order semantics determined by SL */
+        return UCS_BIT(ib_iface->config.sl) & ooo_sl_mask;
     }
 
     if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE) {
         /* Forced full handshake */
-    	return 1;
+        return 1;
     }
 
     /* AR/DDP is disabled */
     if (iface->super.config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_IBTA) {
-    	return 0;
+        return 0;
     }
 
     /* rdma_wr_disabled is not supported */
     return !(md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED) ||
-    		/* RDMA write is required */
-    		!(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT);
+           /* RDMA write is required */
+           !(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT);
 }
 
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
