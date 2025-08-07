@@ -40,6 +40,10 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda12:3
     - container: ubuntu24_cuda12_x86_64
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu24.04-mofed24.10-cuda12.5:1
+    - container: ubuntu22_cuda13_x86_64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda13:1
+    - container: ubuntu24_cuda13_x86_64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu24.04-mofed24.10-cuda13:1
 
     # aarch64
     - container: centos8_cuda11_aarch64
@@ -57,6 +61,10 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu22.04-mofed5-cuda12:3
     - container: ubuntu24_cuda12_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu24.04-mofed24.10-cuda12.5:1
+    - container: ubuntu22_cuda13_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu22.04-mofed5-cuda13:1
+    - container: ubuntu24_cuda13_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu24.04-mofed24.10-cuda13:1
 
 stages:
   - stage: Prepare
