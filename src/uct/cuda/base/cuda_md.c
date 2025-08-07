@@ -60,6 +60,11 @@ void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
         goto err;
     }
 
+    status = ucs_topo_sys_device_enable_aux_path(*sys_dev_p);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     return;
 
 err:
