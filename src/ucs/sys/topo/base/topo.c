@@ -568,6 +568,32 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
     return result;
 }
 
+int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
+{
+    int is_sibling;
+    ucs_topo_sibling_role_t UCS_V_UNUSED role_dev;
+    ucs_topo_sibling_role_t UCS_V_UNUSED role_dev_mem;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    is_sibling = (sys_dev < ucs_topo_global_ctx.num_devices) &&
+                 (sys_dev_mem != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                 (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev ==
+                  sys_dev_mem);
+
+    if (is_sibling) {
+        role_dev     = ucs_topo_global_ctx.devices[sys_dev].sibling_role;
+        role_dev_mem = ucs_topo_global_ctx.devices[sys_dev_mem].sibling_role;
+        ucs_assertv((role_dev != UCS_TOPO_SIBLING_ROLE_NONE) &&
+                    (role_dev_mem != UCS_TOPO_SIBLING_ROLE_NONE) &&
+                    (role_dev != role_dev_mem), "sys_dev=%u sys_dev_mem=%u"
+                    " sys_dev_role=%d sys_dev_mem_role=%d",
+                    sys_dev, sys_dev_mem, role_dev, role_dev_mem);
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return is_sibling;
+}
+
 static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
                                                ucs_sys_dev_distance_t *distance)
 {

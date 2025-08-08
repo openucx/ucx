@@ -195,10 +195,69 @@ ucp_ep_flush_slow_path_remove_filter(const ucs_callbackq_elem_t *elem,
            (elem->arg == arg);
 }
 
+static void ucp_ep_flush_mem_completion(uct_completion_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.flush.mem.uct_comp);
+
+    ucs_assertv(req->send.ep->ext->flush_state.mem_in_progress > 0,
+                "req=%p uct completion flush_mem_inprogress=%d", req,
+                req->send.ep->ext->flush_state.mem_in_progress);
+    ucp_trace_req(req, "flush mem uct completion called");
+}
+
+static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+    size_t count;
+    ucp_mem_area_t *entry;
+    ucp_worker_remote_flush_key_t key;
+    khiter_t khiter;
+
+    if (ep->ext->flush_sys_dev_map == 0) {
+        /* No other potentially related flushes on this EP */
+        ucp_trace_req(req, "flush mem: no work to do");
+        return UCS_OK;
+    }
+
+    count                       = ucs_popcount(ep->ext->flush_sys_dev_map);
+    req->send.flush.mem.entries = ucs_malloc(count * sizeof(*entry),
+                                             "flush_mem_entries");
+    if (req->send.flush.mem.entries == NULL) {
+        ucs_fatal("Cannot allocate flush mem entries");
+    }
+
+    entry  = req->send.flush.mem.entries;
+    key.ep = ep;
+    ucs_for_each_bit(key.sys_dev, ep->ext->flush_sys_dev_map) {
+        khiter = kh_get(ucp_worker_remote_flush, &ep->worker->remote_flush_hash,
+                        key);
+        ucs_assert(khiter != kh_end(&ep->worker->remote_flush_hash));
+
+        *entry = kh_value(&ep->worker->remote_flush_hash, khiter);
+        ++entry;
+    }
+
+    ep->ext->flush_sys_dev_map = 0;
+
+    req->send.flush.mem.started         = 0;
+    req->send.uct.func                  = ucp_ep_flush_mem_progress;
+    req->send.flush.mem.uct_comp.func   = ucp_ep_flush_mem_completion;
+    req->send.flush.mem.uct_comp.count  = count;
+    req->send.flush.mem.uct_comp.status = UCS_OK;
+
+    /* Count one more in-progress memory flush for the EP */
+    ep->ext->flush_state.mem_in_progress++;
+
+    ucp_ep_flush_mem_progress(&req->send.uct);
+
+    return UCS_INPROGRESS;
+}
+
 static int ucp_flush_check_completion(ucp_request_t *req)
 {
     ucp_worker_h worker = req->send.ep->worker;
-
+    ucs_status_t status;
     /* Check if flushed all lanes */
     if (!ucp_ep_flush_is_completed(req)) {
         return 0;
@@ -207,7 +266,12 @@ static int ucp_flush_check_completion(ucp_request_t *req)
     ucp_trace_req(req, "flush ep %p completed", req->send.ep);
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, req,
                                  ucp_ep_flush_slow_path_remove_filter, req);
-    req->send.flushed_cb(req);
+    status = ucp_ep_flush_mem_start(req);
+    if (status == UCS_OK) {
+        /* Nothing more to perform regarding memory specific flush */
+        req->send.flushed_cb(req);
+    }
+
     return 1;
 }
 
@@ -417,11 +481,14 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     ucp_ep_flush_progress(req);
 
     if (ucp_ep_flush_is_completed(req)) {
-        status = req->status;
-        ucp_trace_req(req, "releasing flush ep %p, returning status %s",
-                      ep, ucs_status_string(status));
-        ucp_request_put_param(param, req)
-        return UCS_STATUS_PTR(status);
+        status = ucp_ep_flush_mem_start(req);
+        if (status == UCS_OK) {
+            status = req->status;
+            ucp_trace_req(req, "releasing flush ep %p, returning status %s", ep,
+                          ucs_status_string(status));
+            ucp_request_put_param(param, req);
+            return UCS_STATUS_PTR(status);
+        }
     }
 
     ucp_trace_req(req, "return inprogress flush ep %p request %p", ep, req + 1);
@@ -789,5 +856,74 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
 
     ep->ext->unflushed_lanes = 0;
     ep->ext->fence_seq       = ep->worker->fence_seq;
+    return UCS_OK;
+}
+
+static unsigned ucp_ep_flush_mem_resume_callback(void *arg)
+{
+    ucp_request_t *req = arg;
+    ucp_trace_req(req, "flush mem resume slow path callback");
+
+    ucp_ep_flush_mem_progress(&req->send.uct);
+    return 0;
+}
+
+ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_mem_flush_t *mem = &req->send.flush.mem;
+    ucp_ep_h ep          = req->send.ep;
+    ucs_status_t status;
+    int i;
+    ucp_mem_area_t *entry;
+
+    ucs_assert(mem->uct_comp.func == ucp_ep_flush_mem_completion);
+
+    /* Start any remaining operation */
+    for (i = 0; (i < mem->count) && (mem->started < mem->count); i++) {
+        entry = &mem->entries[i];
+        if (entry->uct_ep == NULL) {
+            continue;
+        }
+
+        status = uct_ep_get_bcopy(entry->uct_ep,
+                                  (uct_unpack_callback_t)ucs_empty_function,
+                                  NULL, 0, entry->address, entry->uct_rkey,
+                                  &mem->uct_comp);
+
+        /* Consume entry only when successfully submitted */
+        if (status == UCS_OK) {
+            mem->uct_comp.count--;
+        } else if (status != UCS_INPROGRESS) {
+            ucs_assertv(status == UCS_ERR_NO_RESOURCE, "status=%s",
+                        ucs_status_string(status));
+            continue;
+        }
+
+        entry->uct_ep = NULL;
+        mem->started++;
+    }
+
+    if ((mem->entries != NULL) && (mem->uct_comp.count == 0)) {
+        ucs_free(mem->entries);
+        mem->entries = NULL;
+        ep->ext->flush_state.mem_in_progress--;
+    }
+
+    ucp_trace_req(req,
+                  "flush mem %s completed status=%s started=%d/%d "
+                  "to_completed=%d ep_flush_in_progress=%d",
+                  (ep->ext->flush_state.mem_in_progress > 0) ? "read" : "req",
+                  ucs_status_string(req->status), mem->started, mem->count,
+                  mem->uct_comp.count, ep->ext->flush_state.mem_in_progress);
+
+    if (ep->ext->flush_state.mem_in_progress > 0) {
+        /* An unrelated flush might still be executing our 0-read flush */
+        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, req,
+                                  ucp_ep_flush_mem_resume_callback, req);
+        return UCS_OK;
+    }
+
+    req->send.flushed_cb(req);
     return UCS_OK;
 }

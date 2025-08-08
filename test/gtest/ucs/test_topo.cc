@@ -35,6 +35,42 @@ protected:
 
     void read_pcie_devices();
 
+    // Find a sibling DMA engine for a GPU
+    void get_siblings(const std::string &hca_bdf, std::string &gpu_bdf,
+                      std::string &dma_bdf)
+    {
+        std::string hca_path = get_sysfs_device_path(hca_bdf);
+        for (const auto &gpu : m_gpus) {
+            std::string gpu_path = get_sysfs_device_path(gpu);
+
+            for (const auto &dma : m_dmas) {
+                auto gpu_dev = register_device("gpu0", gpu);
+                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+
+                ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+
+                auto hca_dev = register_device("hca0", hca_bdf);
+                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
+
+                auto dma_dev = register_device("dma", dma);
+                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+
+                ASSERT_UCS_OK(
+                        ucs_topo_sys_device_set_sys_dev_aux(hca_dev, dma_dev));
+                bool is_sibling = ucs_topo_is_sibling(hca_dev, gpu_dev);
+
+                ucs_topo_cleanup();
+                ucs_topo_init();
+
+                if (is_sibling) {
+                    gpu_bdf = gpu;
+                    dma_bdf = dma;
+                    return;
+                }
+            }
+        }
+    }
+
 public:
     virtual void init()
     {
@@ -274,6 +310,9 @@ UCS_TEST_F(test_topo, sibling) {
         UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
     }
 
+    std::string sibling_gpu, sibling_dma;
+    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
+
     std::vector<ucs_sys_device_t> hca_devs;
     for (int i = 0; i < count; ++i) {
         hca_devs.push_back(
@@ -283,6 +322,12 @@ UCS_TEST_F(test_topo, sibling) {
 
     auto dma = m_dmas[0];
     auto gpu = m_gpus[0];
+    if (!sibling_dma.empty()) {
+        dma = sibling_dma;
+        gpu = sibling_gpu;
+        UCS_TEST_MESSAGE << "Found sibling "
+                         << "dma=" << dma << " gpu=" << gpu;
+    }
 
     auto dma_dev = register_device("dma", dma);
     ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
@@ -301,6 +346,18 @@ UCS_TEST_F(test_topo, sibling) {
     ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[0], gpu_dev));
     // Reachable as there is no auxiliary capability (cuda_ipc)
     ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[2], gpu_dev));
+    ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[1], gpu_dev));
+    ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[2], gpu_dev));
 
     ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
+
+    if (!sibling_dma.empty()) {
+        ASSERT_FALSE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
+        ASSERT_TRUE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
+        ASSERT_TRUE(ucs_topo_is_sibling(gpu_dev, hca_devs[0]));
+    } else {
+        ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
+        ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
+        ASSERT_FALSE(ucs_topo_is_sibling(gpu_dev, hca_devs[0]));
+    }
 }

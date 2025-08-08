@@ -65,6 +65,10 @@ struct ucp_rkey_config_key {
 };
 
 
+#define UCP_SYS_DEVICE_FLUSH_BIT UCS_BIT(7)
+#define UCP_SYS_DEVICE_MAX_PACKED UCP_SYS_DEVICE_FLUSH_BIT - 1
+
+
 /**
  * Rkey configuration
  */
@@ -237,5 +241,8 @@ void ucp_rkey_config_dump_brief(const ucp_rkey_config_key_t *rkey_config_key,
 void ucp_rkey_proto_select_dump(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                 ucs_string_buffer_t *strb);
+
+
+ucs_sys_device_t ucp_rkey_pack_sys_dev(ucp_mem_h memh);
 
 #endif
