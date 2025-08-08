@@ -732,6 +732,13 @@ ucp_context_usage_tracker_enabled(ucp_context_h context)
     return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_context_rndv_is_enabled(ucp_context_h context)
+{
+    return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
+           (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
+}
+
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      ucs_memory_type_t mem_type,
                                      uint64_t md_reg_flags,
