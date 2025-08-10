@@ -35,9 +35,15 @@ typedef struct {
 
 ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
     .memh = {
-        .alloc_method = UCT_ALLOC_METHOD_LAST,
+        .alloc_method   = UCT_ALLOC_METHOD_LAST,
         .alloc_md_index = UCP_NULL_RESOURCE,
-        .parent = &ucp_mem_dummy_handle.memh,
+        .parent         = &ucp_mem_dummy_handle.memh,
+        .mem_type       = UCS_MEMORY_TYPE_HOST,
+        .sys_dev        = UCS_SYS_DEVICE_ID_UNKNOWN,
+        .packed_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
+        .md_map         = 0,
+        .inv_md_map     = 0,
+        .reg_id         = 0,
     },
     .uct = { UCT_MEM_HANDLE_NULL }
 };
@@ -709,7 +715,8 @@ void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map)
 
 static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
                           uint8_t memh_flags, unsigned uct_flags,
-                          uct_alloc_method_t method, ucs_memory_type_t mem_type)
+                          uct_alloc_method_t method, ucs_memory_type_t mem_type,
+                          ucs_sys_device_t sys_dev)
 {
     memh->md_map         = 0;
     memh->inv_md_map     = 0;
@@ -719,6 +726,14 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
     memh->alloc_md_index = UCP_NULL_RESOURCE;
     memh->alloc_method   = method;
     memh->mem_type       = mem_type;
+    memh->sys_dev        = sys_dev;
+
+    /* Cache sys_dev in a format packed to rkey to minimize overhead during
+     * rndv protocols. TODO remove if using another method to mark rkey with
+     * remote flush requirement. */
+    memh->packed_sys_dev = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                                   UCS_SYS_DEVICE_ID_UNKNOWN :
+                                   ucp_rkey_pack_sys_dev(memh);
 }
 
 static ucs_status_t
@@ -736,11 +751,9 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
 
     memh->super.super.start = (uintptr_t)address;
     memh->super.super.end   = (uintptr_t)address + length;
-    ucp_memh_init(memh, context, memh_flags, uct_flags, method, mem_type);
-
-    ucp_memory_detect(context, ucp_memh_address(memh), ucp_memh_length(memh),
-                      &info);
-    memh->sys_dev = info.sys_dev;
+    ucp_memory_detect(context, address, length, &info);
+    ucp_memh_init(memh, context, memh_flags, uct_flags, method, mem_type,
+                  info.sys_dev);
 
     *memh_p = memh;
     return UCS_OK;
@@ -1632,7 +1645,7 @@ ucp_mem_rcache_mem_reg_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
     ucp_mem_h memh                    = ucs_derived_of(rregion, ucp_mem_t);
 
     ucp_memh_init(memh, context, 0, reg_ctx->uct_flags, UCT_ALLOC_METHOD_LAST,
-                  reg_ctx->mem_type);
+                  reg_ctx->mem_type, UCS_SYS_DEVICE_ID_UNKNOWN);
     memh->reg_id = context->next_memh_reg_id++;
 
     if (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) {
