@@ -5,9 +5,11 @@
 
 package ucx
 
+// #include <stdlib.h>
 // #include <ucp/api/ucp.h>
 // #include <ucs/type/status.h>
 import "C"
+import "unsafe"
 
 // UCP application context (or just a context) is an opaque handle that holds a
 // UCP communication instance's global information. It represents a single UCP
@@ -27,10 +29,44 @@ type UcpContext struct {
 	context C.ucp_context_h
 }
 
+type UcpConfig struct {
+	config *C.ucp_config_t
+}
+
+func ReadConfig() (UcpConfig, error) {
+	var config *C.ucp_config_t
+	if status := C.ucp_config_read(nil, nil, &config); status != C.UCS_OK {
+		return UcpConfig{}, newUcxError(status)
+	}
+	return UcpConfig{config: config}, nil
+}
+
+func (c *UcpConfig) Modify(name string, value string) error {
+	cName := C.CString(name)
+	cValue := C.CString(value)
+	defer C.free(unsafe.Pointer(cName))
+	defer C.free(unsafe.Pointer(cValue))
+	if status := C.ucp_config_modify(c.config, cName, cValue); status != C.UCS_OK {
+		return newUcxError(status)
+	}
+	return nil
+}
+
+func (c *UcpConfig) Close() {
+	C.ucp_config_release(c.config)
+}
+
 func NewUcpContext(contextParams *UcpParams) (*UcpContext, error) {
 	var ucp_context C.ucp_context_h
 
-	if status := C.ucp_init(&contextParams.params, nil, &ucp_context); status != C.UCS_OK {
+	config, err := ReadConfig()
+	if err != nil {
+		return nil, err
+	}
+	defer config.Close()
+	config.Modify("GVA_ENABLE", "auto")
+
+	if status := C.ucp_init(&contextParams.params, config.config, &ucp_context); status != C.UCS_OK {
 		return nil, newUcxError(status)
 	}
 
@@ -91,6 +127,10 @@ func (c *UcpContext) Query(attrs ...UcpContextAttr) (*C.ucp_context_attr_t, erro
 // This routine creates new UcpWorker.
 func (c *UcpContext) NewWorker(workerParams *UcpWorkerParams) (*UcpWorker, error) {
 	var ucp_worker C.ucp_worker_h
+
+	if ((workerParams.params.field_mask & C.UCP_WORKER_PARAM_FIELD_THREAD_MODE) == 0) {
+		workerParams.SetThreadMode(UCS_THREAD_MODE_MULTI)
+	}
 
 	if status := C.ucp_worker_create(c.context, &workerParams.params, &ucp_worker); status != C.UCS_OK {
 		return nil, newUcxError(status)

@@ -187,6 +187,12 @@ uint32_t ucs_file_checksum(const char *filename);
 
 
 /**
+ * Get interface index for a given interface name.
+ */
+ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p);
+
+
+/**
  * Get a globally unique identifier of the machine running the current process.
  */
 uint64_t ucs_machine_guid();

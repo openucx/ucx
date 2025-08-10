@@ -72,6 +72,8 @@ const (
 	UCP_AM_SEND_FLAG_EAGER UcpAmSendFlags = C.UCP_AM_SEND_FLAG_EAGER
 	// Force UCP to use only rendezvous protocol for AM sends.
 	UCP_AM_SEND_FLAG_RNDV UcpAmSendFlags = C.UCP_AM_SEND_FLAG_RNDV
+	// Copy the header of the message to internal ucx buffer.
+	UCP_AM_SEND_FLAG_COPY_HEADER UcpAmSendFlags = C.UCP_AM_SEND_FLAG_COPY_HEADER
 )
 
 type UcpAmRecvAttrs uint64

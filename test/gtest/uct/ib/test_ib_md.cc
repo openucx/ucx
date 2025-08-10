@@ -46,7 +46,8 @@ private:
 #ifdef HAVE_MLX5_DV
     uint32_t m_mlx5_flags = 0;
 #endif
-    void check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected);
+    void check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected_to_have_atomic,
+                       bool is_expected_to_have_auxiliary_key);
 };
 
 void test_ib_md::init() {
@@ -64,7 +65,9 @@ const uct_ib_md_t &test_ib_md::ib_md() const {
     return *ucs_derived_of(md(), uct_ib_md_t);
 }
 
-void test_ib_md::check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected)
+void test_ib_md::check_mlx5_mr(uct_ib_mem_t *ib_memh,
+                               bool is_expected_to_have_atomic,
+                               bool is_expected_to_have_auxiliary_key)
 {
 #if HAVE_DEVX
     if (!has_devx()) {
@@ -73,11 +76,15 @@ void test_ib_md::check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected)
 
     uct_ib_mlx5_devx_mem_t *memh = ucs_derived_of(ib_memh,
                                                   uct_ib_mlx5_devx_mem_t);
-    if (is_expected) {
+    if (is_expected_to_have_atomic) {
         EXPECT_NE(nullptr, memh->atomic_dvmr);
-        EXPECT_NE(UCT_IB_INVALID_MKEY, memh->atomic_rkey);
     } else {
         EXPECT_EQ(nullptr, memh->atomic_dvmr);
+    }
+
+    if (is_expected_to_have_atomic || is_expected_to_have_auxiliary_key) {
+        EXPECT_NE(UCT_IB_INVALID_MKEY, memh->atomic_rkey);
+    } else {
         EXPECT_EQ(UCT_IB_INVALID_MKEY, memh->atomic_rkey);
     }
 
@@ -134,14 +141,15 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
     }
 
-    check_mlx5_mr(ib_memh, false);
+    check_mlx5_mr(ib_memh, false, ib_md().relaxed_order);
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
-    check_mlx5_mr(ib_memh, (amo_access && has_ksm()) || ib_md().relaxed_order);
+    check_mlx5_mr(ib_memh, (amo_access && has_ksm()) || ib_md().relaxed_order,
+                  ib_md().relaxed_order);
 
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);

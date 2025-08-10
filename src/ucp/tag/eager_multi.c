@@ -71,6 +71,7 @@ static void ucp_proto_eager_bcopy_multi_common_probe(
                                UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
+        .min_chunk           = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
@@ -187,7 +188,7 @@ void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
     }
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_eager_sync_bcopy_request_init(ucp_request_t *req)
 {
     if (!(req->flags & UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED)) {
@@ -195,6 +196,8 @@ ucp_proto_eager_sync_bcopy_request_init(ucp_request_t *req)
     }
 
     ucp_proto_msg_multi_request_init(req);
+
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -244,6 +247,7 @@ ucp_proto_eager_zcopy_multi_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
+        .min_chunk           = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY

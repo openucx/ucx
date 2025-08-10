@@ -3932,22 +3932,6 @@ void ucp_request_free(void *request);
 
 
 /**
- * @ingroup UCP_COMM
- * @brief Create an empty communications request.
- *
- * @param [in]  worker       UCP worker.
- *
- * @return Error code as defined by @ref ucs_status_t
- *
- * This routine creates request which may be used in functions
- * @ref ucp_tag_send_nbx, @ref ucp_tag_recv_nbx, etc. The application
- * is responsible for releasing the handle using the @ref ucp_request_free
- * routine
- */
-void *ucp_request_alloc(ucp_worker_h worker);
-
-
-/**
  * @ingroup UCP_DATATYPE
  * @brief Create a generic datatype.
  *

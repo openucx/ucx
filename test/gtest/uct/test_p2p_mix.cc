@@ -183,7 +183,8 @@ uct_p2p_mix_test::alloc_buffer(const entity &entity, size_t offset)
     return mapped_buffer(m_buffer_size, 0, entity, offset);
 }
 
-void uct_p2p_mix_test::run(unsigned count, size_t offset, size_t size_cap)
+void uct_p2p_mix_test::run(unsigned count, size_t offset, size_t size_cap,
+                           double timeout)
 {
     if (m_avail_send_funcs.size() == 0) {
         UCS_TEST_SKIP_R("unsupported");
@@ -200,8 +201,17 @@ void uct_p2p_mix_test::run(unsigned count, size_t offset, size_t size_cap)
     mapped_buffer sendbuf = alloc_buffer(sender(), offset);
     mapped_buffer recvbuf = alloc_buffer(receiver(), offset);
 
+    auto start_time = ucs_get_accurate_time();
     for (unsigned i = 0; i < count; ++i) {
         random_op(sendbuf, recvbuf);
+
+        /* Some transports may send larger buffers or can be slower, so limit
+           also by time */
+        if (ucs_get_accurate_time() > (start_time + timeout)) {
+            UCS_TEST_MESSAGE << "Stopped after " << i
+                             << " iterations due to time limit";
+            break;
+        }
     }
 
     flush();

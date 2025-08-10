@@ -81,6 +81,9 @@ typedef struct {
 
     /* Minimal offset to reach, taking into account minimum RNDV chunk size */
     size_t                       min_end_offset;
+
+    /* Map of system devices that require a flush operation */
+    ucp_sys_dev_map_t            flush_sys_dev_mask;
 } ucp_proto_multi_lane_priv_t;
 
 
@@ -110,6 +113,10 @@ typedef struct {
 
     /* Maximal number of lanes to select */
     ucp_lane_index_t               max_lanes;
+
+    /* Minimal chunk size. It defines the minimal size of the fragment to split into
+     * several parts. The goal is to not split below this limit */
+    size_t                         min_chunk;
 
     /* MDs on which the buffer is expected to be already registered, so no need
        to account for the overhead of registering on them */

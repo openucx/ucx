@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include <uct/ib/efa/ib_efa.h>
+#include <uct/ib/efa/base/ib_efa.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
 
@@ -25,7 +25,6 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
     struct efadv_device_attr attr;
     ucs_status_t status;
     int ret;
-    uint64_t access_flags;
 
     ctx = ibv_open_device(ibv_device);
     if (ctx == NULL) {
@@ -57,21 +56,30 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
-    if (uct_ib_efadv_has_rdma_read(&attr)) {
-        access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
-    } else {
-        access_flags = IBV_ACCESS_LOCAL_WRITE;
-    }
-
     dev                        = &md->super.dev;
-    dev->mr_access_flags       = access_flags;
+    dev->mr_access_flags       = IBV_ACCESS_LOCAL_WRITE;
     dev->max_inline_data       = attr.inline_buf_size;
     dev->ordered_send_comp     = 0;
+
+    if (uct_ib_efadv_has_rdma_read(&attr)) {
+        dev->mr_access_flags |= IBV_ACCESS_REMOTE_READ;
+    }
+
+    if (uct_ib_efadv_has_rdma_write(&attr)) {
+        dev->mr_access_flags |= IBV_ACCESS_REMOTE_WRITE;
+    }
+
     /*
      * FIXME: Always disabling channel completion because of leak (gtest):
      * - https://github.com/amzn/amzn-drivers/issues/306
      */
     dev->req_notify_cq_support = 0;
+
+    if (md_config->enable_gpudirect_rdma != UCS_NO) {
+        uct_ib_check_gpudirect_driver(
+                &md->super, "/sys/module/efa_nv_peermem/version",
+                UCS_MEMORY_TYPE_CUDA);
+    }
 
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {
@@ -92,24 +100,31 @@ static uct_ib_md_ops_t uct_ib_efa_md_ops = {
     .super = {
         .close              = uct_ib_md_close,
         .query              = uct_ib_md_query,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = uct_ib_mem_advise,
         .mem_reg            = uct_ib_verbs_mem_reg,
         .mem_dereg          = uct_ib_verbs_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
-        .mem_advise         = uct_ib_mem_advise,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_ib_verbs_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .mem_attach         =(uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_efa_md_open,
 };
 
 UCT_IB_MD_DEFINE_ENTRY(efa, uct_ib_efa_md_ops);
 
+extern uct_tl_t UCT_TL_NAME(srd);
+
 void UCS_F_CTOR uct_efa_init(void)
 {
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(efa).list);
+    uct_tl_register(&uct_ib_component, &UCT_TL_NAME(srd));
 }
 
 void UCS_F_DTOR uct_efa_cleanup(void)
 {
+    uct_tl_unregister(&UCT_TL_NAME(srd));
     ucs_list_del(&UCT_IB_MD_OPS_NAME(efa).list);
 }

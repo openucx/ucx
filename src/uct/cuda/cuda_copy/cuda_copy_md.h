@@ -25,7 +25,6 @@ typedef enum {
  */
 typedef struct uct_cuda_copy_md {
     struct uct_md                super;           /* Domain info */
-    int                          sync_memops_set;
     size_t                       granularity;     /* allocation granularity */
     struct {
         ucs_on_off_auto_value_t  alloc_whole_reg; /* force return of allocation
@@ -36,6 +35,7 @@ typedef struct uct_cuda_copy_md {
         ucs_ternary_auto_value_t enable_fabric;
         uct_cuda_pref_loc_t      pref_loc;
         int                      cuda_async_managed;
+        int                      retain_primary_ctx;
     } config;
 } uct_cuda_copy_md_t;
 
@@ -50,6 +50,7 @@ typedef struct uct_cuda_copy_md_config {
     ucs_ternary_auto_value_t    enable_fabric;
     uct_cuda_pref_loc_t         pref_loc;
     ucs_memory_type_t           cuda_async_mem_type;
+    int                         retain_primary_ctx;
 } uct_cuda_copy_md_config_t;
 
 /**
@@ -69,5 +70,15 @@ ucs_status_t uct_cuda_copy_md_detect_memory_type(uct_md_h md,
                                                  const void *address,
                                                  size_t length,
                                                  ucs_memory_type_t *mem_type_p);
+
+
+ucs_status_t uct_cuda_copy_push_ctx(CUdevice device, int retain_inactive,
+                                    ucs_log_level_t log_level);
+
+
+ucs_status_t
+uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
+                           uct_md_mem_attr_t *mem_attr);
+
 
 #endif

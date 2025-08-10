@@ -16,8 +16,8 @@
 typedef enum uct_rocm_amd_gpu_product {
     UCT_ROCM_AMD_GPU_UNDEFINED = -1,
     UCT_ROCM_AMD_GPU_MI200,
-    UCT_ROCM_AMD_GPU_MI300A,
-    UCT_ROCM_AMD_GPU_MI300X
+    UCT_ROCM_AMD_GPU_MI300,
+    UCT_ROCM_AMD_GPU_MI350,
 } uct_rocm_amd_gpu_product_t;
 
 hsa_status_t uct_rocm_base_init(void);

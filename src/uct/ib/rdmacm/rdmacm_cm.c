@@ -842,7 +842,7 @@ static uct_cm_ops_t uct_rdmacm_cm_ops = {
 };
 
 static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_connect               = uct_rdmacm_cm_ep_connect,
     .ep_disconnect            = uct_rdmacm_cm_ep_disconnect,
     .cm_ep_conn_notify        = uct_rdmacm_cm_ep_conn_notify,
@@ -866,12 +866,12 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .ep_create                = (uct_ep_create_func_t)ucs_empty_function_return_unsupported,
     .iface_flush              = (uct_iface_flush_func_t)ucs_empty_function_return_unsupported,
     .iface_fence              = (uct_iface_fence_func_t)ucs_empty_function_return_unsupported,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
     .iface_progress           = (uct_iface_progress_func_t)ucs_empty_function_return_zero,
     .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucs_empty_function_return_unsupported,
     .iface_event_arm          = (uct_iface_event_arm_func_t)ucs_empty_function_return_unsupported,
-    .iface_close              = ucs_empty_function,
+    .iface_close              = (uct_iface_close_func_t)ucs_empty_function,
     .iface_query              = (uct_iface_query_func_t)ucs_empty_function_return_unsupported,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_unsupported,
     .iface_get_address        = (uct_iface_get_address_func_t)ucs_empty_function_return_unsupported,
@@ -883,7 +883,7 @@ static uct_iface_internal_ops_t uct_rdmacm_cm_iface_internal_ops = {
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = uct_rdmacm_ep_query,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
     .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
 };

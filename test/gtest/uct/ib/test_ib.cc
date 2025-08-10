@@ -109,7 +109,7 @@ public:
         uct_ib_address_pack(&pack_params, ib_addr);
 
         uct_ib_address_pack_params_t unpack_params;
-        uct_ib_address_unpack(ib_addr, &unpack_params);
+        ASSERT_UCS_OK(uct_ib_address_unpack(ib_addr, &unpack_params));
 
         if (uct_ib_iface_is_roce(iface)) {
             EXPECT_TRUE(iface->config.force_global_addr);
@@ -202,7 +202,7 @@ UCS_TEST_P(test_uct_ib_addr, address_pack_path_mtu, "IB_PATH_MTU=2048")
     uct_ib_address_t *addr = (uct_ib_address_t*)&buffer[0];
     uct_ib_iface_address_pack(iface, addr);
     uct_ib_address_pack_params_t params;
-    uct_ib_address_unpack(addr, &params);
+    ASSERT_UCS_OK(uct_ib_address_unpack(addr, &params));
     EXPECT_TRUE(params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
     EXPECT_EQ(IBV_MTU_2048, params.path_mtu);
 }
@@ -305,7 +305,8 @@ void test_uct_ib_with_specific_port::cleanup() {
 class test_uct_ib_roce : public test_uct_ib {
 };
 
-UCS_TEST_P(test_uct_ib_roce, local_subnet_only, "IB_ROCE_LOCAL_SUBNET=y")
+UCS_TEST_P(test_uct_ib_roce, local_subnet_only,
+           "IB_ROCE_REACHABILITY_MODE=local_subnet")
 {
     send_recv_short();
 }
@@ -463,7 +464,7 @@ public:
                                    UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
         return rc_has_ddp || dc_has_ddp;
     }
-    
+
     void test_check_ib_sl_config() {
         const char *max_avail_sl_str = getenv("GTEST_MAX_IB_SL");
         uint8_t sl, max_avail_sl;
@@ -804,6 +805,7 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
     for (int i = 0; i < num_devices; ++i) {
         const char *dev_name = ibv_get_device_name(ib_device_list[i]);
         uct_md_config_t *md_config;
+        uct_ib_md_t *ib_md;
         uct_ib_mlx5_md_t *ib_mlx5_md;
         uct_ib_device_t *dev;
         uct_md_h md;
@@ -823,6 +825,11 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
         EXPECT_UCS_OK(status);
         if (status != UCS_OK) {
             goto out_md_config_release;
+        }
+
+        ib_md = ucs_derived_of(md, uct_ib_md_t);
+        if (strcmp(ib_md->name, UCT_IB_MD_NAME(mlx5))) {
+            goto out_md_close; /* MD is not derived mlx5 md */
         }
 
         ib_mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
@@ -846,6 +853,7 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
             ucs_string_buffer_cleanup(&strb);
         }
 
+out_md_close:
         uct_md_close(md);
 
 out_md_config_release:

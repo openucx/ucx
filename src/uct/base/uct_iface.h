@@ -1031,7 +1031,7 @@ void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 
 ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface);
 
-void uct_iface_vfs_refresh(void *obj);
+void uct_iface_vfs_set_dirty(uct_iface_h iface);
 
 ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags);
 
@@ -1076,6 +1076,13 @@ static UCS_F_ALWAYS_INLINE int uct_ep_op_is_fetch(uct_ep_operation_t op)
                           UCS_BIT(UCT_EP_OP_GET_BCOPY) |
                           UCS_BIT(UCT_EP_OP_GET_ZCOPY) |
                           UCS_BIT(UCT_EP_OP_ATOMIC_FETCH));
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_perf_attr_has_bandwidth(uint64_t perf_attr_mask)
+{
+    return (perf_attr_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) ||
+           (perf_attr_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH);
 }
 
 #endif

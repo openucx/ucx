@@ -8,8 +8,8 @@ package ucx
 // #include "goucx.h"
 import "C"
 import (
-	"sync"
 	"unsafe"
+	"runtime/cgo"
 )
 
 type UcpCallback interface{}
@@ -23,46 +23,48 @@ type UcpAmDataRecvCallback = func(request *UcpRequest, status UcsStatus, length 
 type UcpAmRecvCallback = func(header unsafe.Pointer, headerSize uint64,
 	data *UcpAmData, replyEp *UcpEp) UcsStatus
 
+type UcpAmRecvCallbackBundle struct {
+	cb     UcpAmRecvCallback
+	worker *UcpWorker
+}	
+
 // This callback routine is invoked on the server side to handle incoming
 // connections from remote clients.
 type UcpListenerConnectionHandler = func(connRequest *UcpConnectionRequest)
 
-// Map from the callback id that is passed to C to the actual go callback.
-var callback_map = make(map[uint64]UcpCallback)
+type PackedCallback cgo.Handle
+func packCallback(cb UcpCallback) PackedCallback {
+    if cb == nil {
+        return 0
+    }
 
-// Unique index for each go callback, that passes to user_data.
-var callback_id uint64 = 1
-
-var mu sync.Mutex
-
-// Associates go callback with a unique id
-func register(cb UcpCallback) uint64 {
-	mu.Lock()
-	defer mu.Unlock()
-	callback_id++
-	callback_map[callback_id] = cb
-	return callback_id
+    return PackedCallback(cgo.NewHandle(cb))
 }
 
-// Atomically removes registered callback by it's id
-func deregister(id uint64) (UcpCallback, bool) {
-	mu.Lock()
-	defer mu.Unlock()
-	val, ret := callback_map[id]
-	delete(callback_map, id)
-	return val, ret
+func (pc PackedCallback) unpackInternal(freeHandle bool) UcpCallback {
+    if pc == 0 {
+        return nil
+    }
+
+    h := cgo.Handle(pc)
+    if freeHandle {
+        defer h.Delete()
+    }
+
+    return h.Value().(UcpCallback)
 }
 
-func getCallback(id uint64) (UcpCallback, bool) {
-	mu.Lock()
-	defer mu.Unlock()
-	val, ret := callback_map[id]
-	return val, ret
+func (pc PackedCallback) unpack() UcpCallback {
+    return pc.unpackInternal(false)
+}
+
+func (pc PackedCallback) unpackAndFree() UcpCallback {
+    return pc.unpackInternal(true)
 }
 
 //export ucxgo_completeGoSendRequest
-func ucxgo_completeGoSendRequest(request unsafe.Pointer, status C.ucs_status_t, callbackId unsafe.Pointer) {
-	if callback, found := deregister(uint64(uintptr(callbackId))); found {
+func ucxgo_completeGoSendRequest(request unsafe.Pointer, status C.ucs_status_t, packedCb unsafe.Pointer) {
+	if callback := PackedCallback(packedCb).unpackAndFree(); callback != nil {
 		callback.(UcpSendCallback)(&UcpRequest{
 			request: request,
 			Status:  UcsStatus(status),
@@ -71,8 +73,8 @@ func ucxgo_completeGoSendRequest(request unsafe.Pointer, status C.ucs_status_t, 
 }
 
 //export ucxgo_completeGoTagRecvRequest
-func ucxgo_completeGoTagRecvRequest(request unsafe.Pointer, status C.ucs_status_t, tag_info *C.ucp_tag_recv_info_t, callbackId unsafe.Pointer) {
-	if callback, found := deregister(uint64(uintptr(callbackId))); found {
+func ucxgo_completeGoTagRecvRequest(request unsafe.Pointer, status C.ucs_status_t, tag_info *C.ucp_tag_recv_info_t, packedCb unsafe.Pointer) {
+	if callback := PackedCallback(packedCb).unpackAndFree(); callback != nil {
 		callback.(UcpTagRecvCallback)(&UcpRequest{
 			request: request,
 			Status:  UcsStatus(status),
@@ -84,30 +86,30 @@ func ucxgo_completeGoTagRecvRequest(request unsafe.Pointer, status C.ucs_status_
 }
 
 //export ucxgo_amRecvCallback
-func ucxgo_amRecvCallback(calbackId unsafe.Pointer, header unsafe.Pointer, headerSize C.size_t,
+func ucxgo_amRecvCallback(packedCb unsafe.Pointer, header unsafe.Pointer, headerSize C.size_t,
 	data unsafe.Pointer, dataSize C.size_t, params *C.ucp_am_recv_param_t) C.ucs_status_t {
-	cbId := uint64(uintptr(calbackId))
-	if callback, found := getCallback(cbId); found {
+	if callback := PackedCallback(packedCb).unpack(); callback != nil {
+		bundle := callback.(*UcpAmRecvCallbackBundle)
 		var replyEp *UcpEp
 		if (params.recv_attr & C.UCP_AM_RECV_ATTR_FIELD_REPLY_EP) != 0 {
 			replyEp = &UcpEp{ep: params.reply_ep}
 		}
 		amData := &UcpAmData{
-			worker:  idToWorker[cbId],
+			worker:  bundle.worker,
 			flags:   UcpAmRecvAttrs(params.recv_attr),
 			dataPtr: data,
 			length:  uint64(dataSize),
 		}
-		return C.ucs_status_t(callback.(UcpAmRecvCallback)(header, uint64(headerSize), amData, replyEp))
+		return C.ucs_status_t(bundle.cb(header, uint64(headerSize), amData, replyEp))
 	}
 	return C.UCS_OK
 }
 
 //export ucxgo_completeAmRecvData
 func ucxgo_completeAmRecvData(request unsafe.Pointer, status C.ucs_status_t,
-	length C.size_t, callbackId unsafe.Pointer) {
+	length C.size_t, packedCb unsafe.Pointer) {
 
-	if callback, found := deregister(uint64(uintptr(callbackId))); found {
+	if callback := PackedCallback(packedCb).unpackAndFree(); callback != nil {
 		callback.(UcpAmDataRecvCallback)(&UcpRequest{
 			request: request,
 			Status:  UcsStatus(status),

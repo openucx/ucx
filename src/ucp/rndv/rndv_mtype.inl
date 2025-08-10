@@ -34,6 +34,7 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         (ucp_proto_rndv_mtype_ep(worker, frag_mem_type, mem_type) == NULL) ||
+        !init_params->worker->context->config.ext.memtype_copy_enable ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -46,12 +47,13 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
-                                  ucs_memory_type_t frag_mem_type)
+                                  ucs_memory_type_t frag_mem_type,
+                                  ucs_sys_device_t frag_sys_dev)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
     req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
-                                              UCS_SYS_DEVICE_ID_UNKNOWN);
+                                              frag_sys_dev);
     if (req->send.rndv.mdesc == NULL) {
         return UCS_ERR_NO_MEMORY;
     }

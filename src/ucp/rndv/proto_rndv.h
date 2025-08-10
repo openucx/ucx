@@ -73,6 +73,7 @@ typedef struct {
      * protocols.
      * TODO: Create a separate struct for mtype protocols and move it there. */
     ucs_memory_type_t         frag_mem_type;
+    ucs_sys_device_t          frag_sys_dev;
 
     /* Multi-lane common part. Must be the last field, see
        @ref ucp_proto_multi_priv_t */

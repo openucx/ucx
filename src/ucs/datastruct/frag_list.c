@@ -351,12 +351,12 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
  *  - see if h is ready for extraction (sn check), extract first, move rest to the ready list
  */
 
-ucs_frag_list_elem_t *ucs_frag_list_pull_slow(ucs_frag_list_t *head)
+ucs_frag_list_elem_t *ucs_frag_list_pull_slow(ucs_frag_list_t *head, int force)
 {
     ucs_frag_list_elem_t *h;
 
     h = ucs_queue_head_elem_non_empty(&head->list, ucs_frag_list_elem_t, list);
-    if (UCS_FRAG_LIST_SN_CMP(h->head.first_sn, !=, head->head_sn+1)) {
+    if (!force && UCS_FRAG_LIST_SN_CMP(h->head.first_sn, !=, head->head_sn+1)) {
         ucs_trace_data("first_sn(%u) != head_sn(%u) + 1", (unsigned)h->head.first_sn,
                        (unsigned)head->head_sn);
         return NULL;

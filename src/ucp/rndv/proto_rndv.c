@@ -200,6 +200,7 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_common_init_params_t *init_params,
     ucp_rsc_index_t rsc_index;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
+    ucp_proto_perf_node_t *perf_node;
 
     if (lane == UCP_NULL_LANE) {
         return UCS_ERR_NO_ELEM;
@@ -237,9 +238,10 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_common_init_params_t *init_params,
     perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY]    = ucs_linear_func_make(
             ucp_tl_iface_latency(worker->context, &perf_attr.latency), 0.0);
 
-    status = ucp_proto_perf_add_funcs(perf, init_params->min_length,
-                                      init_params->max_length, perf_factors,
-                                      NULL, name, "");
+    perf_node = ucp_proto_perf_node_new_data(name, "");
+    status    = ucp_proto_perf_add_funcs(perf, init_params->min_length,
+                                         init_params->max_length, perf_factors,
+                                         perf_node, NULL);
     if (status != UCS_OK) {
         goto err_destroy_perf;
     }
@@ -403,6 +405,13 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         cfg_thresh = remote_proto->cfg_thresh;
     }
 
+    if (fabs(params->perf_bias) > UCP_PROTO_PERF_EPSILON) {
+        ucp_proto_perf_apply_func(perf,
+                                  ucs_linear_func_make(0.0,
+                                                       1.0 - params->perf_bias),
+                                  "bias", "%.2f %%", params->perf_bias);
+    }
+
     ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
                                perf, rpriv, priv_size);
 
@@ -495,10 +504,8 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
 
     num_lanes = ucp_proto_common_find_lanes(params,
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
-                                            UCP_PROTO_COMMON_OFFSET_INVALID, 1,
                                             UCP_LANE_TYPE_AM,
-                                            UCS_MEMORY_TYPE_UNKNOWN,
-                                            UCT_IFACE_FLAG_AM_BCOPY, 1, 0,
+                                            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, NULL,
                                             &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s",
@@ -636,6 +643,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     }
 
     rpriv->frag_mem_type = init_params->super.reg_mem_info.type;
+    rpriv->frag_sys_dev  = init_params->super.reg_mem_info.sys_dev;
 
     if (rpriv->super.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */
@@ -710,6 +718,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
+    ucs_sys_device_t sys_dev;
     ucs_status_t status;
     ucp_rkey_h rkey;
 
@@ -717,6 +726,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
                (op_id < UCP_OP_ID_RNDV_LAST));
 
     if (rkey_length > 0) {
+        sys_dev = req->send.state.dt_iter.mem_info.sys_dev;
+        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            sys_dev = worker->context->alloc_md[UCS_MEMORY_TYPE_CUDA].sys_dev;
+        }
+
         ucs_assert(rkey_buffer != NULL);
         /* Do not unpack rkeys from MDs with rkey_ptr capability, except
          * rkey_ptr_lane. Examples are: sysv and posix. Such keys, if packed,
@@ -725,7 +739,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
          */
         status = ucp_ep_rkey_unpack_internal(
                   ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
-                  ep_config->rndv.proto_rndv_rkey_skip_mds, &rkey);
+                  ep_config->rndv.proto_rndv_rkey_skip_mds, sys_dev, &rkey);
         if (status != UCS_OK) {
             goto err;
         }

@@ -23,7 +23,11 @@
 
 
 #define UCT_DC_MLX5_IFACE_TXQP_GET(_iface, _ep, _txqp, _txwq) \
-    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, (_ep)->dci, _txqp, _txwq)
+    { \
+        ucs_assert((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI); \
+        _txqp = &uct_dc_mlx5_iface_dci(_iface, (_ep)->dci)->txqp; \
+        _txwq = &uct_dc_mlx5_iface_dci(_iface, (_ep)->dci)->txwq; \
+    }
 
 
 enum uct_dc_mlx5_ep_flags {
@@ -49,9 +53,12 @@ enum uct_dc_mlx5_ep_flags {
     /* Flush remote operation should be invoked */
     UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(10),
 
+    /* Use atomic offset on EP */
+    UCT_DC_MLX5_EP_FLAG_ATOMIC_OFFSET       = UCS_BIT(11),
+
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(11)
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(12)
 #else
     UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
 #endif
@@ -346,8 +353,8 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
                               uct_dci_index_t dci_index)
 {
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
-    uct_dc_dci_t *dci            = uct_dc_mlx5_iface_dci(iface, dci_index);
     uint8_t num_channels         = 1;
+    uct_dc_dci_t *dci;
     ucs_status_t status;
 
     ucs_assertv(ucs_array_length(&pool->stack) < iface->tx.ndci,
@@ -358,22 +365,42 @@ uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
         num_channels = iface->tx.num_dci_channels;
     }
 
-    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, 1, num_channels);
+    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, num_channels, &dci);
     if (status != UCS_OK) {
         ucs_error("iface %p: failed to create dci %u at pool %u", iface,
                   dci_index, pool_index);
-        return status;
+        goto err;
     }
 
     dci->path_index = pool->config.path_index;
     dci->pool_index = pool_index;
+
+    ucs_assertv_always(!uct_dc_mlx5_is_dci_valid(
+                               uct_dc_mlx5_iface_dci(iface, dci_index)),
+                       "iface=%p dci_index=%d", iface, dci_index);
+    ucs_array_elem(&iface->tx.dcis, dci_index) = dci;
+
+    status = uct_dc_mlx5_iface_dci_connect(iface, dci);
+    if (status != UCS_OK) {
+        ucs_error("iface %p: failed to connect dci %u at pool %u", iface,
+                  dci_index, pool_index);
+        goto err_destroy;
+    }
 
     if (uct_dc_mlx5_iface_is_policy_shared(iface) ||
         uct_dc_mlx5_is_hw_dci(iface, dci_index)) {
         dci->flags |= UCT_DC_DCI_FLAG_SHARED;
     }
 
+    uct_iface_vfs_set_dirty(&iface->super.super.super.super.super);
+
     return UCS_OK;
+
+err_destroy:
+    ucs_array_elem(&iface->tx.dcis, dci_index) = NULL;
+    uct_dc_mlx5_destroy_dci(iface, dci);
+err:
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -424,25 +451,6 @@ uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
 
     return ucs_likely(pool->stack_top < iface->tx.ndci);
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_iface_dcis_array_copy(void *dst, void *src, size_t length)
-{
-    uct_dc_dci_t *src_dcis = (uct_dc_dci_t*)src;
-    uct_dc_dci_t *dst_dcis = (uct_dc_dci_t*)dst;
-    size_t i;
-
-    memcpy(dst_dcis, src_dcis, sizeof(uct_dc_dci_t) * length);
-
-    /* txqp is a queue and need to splice tail */
-    for (i = 0; i < length; ++i) {
-        if (uct_dc_mlx5_is_dci_valid(&src_dcis[i])) {
-            ucs_queue_head_init(&dst_dcis[i].txqp.outstanding);
-            ucs_queue_splice(&dst_dcis[i].txqp.outstanding,
-                             &src_dcis[i].txqp.outstanding);
-        }
-    }
 }
 
 static UCS_F_ALWAYS_INLINE int

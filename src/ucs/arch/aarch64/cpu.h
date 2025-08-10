@@ -301,6 +301,11 @@ static inline ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
     return UCS_ERR_UNSUPPORTED;
 }
 
+static UCS_F_ALWAYS_INLINE void ucs_cpu_relax()
+{
+    asm volatile ("yield" ::: "memory");
+}
+
 END_C_DECLS
 
 #endif

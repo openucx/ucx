@@ -515,8 +515,8 @@ uct_posix_segment_open(uct_mm_md_t *md, uct_mm_seg_id_t *seg_id_p, int *fd_p)
 
 static ucs_status_t
 uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                    ucs_memory_type_t mem_type, unsigned flags,
-                    const char *alloc_name, uct_mem_h *memh_p)
+                    ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
+                    unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
     uct_mm_md_t                     *md = ucs_derived_of(tl_md, uct_mm_md_t);
     uct_posix_md_config_t *posix_config = ucs_derived_of(md->config,
@@ -716,8 +716,9 @@ static void uct_posix_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rse
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_posix_rkey_unpack,
-                 (component, rkey_buffer, rkey_p, handle_p),
+                 (component, rkey_buffer, params, rkey_p, handle_p),
                  uct_component_t *component, const void *rkey_buffer,
+                 const uct_rkey_unpack_params_t *params,
                  uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_posix_packed_rkey_t *packed_rkey = rkey_buffer;
@@ -764,12 +765,13 @@ static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
         .query              = uct_posix_md_query,
         .mem_alloc          = uct_posix_mem_alloc,
         .mem_free           = uct_posix_mem_free,
-        .mem_advise         = ucs_empty_function_return_unsupported,
-        .mem_reg            = ucs_empty_function_return_unsupported,
-        .mem_dereg          = ucs_empty_function_return_unsupported,
-        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_reg            = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
+        .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_posix_md_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     },
     .query             = uct_posix_query,
     .iface_addr_length = uct_posix_iface_addr_length,

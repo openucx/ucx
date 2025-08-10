@@ -126,6 +126,7 @@ gtest_SOURCES = \
 	uct/test_pending.cc \
 	uct/test_progress.cc \
 	uct/test_uct_ep.cc \
+	uct/test_uct_iface.cc \
 	uct/test_uct_perf.cc \
 	uct/v2/test_uct_query.cc \
 	uct/test_zcopy_comp.cc \
@@ -254,13 +255,18 @@ if HAVE_MLX5_DV
 gtest_SOURCES += \
 	uct/ib/test_cqe_zipping.cc
 endif
+if HAVE_EFA
+gtest_SOURCES += \
+    uct/ib/test_srd.cc
+endif
 endif # HAVE_IB
 
 if HAVE_CUDA
 gtest_SOURCES += \
-	common/cuda_context.cc \
 	ucm/cuda_hooks.cc \
-	uct/cuda/test_cuda_ipc_md.cc
+	uct/cuda/test_switch_cuda_device.cc \
+	uct/cuda/test_cuda_ipc_md.cc \
+	uct/cuda/test_cuda_nvml.cc
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
 gtest_LDFLAGS += \

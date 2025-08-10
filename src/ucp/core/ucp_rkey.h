@@ -65,6 +65,10 @@ struct ucp_rkey_config_key {
 };
 
 
+#define UCP_SYS_DEVICE_FLUSH_BIT UCS_BIT(7)
+#define UCP_SYS_DEVICE_MAX_PACKED UCP_SYS_DEVICE_FLUSH_BIT - 1
+
+
 /**
  * Rkey configuration
  */
@@ -221,7 +225,9 @@ int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer);
 ucs_status_t
 ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,
                             ucp_md_map_t unpack_md_map,
-                            ucp_md_map_t skip_md_map, ucp_rkey_h *rkey_p);
+                            ucp_md_map_t skip_md_map,
+                            ucs_sys_device_t sys_device,
+                            ucp_rkey_h *rkey_p);
 
 
 void ucp_rkey_dump_packed(const void *buffer, size_t length,
@@ -235,5 +241,8 @@ void ucp_rkey_config_dump_brief(const ucp_rkey_config_key_t *rkey_config_key,
 void ucp_rkey_proto_select_dump(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                 ucs_string_buffer_t *strb);
+
+
+ucs_sys_device_t ucp_rkey_pack_sys_dev(ucp_mem_h memh);
 
 #endif

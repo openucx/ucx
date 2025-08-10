@@ -125,6 +125,31 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
     distance->bandwidth = UCS_FP8_UNPACK(BANDWIDTH, packed_distance->bandwidth);
 }
 
+ucs_sys_device_t ucp_rkey_pack_sys_dev(ucp_mem_h memh)
+{
+    ucs_sys_device_t sys_dev_packed = memh->sys_dev;
+    ucp_md_index_t md_index;
+    ucp_sys_dev_map_t sys_dev_map;
+    ucs_sys_device_t sys_dev;
+
+    ucs_assert(sys_dev_packed <= UCP_SYS_DEVICE_MAX_PACKED);
+
+    ucs_for_each_bit(md_index, memh->md_map) {
+        sys_dev_map = memh->context->tl_mds[md_index].sys_dev_map;
+        ucs_for_each_bit(sys_dev, sys_dev_map) {
+            if (ucs_topo_is_sibling(sys_dev, sys_dev_packed)) {
+                /* PUT operation on such rkey requires remote flush.
+                 * Set a flag for the peer to recognize it. */
+                sys_dev_packed |= UCP_SYS_DEVICE_FLUSH_BIT;
+                goto out;
+            }
+        }
+    }
+
+out:
+    return sys_dev_packed;
+}
+
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                  (context, md_map, memh, address, length, mem_info, sys_dev_map,
                   sys_distance, uct_flags, buffer),
@@ -184,7 +209,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
     }
 
     /* Pack system device id */
-    *ucs_serialize_next(&p, uint8_t) = mem_info->sys_dev;
+    *ucs_serialize_next(&p, uint8_t) = memh->packed_sys_dev;
 
     /* Pack distance from sys_dev to each device in distance_dev_map */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
@@ -577,12 +602,11 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat)
                                              ucp_memh_export_md_map(memh));
     }
 
-    if (rkey_compat) {
-        return ucp_rkey_packed_size(context, memh->md_map,
-                                    UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+    if (!rkey_compat) {
+        ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
     }
 
-    ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
+    return ucp_rkey_packed_size(context, memh->md_map, memh->sys_dev, 0);
 }
 
 static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
@@ -594,15 +618,15 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
         return ucp_memh_exported_pack(memh, memh_buffer);
     }
 
-    if (rkey_compat) {
-        mem_info.type    = memh->mem_type;
-        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
-                                  ucp_memh_address(memh), ucp_memh_length(memh),
-                                  &mem_info, 0, NULL, 0, memh_buffer);
+    if (!rkey_compat) {
+        ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
     }
 
-    ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
+    mem_info.type    = memh->mem_type;
+    mem_info.sys_dev = memh->sys_dev;
+    return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
+                              ucp_memh_address(memh), ucp_memh_length(memh),
+                              &mem_info, 0, NULL, 0, memh_buffer);
 }
 
 int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer)
@@ -789,15 +813,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
-                 (ep, buffer, length, unpack_md_map, skip_md_map, rkey_p),
+                 (ep, buffer, length, unpack_md_map, skip_md_map, sys_dev,
+                  rkey_p),
                  ucp_ep_h ep, const void *buffer, size_t length,
                  ucp_md_map_t unpack_md_map, ucp_md_map_t skip_md_map,
-                 ucp_rkey_h *rkey_p)
+                 ucs_sys_device_t sys_dev, ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     const void *p                    = buffer;
     ucp_md_map_t md_map, remote_md_map, unreachable_md_map;
+    uct_rkey_unpack_params_t unpack_params;
     ucp_rsc_index_t cmpt_index;
     unsigned remote_md_index;
     const void *tl_rkey_buf;
@@ -848,6 +874,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     rkey->ep       = ep;
 #endif
 
+    unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
+    unpack_params.sys_device = sys_dev;
+
     /* Go over remote MD indices and unpack rkey of each UCT MD */
     rkey_index = 0; /* Index of the rkey in the array */
     ucs_for_each_bit(remote_md_index, remote_md_map) {
@@ -884,7 +913,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
                                                       remote_md_index);
         tl_rkey->cmpt = worker->context->tl_cmpts[cmpt_index].cmpt;
 
-        status = uct_rkey_unpack(tl_rkey->cmpt, tl_rkey_buf, &tl_rkey->rkey);
+        status = uct_rkey_unpack_v2(tl_rkey->cmpt, tl_rkey_buf, &unpack_params,
+                                    &tl_rkey->rkey);
         if (status == UCS_OK) {
             ucs_trace("rkey[%d] for remote md %d is 0x%lx", rkey_index,
                       remote_md_index, tl_rkey->rkey.rkey);

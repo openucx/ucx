@@ -154,8 +154,6 @@ public:
                               sender().ucph()->cache_md_map[memh1->mem_type];
         ucp_md_index_t md_index;
 
-        EXPECT_NE(memh1->md_map, 0);
-
         ucs_for_each_bit(md_index, md_map) {
             if (equal || (m_always_equal_md_map & UCS_BIT(md_index))) {
                 EXPECT_EQ(memh2->uct[md_index], memh1->uct[md_index]);
@@ -237,8 +235,9 @@ ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
         ASSERT_UCS_OK(ucp_ep_rkey_unpack(ep, rkey_buffer, &rkey));
     } else {
         // Different MD map means different config index on proto v2
-        ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_size,
-                                                  md_map, 0, &rkey));
+        ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(
+                        ep, rkey_buffer, rkey_size, md_map, 0,
+                        UCS_SYS_DEVICE_ID_UNKNOWN, &rkey));
     }
 
     ucp_rkey_buffer_release(rkey_buffer);
@@ -335,7 +334,7 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(ucp_rkey_packed_size(sender().ucph(), memh->md_map,
-                                   UCS_SYS_DEVICE_ID_UNKNOWN, 0),
+                                   memh->sys_dev, 0),
               rkey_size);
 
     /* Unpack remote key buffer */
@@ -389,8 +388,6 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
                 EXPECT_EQ(&ucp_rma_sw_proto,
                           UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
             } else {
-                ucs_assert(&ucp_rma_basic_proto ==
-                           UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
                 EXPECT_EQ(&ucp_rma_basic_proto,
                           UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
             }

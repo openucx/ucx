@@ -108,6 +108,7 @@ typedef struct uct_ib_md_ext_config {
                                                        reuse*/
     unsigned long            reg_retry_cnt; /**< Memory registration retry count */
     unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
+    int                      direct_nic; /**< Direct NIC with GPU functionality */
 } uct_ib_md_ext_config_t;
 
 
@@ -387,8 +388,6 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
 void uct_ib_md_ece_check(uct_ib_md_t *md);
 
 /* Check if IB MD supports nonblocking registration */
-void uct_ib_md_check_odp(uct_ib_md_t *md);
-
 int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr);
 
 ucs_status_t
@@ -413,8 +412,9 @@ ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                                     void *mkey_buffer);
 
 ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
-                                const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                void **handle_p);
+                                const void *rkey_buffer,
+                                const uct_rkey_unpack_params_t *params,
+                                uct_rkey_t *rkey_p, void **handle_p);
 
 ucs_status_t
 uct_ib_base_query_md_resources(uct_md_resource_desc_t **resources_p,
@@ -431,5 +431,9 @@ ucs_status_t uct_ib_fork_init(const uct_ib_md_config_t *md_config,
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
                                unsigned mem_flags, size_t memh_base_size,
                                size_t mr_size, uct_ib_mem_t **memh_p);
+
+void uct_ib_check_gpudirect_driver(uct_ib_md_t *md,
+                                   const char *file,
+                                   ucs_memory_type_t mem_type);
 
 #endif

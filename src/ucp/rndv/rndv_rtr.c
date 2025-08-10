@@ -35,6 +35,7 @@ typedef struct {
 typedef struct {
     ucp_proto_rndv_rtr_priv_t super;
     ucs_memory_type_t         frag_mem_type;
+    ucs_sys_device_t          frag_sys_dev;
 } ucp_proto_rndv_rtr_mtype_priv_t;
 
 static UCS_F_ALWAYS_INLINE void
@@ -351,7 +352,8 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type);
+        status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
+                                                   rpriv->frag_sys_dev);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
@@ -414,10 +416,10 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
             continue;
         }
 
-        params.super.reg_mem_info.type = frag_mem_type;
-
-        status = ucp_mm_get_alloc_md_index(context, frag_mem_type, &md_index,
-                                           &params.super.reg_mem_info.sys_dev);
+        status = ucp_mm_get_alloc_md_index(context, frag_mem_type,
+                                           init_params->select_param->sys_dev,
+                                           &md_index,
+                                           &params.super.reg_mem_info);
         if ((status == UCS_OK) && (md_index != UCP_NULL_RESOURCE)) {
             params.md_map = UCS_BIT(md_index);
         } else if (frag_mem_type == UCS_MEMORY_TYPE_HOST) {
@@ -445,6 +447,7 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         rpriv.super.pack_cb       = ucp_proto_rndv_rtr_mtype_pack;
         rpriv.super.data_received = ucp_proto_rndv_rtr_mtype_data_received;
         rpriv.frag_mem_type       = frag_mem_type;
+        rpriv.frag_sys_dev        = params.super.reg_mem_info.sys_dev;
 
         ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
 out_unpack_perf_destroy:

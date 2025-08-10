@@ -672,16 +672,18 @@ run_mpi_tests() {
 			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
 			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
-			build release --disable-gtest --with-mpi
+			build release-mt --with-mpi --enable-assertions
 
 			# check whether installation is valid (it compiles examples at least)
 			$MAKEP installcheck
 
-			MPIRUN="mpirun \
+			MPIRUN_COMMON="mpirun \
 					--allow-run-as-root \
 					--bind-to none \
 					-x UCX_ERROR_SIGNALS \
-					-x UCX_HANDLE_ERRORS \
+					-x UCX_HANDLE_ERRORS"
+
+			MPIRUN="${MPIRUN_COMMON} \
 					-mca pml ob1 \
 					-mca osc ^ucx \
 					-mca btl tcp,self \
@@ -692,6 +694,20 @@ run_mpi_tests() {
 			run_ucx_perftest 1
 
 			test_malloc_hooks_mpi
+
+			if [ "X$have_cuda" == "Xyes" ] && [ -x ./test/mpi/test_mpi_cuda ]
+			then
+				echo "==== Running MPI CUDA tests ===="
+				${MPIRUN_COMMON} -np 2 ./test/mpi/test_mpi_cuda
+
+				echo "==== Running MPI CUDA tests without cuda_ipc ===="
+				${MPIRUN_COMMON} -np 2  -x UCX_TLS=^cuda_ipc \
+						./test/mpi/test_mpi_cuda
+
+				echo "==== Running MPI CUDA tests with put_ppln ===="
+				${MPIRUN_COMMON} -np 2  -x UCX_RNDV_SCHEME=put_ppln \
+						./test/mpi/test_mpi_cuda
+			fi
 
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
 			# from installation directory
@@ -1128,12 +1144,9 @@ run_release_mode_tests() {
 # Run nt_buffer_transfer tests
 #
 run_nt_buffer_transfer_tests() {
-    if lscpu | grep -q 'AuthenticAMD'
-    then
-	    build release --enable-gtest --enable-optimizations
-	    echo "==== Running nt_buffer_transfer tests ===="
-	    ./test/gtest/gtest --gtest_filter="test_arch.nt_buffer_transfer_*"
-    fi
+    build release --enable-gtest --enable-optimizations
+    echo "==== Running test_arch tests with optimizations ===="
+    ./test/gtest/gtest --gtest_filter="test_arch.*"
 }
 
 set_ucx_common_test_env() {
@@ -1143,11 +1156,30 @@ set_ucx_common_test_env() {
 	export UCX_TCP_CM_REUSEADDR=y
 
 	# Don't cross-connect RoCE devices
-	export UCX_IB_ROCE_LOCAL_SUBNET=y
 	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 
 	export LSAN_OPTIONS=suppressions=${WORKSPACE}/contrib/lsan.supp
 	export ASAN_OPTIONS=protect_shadow_gap=0
+}
+
+run_configure_tests() {
+	echo "==== Run configure tests ===="
+
+	../contrib/configure-release --with-verbs
+	grep 'build_modules=' config.log
+	if ! grep -qwE '^build_modules=.*:ib.*:rdmacm.*:mlx5' config.log
+	then
+		azure_log_error "missing modules configuring with verbs"
+		exit 1
+	fi
+
+	../contrib/configure-release --without-verbs
+	grep 'build_modules=' config.log
+	if grep -wE '^build_modules=.*:(ib|rdmacm|efa|mlx5)' config.log
+	then
+		azure_log_error "some modules were not disabled without verbs"
+		exit 1
+	fi
 }
 
 #
@@ -1158,6 +1190,9 @@ run_tests() {
 
 	# all are running mpi tests
 	run_mpi_tests
+
+	# configuration related tests
+	run_configure_tests
 
 	# build for devel tests and gtest
 	build devel --enable-gtest

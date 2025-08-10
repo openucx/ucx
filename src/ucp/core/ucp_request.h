@@ -54,10 +54,11 @@ enum {
     UCP_REQUEST_FLAG_RKEY_INUSE            = UCS_BIT(18),
     UCP_REQUEST_FLAG_USER_HEADER_COPIED    = UCS_BIT(19),
     UCP_REQUEST_FLAG_USAGE_TRACKED         = UCS_BIT(20),
+    UCP_REQUEST_FLAG_FENCE_REQUIRED        = UCS_BIT(21),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(21),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(22),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(23),
+    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(22),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(23),
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(24),
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
@@ -118,6 +119,24 @@ enum {
     UCP_RDESC_HASH_LIST = 0,
     UCP_RDESC_ALL_LIST  = 1
 };
+
+
+/**
+ * Memory flush related structure
+ */
+typedef struct {
+    /* Number of 0-read flush to complete overall */
+    int              count;
+
+    /* Number of 0-read flush started */
+    int              started;
+
+    /* Shared completion to track remaining */
+    uct_completion_t uct_comp;
+
+    /* List of memory areas to track 0-read flush operations */
+    ucp_mem_area_t   *entries;
+} ucp_mem_flush_t;
 
 
 /**
@@ -334,6 +353,7 @@ struct ucp_request {
                     uint8_t            sw_done;
                     uint8_t            num_lanes; /* How many lanes are being flushed */
                     ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
+                    ucp_mem_flush_t    mem; /* Memory specific flushes */
                 } flush;
 
                 struct {

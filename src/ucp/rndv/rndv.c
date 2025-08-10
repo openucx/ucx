@@ -1129,7 +1129,7 @@ ucs_mpool_ops_t ucp_frag_mpool_ops = {
     .chunk_alloc   = ucp_frag_mpool_malloc,
     .chunk_release = ucp_frag_mpool_free,
     .obj_init      = ucp_frag_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = (ucs_mpool_obj_cleanup_func_t)ucs_empty_function
 };
 
 ucp_mem_desc_t *
@@ -1179,6 +1179,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     mpriv            = ucs_mpool_priv(mpool);
     mpriv->worker    = worker;
     mpriv->mem_type  = key.mem_type;
+    mpriv->sys_dev   = sys_dev;
 
 out_mp_get:
     return ucp_worker_mpool_get(mpool);

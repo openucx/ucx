@@ -591,6 +591,10 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         perf_attr->bandwidth = iface_attr.bandwidth;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        perf_attr->path_bandwidth = iface_attr.bandwidth;
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         perf_attr->latency = iface_attr.latency;
     }
@@ -725,7 +729,7 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
     if (params->field_mask & UCT_EP_PARAM_FIELD_IFACE) {
         status = params->iface->ops.ep_create(params, ep_p);
         if (status == UCS_OK) {
-            ucs_vfs_obj_set_dirty(params->iface, uct_iface_vfs_refresh);
+            uct_iface_vfs_set_dirty(params->iface);
         }
 
         return status;

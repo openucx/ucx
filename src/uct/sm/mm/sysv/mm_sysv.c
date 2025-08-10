@@ -68,8 +68,8 @@ static ucs_status_t uct_sysv_mem_attach_common(int shmid, void **address_p)
 
 static ucs_status_t
 uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                   ucs_memory_type_t mem_type, unsigned flags,
-                   const char *alloc_name, uct_mem_h *memh_p)
+                   ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
+                   unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
     uct_mm_md_t *md = ucs_derived_of(tl_md, uct_mm_md_t);
     ucs_status_t status;
@@ -169,8 +169,9 @@ static void uct_sysv_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_sysv_rkey_unpack,
-                 (component, rkey_buffer, rkey_p, handle_p),
+                 (component, rkey_buffer, params, rkey_p, handle_p),
                  uct_component_t *component, const void *rkey_buffer,
+                 const uct_rkey_unpack_params_t *params,
                  uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_sysv_packed_rkey_t *packed_rkey = rkey_buffer;
@@ -199,19 +200,20 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
         .query                  = uct_sysv_md_query,
         .mem_alloc              = uct_sysv_mem_alloc,
         .mem_free               = uct_sysv_mem_free,
-        .mem_advise             = ucs_empty_function_return_unsupported,
-        .mem_reg                = ucs_empty_function_return_unsupported,
-        .mem_dereg              = ucs_empty_function_return_unsupported,
-        .mem_attach             = ucs_empty_function_return_unsupported,
+        .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_reg                = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
+        .mem_dereg              = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+        .mem_query              = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack              = uct_sysv_md_mkey_pack,
-        .detect_memory_type     = ucs_empty_function_return_unsupported
+        .mem_attach             = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     },
     .query             = uct_sysv_query,
-    .iface_addr_length = ucs_empty_function_return_zero_size_t,
-    .iface_addr_pack   = ucs_empty_function_return_success,
+    .iface_addr_length = (uct_mm_mapper_iface_addr_length_func_t)ucs_empty_function_return_zero_size_t,
+    .iface_addr_pack   = (uct_mm_mapper_iface_addr_pack_func_t)ucs_empty_function_return_success,
     .mem_attach        = uct_sysv_mem_attach,
     .mem_detach        = uct_sysv_mem_detach,
-    .is_reachable      = ucs_empty_function_return_one_int
+    .is_reachable      = (uct_mm_mapper_is_reachable_func_t)ucs_empty_function_return_one_int
 };
 
 UCT_MM_TL_DEFINE(sysv, &uct_sysv_md_ops, uct_sysv_rkey_unpack,

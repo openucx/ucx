@@ -606,6 +606,10 @@ bool uct_test::has_ud() const {
     return (has_transport("ud_verbs") || has_transport("ud_mlx5"));
 }
 
+bool uct_test::has_srd() const {
+    return has_transport("srd");
+}
+
 bool uct_test::has_rc() const {
     return (has_transport("rc_verbs") || has_transport("rc_mlx5"));
 }
@@ -959,6 +963,7 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
     params.address         = address;
 
     for (unsigned i = 0; i <= num_retries; ++i) {
+        scoped_log_handler slh(wrap_errors_logger);
         if ((md_attr().flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG)) &&
             (mem_type == UCS_MEMORY_TYPE_HOST)) {
             status = uct_iface_mem_alloc(m_iface, length, mem_flags, "uct_test",
@@ -983,7 +988,7 @@ void uct_test::entity::mem_alloc(size_t length, unsigned mem_flags,
                              << ": Allocation failed - "
                              << ucs_status_string(status);
             /* Sleep only if there are more retries remaining */
-            usleep(10000);
+            usleep(ucs::rand() % 10000);
         }
     }
 
@@ -1461,12 +1466,13 @@ uct_test::mapped_buffer::mapped_buffer(size_t size,
     if ((mem_type == UCS_MEMORY_TYPE_HOST) || (mem_type == UCS_MEMORY_TYPE_RDMA)) {
         m_entity.mem_alloc(alloc_size, mem_flags, &m_mem, mem_type, num_retries);
     } else {
-        m_mem.method   = UCT_ALLOC_METHOD_LAST;
-        m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
-        m_mem.length   = alloc_size;
-        m_mem.mem_type = mem_type;
-        m_mem.memh     = UCT_MEM_HANDLE_NULL;
-        m_mem.md       = NULL;
+        m_mem.method     = UCT_ALLOC_METHOD_LAST;
+        m_mem.address    = mem_buffer::allocate(alloc_size, mem_type);
+        m_mem.length     = alloc_size;
+        m_mem.mem_type   = mem_type;
+        m_mem.memh       = UCT_MEM_HANDLE_NULL;
+        m_mem.md         = NULL;
+        m_mem.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
         m_entity.mem_type_reg(&m_mem, mem_flags);
     }
 

@@ -597,8 +597,12 @@ uct_ud_verbs_iface_unpack_peer_address(uct_ud_iface_t *iface,
 
     memset(peer_address, 0, sizeof(*peer_address));
 
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
-                                        &ah_attr, &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
+                                                 &ah_attr, &path_mtu);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "UD verbs connect",
                                     &peer_address->ah);
     if (status != UCS_OK) {
@@ -619,30 +623,17 @@ static void *uct_ud_verbs_ep_get_peer_address(uct_ud_ep_t *ud_ep)
 int uct_ud_verbs_ep_is_connected(const uct_ep_h tl_ep,
                                  const uct_ep_is_connected_params_t *params)
 {
-    uct_ud_verbs_ep_t *ep    = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
-    uct_ib_iface_t *ib_iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_ib_address_t *ib_addr;
-    struct ibv_ah *ah;
-    struct ibv_ah_attr ah_attr;
-    enum ibv_mtu path_mtu;
-    ucs_status_t status;
+    uct_ud_verbs_ep_t *ep     = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
+    uct_ib_iface_t *ib_iface  = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
+    uct_ib_address_t *ib_addr = (uct_ib_address_t*)params->device_addr;
 
     if (!uct_ud_ep_is_connected_to_addr(&ep->super, params,
                                         ep->peer_address.dest_qpn)) {
         return 0;
     }
 
-    ib_addr = (uct_ib_address_t*)params->device_addr;
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ep->super.path_index,
-                                        &ah_attr, &path_mtu);
-
-    status = uct_ib_device_get_ah_cached(uct_ib_iface_device(ib_iface),
-                                         &ah_attr, &ah);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    return ah == ep->peer_address.ah;
+    return uct_ib_iface_is_connected(ib_iface, ib_addr, ep->super.path_index,
+                                     ep->peer_address.ah);
 }
 
 static size_t uct_ud_verbs_get_peer_address_length()
@@ -790,6 +781,25 @@ ucs_status_t uct_ud_verbs_qp_max_send_sge(uct_ud_verbs_iface_t *iface,
     return UCS_OK;
 }
 
+void uct_ud_send_wr_init(struct ibv_send_wr *wr, struct ibv_sge *sge,
+                         int is_inline)
+{
+    memset(wr, 0, sizeof(*wr));
+
+    wr->opcode            = IBV_WR_SEND;
+    wr->wr.ud.remote_qkey = UCT_IB_KEY;
+    wr->imm_data          = 0;
+    wr->next              = 0;
+    wr->sg_list           = sge;
+
+    if (is_inline) {
+        wr->wr_id   = 0xBEEBBEEB;
+    } else {
+        wr->wr_id   = 0xFAAFFAAF;
+        wr->num_sge = 1;
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -810,22 +820,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->super.super.config.sl = uct_ib_iface_config_select_sl(&config->super);
     uct_ib_iface_set_reverse_sl(&self->super.super, &config->super);
 
-    memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
-    self->tx.wr_inl.opcode            = IBV_WR_SEND;
-    self->tx.wr_inl.wr_id             = 0xBEEBBEEB;
-    self->tx.wr_inl.wr.ud.remote_qkey = UCT_IB_KEY;
-    self->tx.wr_inl.imm_data          = 0;
-    self->tx.wr_inl.next              = 0;
-    self->tx.wr_inl.sg_list           = self->tx.sge;
-
-    memset(&self->tx.wr_skb, 0, sizeof(self->tx.wr_skb));
-    self->tx.wr_skb.opcode            = IBV_WR_SEND;
-    self->tx.wr_skb.wr_id             = 0xFAAFFAAF;
-    self->tx.wr_skb.wr.ud.remote_qkey = UCT_IB_KEY;
-    self->tx.wr_skb.imm_data          = 0;
-    self->tx.wr_skb.next              = 0;
-    self->tx.wr_skb.sg_list           = self->tx.sge;
-    self->tx.wr_skb.num_sge           = 1;
+    uct_ud_send_wr_init(&self->tx.wr_inl, self->tx.sge, 1);
+    uct_ud_send_wr_init(&self->tx.wr_skb, self->tx.sge, 0);
 
     self->tx.send_sn                  = 0;
     self->tx.comp_sn                  = 0;

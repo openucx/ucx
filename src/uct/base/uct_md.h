@@ -80,6 +80,7 @@ typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
                                                 size_t *length_p,
                                                 void **address_p,
                                                 ucs_memory_type_t mem_type,
+                                                ucs_sys_device_t sys_dev,
                                                 unsigned flags,
                                                 const char *alloc_name,
                                                 uct_mem_h *memh_p);
@@ -189,13 +190,15 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
  *                             which may be larger than the one requested. Must be >0.
  * @param [in,out] address_p   The address
  * @param [in]     mem_type    Memory type of the allocation
+ * @param [in]     sys_dev     System device for the allocation.
  * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
  * @param [in]     name        Name of the allocated region, used to track memory
  *                             usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
  */
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              ucs_memory_type_t mem_type, unsigned flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, unsigned flags,
                               const char *alloc_name, uct_mem_h *memh_p);
 
 /**
@@ -214,8 +217,9 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
  *
  */
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
-                                     const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                     void **handle_p);
+                                     const void *rkey_buffer,
+                                     const uct_rkey_unpack_params_t *params,
+                                     uct_rkey_t *rkey_p, void **handle_p);
 
 ucs_status_t uct_base_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
                                    uct_rkey_t rkey2,
