@@ -73,15 +73,11 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
     snprintf(dev_name, sizeof(dev_name), "%s_direct",
              uct_ib_device_name(&md->super.dev));
     md->direct_nic_sys_dev = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
-
-    status = ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
-                                                 md->direct_nic_sys_dev);
-    if (status != UCS_OK) {
-        ucs_debug("ucs_topo_sys_device_set_sys_dev_aux failed: %s",
-                  ucs_status_string(status));
+    if (md->direct_nic_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         goto out;
     }
 
+    ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev, md->direct_nic_sys_dev);
     ucs_debug("%s: Direct NIC is supported sys_path='%s%s' "
               "sys_dev=%u sys_dev_aux=%u",
               uct_ib_device_name(&md->super.dev),
