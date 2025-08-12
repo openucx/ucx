@@ -56,7 +56,6 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
     char sys_path[PATH_MAX];
     char dev_name[64];
     int ret;
-    ucs_status_t status;
 
     if (!md_config->ext.direct_nic) {
         goto out;
