@@ -39,10 +39,15 @@ public:
     void add_mock_iface(
             const std::string &dev_name = "mock",
             iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
-            perf_attr_func_t perf_cb = cx7_perf_mock)
+            perf_attr_func_t perf_cb = [](uct_perf_attr_t& perf_attr) {})
     {
         m_iface_attrs_funcs[dev_name] = cb;
         m_perf_attrs_funcs[dev_name]  = perf_cb;
+    }
+
+    void add_mock_cx7_iface(const std::string &dev_name, iface_attr_func_t cb)
+    {
+        add_mock_iface(dev_name, cb, cx7_perf_mock);
     }
 
     void mock_transport(const std::string &tl_name)
@@ -163,8 +168,7 @@ private:
 
     static void cx7_perf_mock(uct_perf_attr_t& perf_attr)
     {
-        perf_attr.path_bandwidth.shared    = 0.95 * perf_attr.bandwidth.shared;
-        perf_attr.path_bandwidth.dedicated = 0;
+        perf_attr.path_bandwidth.shared = 0.95 * perf_attr.bandwidth.shared;
     }
 
     /* We have to use singleton to mock C functions */
@@ -515,7 +519,7 @@ public:
     virtual void init() override
     {
         /* Device with higher BW and latency */
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 2000;
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 600e-9;
@@ -523,7 +527,7 @@ public:
             iface_attr.cap.get.max_zcopy = 16384;
         });
         /* Device with smaller BW but lower latency */
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short = 208;
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 500e-9;
@@ -661,7 +665,7 @@ public:
     virtual void init() override
     {
         /* Device with high BW and lower latency */
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 500e-9;
@@ -669,7 +673,7 @@ public:
             iface_attr.cap.get.max_zcopy = 16384;
         });
         /* Device with lower BW and higher latency */
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 600e-9;
@@ -709,7 +713,7 @@ public:
     {
         /* Device with high BW and lower latency, but 0 get_zcopy.
          * This use case is similar to cuda_ipc when NVLink is not available. */
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 500e-9;
@@ -717,7 +721,7 @@ public:
             iface_attr.cap.get.max_zcopy = 0;
         });
         /* Device with lower BW and higher latency */
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 600e-9;
