@@ -652,7 +652,7 @@ static uint64_t uct_ib_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
 uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
                                   uint64_t access_flags, uint64_t uct_flags)
 {
-    access_flags |= uct_ib_flags_to_ibv_mem_access_flags(uct_flags);
+    access_flags &= uct_ib_flags_to_ibv_mem_access_flags(uct_flags);
 
     if (memh->flags & UCT_IB_MEM_FLAG_ODP) {
         access_flags |= IBV_ACCESS_ON_DEMAND;

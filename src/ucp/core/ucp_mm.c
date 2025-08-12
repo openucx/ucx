@@ -331,9 +331,9 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
             flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT;
         }
     } else {
-        if (context->config.features & UCP_FEATURE_RMA) {
-            flags |= UCT_MD_MEM_ACCESS_RMA;
-        }
+        flags |= (context->config.features & UCP_FEATURE_RMA) ?
+                 UCT_MD_MEM_ACCESS_ALL :
+                 UCT_MD_MEM_ACCESS_LOCAL_READ | UCT_MD_MEM_ACCESS_LOCAL_WRITE;
     }
 
     if (context->config.features & UCP_FEATURE_AMO) {
