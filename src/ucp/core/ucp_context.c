@@ -1799,6 +1799,34 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
     }
 }
 
+static void ucp_fill_resources_reachable_sys_devs(ucp_context_h context)
+{
+    unsigned num_sys_devs;
+    ucp_md_index_t md_index;
+    ucp_tl_md_t *tl_md;
+    ucs_sys_device_t sys_dev, sys_dev_md;
+    int is_reachable;
+
+    num_sys_devs = ucs_topo_num_devices();
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        tl_md                     = &context->tl_mds[md_index];
+        tl_md->reachable_sys_devs = 0;
+        for (sys_dev = 0; sys_dev < num_sys_devs; ++sys_dev) {
+            is_reachable = 1;
+            ucs_for_each_bit(sys_dev_md, tl_md->sys_dev_map) {
+                if (!ucs_topo_is_reachable(sys_dev_md, sys_dev)) {
+                    is_reachable = 0;
+                    break;
+                }
+            }
+
+            if (is_reachable) {
+                tl_md->reachable_sys_devs |= UCS_BIT(sys_dev);
+            }
+        }
+    }
+}
+
 static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                        const ucp_config_t *config)
 {
@@ -1913,6 +1941,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     ucp_fill_resources_reg_md_map_update(context);
+    ucp_fill_resources_reachable_sys_devs(context);
 
     /* If unified mode is enabled, initialize tl_bitmap to 0.
      * Then the worker will open all available transport resources and will
