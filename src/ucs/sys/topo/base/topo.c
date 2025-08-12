@@ -515,11 +515,13 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t sys_dev1,
     sys_dev_aux2 = ucs_topo_global_ctx.devices[sys_dev2].sys_dev_aux;
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
-    if (sys_dev_aux1 != UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if ((sys_dev_aux1 != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (sys_dev_aux2 == UCS_SYS_DEVICE_ID_UNKNOWN)) {
         ucs_topo_update_distance_sysfs(sys_dev_aux1, sys_dev2, distance);
     }
 
-    if (sys_dev_aux2 != UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if ((sys_dev_aux1 == UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (sys_dev_aux2 != UCS_SYS_DEVICE_ID_UNKNOWN)) {
         ucs_topo_update_distance_sysfs(sys_dev1, sys_dev_aux2, distance);
     }
 
