@@ -423,7 +423,7 @@ uct_ib_md_mlx5_devx_mr_lru_push(uct_ib_mlx5_md_t *md, uint32_t rkey, void *mr)
 {
     uct_ib_mlx5_mem_lru_entry_t *entry;
     khint_t iter;
-    ucs_kh_put_t res;
+    int res;
 
     ucs_assert(rkey != UCT_IB_INVALID_MKEY);
 

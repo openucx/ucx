@@ -284,7 +284,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
     ucs_bus_id_bit_rep_t bus_id_bit_rep;
-    ucs_kh_put_t kh_put_status;
+    int kh_put_status;
     khiter_t hash_it;
     char *name;
 

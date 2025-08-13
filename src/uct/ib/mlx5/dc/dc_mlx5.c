@@ -836,7 +836,7 @@ uct_dc_mlx5_dci_pool_get_or_create(uct_dc_mlx5_iface_t *iface,
 {
     uint32_t config_hash = uct_dc_mlx5_dci_config_hash(dci_config);
     khiter_t khit;
-    ucs_kh_put_t kh_put_ret;
+    int kh_put_ret;
 
     khit = kh_put(uct_dc_mlx5_config_hash, &iface->dc_config_hash, config_hash,
                   &kh_put_ret);
