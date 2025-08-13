@@ -165,7 +165,7 @@ AC_DEFUN([DETECT_UARCH],
     cpuvar=`grep 'CPU variant' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
     cpupart=`grep 'CPU part' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
 
-    with_mcpu=""
+    with_mtune=""
     with_march=""
 
     AC_MSG_NOTICE(Detected CPU implementation: ${cpuimpl})
@@ -177,41 +177,38 @@ AC_DEFUN([DETECT_UARCH],
       0x42) case $cpupart in
         0x516 | 0x0516)
           AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-          with_mcpu="thunderx2t99"
+          with_mtune="thunderx2t99"
           with_march="armv8.1-a+lse" ;;
         0xaf | 0x0af)
           AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-          with_mcpu="thunderx2t99"
+          with_mtune="thunderx2t99"
           with_march="armv8.1-a+lse" ;;
         esac
         ;;
       0x43) case $cpupart in
         0x516 | 0x0516)
           AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-          with_mcpu="thunderx2t99"
+          with_mtune="thunderx2t99"
           with_march="armv8.1-a+lse" ;;
         0xaf | 0x0af)
           AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-          with_mcpu="thunderx2t99"
+          with_mtune="thunderx2t99"
           with_march="armv8.1-a+lse" ;;
         0xa1 | 0x0a1)
           AC_DEFINE([HAVE_AARCH64_THUNDERX1], 1, [Cavium ThunderX1])
-          with_mcpu="thunderxt88" ;;
+          with_mtune="thunderxt88" ;;
         esac
         ;;
       0x48) case $cpupart in
         0xd01 | 0x0d01)
           AC_DEFINE([HAVE_AARCH64_HI1620], 1, [Huawei Kunpeng 920])
-          with_mcpu="tsv110"
+          with_mtune="tsv110"
           with_march="armv8.2-a" ;;
         esac
         ;;
       *)
         ;;
     esac
-    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [test x$with_mcpu = xthunderx2t99])
-    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [test x$with_mcpu = xthunderxt88])
-    AM_CONDITIONAL([HAVE_AARCH64_HI1620], [test x$with_mcpu = xtsv110])
 ])
 
 
@@ -365,31 +362,41 @@ AS_IF([test "x$with_avx" != xyes],
       ])
 
 
-# Only detect uarch if neither --with-mcpu nor --with-march is set
-AS_IF([test -z "$with_mcpu" -a -z "$with_march"], [
+# Only detect uarch if neither --with-mtune nor --with-march is set
+AS_IF([test -z "$with_mtune" -a -z "$with_march"], [
     DETECT_UARCH()
-], [
-    # Always define these conditionals to avoid errors on non-ARM platforms
-    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [false])
-    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
-    AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
 ])
 
 #
-# CPU tuning
-#
-AS_IF([test "x$with_mcpu" != "x"],
-      [COMPILER_CPU_OPTIMIZATION([mcpu], [CPU Model], [-mcpu=$with_mcpu],
-                                 [int main(int argc, char** argv) { return 0;}])
-      ])
+# CPU tuning (--with-mtune)
+# Map to -mcpu on ARM/AArch64, -mtune elsewhere
+AC_ARG_WITH([mtune],
+            [AS_HELP_STRING([--with-mtune], [Use tuning option. Applies -mtune or -mcpu depending on target.])])
+
+AS_IF([test "x$with_mtune" != "x"], [
+    case $host_cpu in
+      aarch64*|arm*) tune_flag="-mcpu=$with_mtune" ;;
+      *)             tune_flag="-mtune=$with_mtune" ;;
+    esac
+    COMPILER_CPU_OPTIMIZATION([mtune], [tuning], [$tune_flag],
+                              [int main(int argc, char** argv) { return 0;}])
+])
 
 #
-# Architecture tuning
+# Architecture tuning (--with-march)
 #
-AS_IF([test "x$with_march" != "x"],
-      [COMPILER_CPU_OPTIMIZATION([march], [architecture tuning], [-march=$with_march],
-                                 [int main(int argc, char** argv) { return 0;}])
-      ])
+AC_ARG_WITH([march],
+            [AS_HELP_STRING([--with-march], [Use ISA selection option (e.g., native, znver4/5).])])
+
+AS_IF([test "x$with_march" != "x"], [
+    COMPILER_CPU_OPTIMIZATION([march], [architecture tuning], [-march=$with_march],
+                              [int main(int argc, char** argv) { return 0;}])
+])
+
+# Define AArch64 feature conditionals based on final with_mtune value
+AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [test "x$with_mtune" = "xthunderx2t99"])
+AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [test "x$with_mtune" = "xthunderxt88"])
+AM_CONDITIONAL([HAVE_AARCH64_HI1620],    [test "x$with_mtune" = "xtsv110"])
 
 
 #
