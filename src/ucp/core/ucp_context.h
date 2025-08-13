@@ -333,7 +333,8 @@ typedef struct ucp_tl_md {
     ucp_sys_dev_map_t      sys_dev_map;
 
     /**
-     * Set of reachable system devices
+     * Set of system devices that can reach all system devices associated with
+     * the MD
      */
     ucp_sys_dev_map_t      reachable_sys_devs;
 } ucp_tl_md_t;
