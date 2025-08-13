@@ -1181,19 +1181,17 @@ run_configure_tests() {
 		exit 1
 	fi
 
-    if lscpu | grep -q 'x86_64'
+    if [ "$(uname -m)" = "x86_64" ]
     then
-        ../contrib/configure-release --with-mcpu=generic
-        base_cflags=$(grep ^BASE_CFLAGS config.log)
-        if ! (echo "$base_cflags" | grep -q '\-mcpu=generic')
+        ../contrib/configure-release --with-mtune=generic
+        if ! grep -qE '^BASE_CFLAGS=.*-mtune=generic' config.log
         then
-            azure_log_error "error in detecting --with-mcpu"
+            azure_log_error "error in detecting --with-mtune"
             exit 1
         fi
 
         ../contrib/configure-release --with-march=x86-64
-        base_cflags=$(grep ^BASE_CFLAGS config.log)
-        if ! (echo "$base_cflags" | grep -q '\-march=x86\-64')
+        if ! grep -qE '^BASE_CFLAGS=.*-march=x86-64' config.log
         then
             azure_log_error "error in detecting --with-march"
             exit 1
