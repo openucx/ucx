@@ -402,6 +402,7 @@ typedef struct uct_ib_mlx5_md {
     ucs_mpool_t               dbrec_pool;
     ucs_recursive_spinlock_t  dbrec_lock;
     uct_ib_port_select_mode_t port_select_mode;
+    ucs_sys_device_t          direct_nic_sys_dev;
 #if HAVE_DEVX
     void                     *zero_buf;
     uct_ib_mlx5_devx_umem_t  zero_mem;

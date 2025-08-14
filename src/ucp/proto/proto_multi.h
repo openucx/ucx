@@ -81,6 +81,9 @@ typedef struct {
 
     /* Minimal offset to reach, taking into account minimum RNDV chunk size */
     size_t                       min_end_offset;
+
+    /* Map of system devices that require a flush operation */
+    ucp_sys_dev_map_t            flush_sys_dev_mask;
 } ucp_proto_multi_lane_priv_t;
 
 
