@@ -14,6 +14,8 @@
 
 #include "rma.inl"
 
+const ucp_lane_map_t ucp_lane_map_zero = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+
 static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg);
 
 static void
@@ -72,7 +74,6 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 {
     ucp_ep_h ep              = req->send.ep;
     unsigned num_lanes       = ucp_ep_num_lanes(ep);
-    ucp_lane_map_t zero_map  = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_lane_map_t all_lanes;
     ucp_ep_flush_state_t *flush_state;
     ucp_lane_index_t lane;
@@ -91,7 +92,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     diff = num_lanes - req->send.flush.num_lanes;
     if (ucs_unlikely(diff != 0)) {
         if (diff > 0) {
-            ucp_ep_flush_request_update_uct_comp(req, diff, zero_map);
+            ucp_ep_flush_request_update_uct_comp(req, diff, ucp_lane_map_zero);
         } else {
             /* Some lanes that we wanted to flush were destroyed. If we already
                started to flush them, they would be completed by discard flow,
@@ -108,7 +109,8 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
             lanes_to_flush  = UCS_STATIC_BITMAP_AND(
                                             destroyed_lanes, unstarted_flush);
             ucp_ep_flush_request_update_uct_comp(
-                    req, -UCS_STATIC_BITMAP_POPCOUNT(lanes_to_flush), zero_map);
+                    req, -UCS_STATIC_BITMAP_POPCOUNT(lanes_to_flush),
+                    ucp_lane_map_zero);
         }
 
         req->send.flush.num_lanes = num_lanes;

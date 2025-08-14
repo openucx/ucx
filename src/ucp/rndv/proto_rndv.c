@@ -500,14 +500,13 @@ size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params)
 ucp_lane_index_t
 ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
 {
-    ucp_lane_map_t zero_map = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_lane_index_t lane, num_lanes;
 
     num_lanes = ucp_proto_common_find_lanes(params,
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
                                             UCP_LANE_TYPE_AM,
                                             UCT_IFACE_FLAG_AM_BCOPY, 1,
-                                            zero_map, NULL, &lane);
+                                            ucp_lane_map_zero, NULL, &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s",
                   ucp_proto_id_field(params->proto_id, name));

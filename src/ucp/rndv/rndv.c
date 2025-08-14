@@ -1076,7 +1076,6 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *freq,
                                 ucp_mem_desc_t *mdesc, size_t length,
                                 size_t offset)
 {
-    ucp_lane_map_t zero_map = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucs_assert_always(!UCP_MEM_IS_HOST(rreq->recv.dt_iter.mem_info.type));
 
     /* PUT on memtype endpoint to stage from
@@ -1089,7 +1088,8 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *freq,
                                     rreq->recv.dt_iter.mem_info.type, length,
                                     ucp_rndv_progress_rma_put_zcopy);
 
-    ucp_rndv_req_init(freq, rreq, zero_map, NULL, (uintptr_t)UCS_PTR_BYTE_OFFSET(
+    ucp_rndv_req_init(freq, rreq, ucp_lane_map_zero, NULL,
+                      (uintptr_t)UCS_PTR_BYTE_OFFSET(
                               rreq->recv.dt_iter.type.contig.buffer, offset));
 
     ucp_rndv_req_init_zcopy_lane_map(freq, freq->send.mem_type,
