@@ -673,7 +673,6 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
             }
         }
 
-        ucs_trace("%s: added as lane %d", lane_desc, lane);
         lanes[num_lanes++] = lane;
     }
 
@@ -930,7 +929,7 @@ void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name)
 static UCS_F_ALWAYS_INLINE double
 ucp_proto_lane_select_avail_bw(const ucp_proto_init_params_t *params,
                                ucp_lane_index_t lane,
-                               const ucp_proto_common_tl_perf_t *lane_perf,
+                               const ucp_proto_lane_select_t *select,
                                const ucp_proto_lane_selection_t *selection)
 {
     /* Minimal path ratio */
@@ -939,8 +938,10 @@ ucp_proto_lane_select_avail_bw(const ucp_proto_init_params_t *params,
     double multi_path_ratio       = context->config.ext.multi_path_ratio;
     ucp_rsc_index_t dev_index     = ucp_proto_common_get_dev_index(params, lane);
     uint8_t path_index            = selection->dev_count[dev_index];
+    const ucp_proto_common_tl_perf_t *lane_perf;
     double ratio;
 
+    lane_perf = &select->lanes_perf[lane];
     if (UCS_CONFIG_DBL_IS_AUTO(multi_path_ratio)) {
         ratio = ucs_min(1.0 - (lane_perf->path_ratio * path_index),
                         lane_perf->path_ratio);
@@ -965,12 +966,29 @@ ucp_proto_lane_select_avail_bw(const ucp_proto_init_params_t *params,
 }
 
 static UCS_F_ALWAYS_INLINE double
-ucp_proto_lane_select_score(double bw,
-                            const ucp_proto_common_tl_perf_t *lane_perf,
-                            ucp_proto_variant_t variant)
+ucp_proto_lane_select_score(double bw, ucp_lane_index_t lane,
+                            const ucp_proto_lane_select_t *select,
+                            const ucp_proto_lane_selection_t *selection)
 {
-    size_t msg_size = ucp_proto_common_get_variant_msg_size(variant);
-    return 1.0 / ((msg_size / bw) + lane_perf->latency);
+    size_t msg_size = ucp_proto_common_get_variant_msg_size(selection->variant);
+    const ucp_proto_common_tl_perf_t *lane_perf, *best_lane_perf;
+    double latency, best_latency;
+
+    lane_perf = &select->lanes_perf[lane];
+    latency   = lane_perf->latency + lane_perf->sys_latency;
+
+    /* For latency variant, do not select lanes with higher latency than the
+     * best lane found so far */
+    if ((selection->variant == UCP_PROTO_VARIANT_LAT) &&
+        (selection->num_lanes > 0)) {
+        best_lane_perf = &select->lanes_perf[selection->lanes[0]];
+        best_latency   = best_lane_perf->latency + best_lane_perf->sys_latency;
+        if (ucp_score_cmp(latency, best_latency) > 0) {
+            return -1.0;
+        }
+    }
+
+    return 1.0 / ((msg_size / bw) + latency);
 }
 
 static ucp_lane_index_t
@@ -983,17 +1001,13 @@ ucp_proto_lane_select_find(const ucp_proto_init_params_t *params,
     ucp_lane_index_t max_index = UCP_NULL_LANE;
     double score;
     double avail_bw;
-    const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t lane, index;
 
     ucs_assert(index_map != 0);
     ucs_for_each_bit(index, index_map) {
-        lane      = select->lanes[index];
-        lane_perf = &select->lanes_perf[lane];
-        avail_bw  = ucp_proto_lane_select_avail_bw(params, lane, lane_perf,
-                                                   selection);
-        score     = ucp_proto_lane_select_score(avail_bw, lane_perf,
-                                                selection->variant);
+        lane     = select->lanes[index];
+        avail_bw = ucp_proto_lane_select_avail_bw(params, lane, select, selection);
+        score    = ucp_proto_lane_select_score(avail_bw, lane, select, selection);
         if (score > max_score) {
             max_score = score;
             max_index = index;
@@ -1084,8 +1098,6 @@ ucp_proto_lane_select_fast_lanes(const ucp_proto_init_params_t *params,
         if ((req->fixed_first_lane && (i == 0)) ||
             ((lane_perf->bandwidth * max_bw_ratio) >= max_bandwidth)) {
             ucp_proto_lane_select_add(params, &fast, lane);
-            ucs_trace("avail " UCP_PROTO_LANE_FMT,
-                      UCP_PROTO_LANE_ARG(params, lane, lane_perf));
         } else {
             ucs_trace("drop " UCP_PROTO_LANE_FMT,
                       UCP_PROTO_LANE_ARG(params, lane, lane_perf));
@@ -1243,6 +1255,8 @@ ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
         }
 
         select->lanes[select->num_lanes++] = lane;
+        ucs_trace("avail " UCP_PROTO_LANE_FMT,
+                  UCP_PROTO_LANE_ARG(&params->super, lane, lane_perf));
     }
 
     /* Initialize all protocol variants */

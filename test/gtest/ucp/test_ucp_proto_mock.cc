@@ -749,6 +749,66 @@ UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx3, rcx, "rc_x")
 
+class test_ucp_proto_mock_variants : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_variants()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        /* Mock for "cuda_ipc" device. */
+        add_mock_iface("nvlink", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 0;
+            iface_attr.bandwidth.shared = 100e9;
+            iface_attr.latency.c        = 2000e-9;
+            iface_attr.latency.m        = 1e-9;
+        }, [](uct_perf_attr_t &perf_attr) {
+            perf_attr.path_bandwidth.shared = 0.5 * perf_attr.bandwidth.shared;
+        });
+        /* IB device attached to GPU */
+        add_mock_cx7_iface("fast:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 45e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        /* IB device not attached to GPU, therefore both BW and latency are
+         * limited by distance */
+        add_mock_cx7_iface("slow:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 25e9;
+            iface_attr.latency.c        = 900e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_variants, latency_variant,
+           "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2", "RNDV_THRESH=0", "PROTO_VARIANTS=y")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    /*
+     * Variant for latency must not include slow lane, because it adds
+     * latency to the path.
+     */
+    check_ep_config(sender(), {
+        {1,       129, "rendezvous fragmented copy-in copy-out",
+         "rc_mlx5/fast:1/path0"},
+        {130,  229091, "rendezvous zero-copy read from remote",
+         "rc_mlx5/fast:1 50% on path0 and 50% on path1"},
+        {229092,  INF, "rendezvous zero-copy read from remote",
+         "rc_mlx5/nvlink 50% on path0 and 50% on path1"},
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_variants, rcx, "rc_x")
+
 class test_ucp_proto_mock_cma : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_cma()
