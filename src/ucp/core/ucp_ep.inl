@@ -263,6 +263,11 @@ static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
            ucp_ep_config_key_has_cm_lane(&ucp_ep_config(ep)->key);
 }
 
+static UCS_F_ALWAYS_INLINE int ucp_ep_has_p2p_lanes(ucp_ep_h ep)
+{
+    return !UCS_STATIC_BITMAP_IS_ZERO(ucp_ep_config(ep)->p2p_lanes);
+}
+
 static UCS_F_ALWAYS_INLINE ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
 {
     return ucp_ep_config(ep)->key.cm_lane;

@@ -1233,7 +1233,7 @@ public:
          *      needed for dc. */
         stats_activate();
         if ((get_variant_value() == VARIANT_128_PATHS) &&
-            (has_transport("rc_x") || has_transport("rc_v"))) {
+            (has_any_transport({"rc_x", "rc_v"}))) {
             UCS_TEST_SKIP_R("128 paths tests not supported for RC transport");
         }
 

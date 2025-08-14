@@ -643,7 +643,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
-    int has_cm_lane, am_need_flush, full_handshake_required, has_p2p_lanes;
+    int has_cm_lane, am_need_flush, full_handshake_required;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REQUEST);
     ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
@@ -726,9 +726,8 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
      * 1) CM flow (the client's EP has to be marked as REMOTE_CONNECTED)
      * 2) P2P lanes exist in EP configuration (client-server flow)
      * 3) Old AM lane was replaced (ensures message order) */
-    has_p2p_lanes = !UCS_STATIC_BITMAP_IS_ZERO(ucp_ep_config(ep)->p2p_lanes);
     full_handshake_required = has_cm_lane ||
-                              has_p2p_lanes ||
+                              ucp_ep_has_p2p_lanes(ep) ||
                               am_need_flush;
 
     /* Send a reply if remote side does not have ep_ptr (active-active flow) or
