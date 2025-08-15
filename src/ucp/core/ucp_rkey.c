@@ -70,10 +70,12 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
         size += sizeof(uint8_t) + tl_rkey_size;
     }
 
-    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if (md_map != 0) {
         /* System device id */
         size += sizeof(uint8_t);
+    }
 
+    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
         /* Distance of each device */
         size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
     }
@@ -100,6 +102,10 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
         memcpy(ucs_serialize_next_raw(&p, void, tl_rkey_size), *(uct_rkeys++),
                tl_rkey_size);
     }
+
+    if (md_map != 0) {
+        *ucs_serialize_next(&p, uint8_t) = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
 }
 
 static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
@@ -125,12 +131,19 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
     distance->bandwidth = UCS_FP8_UNPACK(BANDWIDTH, packed_distance->bandwidth);
 }
 
+/* Cache sys_dev in a format packed to rkey to minimize overhead during
+ * rndv protocols. TODO remove if using another method to mark rkey with
+ * remote flush requirement. */
 ucs_sys_device_t ucp_rkey_pack_sys_dev(ucp_mem_h memh)
 {
     ucs_sys_device_t sys_dev_packed = memh->sys_dev;
     ucp_md_index_t md_index;
     ucp_sys_dev_map_t sys_dev_map;
     ucs_sys_device_t sys_dev;
+
+    if (sys_dev_packed == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        goto out;
+    }
 
     ucs_assert(sys_dev_packed <= UCP_SYS_DEVICE_MAX_PACKED);
 
@@ -204,12 +217,16 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                   md_index, context->tl_mds[md_index].rsc.md_name);
     }
 
+    if (md_map != 0) {
+        /* Since UCX 1.20: always pack sys_dev for non-empty rkeys. Highest bit
+         * indicates if flush is required for puts/atomics (for direct NIC). */
+        ucs_assert(memh != NULL);
+        *ucs_serialize_next(&p, uint8_t) = memh->packed_sys_dev;
+    }
+
     if (ucs_likely(mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
         goto out_packed_size;
     }
-
-    /* Pack system device id */
-    *ucs_serialize_next(&p, uint8_t) = memh->packed_sys_dev;
 
     /* Pack distance from sys_dev to each device in distance_dev_map */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
@@ -773,8 +790,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
                  ucp_rkey_h rkey, ucp_ep_h ep, const void *buffer,
                  const void *buffer_end, ucp_md_map_t unreachable_md_map)
 {
-    ucp_worker_h worker = ep->worker;
-    const void *p       = buffer;
+    ucp_worker_h worker        = ep->worker;
+    const void *p              = buffer;
+    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucs_sys_dev_distance_t *lanes_distance;
     ucp_rkey_config_key_t rkey_config_key;
     khiter_t khiter;
@@ -791,7 +809,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
-    if (buffer < buffer_end) {
+    if ((buffer < buffer_end) ||
+        ((ep_config->key.dst_version > 19) && (rkey->md_map != 0))) {
         rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
     } else {
         rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
