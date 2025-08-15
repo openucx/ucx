@@ -35,9 +35,15 @@ typedef struct {
 
 ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
     .memh = {
-        .alloc_method = UCT_ALLOC_METHOD_LAST,
+        .alloc_method   = UCT_ALLOC_METHOD_LAST,
         .alloc_md_index = UCP_NULL_RESOURCE,
-        .parent = &ucp_mem_dummy_handle.memh,
+        .parent         = &ucp_mem_dummy_handle.memh,
+        .mem_type       = UCS_MEMORY_TYPE_HOST,
+        .sys_dev        = UCS_SYS_DEVICE_ID_UNKNOWN,
+        .packed_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
+        .md_map         = 0,
+        .inv_md_map     = 0,
+        .reg_id         = 0,
     },
     .uct = { UCT_MEM_HANDLE_NULL }
 };
@@ -518,6 +524,28 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
     return UCS_OK;
 }
 
+static int ucp_memh_sys_dev_reachable(ucs_sys_device_t mem_sys_dev,
+                                      ucp_sys_dev_map_t sys_dev_map)
+{
+    ucs_sys_device_t sys_dev;
+
+    if (mem_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return 1;
+    }
+
+    /*
+     * If at least one sys_dev is not reachable, do not register on it
+     * as we cannot know in advance which device is going to be used.
+     */
+    ucs_for_each_bit(sys_dev, sys_dev_map) {
+        if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 static ucs_status_t
 ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map, unsigned uct_flags,
@@ -538,6 +566,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     void *reg_address;
     size_t reg_length;
     size_t reg_align;
+    ucp_sys_dev_map_t sys_dev_map;
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
@@ -565,7 +594,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         (reg_md_map & context->dmabuf_reg_md_map)) {
         /* Query dmabuf file descriptor and offset */
         mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
         status = uct_md_mem_query(context->tl_mds[dmabuf_prov_md_index].md,
                                   address, length, &mem_attr);
         if (status != UCS_OK) {
@@ -574,12 +604,24 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     address, length, ucs_status_string(status));
         } else {
             ucs_trace("uct_md_mem_query(dmabuf address %p length %zu) returned "
-                      "fd %d offset %zu",
+                      "fd %d offset %zu sys_dev %u",
                       address, length, mem_attr.dmabuf_fd,
-                      mem_attr.dmabuf_offset);
+                      mem_attr.dmabuf_offset, mem_attr.sys_dev);
+
             dmabuf_md_map            = context->dmabuf_reg_md_map;
             reg_params.dmabuf_fd     = mem_attr.dmabuf_fd;
             reg_params.dmabuf_offset = mem_attr.dmabuf_offset;
+
+            /* Exclude any unreachable MD from registration */
+            ucs_for_each_bit(md_index, dmabuf_md_map) {
+                sys_dev_map = context->tl_mds[md_index].sys_dev_map;
+                if (!ucp_memh_sys_dev_reachable(mem_attr.sys_dev,
+                                                sys_dev_map)) {
+                    ucs_trace("md[%d] skipped: cannot reach mem_sys_dev=%u",
+                              md_index, mem_attr.sys_dev);
+                    reg_md_map &= ~UCS_BIT(md_index);
+                }
+            }
         }
     }
 
@@ -673,7 +715,8 @@ void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map)
 
 static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
                           uint8_t memh_flags, unsigned uct_flags,
-                          uct_alloc_method_t method, ucs_memory_type_t mem_type)
+                          uct_alloc_method_t method, ucs_memory_type_t mem_type,
+                          ucs_sys_device_t sys_dev)
 {
     memh->md_map         = 0;
     memh->inv_md_map     = 0;
@@ -683,6 +726,14 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
     memh->alloc_md_index = UCP_NULL_RESOURCE;
     memh->alloc_method   = method;
     memh->mem_type       = mem_type;
+    memh->sys_dev        = sys_dev;
+
+    /* Cache sys_dev in a format packed to rkey to minimize overhead during
+     * rndv protocols. TODO remove if using another method to mark rkey with
+     * remote flush requirement. */
+    memh->packed_sys_dev = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                                   UCS_SYS_DEVICE_ID_UNKNOWN :
+                                   ucp_rkey_pack_sys_dev(memh);
 }
 
 static ucs_status_t
@@ -700,11 +751,9 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
 
     memh->super.super.start = (uintptr_t)address;
     memh->super.super.end   = (uintptr_t)address + length;
-    ucp_memh_init(memh, context, memh_flags, uct_flags, method, mem_type);
-
-    ucp_memory_detect(context, ucp_memh_address(memh), ucp_memh_length(memh),
-                      &info);
-    memh->sys_dev = info.sys_dev;
+    ucp_memory_detect(context, address, length, &info);
+    ucp_memh_init(memh, context, memh_flags, uct_flags, method, mem_type,
+                  info.sys_dev);
 
     *memh_p = memh;
     return UCS_OK;
@@ -835,7 +884,7 @@ static ucs_status_t ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
             goto err;
         }
 
-        ucp_memh_init_from_parent(memh, cache_md_map);
+        ucp_memh_init_from_parent(memh, memh->parent->md_map);
 
         status = ucp_memh_register(context, memh, reg_md_map, uct_flags,
                                    alloc_name);
@@ -1596,7 +1645,7 @@ ucp_mem_rcache_mem_reg_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
     ucp_mem_h memh                    = ucs_derived_of(rregion, ucp_mem_t);
 
     ucp_memh_init(memh, context, 0, reg_ctx->uct_flags, UCT_ALLOC_METHOD_LAST,
-                  reg_ctx->mem_type);
+                  reg_ctx->mem_type, UCS_SYS_DEVICE_ID_UNKNOWN);
     memh->reg_id = context->next_memh_reg_id++;
 
     if (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) {

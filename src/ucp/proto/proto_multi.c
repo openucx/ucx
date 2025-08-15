@@ -20,6 +20,16 @@
 #include <ucs/debug/log.h>
 
 
+static ucp_sys_dev_map_t
+ucp_proto_multi_init_flush_sys_dev_mask(const ucp_rkey_config_key_t *key)
+{
+    if (key == NULL || !ucp_rkey_need_remote_flush(key)) {
+        return 0;
+    }
+
+    return UCS_BIT(key->sys_dev & ~UCP_SYS_DEVICE_FLUSH_BIT);
+}
+
 ucs_status_t
 ucp_proto_multi_init_perf(const ucp_proto_multi_init_params_t *params,
                           const ucp_proto_lane_select_t *select,
@@ -143,6 +153,8 @@ ucp_proto_multi_init_perf(const ucp_proto_multi_init_params_t *params,
         lpriv->max_frag_sum   = mpriv->max_frag_sum;
         lpriv->opt_align      = ucp_proto_multi_get_lane_opt_align(params, lane);
         mpriv->align_thresh   = ucs_max(mpriv->align_thresh, lpriv->opt_align);
+        lpriv->flush_sys_dev_mask = ucp_proto_multi_init_flush_sys_dev_mask(
+                params->super.super.rkey_config_key);
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection->lane_map));
 
