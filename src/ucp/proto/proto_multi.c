@@ -144,11 +144,11 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
 static ucp_sys_dev_map_t
 ucp_proto_multi_init_flush_sys_dev_mask(const ucp_rkey_config_key_t *key)
 {
-    if (key == NULL || !ucp_rkey_need_remote_flush(key)) {
+    if ((key == NULL) || !ucp_rkey_need_remote_flush(key)) {
         return 0;
     }
 
-    return UCS_BIT(key->sys_dev & ~UCP_SYS_DEVICE_FLUSH_BIT);
+    return UCS_BIT(key->sys_dev);
 }
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,

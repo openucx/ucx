@@ -45,6 +45,15 @@ enum {
 
 
 /**
+ * Rkey config flags
+ */
+enum {
+    UCP_RKEY_CONFIG_FLAG_FLUSH    = UCS_BIT(0)  /* Put and atomic operations on this rkey
+                                                   require remote flush */
+};
+
+
+/**
  * Rkey configuration key
  */
 struct ucp_rkey_config_key {
@@ -62,6 +71,9 @@ struct ucp_rkey_config_key {
 
     /* MDs for which rkey is not reachable */
     ucp_md_map_t           unreachable_md_map;
+
+    /* Rkey specific flags, e.g.  */
+    uint8_t                flags;
 };
 
 

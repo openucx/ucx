@@ -521,6 +521,10 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
         memh->flags |= UCP_MEMH_FLAG_HAS_AUTO_GVA;
     }
 
+    if (reg_md_map != 0) {
+        memh->packed_sys_dev = ucp_rkey_pack_sys_dev(memh);
+    }
+
     return UCS_OK;
 }
 
@@ -679,6 +683,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     memh->md_map |= md_map_registered;
     status        = UCS_OK;
 
+    memh->packed_sys_dev = ucp_rkey_pack_sys_dev(memh);
+
     ucs_trace("memh %p: registered %s address %p length %zu md_map %" PRIx64,
               memh, alloc_name, address, length, memh->md_map);
 
@@ -727,13 +733,7 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
     memh->alloc_method   = method;
     memh->mem_type       = mem_type;
     memh->sys_dev        = sys_dev;
-
-    /* Cache sys_dev in a format packed to rkey to minimize overhead during
-     * rndv protocols. TODO remove if using another method to mark rkey with
-     * remote flush requirement. */
-    memh->packed_sys_dev = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
-                                   UCS_SYS_DEVICE_ID_UNKNOWN :
-                                   ucp_rkey_pack_sys_dev(memh);
+    memh->packed_sys_dev = sys_dev;
 }
 
 static ucs_status_t
