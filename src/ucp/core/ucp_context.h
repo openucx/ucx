@@ -390,6 +390,11 @@ typedef struct ucp_context {
 
     uint64_t                      mem_type_mask;            /* Supported mem type mask */
 
+    /* Bitmask of memory types for which at least one MD supports
+     * non-blocking registration. Each bit corresponds to a value from
+     * ucs_memory_type_t. */
+    uint64_t                      reg_nb_supported_mem_types;
+
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_tl_bitmap_t               tl_bitmap;  /* Cached map of tl resources used by workers.
                                                * Not all resources may be used if unified
