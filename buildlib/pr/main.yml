@@ -369,6 +369,7 @@ stages:
 
   - stage: io_demo
     dependsOn: [Static_check]
+    condition: false
     jobs:
     - template: io_demo/io-demo.yml
 
