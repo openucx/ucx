@@ -319,7 +319,7 @@ ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
 {
     CUcontext ctx;
     ucs_status_t status;
-    ucs_kh_put_t ret;
+    int ret;
     khiter_t iter;
     uct_cuda_ctx_rsc_t *ctx_rsc;
     ucs_mpool_params_t mp_params;
