@@ -5,15 +5,15 @@
 
 SUFFIXES = .cu
 
-NVCC_CMD = $(NVCC) $(NVCCFLAGS) \
+NVCC_CMD = $(NVCC_WRAP) $(NVCC) $(NVCCFLAGS) $(NVCC_EXTRA_FLAGS) \
 		   -c $< -MD -MT $@ -MF $(DEPDIR)/cuda/$@.d -o $@ \
 		   -DHAVE_CONFIG_H $(BASE_NVCCFLAGS)
 NVCC_LT_CMD = $(LIBTOOL) --tag=CXX --mode=compile $(NVCC_CMD)
 
 define nvcc-build
 	@$(MKDIR_P) $(shell dirname $(DEPDIR)/cuda/$@)
-	@if $(AM_V_P); then set -x; else echo "  NVCC     $@"; fi; \
-	$(if $(filter .o,$(suffix $@)),$(NVCC_CMD),$(NVCC_LT_CMD)) $($(1))
+	@$(if $(filter false,$(AM_V_P)),echo "  NVCC     $@")
+	@$(if $(filter .o,$(suffix $@)),$(NVCC_CMD),$(NVCC_LT_CMD)) $($(1)) $(if $(filter false,$(AM_V_P)), >/dev/null)
 endef
 
 define nvcc-source
