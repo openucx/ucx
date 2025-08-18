@@ -5,7 +5,6 @@ parameters:
   name: subtest
   container:
   run_tests: yes
-  proto_enable: yes
   asan_check: no
   valgrind_check: no
 
@@ -47,7 +46,6 @@ jobs:
           EXECUTOR_NUMBER: $(AZP_AGENT_ID)
           RUN_TESTS: ${{ parameters.run_tests }}
           TEST_PERF: ${{ parameters.test_perf }}
-          PROTO_ENABLE: ${{ parameters.proto_enable }}
           ASAN_CHECK: ${{ parameters.asan_check }}
           VALGRIND_CHECK: ${{ parameters.valgrind_check }}
           RUNNING_IN_AZURE: yes
