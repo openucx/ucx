@@ -415,6 +415,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
                     const uct_ud_iface_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
+    uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     ucs_status_t status;
     size_t data_size;
     int mtu;
@@ -448,6 +449,12 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     init_attr->rx_hdr_len  = UCT_UD_RX_HDR_LEN;
     init_attr->seg_size    = ucs_min(mtu, config->super.seg_size) + UCT_IB_GRH_LEN;
     init_attr->qp_type     = IBV_QPT_UD;
+
+    status = uct_ib_device_find_port(dev, params->mode.device.dev_name,
+                                     &init_attr->port_num);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, md, worker,
                               params, &config->super, init_attr);

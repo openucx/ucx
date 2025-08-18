@@ -334,6 +334,8 @@ typedef struct {
 typedef struct {
     struct mlx5dv_devx_umem  *mem;
     size_t                   size;
+    void                     *buf;
+    uct_alloc_t              *alloc;
 } uct_ib_mlx5_devx_umem_t;
 
 
@@ -440,7 +442,7 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
     struct {
-        /* Max dp ordering level per transport, 
+        /* Max dp ordering level per transport,
            as listed in uct_ib_mlx5_dp_ordering_t */
         uint8_t              rc;
         uint8_t              dc;
@@ -626,6 +628,7 @@ typedef struct uct_ib_mlx5_qp_attr {
     int                         full_handshake;
     int                         rdma_wr_disabled;
     uint8_t                     log_num_dci_stream_channels;
+    uct_alloc_t                 *alloc;
 } uct_ib_mlx5_qp_attr_t;
 
 
@@ -641,7 +644,10 @@ typedef struct uct_ib_mlx5_qp {
 #if HAVE_DEVX
         struct {
             void                       *wq_buf;
+            int                        dbrec_from_pool;
             uct_ib_mlx5_dbrec_t        *dbrec;
+            uct_ib_mlx5_devx_umem_t    dbrecmem;
+            void *dbrec_buf;
             uct_ib_mlx5_devx_umem_t    mem;
             struct mlx5dv_devx_obj     *obj;
         } devx;
@@ -800,7 +806,10 @@ ucs_status_t uct_ib_mlx5_fill_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
  */
 void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
                                 unsigned cqe_size, uint32_t cqn, void *cq_buf,
-                                void* uar, volatile void *dbrec, int zip);
+                                void* uar, volatile void *dbrec, int zip,
+                                int fill_buf);
+
+void uct_ib_mlx5_fill_cq_buf(uct_ib_mlx5_cq_t *cq);
 
 /**
  * Destroy CQ.
@@ -876,7 +885,7 @@ void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
 /**
  * Reset txwq contents and posting indices.
  */
-void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq);
+void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq, int is_cpu);
 
 /**
  * Add txwq attributes to a VFS object
@@ -1033,16 +1042,18 @@ uct_ib_mlx5_devx_allow_xgvmi_access(uct_ib_mlx5_md_t *md,
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
-                         int access_mode, char *name)
+                         int access_mode, uct_alloc_t *alloc, char *name)
 {
     struct ibv_context *ibv_context = md->super.dev.ibv_context;
     const ucs_log_level_t level     = silent ? UCS_LOG_LEVEL_DEBUG :
                                                UCS_LOG_LEVEL_ERROR;
+    struct mlx5dv_devx_umem_in umem_in;
     ucs_status_t status;
+    int dmabuf_fd, ret;
     void *buf;
-    int ret;
 
-    ret = ucs_posix_memalign(&buf, ucs_get_page_size(), size, name);
+    ret = alloc->alloc(alloc, &buf, ucs_get_page_size(), size, &dmabuf_fd, name);
+
     if (ret != 0) {
         ucs_log(level, "failed to allocate buffer of %zu bytes: %m", size);
         return UCS_ERR_NO_MEMORY;
@@ -1058,7 +1069,18 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     }
 
     mem->size = size;
-    mem->mem  = mlx5dv_devx_umem_reg(ibv_context, buf, size, access_mode);
+    if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
+        mem->mem = mlx5dv_devx_umem_reg(ibv_context, buf, size, access_mode);
+    } else {
+        umem_in.addr = buf;
+        umem_in.size = size;
+        umem_in.access = access_mode;
+        umem_in.pgsz_bitmap = 4096;
+        umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
+        umem_in.dmabuf_fd = dmabuf_fd;
+        mem->mem = mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
+    }
+
     if (mem->mem == NULL) {
         uct_ib_check_memlock_limit_msg(
                 ibv_context, level,
@@ -1068,6 +1090,7 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
         goto err_dofork;
     }
 
+    mem->alloc = alloc;
     *buf_p = buf;
     return UCS_OK;
 
@@ -1097,7 +1120,7 @@ uct_ib_mlx5_md_buf_free(uct_ib_mlx5_md_t *md, void *buf, uct_ib_mlx5_devx_umem_t
             ucs_warn("madvise(DOFORK, buf=%p, len=%zu) failed: %m", buf, mem->size);
         }
     }
-    ucs_free(buf);
+    mem->alloc->free(mem->alloc, buf);
 }
 
 #else

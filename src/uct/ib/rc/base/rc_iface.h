@@ -241,6 +241,46 @@ typedef struct uct_rc_srq {
     unsigned                 quota;
 } uct_rc_srq_t;
 
+typedef struct {
+    unsigned             tx_qp_len;
+    unsigned             tx_min_sge;
+    unsigned             tx_min_inline;
+    unsigned             tx_cq_len;
+    uint16_t             tx_moderation;
+    uint8_t              tx_poll_always;
+
+    /* Threshold to send "soft" FC credit request. The peer will try to
+     * piggy-back credits grant to the counter AM, if any. */
+    int16_t              fc_soft_thresh;
+
+    /* Threshold to sent "hard" credits request. The peer will grant
+     * credits in a separate AM as soon as it handles this request. */
+    int16_t              fc_hard_thresh;
+
+    uint16_t             fc_wnd_size;
+    uint8_t              fc_enabled;
+
+    uint8_t              min_rnr_timer;
+    uint8_t              timeout;
+    uint8_t              rnr_retry;
+    uint8_t              retry_cnt;
+    uint8_t              max_rd_atomic;
+    uint8_t              flush_remote;
+    uct_rc_fence_mode_t  fence_mode;
+    unsigned             exp_backoff;
+    uint32_t             ece;
+    size_t               max_get_zcopy;
+
+    /* Atomic callbacks */
+    uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */
+    uct_rc_send_handler_t  atomic32_ext_handler;  /* 32bit extended */
+    uct_rc_send_handler_t  atomic64_ext_handler;  /* 64bit extended */
+
+    uint8_t              log_ack_req_freq;
+    uint8_t              dp_ordering;
+    uint8_t              dp_ordering_force;
+} uct_rc_config_t;
+
 
 struct uct_rc_iface {
     uct_ib_iface_t              super;
@@ -272,41 +312,7 @@ struct uct_rc_iface {
         uct_rc_srq_t         srq;
     } rx;
 
-    struct {
-        unsigned             tx_qp_len;
-        unsigned             tx_min_sge;
-        unsigned             tx_min_inline;
-        unsigned             tx_cq_len;
-        uint16_t             tx_moderation;
-        uint8_t              tx_poll_always;
-
-        /* Threshold to send "soft" FC credit request. The peer will try to
-         * piggy-back credits grant to the counter AM, if any. */
-        int16_t              fc_soft_thresh;
-
-        /* Threshold to sent "hard" credits request. The peer will grant
-         * credits in a separate AM as soon as it handles this request. */
-        int16_t              fc_hard_thresh;
-
-        uint16_t             fc_wnd_size;
-        uint8_t              fc_enabled;
-
-        uint8_t              min_rnr_timer;
-        uint8_t              timeout;
-        uint8_t              rnr_retry;
-        uint8_t              retry_cnt;
-        uint8_t              max_rd_atomic;
-        uint8_t              flush_remote;
-        uct_rc_fence_mode_t  fence_mode;
-        unsigned             exp_backoff;
-        uint32_t             ece;
-        size_t               max_get_zcopy;
-
-        /* Atomic callbacks */
-        uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */
-        uct_rc_send_handler_t  atomic32_ext_handler;  /* 32bit extended */
-        uct_rc_send_handler_t  atomic64_ext_handler;  /* 64bit extended */
-    } config;
+    uct_rc_config_t config;
 
     UCS_STATS_NODE_DECLARE(stats)
 
@@ -395,6 +401,11 @@ void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface);
 
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
 
+ucs_status_t uct_set_rc_cfg(uct_rc_config_t *rc_cfg,
+                            const uct_rc_iface_common_config_t *config,
+                            const uct_ib_iface_init_attr_t *init_attr,
+                            uct_ib_md_t *md, unsigned tx_cq_size);
+
 /**
  * Creates an RC or DCI QP
  */
@@ -406,6 +417,8 @@ void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
                             uct_ib_qp_attr_t *qp_init_attr,
                             unsigned max_send_wr,
                             struct ibv_srq *srq);
+void uct_ib_iface_fill_attr_rc(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
+                            uct_rc_config_t *rc_cfg, unsigned max_send_wr, struct ibv_srq *srq);
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
 
@@ -444,7 +457,7 @@ uct_rc_ep_process_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                           ucs_arbiter_elem_t *elem, void *arg);
 
 void
-uct_rc_iface_adjust_max_get_zcopy(uct_rc_iface_t *iface,
+uct_rc_iface_adjust_max_get_zcopy(uct_rc_config_t *iface,
                                   const uct_rc_iface_common_config_t *config,
                                   size_t max_tl_get_zcopy, const char *tl_name,
                                   const char *dev_name);

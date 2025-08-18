@@ -7,12 +7,15 @@
 #
 # See file LICENSE for terms.
 #
+if HAVE_NVCC
+SUBDIRS = ../gdaki
+endif
 
 noinst_LTLIBRARIES     = libucxperf.la
-libucxperf_la_CPPFLAGS = $(BASE_CPPFLAGS)
-libucxperf_la_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS) $(LT_CFLAGS)
+libucxperf_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+libucxperf_la_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS) $(LT_CFLAGS) $(CUDA_CFLAGS)
 libucxperf_la_CXXFLAGS = $(BASE_CXXFLAGS) $(OPENMP_CFLAGS)
-libucxperf_la_LDFLAGS  = $(RTE_LDFLAGS) $(OPENMP_CFLAGS)
+libucxperf_la_LDFLAGS  = $(RTE_LDFLAGS) $(OPENMP_CFLAGS) $(CUDA_LDFLAGS)
 libucxperf_la_LIBADD   = \
 	$(abs_top_builddir)/src/uct/libuct.la \
 	$(abs_top_builddir)/src/ucp/libucp.la \
@@ -30,3 +33,8 @@ libucxperf_la_SOURCES = \
 	libperf_thread.c \
 	uct_tests.cc \
 	ucp_tests.cc
+
+if HAVE_NVCC
+# Link with our GDAKI library
+libucxperf_la_LIBADD += $(abs_top_builddir)/src/tools/perf/gdaki/libperf_gdaki.la
+endif

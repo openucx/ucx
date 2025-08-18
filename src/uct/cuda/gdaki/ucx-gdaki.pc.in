@@ -1,0 +1,12 @@
+#
+# Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
+Name: @PACKAGE@-gdaki
+Description: Unified Communication X Library GDA-KI module
+Version: @VERSION@
+Libs:
+Libs.private:
+

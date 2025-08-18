@@ -1661,7 +1661,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     ucs_cpu_set_t cpu_mask;
     int preferred_cpu;
     ucs_status_t status;
-    uint8_t port_num;
 
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
         return UCS_ERR_UNSUPPORTED;
@@ -1684,12 +1683,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                             dev->stats)
                      UCS_STATS_ARG(params->mode.device.dev_name));
 
-    status = uct_ib_device_find_port(dev, params->mode.device.dev_name,
-                                     &port_num);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
     self->ops                       = ops;
 
     self->config.rx_payload_offset  = sizeof(uct_ib_iface_recv_desc_t) +
@@ -1707,7 +1700,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.rx_max_poll        = config->rx.max_poll;
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
                                               config->rx.queue_len / 4);
-    self->config.port_num           = port_num;
+    self->config.port_num           = init_attr->port_num;
     /* initialize to invalid value */
     self->config.sl                 = UCT_IB_SL_NUM;
     self->config.reverse_sl         = UCT_IB_SL_NUM;

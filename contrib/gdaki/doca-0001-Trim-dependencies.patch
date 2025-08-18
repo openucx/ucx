@@ -1,0 +1,46 @@
+From bfa6205caef2e5500211142480e8804403ad90f5 Mon Sep 17 00:00:00 2001
+From: Thomas Vegas <tvegas@nvidia.com>
+Date: Wed, 11 Jun 2025 07:50:12 +0000
+Subject: [PATCH] Trim dependencies
+
+---
+ samples/doca_gpunetio/dependencies/meson.build | 3 ---
+ samples/doca_gpunetio/meson.build              | 8 --------
+ 2 files changed, 11 deletions(-)
+
+diff --git a/samples/doca_gpunetio/dependencies/meson.build b/samples/doca_gpunetio/dependencies/meson.build
+index fa18e01ed7..79d9854dae 100644
+--- a/samples/doca_gpunetio/dependencies/meson.build
++++ b/samples/doca_gpunetio/dependencies/meson.build
+@@ -26,8 +26,5 @@
+ # Needed by one of the samples (and by the lib itself) so it is OK to have it here
+ sample_lib_doca_depends += ['rdma']
+ sample_lib_doca_depends += ['rdma_verbs']
+-sample_lib_doca_depends += ['dpdk_bridge']
+ # Needed by some of the samples, and is roughly in the same components group, so it is fine
+-sample_lib_doca_depends += ['flow']
+-sample_lib_doca_depends += ['eth']
+ sample_lib_doca_depends += ['dma']
+diff --git a/samples/doca_gpunetio/meson.build b/samples/doca_gpunetio/meson.build
+index 76552dcdec..474723aa4f 100644
+--- a/samples/doca_gpunetio/meson.build
++++ b/samples/doca_gpunetio/meson.build
+@@ -23,15 +23,7 @@
+ #
+ 
+ samples = [
+-	'gpunetio_send_wait_time',
+-	'gpunetio_simple_receive',
+-	'gpunetio_simple_send',
+-	'gpunetio_rdma_client_server_write',
+-	'gpunetio_rdma_verbs_onesided_bw',
+-	'gpunetio_rdma_verbs_twosided',
+ 	'gpunetio_rdma_verbs_write_bw',
+-	'gpunetio_rdma_verbs_write_lat',
+-	'gpunetio_dma_memcpy',
+ ]
+ 
+ sample_lib_srcs = files([
+-- 
+2.31.1
+

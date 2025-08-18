@@ -7,7 +7,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = . cuda ib rocm sm ugni ze
+SUBDIRS = . ib cuda rocm sm ugni ze
 
 lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
@@ -20,7 +20,9 @@ nobase_dist_libuct_la_HEADERS = \
 	api/tl.h \
 	api/uct_def.h \
 	api/uct.h \
-	api/version.h
+	api/version.h \
+	api/cuda/uct_dev.cuh \
+	api/cuda/uct.h
 
 noinst_HEADERS = \
 	base/uct_md.h \

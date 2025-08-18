@@ -59,6 +59,34 @@ AC_ARG_ENABLE([gcov],
         [enable_gcov=no])
 AM_CONDITIONAL([HAVE_GCOV],[test "x$enable_gcov" = xyes])
 
+#
+# Enable NVCC build
+#
+AC_ARG_WITH([nvcc],
+    AS_HELP_STRING([--with-nvcc], [Enable NVCC compiler support]))
+
+AS_IF([test "x$with_nvcc" != "xno"],
+    [
+    # Look for NVCC compiler
+    AC_PATH_PROG([NVCC], [nvcc], [no])
+    AS_IF([test "x$NVCC" != "xno"],
+        [
+        AC_DEFINE([HAVE_NVCC], [1], [Enable NVCC compiler support])
+        NVCC_FLAGS="-g -lineinfo"
+        AS_IF([test "x$enable_debug" = xyes],
+              [NVCC_FLAGS="$NVCC_FLAGS -G"])
+        AC_DEFINE_UNQUOTED([NVCC_PATH], ["$NVCC"], [Path to NVCC compiler])
+        AC_DEFINE_UNQUOTED([NVCC_FLAGS], ["$NVCC_FLAGS"], [NVCC compiler flags])
+        nvcc_happy=yes
+        ],
+        [
+        nvcc_happy=no
+        AS_IF([test "x$with_nvcc" = "xyes"],
+            [AC_MSG_ERROR([NVCC compiler support requested but nvcc not found])])
+        ])
+    ])
+AM_CONDITIONAL([HAVE_NVCC], [test "x$NVCC" != "xno"])
+
 
 #
 # Optimization level
@@ -71,9 +99,11 @@ AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
       [test "x$enable_compiler_opt" = "xnone"],
           [AS_IF([test "x$enable_debug" = xyes -o "x$enable_gcov" = xyes],
                  [BASE_CFLAGS="-O0 $BASE_CFLAGS"
-                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"],
+                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"
+                  NVCC_FLAGS="-O0 $NVCC_FLAGS"],
                  [BASE_CFLAGS="-O3 $BASE_CFLAGS"
-                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"])],
+                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"
+                  NVCC_FLAGS="-O3 $NVCC_FLAGS"])],
       [test "x$enable_compiler_opt" = "xno"], [],
       [BASE_CFLAGS="-O$enable_compiler_opt $BASE_CFLAGS"])
 
@@ -633,4 +663,7 @@ BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
 BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_srcdir}/src"
 BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_builddir}"
 BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_builddir}/src"
+NVCC_WRAP="\$(abs_top_srcdir)/contrib/nvcc_wrap.sh"
 AC_SUBST([BASE_CPPFLAGS], [$BASE_CPPFLAGS])
+AC_SUBST([NVCC_WRAP], [$NVCC_WRAP])
+AC_SUBST([NVCC_FLAGS], [$NVCC_FLAGS])

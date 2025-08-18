@@ -44,6 +44,15 @@ typedef ucs_status_t (*uct_ep_put_zcopy_func_t)(uct_ep_h ep,
                                                 uct_rkey_t rkey,
                                                 uct_completion_t *comp);
 
+typedef ucs_status_t (*uct_ep_batch_prepare_func_t)(uct_ep_h ep,
+                                                    const uct_rma_iov_t *iov,
+                                                    size_t iovcnt,
+                                                    uint64_t signal_var,
+                                                    uct_rkey_t sgnal_rkey,
+                                                    uct_batch_h *batch_p);
+
+typedef void (*uct_ep_batch_release_func_t)(uct_ep_h ep, uct_batch_h batch);
+
 /* endpoint - get */
 
 typedef ucs_status_t (*uct_ep_get_short_func_t)(uct_ep_h ep,
@@ -235,6 +244,8 @@ typedef ucs_status_t (*uct_ep_connect_to_ep_func_t)(uct_ep_h ep,
                                                     const uct_device_addr_t *dev_addr,
                                                     const uct_ep_addr_t *ep_addr);
 
+typedef ucs_status_t (*uct_ep_export_dev_func_t)(uct_ep_h ep, uct_dev_ep_h *dev_ep_p);
+
 typedef ucs_status_t (*uct_iface_accept_func_t)(uct_iface_h iface,
                                                 uct_conn_request_h conn_request);
 
@@ -298,6 +309,8 @@ typedef struct uct_iface_ops {
     uct_ep_put_short_func_t             ep_put_short;
     uct_ep_put_bcopy_func_t             ep_put_bcopy;
     uct_ep_put_zcopy_func_t             ep_put_zcopy;
+    uct_ep_batch_prepare_func_t         ep_batch_prepare;
+    uct_ep_batch_release_func_t         ep_batch_release;
 
     /* endpoint - get */
     uct_ep_get_short_func_t             ep_get_short;
@@ -347,6 +360,7 @@ typedef struct uct_iface_ops {
     uct_ep_destroy_func_t               ep_destroy;
     uct_ep_get_address_func_t           ep_get_address;
     uct_ep_connect_to_ep_func_t         ep_connect_to_ep;
+    uct_ep_export_dev_func_t            ep_export_dev;
     uct_iface_accept_func_t             iface_accept;
     uct_iface_reject_func_t             iface_reject;
 

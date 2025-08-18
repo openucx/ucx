@@ -13,7 +13,6 @@
 #include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
 
-
 static inline void *ucs_mpool_get_inline(ucs_mpool_t *mp)
 {
     ucs_mpool_elem_t *elem;

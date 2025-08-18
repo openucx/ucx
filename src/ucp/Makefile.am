@@ -18,7 +18,9 @@ nobase_dist_libucp_la_HEADERS = \
 	api/ucp_compat.h \
 	api/ucp_def.h \
 	api/ucp_version.h \
-	api/ucp.h
+	api/ucp.h \
+	api/cuda/ucp_dev.cuh \
+	api/cuda/ucp_def.h
 
 noinst_HEADERS = \
 	am/eager.inl \

@@ -114,7 +114,7 @@ ucs_memory_info_set_host(ucs_memory_info_t *mem_info)
     mem_info->type         = UCS_MEMORY_TYPE_HOST;
     mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
     mem_info->base_address = NULL;
-    mem_info->alloc_length = -1;
+    mem_info->alloc_length = SIZE_MAX;
 }
 
 END_C_DECLS

@@ -17,6 +17,7 @@
 
 #include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_common.inl>
+#include <ucp/api/cuda/ucp_def.h>
 
 
 #define UCP_RMA_CHECK_BUFFER(_buffer, _action) \
@@ -248,6 +249,415 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
         ep->ext->unflushed_lanes |= UCS_BIT(rkey_config->put_short.lane);
     }
 
+    return status;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_rma_batch_prepare,
+                 (ep, iov, iovcnt, signal_va, signal_rkey, param), ucp_ep_h ep,
+                 const ucp_rma_iov_t *iov, size_t iovcnt, uint64_t signal_va,
+                 ucp_rkey_h signal_rkey, ucp_ep_prepare_batch_param_t *param)
+{
+    ucp_request_t *req;
+
+    if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+        return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
+    }
+
+    req = ucp_request_get(ep->worker);
+    if (ucs_unlikely((req == NULL))) {
+        return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
+    }
+
+    req->send.batch.iovcnt = 0;
+    req->send.batch.iov    = NULL;
+    if (iovcnt != 0) {
+        if (iov == NULL) {
+            goto invalid_param;
+        }
+
+        req->send.batch.iovcnt = iovcnt;
+        req->send.batch.iov = ucs_malloc(iovcnt * sizeof(*req->send.batch.iov),
+                                         "request send batch");
+        if (req->send.batch.iov == NULL) {
+            ucp_request_put(req);
+            return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        }
+
+        memcpy(req->send.batch.iov, iov, sizeof(*iov) * iovcnt);
+    } else if (signal_va == 0) {
+        goto invalid_param;
+    }
+
+    req->send.batch.signal_va   = 0;
+    req->send.batch.signal_rkey = NULL;
+    if (signal_va != 0) {
+        if (signal_rkey == NULL) {
+            goto invalid_param;
+        }
+
+        req->send.batch.signal_va   = signal_va;
+        req->send.batch.signal_rkey = signal_rkey;
+    }
+
+    req->flags         = UCP_REQUEST_FLAG_COMPLETED | UCP_REQUEST_FLAG_BATCH;
+    req->send.batch.ep = ep;
+    req->send.batch.exported = 0;
+
+    return req + 1;
+
+invalid_param:
+    ucp_request_put(req);
+    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+}
+
+static ucs_status_t ucp_ep_rma_batch_populate(const ucp_request_t *req,
+                                              ucp_md_index_t md_index,
+                                              ucp_md_index_t remote_md_index,
+                                              uct_rma_iov_t *iov,
+                                              uint64_t *sig_va,
+                                              uct_rkey_t *sig_rkey)
+{
+    ucp_rma_iov_t *rma_iov = req->send.batch.iov;
+    ucp_mem_h ucp_memh;
+    uct_mem_h memh;
+    int i;
+    uint8_t rkey_index;
+    uct_rkey_t uct_rkey;
+
+    /* Prepare signal area */
+    if (req->send.batch.signal_va != 0) {
+        rkey_index = ucs_bitmap2idx(req->send.batch.signal_rkey->md_map,
+                                    remote_md_index);
+        uct_rkey   = ucp_rkey_get_tl_rkey(req->send.batch.signal_rkey,
+                                          rkey_index);
+        if (uct_rkey == UCT_INVALID_RKEY) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        *sig_va   = req->send.batch.signal_va;
+        *sig_rkey = uct_rkey;
+    } else {
+        *sig_va   = 0;
+        *sig_rkey = 0;
+    }
+
+    for (i = 0; i < req->send.batch.iovcnt; i++) {
+        /* Local registration */
+        ucp_memh = rma_iov[i].memh;
+
+        if (!(ucp_memh->md_map & UCS_BIT(md_index))) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        memh = ucp_memh->uct[md_index];
+        if (memh == UCT_MEM_HANDLE_NULL) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        /* Remote registration */
+        rkey_index = ucs_bitmap2idx(rma_iov[i].rkey->md_map, remote_md_index);
+        uct_rkey   = ucp_rkey_get_tl_rkey(rma_iov[i].rkey, rkey_index);
+        if (uct_rkey == UCT_INVALID_RKEY) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        iov[i].local_va  = rma_iov[i].local_va;
+        iov[i].remote_va = rma_iov[i].remote_va;
+        iov[i].length    = rma_iov[i].length;
+        iov[i].rkey      = uct_rkey;
+        iov[i].memh      = memh;
+
+        ucs_trace("batch populate: i=%d va=%p rva=%lx length=%zu rkey=%lx "
+                  "memh=%p ucp_memh->md_map=%lx",
+                  i, iov[i].local_va, iov[i].remote_va, iov[i].length,
+                  iov[i].rkey, iov[i].memh, ucp_memh->md_map);
+    }
+
+    return UCS_OK;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rma_batch_release,
+                 (request, batch), void *request, ucp_batch_h batch)
+{
+    ucp_request_t *req = (ucp_request_t *)request - 1;
+    ucp_ep_h ep        = req->send.batch.ep;
+    uct_ep_h uct_ep;
+    ucp_batch_t host_batch;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_BATCH) ||
+        (req->send.batch.exported < 1)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (batch == NULL) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucp_mem_type_pack(ep->worker, &host_batch, batch, sizeof(host_batch),
+                      UCS_MEMORY_TYPE_CUDA);
+
+    req->send.batch.exported--;
+    uct_ep = host_batch.host.uct_ep;
+    uct_ep_batch_release(uct_ep, host_batch.uct_batch);
+
+    uct_mem_free(&host_batch.host.mem);
+    return UCS_OK;
+}
+
+static ucs_status_t ucp_ep_rma_batch_create(ucp_worker_h worker,
+                                            uct_ep_h uct_ep,
+                                            uct_batch_h uct_batch,
+                                            ucp_batch_h *batch,
+                                            const uct_allocated_memory_t *mem)
+{
+    ucp_batch_t host_batch;
+    ucs_status_t status;
+
+    host_batch.host.uct_ep = uct_ep;
+    host_batch.host.mem    = *mem;
+    host_batch.uct_batch   = uct_batch;
+
+    status = uct_ep_export_dev(uct_ep, &host_batch.exported_uct_ep);
+    if (status != UCS_OK) {
+        ucs_error("failed to export uct_ep");
+        uct_mem_free(&host_batch.host.mem);
+        return status;
+    }
+
+    if (!host_batch.exported_uct_ep) {
+        ucs_error("exported_uct_ep is NULL");
+        uct_mem_free(&host_batch.host.mem);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucp_mem_type_unpack(worker, mem->address, &host_batch, mem->length,
+                        UCS_MEMORY_TYPE_CUDA);
+
+    *batch = mem->address;
+    return UCS_OK;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rma_batch_export, (request, batch),
+                 void *request, ucp_batch_h *batch)
+{
+    ucs_status_t status   = UCS_ERR_NO_RESOURCE;
+    ucp_request_t *req    = (ucp_request_t*)request - 1;
+    ucp_ep_h ep           = req->send.batch.ep;
+    ucp_context_h context = ep->worker->context;
+    uct_rma_iov_t *iov    = NULL;
+    int found_lane        = 0;
+    ucp_md_map_t remote_md_map;
+    ucp_rkey_h rkey;
+    ucp_lane_index_t lane;
+    struct ucp_ep_config *ep_config;
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_md_index_t lane_local_md_index, lane_remote_md_index;
+    uct_ep_h uct_ep;
+    uct_batch_h uct_batch;
+    uint64_t sig_va;
+    uct_rkey_t sig_rkey;
+    ucs_memory_info_t mem_info;
+    ucp_rkey_config_t *rkey_config;
+    uct_allocated_memory_t mem;
+    ucp_rsc_index_t lane_rsc_index;
+    ucs_sys_device_t lane_local_sys_dev, local_sys_dev, remote_sys_dev;
+    ucs_sys_device_t lane_remote_sys_dev;
+    uct_iface_attr_t *iface_attr;
+    ucp_tl_resource_desc_t *lane_tl_rsc;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_BATCH)) {
+        ucs_error("request is not a batch");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /*
+     * 0. User sets cuda context to desired device before doing export to GPU
+     * 1. Allocate ucp batch with UCS_SYS_DEVICE_ID_UNKNOWN sys_dev
+     * 2. Detect allocated sys_dev
+     * 3. Remote MD index filter
+     * 4. Local GPU lanes filter
+     * 5. Remote GPU lanes filter
+     * 6. Batch support filter
+     * 7. Populate uct batch
+     * 8. Create ucp batch
+     * 9. Export ucp batch
+     */
+
+    /* Step 1: Allocate ucp_batch with UCS_SYS_DEVICE_ID_UNKNOWN sys_dev */
+    status = ucp_mem_do_alloc(context, NULL, sizeof(**batch),
+                              UCT_MD_MEM_ACCESS_LOCAL_READ |
+                              UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+                              UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN,
+                              "ucp_batch_t", &mem);
+    if (status != UCS_OK) {
+        ucs_error("failed to allocate ucp_batch");
+        return status;
+    }
+
+    /* Step 2: Detect allocated sys_dev */
+    ucp_memory_detect_internal(context, mem.address, mem.length, &mem_info);
+    if (mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("detected unknown sys_dev");
+        status = UCS_ERR_UNSUPPORTED;
+        goto err;
+    }
+
+    local_sys_dev = mem_info.sys_dev;
+    ucs_trace("detected local_sys_dev %u", local_sys_dev);
+
+    if (req->send.batch.signal_va != 0 && req->send.batch.signal_rkey != NULL) {
+        rkey = req->send.batch.signal_rkey;
+        if (rkey->mem_type != UCS_MEMORY_TYPE_CUDA) {
+            ucs_error("signal rkey is not CUDA");
+            status = UCS_ERR_INVALID_PARAM;
+            goto err;
+        }
+    } else if (req->send.batch.iovcnt > 0) {
+        rkey = req->send.batch.iov[0].rkey;
+    } else {
+        ucs_error("ep %p should have iovcnt > 0 or signal_va != 0 and "
+                  "signal_rkey != NULL", ep);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    rkey_cfg_index = rkey->cfg_index;
+    remote_md_map  = rkey->md_map;
+
+    for (int i = 0; i < req->send.batch.iovcnt; i++) {
+        rkey = req->send.batch.iov[i].rkey;
+        if ((rkey->mem_type != UCS_MEMORY_TYPE_CUDA) ||
+            (rkey->cfg_index != rkey_cfg_index)) {
+            ucs_error("invalid rkey, mem_type %u, cfg_index %u",
+                      rkey->mem_type, rkey->cfg_index);
+            status = UCS_ERR_INVALID_PARAM;
+            goto err;
+        }
+
+        remote_md_map &= rkey->md_map;
+        if (remote_md_map == 0) {
+            ucs_error("remote_md_map is 0");
+            status = UCS_ERR_INVALID_PARAM;
+            goto err;
+        }
+    }
+
+    ucs_trace_req("ep %p iovcnt %zu remote_md_map %lx search batch lane", ep,
+                  req->send.batch.iovcnt, remote_md_map);
+
+    if (req->send.batch.iovcnt != 0) {
+        iov = ucs_malloc(req->send.batch.iovcnt * sizeof(*iov),
+                         "req batch iov");
+        if (iov == NULL) {
+            ucs_error("ep %p failed to allocate iov", ep);
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
+    }
+
+    ep_config      = ucp_ep_config(ep);
+    rkey_config    = ucp_rkey_config(ep->worker, rkey);
+    remote_sys_dev = rkey_config->key.sys_dev;
+
+    if (remote_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("ep %p remote_sys_dev is unknown iovcnt %zu", ep,
+                  req->send.batch.iovcnt);
+        status = UCS_ERR_UNSUPPORTED;
+        goto err;
+    }
+
+    for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+        uct_ep               = ucp_ep_get_lane(ep, lane);
+        lane_local_md_index  = ep_config->md_index[lane];
+        lane_remote_md_index = ep_config->key.lanes[lane].dst_md_index;
+        lane_rsc_index       = ep_config->key.lanes[lane].rsc_index;
+        lane_remote_sys_dev  = ep_config->key.lanes[lane].dst_sys_dev;
+        lane_tl_rsc          = &context->tl_rscs[lane_rsc_index];
+        lane_local_sys_dev   = lane_tl_rsc->tl_rsc.sys_device;
+
+        /* Step 3: Remote MD index filter */
+        if (!(remote_md_map & UCS_BIT(lane_remote_md_index))) {
+            ucs_trace("ep %p skipping lane[%u]: lane_remote_md_index %u not in "
+                      "remote_md_map %lx " UCT_TL_RESOURCE_DESC_FMT,
+                      ep, lane, lane_remote_md_index, remote_md_map,
+                      UCT_TL_RESOURCE_DESC_ARG(&lane_tl_rsc->tl_rsc));
+            continue;
+        }
+
+        /* Step 4: Local GPU lanes filter */
+        if (local_sys_dev != lane_local_sys_dev) {
+            ucs_trace("ep %p skipping lane[%u]: local_sys_dev %u != "
+                      "lane_local_sys_dev %u " UCT_TL_RESOURCE_DESC_FMT,
+                      ep, lane, local_sys_dev, lane_local_sys_dev,
+                      UCT_TL_RESOURCE_DESC_ARG(&lane_tl_rsc->tl_rsc));
+            continue;
+        }
+
+        /* Step 5: Remote GPU lanes filter */
+        if (remote_sys_dev != lane_remote_sys_dev) {
+            ucs_trace("ep %p skipping lane[%u]: remote_sys_dev %u != "
+                      "lane_remote_sys_dev %u",
+                      ep, lane, remote_sys_dev, lane_remote_sys_dev);
+            continue;
+        }
+
+        /* Step 6: Batch support filter */
+        iface_attr = ucp_worker_iface_get_attr(ep->worker, lane_rsc_index);
+        if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BATCH)) {
+            ucs_trace("ep %p skipping lane[%u]: doesn't support batch "
+                      UCT_TL_RESOURCE_DESC_FMT,
+                      ep, lane, UCT_TL_RESOURCE_DESC_ARG(&lane_tl_rsc->tl_rsc));
+            continue;
+        }
+
+        /* Step 7: Populate uct batch */
+        status = ucp_ep_rma_batch_populate(req, lane_local_md_index,
+                                           lane_remote_md_index, iov, &sig_va,
+                                           &sig_rkey);
+        if (status != UCS_OK) {
+            ucs_trace("ep %p could not populate uct batch for lane[%u] "
+                      UCT_TL_RESOURCE_DESC_FMT,
+                      ep, lane, UCT_TL_RESOURCE_DESC_ARG(&lane_tl_rsc->tl_rsc));
+            continue;
+        }
+
+        /* Step 8: Create ucp batch */
+        status = uct_ep_batch_prepare(uct_ep, iov, req->send.batch.iovcnt,
+                                      sig_va, sig_rkey, &uct_batch);
+        if (status == UCS_OK) {
+            ucs_trace("ep %p selected lane[%u] " UCT_TL_RESOURCE_DESC_FMT
+                      "md[%u] sys_dev %u -> md[%u] sys_dev %u",
+                      ep, lane, UCT_TL_RESOURCE_DESC_ARG(&lane_tl_rsc->tl_rsc),
+                      lane_local_md_index, lane_local_sys_dev,
+                      lane_remote_md_index, lane_remote_sys_dev);
+
+            /* Step 9: Export ucp batch */
+            status = ucp_ep_rma_batch_create(ep->worker, uct_ep, uct_batch,
+                                             batch, &mem);
+            if (status == UCS_OK) {
+                req->send.batch.exported++;
+                found_lane = 1;
+                break;
+            } else {
+                ucs_trace("ep %p failed to create batch for lane[%u] "
+                          UCT_TL_RESOURCE_DESC_FMT,
+                          ep, lane,
+                          UCT_TL_RESOURCE_DESC_ARG(&lane_tl_rsc->tl_rsc));
+                uct_ep_batch_release(uct_ep, uct_batch);
+            }
+        }
+    }
+
+    if (!found_lane) {
+        ucs_error("failed to find a lane");
+        status = UCS_ERR_NO_RESOURCE;
+    }
+
+    ucs_free(iov);
+    return status;
+
+err:
+    uct_mem_free(&mem);
     return status;
 }
 
