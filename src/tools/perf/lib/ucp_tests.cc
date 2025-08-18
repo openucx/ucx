@@ -16,13 +16,337 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/string.h>
 #include <limits>
+#include <tools/perf/gdaki/gdaki_benchmark.h>
+
+class ucp_perf_test_runner_base {
+public:
+    ucp_perf_test_runner_base(ucx_perf_context_t &perf) :
+        m_perf(perf), m_max_outstanding(m_perf.params.max_outstanding)
+    {}
+
+    virtual ~ucp_perf_test_runner_base() {}
+
+    virtual ucs_status_t run() = 0;
+
+    template<typename PSN>
+    UCS_F_ALWAYS_INLINE PSN read_sn(void *buffer, size_t length)
+    {
+        ucs_memory_type_t mem_type = m_perf.params.recv_mem_type;
+        const void *ptr            = sn_ptr<PSN>(buffer, length);
+        ucp_request_param_t param  = {0};
+        ucs_status_ptr_t request;
+        PSN sn;
+
+        if (mem_type == UCS_MEMORY_TYPE_HOST) {
+            return *(const volatile PSN*)ptr;
+        } else {
+            request = ucp_get_nbx(m_perf.ucp.self_ep, &sn, sizeof(sn),
+                                  (uint64_t)ptr, m_perf.ucp.self_recv_rkey,
+                                  &param);
+            request_wait(request, mem_type, "read_sn");
+            request = ucp_ep_flush_nbx(m_perf.ucp.self_ep, &param);
+            request_wait(request, mem_type, "flush read_sn");
+            return sn;
+        }
+    }
+
+    template<typename PSN>
+    UCS_F_ALWAYS_INLINE void *sn_ptr(void *buffer, size_t length)
+    {
+        return UCS_PTR_BYTE_OFFSET(buffer, length - sizeof(PSN));
+    }
+
+    void request_wait(ucs_status_ptr_t request, ucs_memory_type_t mem_type,
+                      const char *operation_name)
+    {
+        ucs_status_t status;
+
+        if (UCS_PTR_IS_PTR(request)) {
+            do {
+                ucp_worker_progress(m_perf.ucp.worker);
+                status = ucp_request_check_status(request);
+            } while (status == UCS_INPROGRESS);
+            ucp_request_free(request);
+        } else {
+            status = UCS_PTR_STATUS(request);
+        }
+
+        if (status != UCS_OK) {
+            ucs_warn("failed to %s(memory_type=%s): %s", operation_name,
+                     ucs_memory_type_names[mem_type],
+                     ucs_status_string(status));
+        }
+    }
+
+protected:
+    ucx_perf_context_t &m_perf;
+    const unsigned m_max_outstanding;
+};
+
+class ucp_perf_test_gdaki_runner: public ucp_perf_test_runner_base {
+public:
+    typedef uint64_t psn_t;
+
+    ucp_perf_test_gdaki_runner(ucx_perf_context_t &perf, ucx_perf_cmd_t command,
+                               ucx_perf_test_type_t type) :
+        ucp_perf_test_runner_base(perf),
+        poll_interval(0),
+        cpu_ctx(NULL),
+        gpu_ctx(NULL),
+        mem_handle(NULL),
+        result{0},
+        m_command(command),
+        m_type(type)
+    {
+        mem_handle = gdaki_mem_create(NULL, sizeof(ucx_perf_gdaki_context_t));
+        if (!mem_handle) {
+            ucs_error("Failed to create GPU memory handle\n");
+            return;
+        }
+
+        gpu_ctx = (ucx_perf_gdaki_context_t*)gdaki_mem_get_gpu_ptr(mem_handle);
+        cpu_ctx = (ucx_perf_gdaki_context_t*)gdaki_mem_get_ptr(mem_handle);
+        memset(cpu_ctx, 0, sizeof(ucx_perf_gdaki_context_t));
+
+        cpu_ctx->params.report_interval     = m_perf.params.report_interval *
+                                              UCS_NSEC_PER_SEC;
+        cpu_ctx->params.max_outstanding     = m_max_outstanding;
+        cpu_ctx->params.m_sends_outstanding = 0;
+        cpu_ctx->params.max_iter            = m_perf.params.max_iter;
+        cpu_ctx->params.length              = ucx_perf_get_message_size(
+                                              &m_perf.params);
+        poll_interval                       = m_perf.params.report_interval /
+                                              10000;
+    }
+
+     ~ucp_perf_test_gdaki_runner() {
+        if (mem_handle != NULL) {
+            gdaki_mem_destroy(mem_handle);
+        }
+    }
+
+
+    ucs_status_t run()
+    {
+        /* coverity[switch_selector_expr_is_constant] */
+        switch (m_type) {
+        case UCX_PERF_TEST_TYPE_PINGPONG:
+            switch (m_command) {
+            case UCX_PERF_CMD_PUT_BATCH:
+                return run_pingpong_batch_gdaki();
+            default:
+                return UCS_ERR_INVALID_PARAM;
+            }
+        case UCX_PERF_TEST_TYPE_STREAM_UNI:
+            switch (m_command) {
+            case UCX_PERF_CMD_PUT_BATCH:
+                return run_stream_req_uni_batch_gdaki();
+            default:
+                return UCS_ERR_INVALID_PARAM;
+            }
+        default:
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+private:
+    ucx_perf_gdaki_time_t    poll_interval;
+    ucx_perf_gdaki_context_t *cpu_ctx;
+    ucx_perf_gdaki_context_t *gpu_ctx;
+    gdaki_mem_handle_t       mem_handle;
+    ucx_perf_result_t        result;
+    ucx_perf_cmd_t           m_command;
+    ucx_perf_test_type_t     m_type;
+
+    void ucp_perf_test_prepare_rma_iov(const ucx_perf_context_t *perf)
+    {
+        const size_t iovcnt  = perf->params.msg_size_cnt;
+        size_t iov_length_it = 0;
+        size_t iov_it        = 0;
+        ucp_rma_iov_t *iov   = perf->ucp.rma_iov;
+
+        ucs_assert(NULL != perf->params.msg_size_list);
+        ucs_assert(iovcnt > 0);
+
+        for (; iov_it < iovcnt; ++iov_it) {
+            iov[iov_it].opcode    = UCP_RMA_PUT;
+            iov[iov_it].local_va  = (char*)perf->send_buffer + iov_length_it;
+            iov[iov_it].remote_va = perf->ucp.remote_addr + iov_length_it;
+            iov[iov_it].memh      = perf->ucp.send_memh;
+            iov[iov_it].rkey      = perf->ucp.rkey;
+            iov[iov_it].length    = perf->params.msg_size_list[iov_it];
+
+            iov_length_it += iov[iov_it].length;
+        }
+
+        ucs_debug("IOV buffer filled by %lu slices with total length %lu",
+                  iovcnt, iov_length_it);
+    }
+
+    ucs_status_t run_pingpong_batch_gdaki()
+    {
+        unsigned my_index;
+        size_t length;
+        ucp_batch_h batch;
+        ucs_status_t status;
+        unsigned group_size;
+
+        group_size = rte_call(&m_perf, group_size);
+        length     = ucx_perf_get_message_size(&m_perf.params);
+        ucs_assert(length >= sizeof(psn_t));
+
+        m_perf.send_allocator->memset(m_perf.send_buffer, 0, length);
+        m_perf.recv_allocator->memset(m_perf.recv_buffer, 0, length);
+
+        my_index = rte_call(&m_perf, group_index);
+        rte_peer_index(group_size, my_index);
+
+        ucp_perf_test_prepare_rma_iov(&m_perf);
+
+        ucp_perf_barrier(&m_perf);
+
+        void *signal       = UCS_PTR_BYTE_OFFSET(m_perf.ucp.remote_addr,
+                                                cpu_ctx->params.length);
+        void *local_signal = UCS_PTR_BYTE_OFFSET(m_perf.recv_buffer,
+                                                 cpu_ctx->params.length);
+        void *req          = ucp_ep_rma_batch_prepare(m_perf.ucp.ep,
+                                                      m_perf.ucp.rma_iov,
+                                                      m_perf.params.msg_size_cnt,
+                                                      (uint64_t)signal,
+                                                      m_perf.ucp.rkey, NULL);
+        if (UCS_PTR_IS_ERR(req)) {
+            return UCS_PTR_STATUS(req);
+        }
+
+        status = ucp_ep_rma_batch_export(req, &batch);
+        if (status != UCS_OK) {
+            ucs_error("Failed to export batch: %s", ucs_status_string(status));
+            ucp_request_release(req);
+            return status;
+        }
+
+        status = ucx_perf_gdaki_execute_ucp_put_batch_lat_kernel(
+                m_perf.params.cuda_threads, gpu_ctx, batch,
+                UCP_DEV_BATCH_FLAG_DEFAULT, local_signal, my_index);
+        if (status != UCS_OK) {
+            ucs_error("Failed to launch bw test");
+            return status;
+        }
+
+        while (!cpu_ctx->test_completed) {
+            if (cpu_ctx->results_ready) {
+                ucx_perf_gdaki_mirror_result(&m_perf, cpu_ctx);
+                ucx_perf_calc_result(&m_perf, &result);
+                ucx_perf_report_gdaki(&m_perf);
+                // TODO: Replace with producer/consumer pattern.
+                cpu_ctx->results_ready = 0;
+            }
+            usleep(poll_interval); // Small sleep to prevent busy-waiting
+        }
+
+        psn_t signal_val  = read_sn<psn_t>((psn_t*)local_signal, sizeof(psn_t));
+        assert(signal_val == m_perf.params.max_iter);
+
+        ucx_perf_gdaki_mirror_result(&m_perf, cpu_ctx);
+        ucx_perf_calc_result(&m_perf, &result);
+
+        ucp_ep_rma_batch_release(req, batch);
+        ucp_request_release(req);
+
+        return UCS_OK;
+    }
+
+    ucs_status_t run_stream_req_uni_batch_gdaki()
+    {
+        unsigned my_index;
+        size_t length;
+        unsigned group_size;
+
+        group_size = rte_call(&m_perf, group_size);
+
+        length = ucx_perf_get_message_size(&m_perf.params);
+        ucs_assert(length >= sizeof(psn_t));
+
+        m_perf.send_allocator->memset(m_perf.send_buffer, 0, length);
+        m_perf.recv_allocator->memset(m_perf.recv_buffer, 0, length);
+
+        my_index   = rte_call(&m_perf, group_index);
+        rte_peer_index(group_size, my_index);
+
+        if (my_index == 1) {
+            ucp_perf_test_prepare_rma_iov(&m_perf);
+        }
+
+        ucp_perf_barrier(&m_perf);
+
+        if (my_index == 1) {
+            void *req;
+            ucs_status_t status;
+            ucp_batch_h batch;
+            void* signal;
+
+            // TODO: temporary for signal.
+            signal = UCS_PTR_BYTE_OFFSET(m_perf.ucp.remote_addr,
+                                         cpu_ctx->params.length);
+            req    = ucp_ep_rma_batch_prepare(m_perf.ucp.ep,
+                                              m_perf.ucp.rma_iov,
+                                              m_perf.params.msg_size_cnt,
+                                              (uint64_t)signal,
+                                              m_perf.ucp.rkey,
+                                              NULL);
+            if (UCS_PTR_IS_ERR(req)) {
+                return UCS_PTR_STATUS(req);
+            }
+
+            status = ucp_ep_rma_batch_export(req, &batch);
+            if (status != UCS_OK) {
+                ucs_error("Failed to export batch: %s", ucs_status_string(status));
+                ucp_request_release(req);
+                return status;
+            }
+
+            status = ucx_perf_gdaki_execute_ucp_put_batch_bw_kernel(
+                    m_perf.params.cuda_threads, gpu_ctx, batch,
+                    UCP_DEV_BATCH_FLAG_DEFAULT, 1);
+            if (status != UCS_OK) {
+                ucs_error("Failed to launch bw test");
+                return status;
+            }
+
+            while (!cpu_ctx->test_completed) {
+                if (cpu_ctx->results_ready) {
+                    ucx_perf_gdaki_mirror_result(&m_perf, cpu_ctx);
+                    ucx_perf_calc_result(&m_perf, &result);
+                    ucx_perf_report_gdaki(&m_perf);
+                    // TODO: Replace with producer/consumer pattern.
+                    cpu_ctx->results_ready = 0;
+                }
+                usleep(poll_interval); // Small sleep to prevent busy-waiting
+            }
+
+            ucx_perf_gdaki_mirror_result(&m_perf, cpu_ctx);
+            ucx_perf_calc_result(&m_perf, &result);
+            ucp_ep_rma_batch_release(req, batch);
+            ucp_request_release(req);
+        } else if (my_index == 0) {
+            psn_t *signal_add = (psn_t*)UCS_PTR_BYTE_OFFSET(
+                    m_perf.recv_buffer, cpu_ctx->params.length);
+            psn_t signal;
+            do {
+                signal = read_sn<psn_t>(signal_add, sizeof(psn_t));
+                usleep(poll_interval);
+            } while (signal != m_perf.params.max_iter);
+        }
+
+        return UCS_OK;
+    }
+};
 
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
-class ucp_perf_test_runner {
+class ucp_perf_test_runner: public ucp_perf_test_runner_base {
 public:
     typedef uint8_t psn_t;
-
     static const unsigned AM_ID     = UCP_PERF_AM_ID;
     static const ucp_tag_t TAG      = 0x1337a880u;
     static const ucp_tag_t TAG_MASK = (FLAGS & UCX_PERF_TEST_FLAG_TAG_WILDCARD) ?
@@ -32,10 +356,9 @@ public:
     static const psn_t UNKNOWN_SN   = std::numeric_limits<psn_t>::max();
 
     ucp_perf_test_runner(ucx_perf_context_t &perf) :
-        m_perf(perf),
+        ucp_perf_test_runner_base(perf),
         m_recvs_outstanding(0),
         m_sends_outstanding(0),
-        m_max_outstanding(m_perf.params.max_outstanding),
         m_am_rx_buffer(NULL),
         m_am_rx_length(0ul)
     {
@@ -406,58 +729,10 @@ public:
         }
     }
 
-    UCS_F_ALWAYS_INLINE void *sn_ptr(void *buffer, size_t length)
-    {
-        return UCS_PTR_BYTE_OFFSET(buffer, length - sizeof(psn_t));
-    }
-
-    void request_wait(ucs_status_ptr_t request, ucs_memory_type_t mem_type,
-                      const char *operation_name)
-    {
-        ucs_status_t status;
-
-        if (UCS_PTR_IS_PTR(request)) {
-            do {
-                ucp_worker_progress(m_perf.ucp.worker);
-                status = ucp_request_check_status(request);
-            } while (status == UCS_INPROGRESS);
-            ucp_request_free(request);
-        } else {
-            status = UCS_PTR_STATUS(request);
-        }
-
-        if (status != UCS_OK) {
-            ucs_warn("failed to %s(memory_type=%s): %s", operation_name,
-                     ucs_memory_type_names[mem_type],
-                     ucs_status_string(status));
-        }
-    }
-
-    UCS_F_ALWAYS_INLINE psn_t read_sn(void *buffer, size_t length)
-    {
-        ucs_memory_type_t mem_type = m_perf.params.recv_mem_type;
-        const void *ptr            = sn_ptr(buffer, length);
-        ucp_request_param_t param  = {0};
-        ucs_status_ptr_t request;
-        psn_t sn;
-
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            return *(const volatile psn_t*)ptr;
-        } else {
-            request = ucp_get_nbx(m_perf.ucp.self_ep, &sn, sizeof(sn),
-                                  (uint64_t)ptr, m_perf.ucp.self_recv_rkey,
-                                  &param);
-            request_wait(request, mem_type, "read_sn");
-            request = ucp_ep_flush_nbx(m_perf.ucp.self_ep, &param);
-            request_wait(request, mem_type, "flush read_sn");
-            return sn;
-        }
-    }
-
     UCS_F_ALWAYS_INLINE void write_sn(void *buffer, ucs_memory_type_t mem_type,
                                       size_t length, psn_t sn, ucp_rkey_h rkey)
     {
-        void *ptr                 = sn_ptr(buffer, length);
+        void *ptr                 = sn_ptr<psn_t>(buffer, length);
         ucp_request_param_t param = {0};
         ucs_status_ptr_t request;
 
@@ -605,13 +880,13 @@ public:
             /* coverity[switch_selector_expr_is_constant] */
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
-                while (read_sn(buffer, length) != sn) {
+                while (read_sn<psn_t>(buffer, length) != sn) {
                     progress_responder();
                 }
                 return UCS_OK;
             case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
-                ptr = sn_ptr(buffer, length);
-                while (read_sn(buffer, length) != sn) {
+                ptr = sn_ptr<psn_t>(buffer, length);
+                while (read_sn<psn_t>(buffer, length) != sn) {
                     ucp_worker_wait_mem(worker, ptr);
                     progress_responder();
                 }
@@ -651,7 +926,7 @@ public:
     void wait_last_iter(void *buffer, size_t size)
     {
         if (use_psn()) {
-            while (read_sn(buffer, size) != LAST_ITER_SN) {
+            while (read_sn<psn_t>(buffer, size) != LAST_ITER_SN) {
                 progress_responder();
             }
         }
@@ -1014,10 +1289,9 @@ private:
         }
     }
 
-    ucx_perf_context_t &m_perf;
+protected:
     int                m_recvs_outstanding;
     int                m_sends_outstanding;
-    const int          m_max_outstanding;
     /*
      * These fields are used by UCP AM flow only, because receive operation is
      * initiated from the data receive callback.
@@ -1037,6 +1311,11 @@ private:
         ((_perf)->params.test_type == (_type)) && \
         (((_perf)->params.flags & (_mask)) == (_flags))) \
     { \
+        if (UCX_PERF_PARAM_GPU_CUDA_THREADS_DEFINED( \
+                    _perf->params.cuda_threads)) { \
+            ucp_perf_test_gdaki_runner r(*_perf, _cmd, _type); \
+            return r.run(); \
+        } \
         ucp_perf_test_runner<_cmd, _type, _flags> r(*_perf); \
         return r.run(); \
     }
@@ -1078,6 +1357,8 @@ static ucs_status_t ucp_perf_dispatch_osd(ucx_perf_context_t *perf)
                    (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG),
                    (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM),
                    (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI),
+                   (UCX_PERF_CMD_PUT_BATCH, UCX_PERF_TEST_TYPE_STREAM_UNI),
+                   (UCX_PERF_CMD_PUT_BATCH, UCX_PERF_TEST_TYPE_PINGPONG),
                    (UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI),
                    (UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI),
                    (UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI),

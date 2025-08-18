@@ -19,6 +19,9 @@ BEGIN_C_DECLS
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
 
+#define UCX_PERF_PARAM_GPU_CUDA_THREADS_DEFINED(cuda_threads) \
+    ((cuda_threads) > 0)
+
 
 typedef enum {
     UCX_PERF_API_UCT,
@@ -30,6 +33,7 @@ typedef enum {
 typedef enum {
     UCX_PERF_CMD_AM,
     UCX_PERF_CMD_PUT,
+    UCX_PERF_CMD_PUT_BATCH,
     UCX_PERF_CMD_GET,
     UCX_PERF_CMD_ADD,
     UCX_PERF_CMD_FADD,
@@ -277,6 +281,7 @@ typedef struct ucx_perf_params {
 
     ucx_perf_report_func_t report_func;     /* Report function callback */
     void                   *report_arg;     /* Custom argument for report function */
+    unsigned               cuda_threads;    /* Number of cuda threads to use with gdaki */
 
     struct {
         char                   dev_name[UCT_DEVICE_NAME_MAX]; /* Device name to use */

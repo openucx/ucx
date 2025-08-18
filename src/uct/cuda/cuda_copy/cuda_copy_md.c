@@ -447,7 +447,7 @@ uct_cuda_copy_push_alloc_ctx(uct_cuda_copy_md_t *md,
     return status;
 }
 
-static void uct_cuda_copy_pop_alloc_ctx(CUdevice cu_device)
+void uct_cuda_copy_pop_alloc_ctx(CUdevice cu_device)
 {
     (void)UCT_CUDADRV_FUNC(cuCtxPopCurrent(NULL), UCS_LOG_LEVEL_WARN);
     (void)UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRelease(cu_device),

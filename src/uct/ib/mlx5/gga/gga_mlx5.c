@@ -795,7 +795,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(
-            md, &self->super,
+            md, &self->super.super.config,
             ucs_min(md->dp_ordering_cap.rc, UCT_IB_MLX5_DP_ORDERING_OOO_RW),
             &config->rc_mlx5_common, "gga");
     if (status != UCS_OK) {
@@ -814,7 +814,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
     self->super.config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
     self->super.super.config.fence_mode  = UCT_RC_FENCE_MODE_AUTO;
 
-    uct_rc_iface_adjust_max_get_zcopy(&self->super.super, &config->super.super,
+    uct_rc_iface_adjust_max_get_zcopy(&self->super.super.config, &config->super.super,
             UCT_GGA_MAX_MSG_SIZE,
             uct_ib_device_name(uct_ib_iface_device(&self->super.super.super)),
             "gga");

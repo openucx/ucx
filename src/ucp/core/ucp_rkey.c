@@ -791,11 +791,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
-    if (buffer < buffer_end) {
-        rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
-    } else {
-        rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-    }
+    rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
 
     khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
                     rkey_config_key);

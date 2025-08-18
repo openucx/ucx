@@ -255,6 +255,14 @@ enum {
 UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_md_h);
 UCS_CLASS_DECLARE(uct_ep_t, uct_iface_h);
 
+typedef struct uct_alloc uct_alloc_t;
+struct uct_alloc {
+    int (*alloc)(uct_alloc_t *self, void **ptr, size_t boundary, size_t size,
+                 int *dma_fd, const char *name);
+    void (*free)(uct_alloc_t *self, void *ptr);
+};
+
+extern uct_alloc_t uct_posix_alloc;
 
 /**
  * Active message handle table entry

@@ -183,17 +183,15 @@ ucs_status_t uct_ib_mlx5_fill_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 #endif
 
     uct_ib_mlx5_fill_cq_common(mlx5_cq, dcq.dv.cqe_cnt, dcq.dv.cqe_size,
-                               dcq.dv.cqn, dcq.dv.buf, uar, dcq.dv.dbrec, 0);
+                               dcq.dv.cqn, dcq.dv.buf, uar, dcq.dv.dbrec, 0, 1);
     return UCS_OK;
 }
 
 void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
                                 unsigned cqe_size, uint32_t cqn, void *cq_buf,
-                                void *uar, volatile void *dbrec, int zip)
+                                void *uar, volatile void *dbrec, int zip,
+                                int fill_buf)
 {
-    struct mlx5_cqe64 *cqe;
-    int i;
-
     cq->cq_buf    = cq_buf;
     cq->cq_ci     = 0;
     cq->cq_sn     = 0;
@@ -205,10 +203,12 @@ void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
     /* Initializing memory is required for checking the cq_unzip.current_idx */
     memset(&cq->cq_unzip, 0, sizeof(uct_ib_mlx5_cq_unzip_t));
 
-    /* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
-     * 64b when polling. */
-    cq->cq_buf = UCS_PTR_BYTE_OFFSET(cq->cq_buf,
-                                     cqe_size - sizeof(struct mlx5_cqe64));
+    if (fill_buf) {
+        /* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
+         * 64b when polling. */
+        cq->cq_buf = UCS_PTR_BYTE_OFFSET(cq->cq_buf,
+                                         cqe_size - sizeof(struct mlx5_cqe64));
+    }
 
     cq->cqe_size_log = ucs_ilog2(cqe_size);
     ucs_assert_always(UCS_BIT(cq->cqe_size_log) == cqe_size);
@@ -227,11 +227,21 @@ void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
         cq->own_mask         = MLX5_CQE_OWNER_MASK;
     }
 
+    if (fill_buf) {
+        uct_ib_mlx5_fill_cq_buf(cq);
+    }
+}
+
+void uct_ib_mlx5_fill_cq_buf(uct_ib_mlx5_cq_t *cq)
+{
+    struct mlx5_cqe64 *cqe;
+    int i;
+
     /* Set owner bit for all CQEs, so that CQE would look like it is in HW
      * ownership. In this case CQ polling functions will return immediately if
      * no any CQE ready, there is no need to check opcode for
      * MLX5_CQE_INVALID value anymore.  */
-    for (i = 0; i < cq_size; ++i) {
+    for (i = 0; i < UCS_BIT(cq->cq_length_log); ++i) {
         cqe            = uct_ib_mlx5_get_cqe(cq, i);
         cqe->op_own   |= MLX5_CQE_OWNER_MASK;
         cqe->op_own   |= MLX5_CQE_INVALID << 4;
@@ -672,7 +682,7 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 #endif
 }
 
-void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
+void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq, int is_cpu)
 {
     txwq->curr       = txwq->qstart;
     txwq->sw_pi      = 0;
@@ -682,11 +692,13 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->flags      = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
-    memset(txwq->qstart, 0, UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
+    if (is_cpu) {
+        memset(txwq->qstart, 0, UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
 
-    /* Make uct_ib_mlx5_txwq_num_posted_wqes() work if no wqe has completed by
-       setting number-of-segments (ds) field of the last wqe to 1 */
-    uct_ib_mlx5_set_ctrl_qpn_ds(uct_ib_mlx5_txwq_get_wqe(txwq, 0xffff), 0, 1);
+        /* Make uct_ib_mlx5_txwq_num_posted_wqes() work if no wqe has completed by
+           setting number-of-segments (ds) field of the last wqe to 1 */
+        uct_ib_mlx5_set_ctrl_qpn_ds(uct_ib_mlx5_txwq_get_wqe(txwq, 0xffff), 0, 1);
+    }
 }
 
 void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
@@ -805,7 +817,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
     txwq->bb_max     = qp_info.dv.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
     ucs_assert_always(txwq->bb_max > 0);
 
-    uct_ib_mlx5_txwq_reset(txwq);
+    uct_ib_mlx5_txwq_reset(txwq, 1);
     return UCS_OK;
 }
 

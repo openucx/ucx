@@ -1624,7 +1624,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * self->tx.ndci;
 
-    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
+    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super.super.config,
                                               md->dp_ordering_cap.dc,
                                               &config->rc_mlx5_common, "dc");
     if (status != UCS_OK) {
@@ -1836,7 +1836,7 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
                                    txwq->super.qp_num);
 
     /* Resume posting from to the beginning of the QP */
-    uct_ib_mlx5_txwq_reset(txwq);
+    uct_ib_mlx5_txwq_reset(txwq, 1);
     if (status != UCS_OK) {
         ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
                   iface, dci_index, txwq->super.qp_num,

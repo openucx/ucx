@@ -823,7 +823,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->super.config.fence_mode  = (uct_rc_fence_mode_t)rc_config->fence_mode;
     self->super.rx.srq.quota       = self->rx.srq.mask + 1;
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
-    self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
+    self->super.config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
 
     if ((rc_config->fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
@@ -947,7 +947,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
-    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
+    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super.super.config,
                                               md->dp_ordering_cap.rc,
                                               &config->rc_mlx5_common,
                                               "rc_mlx5");

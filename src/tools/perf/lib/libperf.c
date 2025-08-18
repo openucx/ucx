@@ -92,6 +92,7 @@ static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_PUT_SHORT)]        = "put short",
     [ucs_ilog2(UCT_IFACE_FLAG_PUT_BCOPY)]        = "put bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_PUT_ZCOPY)]        = "put zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_PUT_BATCH)]        = "put batch",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_SHORT)]        = "get short",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_BCOPY)]        = "get bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_ZCOPY)]        = "get zcopy",
@@ -477,6 +478,12 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_size = __get_max_size(params->uct.data_layout, attr.cap.put.max_short,
                                   attr.cap.put.max_bcopy, attr.cap.put.max_zcopy);
         max_iov  = attr.cap.put.max_iov;
+        break;
+    case UCX_PERF_CMD_PUT_BATCH:
+        required_flags = UCT_IFACE_FLAG_PUT_BATCH;
+        min_size       = attr.cap.put.min_zcopy;
+        max_size       = attr.cap.put.max_zcopy;
+        max_iov        = attr.cap.put.max_iov;
         break;
     case UCX_PERF_CMD_GET:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_GET_SHORT,
@@ -877,6 +884,7 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
     message_size = ucx_perf_get_message_size(params);
     switch (params->command) {
     case UCX_PERF_CMD_PUT:
+    case UCX_PERF_CMD_PUT_BATCH:
     case UCX_PERF_CMD_GET:
         ucp_params->features |= UCP_FEATURE_RMA;
         break;
@@ -2234,9 +2242,12 @@ ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
             perf->ucp.self_recv_rkey = perf->ucp.tctx[0].perf.ucp.self_recv_rkey;
         }
 
-        status = ucx_perf_do_warmup(perf, params);
-        if (status != UCS_OK) {
-            goto out_cleanup;
+        if (!UCX_PERF_PARAM_GPU_CUDA_THREADS_DEFINED(
+                    perf->params.cuda_threads)) {
+            status = ucx_perf_do_warmup(perf, params);
+            if (status != UCS_OK) {
+                goto out_cleanup;
+            }
         }
 
         /* Run test */
@@ -2282,13 +2293,27 @@ unsigned rte_peer_index(unsigned group_size, unsigned group_index)
     return peer_index;
 }
 
-void ucx_perf_report(ucx_perf_context_t *perf)
+static inline void
+ucx_perf_report_common(ucx_perf_context_t *perf, int update_time)
 {
     ucx_perf_result_t result;
 
-    ucx_perf_get_time(perf);
+    if (update_time) {
+        ucx_perf_get_time(perf);
+    }
+
     ucx_perf_calc_result(perf, &result);
     perf->params.report_func(perf->params.rte_group, &result,
                              perf->params.report_arg, "", 0, 0);
     perf->prev = perf->current;
+}
+
+void ucx_perf_report(ucx_perf_context_t *perf)
+{
+    ucx_perf_report_common(perf, 1);
+}
+
+void ucx_perf_report_gdaki(ucx_perf_context_t *perf)
+{
+    ucx_perf_report_common(perf, 0);
 }

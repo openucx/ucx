@@ -218,6 +218,15 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
     ucs_assert(!(flags & UCP_REQUEST_DEBUG_FLAG_EXTERNAL));
     ucs_assert(!(flags & UCP_REQUEST_FLAG_RELEASED));
 
+    if ((req->flags & UCP_REQUEST_FLAG_BATCH) && (req->send.batch.iov != NULL)) {
+        if (req->send.batch.exported != 0) {
+            ucs_warn("releasing batch request with %d active batch(es)",
+                     req->send.batch.exported);
+        }
+        ucs_free(req->send.batch.iov);
+        req->send.batch.iov = NULL;
+    }
+
     if (ucs_likely(flags & UCP_REQUEST_FLAG_COMPLETED)) {
         ucp_request_put(req);
     } else {

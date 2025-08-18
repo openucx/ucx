@@ -63,13 +63,18 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("  Common options:\n");
     printf("     -t <test>      test to run:\n");
     for (test = tests; test->name; ++test) {
-        printf("    %13s - %s %s\n", test->name,
+        printf("    %23s - %s %s\n", test->name,
                api_names[test->api], test->desc);
     }
     printf("\n");
+#ifdef HAVE_CUDA
+    printf("     -a <cuda_threads> If set will run gdaki test with #cuda_threads threads (%d)\n",
+                                   ctx->params.super.cuda_threads);
+#endif
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
+    printf("                    compact form example: \"-s 1024:16\", expands to [1024, ..., 1024] with 16 elements\n");
     printf("     -m <send mem type>[,<recv mem type>]\n");
     printf("                    memory type of message for sender and receiver (host)\n");
     print_memory_type_usage();
@@ -208,8 +213,8 @@ static ucs_status_t parse_mem_type_params(const char *opt_arg,
     }
 }
 
-static ucs_status_t parse_message_sizes_params(const char *opt_arg,
-                                               ucx_perf_params_t *params)
+static ucs_status_t parse_list_message_sizes(const char *opt_arg,
+                                             ucx_perf_params_t *params)
 {
     const char delim = ',';
     size_t *msg_size_list, token_num, token_it;
@@ -249,6 +254,57 @@ static ucs_status_t parse_message_sizes_params(const char *opt_arg,
 
     params->msg_size_cnt = token_num;
     return UCS_OK;
+}
+
+static ucs_status_t
+parse_compact_message_sizes(const char *opt_arg, ucx_perf_params_t *params)
+{
+    size_t count = 0;
+    size_t value = 0;
+    size_t *msg_size_list;
+    size_t i;
+    char *optarg_ptr, *optarg_ptr2;
+
+    optarg_ptr = (char*)opt_arg;
+    value      = strtoul(optarg_ptr, &optarg_ptr2, 10);
+    if (ULONG_MAX == value) {
+        ucs_error("Invalid value argument %zu", value);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    optarg_ptr = optarg_ptr2 + 1;
+    count      = strtoul(optarg_ptr, &optarg_ptr2, 10);
+    assert(count > 0);
+
+    msg_size_list = realloc(params->msg_size_list,
+                            sizeof(*params->msg_size_list) * count);
+    if (NULL == msg_size_list) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    params->msg_size_list = msg_size_list;
+
+    for (i = 0; i < count; ++i) {
+        params->msg_size_list[i] = value;
+    }
+
+    params->msg_size_cnt = count;
+    return UCS_OK;
+}
+
+static int is_compact_form(const char *input)
+{
+    return strchr(input, ':') != NULL;
+}
+
+static ucs_status_t
+parse_message_sizes_params(const char *opt_arg, ucx_perf_params_t *params)
+{
+    if (!is_compact_form(opt_arg)) {
+        return parse_list_message_sizes(opt_arg, params);
+    }
+
+    return parse_compact_message_sizes(opt_arg, params);
 }
 
 static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
@@ -353,6 +409,11 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         ucs_snprintf_zero(params->super.uct.tl_name,
                           sizeof(params->super.uct.tl_name), "%s", opt_arg);
         return UCS_OK;
+#ifdef HAVE_CUDA
+    case 'a':
+        params->super.cuda_threads = atoi(opt_arg);
+        return UCS_OK;
+#endif
     case 't':
         for (i = 0; tests[i].name != NULL; ++i) {
             test = &tests[i];
@@ -649,7 +710,7 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
 
     optind = 1;
     while ((c = getopt_long(argc, argv,
-                            "p:b:6NfvXc:P:hK:g:G:k" TEST_PARAMS_ARGS,
+                            "p:b:6NfvXca:P:hK:g:G:k" TEST_PARAMS_ARGS,
                             TEST_PARAMS_ARGS_LONG, NULL)) != -1) {
         switch (c) {
         case 'p':

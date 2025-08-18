@@ -30,6 +30,7 @@ BEGIN_C_DECLS
 #define UCT_PERF_TEST_AM_ID  5
 #define ADDR_BUF_SIZE        4096
 #define EXTRA_INFO_SIZE      256
+#define ONESIDED_SIGNAL_SIZE sizeof(uint64_t)
 
 #define UCX_PERF_TEST_FOREACH(perf) \
     while (!ucx_perf_context_done(perf))
@@ -117,6 +118,7 @@ struct ucx_perf_context {
             uct_allocated_memory_t send_mem;
             uct_allocated_memory_t recv_mem;
             uct_iov_t              *iov;
+            uct_rma_iov_t          *rma_iov;
         } uct;
 
         struct {
@@ -133,6 +135,7 @@ struct ucx_perf_context {
             ucp_perf_daemon_req_t      daemon_req;
             ucp_dt_iov_t               *send_iov;
             ucp_dt_iov_t               *recv_iov;
+            ucp_rma_iov_t              *rma_iov;
             void                       *am_hdr;
             ucp_ep_h                   self_ep;
             ucp_rkey_h                 self_send_rkey;
@@ -196,6 +199,7 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params);
 size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
 
 void ucx_perf_report(ucx_perf_context_t *perf);
+void ucx_perf_report_gdaki(ucx_perf_context_t *perf);
 
 ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf);
 

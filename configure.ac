@@ -386,6 +386,7 @@ AC_CONFIG_FILES([
                  cmake/ucx-config.cmake
                  cmake/ucx-targets.cmake
                  config/Makefile
+                 src/tools/perf/gdaki/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
@@ -426,6 +427,10 @@ AC_MSG_NOTICE([        ROCM modules:   <$(echo ${uct_rocm_modules}|tr ':' ' ') >
 AC_MSG_NOTICE([          IB modules:   <$(echo ${uct_ib_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCM modules:   <$(echo ${ucm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        Perf modules:   <$(echo ${ucx_perftest_modules}|tr ':' ' ') >])
+AS_IF([test "x$NVCC" != "xno"], [
+    AC_MSG_NOTICE([           NVCC path:   ${NVCC}])
+    AC_MSG_NOTICE([          NVCC flags:   ${NVCC_FLAGS}])
+])
 AS_IF([test "x$enable_ucg" != "xno"], [
     AC_MSG_NOTICE([       UCG modules:   <$(echo ${ucg_modules}|tr ':' ' ') >])])
 ])

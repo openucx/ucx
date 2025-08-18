@@ -55,10 +55,11 @@ enum {
     UCP_REQUEST_FLAG_USER_HEADER_COPIED    = UCS_BIT(19),
     UCP_REQUEST_FLAG_USAGE_TRACKED         = UCS_BIT(20),
     UCP_REQUEST_FLAG_FENCE_REQUIRED        = UCS_BIT(21),
+    UCP_REQUEST_FLAG_BATCH                 = UCS_BIT(22),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(22),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(23),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(24),
+    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(23),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(24),
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(25),
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
@@ -237,6 +238,15 @@ struct ucp_request {
                     uint64_t   remote_addr; /* Remote address */
                     ucp_rkey_h rkey; /* Remote memory key */
                 } rma;
+
+                struct {
+                    ucp_ep_h      ep;
+                    ucp_rma_iov_t *iov;
+                    size_t        iovcnt;
+                    uint64_t      signal_va;
+                    ucp_rkey_h    signal_rkey;
+                    int           exported;
+                } batch;
 
                 struct {
                     /* Remote request ID received from a peer */

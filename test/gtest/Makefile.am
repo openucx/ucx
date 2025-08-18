@@ -52,6 +52,12 @@ VALGRIND_ARGS = \
 	--suppressions=$(top_srcdir)/contrib/valgrind.supp \
 	$(VALGRIND_EXTRA_ARGS)
 
+GTEST_INCLUDE = \
+	-I$(top_srcdir)/src \
+	-I$(top_srcdir)/test \
+	-I$(top_builddir)/src \
+	-I$(top_srcdir)/test/gtest
+
 noinst_PROGRAMS = gtest
 
 EXTRA_DIST = \
@@ -74,10 +80,7 @@ gtest_LDADD = \
 gtest_CPPFLAGS = \
 	$(BASE_CPPFLAGS) \
 	-DTOP_SRCDIR=\"$(abs_top_srcdir)\" \
-	-I$(top_srcdir)/src \
-	-I$(top_srcdir)/test \
-	-I$(top_builddir)/src \
-	-I$(top_srcdir)/test/gtest \
+	$(GTEST_INCLUDE) \
 	$(GTEST_CPPFLAGS) \
 	$(OPENMP_CFLAGS)
 
@@ -274,6 +277,15 @@ gtest_LDFLAGS += \
 gtest_LDADD += \
 	$(CUDA_LIBS) $(CUDART_LIBS) $(NVML_LIBS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
+
+if HAVE_GPUNETIO
+gtest_SOURCES += \
+	ucp/test_ucp_batch.cu \
+	uct/test_gdaki.cu
+
+-include ucp/test_ucp_batch.o.d
+-include uct/test_gdaki.o.d
+endif
 endif
 
 if HAVE_HIP
@@ -315,6 +327,10 @@ noinst_HEADERS = \
 
 .PHONY: test test gdb valgrind fix_rpath ucx
 
+SUFFIXES = .cu
+.cu.o:
+	$(NVCC_WRAP) $(NVCC) $(NVCC_FLAGS) $(AM_CPPFLAGS) -c $< -MD -MP -MF $@.d -o $@ \
+		$(DEFS) $(BASE_CPPFLAGS) $(GPUNETIO_CFLAGS) $(GTEST_INCLUDE)
 
 all-local: gtest
 

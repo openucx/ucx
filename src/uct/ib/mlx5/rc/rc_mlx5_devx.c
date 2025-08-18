@@ -231,7 +231,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     len    = max * stride;
 
     status = uct_ib_mlx5_md_buf_alloc(md, len, 0, &iface->rx.srq.buf,
-                                      &iface->rx.srq.devx.mem, 0, "srq buf");
+                                      &iface->rx.srq.devx.mem, 0, &uct_posix_alloc, "srq buf");
     if (status != UCS_OK) {
         return status;
     }
@@ -381,12 +381,12 @@ void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
     uct_ib_mlx5_md_buf_free(md, srq->buf, &srq->devx.mem);
 }
 
-ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
-        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
+ucs_status_t uct_ib_rc_mlx5_iface_common_devx_connect_qp(
+        uct_ib_iface_t *iface, uct_rc_config_t *rc_cfg, uct_ib_mlx5_qp_t *qp,
         uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
-        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic)
+        enum ibv_mtu path_mtu, uint8_t path_index)
 {
-    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(iface);
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
     char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
     char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]    = {};
@@ -394,6 +394,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     uint32_t opt_param_mask = UCT_IB_MLX5_QP_OPTPAR_RRE |
                               UCT_IB_MLX5_QP_OPTPAR_RAE |
                               UCT_IB_MLX5_QP_OPTPAR_RWE;
+    unsigned max_rd_atomic = rc_cfg->max_rd_atomic;
     struct mlx5_wqe_av mlx5_av;
     ucs_status_t status;
     struct ibv_ah *ah;
@@ -409,11 +410,10 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
     UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
 
-    uct_ib_mlx5_devx_set_qpc_dp_ordering(md, qpc, iface);
+    uct_ib_mlx5_devx_set_qpc_dp_ordering(md, qpc, rc_cfg);
 
-    if (uct_ib_iface_is_roce(&iface->super.super)) {
-        status = uct_ib_iface_create_ah(&iface->super.super, ah_attr,
-                                        "RC DEVX QP connect", &ah);
+    if (uct_ib_iface_is_roce(iface)) {
+        status = uct_ib_iface_create_ah(iface, ah_attr, "RC DEVX QP connect", &ah);
         if (status != UCS_OK) {
             return status;
         }
@@ -428,13 +428,13 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index,
                           ah_attr->grh.sgid_index);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio,
-                          iface->super.super.config.sl);
-        if (uct_ib_iface_is_roce_v2(&iface->super.super)) {
+                          iface->config.sl);
+        if (uct_ib_iface_is_roce_v2(iface)) {
             ucs_assert(ah_attr->dlid >= UCT_IB_ROCE_UDP_SRC_PORT_BASE);
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                               ah_attr->dlid);
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
-                              uct_ib_iface_roce_dscp(&iface->super.super));
+                              uct_ib_iface_roce_dscp(iface));
         }
 
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
@@ -445,7 +445,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.mlid,
                           ah_attr->src_path_bits & 0x7f);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
-                          iface->super.super.config.sl);
+                          iface->config.sl);
 
         if (ah_attr->is_global) {
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index,
@@ -457,21 +457,21 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                    UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
             /* TODO add flow_label support */
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
-                              iface->super.super.config.traffic_class);
+                              iface->config.traffic_class);
         }
     }
 
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, ah_attr->port_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max, ucs_ilog2_or0(max_rd_atomic));
     UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode,
-                      uct_ib_mlx5_get_atomic_mode(&iface->super.super));
+                      uct_ib_mlx5_get_atomic_mode(iface));
     UCT_IB_MLX5DV_SET(qpc, qpc, rre, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
-    UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, iface->super.config.min_rnr_timer);
+    UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, rc_cfg->min_rnr_timer);
 
     if (md->super.ece_enable) {
-        UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, iface->super.config.ece);
+        UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, rc_cfg->ece);
     }
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
@@ -488,14 +488,14 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in_2rts, qpc);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, ucs_ilog2_or0(max_rd_atomic));
-    UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, iface->super.config.retry_cnt);
-    UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.config.rnr_retry);
+    UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, rc_cfg->retry_cnt);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, rc_cfg->rnr_retry);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout,
-                      iface->super.config.timeout);
+                      rc_cfg->timeout);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm,
-                      iface->super.config.exp_backoff);
+                      rc_cfg->exp_backoff);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq,
-                      iface->config.log_ack_req_freq);
+                      rc_cfg->log_ack_req_freq);
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
                                         out_2rts, sizeof(out_2rts));
@@ -505,14 +505,23 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
     ucs_debug("connected rc devx qp 0x%x on "UCT_IB_IFACE_FMT" to lid %d(+%d) sl %d "
               "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d",
-              qp->qp_num, UCT_IB_IFACE_ARG(&iface->super.super), ah_attr->dlid,
+              qp->qp_num, UCT_IB_IFACE_ARG(iface), ah_attr->dlid,
               ah_attr->src_path_bits, ah_attr->sl, dest_qp_num,
-              uct_ib_mtu_value(iface->super.super.config.path_mtu),
-              iface->super.config.timeout,
-              iface->super.config.retry_cnt,
-              iface->super.config.min_rnr_timer,
-              iface->super.config.rnr_retry,
-              iface->super.config.max_rd_atomic);
+              uct_ib_mtu_value(iface->config.path_mtu),
+              rc_cfg->timeout,
+              rc_cfg->retry_cnt,
+              rc_cfg->min_rnr_timer,
+              rc_cfg->rnr_retry,
+              rc_cfg->max_rd_atomic);
     return UCS_OK;
+}
+
+ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
+        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
+        uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic)
+{
+    return uct_ib_rc_mlx5_iface_common_devx_connect_qp(&iface->super.super, &iface->super.config,
+            qp, dest_qp_num, ah_attr, path_mtu, path_index);
 }
 

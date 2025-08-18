@@ -377,6 +377,7 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_PUT_SHORT      UCS_BIT(4)  /**< Short put */
 #define UCT_IFACE_FLAG_PUT_BCOPY      UCS_BIT(5)  /**< Buffered put */
 #define UCT_IFACE_FLAG_PUT_ZCOPY      UCS_BIT(6)  /**< Zero-copy put */
+#define UCT_IFACE_FLAG_PUT_BATCH      UCS_BIT(7)
 
         /* GET capabilities */
 #define UCT_IFACE_FLAG_GET_SHORT      UCS_BIT(8)  /**< Short get */
@@ -1757,6 +1758,14 @@ struct uct_completion {
 };
 
 
+struct uct_dev_completion {
+    int                       count;   /**< Completion counter */
+    ucs_status_t              status;  /**< Completion status, this field must
+                                            be initialized with UCS_OK before
+                                            first operation is started. */
+};
+
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief Pending request.
@@ -2472,6 +2481,16 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Export endpoint to a peer device.
+ *
+ * @param [in]  ep           Endpoint to export.
+ * @param [out] dev_ep_p     Handle to export data.
+ */
+ucs_status_t uct_ep_export_dev(uct_ep_h ep, uct_dev_ep_h *dev_ep_p);
+
+
+/**
  * @ingroup UCT_MD
  * @brief Query for memory domain attributes.
  *
@@ -3014,6 +3033,66 @@ UCT_INLINE_API ucs_status_t uct_ep_get_zcopy(uct_ep_h ep,
     return ep->iface->ops.ep_get_zcopy(ep, iov, iovcnt, remote_addr, rkey, comp);
 }
 
+/**
+ * @ingroup UCT_RMA
+ * @brief UCT batch execute flags
+ *
+ * The enumeration allows specifying which parts of the batch operations to perform.
+ */
+enum uct_dev_batch_flags {
+    UCT_DEV_BATCH_FLAG_RMA_IOV = UCS_BIT(0), /**< post rma iov */
+    UCT_DEV_BATCH_FLAG_ATOMIC  = UCS_BIT(1), /**< post atomic */
+    UCT_DEV_BATCH_FLAG_COMP    = UCS_BIT(2), /**< post with cq update */
+    UCT_DEV_BATCH_FLAG_NODELAY = UCS_BIT(3), /**< post with DB */
+    UCT_DEV_BATCH_FLAG_DEFAULT = UCT_DEV_BATCH_FLAG_RMA_IOV |
+                                 UCT_DEV_BATCH_FLAG_ATOMIC |
+                                 UCT_DEV_BATCH_FLAG_COMP |
+                                 UCT_DEV_BATCH_FLAG_NODELAY
+};
+
+/**
+ * @ingroup UCT_RMA
+ * @brief Prepare multiple data blocks to remote memory in a batch operation
+ *
+ * This routine prepare putting multiple data blocks from local memory to remote memory
+ * in a single batch operation. The operation is completed when all data blocks
+ * have been transferred and the signal variable has been updated. It also send signal.
+ *
+ * @param [in]  ep              Endpoint to use for the operation
+ * @param [in]  list            Array of IOV entries describing the data blocks
+ * @param [in]  list_len        Number of entries in the IOV list
+ * @param [in]  signal_var      Remote address of the signal variable
+ * @param [in]  signal_rkey     Remote key for accessing the signal variable
+ * @param [in]  batch_p         Batch operation device handle
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+UCT_INLINE_API ucs_status_t uct_ep_batch_prepare(uct_ep_h ep,
+                                                 const uct_rma_iov_t *iov,
+                                                 size_t iovcnt,
+                                                 uint64_t signal_var,
+                                                 uct_rkey_t signal_rkey,
+                                                 uct_batch_h *batch_p)
+{
+    if (ep->iface->ops.ep_batch_prepare == NULL) {
+        return UCS_ERR_NOT_IMPLEMENTED;
+    }
+
+    return ep->iface->ops.ep_batch_prepare(ep, iov, iovcnt, signal_var, signal_rkey, batch_p);
+}
+
+/**
+ * @ingroup UCT_RMA
+ * @brief Release batch device handle create by @ref uct_ep_batch_prepare
+ */
+ UCT_INLINE_API void uct_ep_batch_release(uct_ep_h ep, uct_batch_h batch)
+{
+    if (ep->iface->ops.ep_batch_release == NULL) {
+        return;
+    }
+
+    ep->iface->ops.ep_batch_release(ep, batch);
+}
 
 /**
  * @ingroup UCT_AM

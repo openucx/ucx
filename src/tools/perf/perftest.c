@@ -56,6 +56,20 @@ test_type_t tests[] = {
     {"put_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put bandwidth / message rate", "overhead", 32},
 
+    {"put_batch_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT_BATCH, UCX_PERF_TEST_TYPE_PINGPONG,
+#ifdef HAVE_CUDA
+     "put batch latency. Use gdaki if GPU is specified with -a", "overhead", 32},
+#else
+     "put batch latency", "overhead", 32},
+#endif
+
+    {"put_batch_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT_BATCH, UCX_PERF_TEST_TYPE_STREAM_UNI,
+#ifdef HAVE_CUDA
+     "put batch bandwidth / message rate. Use gdaki if GPU is specified with -a", "overhead", 32},
+#else
+     "put batch bandwidth / message rate", "overhead", 32},
+#endif
+
     {"get_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "get bandwidth / message rate", "overhead", 32},
 
@@ -79,6 +93,20 @@ test_type_t tests[] = {
 
     {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put bandwidth", "overhead", 32},
+
+    {"ucp_put_batch_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_BATCH, UCX_PERF_TEST_TYPE_STREAM_UNI,
+#ifdef HAVE_CUDA
+     "put batch bandwidth. Use gdaki if GPU is specified with -a", "overhead", 32},
+#else
+     "put batch bandwidth", "overhead", 32},
+#endif
+
+    {"ucp_put_batch_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_BATCH, UCX_PERF_TEST_TYPE_PINGPONG,
+#ifdef HAVE_CUDA
+     "put batch latency. Use gdaki if GPU is specified with -a", "overhead", 32},
+#else
+     "put batch latency", "overhead", 32},
+#endif
 
     {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "get latency / bandwidth / message rate", "latency", 1},
@@ -201,6 +229,7 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.ucp.is_daemon_mode  = 0;
     params->super.ucp.dmn_local_addr  = empty_addr;
     params->super.ucp.dmn_remote_addr = empty_addr;
+    params->super.cuda_threads        = 0;
     strcpy(params->super.uct.dev_name, TL_RESOURCE_NAME_NONE);
     strcpy(params->super.uct.tl_name,  TL_RESOURCE_NAME_NONE);
 

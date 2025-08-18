@@ -541,6 +541,7 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
     }
 
     qp_attr->super.srq_num = srq->srq_num;
+    qp_attr->alloc = &uct_posix_alloc;
 }
 
 ucs_status_t
@@ -603,7 +604,7 @@ void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
 /* TODO do not pass iface, but only pass return value to config */
 ucs_status_t
 uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
-                                 uct_rc_mlx5_iface_common_t *iface,
+                                 uct_rc_config_t *rc_config,
                                  uct_ib_mlx5_dp_ordering_t dp_ordering_cap,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name)
@@ -674,8 +675,8 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    iface->config.dp_ordering       = max_dp_ordering;
-    iface->config.dp_ordering_force = force;
+    rc_config->dp_ordering       = max_dp_ordering;
+    rc_config->dp_ordering_force = force;
     return UCS_OK;
 }
 
@@ -1107,7 +1108,7 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
     }
 
 #ifdef HAVE_OOO_RECV_WRS
-    if (iface->config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
+    if (iface->super.config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
         dv_attr->create_flags |= MLX5DV_QP_CREATE_OOO_DP;
         dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
     }
@@ -1290,12 +1291,12 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
 }
 
 void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
-                                          uct_rc_mlx5_iface_common_t *iface)
+                                          uct_rc_config_t *rc_cfg)
 {
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
-                      UCS_BIT_GET(iface->config.dp_ordering, 0));
+                      UCS_BIT_GET(rc_cfg->dp_ordering, 0));
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1,
-                      UCS_BIT_GET(iface->config.dp_ordering, 1));
+                      UCS_BIT_GET(rc_cfg->dp_ordering, 1));
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
-                      iface->config.dp_ordering_force);
+                      rc_cfg->dp_ordering_force);
 }
