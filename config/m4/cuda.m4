@@ -23,6 +23,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
         [
          cuda_happy=no
          have_cuda_static=no
+         nvcc_happy=no
          NVCC=""
         ],
         [
