@@ -39,7 +39,17 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
         return UCS_ERR_NO_DEVICE;
     }
 
-    gpu_index = group_index % num_gpus;
+    gpu_index = (group_index == 0) ? perf->params.recv_mem_device :
+                                     perf->params.send_mem_device;
+    if (gpu_index == UCX_PERF_DEV_DEFAULT) {
+        gpu_index = group_index % num_gpus;
+    }
+
+    if (gpu_index >= num_gpus) {
+        ucs_error("Illegal cuda device %d, number of devices: %d", gpu_index,
+                  num_gpus);
+        return UCS_ERR_NO_DEVICE;
+    }
 
     CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, gpu_index);
 

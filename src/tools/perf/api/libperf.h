@@ -253,6 +253,8 @@ typedef struct ucx_perf_params {
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     ucs_memory_type_t      send_mem_type;   /* Send memory type */
     ucs_memory_type_t      recv_mem_type;   /* Recv memory type */
+    int                    send_mem_device; /* GPU device ID to be used by sender */
+    int                    recv_mem_device; /* GPU device ID to be used by receiver */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size

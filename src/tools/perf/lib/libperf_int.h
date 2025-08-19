@@ -30,6 +30,7 @@ BEGIN_C_DECLS
 #define UCT_PERF_TEST_AM_ID  5
 #define ADDR_BUF_SIZE        4096
 #define EXTRA_INFO_SIZE      256
+#define UCX_PERF_DEV_DEFAULT -1
 
 #define UCX_PERF_TEST_FOREACH(perf) \
     while (!ucx_perf_context_done(perf))
