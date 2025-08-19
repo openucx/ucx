@@ -297,7 +297,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                                       UCP_PROTO_RNDV_ATP_NAME, &perf,
                                       &rpriv->bulk);
     if (status != UCS_OK) {
-        return;
+        goto out;
     }
 
     send_atp = !ucp_proto_rndv_init_params_is_ppln_frag(init_params);
@@ -370,6 +370,9 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                                params.super.cfg_priority, perf, rpriv,
                                UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(rpriv,
                                                                   bulk.mpriv));
+
+out:
+    ucs_free(rpriv);
 }
 
 static const char *
