@@ -290,9 +290,7 @@ AS_IF([test "x$with_ib" = "xyes"],
 
            # Direct NIC support, from IB side
            AC_CHECK_DECLS([mlx5dv_get_data_direct_sysfs_path,
-                           mlx5dv_reg_dmabuf_mr],
-                           [AC_DEFINE([HAVE_DIRECT_NIC], 1,
-                                      [Have Direct NIC support])], [],
+                           mlx5dv_reg_dmabuf_mr], [], [],
                           [[#include <infiniband/mlx5dv.h>]])
               ])
 
