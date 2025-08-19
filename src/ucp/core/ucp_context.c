@@ -504,6 +504,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "directory.",
    ucs_offsetof(ucp_context_config_t, proto_info_dir), UCS_CONFIG_TYPE_STRING},
 
+  {"PROTO_VARIANTS", "n",
+   "Enable multiple variants of UCP protocols, meaning that a single protocol\n"
+   "may have multiple variants (optimized for latency or bandwidth) for the same\n"
+   "operation. The value is interpreted as follows:\n"
+   " 'y'          : Enable multiple variants\n"
+   " 'n'          : Disable multiple variants\n",
+   ucs_offsetof(ucp_context_config_t, proto_variants_enable), UCS_CONFIG_TYPE_BOOL},
+
   {"REG_NONBLOCK_MEM_TYPES", "",
    "Perform only non-blocking memory registration for these memory types.\n"
    "Non-blocking registration means that the page registration may be\n"

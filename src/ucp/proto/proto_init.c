@@ -129,7 +129,6 @@ ucp_proto_init_skip_recv_overhead(const ucp_proto_common_init_params_t *params,
 static ucs_status_t
 ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
-                           ucp_proto_perf_node_t *const tl_perf_node,
                            size_t range_start, size_t range_end,
                            ucp_proto_perf_t *perf)
 {
@@ -185,7 +184,7 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
     return ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
                                     ucp_proto_perf_node_new_data("transport",
                                                                  ""),
-                                    tl_perf_node);
+                                    tl_perf->node);
 }
 
 /**
@@ -503,7 +502,6 @@ ucp_proto_common_check_mem_access(const ucp_proto_common_init_params_t *params)
 
 ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
                                  const ucp_proto_common_tl_perf_t *tl_perf,
-                                 ucp_proto_perf_node_t *const tl_perf_node,
                                  ucp_md_map_t reg_md_map, const char *perf_name,
                                  ucp_proto_perf_t **perf_p)
 {
@@ -532,8 +530,8 @@ ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
         return status;
     }
 
-    status = ucp_proto_init_add_tl_perf(params, tl_perf, tl_perf_node,
-                                        range_start, range_end, perf);
+    status = ucp_proto_init_add_tl_perf(params, tl_perf, range_start, range_end,
+                                        perf);
     if (status != UCS_OK) {
         goto err_cleanup_perf;
     }

@@ -176,15 +176,60 @@ typedef struct {
 
     /* Maximum single message length */
     size_t max_frag;
+
+    /* Performance selection tree node */
+    ucp_proto_perf_node_t *node;
 } ucp_proto_common_tl_perf_t;
 
 
+/**
+ * Protocol selection variants macro, used to iterate over all variants.
+ * The second argument is the message size for the variant, which is used to
+ * calculate the score for the variant. The third argument is the name of the
+ * variant, which is used to print the variant name.
+ */
+#define UCP_FOREACH_PROTO_VARIANT(_macro) \
+    _macro(UCP_PROTO_VARIANT_BW,  UCS_GBYTE, "(bw)") \
+    _macro(UCP_PROTO_VARIANT_LAT, UCS_KBYTE, "(lat)")
+
+/**
+ * Protocol selection variant enum
+ */
+#define UCP_PROTO_VARIANT_ENUMIFY(ID, MSG_SIZE, NAME) ID,
+typedef enum {
+    UCP_FOREACH_PROTO_VARIANT(UCP_PROTO_VARIANT_ENUMIFY)
+    UCP_PROTO_VARIANT_LAST
+} ucp_proto_variant_t;
+
+
 typedef struct {
-    ucp_lane_map_t   lane_map;
+    ucp_lane_map_t             lane_map;
+    ucp_lane_index_t           lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t           num_lanes;
+    uint8_t                    dev_count[UCP_MAX_RESOURCES];
+    ucp_proto_common_tl_perf_t perf;
+    ucp_proto_variant_t        variant;
+    char                       name[UCP_PROTO_DESC_STR_MAX];
+} ucp_proto_lane_selection_t;
+
+
+typedef struct {
+    const char       *perf_name;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     ucp_lane_index_t num_lanes;
-    uint8_t          dev_count[UCP_MAX_RESOURCES];
-} ucp_proto_lane_selection_t;
+    ucp_lane_index_t max_lanes;
+    int              fixed_first_lane;
+} ucp_proto_lane_select_req_t;
+
+
+typedef struct {
+    ucp_lane_index_t           lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t           num_lanes;
+    ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
+    ucp_proto_lane_selection_t selections[UCP_PROTO_VARIANT_LAST];
+    ucp_lane_index_t           num_selections;
+    int                        mp_alloc;
+} ucp_proto_lane_select_t;
 
 
 /* Private data per lane */
@@ -279,8 +324,7 @@ void ucp_proto_common_lane_perf_node(ucp_context_h context,
 ucs_status_t
 ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
-                               ucp_proto_common_tl_perf_t *perf,
-                               ucp_proto_perf_node_t **perf_node_p);
+                               ucp_proto_common_tl_perf_t *perf);
 
 
 typedef int (*ucp_proto_common_filter_lane_cb_t)(
@@ -360,5 +404,12 @@ void ucp_proto_abort_fatal_not_implemented(ucp_request_t *req,
 void ucp_proto_reset_fatal_not_implemented(ucp_request_t *req);
 
 void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name);
+
+ucs_status_t
+ucp_proto_lane_select_init(const ucp_proto_common_init_params_t *params,
+                           const ucp_proto_lane_select_req_t *req,
+                           ucp_proto_lane_select_t **select_p);
+
+void ucp_proto_lane_select_destroy(ucp_proto_lane_select_t *select);
 
 #endif

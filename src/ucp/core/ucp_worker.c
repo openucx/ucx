@@ -130,6 +130,14 @@ static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
     .obj_str       = NULL
 };
 
+static ucs_mpool_ops_t ucp_proto_select_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
+};
+
 #define ucp_worker_discard_uct_ep_hash_key(_uct_ep) \
     kh_int64_hash_func((uintptr_t)(_uct_ep))
 
@@ -2006,6 +2014,16 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         worker->flags |= UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED;
     }
 
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = sizeof(ucp_proto_lane_select_t);
+    mp_params.elems_per_chunk = 8;
+    mp_params.ops             = &ucp_proto_select_mpool_ops;
+    mp_params.name            = "ucp_proto_lane_select";
+    status = ucs_mpool_init(&mp_params, &worker->proto_select_mp);
+    if (status != UCS_OK) {
+        goto err_reg_mp_cleanup;
+    }
+
     return UCS_OK;
 
 err_reg_mp_cleanup:
@@ -2043,6 +2061,7 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
     }
     ucs_mpool_cleanup(&worker->req_mp,
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
+    ucs_mpool_cleanup(&worker->proto_select_mp, 1);
 }
 
 static unsigned ucp_worker_ep_config_free_cb(void *arg)
