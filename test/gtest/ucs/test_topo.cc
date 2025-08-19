@@ -47,16 +47,13 @@ protected:
                 auto gpu_dev = register_device("gpu0", gpu);
                 ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
 
-                ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
-
                 auto hca_dev = register_device("hca0", hca_bdf);
                 ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
 
                 auto dma_dev = register_device("dma", dma);
                 ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
 
-                ASSERT_UCS_OK(
-                        ucs_topo_sys_device_set_sys_dev_aux(hca_dev, dma_dev));
+                ucs_topo_sys_device_set_sys_dev_aux(hca_dev, dma_dev);
                 bool is_sibling = ucs_topo_is_sibling(hca_dev, gpu_dev);
 
                 ucs_topo_cleanup();
@@ -295,12 +292,6 @@ void test_topo::read_pcie_devices()
     closedir(dir);
 }
 
-UCS_TEST_F(test_topo, sibling_error) {
-    scoped_log_handler slh(hide_errors_logger);
-    ASSERT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_sys_device_set_sys_dev_aux(1, 0));
-    ASSERT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_sys_device_enable_aux_path(1));
-}
-
 UCS_TEST_F(test_topo, sibling) {
     constexpr int count = 3;
 
@@ -335,13 +326,9 @@ UCS_TEST_F(test_topo, sibling) {
     ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
 
     // Link DMA with its HCA
-    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_devs[0], dma_dev));
+    ucs_topo_sys_device_set_sys_dev_aux(hca_devs[0], dma_dev);
     // Link fake DMA with its HCA
-    ASSERT_UCS_OK(
-            ucs_topo_sys_device_set_sys_dev_aux(hca_devs[1], hca_devs[1]));
-
-    // Associate GPU with HCA
-    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+    ucs_topo_sys_device_set_sys_dev_aux(hca_devs[1], hca_devs[1]);
 
     ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[0], gpu_dev));
     // Reachable as there is no auxiliary capability (cuda_ipc)

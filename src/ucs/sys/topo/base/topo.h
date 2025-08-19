@@ -268,24 +268,9 @@ uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev);
  *
  * @param [in] sys_dev     System device index.
  * @param [in] sys_dev_aux Auxiliary system device index to add.
- *
- * @return UCS_OK on success, error otherwise.
  */
-ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
-                                                 ucs_sys_device_t sys_dev_aux);
-
-
-/**
- * Enable the use of auxiliary path for memory transfers.
- *
- * When called, the memory on this sys_dev will be eligible for matching
- * with an auxiliary path.
- *
- * @param [in] sys_dev     System device of the memory to allow auxiliary path.
- *
- * @return UCS_OK on success, error otherwise.
- */
-ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev);
+void ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
+                                         ucs_sys_device_t sys_dev_aux);
 
 
 /**
