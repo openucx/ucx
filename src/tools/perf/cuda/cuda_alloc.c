@@ -41,7 +41,7 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
 
     gpu_index = (group_index == 0) ? perf->params.recv_mem_device :
                                      perf->params.send_mem_device;
-    if (gpu_index == UCX_PERF_DEV_DEFAULT) {
+    if (gpu_index == UCX_PERF_MEM_DEV_DEFAULT) {
         gpu_index = group_index % num_gpus;
     }
 

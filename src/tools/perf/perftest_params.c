@@ -71,9 +71,12 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
     printf("     -m <send mem type[:device id]>,<recv mem type[:device id]>\n");
-    printf("                    memory type of message for sender and receiver (host)\n");
-    printf("                    GPU device id for sender and receiver (by default GPU index\n");
-    printf("                    is 0 on a receiver and 1 on a sender).\n");
+    printf("                    memory type of message for sender(%s, device_id:%d)\n"
+                                " and receiver (%s, device_id:%d)\n",
+           ucs_memory_type_names[ctx->params.super.send_mem_type],
+           ctx->params.super.send_mem_device,
+           ucs_memory_type_names[ctx->params.super.recv_mem_type],
+           ctx->params.super.recv_mem_device);
     print_memory_type_usage();
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
@@ -199,7 +202,7 @@ static ucs_status_t parse_cuda_device(const char *opt_arg, int *device_id)
     }
 
     parsed_device_id = strtol(opt_arg, &endptr, 10);
-    if ((endptr == opt_arg) || (parsed_device_id < 0)) {
+    if ((endptr == opt_arg) || (*endptr != '\0') || (parsed_device_id < 0)) {
         ucs_error("Failed to parse device id: %s", opt_arg);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -213,7 +216,7 @@ static ucs_status_t parse_mem_type_param(const char *opt_arg,
                                          int *device_id)
 {
     const char *delim = ":";
-    char *token;
+    char *token, *arg;
     ucs_status_t status;
 
     if (opt_arg == NULL) {
@@ -221,7 +224,9 @@ static ucs_status_t parse_mem_type_param(const char *opt_arg,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    token  = strtok((char*)opt_arg, delim);
+    arg = ucs_alloca(strlen(opt_arg) + 1);
+    strcpy(arg, opt_arg);
+    token  = strtok(arg, delim);
     status = parse_mem_type(token, mem_type);
     if (status != UCS_OK) {
         return status;
@@ -229,7 +234,7 @@ static ucs_status_t parse_mem_type_param(const char *opt_arg,
 
     token = strtok(NULL, delim);
     if (NULL == token) {
-        *device_id = UCX_PERF_DEV_DEFAULT;
+        *device_id = UCX_PERF_MEM_DEV_DEFAULT;
         return UCS_OK;
     }
 
@@ -242,9 +247,12 @@ parse_mem_type_params(const char *opt_arg, ucs_memory_type_t *send_mem_type,
                       int *recv_device_id)
 {
     const char *delim = ",";
-    char *token       = strtok((char*)opt_arg, delim);
+    char *token, *arg;
     ucs_status_t status;
 
+    arg = ucs_alloca(strlen(opt_arg) + 1);
+    strcpy(arg, opt_arg);
+    token  = strtok(arg, delim);
     status = parse_mem_type_param(token, send_mem_type, send_device_id);
     if (status != UCS_OK) {
         return status;
@@ -258,7 +266,7 @@ parse_mem_type_params(const char *opt_arg, ucs_memory_type_t *send_mem_type,
     }
 
     status = parse_mem_type_param(token, recv_mem_type, recv_device_id);
-    if (*send_device_id == UCX_PERF_DEV_DEFAULT) {
+    if (*send_device_id == UCX_PERF_MEM_DEV_DEFAULT) {
         *send_device_id = *recv_device_id;
     }
 

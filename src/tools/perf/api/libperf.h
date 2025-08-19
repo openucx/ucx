@@ -160,6 +160,9 @@ typedef enum {
                                              (_params)->uct.dev_name
 
 
+#define UCX_PERF_MEM_DEV_DEFAULT -1
+
+
 /**
  * Performance counter type.
  */
