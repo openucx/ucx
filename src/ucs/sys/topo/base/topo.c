@@ -283,10 +283,10 @@ out:
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
-    ucs_status_t status = UCS_OK;
     ucs_bus_id_bit_rep_t bus_id_bit_rep;
     ucs_kh_put_t kh_put_status;
     khiter_t hash_it;
+    ucs_status_t status;
     char *name;
 
     bus_id_bit_rep  = ucs_topo_get_bus_id_bit_repr(bus_id);
@@ -299,6 +299,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
     if (kh_put_status == UCS_KH_PUT_KEY_PRESENT) {
         *sys_dev = kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it);
+        status   = UCS_OK;
     } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_assert_always(ucs_topo_global_ctx.num_devices <
@@ -334,6 +335,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                 UCS_SYS_DEVICE_ID_UNKNOWN;
 
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
+        status = UCS_OK;
     } else {
         ucs_error("failed to put key into hash table");
         status = UCS_ERR_IO_ERROR;
