@@ -9,7 +9,7 @@ cd $(dirname $0)/..
 echo "Using $PWD"
 
 rm -f tags || :
-ctags -R -f tags .
+ctags -R --langmap=c++:+.cu.cuh -f tags .
 
 find . -name "*.inl" -type f -exec \
     ctags -R -f tags \
