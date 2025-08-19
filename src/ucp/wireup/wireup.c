@@ -236,7 +236,7 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     msg_hdr->conn_sn   = ep->conn_sn;
     msg_hdr->src_ep_id = ucp_ep_local_id(ep);
     if (type == UCP_WIREUP_MSG_ADDR_REQUEST) {
-        /* Reuse KA reply EP for simplicity of EP lifetime management */
+        /* Reuse onetime_reply_ep for simplicity of EP lifetime management */
         msg_hdr->dst_ep_id = UCS_PTR_MAP_KEY_INVALID;
     } else if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
         msg_hdr->dst_ep_id = ucp_ep_remote_id(ep);
