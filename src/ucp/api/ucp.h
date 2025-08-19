@@ -4129,6 +4129,121 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr);
 
 
 /**
+ * @ingroup UCP_COMM
+ * @brief Descriptor list entry.
+ *
+ * This describes a local and a remote memory pair for which a memory operation
+ * can later be performed multiple times, possibly with varying memory offsets.
+ */
+typedef struct ucp_dlist_elem {
+    /**
+     * Local memory registration handle.
+     */
+    ucp_mem_h  memh;
+
+    /**
+     * Unpacked memory key for a remote memory endpoint.
+     */
+    ucp_rkey_h rkey;
+} ucp_dlist_elem_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Descriptor list export parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_dlist_export_params_t
+ * are presents. It is used to enable backward compatibility support.
+ */
+enum ucp_dlist_export_params_field {
+    UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENTS       = UCS_BIT(0), /**< Elements array base address */
+    UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENTS_SIZE  = UCS_BIT(1), /**< Element size in bytes */
+    UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENTS_COUNT = UCS_BIT(2), /**< Elements array count */
+};
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Descriptor list export parameters.
+ *
+ * The structure defines the parameters that can be used to create a handle
+ * with @ref ucp_gpu_dlist_export.
+ */
+typedef struct ucp_dlist_export_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_dlist_export_params_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t               field_mask;
+
+    /**
+     * Base address for the array of descriptor elements.
+     */
+    const ucp_dlist_elem_t *elements;
+
+    /**
+     * Size in bytes of one descriptor element, for backward compatibility.
+     */
+    size_t                 elements_size;
+
+    /**
+     * Number of elements presents in @ref ucp_dlist_elem_t.
+     */
+    size_t                 elements_count;
+} ucp_dlist_export_params_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Opaque descriptor list handle from @ref ucp_gpu_dlist_export.
+ *
+ * This handle is opaque from host point of view. It is to be used from a GPU
+ * kernel using device specific functions.
+ */
+struct ucp_dlist_handle;
+typedef struct ucp_dlist_handle *ucp_dlist_handle_h;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Descriptor list export function for batched RMA operations.
+ *
+ * This function creates and populates a descriptor list handle using parameters
+ * inputs from @ref ucp_dlist_export_params_t. This descriptor is created for
+ * a given remote endpoint. It can be used on a GPU using the corresponding
+ * device functions.
+ *
+ * It can be used repeatedly, until finally released by calling @ref
+ * ucp_gpu_dlist_cleanup.
+ *
+ * @param [in]  ep        Remote endpoint handle.
+ * @param [in]  params    Parameters used to create the exported handle
+ * @param [out] handle    Exported descriptor list handle
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_gpu_dlist_export(ucp_ep_h ep,
+                                  const ucp_dlist_export_params_t *params,
+                                  ucp_dlist_handle_h *handle);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Release function for a descriptor list handle.
+ *
+ * This function releases the handle that was created using @ref
+ * ucp_gpu_dlist_export.
+ *
+ * @param [in] handle     Exported handle to release
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_gpu_dlist_cleanup(ucp_dlist_handle_h handle);
+
+
+/**
  * @example ucp_hello_world.c
  * UCP hello world client / server example utility.
  *
