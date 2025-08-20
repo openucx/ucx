@@ -71,12 +71,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
     printf("     -m <send mem type[:device id]>,<recv mem type[:device id]>\n");
-    printf("                    memory type of message for sender(%s, device_id:%d)\n"
-                                " and receiver (%s, device_id:%d)\n",
-           ucs_memory_type_names[ctx->params.super.send_mem_type],
-           ctx->params.super.send_mem_device,
-           ucs_memory_type_names[ctx->params.super.recv_mem_type],
-           ctx->params.super.recv_mem_device);
+    printf("                    memory type of message for sender and receiver (host)\n");
     print_memory_type_usage();
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
