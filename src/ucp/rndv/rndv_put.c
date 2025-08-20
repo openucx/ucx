@@ -289,7 +289,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     }
 
     rpriv = ucs_malloc(sizeof(*rpriv), "rndv_put_priv");
-    if (ucs_unlikely(rpriv == NULL)) {
+    if (rpriv == NULL) {
         return;
     }
 
