@@ -3146,8 +3146,7 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
 
     ret = mlx5dv_query_device(ctx, &ctx_dv);
     if (ret != 0) {
-        ucs_error("mlx5dv_query_device: Failed to query device capabilities, "
-                  "ret=%d\n", ret);
+        ucs_error("mlx5dv_query_device: Failed to query device capabilities, ret=%d\n", ret);
         return UCS_ERR_NO_RESOURCE;
     }
 
