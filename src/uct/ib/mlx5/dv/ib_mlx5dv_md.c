@@ -2173,34 +2173,7 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 }
 
 static ucs_status_t
-uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
-{
-#ifdef HAVE_OOO_RECV_WRS
-    struct mlx5dv_context ctx_dv = {
-        .comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS
-    };
-    int ret;
-
-    ret = mlx5dv_query_device(ctx, &ctx_dv);
-    if (ret != 0) {
-        ucs_error("mlx5dv_query_device: Failed to query device capabilities, " 
-                  "ret=%d\n", ret);
-        return UCS_ERR_NO_RESOURCE;
-    }
-
-    if (ctx_dv.ooo_recv_wrs_caps.max_rc > 0) {
-        md->ddp_support_dv.rc = 1;
-    }
-
-    if (ctx_dv.ooo_recv_wrs_caps.max_dct > 0) {
-        md->ddp_support_dv.dc = 1;
-    }
-#else
-    md->ddp_support_dv.rc = 0;
-    md->ddp_support_dv.dc = 0;
-#endif
-    return UCS_OK;
-}
+uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md);
 
 ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
                                              struct ibv_device *ibv_device,
@@ -3161,6 +3134,36 @@ out:
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops;
+
+static ucs_status_t
+uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
+{
+#ifdef HAVE_OOO_RECV_WRS
+    struct mlx5dv_context ctx_dv = {
+        .comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS
+    };
+    int ret;
+
+    ret = mlx5dv_query_device(ctx, &ctx_dv);
+    if (ret != 0) {
+        ucs_error("mlx5dv_query_device: Failed to query device capabilities, "
+                  "ret=%d\n", ret);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    if (ctx_dv.ooo_recv_wrs_caps.max_rc > 0) {
+        md->ddp_support_dv.rc = 1;
+    }
+
+    if (ctx_dv.ooo_recv_wrs_caps.max_dct > 0) {
+        md->ddp_support_dv.dc = 1;
+    }
+#else
+    md->ddp_support_dv.rc = 0;
+    md->ddp_support_dv.dc = 0;
+#endif
+    return UCS_OK;
+}
 
 static void uct_ib_mlx5dv_md_check_odp(uct_ib_mlx5_md_t *md,
                                        const uct_ib_md_config_t *md_config)
