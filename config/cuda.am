@@ -1,0 +1,33 @@
+#
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+
+SUFFIXES = .cu
+
+NVCC_CMD = $(NVCC) $(NVCCFLAGS) \
+		   -c $< -MD -MT $@ -MF $(DEPDIR)/cuda/$@.d -o $@ \
+		   -DHAVE_CONFIG_H $(BASE_NVCCFLAGS)
+NVCC_LT_CMD = $(LIBTOOL) --tag=CXX --mode=compile $(NVCC_CMD)
+
+define nvcc-build
+	@$(MKDIR_P) $(shell dirname $(DEPDIR)/cuda/$@)
+	@if $(AM_V_P); then set -x; else echo "  NVCC     $@"; fi; \
+	$(if $(filter .o,$(suffix $@)),$(NVCC_CMD),$(NVCC_LT_CMD)) $($(1))
+endef
+
+define nvcc-source
+	EXTRA_DIST += $(2)
+$(1): $(2)
+	$$(call nvcc-build,$(3))
+endef
+
+# Default rules when no target-specific compile flags are required
+.cu.o:
+	$(call nvcc-build)
+
+.cu.lo:
+	$(call nvcc-build)
+
+CUDA_DEP_FILES := $(shell find $(DEPDIR)/cuda/ -type f -name *.d 2>/dev/null)
+-include $(CUDA_DEP_FILES)

@@ -10,6 +10,14 @@ AS_IF([test "x$cuda_checked" != "xyes"],
     AC_ARG_WITH([cuda],
                 [AS_HELP_STRING([--with-cuda=(DIR)], [Enable the use of CUDA (default is guess).])],
                 [], [with_cuda=guess])
+    AC_ARG_WITH([nvcc],
+                AS_HELP_STRING([--with-nvcc], [Enable NVCC compiler support (default is guess)]),
+                [],
+                [with_nvcc="guess"])
+    AC_ARG_WITH([nvcc-gencode],
+                AS_HELP_STRING([--with-nvcc-gencode=(OPTS)], [Build for specific GPU architectures]),
+                [],
+                [with_nvcc_gencode="-gencode=arch=compute_80,code=sm_80"])
 
     AS_IF([test "x$with_cuda" = "xno"],
         [
@@ -97,7 +105,11 @@ AS_IF([test "x$cuda_checked" != "xyes"],
 
          # Check NVCC exists and able to compile
          nvcc_happy="no"
-         AC_PATH_PROGS(NVCC, nvcc, "", $CUDA_BIN_PATH:$PATH)
+         AC_ARG_VAR([NVCC], [nvcc compiler path])
+         AC_ARG_VAR([NVCCFLAGS], [nvcc compiler flags])
+         AS_IF([test "x$with_nvcc" != "xno"],
+               [AC_PATH_PROGS(NVCC, nvcc, "", $CUDA_BIN_PATH:$PATH)])
+
          AS_IF([test "x$NVCC" != "x"],
                [AC_LANG_PUSH([C])
                 AC_LANG_CONFTEST([AC_LANG_SOURCE([[#include <cuda_runtime.h>]])])
@@ -105,6 +117,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                 AC_MSG_CHECKING([$NVCC can compile])
                 AS_IF([$NVCC -c conftest.cu 2>&AS_MESSAGE_LOG_FD],
                   [AC_MSG_RESULT([yes])
+                   BASE_NVCCFLAGS="$BASE_NVCCFLAGS $with_nvcc_gencode -g -lineinfo"
                    nvcc_happy="yes"],
                   [AC_MSG_RESULT([no])
                    cat conftest.cu >&AS_MESSAGE_LOG_FD])
@@ -115,6 +128,10 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"
          LIBS="$save_LIBS"
+
+         AS_IF([test "x$with_nvcc" = "xyes" -a "x$nvcc_happy" = "xno"],
+               [AC_MSG_ERROR([nvcc compiler is not functional])],
+               [])
 
          AS_IF([test "x$cuda_happy" = "xyes"],
                [AC_SUBST([CUDA_CPPFLAGS], ["$CUDA_CPPFLAGS"])
