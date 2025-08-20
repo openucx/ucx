@@ -104,6 +104,17 @@ void print_progress(void *UCS_V_UNUSED rte_group,
     fflush(stdout);
 }
 
+static void get_memory_type_str(ucs_memory_type_t mem_type, int device_id,
+                                char *str, size_t size)
+{
+    if (device_id == UCX_PERF_MEM_DEV_DEFAULT) {
+        ucs_snprintf_safe(str, size, "%s", ucs_memory_type_names[mem_type]);
+    } else {
+        ucs_snprintf_safe(str, size, "%s:%d", ucs_memory_type_names[mem_type],
+                          device_id);
+    }
+}
+
 static void print_header(struct perftest_context *ctx)
 {
     const char *overhead_lat_str;
@@ -111,6 +122,8 @@ static void print_header(struct perftest_context *ctx)
     const char *test_api_str;
     test_type_t *test;
     unsigned i;
+    char send_mem_str[16];
+    char recv_mem_str[16];
 
     test = (ctx->params.test_id == TEST_ID_UNDEFINED) ? NULL :
            &tests[ctx->params.test_id];
@@ -142,12 +155,19 @@ static void print_header(struct perftest_context *ctx)
             return;
         }
 
+        get_memory_type_str(ctx->params.super.send_mem_type,
+                            ctx->params.super.send_mem_device,
+                            send_mem_str, sizeof(send_mem_str));
+        get_memory_type_str(ctx->params.super.recv_mem_type,
+                            ctx->params.super.recv_mem_device,
+                            recv_mem_str, sizeof(recv_mem_str));
+
         printf("+----------------------------------------------------------------------------------------------------------+\n");
         printf("| API:          %-60s                               |\n", test_api_str);
         printf("| Test:         %-60s                               |\n", test->desc);
         printf("| Data layout:  %-60s                               |\n", test_data_str);
-        printf("| Send memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.send_mem_type]);
-        printf("| Recv memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.recv_mem_type]);
+        printf("| Send memory:  %-60s                               |\n", send_mem_str);
+        printf("| Recv memory:  %-60s                               |\n", recv_mem_str);
         printf("| Message size: %-60zu                               |\n", ucx_perf_get_message_size(&ctx->params.super));
         printf("| Window size:  %-60u                               |\n", ctx->params.super.max_outstanding);
 

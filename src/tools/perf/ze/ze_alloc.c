@@ -60,7 +60,7 @@ static ze_result_t ze_init_devices(void)
     return ZE_RESULT_SUCCESS;
 }
 
-static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf)
+static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf, int *device_id_p)
 {
     ze_command_queue_desc_t cmdq_desc = {
         .stype    = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
@@ -90,6 +90,7 @@ static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf)
     }
 
     gpu_index = i;
+    *device_id_p = UCX_PERF_MEM_DEV_DEFAULT;
     return UCS_OK;
 }
 
@@ -147,25 +148,28 @@ uct_perf_ze_alloc_reg_mem(const ucx_perf_context_t *perf, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_perf_ze_host_alloc(const ucx_perf_context_t *perf,
-                                           size_t length, unsigned flags,
-                                           uct_allocated_memory_t *alloc_mem)
+static ucs_status_t
+uct_perf_ze_host_alloc(const ucx_perf_context_t *perf,
+                       size_t length, unsigned flags, int device_id,
+                       uct_allocated_memory_t *alloc_mem)
 {
     return uct_perf_ze_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_ZE_HOST,
                                      flags, alloc_mem);
 }
 
-static ucs_status_t uct_perf_ze_device_alloc(const ucx_perf_context_t *perf,
-                                             size_t length, unsigned flags,
-                                             uct_allocated_memory_t *alloc_mem)
+static ucs_status_t
+uct_perf_ze_device_alloc(const ucx_perf_context_t *perf,
+                         size_t length, unsigned flags, int device_id,
+                         uct_allocated_memory_t *alloc_mem)
 {
     return uct_perf_ze_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_ZE_DEVICE,
                                      flags, alloc_mem);
 }
 
-static ucs_status_t uct_perf_ze_managed_alloc(const ucx_perf_context_t *perf,
-                                              size_t length, unsigned flags,
-                                              uct_allocated_memory_t *alloc_mem)
+static ucs_status_t
+uct_perf_ze_managed_alloc(const ucx_perf_context_t *perf,
+                          size_t length, unsigned flags, int device_id,
+                          uct_allocated_memory_t *alloc_mem)
 {
     return uct_perf_ze_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_ZE_MANAGED,
                                      flags, alloc_mem);

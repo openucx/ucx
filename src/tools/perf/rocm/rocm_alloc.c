@@ -15,7 +15,7 @@
 #include <ucs/sys/compiler.h>
 
 
-static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
+static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf, int *device_id_p)
 {
     hipError_t ret;
     unsigned group_index;
@@ -36,6 +36,7 @@ static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
         return UCS_ERR_NO_DEVICE;
     }
 
+    *device_id_p = UCX_PERF_MEM_DEV_DEFAULT;
     return UCS_OK;
 }
 
@@ -87,17 +88,19 @@ uct_perf_rocm_alloc_reg_mem(const ucx_perf_context_t *perf,
     return UCS_OK;
 }
 
-static ucs_status_t uct_perf_rocm_alloc(const ucx_perf_context_t *perf,
-                                        size_t length, unsigned flags,
-                                        uct_allocated_memory_t *alloc_mem)
+static ucs_status_t
+uct_perf_rocm_alloc(const ucx_perf_context_t *perf,
+                    size_t length, unsigned flags, int device_id,
+                    uct_allocated_memory_t *alloc_mem)
 {
     return uct_perf_rocm_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_ROCM,
                                        flags, alloc_mem);
 }
 
-static ucs_status_t uct_perf_rocm_managed_alloc(const ucx_perf_context_t *perf,
-                                                size_t length, unsigned flags,
-                                                uct_allocated_memory_t *alloc_mem)
+static ucs_status_t
+uct_perf_rocm_managed_alloc(const ucx_perf_context_t *perf,
+                            size_t length, unsigned flags, int device_id,
+                            uct_allocated_memory_t *alloc_mem)
 {
     return uct_perf_rocm_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_ROCM_MANAGED,
                                        flags, alloc_mem);

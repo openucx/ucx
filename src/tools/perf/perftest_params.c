@@ -211,6 +211,7 @@ static ucs_status_t parse_mem_type_param(const char *opt_arg,
                                          int *device_id)
 {
     const char *delim = ":";
+    char *saveptr = NULL;
     char *token, *arg;
     ucs_status_t status;
 
@@ -221,13 +222,13 @@ static ucs_status_t parse_mem_type_param(const char *opt_arg,
 
     arg = ucs_alloca(strlen(opt_arg) + 1);
     strcpy(arg, opt_arg);
-    token  = strtok(arg, delim);
+    token  = strtok_r(arg, delim, &saveptr);
     status = parse_mem_type(token, mem_type);
     if (status != UCS_OK) {
         return status;
     }
 
-    token = strtok(NULL, delim);
+    token = strtok_r(NULL, delim, &saveptr);
     if (NULL == token) {
         *device_id = UCX_PERF_MEM_DEV_DEFAULT;
         return UCS_OK;
@@ -242,18 +243,19 @@ parse_mem_type_params(const char *opt_arg, ucs_memory_type_t *send_mem_type,
                       int *recv_device_id)
 {
     const char *delim = ",";
+    char *saveptr = NULL;
     char *token, *arg;
     ucs_status_t status;
 
     arg = ucs_alloca(strlen(opt_arg) + 1);
     strcpy(arg, opt_arg);
-    token  = strtok(arg, delim);
+    token  = strtok_r(arg, delim, &saveptr);
     status = parse_mem_type_param(token, send_mem_type, send_device_id);
     if (status != UCS_OK) {
         return status;
     }
 
-    token = strtok(NULL, delim);
+    token = strtok_r(NULL, delim, &saveptr);
     if (NULL == token) {
         *recv_mem_type  = *send_mem_type;
         *recv_device_id = *send_device_id;

@@ -41,10 +41,11 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
     return UCS_OK;
 }
 
-static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
-                                       size_t length,
-                                       ucs_memory_type_t mem_type,
-                                       void **address_p, ucp_mem_h *memh_p)
+static ucs_status_t
+ucp_perf_mem_alloc(ucx_perf_context_t *perf, size_t length,
+                   ucs_memory_type_t mem_type, void **address_p,
+                   const ucx_perf_allocator_t *allocator, int device_id,
+                   ucp_mem_h *memh_p)
 {
     ucp_mem_map_params_t params;
     ucp_mem_attr_t attr;
@@ -60,6 +61,13 @@ static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
     params.flags       = UCP_MEM_MAP_ALLOCATE;
     if (perf->params.flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) {
         params.flags |= UCP_MEM_MAP_NONBLOCK;
+    }
+
+    if (device_id != UCX_PERF_MEM_DEV_DEFAULT) {
+        status = allocator->init(perf, &device_id);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     status = ucp_mem_map(perf->ucp.context, &params, memh_p);
@@ -114,6 +122,7 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     /* Allocate send buffer memory */
     status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
                                 params->send_mem_type, &perf->send_buffer,
+                                perf->send_allocator, perf->send_device_id,
                                 &perf->ucp.send_memh);
     if (status != UCS_OK) {
         goto err;
@@ -127,6 +136,7 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     /* Allocate receive buffer memory */
     status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
                                 params->recv_mem_type, &perf->recv_buffer,
+                                perf->recv_allocator, perf->recv_device_id,
                                 &perf->ucp.recv_memh);
     if (status != UCS_OK) {
         goto err_free_send_buffer;
@@ -223,8 +233,16 @@ ucx_perf_test_memcpy_host(void *dst, ucs_memory_type_t dst_mem_type,
 }
 
 static ucs_status_t
+uct_perf_test_alloc_init(ucx_perf_context_t *perf, int *device_id_p)
+{
+    *device_id_p = UCX_PERF_MEM_DEV_DEFAULT;
+    return UCS_OK;
+}
+
+static ucs_status_t
 uct_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
-                         unsigned flags, uct_allocated_memory_t *alloc_mem)
+                         unsigned flags, int device_id,
+                         uct_allocated_memory_t *alloc_mem)
 {
     ucs_status_t status;
 
@@ -287,7 +305,8 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     /* Allocate send buffer memory */
     status = perf->send_allocator->uct_alloc(perf,
                                              buffer_size * params->thread_count,
-                                             flags, &perf->uct.send_mem);
+                                             flags, perf->send_device_id,
+                                             &perf->uct.send_mem);
 
     if (status != UCS_OK) {
         goto err;
@@ -298,7 +317,8 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     /* Allocate receive buffer memory */
     status = perf->recv_allocator->uct_alloc(perf,
                                              buffer_size * params->thread_count,
-                                             flags, &perf->uct.recv_mem);
+                                             flags, perf->recv_device_id,
+                                             &perf->uct.recv_mem);
     if (status != UCS_OK) {
         goto err_free_send;
     }
@@ -340,7 +360,7 @@ void ucx_perf_global_init()
 {
     static ucx_perf_allocator_t host_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_HOST,
-        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
+        .init      = uct_perf_test_alloc_init,
         .uct_alloc = uct_perf_test_alloc_host,
         .uct_free  = uct_perf_test_free_host,
         .memcpy    = ucx_perf_test_memcpy_host,
@@ -348,7 +368,7 @@ void ucx_perf_global_init()
     };
     static ucx_perf_allocator_t rdma_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_RDMA,
-        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
+        .init      = uct_perf_test_alloc_init,
         .uct_alloc = (ucx_perf_uct_alloc_func_t)ucs_empty_function_do_assert,
         .uct_free  = (ucx_perf_uct_free_func_t)ucs_empty_function_do_assert,
         .memcpy    = (ucx_perf_memcpy_func_t)ucs_empty_function_do_assert,

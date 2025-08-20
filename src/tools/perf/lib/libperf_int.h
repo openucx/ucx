@@ -44,11 +44,12 @@ typedef struct ucp_perf_request        ucp_perf_request_t;
 typedef struct ucx_perf_thread_context ucx_perf_thread_context_t;
 
 
-typedef ucs_status_t (*ucx_perf_init_func_t)(ucx_perf_context_t *perf);
+typedef ucs_status_t (*ucx_perf_init_func_t)(ucx_perf_context_t *perf,
+                                             int *device_id_p);
 
 typedef ucs_status_t (*ucx_perf_uct_alloc_func_t)(
         const ucx_perf_context_t *perf, size_t length, unsigned flags,
-        uct_allocated_memory_t *alloc_mem);
+        int device_id, uct_allocated_memory_t *alloc_mem);
 
 typedef void (*ucx_perf_uct_free_func_t)(const ucx_perf_context_t *perf,
                                          uct_allocated_memory_t *alloc_mem);
@@ -103,6 +104,8 @@ struct ucx_perf_context {
 
     const ucx_perf_allocator_t   *send_allocator;
     const ucx_perf_allocator_t   *recv_allocator;
+    int                          send_device_id;
+    int                          recv_device_id;
 
     char                         extra_info[EXTRA_INFO_SIZE];
 
