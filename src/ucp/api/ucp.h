@@ -4202,8 +4202,8 @@ typedef struct ucp_dlist_export_params {
  * This handle is opaque from host point of view. It is to be used from a GPU
  * kernel using device specific functions.
  */
-struct ucp_dlist_handle;
-typedef struct ucp_dlist_handle *ucp_dlist_handle_h;
+struct ucp_gpu_dlist_handle;
+typedef struct ucp_gpu_dlist_handle *ucp_gpu_dlist_handle_h;
 
 
 /**
@@ -4216,9 +4216,9 @@ typedef struct ucp_dlist_handle *ucp_dlist_handle_h;
  * device functions.
  *
  * It can be used repeatedly, until finally released by calling @ref
- * ucp_gpu_dlist_cleanup.
+ * ucp_gpu_dlist_release.
  *
- * @param [in]  ep        Remote endpoint handle.
+ * @param [in]  ep        Remote endpoint handle
  * @param [in]  params    Parameters used to create the exported handle
  * @param [out] handle    Exported descriptor list handle
  *
@@ -4226,7 +4226,7 @@ typedef struct ucp_dlist_handle *ucp_dlist_handle_h;
  */
 ucs_status_t ucp_gpu_dlist_export(ucp_ep_h ep,
                                   const ucp_dlist_export_params_t *params,
-                                  ucp_dlist_handle_h *handle);
+                                  ucp_gpu_dlist_handle_h *handle);
 
 
 /**
@@ -4240,7 +4240,7 @@ ucs_status_t ucp_gpu_dlist_export(ucp_ep_h ep,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_gpu_dlist_cleanup(ucp_dlist_handle_h handle);
+ucs_status_t ucp_gpu_dlist_release(ucp_gpu_dlist_handle_h handle);
 
 
 /**
