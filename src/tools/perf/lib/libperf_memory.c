@@ -41,11 +41,10 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
     return UCS_OK;
 }
 
-static ucs_status_t
-ucp_perf_mem_alloc(ucx_perf_context_t *perf, size_t length,
-                   ucs_memory_type_t mem_type, void **address_p,
-                   const ucx_perf_allocator_t *allocator, int device_id,
-                   ucp_mem_h *memh_p)
+static ucs_status_t ucp_perf_mem_alloc(ucx_perf_context_t *perf,
+                                       size_t length,
+                                       ucs_memory_type_t mem_type,
+                                       void **address_p, ucp_mem_h *memh_p)
 {
     ucp_mem_map_params_t params;
     ucp_mem_attr_t attr;
@@ -61,13 +60,6 @@ ucp_perf_mem_alloc(ucx_perf_context_t *perf, size_t length,
     params.flags       = UCP_MEM_MAP_ALLOCATE;
     if (perf->params.flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) {
         params.flags |= UCP_MEM_MAP_NONBLOCK;
-    }
-
-    if (device_id != UCX_PERF_MEM_DEV_DEFAULT) {
-        status = allocator->init(perf, &device_id);
-        if (status != UCS_OK) {
-            return status;
-        }
     }
 
     status = ucp_mem_map(perf->ucp.context, &params, memh_p);
@@ -122,7 +114,6 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     /* Allocate send buffer memory */
     status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
                                 params->send_mem_type, &perf->send_buffer,
-                                perf->send_allocator, perf->send_device_id,
                                 &perf->ucp.send_memh);
     if (status != UCS_OK) {
         goto err;
@@ -136,7 +127,6 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     /* Allocate receive buffer memory */
     status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
                                 params->recv_mem_type, &perf->recv_buffer,
-                                perf->recv_allocator, perf->recv_device_id,
                                 &perf->ucp.recv_memh);
     if (status != UCS_OK) {
         goto err_free_send_buffer;
@@ -305,7 +295,7 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     /* Allocate send buffer memory */
     status = perf->send_allocator->uct_alloc(perf,
                                              buffer_size * params->thread_count,
-                                             flags, perf->send_device_id,
+                                             flags, perf->device_id,
                                              &perf->uct.send_mem);
 
     if (status != UCS_OK) {
@@ -317,7 +307,7 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     /* Allocate receive buffer memory */
     status = perf->recv_allocator->uct_alloc(perf,
                                              buffer_size * params->thread_count,
-                                             flags, perf->recv_device_id,
+                                             flags, perf->device_id,
                                              &perf->uct.recv_mem);
     if (status != UCS_OK) {
         goto err_free_send;

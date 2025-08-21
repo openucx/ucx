@@ -149,14 +149,21 @@ ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
 ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf)
 {
     ucs_status_t status;
+    unsigned group_index;
+
+    group_index = rte_call(perf, group_index);
+    perf->device_id = group_index == 0 ? perf->params.recv_mem_device :
+                                         perf->params.send_mem_device;
 
     /* New threads need explicit device association */
-    perf->send_device_id = perf->params.send_mem_device;
-    status = perf->send_allocator->init(perf, &perf->send_device_id);
+    status = perf->send_allocator->init(perf, &perf->device_id);
     if (status != UCS_OK) {
         return status;
     }
 
-    perf->recv_device_id = perf->params.recv_mem_device;
-    return perf->recv_allocator->init(perf, &perf->recv_device_id);
+    if (perf->send_allocator == perf->recv_allocator) {
+        return UCS_OK;
+    }
+
+    return perf->recv_allocator->init(perf, &perf->device_id);
 }

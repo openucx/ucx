@@ -28,7 +28,7 @@
 static ucs_status_t
 ucx_perf_cuda_init(ucx_perf_context_t *perf, int *device_id_p)
 {
-    int gpu_index = *device_id_p;
+    int device_id = *device_id_p;
     unsigned group_index;
     int num_gpus;
 
@@ -38,23 +38,23 @@ ucx_perf_cuda_init(ucx_perf_context_t *perf, int *device_id_p)
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (gpu_index == UCX_PERF_MEM_DEV_DEFAULT) {
+    if (device_id == UCX_PERF_MEM_DEV_DEFAULT) {
         group_index = rte_call(perf, group_index);
-        gpu_index   = group_index % num_gpus;
+        device_id   = group_index % num_gpus;
     }
 
-    if (gpu_index >= num_gpus) {
-        ucs_error("Illegal cuda device %d, number of devices: %d", gpu_index,
+    if (device_id >= num_gpus) {
+        ucs_error("Illegal cuda device %d, number of devices: %d", device_id,
                   num_gpus);
         return UCS_ERR_NO_DEVICE;
     }
 
-    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, gpu_index);
+    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, device_id);
 
     /* actually set device context as calling cudaSetDevice may result in
      * context being initialized lazily */
     cudaFree(0);
-    *device_id_p = gpu_index;
+    *device_id_p = device_id;
     return UCS_OK;
 }
 

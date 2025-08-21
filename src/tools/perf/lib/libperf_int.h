@@ -104,8 +104,8 @@ struct ucx_perf_context {
 
     const ucx_perf_allocator_t   *send_allocator;
     const ucx_perf_allocator_t   *recv_allocator;
-    int                          send_device_id;
-    int                          recv_device_id;
+    /* Currently using single GPU id, because inproc multi-GPU is not supported */
+    int                          device_id;
 
     char                         extra_info[EXTRA_INFO_SIZE];
 
