@@ -87,8 +87,6 @@ typedef ucp_dlist_handle_t *ucp_dlist_handle_h;
  *                          registration keys to use for the transfer.
  * @param [in]  flags       Bitfield usable to modify the function behavior.
  * @param [out] status      GPU status returned by the call.
- *
- * @return Error code as defined by @ref ucs_gpu_status_t
  */
 __device__ void
 ucp_gpu_post_single(ucp_dlist_handle_h handle,
@@ -117,13 +115,11 @@ ucp_gpu_post_single(ucp_dlist_handle_h handle,
  *                          remote key to use for the atomic operation.
  * @param [in]  flags       Bitfield usable to modify the function behavior.
  * @param [out] status      GPU status returned by the call.
- *
- * @return Error code as defined by @ref ucs_gpu_status_t
  */
 __device__ void
 ucp_gpu_post_atomic(ucp_dlist_handle_h handle,
                     uint64_t value, uint64_t remote_addr,
-                    int dlist_index, ucs_gpu_status_t *status, uint64_t flags);
+                    int dlist_index, uint64_t flags, ucs_gpu_status_t *status);
 
 
 /**
@@ -155,8 +151,6 @@ ucp_gpu_post_atomic(ucp_dlist_handle_h handle,
  * @param [in]  atomic_remote_addr  Remote address to increment to.
  * @param [in]  flags               Bitfield to modify the function behavior.
  * @param [out] status              GPU status returned by the call.
- *
- * @return Error code as defined by @ref ucs_gpu_status_t
  */
 __device__ void
 ucp_gpu_post_multi(ucp_dlist_handle_h handle,
@@ -203,8 +197,6 @@ ucp_gpu_post_multi(ucp_dlist_handle_h handle,
  * @param [in]  atomic_remote_addr  Remote address to increment to.
  * @param [in]  flags               Bitfield to modify the function behavior.
  * @param [out] status              GPU status returned by the call.
- *
- * @return Error code as defined by @ref ucs_gpu_status_t
  */
 __device__ void
 ucp_gpu_post_multi_partial(ucp_dlist_handle_h handle,
@@ -212,6 +204,7 @@ ucp_gpu_post_multi_partial(ucp_dlist_handle_h handle,
                            size_t dlist_count,
                            const void **addrs, const uint64_t **remote_addrs,
                            const size_t *lengths,
+                           uint64_t atomic_value,
                            uint64_t atomic_remote_addr,
                            uint64_t flags, ucs_gpu_status_t *status);
 #endif /* UCP_CUH */
