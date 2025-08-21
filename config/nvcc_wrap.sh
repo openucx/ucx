@@ -26,7 +26,11 @@ while [[ $# -gt 0 ]]; do
         -c)
             shift
             ;;
-        -I*|-D*|-G|-g|-MD|-MMD|-gencode=*|-fPIC|-std=*)
+        -fPIC)
+            args="$args -Xcompiler -fPIC"
+            shift
+            ;;
+        -I*|-D*|-G|-g|-MD|-MMD|-Xcompiler|-gencode=*|-fPIC|-std=*)
             args="$args $1"
             shift
             ;;
@@ -58,6 +62,6 @@ then
 fi
 
 mkdir -p "$(dirname "$output")"
-cmd="$nvcc -c $src -o $output -Xcompiler $args"
+cmd="$nvcc -c $src -o $output $args"
 echo $cmd
 exec $cmd
