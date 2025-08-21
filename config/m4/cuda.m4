@@ -117,7 +117,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                 AC_MSG_CHECKING([$NVCC can compile])
                 AS_IF([$NVCC -c conftest.cu 2>&AS_MESSAGE_LOG_FD],
                   [AC_MSG_RESULT([yes])
-                   BASE_NVCCFLAGS="$BASE_NVCCFLAGS $with_nvcc_gencode -g -lineinfo"
+                   BASE_NVCCFLAGS="$BASE_NVCCFLAGS $with_nvcc_gencode -Xcompiler -fPIC -g -lineinfo"
                    nvcc_happy="yes"],
                   [AC_MSG_RESULT([no])
                    cat conftest.cu >&AS_MESSAGE_LOG_FD])
