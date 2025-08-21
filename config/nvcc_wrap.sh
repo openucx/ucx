@@ -26,7 +26,7 @@ while [[ $# -gt 0 ]]; do
         -c)
             shift
             ;;
-        -I*|-D*|-G|-g|-MD|-gencode=*|-fPIC|-std=*)
+        -I*|-D*|-G|-g|-MD|-MMD|-gencode=*|-fPIC|-std=*)
             args="$args $1"
             shift
             ;;
