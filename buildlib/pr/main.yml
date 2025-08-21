@@ -165,6 +165,9 @@ resources:
     - container: ubuntu22_cuda_12_1
       image: nvidia/cuda:12.1.0-devel-ubuntu22.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
+    - container: ubuntu22_cuda_13_0
+      image: nvidia/cuda:13.0.0-devel-ubuntu22.04
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
