@@ -18,6 +18,17 @@ typedef struct ucp_dlist_elem {} ucp_dlist_elem_t;
 
 /**
  * @ingroup UCP_COMM
+ * @brief GPU request descriptor of a given batch
+ *
+ * This request tracks a batch of memory operations in progress. It can be used
+ * with @ref ucp_gpu_progress_req to detect request completion.
+ */
+typedef struct ucp_gpu_request {
+} ucp_gpu_request_t;
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Descriptor list handle stored on GPU memory.
  *
  * This handle is obtained and managed with functions called on host. It can be
@@ -75,6 +86,9 @@ typedef ucp_dlist_handle_t *ucp_dlist_handle_h;
  * memory transfer. The addresses and length must be valid for the used dlist
  * entry.
  *
+ * The routine returns a request that can be progressed and checked for
+ * completion with @ref ucp_gpu_progress_req.
+ *
  * This routine can be called repeatedly with the same handle and different
  * addresses and length. The flags parameter can be used to modify the behavior
  * of the routine.
@@ -86,13 +100,15 @@ typedef ucp_dlist_handle_t *ucp_dlist_handle_h;
  * @param [in]  dlist_index Index in descriptor list pointing to the memory
  *                          registration keys to use for the transfer.
  * @param [in]  flags       Bitfield usable to modify the function behavior.
- * @param [out] status      GPU status returned by the call.
+ * @param [out] req         Request populated by the call.
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
-__device__ void
-ucp_gpu_post_single(ucp_dlist_handle_h handle,
-                    void *addr, uint64_t remote_addr,
-                    size_t length, int dlist_index, uint64_t flags,
-                    ucs_gpu_status_t *status);
+UCS_DEVICE_FUNC ucs_status_t
+ucp_gpu_put_single(ucp_dlist_handle_h handle,
+                   void *addr, uint64_t remote_addr,
+                   size_t length, int dlist_index, uint64_t flags,
+                   ucp_gpu_request_t *req);
 
 
 /**
@@ -104,6 +120,9 @@ ucp_gpu_post_single(ucp_dlist_handle_h handle,
  * for the atomic operation. The remote address must be valid for the used dlist
  * entry.
  *
+ * The routine returns a request that can be progressed and checked for
+ * completion with @ref ucp_gpu_progress_req.
+ *
  * This routine can be called repeatedly with the same handle and different
  * address. The flags parameter can be used to modify the behavior of the
  * routine.
@@ -114,12 +133,15 @@ ucp_gpu_post_single(ucp_dlist_handle_h handle,
  * @param [in]  dlist_index Index in descriptor list pointing to the memory
  *                          remote key to use for the atomic operation.
  * @param [in]  flags       Bitfield usable to modify the function behavior.
- * @param [out] status      GPU status returned by the call.
+ * @param [out] req         Request populated by the call.
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
-__device__ void
-ucp_gpu_post_atomic(ucp_dlist_handle_h handle,
-                    uint64_t value, uint64_t remote_addr,
-                    int dlist_index, uint64_t flags, ucs_gpu_status_t *status);
+UCS_DEVICE_FUNC ucs_status_t
+ucp_gpu_atomic(ucp_dlist_handle_h handle,
+               uint64_t value, uint64_t remote_addr,
+               int dlist_index, uint64_t flags,
+               ucp_gpu_request_t *req);
 
 
 /**
@@ -139,6 +161,9 @@ ucp_gpu_post_atomic(ucp_dlist_handle_h handle,
  * The size of the arrays addrs, remote_addrs, and lengths are all equal to
  * the size of the descriptor list array from the handle, minus one.
  *
+ * The routine returns a request that can be progressed and checked for
+ * completion with @ref ucp_gpu_progress_req.
+ *
  * This routine can be called repeatedly with the same handle and different
  * addresses, lengths and atomic related parameters. The flags parameter can be
  * used to modify the behavior of the routine.
@@ -150,14 +175,17 @@ ucp_gpu_post_atomic(ucp_dlist_handle_h handle,
  * @param [in]  atomic_value        Value of the remote increment.
  * @param [in]  atomic_remote_addr  Remote address to increment to.
  * @param [in]  flags               Bitfield to modify the function behavior.
- * @param [out] status              GPU status returned by the call.
+ * @param [out] req                 Request populated by the call.
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
-__device__ void
-ucp_gpu_post_multi(ucp_dlist_handle_h handle,
-                   const void **addrs, const uint64_t **remote_addrs,
-                   const size_t *lengths,
-                   uint64_t atomic_value, uint64_t atomic_remote_addr,
-                   uint64_t flags, ucs_gpu_status_t *status);
+UCS_DEVICE_FUNC ucs_status_t
+ucp_gpu_put_multi(ucp_dlist_handle_h handle,
+                  const void **addrs, const uint64_t **remote_addrs,
+                  const size_t *lengths,
+                  uint64_t atomic_value, uint64_t atomic_remote_addr,
+                  uint64_t flags,
+                  ucp_gpu_request_t *req);
 
 
 /**
@@ -181,6 +209,9 @@ ucp_gpu_post_multi(ucp_dlist_handle_h handle,
  * all equal. They are lower than the size of the descriptor list array from
  * the handle.
  *
+ * The routine returns a request that can be progressed and checked for
+ * completion with @ref ucp_gpu_progress_req.
+ *
  * This routine can be called repeatedly with the same handle and different
  * dlist_indexes, addresses, lengths and atomic related parameters. The flags
  * parameter can be used to modify the behavior of the routine.
@@ -196,15 +227,38 @@ ucp_gpu_post_multi(ucp_dlist_handle_h handle,
  * @param [in]  atomic_value        Value of the remote increment.
  * @param [in]  atomic_remote_addr  Remote address to increment to.
  * @param [in]  flags               Bitfield to modify the function behavior.
- * @param [out] status              GPU status returned by the call.
+ * @param [out] req                 Request populated by the call.
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
-__device__ void
-ucp_gpu_post_multi_partial(ucp_dlist_handle_h handle,
-                           const int *dlist_indexes,
-                           size_t dlist_count,
-                           const void **addrs, const uint64_t **remote_addrs,
-                           const size_t *lengths,
-                           uint64_t atomic_value,
-                           uint64_t atomic_remote_addr,
-                           uint64_t flags, ucs_gpu_status_t *status);
+UCS_DEVICE_FUNC ucs_status_t
+ucp_gpu_put_multi_partial(ucp_dlist_handle_h handle,
+                          const int *dlist_indexes,
+                          size_t dlist_count,
+                          const void **addrs, const uint64_t **remote_addrs,
+                          const size_t *lengths,
+                          uint64_t atomic_value,
+                          uint64_t atomic_remote_addr,
+                          uint64_t flags,
+                          ucp_gpu_request_t *req);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Progress a GPU request containing a batch of operations.
+ *
+ * This GPU progress function checks and progresses a request representing a
+ * batch of one or many operations in progress.
+ *
+ * @param [in]  req                 Request containing operations in progress.
+ *
+ * @return UCS_OK           - The request has completed, no more operations are
+ *                            in progress.
+ * @return UCS_INPROGRESS   - One or many operations from the batch of the
+ *                            request has not completed.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+UCS_DEVICE_FUNC ucs_status_t
+ucp_gpu_progress_req(ucp_gpu_request_t *req);
+
 #endif /* UCP_CUH */

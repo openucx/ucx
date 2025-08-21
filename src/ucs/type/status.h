@@ -86,21 +86,6 @@ typedef enum {
 } UCS_S_PACKED ucs_status_t;
 
 
-/**
- * @ingroup UCS_RESOURCE
- * @brief GPU specific status codes
- */
-typedef enum {
-    /* Operation completed successfully */
-    UCS_GPU_OK                = 0,
-
-    /* Failure codes */
-    UCS_GPU_ERR_INVALID_PARAM = -1,
-    UCS_GPU_ERR_UNSUPPORTED   = -2,
-    UCS_GPU_ERR_LAST          = -10
-} ucs_gpu_status_t;
-
-
 #define UCS_IS_LINK_ERROR(_code) \
     (((_code) <= UCS_ERR_FIRST_LINK_FAILURE) && \
      ((_code) >= UCS_ERR_LAST_LINK_FAILURE))
