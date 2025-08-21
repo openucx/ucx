@@ -272,6 +272,7 @@ typedef struct uct_ib_iface_init_attr {
     unsigned    max_rd_atomic;
     uint8_t     cqe_zip_sizes[UCT_IB_DIR_LAST];
     uint16_t    tx_moderation;           /* TX CQ moderation */
+    const char  *dev_name;               /* Device Name */
 } uct_ib_iface_init_attr_t;
 
 

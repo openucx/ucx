@@ -725,6 +725,10 @@ uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
     uct_ib_mlx5_cq_t *scq = &iface->cq[UCT_IB_DIR_TX];
     uct_ib_mlx5_cq_t *rcq = &iface->cq[UCT_IB_DIR_RX];
 
+    if (iface->super.config.tx_cq_len == 0) {
+        return status;
+    }
+
     if (scq->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
         status = uct_rc_mlx5_devx_iface_subscribe_event(iface,
                                                         iface->cq_event_channel,
@@ -942,6 +946,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
                                                    max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.dev_name              = params->mode.device.dev_name;
 
     if (md->dp_ordering_cap.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;

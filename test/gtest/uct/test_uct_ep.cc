@@ -281,5 +281,6 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, destroy_entity_after_send,
     }
 }
 
+_UCT_INSTANTIATE_TEST_CASE(test_uct_ep, gdaki)
 UCT_INSTANTIATE_TEST_CASE(test_uct_ep)
 UCT_INSTANTIATE_CUDA_IPC_TEST_CASE(test_uct_ep)

@@ -273,6 +273,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.seg_size              = ib_config->seg_size;
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.dev_name              = params->mode.device.dev_name;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
