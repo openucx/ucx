@@ -270,7 +270,7 @@ gtest_SOURCES += \
 	uct/cuda/test_cuda_nvml.cc
 
 if HAVE_NVCC
-NVCC_EXTRA_FLAGS = $(gtest_CPPFLAGS)
+NVCC_EXTRA_FLAGS = -std=c++11 $(gtest_CPPFLAGS)
 include $(top_srcdir)/config/cuda.am
 
 gtest_SOURCES += \
