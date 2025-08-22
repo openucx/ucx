@@ -49,7 +49,6 @@ protected:
         if (cudaMemcpy(&h_result, d_result, sizeof(h_result), cudaMemcpyDeviceToHost)
             != cudaSuccess) {
             h_result = -1;
-            goto out;
         }
 
 out:
