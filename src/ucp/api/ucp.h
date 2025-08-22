@@ -4158,7 +4158,7 @@ typedef struct ucp_dlist_elem {
 enum ucp_dlist_export_params_field {
     UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENTS       = UCS_BIT(0), /**< Elements array base address */
     UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENTS_SIZE  = UCS_BIT(1), /**< Element size in bytes */
-    UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENTS_COUNT = UCS_BIT(2), /**< Elements array count */
+    UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENTS_COUNT = UCS_BIT(2)  /**< Elements array count */
 };
 
 
