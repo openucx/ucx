@@ -41,7 +41,7 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
     return UCS_OK;
 }
 
-static ucs_status_t ucp_perf_mem_alloc(ucx_perf_context_t *perf,
+static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
                                        size_t length,
                                        ucs_memory_type_t mem_type,
                                        void **address_p, ucp_mem_h *memh_p)
@@ -223,13 +223,6 @@ ucx_perf_test_memcpy_host(void *dst, ucs_memory_type_t dst_mem_type,
 }
 
 static ucs_status_t
-uct_perf_test_alloc_init(ucx_perf_context_t *perf, int *device_id_p)
-{
-    *device_id_p = UCX_PERF_MEM_DEV_DEFAULT;
-    return UCS_OK;
-}
-
-static ucs_status_t
 uct_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
                          unsigned flags, int device_id,
                          uct_allocated_memory_t *alloc_mem)
@@ -350,7 +343,7 @@ void ucx_perf_global_init()
 {
     static ucx_perf_allocator_t host_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_HOST,
-        .init      = uct_perf_test_alloc_init,
+        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
         .uct_alloc = uct_perf_test_alloc_host,
         .uct_free  = uct_perf_test_free_host,
         .memcpy    = ucx_perf_test_memcpy_host,
@@ -358,7 +351,7 @@ void ucx_perf_global_init()
     };
     static ucx_perf_allocator_t rdma_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_RDMA,
-        .init      = uct_perf_test_alloc_init,
+        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
         .uct_alloc = (ucx_perf_uct_alloc_func_t)ucs_empty_function_do_assert,
         .uct_free  = (ucx_perf_uct_free_func_t)ucs_empty_function_do_assert,
         .memcpy    = (ucx_perf_memcpy_func_t)ucs_empty_function_do_assert,

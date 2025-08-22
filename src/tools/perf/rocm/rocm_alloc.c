@@ -36,7 +36,6 @@ static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf, int *device_id_
         return UCS_ERR_NO_DEVICE;
     }
 
-    *device_id_p = UCX_PERF_MEM_DEV_DEFAULT;
     return UCS_OK;
 }
 
