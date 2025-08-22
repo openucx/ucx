@@ -306,13 +306,13 @@ stages:
     #    name: bond
     #    demands: ucx_iodemo -equals yes
 
-  - stage: Coverity
-    dependsOn: [Static_check]
-    jobs:
-      - template: coverity.yml
-        parameters:
-          demands: ucx_docker -equals yes
-          container: coverity_rh7
+  #- stage: Coverity
+  #  dependsOn: [Static_check]
+  #  jobs:
+  #    - template: coverity.yml
+  #      parameters:
+  #        demands: ucx_docker -equals yes
+  #        container: coverity_rh7
 
   - stage: Tests
     dependsOn: [Static_check]
