@@ -270,7 +270,8 @@ gtest_SOURCES += \
 	uct/cuda/test_cuda_nvml.cc
 
 if HAVE_NVCC
-NVCC_EXTRA_FLAGS = -std=c++11 $(gtest_CPPFLAGS)
+# Use C++14 as workaround, nvcc fails to build cuda_runtime.sh with -std=c++11
+NVCC_EXTRA_FLAGS = -std=c++14 $(gtest_CPPFLAGS)
 include $(top_srcdir)/config/cuda.am
 
 gtest_SOURCES += \
