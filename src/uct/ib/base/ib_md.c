@@ -638,12 +638,13 @@ static uint64_t uct_ib_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
         ibv_flags |= IBV_ACCESS_REMOTE_READ;
     }
 
+    /* If remote put or remote atomic is set, local write must be set too */
     if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_PUT) {
-        ibv_flags |= IBV_ACCESS_REMOTE_WRITE;
+        ibv_flags |= IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
     }
 
     if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_ATOMIC) {
-        ibv_flags |= IBV_ACCESS_REMOTE_ATOMIC;
+        ibv_flags |= IBV_ACCESS_REMOTE_ATOMIC | IBV_ACCESS_LOCAL_WRITE;
     }
 
     return ibv_flags;
