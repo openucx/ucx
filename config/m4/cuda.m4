@@ -122,6 +122,19 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                   [AC_MSG_RESULT([no])
                    cat conftest.cu >&AS_MESSAGE_LOG_FD])
                 rm conftest.cu
+
+                AC_LANG_CONFTEST([AC_LANG_SOURCE([[
+                  #if __cplusplus < 201103L
+                  #error missing C++11
+                  #endif
+                ]])])
+                mv conftest.c conftest.cu
+                AC_MSG_CHECKING([$NVCC needs explicit C++11 option])
+                AS_IF([$NVCC -c conftest.cu 2>&AS_MESSAGE_LOG_FD],
+                      [AC_MSG_RESULT([no])],
+                      [AC_MSG_RESULT([yes])
+                       BASE_NVCCFLAGS="$BASE_NVCCFLAGS -std=c++11"])
+                rm conftest.cu
                 AC_LANG_POP
                 ])
 
