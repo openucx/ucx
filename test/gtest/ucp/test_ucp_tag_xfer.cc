@@ -1011,6 +1011,7 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy, "RN
 
 UCS_TEST_SKIP_COND_P(test_ucp_tag_xfer, test_xfer_len_offset,
                      RUNNING_ON_VALGRIND, "RNDV_THRESH=1000") {
+    UCS_TEST_SKIP_R("Disabled. See RM 4602065 for details");
     test_xfer_len_offset();
 }
 

@@ -1055,25 +1055,13 @@ ucs_status_t
 uct_ib_mlx5_devx_allow_xgvmi_access(uct_ib_mlx5_md_t *md,
                                     uint32_t exported_lkey, int silent);
 
-static UCS_F_ALWAYS_INLINE void
-uct_ib_mlx5_wq_calc_sizes(uct_ib_mlx5_qp_attr_t *attr, int *max_tx, int *max_rx,
-                          int *len_tx, int *len)
-{
-    *max_tx = uct_ib_mlx5_devx_sq_length(attr->super.cap.max_send_wr);
-    *len_tx = *max_tx * MLX5_SEND_WQE_BB;
-    *max_rx = ucs_roundup_pow2_or0(attr->super.cap.max_recv_wr);
-    *len    = *len_tx + *max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
-}
+void uct_ib_mlx5_wq_calc_sizes(uct_ib_mlx5_qp_attr_t *attr, int *max_tx,
+                               int *max_rx, int *len_tx, int *len);
 
-static UCS_F_ALWAYS_INLINE void
-uct_ib_mlx5_cq_calc_sizes(uct_ib_iface_t *iface, uct_ib_dir_t dir,
-                          const uct_ib_iface_init_attr_t *init_attr, size_t inl,
-                          unsigned *cq_size, int *cqe_size, size_t *umem_len)
-{
-    *cq_size  = ucs_roundup_pow2(uct_ib_cq_size(iface, init_attr, dir));
-    *cqe_size = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
-    *umem_len = *cqe_size * *cq_size;
-}
+void uct_ib_mlx5_cq_calc_sizes(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                               const uct_ib_iface_init_attr_t *init_attr,
+                               size_t inl, unsigned *cq_size, int *cqe_size,
+                               size_t *umem_len);
 
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
