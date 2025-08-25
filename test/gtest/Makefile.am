@@ -270,7 +270,7 @@ gtest_SOURCES += \
 
 if HAVE_NVCC
 NVCC_EXTRA_FLAGS = \
-	-I$(top_srcdir)/test/gtest/
+	-I$(top_srcdir)/test/gtest
 include $(top_srcdir)/config/cuda.am
 
 gtest_SOURCES += \

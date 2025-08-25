@@ -4,10 +4,12 @@
  * See file LICENSE for terms.
  */
 
-#ifndef TEST_UCP_DEVICE_LIB_H_
-#define TEST_UCP_DEVICE_LIB_H_
+#ifndef TEST_KERNELS_H_
+#define TEST_KERNELS_H_
 
+namespace cuda {
 /* -1 if error, 0 if memory is equal */
-int cuda_memcmp(const void *s1, const void *s2, size_t size);
+int memcmp(const void *s1, const void *s2, size_t size);
+};
 
 #endif

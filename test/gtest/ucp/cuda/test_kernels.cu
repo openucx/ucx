@@ -9,8 +9,9 @@
 
 #include "test_kernels.h"
 
-static __global__ void cuda_memcmp_kernel(const void* s1, const void* s2,
-                                          int* result, size_t size)
+namespace cuda {
+static __global__ void memcmp_kernel(const void* s1, const void* s2,
+                                     int* result, size_t size)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -24,7 +25,7 @@ static __global__ void cuda_memcmp_kernel(const void* s1, const void* s2,
 }
 
 // Compare generic CUDA buffers without copying them
-int cuda_memcmp(const void *s1, const void *s2, size_t size)
+int memcmp(const void *s1, const void *s2, size_t size)
 {
     int *h_result, *d_result;
     int result;
@@ -40,11 +41,12 @@ int cuda_memcmp(const void *s1, const void *s2, size_t size)
     }
 
     *h_result = 0;
-    cuda_memcmp_kernel<<<16, 64>>>(s1, s2, d_result, size);
+    memcmp_kernel<<<16, 64>>>(s1, s2, d_result, size);
     cudaDeviceSynchronize();
     result = *h_result;
 
 out:
     cudaFreeHost(h_result);
     return result;
+}
 }

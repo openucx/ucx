@@ -29,11 +29,11 @@ UCS_TEST_P(test_ucp_device, cuda_kernel_memcmp)
     EXPECT_EQ(cudaSuccess, cudaMemset(src, 0x11, size));
     EXPECT_EQ(cudaSuccess, cudaMemset(dst, 0xde, size));
 
-    EXPECT_EQ(1, cuda_memcmp(src, dst, size));
+    EXPECT_EQ(1, cuda::memcmp(src, dst, size));
     EXPECT_EQ(cudaSuccess, cudaMemset(dst, 0x11, size));
-    EXPECT_EQ(0, cuda_memcmp(src, dst, size));
+    EXPECT_EQ(0, cuda::memcmp(src, dst, size));
     EXPECT_EQ(cudaSuccess, cudaMemset(dst + size / 10, 0xfa, 10));
-    EXPECT_EQ(1, cuda_memcmp(src, dst, size));
+    EXPECT_EQ(1, cuda::memcmp(src, dst, size));
 
     EXPECT_EQ(cudaSuccess, cudaFree(data));
 }
