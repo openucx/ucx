@@ -15,31 +15,6 @@ public:
     {
         add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64);
     }
-
-    static void cuda_host_alloc(int *&host_ptr, int *&dev_ptr)
-    {
-        ASSERT_EQ(cudaSuccess, cudaHostAlloc(&host_ptr, sizeof(host_ptr),
-                                             cudaHostAllocMapped));
-        ASSERT_EQ(cudaSuccess, cudaHostGetDevicePointer(&dev_ptr, host_ptr, 0));
-    }
-
-protected:
-    // Compare generic CUDA buffers without copying them
-    int cuda_memcmp(const void *s1, const void *s2, size_t size)
-    {
-        int *h_result, *d_result;
-        int result;
-
-        cuda_host_alloc(h_result, d_result);
-
-        *h_result = 0;
-        launch_cuda_memcmp(s1, s2, d_result, size);
-        cudaDeviceSynchronize();
-        result = *h_result;
-
-        cudaFreeHost(h_result);
-        return result;
-    }
 };
 
 UCS_TEST_P(test_ucp_device, cuda_kernel_memcmp)
