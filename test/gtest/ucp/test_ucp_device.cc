@@ -9,19 +9,18 @@
 
 #include <ucp/cuda/test_kernels.h>
 
-class test_ucp_device: public ucp_test {
+class test_ucp_device : public ucp_test {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
         add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64);
     }
 
     static void cuda_host_alloc(int *&host_ptr, int *&dev_ptr)
     {
-        ASSERT_EQ(cudaSuccess,
-                  cudaHostAlloc(&host_ptr, sizeof(host_ptr),
-                                cudaHostAllocMapped));
-        ASSERT_EQ(cudaSuccess,
-                  cudaHostGetDevicePointer(&dev_ptr, host_ptr, 0));
+        ASSERT_EQ(cudaSuccess, cudaHostAlloc(&host_ptr, sizeof(host_ptr),
+                                             cudaHostAllocMapped));
+        ASSERT_EQ(cudaSuccess, cudaHostGetDevicePointer(&dev_ptr, host_ptr, 0));
     }
 
 protected:
@@ -58,7 +57,7 @@ UCS_TEST_P(test_ucp_device, cuda_kernel_memcmp)
     EXPECT_EQ(1, cuda_memcmp(src, dst, size));
     EXPECT_EQ(cudaSuccess, cudaMemset(dst, 0x11, size));
     EXPECT_EQ(0, cuda_memcmp(src, dst, size));
-    EXPECT_EQ(cudaSuccess, cudaMemset(dst + size/10, 0xfa, 10));
+    EXPECT_EQ(cudaSuccess, cudaMemset(dst + size / 10, 0xfa, 10));
     EXPECT_EQ(1, cuda_memcmp(src, dst, size));
 
     EXPECT_EQ(cudaSuccess, cudaFree(data));
