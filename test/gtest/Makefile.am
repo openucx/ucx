@@ -70,6 +70,7 @@ gtest_LDADD = \
 	$(OPENMP_CFLAGS) \
 	$(GTEST_LIBS)
 
+
 gtest_CPPFLAGS = \
 	$(BASE_CPPFLAGS) \
 	-DTOP_SRCDIR=\"$(abs_top_srcdir)\" \
@@ -261,7 +262,6 @@ endif
 endif # HAVE_IB
 
 if HAVE_CUDA
-
 gtest_SOURCES += \
 	ucm/cuda_hooks.cc \
 	uct/cuda/test_switch_cuda_device.cc \
