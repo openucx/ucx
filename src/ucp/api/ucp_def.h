@@ -869,4 +869,15 @@ typedef struct {
 
 } ucp_transports_t;
 
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Opaque descriptor list handle from @ref ucp_gpu_dlist_export.
+ *
+ * This handle is opaque from host point of view. It is to be used from a GPU
+ * kernel using device specific functions.
+ */
+struct ucp_gpu_dlist_handle;
+typedef struct ucp_gpu_dlist_handle *ucp_gpu_dlist_handle_h;
+
 #endif
