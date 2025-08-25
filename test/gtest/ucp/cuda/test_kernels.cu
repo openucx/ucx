@@ -4,7 +4,7 @@
  * See file LICENSE for terms.
  */
 
-#include <ucp/device/lib.h>
+#include <ucp/cuda/test_kernels.h>
 
 #include <cstdint>
 

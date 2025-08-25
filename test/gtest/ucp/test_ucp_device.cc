@@ -7,7 +7,7 @@
 #include <cuda_runtime.h>
 #include <ucp/ucp_test.h>
 
-#include <ucp/device/lib.h>
+#include <ucp/cuda/test_kernels.h>
 
 class test_ucp_device: public ucp_test {
 public:
@@ -16,13 +16,13 @@ public:
     }
 
     // Compare generic CUDA buffers without copying them
-    static void cuda_alloc(int *&h_result, int *&d_result)
+    static void cuda_host_alloc(int *&host_ptr, int *&dev_ptr)
     {
         ASSERT_EQ(cudaSuccess,
-                  cudaHostAlloc(&h_result, sizeof(h_result),
+                  cudaHostAlloc(&host_ptr, sizeof(host_ptr),
                                 cudaHostAllocMapped));
         ASSERT_EQ(cudaSuccess,
-                  cudaHostGetDevicePointer(&d_result, h_result, 0));
+                  cudaHostGetDevicePointer(&dev_ptr, host_ptr, 0));
     }
 
     int test_ucp_cuda_memcmp(const void *a, const void *b, size_t size)
@@ -30,14 +30,14 @@ public:
         int *h_result, *d_result;
         int result;
 
-        cuda_alloc(h_result, d_result);
+        cuda_host_alloc(h_result, d_result);
 
         *h_result = 0;
         test_cuda_memcmp(a, b, d_result, size);
         cudaDeviceSynchronize();
         result = *h_result;
 
-        cudaFree(h_result);
+        cudaFreeHost(h_result);
         return result;
     }
 protected:
