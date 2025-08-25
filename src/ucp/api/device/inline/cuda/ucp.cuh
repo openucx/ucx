@@ -63,7 +63,7 @@ typedef ucp_dlist_handle_t *ucp_dlist_handle_h;
  */
 UCS_DEVICE_FUNC ucs_status_t
 ucp_gpu_put_single(ucp_dlist_handle_h handle,
-                   void *addr, uint64_t remote_addr,
+                   const void *addr, uint64_t remote_addr,
                    size_t length, int dlist_index, uint64_t flags,
                    ucp_gpu_request_t *req);
 
@@ -138,7 +138,7 @@ ucp_gpu_atomic_inc(ucp_dlist_handle_h handle,
  */
 UCS_DEVICE_FUNC ucs_status_t
 ucp_gpu_put_multi(ucp_dlist_handle_h handle,
-                  const void **addrs, const uint64_t **remote_addrs,
+                  void *const *addrs, const uint64_t *remote_addrs,
                   const size_t *lengths,
                   uint64_t atomic_value, uint64_t atomic_remote_addr,
                   uint64_t flags,
@@ -192,7 +192,7 @@ UCS_DEVICE_FUNC ucs_status_t
 ucp_gpu_put_multi_partial(ucp_dlist_handle_h handle,
                           const int *dlist_indexes,
                           size_t dlist_count,
-                          const void **addrs, const uint64_t **remote_addrs,
+                          void *const *addrs, const uint64_t *remote_addrs,
                           const size_t *lengths,
                           uint64_t atomic_value,
                           uint64_t atomic_remote_addr,
