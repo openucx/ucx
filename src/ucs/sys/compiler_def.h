@@ -253,11 +253,9 @@
         *(_b) = __tmp; \
     }
 
-/* Declare GPU specific functions */
-#ifdef __NVCC__
+/*
+ * Declare GPU specific functions
+ */
 #define UCS_DEVICE_FUNC __device__
-#else
-#define UCS_DEVICE_FUNC #error "Missing UCS_DEVICE_FUNC macro for compiler"
-#endif
 
 #endif /* UCS_COMPILER_DEF_H */
