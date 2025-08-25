@@ -10,6 +10,6 @@
 namespace cuda {
 /* -1 if error, 0 if memory is equal */
 int memcmp(const void *s1, const void *s2, size_t size);
-};
+}; // namespace cuda
 
 #endif
