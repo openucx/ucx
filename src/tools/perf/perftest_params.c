@@ -70,8 +70,10 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
-    printf("     -m <send mem type>[,<recv mem type>]\n");
+    printf("     -m <send mem type[:device id]>[,<recv mem type[:device id]>]\n");
     printf("                    memory type of message for sender and receiver (host)\n");
+    printf("                    device id is optional, it corresponds to the index of\n");
+    printf("                    the device in the list of available devices\n");
     print_memory_type_usage();
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
@@ -186,26 +188,86 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
     return UCS_ERR_INVALID_PARAM;
 }
 
-static ucs_status_t parse_mem_type_params(const char *opt_arg,
-                                          ucs_memory_type_t *send_mem_type,
-                                          ucs_memory_type_t *recv_mem_type)
+static ucs_status_t parse_device_id(const char *opt_arg, int *device_id)
 {
-    const char *delim   = ",";
-    char *token         = strtok((char*)opt_arg, delim);
+    char *endptr;
+    int parsed_device_id;
+
+    if (opt_arg == NULL) {
+        ucs_error("device id string is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    parsed_device_id = strtol(opt_arg, &endptr, 10);
+    if ((endptr == opt_arg) || (*endptr != '\0') || (parsed_device_id < 0)) {
+        ucs_error("Failed to parse device id: %s", opt_arg);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *device_id = parsed_device_id;
+    return UCS_OK;
+}
+
+static ucs_status_t parse_mem_type_param(char *opt_arg,
+                                         ucs_memory_type_t *mem_type,
+                                         int *device_id)
+{
+    const char *delim = ":";
+    char *saveptr = NULL;
+    char *token;
     ucs_status_t status;
 
-    status = parse_mem_type(token, send_mem_type);
+    if (opt_arg == NULL) {
+        ucs_error("mem type param is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    token  = strtok_r(opt_arg, delim, &saveptr);
+    status = parse_mem_type(token, mem_type);
     if (status != UCS_OK) {
         return status;
     }
 
-    token = strtok(NULL, delim);
+    token = strtok_r(NULL, delim, &saveptr);
     if (NULL == token) {
-        *recv_mem_type = *send_mem_type;
+        *device_id = UCX_PERF_MEM_DEV_DEFAULT;
         return UCS_OK;
-    } else {
-        return parse_mem_type(token, recv_mem_type);
     }
+
+    return parse_device_id(token, device_id);
+}
+
+static ucs_status_t
+parse_mem_type_params(const char *opt_arg, ucs_memory_type_t *send_mem_type,
+                      ucs_memory_type_t *recv_mem_type, int *send_device_id,
+                      int *recv_device_id)
+{
+    const char *delim = ",";
+    char *saveptr = NULL;
+    char *token, *arg;
+    ucs_status_t status;
+
+    arg = ucs_alloca(strlen(opt_arg) + 1);
+    strcpy(arg, opt_arg);
+    token  = strtok_r(arg, delim, &saveptr);
+    status = parse_mem_type_param(token, send_mem_type, send_device_id);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    token = strtok_r(NULL, delim, &saveptr);
+    if (NULL == token) {
+        *recv_mem_type  = *send_mem_type;
+        *recv_device_id = *send_device_id;
+        return UCS_OK;
+    }
+
+    status = parse_mem_type_param(token, recv_mem_type, recv_device_id);
+    if (*send_device_id == UCX_PERF_MEM_DEV_DEFAULT) {
+        *send_device_id = *recv_device_id;
+    }
+
+    return status;
 }
 
 static ucs_status_t parse_message_sizes_params(const char *opt_arg,
@@ -500,7 +562,9 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'm':
         if (UCS_OK != parse_mem_type_params(opt_arg,
                                             &params->super.send_mem_type,
-                                            &params->super.recv_mem_type)) {
+                                            &params->super.recv_mem_type,
+                                            &params->super.send_mem_device,
+                                            &params->super.recv_mem_device)) {
             return UCS_ERR_INVALID_PARAM;
         }
         return UCS_OK;
