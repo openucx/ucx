@@ -253,4 +253,9 @@
         *(_b) = __tmp; \
     }
 
+/*
+ * Declare GPU specific functions
+ */
+#define UCS_DEVICE_FUNC __device__
+
 #endif /* UCS_COMPILER_DEF_H */
