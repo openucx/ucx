@@ -70,8 +70,10 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
-    printf("     -m <send mem type[:device id]>,<recv mem type[:device id]>\n");
+    printf("     -m <send mem type[:device id]>[,<recv mem type[:device id]>]\n");
     printf("                    memory type of message for sender and receiver (host)\n");
+    printf("                    device id is optional, it corresponds to the index of\n");
+    printf("                    the device in the list of available devices\n");
     print_memory_type_usage();
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
@@ -186,7 +188,7 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
     return UCS_ERR_INVALID_PARAM;
 }
 
-static ucs_status_t parse_cuda_device(const char *opt_arg, int *device_id)
+static ucs_status_t parse_device_id(const char *opt_arg, int *device_id)
 {
     char *endptr;
     int parsed_device_id;
@@ -206,13 +208,13 @@ static ucs_status_t parse_cuda_device(const char *opt_arg, int *device_id)
     return UCS_OK;
 }
 
-static ucs_status_t parse_mem_type_param(const char *opt_arg,
+static ucs_status_t parse_mem_type_param(char *opt_arg,
                                          ucs_memory_type_t *mem_type,
                                          int *device_id)
 {
     const char *delim = ":";
     char *saveptr = NULL;
-    char *token, *arg;
+    char *token;
     ucs_status_t status;
 
     if (opt_arg == NULL) {
@@ -220,9 +222,7 @@ static ucs_status_t parse_mem_type_param(const char *opt_arg,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    arg = ucs_alloca(strlen(opt_arg) + 1);
-    strcpy(arg, opt_arg);
-    token  = strtok_r(arg, delim, &saveptr);
+    token  = strtok_r(opt_arg, delim, &saveptr);
     status = parse_mem_type(token, mem_type);
     if (status != UCS_OK) {
         return status;
@@ -234,7 +234,7 @@ static ucs_status_t parse_mem_type_param(const char *opt_arg,
         return UCS_OK;
     }
 
-    return parse_cuda_device(token, device_id);
+    return parse_device_id(token, device_id);
 }
 
 static ucs_status_t
