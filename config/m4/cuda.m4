@@ -108,21 +108,8 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          AC_ARG_VAR([NVCC], [nvcc compiler path])
          AC_ARG_VAR([NVCCFLAGS], [nvcc compiler flags])
          AS_IF([test "x$with_nvcc" != "xno"],
-               [AC_PATH_PROGS(NVCC, nvcc, "", $CUDA_BIN_PATH:$PATH)])
-
-         AS_IF([test "x$NVCC" != "x"],
-               [AC_LANG_PUSH([C])
-                AC_LANG_CONFTEST([AC_LANG_SOURCE([[#include <cuda_runtime.h>]])])
-                mv conftest.c conftest.cu
-                AC_MSG_CHECKING([$NVCC can compile])
-                AS_IF([$NVCC -c conftest.cu 2>&AS_MESSAGE_LOG_FD],
-                  [AC_MSG_RESULT([yes])
-                   BASE_NVCCFLAGS="$BASE_NVCCFLAGS $with_nvcc_gencode -Xcompiler -fPIC -g -lineinfo"
-                   nvcc_happy="yes"],
-                  [AC_MSG_RESULT([no])
-                   cat conftest.cu >&AS_MESSAGE_LOG_FD])
-                rm conftest.cu
-
+               [AC_PATH_PROGS(NVCC, nvcc, "", $CUDA_BIN_PATH:$PATH)
+                AC_LANG_PUSH([C])
                 AC_LANG_CONFTEST([AC_LANG_SOURCE([[
                   #if __cplusplus < 201103L
                   #error missing C++11
@@ -134,6 +121,20 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                       [AC_MSG_RESULT([no])],
                       [AC_MSG_RESULT([yes])
                        BASE_NVCCFLAGS="$BASE_NVCCFLAGS -std=c++11"])
+                rm conftest.cu
+                AC_LANG_POP])
+
+         AS_IF([test "x$NVCC" != "x"],
+               [AC_LANG_PUSH([C])
+                AC_LANG_CONFTEST([AC_LANG_SOURCE([[#include <cuda_runtime.h>]])])
+                mv conftest.c conftest.cu
+                AC_MSG_CHECKING([$NVCC can compile])
+                AS_IF([$NVCC -c conftest.cu 2>&AS_MESSAGE_LOG_FD],
+                  [AC_MSG_RESULT([yes])
+                   BASE_NVCCFLAGS="$BASE_NVCCFLAGS $with_nvcc_gencode -g -lineinfo"
+                   nvcc_happy="yes"],
+                  [AC_MSG_RESULT([no])
+                   cat conftest.cu >&AS_MESSAGE_LOG_FD])
                 rm conftest.cu
                 AC_LANG_POP
                 ])
