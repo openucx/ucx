@@ -13,7 +13,8 @@
 
 
 /* TODO: Use from ucp.h */
-typedef struct ucp_dlist_elem {} ucp_dlist_elem_t;
+typedef struct ucp_dlist_elem {
+} ucp_dlist_elem_t;
 
 
 /**
