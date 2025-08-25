@@ -44,26 +44,33 @@ typedef struct ucp_perf_request        ucp_perf_request_t;
 typedef struct ucx_perf_thread_context ucx_perf_thread_context_t;
 
 
-typedef ucs_status_t (*ucx_perf_init_func_t)(ucx_perf_context_t *perf,
-                                             int *device_id_p);
+typedef ucs_status_t (*ucx_perf_dev_count_func_t)(int *num_devices_p);
+
+typedef ucs_status_t (*ucx_perf_init_func_t)(ucx_perf_allocator_t *allocator,
+                                             int device_id);
 
 typedef ucs_status_t (*ucx_perf_uct_alloc_func_t)(
-        const ucx_perf_context_t *perf, size_t length, unsigned flags,
-        int device_id, uct_allocated_memory_t *alloc_mem);
+        const ucx_perf_allocator_t *allocator, const ucx_perf_context_t *perf,
+        size_t length, unsigned flags, uct_allocated_memory_t *alloc_mem);
 
-typedef void (*ucx_perf_uct_free_func_t)(const ucx_perf_context_t *perf,
+typedef void (*ucx_perf_uct_free_func_t)(const ucx_perf_allocator_t *allocator,
+                                         const ucx_perf_context_t *perf,
                                          uct_allocated_memory_t *alloc_mem);
 
-typedef void (*ucx_perf_memcpy_func_t)(void *dst,
-                                       ucs_memory_type_t dst_mem_type,
+typedef void (*ucx_perf_memcpy_func_t)(const ucx_perf_allocator_t *allocator,
+                                       void *dst, ucs_memory_type_t dst_mem_type,
                                        const void *src,
                                        ucs_memory_type_t src_mem_type,
                                        size_t count);
 
-typedef void *(*ucx_perf_memset_func_t)(void *dst, int value, size_t count);
+typedef void *(*ucx_perf_memset_func_t)(const ucx_perf_allocator_t *allocator,
+                                        void *dst, int value, size_t count);
 
 struct ucx_perf_allocator {
     ucs_memory_type_t         mem_type;
+    int                       device_id;
+
+    ucx_perf_dev_count_func_t dev_count;
     ucx_perf_init_func_t      init;
     ucx_perf_uct_alloc_func_t uct_alloc;
     ucx_perf_uct_free_func_t  uct_free;
@@ -102,10 +109,8 @@ struct ucx_perf_context {
     ucs_time_t                   timing_queue[TIMING_QUEUE_SIZE];
     unsigned                     timing_queue_head;
 
-    const ucx_perf_allocator_t   *send_allocator;
-    const ucx_perf_allocator_t   *recv_allocator;
-    /* Currently using single GPU id, because inproc multi-GPU is not supported */
-    int                          device_id;
+    ucx_perf_allocator_t         send_allocator;
+    ucx_perf_allocator_t         recv_allocator;
 
     char                         extra_info[EXTRA_INFO_SIZE];
 

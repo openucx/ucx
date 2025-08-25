@@ -146,24 +146,89 @@ ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
 
 #endif /* _OPENMP */
 
-ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf)
+static ucs_status_t
+ucx_perf_get_devices_id(int conf_device_id, int num_devices,
+                        unsigned group_index, int *device_id_p)
 {
-    ucs_status_t status;
+    int device_id = conf_device_id;
+
+    if ((device_id == UCX_PERF_MEM_DEV_DEFAULT) && (num_devices > 0)) {
+        device_id = group_index % num_devices;
+    }
+
+    if (device_id >= num_devices) {
+        ucs_error("Illegal device id %d, number of devices: %d", device_id,
+                  num_devices);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *device_id_p = device_id;
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucx_perf_get_device_ids(ucx_perf_context_t *perf, int num_devices,
+                        int *send_device_id_p, int *recv_device_id_p)
+{
+    int send_device_id, recv_device_id;
     unsigned group_index;
+    ucs_status_t status;
 
     group_index = rte_call(perf, group_index);
-    perf->device_id = group_index == 0 ? perf->params.recv_mem_device :
-                                         perf->params.send_mem_device;
 
-    /* New threads need explicit device association */
-    status = perf->send_allocator->init(perf, &perf->device_id);
+    status = ucx_perf_get_devices_id(perf->params.send_mem_device, num_devices,
+                                     group_index, &send_device_id);
     if (status != UCS_OK) {
         return status;
     }
 
-    if (perf->send_allocator == perf->recv_allocator) {
+    status = ucx_perf_get_devices_id(perf->params.recv_mem_device, num_devices,
+                                     group_index, &recv_device_id);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* If perftest is not running in a loopback mode, then keep the same device
+     * for send and recv. */
+    if (!(perf->params.flags & UCX_PERF_TEST_FLAG_LOOPBACK)) {
+        if (group_index == 0) {
+            send_device_id = recv_device_id;
+        } else {
+            recv_device_id = send_device_id;
+        }
+    }
+
+    *send_device_id_p = send_device_id;
+    *recv_device_id_p = recv_device_id;
+    return UCS_OK;
+}
+
+ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf)
+{
+    ucs_status_t status;
+    int send_device_id, recv_device_id, num_devices;
+
+    status = perf->send_allocator.dev_count(&num_devices);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucx_perf_get_device_ids(perf, num_devices, &send_device_id,
+                                     &recv_device_id);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* New threads need explicit device association */
+    status = perf->send_allocator.init(&perf->send_allocator, send_device_id);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if ((perf->send_allocator.mem_type == perf->recv_allocator.mem_type) &&
+        (send_device_id == recv_device_id)) {
         return UCS_OK;
     }
 
-    return perf->recv_allocator->init(perf, &perf->device_id);
+    return perf->recv_allocator.init(&perf->recv_allocator, recv_device_id);
 }

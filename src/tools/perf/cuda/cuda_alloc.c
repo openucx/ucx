@@ -25,36 +25,28 @@
         } \
     }
 
-static ucs_status_t
-ucx_perf_cuda_init(ucx_perf_context_t *perf, int *device_id_p)
+static ucs_status_t ucx_perf_cuda_dev_count(int *num_devices_p)
 {
-    int device_id = *device_id_p;
-    unsigned group_index;
     int num_gpus;
-
-    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetDeviceCount, &num_gpus)
+    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetDeviceCount, &num_gpus);
     if (num_gpus == 0) {
         ucs_error("no cuda devices available");
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (device_id == UCX_PERF_MEM_DEV_DEFAULT) {
-        group_index = rte_call(perf, group_index);
-        device_id   = group_index % num_gpus;
-    }
+    *num_devices_p = num_gpus;
+    return UCS_OK;
+}
 
-    if (device_id >= num_gpus) {
-        ucs_error("Illegal cuda device %d, number of devices: %d", device_id,
-                  num_gpus);
-        return UCS_ERR_NO_DEVICE;
-    }
-
+static ucs_status_t
+ucx_perf_cuda_init(ucx_perf_allocator_t *allocator, int device_id)
+{
     CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, device_id);
 
     /* actually set device context as calling cudaSetDevice may result in
      * context being initialized lazily */
     cudaFree(0);
-    *device_id_p = device_id;
+    allocator->device_id = device_id;
     return UCS_OK;
 }
 
@@ -117,26 +109,29 @@ uct_perf_cuda_alloc_reg_mem(const ucx_perf_context_t *perf,
 }
 
 static ucs_status_t
-uct_perf_cuda_alloc(const ucx_perf_context_t *perf, size_t length,
-                    unsigned flags, int device_id,
+uct_perf_cuda_alloc(const ucx_perf_allocator_t *allocator,
+                    const ucx_perf_context_t *perf,
+                    size_t length, unsigned flags,
                     uct_allocated_memory_t *alloc_mem)
 {
-    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, device_id);
+    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, allocator->device_id);
     return uct_perf_cuda_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_CUDA,
                                        flags, alloc_mem);
 }
 
 static ucs_status_t
-uct_perf_cuda_managed_alloc(const ucx_perf_context_t *perf,
-                            size_t length, unsigned flags, int device_id,
+uct_perf_cuda_managed_alloc(const ucx_perf_allocator_t *allocator,
+                            const ucx_perf_context_t *perf,
+                            size_t length, unsigned flags,
                             uct_allocated_memory_t *alloc_mem)
 {
-    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, device_id);
+    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, allocator->device_id);
     return uct_perf_cuda_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_CUDA_MANAGED,
                                        flags, alloc_mem);
 }
 
-static void uct_perf_cuda_free(const ucx_perf_context_t *perf,
+static void uct_perf_cuda_free(const ucx_perf_allocator_t *allocator,
+                               const ucx_perf_context_t *perf,
                                uct_allocated_memory_t *alloc_mem)
 {
     ucs_status_t status;
@@ -151,23 +146,31 @@ static void uct_perf_cuda_free(const ucx_perf_context_t *perf,
     cudaFree(alloc_mem->address);
 }
 
-static void ucx_perf_cuda_memcpy(void *dst, ucs_memory_type_t dst_mem_type,
-                                 const void *src, ucs_memory_type_t src_mem_type,
-                                 size_t count)
+static void
+ucx_perf_cuda_memcpy(const ucx_perf_allocator_t *allocator, void *dst,
+                     ucs_memory_type_t dst_mem_type, const void *src,
+                     ucs_memory_type_t src_mem_type, size_t count)
 {
+    CUDA_CALL(, cudaSetDevice, allocator->device_id);
     CUDA_CALL(, cudaMemcpy, dst, src, count, cudaMemcpyDefault);
     CUDA_CALL(, cudaDeviceSynchronize);
 }
 
-static void* ucx_perf_cuda_memset(void *dst, int value, size_t count)
+static void*
+ucx_perf_cuda_memset(const ucx_perf_allocator_t *allocator, void *dst,
+                     int value, size_t count)
 {
+    CUDA_CALL(dst, cudaSetDevice, allocator->device_id);
     CUDA_CALL(dst, cudaMemset, dst, value, count);
+    CUDA_CALL(dst, cudaDeviceSynchronize);
     return dst;
 }
 
 UCS_STATIC_INIT {
     static ucx_perf_allocator_t cuda_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_CUDA,
+        .device_id = UCX_PERF_MEM_DEV_DEFAULT,
+        .dev_count = ucx_perf_cuda_dev_count,
         .init      = ucx_perf_cuda_init,
         .uct_alloc = uct_perf_cuda_alloc,
         .uct_free  = uct_perf_cuda_free,
@@ -176,6 +179,8 @@ UCS_STATIC_INIT {
     };
     static ucx_perf_allocator_t cuda_managed_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_CUDA_MANAGED,
+        .device_id = UCX_PERF_MEM_DEV_DEFAULT,
+        .dev_count = ucx_perf_cuda_dev_count,
         .init      = ucx_perf_cuda_init,
         .uct_alloc = uct_perf_cuda_managed_alloc,
         .uct_free  = uct_perf_cuda_free,

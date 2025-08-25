@@ -14,24 +14,26 @@
 #include <hip/hip_runtime.h>
 #include <ucs/sys/compiler.h>
 
-
-static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf, int *device_id_p)
+static ucs_status_t ucx_perf_rocm_dev_count(int *num_devices_p)
 {
-    hipError_t ret;
-    unsigned group_index;
     int num_gpus;
-    int gpu_index;
-
-    group_index = rte_call(perf, group_index);
+    hipError_t ret;
 
     ret = hipGetDeviceCount(&num_gpus);
     if (ret != hipSuccess) {
+        ucs_error("failed to get number of rocm devices");
         return UCS_ERR_NO_DEVICE;
     }
 
-    gpu_index = group_index % num_gpus;
+    *num_devices_p = num_gpus;
+    return UCS_OK;
+}
 
-    ret = hipSetDevice(gpu_index);
+static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf, int device_id)
+{
+    hipError_t ret;
+
+    ret = hipSetDevice(device_id);
     if (ret != hipSuccess) {
         return UCS_ERR_NO_DEVICE;
     }
@@ -88,8 +90,8 @@ uct_perf_rocm_alloc_reg_mem(const ucx_perf_context_t *perf,
 }
 
 static ucs_status_t
-uct_perf_rocm_alloc(const ucx_perf_context_t *perf,
-                    size_t length, unsigned flags, int device_id,
+uct_perf_rocm_alloc(const ucx_perf_context_t *perf, int device_id,
+                    size_t length, unsigned flags,
                     uct_allocated_memory_t *alloc_mem)
 {
     return uct_perf_rocm_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_ROCM,
@@ -97,8 +99,8 @@ uct_perf_rocm_alloc(const ucx_perf_context_t *perf,
 }
 
 static ucs_status_t
-uct_perf_rocm_managed_alloc(const ucx_perf_context_t *perf,
-                            size_t length, unsigned flags, int device_id,
+uct_perf_rocm_managed_alloc(const ucx_perf_context_t *perf, int device_id,
+                            size_t length, unsigned flags,
                             uct_allocated_memory_t *alloc_mem)
 {
     return uct_perf_rocm_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_ROCM_MANAGED,
@@ -120,9 +122,10 @@ static void uct_perf_rocm_free(const ucx_perf_context_t *perf,
     hipFree(alloc_mem->address);
 }
 
-static void ucx_perf_rocm_memcpy(void *dst, ucs_memory_type_t dst_mem_type,
-                                 const void *src, ucs_memory_type_t src_mem_type,
-                                 size_t count)
+static void
+ucx_perf_rocm_memcpy(int device_id, void *dst, ucs_memory_type_t dst_mem_type,
+                     const void *src, ucs_memory_type_t src_mem_type,
+                     size_t count)
 {
     hipError_t ret;
 
@@ -132,7 +135,8 @@ static void ucx_perf_rocm_memcpy(void *dst, ucs_memory_type_t dst_mem_type,
     }
 }
 
-static void* ucx_perf_rocm_memset(void *dst, int value, size_t count)
+static void*
+ucx_perf_rocm_memset(int device_id, void *dst, int value, size_t count)
 {
     hipError_t ret;
 
@@ -147,6 +151,7 @@ static void* ucx_perf_rocm_memset(void *dst, int value, size_t count)
 UCS_STATIC_INIT {
     static ucx_perf_allocator_t rocm_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_ROCM,
+        .dev_count = ucx_perf_rocm_dev_count,
         .init      = ucx_perf_rocm_init,
         .uct_alloc = uct_perf_rocm_alloc,
         .uct_free  = uct_perf_rocm_free,
@@ -155,6 +160,7 @@ UCS_STATIC_INIT {
     };
     static ucx_perf_allocator_t rocm_managed_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_ROCM_MANAGED,
+        .dev_count = ucx_perf_rocm_dev_count,
         .init      = ucx_perf_rocm_init,
         .uct_alloc = uct_perf_rocm_managed_alloc,
         .uct_free  = uct_perf_rocm_free,
