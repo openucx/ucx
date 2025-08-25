@@ -78,7 +78,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     ucs_status_t status;
     uct_ep_h uct_ep;
     int diff;
-    ucp_lane_map_t unstarted_destroyed_lanes, unstarted_flush;
+    ucp_lane_map_t ff_lanes, unstarted_flush;
 
     UCS_STATIC_BITMAP_MASK(&all_lanes, num_lanes);
 
@@ -99,15 +99,15 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
             ucp_lane_map_t prev_all_lanes, destroyed_lanes;
 
             UCS_STATIC_BITMAP_MASK(&prev_all_lanes, req->send.flush.num_lanes);
-            destroyed_lanes           = UCS_STATIC_BITMAP_AND(
+            destroyed_lanes = UCS_STATIC_BITMAP_AND(
                                             prev_all_lanes,
                                             UCS_STATIC_BITMAP_NOT(all_lanes));
-            unstarted_destroyed_lanes = UCS_STATIC_BITMAP_AND(
+            ff_lanes        = UCS_STATIC_BITMAP_AND(
                                             destroyed_lanes,
                                             UCS_STATIC_BITMAP_NOT(
                                                 req->send.flush.started_lanes));
             ucp_ep_flush_request_update_uct_comp(
-                    req, -UCS_STATIC_BITMAP_POPCOUNT(unstarted_destroyed_lanes),
+                    req, -UCS_STATIC_BITMAP_POPCOUNT(ff_lanes),
                     ucp_lane_map_zero);
         }
 
