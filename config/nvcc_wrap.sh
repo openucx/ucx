@@ -26,6 +26,10 @@ while [[ $# -gt 0 ]]; do
         -c)
             shift
             ;;
+        -fPIC)
+            args="$args -Xcompiler -fPIC"
+            shift
+            ;;
         -I*|-D*|-G|-g|-MD|-MMD|-gencode=*|-std=*)
             args="$args $1"
             shift
