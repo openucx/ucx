@@ -1071,7 +1071,8 @@ run_gtest_armclang() {
 				CC=armclang \
 				CXX=armclang++ \
 				CFLAGS="${ARMCLANG_CFLAGS}" \
-				--without-go
+				--without-go \
+				--without-valgrind
 
 			run_gtest "armclang"
 		else
@@ -1194,7 +1195,7 @@ run_tests() {
 	run_configure_tests
 
 	# build for devel tests and gtest
-	build devel --enable-gtest
+	build devel --enable-gtest --without-valgrind
 
 	# devel mode tests
 	do_distributed_task 0 4 test_unused_env_var
