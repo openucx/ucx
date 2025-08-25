@@ -1122,7 +1122,7 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
             /* Create wireup EP in case of presence p2p lanes and forced proto
              * restart since pending flush can be completed out of order on
              * lanes directly connected to iface without wireup EP */
-            (!UCS_STATIC_BITMAP_IS_ZERO(ucp_ep_config(ep)->p2p_lanes) &&
+            (ucp_ep_has_p2p_lanes(ep) &&
              ep->worker->context->config.ext.proto_request_reset)) {
             status = ucp_wireup_ep_create(ep, &wireup_ep);
             if (status != UCS_OK) {
@@ -1972,7 +1972,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     /* If we don't have a p2p transport, we're connected */
-    if (UCS_STATIC_BITMAP_IS_ZERO(ucp_ep_config(ep)->p2p_lanes)) {
+    if (!ucp_ep_has_p2p_lanes(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     }
 

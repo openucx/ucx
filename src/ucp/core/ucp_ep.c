@@ -78,6 +78,8 @@ typedef struct ucp_ep_discard_lanes_arg {
 } ucp_ep_discard_lanes_arg_t;
 
 
+const ucp_lane_map_t ucp_lane_map_zero = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+
 extern const ucp_request_send_proto_t ucp_stream_am_proto;
 extern const ucp_request_send_proto_t ucp_am_proto;
 extern const ucp_request_send_proto_t ucp_am_reply_proto;

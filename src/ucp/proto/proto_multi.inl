@@ -272,7 +272,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
     ucp_lane_map_t remaining_lane_map;
     ucp_lane_index_t lane;
     ucs_status_t status;
-    int num_remaining_lanes;
 
     UCS_STATIC_BITMAP_MASK(&remaining_lane_map, *lane_p);
     remaining_lane_map = UCS_STATIC_BITMAP_AND(
@@ -293,8 +292,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
         return ucp_proto_multi_handle_send_error(req, lane, status);
     }
 
-    num_remaining_lanes = UCS_STATIC_BITMAP_POPCOUNT(remaining_lane_map);
-    if (num_remaining_lanes == 0 || num_remaining_lanes == 1) {
+    if (UCS_STATIC_BITMAP_POPCOUNT(remaining_lane_map) < 2) {
         /* This lane was the last one */
         ucp_request_invoke_uct_completion_success(req);
         return UCS_OK;
