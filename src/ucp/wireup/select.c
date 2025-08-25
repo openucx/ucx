@@ -410,6 +410,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_lane_index_t lane;
     char tls_info[256];
     char uct_info[256];
+    char flags_str[64];
     char *p, *endp;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_v2_t *md_attr;
@@ -417,6 +418,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     int is_reachable;
     double score;
     uint8_t priority;
+    uint8_t tl_rsc_flags;
     ucp_md_index_t md_index;
 
     p            = tls_info;
@@ -494,8 +496,14 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         md_attr        = &context->tl_mds[md_index].attr;
         cmpt_attr      = ucp_cmpt_attr_by_md_index(context, md_index);
 
-        if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
-            !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
+        tl_rsc_flags = context->tl_rscs[rsc_index].flags;
+        if (!(tl_rsc_flags & criteria->tl_rsc_flags)) {
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      " : disabled because it doesn't support %s",
+                      UCT_TL_RESOURCE_DESC_ARG(resource),
+                      ucs_flags_str(flags_str, sizeof(flags_str),
+                                    criteria->tl_rsc_flags,
+                                    ucp_tl_rsc_flag_names));
             continue;
         }
 
@@ -1083,7 +1091,9 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
     ucp_wireup_fill_peer_err_criteria(criteria, ep_init_flags);
 }
 
-static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
+static void
+ucp_wireup_criteria_init(const ucp_wireup_select_params_t *select_params,
+                         ucp_wireup_criteria_t *criteria)
 {
     criteria->title              = "";
     criteria->local_md_flags     = 0;
@@ -1093,7 +1103,10 @@ static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
     criteria->alloc_mem_types    = 0;
     criteria->is_keepalive       = 0;
     criteria->calc_score         = NULL;
-    criteria->tl_rsc_flags       = 0;
+    criteria->tl_rsc_flags       = (select_params->ep_init_flags &
+                                    UCP_EP_INIT_FLAG_MEM_TYPE) ?
+                                                 UCP_TL_RSC_FLAG_MEM :
+                                                 UCP_TL_RSC_FLAG_COMM;
     ucp_wireup_init_select_flags(&criteria->local_iface_flags, 0, 0);
     ucp_wireup_init_select_flags(&criteria->remote_iface_flags, 0, 0);
     memset(&criteria->remote_atomic_flags, 0,
@@ -1154,7 +1167,7 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_criteria_init(&criteria);
+    ucp_wireup_criteria_init(select_params, &criteria);
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
         criteria.title              = "copy across memory types";
         ucp_wireup_init_select_flags(&criteria.local_iface_flags,
@@ -1221,7 +1234,7 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_criteria_init(&criteria);
+    ucp_wireup_criteria_init(select_params, &criteria);
     criteria.title              = "atomic operations on %s memory";
     criteria.local_atomic_flags = criteria.remote_atomic_flags;
     criteria.calc_score         = ucp_wireup_amo_score_func;
@@ -1464,13 +1477,15 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
 
     /* Select one lane for active messages */
     for (;;) {
-        ucp_wireup_criteria_init(&criteria);
-        criteria.title              = "active messages";
-        criteria.calc_score         = ucp_wireup_am_score_func;
-        criteria.lane_type          = UCP_LANE_TYPE_AM;
-        criteria.tl_rsc_flags       =
-                (ep_init_flags & UCP_EP_INIT_ALLOW_AM_AUX_TL) ?
-                UCP_TL_RSC_FLAG_AUX : 0;
+        ucp_wireup_criteria_init(select_params, &criteria);
+        criteria.calc_score = ucp_wireup_am_score_func;
+        criteria.lane_type  = UCP_LANE_TYPE_AM;
+        if (ep_init_flags & UCP_EP_INIT_ALLOW_AM_AUX_TL) {
+            criteria.title         = "auxiliary active messages";
+            criteria.tl_rsc_flags |= UCP_TL_RSC_FLAG_AUX;
+        } else {
+            criteria.title = "active messages";
+        }
         ucp_wireup_init_select_flags(&criteria.local_iface_flags,
                                      UCT_IFACE_FLAG_AM_BCOPY, 0);
         ucp_wireup_init_select_flags(&criteria.remote_iface_flags,
@@ -1905,7 +1920,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     /* Select one lane for active messages */
-    ucp_wireup_criteria_init(&bw_info.criteria);
+    ucp_wireup_criteria_init(select_params, &bw_info.criteria);
     bw_info.criteria.title              = "high-bw active messages";
     bw_info.criteria.calc_score         = ucp_wireup_am_bw_score_func;
     bw_info.criteria.lane_type          = UCP_LANE_TYPE_AM_BW;
@@ -2074,7 +2089,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_criteria_init(&bw_info.criteria);
+    ucp_wireup_criteria_init(select_params, &bw_info.criteria);
     bw_info.criteria.calc_score = ucp_wireup_rma_bw_score_func;
     ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_PENDING, 0);
@@ -2237,7 +2252,7 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_criteria_init(&criteria);
+    ucp_wireup_criteria_init(select_params, &criteria);
     criteria.title          = "tag_offload";
     criteria.calc_score     = ucp_wireup_am_score_func;
     criteria.lane_type      = UCP_LANE_TYPE_TAG;
@@ -2401,7 +2416,7 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
         tl_bitmap = &select_params->tl_bitmap;
     }
 
-    ucp_wireup_criteria_init(&criteria);
+    ucp_wireup_criteria_init(select_params, &criteria);
     criteria.title              = "keepalive";
     criteria.local_md_flags     = 0;
     criteria.is_keepalive       = 1;
