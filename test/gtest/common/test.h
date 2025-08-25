@@ -70,7 +70,12 @@ protected:
     };
 
     typedef enum {
-        NEW, RUNNING, SKIPPED, ABORTED, FINISHED
+        NEW,
+        INITIALIZING,
+        RUNNING,
+        SKIPPED,
+        ABORTED,
+        FINISHED
     } state_t;
 
     typedef std::vector<ucs_global_opts_t> config_stack_t;
@@ -85,6 +90,7 @@ protected:
     virtual void cleanup();
     virtual void init();
     bool barrier();
+    void test_skip(const std::string &reason = "");
 
     virtual void check_skip_test() = 0;
 
@@ -174,6 +180,7 @@ protected:
     static std::vector<std::string> m_first_warns_and_errors;
 
 private:
+    void skipped(const std::string &reason);
     void skipped(const test_skip_exception& e);
     void run();
     static void push_debug_message_with_limit(std::vector<std::string>& vec,
