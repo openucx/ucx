@@ -13,15 +13,15 @@ steps:
 
       case "${{ parameters.Name }}" in
         "Build-UCX")
-          module="/hpc/local/etc/modulefiles/dev/cuda12.8"
+          module="/hpc/local/etc/modulefiles/dev/cuda13.0.0"
           perfxParams=(--skip-run --source-branch $(Build.SourceBranch) --omb-cuda)
           ;;
         "Perf-test-multi-node")
-          module="/hpc/local/etc/modulefiles/hpcx-ga-gcc"
+          module="/hpc/local/etc/modulefiles/hpcx-ga-gcc-cuda13"
           perfxParams=(--skip-update --skip-build --use-cache --filter "--extra-ompi-opts= -H $perf_nodes")
           ;;
         "Perf-test-single-node")
-          module="/hpc/local/etc/modulefiles/hpcx-ga-gcc"
+          module="/hpc/local/etc/modulefiles/hpcx-ga-gcc-cuda13"
           IFS=',' read -ra nodes <<< "$perf_nodes"
           node=${nodes[RANDOM % 2]}
           perfxParams=(--skip-update --skip-build --use-cache --filter --setup rdmz-intra "--extra-ompi-opts= -H $node,$node")
