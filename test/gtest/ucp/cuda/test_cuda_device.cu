@@ -57,36 +57,25 @@ out:
     }
 };
 
-
-#define CUDA_CHECK(_action) \
-    do { \
-        cudaError_t _code = (_action); \
-        if (_code != cudaSuccess) { \
-            UCS_TEST_ABORT(#_action << " error: " \
-                           << cudaGetErrorString(_code)); \
-        } \
-    } while (0);
-
-
 UCS_TEST_P(test_ucp_cuda_device, cuda_kernel_memcmp)
 {
     size_t size = 100 * UCS_MBYTE;
     uint8_t *data;
 
-    CUDA_CHECK(cudaMalloc(&data, 2 * size));
+    ASSERT_EQ(cudaSuccess, cudaMalloc(&data, 2 * size));
     uint8_t *src = data;
     uint8_t *dst = static_cast<uint8_t*>(UCS_PTR_BYTE_OFFSET(data, size));
 
-    CUDA_CHECK(cudaMemset(src, 0x11, size));
-    CUDA_CHECK(cudaMemset(dst, 0xde, size));
+    EXPECT_EQ(cudaSuccess, cudaMemset(src, 0x11, size));
+    EXPECT_EQ(cudaSuccess, cudaMemset(dst, 0xde, size));
 
     EXPECT_EQ(1, cuda_memcmp(src, dst, size));
-    CUDA_CHECK(cudaMemset(dst, 0x11, size));
+    EXPECT_EQ(cudaSuccess, cudaMemset(dst, 0x11, size));
     EXPECT_EQ(0, cuda_memcmp(src, dst, size));
-    CUDA_CHECK(cudaMemset(dst + size/10, 0xfa, 10));
+    EXPECT_EQ(cudaSuccess, cudaMemset(dst + size/10, 0xfa, 10));
     EXPECT_EQ(1, cuda_memcmp(src, dst, size));
 
-    CUDA_CHECK(cudaFree(data));
+    EXPECT_EQ(cudaSuccess, cudaFree(data));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_cuda_device, rc_v, "rc_v")
