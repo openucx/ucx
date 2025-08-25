@@ -6,6 +6,8 @@
 
 #ifndef TEST_UCP_DEVICE_LIB_H_
 #define TEST_UCP_DEVICE_LIB_H_
-int test_ucp_cuda_memcmp(const void *a, const void *b, size_t size);
+
+void test_cuda_memcmp(const void* a, const void* b,
+                      int* result, size_t size);
 
 #endif

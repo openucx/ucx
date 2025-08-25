@@ -5,6 +5,10 @@
 # See file LICENSE for terms.
 #
 
+#
+# This script makes sure that all options passed can be understood by nvcc.
+#
+
 if [ $# -lt 1 ]; then
     echo "Error: NVCC path must be first argument"
     exit 1
