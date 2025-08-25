@@ -147,8 +147,8 @@ ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
 #endif /* _OPENMP */
 
 static ucs_status_t
-ucx_perf_get_devices_id(int conf_device_id, int num_devices,
-                        unsigned group_index, int *device_id_p)
+ucx_perf_get_device_id(int conf_device_id, int num_devices,
+                       unsigned group_index, int *device_id_p)
 {
     int device_id = conf_device_id;
 
@@ -176,14 +176,14 @@ ucx_perf_get_device_ids(ucx_perf_context_t *perf, int num_devices,
 
     group_index = rte_call(perf, group_index);
 
-    status = ucx_perf_get_devices_id(perf->params.send_mem_device, num_devices,
-                                     group_index, &send_device_id);
+    status = ucx_perf_get_device_id(perf->params.send_mem_device, num_devices,
+                                    group_index, &send_device_id);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucx_perf_get_devices_id(perf->params.recv_mem_device, num_devices,
-                                     group_index, &recv_device_id);
+    status = ucx_perf_get_device_id(perf->params.recv_mem_device, num_devices,
+                                    group_index, &recv_device_id);
     if (status != UCS_OK) {
         return status;
     }
