@@ -2280,6 +2280,28 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
+ucs_status_t uct_ib_mlx5_devx_query_adv_rdma_cap(uct_ib_mlx5_md_t *md, struct ibv_context *ctx)
+{
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
+    ucs_status_t status;
+    void *cap;
+
+    cap    = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
+    status = uct_ib_mlx5_devx_query_cap(ctx,
+                                        UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
+                                                (UCT_IB_MLX5_CAP_ADV_RDMA << 1),
+                                        out, sizeof(out), "QUERY_ADV_RDMA_CAP",
+                                        0);
+    md->msg_based_srq.supported_tls           = UCT_IB_MLX5DV_GET(
+            adv_rdma_cap, cap, message_based_qp_and_striding_wq);
+    md->msg_based_srq.max_message_size_stride = UCT_IB_MLX5DV_GET(
+            adv_rdma_cap, cap, max_receive_send_message_size_stride);
+    md->msg_based_srq.max_message_size_bytes  = UCT_IB_MLX5DV_GET(
+            adv_rdma_cap, cap, max_receive_send_message_size_byte);
+
+    return status;
+}
+
 ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
                                              struct ibv_device *ibv_device,
                                              const uct_ib_md_config_t *md_config,
@@ -2371,6 +2393,16 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     md->log_max_dci_stream_channels = ucs_min(md->log_max_dci_stream_channels,
                                               UCT_IB_MLX5_MD_MAX_DCI_CHANNELS);
 
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, adv_rdma_cap)) {
+        status = uct_ib_mlx5_devx_query_adv_rdma_cap(md, ctx);
+        if (status != UCS_OK) {
+            goto err_lru_cleanup;
+        }
+    } else {
+        md->msg_based_srq.supported_tls = 0;
+    }
+
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_msg) !=
         UCT_IB_MLX5_LOG_MAX_MSG_SIZE) {
         status = UCS_ERR_UNSUPPORTED;
@@ -2429,6 +2461,12 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
         md->flags |= UCT_IB_MLX5_MD_FLAG_RMP;
     }
 
+    md->msg_based_srq.min_stride_size = UCS_BIT(
+            UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_min_stride_sz_rq));
+
+    md->msg_based_srq.max_stride_size = UCS_BIT(
+            UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_stride_sz_rq));
+
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ooo_sl_mask)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK;
     }
@@ -2463,6 +2501,10 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dma_mmo_qp)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_MMO_DMA;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, qpc_extension)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_QP_CTX_EXTENSION;
     }
 
     vhca_id = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, vhca_id);
