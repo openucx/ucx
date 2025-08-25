@@ -511,6 +511,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
+  {"REG_NONBLOCK_FALLBACK", "y",
+  "Allow fallback to blocking memory registration if no MDs supporting non-blocking\n"
+  "registration.",
+   ucs_offsetof(ucp_context_config_t, reg_nb_fallback), UCS_CONFIG_TYPE_BOOL},
+
   {"PREFER_OFFLOAD", "y",
    "Prefer transports capable of remote memory access for RMA and AMO operations.\n"
    "The value is interpreted as follows:\n"
@@ -1617,13 +1622,13 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
 {
     const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
     size_t avail_mds             = config->max_component_mds;
-    uint64_t mem_type_mask       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     uct_component_attr_t uct_component_attr;
     unsigned num_tl_resources;
     ucs_status_t status;
     ucp_rsc_index_t i;
     const uct_md_attr_v2_t *md_attr;
     unsigned md_index;
+    uint64_t mem_type_mask;
     uint64_t mem_type_bitmap;
 
     /* List memory domain resources */
@@ -1638,6 +1643,7 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
     }
 
     /* Open all memory domains */
+    mem_type_mask = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     for (i = 0; i < tl_cmpt->attr.md_resource_count; ++i) {
         if (avail_mds == 0) {
             ucs_debug("only first %zu domains kept for component %s with %u "
@@ -1726,7 +1732,7 @@ ucp_update_memtype_md_map(uint64_t mem_types_map, ucs_memory_type_t mem_type,
                           ucp_md_index_t md_index, ucp_md_map_t *md_map_p)
 {
     if (mem_types_map & UCS_BIT(mem_type)) {
-        *md_map_p |=  UCS_BIT(md_index);
+        *md_map_p |= UCS_BIT(md_index);
     }
 }
 
@@ -1782,7 +1788,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
         }
 
         if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
-            if (reg_nonblock_md_map != 0) {
+            if ((reg_nonblock_md_map != 0) ||
+                !context->config.ext.reg_nb_fallback) {
                 /* Keep map of MDs supporting blocking registration
                  * if non-blocking registration is requested for the
                  * given memory type. In some cases blocking
@@ -1850,7 +1857,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
     context->export_md_map            = 0;
-    context->reg_nb_supported_mem_types = 0;
 
     ucs_memory_type_for_each(mem_type) {
         context->reg_md_map[mem_type]           = 0;

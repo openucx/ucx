@@ -186,6 +186,8 @@ typedef struct ucp_context_config {
     char                                   *proto_info_dir;
     /** Memory types that perform non-blocking registration by default */
     uint64_t                               reg_nb_mem_types;
+    /** Enable fallback to blocking registration if no MDs support nonblocking */
+    int                                    reg_nb_fallback;
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
     /** RMA zcopy segment size */
@@ -389,11 +391,6 @@ typedef struct ucp_context {
     ucp_md_index_t                dmabuf_mds[UCS_MEMORY_TYPE_LAST];
 
     uint64_t                      mem_type_mask;            /* Supported mem type mask */
-
-    /* Bitmask of memory types for which at least one MD supports
-     * non-blocking registration. Each bit corresponds to a value from
-     * ucs_memory_type_t. */
-    uint64_t                      reg_nb_supported_mem_types;
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_tl_bitmap_t               tl_bitmap;  /* Cached map of tl resources used by workers.
