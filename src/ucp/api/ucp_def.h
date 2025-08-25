@@ -872,12 +872,12 @@ typedef struct {
 
 /**
  * @ingroup UCP_COMM
- * @brief Opaque descriptor list handle from @ref ucp_gpu_dlist_export.
+ * @brief Opaque descriptor list handle from @ref ucp_gpu_mem_list_create.
  *
  * This handle is opaque from host point of view. It is to be used from a GPU
  * kernel using device specific functions.
  */
-struct ucp_gpu_dlist_handle;
-typedef struct ucp_gpu_dlist_handle *ucp_gpu_dlist_handle_h;
+struct ucp_gpu_mem_list_handle;
+typedef struct ucp_gpu_mem_list_handle *ucp_gpu_mem_list_handle_h;
 
 #endif

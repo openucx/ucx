@@ -4136,8 +4136,8 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr);
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_mem_list_elem_field {
-    UCP_DLIST_ELEM_FIELD_MEMH = UCS_BIT(0), /**< Source memory handle */
-    UCP_DLIST_ELEM_FIELD_RKEY = UCS_BIT(1)  /**< Unpacked remote memory key */
+    UCP_MEM_LIST_ELEM_FIELD_MEMH = UCS_BIT(0), /**< Source memory handle */
+    UCP_MEM_LIST_ELEM_FIELD_RKEY = UCS_BIT(1)  /**< Unpacked remote memory key */
 };
 
 
@@ -4177,9 +4177,9 @@ typedef struct ucp_mem_list_elem {
  * are presents. It is used to enable backward compatibility support.
  */
 enum ucp_mem_list_create_params_field {
-    UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENTS       = UCS_BIT(0), /**< Elements array base address */
-    UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENT_SIZE   = UCS_BIT(1), /**< Element size in bytes */
-    UCP_DLIST_EXPORT_PARAMS_FIELD_NUM_ELEMENTS   = UCS_BIT(2)  /**< Number of elements */
+    UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENTS     = UCS_BIT(0), /**< Elements array base address */
+    UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENT_SIZE = UCS_BIT(1), /**< Element size in bytes */
+    UCP_MEM_LIST_CREATE_PARAMS_FIELD_NUM_ELEMENTS = UCS_BIT(2)  /**< Number of elements */
 };
 
 
@@ -4197,22 +4197,22 @@ typedef struct ucp_mem_list_create_params {
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
-    uint64_t               field_mask;
+    uint64_t                  field_mask;
+
+    /**
+     * Size in bytes of one descriptor element, for backward compatibility.
+     */
+    size_t                    element_size;
+
+    /**
+     * Number of elements presents in @ref ucp_mem_list_elem_t.
+     */
+    size_t                    num_elements;
 
     /**
      * Base address for the array of descriptor elements.
      */
     const ucp_mem_list_elem_t *elements;
-
-    /**
-     * Size in bytes of one descriptor element, for backward compatibility.
-     */
-    size_t                 element_size;
-
-    /**
-     * Number of elements presents in @ref ucp_mem_list_elem_t.
-     */
-    size_t                 num_elements;
 } ucp_mem_list_create_params_t;
 
 
