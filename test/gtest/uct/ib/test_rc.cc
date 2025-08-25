@@ -289,7 +289,9 @@ public:
             modify_config("RC_TX_QUEUE_LEN", "32");
         }
 
-        modify_config("RC_TM_ENABLE", "y", SETENV_IF_NOT_EXIST);
+        if (!ucs::skip_hw_tm_offload()) {
+            modify_config("RC_TM_ENABLE", "y", SETENV_IF_NOT_EXIST);
+        }
 
         m_comp.func   = NULL;
         m_comp.count  = 300000; // some big value to avoid func invocation
