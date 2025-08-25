@@ -512,8 +512,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
   {"REG_NONBLOCK_FALLBACK", "y",
-  "Allow fallback to blocking memory registration if no MDs supporting non-blocking\n"
-  "registration.",
+   "Allow fallback to blocking memory registration if no MDs supporting non-blocking\n"
+   "registration.",
    ucs_offsetof(ucp_context_config_t, reg_nb_fallback), UCS_CONFIG_TYPE_BOOL},
 
   {"PREFER_OFFLOAD", "y",
