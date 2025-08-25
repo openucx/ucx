@@ -16,6 +16,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/module.h>
 #include <ucs/sys/sys.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
@@ -1265,4 +1266,11 @@ void UCS_F_DTOR uct_mlx5_cleanup(void)
 #if defined (HAVE_DEVX)
     ucs_list_del(&UCT_IB_MD_OPS_NAME(devx).list);
 #endif
+}
+
+UCS_MODULE_INIT()
+{
+    UCS_MODULE_FRAMEWORK_DECLARE(uct_ib_mlx5);
+    UCS_MODULE_FRAMEWORK_LOAD(uct_ib_mlx5, 0);
+    return UCS_OK;
 }

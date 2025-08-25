@@ -1,0 +1,16 @@
+#
+# Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
+libdir = @libdir@/ucx
+
+Name: @PACKAGE@-mlx5-gdaki
+Description: Unified Communication X Library GDA-KI module
+Version: @VERSION@
+Cflags: @GPUNETIO_CFLAGS@
+Libs:
+Libs.private: -L${libdir} -luct_ib_mlx5_gdaki -Wl,--undefined=uct_gdaki_init @IBVERBS_LDFLAGS@ @CUDA_LDFLAGS@ @GPUNETIO_LDFLAGS@
+Requires.private: doca-gpunetio
+
