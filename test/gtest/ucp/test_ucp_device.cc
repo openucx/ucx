@@ -15,7 +15,6 @@ public:
         add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64);
     }
 
-    // Compare generic CUDA buffers without copying them
     static void cuda_host_alloc(int *&host_ptr, int *&dev_ptr)
     {
         ASSERT_EQ(cudaSuccess,
@@ -25,7 +24,9 @@ public:
                   cudaHostGetDevicePointer(&dev_ptr, host_ptr, 0));
     }
 
-    int test_ucp_cuda_memcmp(const void *a, const void *b, size_t size)
+protected:
+    // Compare generic CUDA buffers without copying them
+    int cuda_memcmp(const void *s1, const void *s2, size_t size)
     {
         int *h_result, *d_result;
         int result;
@@ -33,14 +34,13 @@ public:
         cuda_host_alloc(h_result, d_result);
 
         *h_result = 0;
-        test_cuda_memcmp(a, b, d_result, size);
+        launch_cuda_memcmp(s1, s2, d_result, size);
         cudaDeviceSynchronize();
         result = *h_result;
 
         cudaFreeHost(h_result);
         return result;
     }
-protected:
 };
 
 UCS_TEST_P(test_ucp_device, cuda_kernel_memcmp)
@@ -55,11 +55,11 @@ UCS_TEST_P(test_ucp_device, cuda_kernel_memcmp)
     EXPECT_EQ(cudaSuccess, cudaMemset(src, 0x11, size));
     EXPECT_EQ(cudaSuccess, cudaMemset(dst, 0xde, size));
 
-    EXPECT_EQ(1, test_ucp_cuda_memcmp(src, dst, size));
+    EXPECT_EQ(1, cuda_memcmp(src, dst, size));
     EXPECT_EQ(cudaSuccess, cudaMemset(dst, 0x11, size));
-    EXPECT_EQ(0, test_ucp_cuda_memcmp(src, dst, size));
+    EXPECT_EQ(0, cuda_memcmp(src, dst, size));
     EXPECT_EQ(cudaSuccess, cudaMemset(dst + size/10, 0xfa, 10));
-    EXPECT_EQ(1, test_ucp_cuda_memcmp(src, dst, size));
+    EXPECT_EQ(1, cuda_memcmp(src, dst, size));
 
     EXPECT_EQ(cudaSuccess, cudaFree(data));
 }

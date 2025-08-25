@@ -9,7 +9,8 @@
 #include <cstdint>
 
 static __global__ void cuda_memcmp_kernel(const void* a, const void* b,
-                                          int* result, size_t size) {
+                                          int* result, size_t size)
+{
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     for (size_t i = idx; i < size; i += blockDim.x * gridDim.x) {
@@ -21,7 +22,8 @@ static __global__ void cuda_memcmp_kernel(const void* a, const void* b,
     }
 }
 
-void test_cuda_memcmp(const void* a, const void* b,
-                      int* result, size_t size) {
+void launch_cuda_memcmp(const void* a, const void* b,
+                        int* result, size_t size)
+{
     cuda_memcmp_kernel<<<16, 64>>>(a, b, result, size);
 }
