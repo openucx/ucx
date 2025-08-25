@@ -225,10 +225,5 @@ ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf)
         return status;
     }
 
-    if ((perf->send_allocator.mem_type == perf->recv_allocator.mem_type) &&
-        (send_device_id == recv_device_id)) {
-        return UCS_OK;
-    }
-
     return perf->recv_allocator.init(&perf->recv_allocator, recv_device_id);
 }

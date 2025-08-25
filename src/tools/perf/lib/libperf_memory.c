@@ -42,8 +42,8 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
 }
 
 static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
-                                       size_t length,
-                                       ucs_memory_type_t mem_type,
+                                       ucx_perf_allocator_t *allocator,
+                                       size_t length, ucs_memory_type_t mem_type,
                                        void **address_p, ucp_mem_h *memh_p)
 {
     ucp_mem_map_params_t params;
@@ -60,6 +60,11 @@ static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
     params.flags       = UCP_MEM_MAP_ALLOCATE;
     if (perf->params.flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) {
         params.flags |= UCP_MEM_MAP_NONBLOCK;
+    }
+
+    status = allocator->init(allocator, allocator->device_id);
+    if (status != UCS_OK) {
+        return status;
     }
 
     status = ucp_mem_map(perf->ucp.context, &params, memh_p);
@@ -112,7 +117,8 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     }
 
     /* Allocate send buffer memory */
-    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
+    status = ucp_perf_mem_alloc(perf, &perf->send_allocator,
+                                buffer_size * params->thread_count,
                                 params->send_mem_type, &perf->send_buffer,
                                 &perf->ucp.send_memh);
     if (status != UCS_OK) {
@@ -125,7 +131,8 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     perf->ucp.recv_exported_mem.address = NULL;
 
     /* Allocate receive buffer memory */
-    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
+    status = ucp_perf_mem_alloc(perf, &perf->recv_allocator,
+                                buffer_size * params->thread_count,
                                 params->recv_mem_type, &perf->recv_buffer,
                                 &perf->ucp.recv_memh);
     if (status != UCS_OK) {
