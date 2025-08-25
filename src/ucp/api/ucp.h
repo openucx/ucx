@@ -4132,10 +4132,10 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr);
  * @ingroup UCP_ENDPOINT
  * @brief UCP endpoint attributes field mask.
  *
- * The enumeration allows specifying which fields in @ref ucp_dlist_elem are
+ * The enumeration allows specifying which fields in @ref ucp_mem_list_elem are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_dlist_elem_field {
+enum ucp_mem_list_elem_field {
     UCP_DLIST_ELEM_FIELD_MEMH = UCS_BIT(0), /**< Source memory handle */
     UCP_DLIST_ELEM_FIELD_RKEY = UCS_BIT(1)  /**< Unpacked remote memory key */
 };
@@ -4148,10 +4148,10 @@ enum ucp_dlist_elem_field {
  * This describes a local and a remote memory pair for which a memory operation
  * can later be performed multiple times, possibly with varying memory offsets.
  */
-typedef struct ucp_dlist_elem {
+typedef struct ucp_mem_list_elem {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_dlist_elem_field.
+     * @ref ucp_mem_list_elem_field.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -4166,17 +4166,17 @@ typedef struct ucp_dlist_elem {
      * Unpacked memory key for a remote memory endpoint.
      */
     ucp_rkey_h rkey;
-} ucp_dlist_elem_t;
+} ucp_mem_list_elem_t;
 
 
 /**
  * @ingroup UCP_COMM
  * @brief Descriptor list create parameters field mask.
  *
- * The enumeration allows specifying which fields in @ref ucp_dlist_create_params_t
+ * The enumeration allows specifying which fields in @ref ucp_mem_list_create_params_t
  * are presents. It is used to enable backward compatibility support.
  */
-enum ucp_dlist_create_params_field {
+enum ucp_mem_list_create_params_field {
     UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENTS       = UCS_BIT(0), /**< Elements array base address */
     UCP_DLIST_EXPORT_PARAMS_FIELD_ELEMENT_SIZE   = UCS_BIT(1), /**< Element size in bytes */
     UCP_DLIST_EXPORT_PARAMS_FIELD_NUM_ELEMENTS   = UCS_BIT(2)  /**< Number of elements */
@@ -4188,12 +4188,12 @@ enum ucp_dlist_create_params_field {
  * @brief Descriptor list create parameters.
  *
  * The structure defines the parameters that can be used to create a handle
- * with @ref ucp_gpu_dlist_create.
+ * with @ref ucp_gpu_mem_list_create.
  */
-typedef struct ucp_dlist_create_params {
+typedef struct ucp_mem_list_create_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_dlist_create_params_field.
+     * @ref ucp_mem_list_create_params_field.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -4202,7 +4202,7 @@ typedef struct ucp_dlist_create_params {
     /**
      * Base address for the array of descriptor elements.
      */
-    const ucp_dlist_elem_t *elements;
+    const ucp_mem_list_elem_t *elements;
 
     /**
      * Size in bytes of one descriptor element, for backward compatibility.
@@ -4210,10 +4210,10 @@ typedef struct ucp_dlist_create_params {
     size_t                 element_size;
 
     /**
-     * Number of elements presents in @ref ucp_dlist_elem_t.
+     * Number of elements presents in @ref ucp_mem_list_elem_t.
      */
     size_t                 num_elements;
-} ucp_dlist_create_params_t;
+} ucp_mem_list_create_params_t;
 
 
 /**
@@ -4221,12 +4221,12 @@ typedef struct ucp_dlist_create_params {
  * @brief Descriptor list create function for batched RMA operations.
  *
  * This function creates and populates a descriptor list handle using parameters
- * inputs from @ref ucp_dlist_create_params_t. This descriptor is created for
+ * inputs from @ref ucp_mem_list_create_params_t. This descriptor is created for
  * a given remote endpoint. It can be used on a GPU using the corresponding
  * device functions.
  *
  * It can be used repeatedly, until finally released by calling @ref
- * ucp_gpu_dlist_release.
+ * ucp_gpu_mem_list_release.
  *
  * @param [in]  ep        Remote endpoint handle
  * @param [in]  params    Parameters used to create the created handle
@@ -4234,9 +4234,9 @@ typedef struct ucp_dlist_create_params {
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_gpu_dlist_create(ucp_ep_h ep,
-                                  const ucp_dlist_create_params_t *params,
-                                  ucp_gpu_dlist_handle_h *handle);
+ucs_status_t ucp_gpu_mem_list_create(ucp_ep_h ep,
+                                  const ucp_mem_list_create_params_t *params,
+                                  ucp_gpu_mem_list_handle_h *handle);
 
 
 /**
@@ -4244,13 +4244,13 @@ ucs_status_t ucp_gpu_dlist_create(ucp_ep_h ep,
  * @brief Release function for a descriptor list handle.
  *
  * This function releases the handle that was created using @ref
- * ucp_gpu_dlist_create.
+ * ucp_gpu_mem_list_create.
  *
  * @param [in] handle     Exported handle to release
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_gpu_dlist_release(ucp_gpu_dlist_handle_h handle);
+ucs_status_t ucp_gpu_mem_list_release(ucp_gpu_mem_list_handle_h handle);
 
 
 /**
