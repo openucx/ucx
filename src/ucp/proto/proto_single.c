@@ -47,7 +47,8 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
 
     ucs_assert(num_lanes == 1);
 
-    reg_md_map = ucp_proto_common_reg_md_map(&params->super, UCS_BIT(lane));
+    reg_md_map = ucp_proto_common_reg_md_map(&params->super,
+                                             UCP_LANE_MAP_BIT(lane));
     if (reg_md_map == 0) {
         spriv->reg_md = UCP_NULL_RESOURCE;
     } else {
@@ -98,5 +99,5 @@ void ucp_proto_single_query(const ucp_proto_query_params_t *params,
 
     ucp_proto_default_query(params, attr);
     ucp_proto_common_lane_priv_str(params, &spriv->super, 1, 1, &config_strb);
-    attr->lane_map = UCS_BIT(spriv->super.lane);
+    attr->lane_map = UCP_LANE_MAP_BIT(spriv->super.lane);
 }
