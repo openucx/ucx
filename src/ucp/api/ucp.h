@@ -4235,8 +4235,8 @@ typedef struct ucp_mem_list_create_params {
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_gpu_mem_list_create(ucp_ep_h ep,
-                                  const ucp_mem_list_create_params_t *params,
-                                  ucp_gpu_mem_list_handle_h *handle);
+                                     const ucp_mem_list_create_params_t *params,
+                                     ucp_gpu_mem_list_handle_h *handle);
 
 
 /**
