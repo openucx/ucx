@@ -70,16 +70,13 @@ gtest_LDADD = \
 	$(OPENMP_CFLAGS) \
 	$(GTEST_LIBS)
 
-gtest_basic_CPPFLAGS = \
+gtest_CPPFLAGS = \
+	$(BASE_CPPFLAGS) \
 	-DTOP_SRCDIR=\"$(abs_top_srcdir)\" \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/test \
 	-I$(top_builddir)/src \
-	-I$(top_srcdir)/test/gtest
-
-gtest_CPPFLAGS = \
-	$(BASE_CPPFLAGS) \
-	$(gtest_basic_CPPFLAGS) \
+	-I$(top_srcdir)/test/gtest \
 	$(GTEST_CPPFLAGS) \
 	$(OPENMP_CFLAGS)
 
@@ -272,7 +269,8 @@ gtest_SOURCES += \
 	uct/cuda/test_cuda_nvml.cc
 
 if HAVE_NVCC
-NVCC_EXTRA_FLAGS = $(gtest_basic_CPPFLAGS)
+NVCC_EXTRA_FLAGS = \
+	-I$(top_srcdir)/src
 include $(top_srcdir)/config/cuda.am
 
 gtest_SOURCES += \
