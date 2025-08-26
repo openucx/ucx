@@ -73,7 +73,8 @@ static ucs_status_t ucx_perf_ze_dev_count(int *num_devices_p)
     return UCS_OK;
 }
 
-static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf, int device_id)
+static ucs_status_t ucx_perf_ze_init(ucx_perf_allocator_t *allocator,
+                                     int device_id)
 {
     ze_command_queue_desc_t cmdq_desc = {
         .stype    = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
@@ -92,7 +93,8 @@ static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf, int device_id)
         }
     }
 
-    gpu_index = device_id;
+    gpu_index            = device_id;
+    allocator->device_id = device_id;
     return UCS_OK;
 }
 
@@ -151,7 +153,8 @@ uct_perf_ze_alloc_reg_mem(const ucx_perf_context_t *perf, size_t length,
 }
 
 static ucs_status_t
-uct_perf_ze_host_alloc(const ucx_perf_context_t *perf, int device_id,
+uct_perf_ze_host_alloc(const ucx_perf_allocator_t *allocator,
+                       const ucx_perf_context_t *perf,
                        size_t length, unsigned flags,
                        uct_allocated_memory_t *alloc_mem)
 {
@@ -160,7 +163,8 @@ uct_perf_ze_host_alloc(const ucx_perf_context_t *perf, int device_id,
 }
 
 static ucs_status_t
-uct_perf_ze_device_alloc(const ucx_perf_context_t *perf, int device_id,
+uct_perf_ze_device_alloc(const ucx_perf_allocator_t *allocator,
+                         const ucx_perf_context_t *perf,
                          size_t length, unsigned flags,
                          uct_allocated_memory_t *alloc_mem)
 {
@@ -169,7 +173,8 @@ uct_perf_ze_device_alloc(const ucx_perf_context_t *perf, int device_id,
 }
 
 static ucs_status_t
-uct_perf_ze_managed_alloc(const ucx_perf_context_t *perf, int device_id,
+uct_perf_ze_managed_alloc(const ucx_perf_allocator_t *allocator,
+                          const ucx_perf_context_t *perf,
                           size_t length, unsigned flags,
                           uct_allocated_memory_t *alloc_mem)
 {
@@ -177,7 +182,8 @@ uct_perf_ze_managed_alloc(const ucx_perf_context_t *perf, int device_id,
                                      flags, alloc_mem);
 }
 
-static void uct_perf_ze_free(const ucx_perf_context_t *perf,
+static void uct_perf_ze_free(const ucx_perf_allocator_t *allocator,
+                             const ucx_perf_context_t *perf,
                              uct_allocated_memory_t *alloc_mem)
 {
     ucs_status_t status;
@@ -193,9 +199,9 @@ static void uct_perf_ze_free(const ucx_perf_context_t *perf,
 }
 
 static void
-ucx_perf_ze_memcpy(int device_id, void *dst, ucs_memory_type_t dst_mem_type,
-                   const void *src, ucs_memory_type_t src_mem_type,
-                   size_t count)
+ucx_perf_ze_memcpy(const ucx_perf_allocator_t *allocator, void *dst,
+                   ucs_memory_type_t dst_mem_type, const void *src,
+                   ucs_memory_type_t src_mem_type, size_t count)
 {
     ze_result_t ret;
 
@@ -212,7 +218,8 @@ ucx_perf_ze_memcpy(int device_id, void *dst, ucs_memory_type_t dst_mem_type,
 }
 
 static void *
-ucx_perf_ze_memset(int device_id, void *dst, int value, size_t count)
+ucx_perf_ze_memset(const ucx_perf_allocator_t *allocator, void *dst,
+                   int value, size_t count)
 {
     ze_result_t ret;
 
