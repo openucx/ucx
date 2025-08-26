@@ -7,9 +7,11 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
+#include <stdint.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
-#include <uct/api/uct.h>
-#include <ucp/api/ucp.h>
+
+#include <ucp/api/device/ucp_device_types.h>
 
 
 /**
@@ -21,17 +23,6 @@
  */
 typedef struct ucp_gpu_request {
 } ucp_gpu_request_t;
-
-
-/**
- * @ingroup UCP_COMM
- * @brief Opaque descriptor list stored on GPU.
- */
-typedef struct ucp_mem_list_handle {
-} ucp_mem_list_handle_t;
-
-
-typedef ucp_mem_list_handle_t *ucp_mem_list_handle_h;
 
 
 /**
@@ -62,7 +53,7 @@ typedef ucp_mem_list_handle_t *ucp_mem_list_handle_h;
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_single(ucp_mem_list_handle_h handle,
+ucp_gpu_put_single(ucp_gpu_mem_list_handle_h handle,
                    const void *addr, uint64_t remote_addr,
                    size_t length, int dlist_index, uint64_t flags,
                    ucp_gpu_request_t *req);
@@ -95,7 +86,7 @@ ucp_gpu_put_single(ucp_mem_list_handle_h handle,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_atomic_inc(ucp_mem_list_handle_h handle,
+ucp_gpu_atomic_inc(ucp_gpu_mem_list_handle_h handle,
                    uint64_t value, uint64_t remote_addr,
                    int dlist_index, uint64_t flags,
                    ucp_gpu_request_t *req);
@@ -137,7 +128,7 @@ ucp_gpu_atomic_inc(ucp_mem_list_handle_h handle,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_multi(ucp_mem_list_handle_h handle,
+ucp_gpu_put_multi(ucp_gpu_mem_list_handle_h handle,
                   void *const *addrs, const uint64_t *remote_addrs,
                   const size_t *lengths,
                   uint64_t atomic_value, uint64_t atomic_remote_addr,
@@ -189,7 +180,7 @@ ucp_gpu_put_multi(ucp_mem_list_handle_h handle,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_multi_partial(ucp_mem_list_handle_h handle,
+ucp_gpu_put_multi_partial(ucp_gpu_mem_list_handle_h handle,
                           const int *dlist_indexes,
                           size_t dlist_count,
                           void *const *addrs, const uint64_t *remote_addrs,

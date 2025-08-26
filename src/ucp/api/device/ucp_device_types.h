@@ -12,9 +12,8 @@
 #include <ucp/api/ucp.h>
 
 
-/* TODO: Use from ucp.h */
 typedef struct ucp_mem_list_elem {
-} ucp_mem_list_elem_t;
+} ucp_gpu_mem_list_elem_t;
 
 
 /**
@@ -59,7 +58,9 @@ typedef struct {
      * Array of descriptor list containing memory pairs to be used by GPU
      * device functions for memory transfers.
      */
-    ucp_mem_list_elem_t elems[];
-} ucp_mem_list_handle_t;
+    ucp_gpu_mem_list_elem_t elems[];
+} ucp_gpu_mem_list_handle_t;
+
+typedef ucp_gpu_mem_list_handle_t *ucp_gpu_mem_list_handle_h;
 
 #endif /* UCP_DEVICE_TYPES_H */
