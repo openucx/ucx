@@ -40,13 +40,16 @@ test_base::~test_base() {
     }
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
-                       m_state == NEW ||    /* can be skipped from a class constructor */
+                       m_state == NEW ||
+                       m_state == INITIALIZING ||
                        m_state == ABORTED,
                        "state=%d", m_state);
 }
 
 void test_base::set_num_threads(unsigned num_threads) {
-    if (m_state != NEW) {
+    if (m_state == SKIPPED) {
+        return;
+    } else if (m_state != NEW) {
         GTEST_FAIL() << "Cannot modify number of threads after test is started, "
                      << "it must be done in the constructor.";
     }
@@ -311,6 +314,10 @@ unsigned test_base::num_warnings()
 }
 
 void test_base::SetUpProxy() {
+    if (m_state == SKIPPED) {
+        return;
+    }
+
     ucs_assert(m_state == NEW);
     m_num_valgrind_errors_before = VALGRIND_COUNT_ERRORS;
     m_num_warnings_before        = m_total_warnings;
@@ -324,6 +331,7 @@ void test_base::SetUpProxy() {
 
     try {
         check_skip_test();
+        m_state = INITIALIZING;
         init();
         m_initialized = true;
         m_state       = RUNNING;
@@ -427,7 +435,10 @@ void test_base::TestBodyProxy() {
 }
 
 void test_base::skipped(const test_skip_exception& e) {
-    std::string reason = e.what();
+    skipped(e.what());
+}
+
+void test_base::skipped(const std::string& reason) {
     if (reason.empty()) {
         detail::message_stream("SKIP");
     } else {
@@ -456,6 +467,14 @@ bool test_base::barrier() {
         return true;
     } else {
         UCS_TEST_ABORT("pthread_barrier_wait() failed");
+    }
+}
+
+void test_base::test_skip(const std::string& reason) {
+    if (m_state == NEW) {
+        skipped(reason); // Do not throw exception from the constructor
+    } else if (m_state != SKIPPED) {
+        throw test_skip_exception(reason);
     }
 }
 
