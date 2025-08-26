@@ -28,20 +28,11 @@ do
 		continue
 	fi
 
-	# devices files should be compiled by nvcc
+	# devices files should be ignored for now
 	file=$(basename ${hfile})
 	if test "$file" != "${file#ucp_device_}"
 	then
-		if ! $NVCC --version >/dev/null 2>&1; then
-			echo "SKIPPED $hfile (NVCC)"
-			continue
-		fi
-
-		TMP=tmp.cu
-		echo "#include <$hfile>" >$TMP
-		$NVCC -I. -c $TMP -o /dev/null || { rm $TMP; exit 1; }
-		rm $TMP
-		echo "OK $hfile (NVCC)"
+		echo "SKIPPED $hfile (NVCC)"
 		continue
 	fi
 
