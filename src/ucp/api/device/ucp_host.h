@@ -95,6 +95,11 @@ typedef struct ucp_mem_list_params {
     uint64_t                  field_mask;
 
     /**
+     * Memory type to identify the device.
+     */
+    ucs_memory_type_t         mem_type;
+
+    /**
      * Size in bytes of one descriptor element, for backward compatibility.
      */
     size_t                    element_size;
@@ -140,9 +145,9 @@ typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
  * @return Error code as defined by @ref ucs_status_t.
  */
 ucs_status_t
-ucp_device_mem_list_create(ucp_ep_h ep,
-                           const ucp_mem_list_params_t *params,
-                           ucp_device_mem_list_handle_h *handle);
+ucp_mem_list_create(ucp_ep_h ep,
+                    const ucp_mem_list_params_t *params,
+                    ucp_device_mem_list_handle_h *handle);
 
 
 /**
@@ -154,7 +159,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
  *
  * @param [in] handle     Created handle to release.
  */
-void ucp_device_mem_list_release(ucp_device_mem_list_handle_h handle);
+void ucp_mem_list_release(ucp_device_mem_list_handle_h handle);
 
 END_C_DECLS
 
