@@ -4,8 +4,8 @@
  * See file LICENSE for terms.
  */
 
-#ifndef UCP_CUH
-#define UCP_CUH
+#ifndef UCP_DEVICE_IMPL_H
+#define UCP_DEVICE_IMPL_H
 
 #include <ucs/type/status.h>
 #include <uct/api/uct.h>
@@ -218,4 +218,4 @@ ucp_gpu_put_multi_partial(ucp_dlist_handle_h handle,
 UCS_DEVICE_FUNC ucs_status_t
 ucp_gpu_progress_req(ucp_gpu_request_t *req);
 
-#endif /* UCP_CUH */
+#endif /* UCP_DEVICE_IMPL_H */

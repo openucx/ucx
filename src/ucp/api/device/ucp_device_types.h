@@ -4,8 +4,8 @@
  * See file LICENSE for terms.
  */
 
-#ifndef UCP_CUDA_TYPES_H
-#define UCP_CUDA_TYPES_H
+#ifndef UCP_DEVICE_TYPES_H
+#define UCP_DEVICE_TYPES_H
 
 #include <ucs/type/status.h>
 #include <uct/api/uct.h>
@@ -62,4 +62,4 @@ typedef struct {
     ucp_dlist_elem_t elems[];
 } ucp_dlist_handle_t;
 
-#endif /* UCP_CUDA_TYPES_H */
+#endif /* UCP_DEVICE_TYPES_H */
