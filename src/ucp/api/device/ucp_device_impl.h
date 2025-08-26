@@ -27,11 +27,11 @@ typedef struct ucp_gpu_request {
  * @ingroup UCP_COMM
  * @brief Opaque descriptor list stored on GPU.
  */
-typedef struct ucp_dlist_handle {
-} ucp_dlist_handle_t;
+typedef struct ucp_mem_list_handle {
+} ucp_mem_list_handle_t;
 
 
-typedef ucp_dlist_handle_t *ucp_dlist_handle_h;
+typedef ucp_mem_list_handle_t *ucp_mem_list_handle_h;
 
 
 /**
@@ -50,7 +50,7 @@ typedef ucp_dlist_handle_t *ucp_dlist_handle_h;
  * addresses and length. The flags parameter can be used to modify the behavior
  * of the routine.
  *
- * @param [in]  handle      Exported descriptor list handle to use for transfer.
+ * @param [in]  handle      Created descriptor list handle to use for transfer.
  * @param [in]  addr        Local virtual address to send data from.
  * @param [in]  remote_addr Remote virtual address to send data to.
  * @param [in]  length      Length in bytes of the data to send.
@@ -62,7 +62,7 @@ typedef ucp_dlist_handle_t *ucp_dlist_handle_h;
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_single(ucp_dlist_handle_h handle,
+ucp_gpu_put_single(ucp_mem_list_handle_h handle,
                    const void *addr, uint64_t remote_addr,
                    size_t length, int dlist_index, uint64_t flags,
                    ucp_gpu_request_t *req);
@@ -84,7 +84,7 @@ ucp_gpu_put_single(ucp_dlist_handle_h handle,
  * address. The flags parameter can be used to modify the behavior of the
  * routine.
  *
- * @param [in]  handle      Exported descriptor list handle to use for transfer.
+ * @param [in]  handle      Created descriptor list handle to use for transfer.
  * @param [in]  value       Value used to increment the remote address.
  * @param [in]  remote_addr Remote virtual address to perform the increment to.
  * @param [in]  dlist_index Index in descriptor list pointing to the memory
@@ -95,7 +95,7 @@ ucp_gpu_put_single(ucp_dlist_handle_h handle,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_atomic_inc(ucp_dlist_handle_h handle,
+ucp_gpu_atomic_inc(ucp_mem_list_handle_h handle,
                    uint64_t value, uint64_t remote_addr,
                    int dlist_index, uint64_t flags,
                    ucp_gpu_request_t *req);
@@ -125,7 +125,7 @@ ucp_gpu_atomic_inc(ucp_dlist_handle_h handle,
  * addresses, lengths and atomic related parameters. The flags parameter can be
  * used to modify the behavior of the routine.
  *
- * @param [in]  handle              Exported descriptor list handle to use.
+ * @param [in]  handle              Created descriptor list handle to use.
  * @param [in]  addrs               Array of local addresses to send from.
  * @param [in]  remote_addrs        Array of remote addresses to send to.
  * @param [in]  lengths             Array of lengths in bytes for each send.
@@ -137,7 +137,7 @@ ucp_gpu_atomic_inc(ucp_dlist_handle_h handle,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_multi(ucp_dlist_handle_h handle,
+ucp_gpu_put_multi(ucp_mem_list_handle_h handle,
                   void *const *addrs, const uint64_t *remote_addrs,
                   const size_t *lengths,
                   uint64_t atomic_value, uint64_t atomic_remote_addr,
@@ -173,7 +173,7 @@ ucp_gpu_put_multi(ucp_dlist_handle_h handle,
  * dlist_indexes, addresses, lengths and atomic related parameters. The flags
  * parameter can be used to modify the behavior of the routine.
  *
- * @param [in]  handle              Exported descriptor list handle to use.
+ * @param [in]  handle              Created descriptor list handle to use.
  * @param [in]  dlist_indexes       Array of indexes, to use in descriptor list
  *                                  of entries from handle.
  * @param [in]  dlist_count         Number of indexes in the array @ref
@@ -189,7 +189,7 @@ ucp_gpu_put_multi(ucp_dlist_handle_h handle,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_multi_partial(ucp_dlist_handle_h handle,
+ucp_gpu_put_multi_partial(ucp_mem_list_handle_h handle,
                           const int *dlist_indexes,
                           size_t dlist_count,
                           void *const *addrs, const uint64_t *remote_addrs,

@@ -13,8 +13,8 @@
 
 
 /* TODO: Use from ucp.h */
-typedef struct ucp_dlist_elem {
-} ucp_dlist_elem_t;
+typedef struct ucp_mem_list_elem {
+} ucp_mem_list_elem_t;
 
 
 /**
@@ -53,13 +53,13 @@ typedef struct {
     /**
      * Number of entries in the descriptor list array @ref elems.
      */
-    unsigned         dlist_length;
+    unsigned         mem_list_length;
 
     /**
      * Array of descriptor list containing memory pairs to be used by GPU
      * device functions for memory transfers.
      */
-    ucp_dlist_elem_t elems[];
-} ucp_dlist_handle_t;
+    ucp_mem_list_elem_t elems[];
+} ucp_mem_list_handle_t;
 
 #endif /* UCP_DEVICE_TYPES_H */
