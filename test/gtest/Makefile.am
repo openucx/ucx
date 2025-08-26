@@ -267,6 +267,17 @@ gtest_SOURCES += \
 	uct/cuda/test_switch_cuda_device.cc \
 	uct/cuda/test_cuda_ipc_md.cc \
 	uct/cuda/test_cuda_nvml.cc
+
+if HAVE_NVCC
+NVCC_EXTRA_FLAGS = \
+	-I$(top_srcdir)/test/gtest
+include $(top_srcdir)/config/cuda.am
+
+gtest_SOURCES += \
+	ucp/cuda/test_kernels.cu \
+	ucp/test_ucp_device.cc
+endif
+
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
 gtest_LDFLAGS += \
