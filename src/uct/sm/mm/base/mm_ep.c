@@ -25,19 +25,23 @@ typedef enum {
 } uct_mm_send_op_t;
 
 
-/* Check if the resources on the remote peer are available for sending to it.
- * i.e. check if the remote receive FIFO has room in it.
- * return 1 if can send.
- * return 0 if can't send.
- * Ignore the event arm bit after the subtraction to accommodate
- * a) A head ARMED with UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED bit
- * b) head wrapping around after 0x7fff ffff ffff ffff and
- *    tail going beyond 0x7fff ffff ffff ffff, in this case the subtraction
- *    will wrap around, this scenario is highly unlikely.
+/* Check if the remote receive FIFO has room.
+ * Returns 1 if can send, 0 otherwise.
+ *
+ * Logic (signed63 over the 63-bit ring, UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED ignored):
+ *   - Compute d = (uint64_t)_head - (uint64_t)_tail
+ *   - Transform to signed 63-bit distance by: s = ((int64_t)(d << 1)) >> 1
+ *     This effectively drops UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED (bit63) from head and
+ *     interprets the delta on a 63-bit ring using two's-complement.
+ *   - Room available iff s < (int64_t)_fifo_size
+ *
+ * Practical note (head counter runtime): We assume the head counter increments
+ * once every 1 ns. On this timescale, the signed63 midpoint (2^62) is
+ * ~4.61e18 ticks (~146 years). Over 5 years, head would advance by ~1.5768e17
+ * ticks (~3.4% of that midpoint), which is far from any wraparound edge case.
  */
 #define UCT_MM_EP_IS_ABLE_TO_SEND(_head, _tail, _fifo_size) \
-    ucs_likely((((_head) - (_tail)) & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED) \
-                 < (uint64_t)(_fifo_size))
+    ucs_likely((((int64_t)(((_head) - (_tail)) << 1)) >> 1) < (int64_t)(_fifo_size))
 
 static UCS_F_NOINLINE ucs_status_t
 uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
