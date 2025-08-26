@@ -118,7 +118,6 @@ Provides header files and examples for developing with UCX.
            %{?debug:--enable-mt} \
            --without-go \
            --without-java \
-           --disable-test-apps \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
            %_with_arg gdrcopy gdrcopy \

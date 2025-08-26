@@ -337,13 +337,13 @@ AS_IF([test "x$with_docs_only" = xyes],
     AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])
 
      #
-     # Disable test apps build
+     # Enable test apps build
      #
      AC_ARG_ENABLE([test-apps],
-                   AS_HELP_STRING([--disable-test-apps],
-                                  [Disable test apps build, default: NO]),
+                   AS_HELP_STRING([--enable-test-apps],
+                                  [Enable test apps build, default: NO]),
                    [],
-                   [enable_test_apps=yes])
+                   [enable_test_apps=no])
     AM_CONDITIONAL([HAVE_TEST_APPS], [test "x$enable_test_apps" = "xyes"])
     ]) # Docs only
 
