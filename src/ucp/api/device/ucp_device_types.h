@@ -30,29 +30,29 @@ typedef struct {
     /**
      * Allow runtime ABI compatibility checks, between host and device code.
      */
-    int              version;
+    int                        version;
 
     /**
      * Protocol index computed by host handle management functions when
      * creating handle.
      */
-    int              proto_idx;
+    int                        proto_idx;
 
     /**
      * Array of pointers to UCT exported endpoints, used for multi-lane
      * transfers.
      */
-    uct_ep_t         **uct_ep;
+    uct_ep_t                   **uct_ep;
 
     /**
-     * Number of UCT exported endpoints found in @ref uct_ep arrays.
+     * Number of UCT exported endpoints found in @a uct_ep arrays.
      */
-    unsigned         num_uct_eps;
+    unsigned                   num_uct_eps;
 
     /**
-     * Number of entries in the descriptor list array @ref elems.
+     * Number of entries in the descriptor list array @a elems.
      */
-    unsigned         mem_list_length;
+    unsigned                   mem_list_length;
 
     /**
      * Array of descriptor list containing memory pairs to be used by GPU

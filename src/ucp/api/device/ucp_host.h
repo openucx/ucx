@@ -68,10 +68,10 @@ typedef struct ucp_mem_list_elem {
  * @ingroup UCP_COMM
  * @brief Memory descriptor list create parameters field mask.
  *
- * The enumeration allows specifying which fields in @ref ucp_mem_list_create_params_t
+ * The enumeration allows specifying which fields in @ref ucp_mem_list_params_t
  * are presents. It is used to enable backward compatibility support.
  */
-enum ucp_mem_list_create_params_field {
+enum ucp_mem_list_params_field {
     UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENTS     = UCS_BIT(0), /**< Elements array base address */
     UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENT_SIZE = UCS_BIT(1), /**< Element size in bytes */
     UCP_MEM_LIST_CREATE_PARAMS_FIELD_NUM_ELEMENTS = UCS_BIT(2)  /**< Number of elements */
@@ -85,10 +85,10 @@ enum ucp_mem_list_create_params_field {
  * The structure defines the parameters that can be used to create a handle
  * with @ref ucp_device_mem_list_create.
  */
-typedef struct ucp_mem_list_create_params {
+typedef struct ucp_mem_list_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_mem_list_create_params_field.
+     * @ref ucp_mem_list_params_field.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -108,7 +108,7 @@ typedef struct ucp_mem_list_create_params {
      * Base address of the array of descriptor elements.
      */
     const ucp_mem_list_elem_t *elements;
-} ucp_mem_list_create_params_t;
+} ucp_mem_list_params_t;
 
 
 /**
@@ -126,7 +126,7 @@ typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
  * @brief Memory descriptor list create function for batched RMA operations.
  *
  * This function creates and populates a descriptor list handle using parameters
- * inputs from @ref ucp_mem_list_create_params_t. This descriptor is created for
+ * inputs from @ref ucp_mem_list_params_t. This descriptor is created for
  * the given remote endpoint. It can be used on a GPU using the corresponding
  * device functions.
  *
@@ -141,7 +141,7 @@ typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
  */
 ucs_status_t
 ucp_device_mem_list_create(ucp_ep_h ep,
-                           const ucp_mem_list_create_params_t *params,
+                           const ucp_mem_list_params_t *params,
                            ucp_device_mem_list_handle_h *handle);
 
 

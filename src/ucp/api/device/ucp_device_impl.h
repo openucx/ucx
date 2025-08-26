@@ -7,7 +7,7 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
-#include "ucp_device_types.h"
+#include <ucp/api/device/ucp_device_types.h>
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
@@ -44,7 +44,10 @@
 UCS_F_DEVICE ucs_status_t
 ucp_device_put_single(ucp_device_mem_list_handle_h handle, const void *addr,
                       uint64_t remote_addr, size_t length, int dlist_index,
-                      uint64_t flags, ucp_device_request_t *req);
+                      uint64_t flags, ucp_device_request_t *req)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
 
 
 /**
@@ -77,7 +80,10 @@ UCS_F_DEVICE ucs_status_t
 ucp_device_atomic_inc(ucp_device_mem_list_handle_h handle,
                       uint64_t value, uint64_t remote_addr,
                       int dlist_index, uint64_t flags,
-                      ucp_device_request_t *req);
+                      ucp_device_request_t *req)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
 
 
 /**
@@ -119,7 +125,10 @@ UCS_F_DEVICE ucs_status_t
 ucp_device_put_multi(ucp_device_mem_list_handle_h handle, void *const *addrs,
                      const uint64_t *remote_addrs, const size_t *lengths,
                      uint64_t atomic_value, uint64_t atomic_remote_addr,
-                     uint64_t flags, ucp_device_request_t *req);
+                     uint64_t flags, ucp_device_request_t *req)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
 
 
 /**
@@ -174,7 +183,10 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h handle,
                              uint64_t atomic_value,
                              uint64_t atomic_remote_addr,
                              uint64_t flags,
-                             ucp_device_request_t *req);
+                             ucp_device_request_t *req)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
 
 
 /**
@@ -193,6 +205,9 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h handle,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_progress_req(ucp_device_request_t *req);
+ucp_device_progress_req(ucp_device_request_t *req)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
 
 #endif /* UCP_DEVICE_IMPL_H */
