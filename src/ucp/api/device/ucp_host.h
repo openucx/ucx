@@ -40,7 +40,7 @@ enum ucp_mem_list_elem_field {
  * @ingroup UCP_COMM
  * @brief Memory descriptor list entry.
  *
- * This describes a local and a remote memory pair for which a memory operation
+ * This describes a pair of local and remote memory for which a memory operation
  * can later be performed multiple times, possibly with varying memory offsets.
  */
 typedef struct ucp_mem_list_elem {
@@ -58,7 +58,7 @@ typedef struct ucp_mem_list_elem {
     ucp_mem_h  memh;
 
     /**
-     * Unpacked memory key for a remote memory endpoint.
+     * Unpacked memory key for the remote memory endpoint.
      */
     ucp_rkey_h rkey;
 } ucp_mem_list_elem_t;
@@ -105,7 +105,7 @@ typedef struct ucp_mem_list_create_params {
     size_t                    num_elements;
 
     /**
-     * Base address for the array of descriptor elements.
+     * Base address of the array of descriptor elements.
      */
     const ucp_mem_list_elem_t *elements;
 } ucp_mem_list_create_params_t;
@@ -127,7 +127,7 @@ typedef struct ucp_gpu_mem_list_handle *ucp_gpu_mem_list_handle_h;
  *
  * This function creates and populates a descriptor list handle using parameters
  * inputs from @ref ucp_mem_list_create_params_t. This descriptor is created for
- * a given remote endpoint. It can be used on a GPU using the corresponding
+ * the given remote endpoint. It can be used on a GPU using the corresponding
  * device functions.
  *
  * It can be used repeatedly, until finally released by calling @ref
