@@ -5,6 +5,8 @@
 
 if HAVE_MLX5_DV
 
+SUBDIRS = . gdaki
+
 module_LTLIBRARIES         = libuct_ib_mlx5.la
 libuct_ib_mlx5_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)
 libuct_ib_mlx5_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
