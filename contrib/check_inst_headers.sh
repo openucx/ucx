@@ -1,6 +1,6 @@
 #!/bin/sh -eE
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2025. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -13,6 +13,7 @@
 
 CC=${CC:-gcc}
 CXX=${CXX:-g++}
+NVCC=${NVCC:-nvcc}
 
 cd ${1:-.}
 
@@ -24,6 +25,23 @@ do
 	# skip some files which are documented to not be included directly
 	if test "${hfile}" = "uct/api/tl.h"
 	then
+		continue
+	fi
+
+	# devices files should be compiled by nvcc
+	file=$(basename ${hfile})
+	if test "$file" != "${file#ucp_device_}"
+	then
+		if ! $NVCC --version >/dev/null 2>&1; then
+			echo "SKIPPED $hfile (NVCC)"
+			continue
+		fi
+
+		TMP=tmp.cu
+		echo "#include <$hfile>" >$TMP
+		$NVCC -I. -c $TMP -o /dev/null || { rm $TMP; exit 1; }
+		rm $TMP
+		echo "OK $hfile (NVCC)"
 		continue
 	fi
 
