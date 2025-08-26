@@ -595,7 +595,7 @@ UCS_TEST_P(test_ucp_mmap, reg_read_only) {
     ucp_mem_h memh;
     ucs_status_t status;
 
-    if (has_transport("shm")) {
+    if (has_any_transport({"shm", "cuda_copy", "rocm_copy"})) {
         UCS_TEST_SKIP_R("shm doesn't support read-only memory");
     }
 
