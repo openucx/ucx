@@ -256,6 +256,8 @@
 /*
  * Declare GPU specific functions
  */
+#ifdef __NVCC__
 #define UCS_DEVICE_FUNC __device__
+#endif /* __NVCC__ */
 
 #endif /* UCS_COMPILER_DEF_H */
