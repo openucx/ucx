@@ -53,10 +53,9 @@ typedef struct ucp_gpu_request {
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_single(ucp_gpu_mem_list_handle_h handle,
-                   const void *addr, uint64_t remote_addr,
-                   size_t length, int dlist_index, uint64_t flags,
-                   ucp_gpu_request_t *req);
+ucp_gpu_put_single(ucp_gpu_mem_list_handle_h handle, const void *addr,
+                   uint64_t remote_addr, size_t length, int dlist_index,
+                   uint64_t flags, ucp_gpu_request_t *req);
 
 
 /**
@@ -128,12 +127,10 @@ ucp_gpu_atomic_inc(ucp_gpu_mem_list_handle_h handle,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_multi(ucp_gpu_mem_list_handle_h handle,
-                  void *const *addrs, const uint64_t *remote_addrs,
-                  const size_t *lengths,
+ucp_gpu_put_multi(ucp_gpu_mem_list_handle_h handle, void *const *addrs,
+                  const uint64_t *remote_addrs, const size_t *lengths,
                   uint64_t atomic_value, uint64_t atomic_remote_addr,
-                  uint64_t flags,
-                  ucp_gpu_request_t *req);
+                  uint64_t flags, ucp_gpu_request_t *req);
 
 
 /**
