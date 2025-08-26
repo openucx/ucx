@@ -7,22 +7,11 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
-#include <stdint.h>
+#include "ucp_device_types.h"
+
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
-
-#include <ucp/api/device/ucp_device_types.h>
-
-
-/**
- * @ingroup UCP_COMM
- * @brief GPU request descriptor of a given batch
- *
- * This request tracks a batch of memory operations in progress. It can be used
- * with @ref ucp_gpu_request_progress to detect request completion.
- */
-typedef struct ucp_gpu_request {
-} ucp_gpu_request_t;
+#include <stdint.h>
 
 
 /**
@@ -35,7 +24,7 @@ typedef struct ucp_gpu_request {
  * entry.
  *
  * The routine returns a request that can be progressed and checked for
- * completion with @ref ucp_gpu_request_progress.
+ * completion with @ref ucp_device_request_progress.
  *
  * This routine can be called repeatedly with the same handle and different
  * addresses and length. The flags parameter can be used to modify the behavior
@@ -52,10 +41,10 @@ typedef struct ucp_gpu_request {
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_single(ucp_gpu_mem_list_handle_h handle, const void *addr,
-                   uint64_t remote_addr, size_t length, int dlist_index,
-                   uint64_t flags, ucp_gpu_request_t *req);
+UCS_F_DEVICE ucs_status_t
+ucp_device_put_single(ucp_device_mem_list_handle_h handle, const void *addr,
+                      uint64_t remote_addr, size_t length, int dlist_index,
+                      uint64_t flags, ucp_device_request_t *req);
 
 
 /**
@@ -68,7 +57,7 @@ ucp_gpu_put_single(ucp_gpu_mem_list_handle_h handle, const void *addr,
  * entry.
  *
  * The routine returns a request that can be progressed and checked for
- * completion with @ref ucp_gpu_request_progress.
+ * completion with @ref ucp_device_request_progress.
  *
  * This routine can be called repeatedly with the same handle and different
  * address. The flags parameter can be used to modify the behavior of the
@@ -84,11 +73,11 @@ ucp_gpu_put_single(ucp_gpu_mem_list_handle_h handle, const void *addr,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_atomic_inc(ucp_gpu_mem_list_handle_h handle,
-                   uint64_t value, uint64_t remote_addr,
-                   int dlist_index, uint64_t flags,
-                   ucp_gpu_request_t *req);
+UCS_F_DEVICE ucs_status_t
+ucp_device_atomic_inc(ucp_device_mem_list_handle_h handle,
+                      uint64_t value, uint64_t remote_addr,
+                      int dlist_index, uint64_t flags,
+                      ucp_device_request_t *req);
 
 
 /**
@@ -109,7 +98,7 @@ ucp_gpu_atomic_inc(ucp_gpu_mem_list_handle_h handle,
  * the size of the descriptor list array from the handle, minus one.
  *
  * The routine returns a request that can be progressed and checked for
- * completion with @ref ucp_gpu_request_progress.
+ * completion with @ref ucp_device_request_progress.
  *
  * This routine can be called repeatedly with the same handle and different
  * addresses, lengths and atomic related parameters. The flags parameter can be
@@ -126,11 +115,11 @@ ucp_gpu_atomic_inc(ucp_gpu_mem_list_handle_h handle,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_multi(ucp_gpu_mem_list_handle_h handle, void *const *addrs,
-                  const uint64_t *remote_addrs, const size_t *lengths,
-                  uint64_t atomic_value, uint64_t atomic_remote_addr,
-                  uint64_t flags, ucp_gpu_request_t *req);
+UCS_F_DEVICE ucs_status_t
+ucp_device_put_multi(ucp_device_mem_list_handle_h handle, void *const *addrs,
+                     const uint64_t *remote_addrs, const size_t *lengths,
+                     uint64_t atomic_value, uint64_t atomic_remote_addr,
+                     uint64_t flags, ucp_device_request_t *req);
 
 
 /**
@@ -155,7 +144,7 @@ ucp_gpu_put_multi(ucp_gpu_mem_list_handle_h handle, void *const *addrs,
  * the handle.
  *
  * The routine returns a request that can be progressed and checked for
- * completion with @ref ucp_gpu_request_progress.
+ * completion with @ref ucp_device_request_progress.
  *
  * This routine can be called repeatedly with the same handle and different
  * dlist_indexes, addresses, lengths and atomic related parameters. The flags
@@ -176,16 +165,16 @@ ucp_gpu_put_multi(ucp_gpu_mem_list_handle_h handle, void *const *addrs,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_put_multi_partial(ucp_gpu_mem_list_handle_h handle,
-                          const int *dlist_indexes,
-                          size_t dlist_count,
-                          void *const *addrs, const uint64_t *remote_addrs,
-                          const size_t *lengths,
-                          uint64_t atomic_value,
-                          uint64_t atomic_remote_addr,
-                          uint64_t flags,
-                          ucp_gpu_request_t *req);
+UCS_F_DEVICE ucs_status_t
+ucp_device_put_multi_partial(ucp_device_mem_list_handle_h handle,
+                             const int *dlist_indexes,
+                             size_t dlist_count,
+                             void *const *addrs, const uint64_t *remote_addrs,
+                             const size_t *lengths,
+                             uint64_t atomic_value,
+                             uint64_t atomic_remote_addr,
+                             uint64_t flags,
+                             ucp_device_request_t *req);
 
 
 /**
@@ -203,7 +192,7 @@ ucp_gpu_put_multi_partial(ucp_gpu_mem_list_handle_h handle,
  *                            request have not completed.
  * @return Error code as defined by @ref ucs_status_t
  */
-UCS_DEVICE_FUNC ucs_status_t
-ucp_gpu_progress_req(ucp_gpu_request_t *req);
+UCS_F_DEVICE ucs_status_t
+ucp_device_progress_req(ucp_device_request_t *req);
 
 #endif /* UCP_DEVICE_IMPL_H */

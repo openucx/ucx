@@ -13,7 +13,7 @@
 
 
 typedef struct ucp_mem_list_elem {
-} ucp_gpu_mem_list_elem_t;
+} ucp_device_mem_list_elem_t;
 
 
 /**
@@ -58,9 +58,20 @@ typedef struct {
      * Array of descriptor list containing memory pairs to be used by GPU
      * device functions for memory transfers.
      */
-    ucp_gpu_mem_list_elem_t elems[];
-} ucp_gpu_mem_list_handle_t;
+    ucp_device_mem_list_elem_t elems[];
+} ucp_device_mem_list_handle_t;
 
-typedef ucp_gpu_mem_list_handle_t *ucp_gpu_mem_list_handle_h;
+typedef ucp_device_mem_list_handle_t *ucp_device_mem_list_handle_h;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief GPU request descriptor of a given batch
+ *
+ * This request tracks a batch of memory operations in progress. It can be used
+ * with @ref ucp_device_request_progress to detect request completion.
+ */
+typedef struct ucp_device_request {
+} ucp_device_request_t;
 
 #endif /* UCP_DEVICE_TYPES_H */

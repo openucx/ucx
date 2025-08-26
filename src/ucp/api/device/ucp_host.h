@@ -83,7 +83,7 @@ enum ucp_mem_list_create_params_field {
  * @brief Memory descriptor list create parameters.
  *
  * The structure defines the parameters that can be used to create a handle
- * with @ref ucp_gpu_mem_list_create.
+ * with @ref ucp_device_mem_list_create.
  */
 typedef struct ucp_mem_list_create_params {
     /**
@@ -117,8 +117,8 @@ typedef struct ucp_mem_list_create_params {
  *
  * Host side does not have access to the content of this descriptor.
  */
-struct ucp_gpu_mem_list_handle;
-typedef struct ucp_gpu_mem_list_handle *ucp_gpu_mem_list_handle_h;
+struct ucp_device_mem_list_handle;
+typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
 
 
 /**
@@ -131,7 +131,7 @@ typedef struct ucp_gpu_mem_list_handle *ucp_gpu_mem_list_handle_h;
  * device functions.
  *
  * It can be used repeatedly, until finally released by calling @ref
- * ucp_gpu_mem_list_release.
+ * ucp_device_mem_list_release.
  *
  * @param [in]  ep        Remote endpoint handle.
  * @param [in]  params    Parameters used to create the handle.
@@ -139,9 +139,10 @@ typedef struct ucp_gpu_mem_list_handle *ucp_gpu_mem_list_handle_h;
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t ucp_gpu_mem_list_create(ucp_ep_h ep,
-                                     const ucp_mem_list_create_params_t *params,
-                                     ucp_gpu_mem_list_handle_h *handle);
+ucs_status_t
+ucp_device_mem_list_create(ucp_ep_h ep,
+                           const ucp_mem_list_create_params_t *params,
+                           ucp_device_mem_list_handle_h *handle);
 
 
 /**
@@ -149,11 +150,11 @@ ucs_status_t ucp_gpu_mem_list_create(ucp_ep_h ep,
  * @brief Release function for a descriptor list handle.
  *
  * This function releases the handle that was created using @ref
- * ucp_gpu_mem_list_create.
+ * ucp_device_mem_list_create.
  *
  * @param [in] handle     Created handle to release.
  */
-void ucp_gpu_mem_list_release(ucp_gpu_mem_list_handle_h handle);
+void ucp_device_mem_list_release(ucp_device_mem_list_handle_h handle);
 
 END_C_DECLS
 
