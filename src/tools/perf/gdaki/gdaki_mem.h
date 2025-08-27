@@ -13,13 +13,13 @@
 
 
 #define CUDA_CALL(_func, ...) \
-    { \
+    do { \
         cudaError_t _cerr = _func(__VA_ARGS__); \
         if (_cerr != cudaSuccess) { \
             ucs_error("%s() failed: %d (%s)", UCS_PP_MAKE_STRING(_func), \
                       _cerr, cudaGetErrorString(_cerr)); \
         } \
-    }
+    } while (0)
 
 class gdaki_mem {
 public:

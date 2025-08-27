@@ -1,11 +1,8 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
-* Copyright (C) The University of Tennessee and The University
-*               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
-*
-* See file LICENSE for terms.
-*/
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
 
 #pragma once
 
