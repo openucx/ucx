@@ -17,7 +17,7 @@ typedef struct ucp_mem_list_elem {
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Descriptor list handle stored on GPU memory.
  *
  * This handle is obtained and managed with functions called on host. It can be
@@ -65,7 +65,7 @@ typedef ucp_device_mem_list_handle_t *ucp_device_mem_list_handle_h;
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief GPU request descriptor of a given batch
  *
  * This request tracks a batch of memory operations in progress. It can be used

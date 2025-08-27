@@ -15,7 +15,7 @@
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Posts one memory put operation.
  *
  * This GPU routine posts one put operation using descriptor list handle.
@@ -30,7 +30,7 @@
  * addresses and length. The flags parameter can be used to modify the behavior
  * of the routine.
  *
- * @param [in]  handle      Created descriptor list handle to use for transfer.
+ * @param [in]  handle      Memory descriptor list handle to use.
  * @param [in]  addr        Local virtual address to send data from.
  * @param [in]  remote_addr Remote virtual address to send data to.
  * @param [in]  length      Length in bytes of the data to send.
@@ -51,7 +51,7 @@ ucp_device_put_single(ucp_device_mem_list_handle_h handle, const void *addr,
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Posts one memory atomic increment operation.
  *
  * This GPU routine posts one atomic increment operation using descriptor list
@@ -66,7 +66,7 @@ ucp_device_put_single(ucp_device_mem_list_handle_h handle, const void *addr,
  * address. The flags parameter can be used to modify the behavior of the
  * routine.
  *
- * @param [in]  handle      Created descriptor list handle to use for transfer.
+ * @param [in]  handle      Memory descriptor list handle to use.
  * @param [in]  value       Value used to increment the remote address.
  * @param [in]  remote_addr Remote virtual address to perform the increment to.
  * @param [in]  dlist_index Index in descriptor list pointing to the memory
@@ -87,7 +87,7 @@ ucp_device_atomic_inc(ucp_device_mem_list_handle_h handle,
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Posts multiple put operations followed by one atomic operation.
  *
  * This GPU routine posts a batch of put operations using the descriptor list
@@ -110,7 +110,7 @@ ucp_device_atomic_inc(ucp_device_mem_list_handle_h handle,
  * addresses, lengths and atomic related parameters. The flags parameter can be
  * used to modify the behavior of the routine.
  *
- * @param [in]  handle              Created descriptor list handle to use.
+ * @param [in]  handle              Memory descriptor list handle to use.
  * @param [in]  addrs               Array of local addresses to send from.
  * @param [in]  remote_addrs        Array of remote addresses to send to.
  * @param [in]  lengths             Array of lengths in bytes for each send.
@@ -132,7 +132,7 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h handle, void *const *addrs,
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Posts few put operations followed by one atomic operation.
  *
  * This GPU routine posts a batch of put operations using only some of the
@@ -159,7 +159,7 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h handle, void *const *addrs,
  * dlist_indexes, addresses, lengths and atomic related parameters. The flags
  * parameter can be used to modify the behavior of the routine.
  *
- * @param [in]  handle              Created descriptor list handle to use.
+ * @param [in]  handle              Memory descriptor list handle to use.
  * @param [in]  dlist_indexes       Array of indexes, to use in descriptor list
  *                                  of entries from handle.
  * @param [in]  dlist_count         Number of indexes in the array @ref
@@ -190,7 +190,7 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h handle,
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Progress a GPU request containing a batch of operations.
  *
  * This GPU progress function checks and progresses a request representing a

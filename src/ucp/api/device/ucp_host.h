@@ -16,15 +16,16 @@
 BEGIN_C_DECLS
 
 /**
- * @defgroup UCP_DEVICE_API Unified Communication Protocol (UCP) Device API
+ * @defgroup UCP_DEVICE Device API
+ * @ingroup UCP_API
  * @{
- * This section describes UCP Device API.
+ * UCP Device API.
  * @}
  */
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Memory descriptor list attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_mem_list_elem are
@@ -37,7 +38,7 @@ enum ucp_mem_list_elem_field {
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Memory descriptor list entry.
  *
  * This describes a pair of local and remote memory for which a memory operation
@@ -65,21 +66,22 @@ typedef struct ucp_mem_list_elem {
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Memory descriptor list create parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_mem_list_params_t
  * are presents. It is used to enable backward compatibility support.
  */
 enum ucp_mem_list_params_field {
-    UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENTS     = UCS_BIT(0), /**< Elements array base address */
-    UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENT_SIZE = UCS_BIT(1), /**< Element size in bytes */
-    UCP_MEM_LIST_CREATE_PARAMS_FIELD_NUM_ELEMENTS = UCS_BIT(2)  /**< Number of elements */
+    UCP_MEM_LIST_CREATE_PARAMS_FIELD_MEM_TYPE     = UCS_BIT(0), /**< Memory type used to identify the type of device */
+    UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENTS     = UCS_BIT(1), /**< Elements array base address */
+    UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENT_SIZE = UCS_BIT(2), /**< Element size in bytes */
+    UCP_MEM_LIST_CREATE_PARAMS_FIELD_NUM_ELEMENTS = UCS_BIT(3)  /**< Number of elements */
 };
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Memory descriptor list create parameters.
  *
  * The structure defines the parameters that can be used to create a handle
@@ -95,7 +97,7 @@ typedef struct ucp_mem_list_params {
     uint64_t                  field_mask;
 
     /**
-     * Memory type to identify the device.
+     * Memory type to identify the type of device.
      */
     ucs_memory_type_t         mem_type;
 
@@ -117,7 +119,7 @@ typedef struct ucp_mem_list_params {
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Opaque descriptor list stored on GPU.
  *
  * Host side does not have access to the content of this descriptor.
@@ -127,7 +129,7 @@ typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Memory descriptor list create function for batched RMA operations.
  *
  * This function creates and populates a descriptor list handle using parameters
@@ -151,7 +153,7 @@ ucp_mem_list_create(ucp_ep_h ep,
 
 
 /**
- * @ingroup UCP_COMM
+ * @ingroup UCP_DEVICE
  * @brief Release function for a descriptor list handle.
  *
  * This function releases the handle that was created using @ref
