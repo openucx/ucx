@@ -437,6 +437,7 @@ typedef enum uct_atomic_op {
 
         /* Interface capability */
 #define UCT_IFACE_FLAG_INTER_NODE      UCS_BIT(54) /**< Interface is inter-node capable */
+#define UCT_IFACE_FLAG_EXPORT_EP       UCS_BIT(55) /**< Interface supports export ep */
 /**
  * @}
  */
@@ -1151,11 +1152,16 @@ struct uct_iface_attr {
 
         uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
         uint64_t             event_flags;/**< Flags from @ref UCT_RESOURCE_IFACE_EVENT_CAP */
+
+        struct {
+            uint64_t mem_types;          /**< Bitmap of supported memory types for export */
+        } export_ep;
     } cap;                               /**< Interface capabilities */
 
     size_t                   device_addr_len;/**< Size of device address */
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
+    size_t                   mem_element_len;/**< Size of memory element */
     size_t                   max_conn_priv;  /**< Max size of the iface's private data.
                                                   used for connection
                                                   establishment with sockaddr */

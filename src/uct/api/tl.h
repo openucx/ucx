@@ -286,6 +286,11 @@ typedef int          (*uct_iface_is_reachable_func_t)(const uct_iface_h iface,
                                                       const uct_device_addr_t *dev_addr,
                                                       const uct_iface_addr_t *iface_addr);
 
+/* interface - export */
+typedef ucs_status_t (*uct_iface_mem_element_pack_func_t)(
+        const uct_iface_h iface, const uct_mem_h memh,
+        const uct_rkey_t rkey, void *target);
+// TODO - Add export endpoint func
 
 /**
  * Transport interface operations.
@@ -371,6 +376,9 @@ typedef struct uct_iface_ops {
     uct_iface_get_device_address_func_t iface_get_device_address;
     uct_iface_get_address_func_t        iface_get_address;
     uct_iface_is_reachable_func_t       iface_is_reachable;
+
+    /* interface - pack */
+    uct_iface_mem_element_pack_func_t   iface_mem_element_pack;
 
 } uct_iface_ops_t;
 
