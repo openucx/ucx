@@ -14,7 +14,7 @@
 #include "libperf_int.h"
 #include "ucp_tests.h"
 
-#ifdef HAVE_CUDA // TODO GDAKI: change to HAVE_DOCA_GPUNETIO_H
+#if HAVE_CUDA // TODO GDAKI: change to HAVE_DOCA_GPUNETIO_H
 #include "ucp_gdaki_tests.h"
 #endif
 
@@ -977,7 +977,7 @@ ucp_perf_test_runner_create(ucx_perf_context_t &perf)
 {
     // TODO GDAKI: check if CUDA kernel device is enabled by -a option
     if (false) {
-#ifdef HAVE_CUDA // TODO GDAKI: change to HAVE_DOCA_GPUNETIO_H
+#if HAVE_CUDA // TODO GDAKI: change to HAVE_DOCA_GPUNETIO_H
         return std::unique_ptr<ucp_perf_test_runner_base>(
                 new ucp_perf_test_gdaki_runner<CMD, TYPE, FLAGS>(perf));
 #else
