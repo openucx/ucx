@@ -15,27 +15,36 @@ public:
     {
         add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64);
     }
+
+    virtual void init()
+    {
+        ucp_test::init();
+        sender().connect(&receiver(), get_ep_params());
+        if (!is_loopback()) {
+            receiver().connect(&sender(), get_ep_params());
+        }
+    }
 };
 
-UCS_TEST_P(test_ucp_device, cuda_kernel_memcmp)
+UCS_TEST_P(test_ucp_device, mapped_buffer_kernel_memcmp)
 {
     size_t size = 100 * UCS_MBYTE;
-    uint8_t *data;
 
-    ASSERT_EQ(cudaSuccess, cudaMalloc(&data, 2 * size));
-    uint8_t *src = data;
-    uint8_t *dst = static_cast<uint8_t*>(UCS_PTR_BYTE_OFFSET(data, size));
+    mapped_buffer dst(size, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
+    mapped_buffer src(size, sender(), 0, UCS_MEMORY_TYPE_CUDA);
 
-    EXPECT_EQ(cudaSuccess, cudaMemset(src, 0x11, size));
-    EXPECT_EQ(cudaSuccess, cudaMemset(dst, 0xde, size));
+    src.pattern_fill(0x1234, size);
+    src.pattern_check(0x1234, size);
 
-    EXPECT_EQ(1, cuda::memcmp(src, dst, size));
-    EXPECT_EQ(cudaSuccess, cudaMemset(dst, 0x11, size));
-    EXPECT_EQ(0, cuda::memcmp(src, dst, size));
-    EXPECT_EQ(cudaSuccess, cudaMemset(dst + size / 10, 0xfa, 10));
-    EXPECT_EQ(1, cuda::memcmp(src, dst, size));
+    EXPECT_EQ(cudaSuccess, cudaMemset(src.ptr(), 0x11, size));
+    EXPECT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0xde, size));
 
-    EXPECT_EQ(cudaSuccess, cudaFree(data));
+    EXPECT_EQ(1, cuda::memcmp(src.ptr(), dst.ptr(), size));
+    EXPECT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0x11, size));
+    EXPECT_EQ(0, cuda::memcmp(src.ptr(), dst.ptr(), size));
+    EXPECT_EQ(cudaSuccess,
+              cudaMemset(UCS_PTR_BYTE_OFFSET(dst.ptr(), size / 10), 0xfa, 10));
+    EXPECT_EQ(1, cuda::memcmp(src.ptr(), dst.ptr(), size));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_v, "rc_v")
