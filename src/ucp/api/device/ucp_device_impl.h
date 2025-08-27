@@ -18,7 +18,7 @@
  * @ingroup UCP_DEVICE
  * @brief Posts one memory put operation.
  *
- * This GPU routine posts one put operation using descriptor list handle.
+ * This device routine posts one put operation using descriptor list handle.
  * The @a mem_list_index is used to point at the @a mem_list entry to be used
  * for the memory transfer. The addresses and length must be valid for the used
  * @a mem_list entry.
@@ -44,7 +44,7 @@
 UCS_F_DEVICE ucs_status_t
 ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
                       const void *address, uint64_t remote_address,
-                      size_t length, int mem_list_index,
+                      size_t length, unsigned mem_list_index,
                       uint64_t flags, ucp_device_request_t *req)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
@@ -53,12 +53,12 @@ ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Posts one memory atomic increment operation.
+ * @brief Posts one memory increment operation.
  *
- * This GPU routine posts one atomic increment operation using memory descriptor
- * list handle. The @ref mem_list_index is used to point at the dlist entry to
- * be used for the atomic operation. The remote address must be valid for the
- * used @a mem_list entry.
+ * This device routine posts one increment operation using memory descriptor
+ * list handle. The @ref mem_list_index is used to point at the @a mem_list
+ * entry to be used for the increment operation. The remote address must be
+ * valid for the used @a mem_list entry.
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
@@ -72,17 +72,17 @@ ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
  * @param [in]  remote_address  Remote virtual address to perform the increment
  *                              to.
  * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
- *                              remote key to use for the atomic operation.
+ *                              remote key to use for the increment operation.
  * @param [in]  flags           Flags usable to modify the function behavior.
  * @param [out] req             Request populated by the call.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_counter64_inc(ucp_device_mem_list_handle_h mem_list,
-                         uint64_t inc_value, uint64_t remote_address,
-                         int mem_list_index, uint64_t flags,
-                         ucp_device_request_t *req)
+ucp_device_counter_inc(ucp_device_mem_list_handle_h mem_list,
+                       uint64_t inc_value, uint64_t remote_address,
+                       int mem_list_index, uint64_t flags,
+                       ucp_device_request_t *req)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
 }
@@ -90,17 +90,17 @@ ucp_device_counter64_inc(ucp_device_mem_list_handle_h mem_list,
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Posts multiple put operations followed by one atomic operation.
+ * @brief Posts multiple put operations followed by one increment operation.
  *
- * This GPU routine posts a batch of put operations using the descriptor list
- * entries in the input handle, followed by an atomic operation. This atomic
+ * This device routine posts a batch of put operations using the descriptor list
+ * entries in the input handle, followed by an increment operation. This
  * operation can be polled on the receiver to detect completion of all the
  * operations of the batch, started during the same routine call.
  *
  * The content of each entries in the arrays @a addresses, @a remote_addresses
  * and @a lengths must be valid for each corresponding entry in the descriptor
  * list from the input handle. The last entry in the descriptor list contains
- * the remote memory registration descriptors to be used for the atomic
+ * the remote memory registration descriptors to be used for the increment
  * operation.
  *
  * The size of the arrays @a addresses, @a remote_addresses, and @a lengths
@@ -111,15 +111,15 @@ ucp_device_counter64_inc(ucp_device_mem_list_handle_h mem_list,
  * completion with @ref ucp_device_progress_req.
  *
  * This routine can be called repeatedly with the same handle and different
- * @a addresses, @a lengths and atomic related parameters. The @a flags
+ * @a addresses, @a lengths and counter related parameters. The @a flags
  * parameter can be used to modify the behavior of the routine.
  *
  * @param [in]  mem_list               Memory descriptor list handle to use.
  * @param [in]  addresses              Array of local addresses to send from.
  * @param [in]  remote_addresses       Array of remote addresses to send to.
  * @param [in]  lengths                Array of lengths in bytes for each send.
- * @param [in]  atomic_value           Value of the remote increment.
- * @param [in]  atomic_remote_address  Remote address to increment to.
+ * @param [in]  counter_inc_value      Value of the remote increment.
+ * @param [in]  counter_remote_address Remote address to increment to.
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [out] req                    Request populated by the call.
  *
@@ -128,8 +128,8 @@ ucp_device_counter64_inc(ucp_device_mem_list_handle_h mem_list,
 UCS_F_DEVICE ucs_status_t
 ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
                      void *const *addresses, const uint64_t *remote_addresses,
-                     const size_t *lengths, uint64_t atomic_value,
-                     uint64_t atomic_remote_address, uint64_t flags,
+                     const size_t *lengths, uint64_t counter_inc_value,
+                     uint64_t counter_remote_address, uint64_t flags,
                      ucp_device_request_t *req)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
@@ -138,16 +138,16 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Posts few put operations followed by one atomic operation.
+ * @brief Posts few put operations followed by one increment operation.
  *
- * This GPU routine posts a batch of put operations using only some of the
- * descriptor list entries in the input handle, followed by an atomic operation.
- * This atomic operation can be polled on the receiver to detect completion of
- * all operations of the batch, started during the same routine call.
+ * This device routine posts a batch of put operations using only some of the
+ * descriptor list entries in the input handle, followed by an operation.
+ * This increment operation can be polled on the receiver to detect completion
+ * of all operations of the batch, started during the same routine call.
  *
  * The set of indexes from the descriptor list entries to use are to be passed
  * in the array @ref mem_list_indexes. The last entry of the descriptor list is to
- * be used for the final atomic increment operation.
+ * be used for the final increment operation.
  *
  * The content of each entries in the arrays addresses, remote_addresses and
  * lengths must be valid for each corresponding descriptor list entry whose
@@ -161,33 +161,33 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
  * completion with @ref ucp_device_progress_req.
  *
  * This routine can be called repeatedly with the same handle and different
- * mem_list_indexes, addresses, lengths and atomic related parameters. The flags
- * parameter can be used to modify the behavior of the routine.
+ * mem_list_indexes, addresses, lengths and increment related parameters. The
+ * flags parameter can be used to modify the behavior of the routine.
  *
- * @param [in]  mem_list            Memory descriptor list handle to use.
- * @param [in]  mem_list_indexes    Array of indexes, to use in descriptor list
- *                                  of entries from handle.
- * @param [in]  mem_list_count      Number of indexes in the array @ref
- *                                  mem_list_indexes.
- * @param [in]  addresses           Array of local addresses to send from.
- * @param [in]  remote_addresses    Array of remote addresses to send to.
- * @param [in]  lengths             Array of lengths in bytes for each send.
- * @param [in]  atomic_value        Value of the remote increment.
- * @param [in]  atomic_remote_addr  Remote address to increment to.
- * @param [in]  flags               Flags to modify the function behavior.
- * @param [out] req                 Request populated by the call.
+ * @param [in]  mem_list               Memory descriptor list handle to use.
+ * @param [in]  mem_list_indexes       Array of indexes, to use in descriptor
+ *                                     list of entries from handle.
+ * @param [in]  mem_list_count         Number of indexes in the array @ref
+ *                                     mem_list_indexes.
+ * @param [in]  addresses              Array of local addresses to send from.
+ * @param [in]  remote_addresses       Array of remote addresses to send to.
+ * @param [in]  lengths                Array of lengths in bytes for each send.
+ * @param [in]  counter_inc_value      Value of the remote increment.
+ * @param [in]  counter_remote_address Remote address to increment to.
+ * @param [in]  flags                  Flags to modify the function behavior.
+ * @param [out] req                    Request populated by the call.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
-                             const int *mem_list_indexes,
-                             size_t mem_list_count,
+ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_elem,
+                             const unsigned *mem_elem_indexes,
+                             unsigned mem_elem_count,
                              void *const *addresses,
                              const uint64_t *remote_addresses,
                              const size_t *lengths,
-                             uint64_t atomic_value,
-                             uint64_t atomic_remote_addr,
+                             uint64_t counter_inc_value,
+                             uint64_t counter_remote_address,
                              uint64_t flags,
                              ucp_device_request_t *req)
 {
@@ -197,9 +197,9 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Progress a GPU request containing a batch of operations.
+ * @brief Progress a device request containing a batch of operations.
  *
- * This GPU progress function checks and progresses a request representing a
+ * This device progress function checks and progresses a request representing a
  * batch of one or many operations in progress.
  *
  * @param [in]  req  Request containing operations in progress.
