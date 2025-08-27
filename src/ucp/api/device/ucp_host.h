@@ -73,10 +73,10 @@ typedef struct ucp_mem_list_elem {
  * are presents. It is used to enable backward compatibility support.
  */
 enum ucp_mem_list_params_field {
-    UCP_MEM_LIST_CREATE_PARAMS_FIELD_MEM_TYPE     = UCS_BIT(0), /**< Memory type used to identify the type of device */
-    UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENTS     = UCS_BIT(1), /**< Elements array base address */
-    UCP_MEM_LIST_CREATE_PARAMS_FIELD_ELEMENT_SIZE = UCS_BIT(2), /**< Element size in bytes */
-    UCP_MEM_LIST_CREATE_PARAMS_FIELD_NUM_ELEMENTS = UCS_BIT(3)  /**< Number of elements */
+    UCP_MEM_LIST_PARAMS_FIELD_MEM_TYPE     = UCS_BIT(0), /**< Memory type used to identify the type of device */
+    UCP_MEM_LIST_PARAMS_FIELD_ELEMENTS     = UCS_BIT(1), /**< Elements array base address */
+    UCP_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE = UCS_BIT(2), /**< Element size in bytes */
+    UCP_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS = UCS_BIT(3)  /**< Number of elements */
 };
 
 
@@ -95,11 +95,6 @@ typedef struct ucp_mem_list_params {
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                  field_mask;
-
-    /**
-     * Memory type to identify the type of device.
-     */
-    ucs_memory_type_t         mem_type;
 
     /**
      * Size in bytes of one descriptor element, for backward compatibility.

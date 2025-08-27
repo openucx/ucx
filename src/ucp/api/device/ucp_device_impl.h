@@ -7,7 +7,7 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
-#include <ucp/api/device/ucp_device_types.h>
+#include "ucp_device_types.h"
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
@@ -30,20 +30,21 @@
  * addresses and length. The flags parameter can be used to modify the behavior
  * of the routine.
  *
- * @param [in]  handle      Memory descriptor list handle to use.
- * @param [in]  addr        Local virtual address to send data from.
- * @param [in]  remote_addr Remote virtual address to send data to.
- * @param [in]  length      Length in bytes of the data to send.
- * @param [in]  dlist_index Index in descriptor list pointing to the memory
- *                          registration keys to use for the transfer.
- * @param [in]  flags       Bitfield usable to modify the function behavior.
- * @param [out] req         Request populated by the call.
+ * @param [in]  mem_list        Memory descriptor list handle to use.
+ * @param [in]  address         Local virtual address to send data from.
+ * @param [in]  remote_address  Remote virtual address to send data to.
+ * @param [in]  length          Length in bytes of the data to send.
+ * @param [in]  dlist_index     Index in descriptor list pointing to the memory
+ *                              registration keys to use for the transfer.
+ * @param [in]  flags           Bitfield usable to modify the function behavior.
+ * @param [out] req             Request populated by the call.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_put_single(ucp_device_mem_list_handle_h handle, const void *addr,
-                      uint64_t remote_addr, size_t length, int dlist_index,
+ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
+                      const void *address, uint64_t remote_address,
+                      size_t length, int dlist_index,
                       uint64_t flags, ucp_device_request_t *req)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
@@ -66,21 +67,22 @@ ucp_device_put_single(ucp_device_mem_list_handle_h handle, const void *addr,
  * address. The flags parameter can be used to modify the behavior of the
  * routine.
  *
- * @param [in]  handle      Memory descriptor list handle to use.
- * @param [in]  value       Value used to increment the remote address.
- * @param [in]  remote_addr Remote virtual address to perform the increment to.
- * @param [in]  dlist_index Index in descriptor list pointing to the memory
- *                          remote key to use for the atomic operation.
- * @param [in]  flags       Bitfield usable to modify the function behavior.
- * @param [out] req         Request populated by the call.
+ * @param [in]  mem_list        Memory descriptor list handle to use.
+ * @param [in]  inc_value       Value used to increment the remote address.
+ * @param [in]  remote_address  Remote virtual address to perform the increment
+ *                              to.
+ * @param [in]  dlist_index     Index in descriptor list pointing to the memory
+ *                              remote key to use for the atomic operation.
+ * @param [in]  flags           Bitfield usable to modify the function behavior.
+ * @param [out] req             Request populated by the call.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_atomic_inc(ucp_device_mem_list_handle_h handle,
-                      uint64_t value, uint64_t remote_addr,
-                      int dlist_index, uint64_t flags,
-                      ucp_device_request_t *req)
+ucp_device_counter64_inc(ucp_device_mem_list_handle_h mem_list,
+                         uint64_t inc_value, uint64_t remote_address,
+                         int mem_list_index, uint64_t flags,
+                         ucp_device_request_t *req)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
 }
@@ -95,13 +97,13 @@ ucp_device_atomic_inc(ucp_device_mem_list_handle_h handle,
  * operation can be polled on the receiver to detect completion of all the
  * operations of the batch, started during the same routine call.
  *
- * The content of each entries in the arrays addrs, remote_addrs and lengths
- * must be valid for each corresponding entry in the descriptor list from the
- * input handle. The last entry in the descriptor list contains the remote
- * memory registration descriptors to be used for the atomic operation.
+ * The content of each entries in the arrays addresses, remote_addresses and
+ * lengths must be valid for each corresponding entry in the descriptor list
+ * from the input handle. The last entry in the descriptor list contains the
+ * remote memory registration descriptors to be used for the atomic operation.
  *
- * The size of the arrays addrs, remote_addrs, and lengths are all equal to
- * the size of the descriptor list array from the handle, minus one.
+ * The size of the arrays addresses, remote_addresses, and lengths are all equal
+ * to the size of the descriptor list array from the handle, minus one.
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_request_progress.
@@ -110,22 +112,23 @@ ucp_device_atomic_inc(ucp_device_mem_list_handle_h handle,
  * addresses, lengths and atomic related parameters. The flags parameter can be
  * used to modify the behavior of the routine.
  *
- * @param [in]  handle              Memory descriptor list handle to use.
- * @param [in]  addrs               Array of local addresses to send from.
- * @param [in]  remote_addrs        Array of remote addresses to send to.
- * @param [in]  lengths             Array of lengths in bytes for each send.
- * @param [in]  atomic_value        Value of the remote increment.
- * @param [in]  atomic_remote_addr  Remote address to increment to.
- * @param [in]  flags               Bitfield to modify the function behavior.
- * @param [out] req                 Request populated by the call.
+ * @param [in]  mem_list               Memory descriptor list handle to use.
+ * @param [in]  addresses              Array of local addresses to send from.
+ * @param [in]  remote_addresses       Array of remote addresses to send to.
+ * @param [in]  lengths                Array of lengths in bytes for each send.
+ * @param [in]  atomic_value           Value of the remote increment.
+ * @param [in]  atomic_remote_address  Remote address to increment to.
+ * @param [in]  flags                  Bitfield to modify the function behavior.
+ * @param [out] req                    Request populated by the call.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_put_multi(ucp_device_mem_list_handle_h handle, void *const *addrs,
-                     const uint64_t *remote_addrs, const size_t *lengths,
-                     uint64_t atomic_value, uint64_t atomic_remote_addr,
-                     uint64_t flags, ucp_device_request_t *req)
+ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
+                     void *const *addresses, const uint64_t *remote_addresses,
+                     const size_t *lengths, uint64_t atomic_value,
+                     uint64_t atomic_remote_address, uint64_t flags,
+                     ucp_device_request_t *req)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
 }
@@ -144,13 +147,13 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h handle, void *const *addrs,
  * in the array @ref dlist_indexes. The last entry of the descriptor list is to
  * be used for the final atomic increment operation.
  *
- * The content of each entries in the arrays addrs, remote_addrs and lengths
- * must be valid for each corresponding descriptor list entry whose index is
- * referenced in @ref dlist_indexes.
+ * The content of each entries in the arrays addresses, remote_addresses and
+ * lengths must be valid for each corresponding descriptor list entry whose
+ * index is referenced in @ref dlist_indexes.
  *
- * The size of the arrays dlist_indexes, addrs, remote_addrs, and lengths are
- * all equal. They are lower than the size of the descriptor list array from
- * the handle.
+ * The size of the arrays dlist_indexes, addresses, remote_addresses, and
+ * lengths are all equal. They are lower than the size of the descriptor list
+ * array from the handle.
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_request_progress.
@@ -159,13 +162,13 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h handle, void *const *addrs,
  * dlist_indexes, addresses, lengths and atomic related parameters. The flags
  * parameter can be used to modify the behavior of the routine.
  *
- * @param [in]  handle              Memory descriptor list handle to use.
+ * @param [in]  mem_list            Memory descriptor list handle to use.
  * @param [in]  dlist_indexes       Array of indexes, to use in descriptor list
  *                                  of entries from handle.
  * @param [in]  dlist_count         Number of indexes in the array @ref
  *                                  dlist_indexes.
- * @param [in]  addrs               Array of local addresses to send from.
- * @param [in]  remote_addrs        Array of remote addresses to send to.
+ * @param [in]  addresses           Array of local addresses to send from.
+ * @param [in]  remote_addresses    Array of remote addresses to send to.
  * @param [in]  lengths             Array of lengths in bytes for each send.
  * @param [in]  atomic_value        Value of the remote increment.
  * @param [in]  atomic_remote_addr  Remote address to increment to.
@@ -175,10 +178,11 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h handle, void *const *addrs,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_put_multi_partial(ucp_device_mem_list_handle_h handle,
+ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
                              const int *dlist_indexes,
                              size_t dlist_count,
-                             void *const *addrs, const uint64_t *remote_addrs,
+                             void *const *addresses,
+                             const uint64_t *remote_addresses,
                              const size_t *lengths,
                              uint64_t atomic_value,
                              uint64_t atomic_remote_addr,

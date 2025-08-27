@@ -13,7 +13,6 @@
 
 CC=${CC:-gcc}
 CXX=${CXX:-g++}
-NVCC=${NVCC:-nvcc}
 
 cd ${1:-.}
 
@@ -29,10 +28,9 @@ do
 	fi
 
 	# devices files should be ignored for now
-	file=$(basename ${hfile})
-	if test "$file" != "${file#ucp_device_}"
+	if test "$hfile" != "${hfile#ucp/api/device/}"
 	then
-		echo "SKIPPED $hfile (NVCC)"
+		echo "SKIPPED $hfile (device compiler)"
 		continue
 	fi
 
