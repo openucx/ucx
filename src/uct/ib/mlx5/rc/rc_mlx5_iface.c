@@ -943,7 +943,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                                                    max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
 
-    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) &&
+    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
         md->ddp_support_dv.rc) {
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
