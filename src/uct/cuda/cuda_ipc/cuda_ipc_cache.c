@@ -261,18 +261,14 @@ uct_cuda_ipc_open_memhandle_vmm(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     }
 
     *mapped_addr = dptr;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemRelease(handle));
-    if (status == UCS_OK) {
-        goto out;
-    }
+    goto release_handle;
 
 unmap_range:
-    cuMemUnmap(dptr, key->b_len);
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(dptr, key->b_len));
 release_va_range:
-    cuMemAddressFree(dptr, key->b_len);
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(dptr, key->b_len));
 release_handle:
-    cuMemRelease(handle);
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
 out:
     return status;
 }
