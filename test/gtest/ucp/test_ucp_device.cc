@@ -36,15 +36,15 @@ UCS_TEST_P(test_ucp_device, mapped_buffer_kernel_memcmp)
     src.pattern_fill(0x1234, size);
     src.pattern_check(0x1234, size);
 
-    EXPECT_EQ(cudaSuccess, cudaMemset(src.ptr(), 0x11, size));
-    EXPECT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0xde, size));
+    ASSERT_EQ(cudaSuccess, cudaMemset(src.ptr(), 0x11, size));
+    ASSERT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0xde, size));
 
-    EXPECT_EQ(1, cuda::memcmp(src.ptr(), dst.ptr(), size));
-    EXPECT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0x11, size));
-    EXPECT_EQ(0, cuda::memcmp(src.ptr(), dst.ptr(), size));
-    EXPECT_EQ(cudaSuccess,
+    ASSERT_EQ(1, cuda::memcmp(src.ptr(), dst.ptr(), size));
+    ASSERT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0x11, size));
+    ASSERT_EQ(0, cuda::memcmp(src.ptr(), dst.ptr(), size));
+    ASSERT_EQ(cudaSuccess,
               cudaMemset(UCS_PTR_BYTE_OFFSET(dst.ptr(), size / 10), 0xfa, 10));
-    EXPECT_EQ(1, cuda::memcmp(src.ptr(), dst.ptr(), size));
+    ASSERT_EQ(1, cuda::memcmp(src.ptr(), dst.ptr(), size));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_v, "rc_v")
