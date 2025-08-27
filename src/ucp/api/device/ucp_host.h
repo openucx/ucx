@@ -84,7 +84,7 @@ enum ucp_mem_list_params_field {
  * @brief Memory descriptor list create parameters.
  *
  * The structure defines the parameters that can be used to create a handle
- * with @ref ucp_device_mem_list_create.
+ * with @ref ucp_mem_list_create.
  */
 typedef struct ucp_mem_list_params {
     /**
@@ -132,7 +132,7 @@ typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
  * device functions.
  *
  * It can be used repeatedly, until finally released by calling @ref
- * ucp_device_mem_list_release.
+ * ucp_mem_list_release.
  *
  * @param [in]  ep        Remote endpoint handle.
  * @param [in]  params    Parameters used to create the handle.
@@ -151,7 +151,7 @@ ucp_mem_list_create(ucp_ep_h ep,
  * @brief Release function for a descriptor list handle.
  *
  * This function releases the handle that was created using @ref
- * ucp_device_mem_list_create.
+ * ucp_mem_list_create.
  *
  * @param [in] handle     Created handle to release.
  */

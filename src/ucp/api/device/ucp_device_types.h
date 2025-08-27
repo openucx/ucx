@@ -7,9 +7,7 @@
 #ifndef UCP_DEVICE_TYPES_H
 #define UCP_DEVICE_TYPES_H
 
-#include <ucs/type/status.h>
 #include <uct/api/uct.h>
-#include <ucp/api/ucp.h>
 
 
 typedef struct ucp_mem_list_elem {
@@ -42,21 +40,21 @@ typedef struct {
      * Array of pointers to UCT exported endpoints, used for multi-lane
      * transfers.
      */
-    uct_ep_t                   **uct_ep;
+    uct_ep_h                   *uct_ep;
 
     /**
-     * Number of UCT exported endpoints found in @a uct_ep arrays.
+     * Number of UCT exported endpoints found in @a uct_ep array.
      */
     unsigned                   num_uct_eps;
 
     /**
-     * Number of entries in the descriptor list array @a elems.
+     * Number of entries in the memory descriptors array @a elems.
      */
     unsigned                   mem_list_length;
 
     /**
-     * Array of descriptor list containing memory pairs to be used by GPU
-     * device functions for memory transfers.
+     * Array of memory descriptors containing memory pairs to be used by device
+     * functions for memory transfers.
      */
     ucp_device_mem_list_elem_t elems[];
 } ucp_device_mem_list_handle_t;
@@ -69,7 +67,7 @@ typedef ucp_device_mem_list_handle_t *ucp_device_mem_list_handle_h;
  * @brief GPU request descriptor of a given batch
  *
  * This request tracks a batch of memory operations in progress. It can be used
- * with @ref ucp_device_request_progress to detect request completion.
+ * with @ref ucp_device_progress_req to detect request completion.
  */
 typedef struct ucp_device_request {
 } ucp_device_request_t;
