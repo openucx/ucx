@@ -6,26 +6,35 @@
 
 #include "gdaki_mem.h"
 #include <cuda_runtime.h>
+#include <stdexcept>
 
-#define CUDA_CALL(_func, ...) \
+#define CUDA_CALL(_handler, _func, ...) \
     do { \
         cudaError_t _cerr = _func(__VA_ARGS__); \
         if (_cerr != cudaSuccess) { \
-            ucs_error("%s() failed: %d (%s)", UCS_PP_MAKE_STRING(_func), \
-                      _cerr, cudaGetErrorString(_cerr)); \
+            char _msg[256]; \
+            snprintf(_msg, sizeof(_msg), "%s() failed: %d (%s)", \
+                     UCS_PP_MAKE_STRING(_func), (int)_cerr, \
+                     cudaGetErrorString(_cerr)); \
+            _handler(_msg); \
         } \
     } while (0)
 
+#define CUDA_CALL_THROW(_func, ...) \
+    CUDA_CALL(throw std::runtime_error, _func, __VA_ARGS__)
 
 gdaki_mem::gdaki_mem(size_t size) : m_size(size)
 {
-    CUDA_CALL(cudaSetDeviceFlags, cudaDeviceMapHost |
-                                  cudaDeviceScheduleBlockingSync);
-    CUDA_CALL(cudaHostAlloc, &m_cpu_ptr, size, cudaHostAllocMapped);
-    CUDA_CALL(cudaHostGetDevicePointer, &m_gpu_ptr, m_cpu_ptr, 0);
+    CUDA_CALL_THROW(cudaSetDeviceFlags, cudaDeviceMapHost |
+                                        cudaDeviceScheduleBlockingSync);
+    CUDA_CALL_THROW(cudaHostAlloc, &m_cpu_ptr, size, cudaHostAllocMapped);
+    CUDA_CALL([this](const char *msg) {
+        CUDA_CALL(ucs_warn, cudaFreeHost, m_cpu_ptr);
+        throw std::runtime_error(msg);
+    }, cudaHostGetDevicePointer, &m_gpu_ptr, m_cpu_ptr, 0);
 }
 
 gdaki_mem::~gdaki_mem()
 {
-    CUDA_CALL(cudaFreeHost, m_cpu_ptr);
+    CUDA_CALL(ucs_warn, cudaFreeHost, m_cpu_ptr);
 }

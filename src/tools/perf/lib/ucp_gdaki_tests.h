@@ -16,13 +16,13 @@
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 class ucp_perf_test_gdaki_runner: public ucp_perf_test_runner_base_psn<uint64_t> {
 public:
-    typedef uint64_t psn_t;
+    using psn_t = uint64_t;
 
     ucp_perf_test_gdaki_runner(ucx_perf_context_t &perf) :
         ucp_perf_test_runner_base_psn<uint64_t>(perf),
         m_gdaki_mem(sizeof(ucx_perf_context_t)),
-        m_cpu_ctx{static_cast<ucx_perf_context_t*>(m_gdaki_mem.get_cpu_ptr())},
-        m_gpu_ctx{static_cast<ucx_perf_context_t*>(m_gdaki_mem.get_gpu_ptr())}
+        m_cpu_ctx(static_cast<ucx_perf_context_t*>(m_gdaki_mem.get_cpu_ptr())),
+        m_gpu_ctx(static_cast<ucx_perf_context_t*>(m_gdaki_mem.get_gpu_ptr()))
     {
         memcpy(m_cpu_ctx, &perf, sizeof(ucx_perf_context_t));
     }

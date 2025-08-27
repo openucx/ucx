@@ -27,7 +27,7 @@
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 class ucp_perf_test_runner : public ucp_perf_test_runner_base_psn<uint8_t> {
 public:
-    typedef uint8_t psn_t;
+    using psn_t = uint8_t;
 
     static const unsigned AM_ID     = UCP_PERF_AM_ID;
     static const ucp_tag_t TAG      = 0x1337a880u;
