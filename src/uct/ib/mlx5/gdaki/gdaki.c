@@ -47,7 +47,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
-    init_attr.cq_len[UCT_IB_DIR_TX] = iface->super.super.config.tx_qp_len * 4;
+    init_attr.cq_len[UCT_IB_DIR_TX] = iface->super.super.config.tx_qp_len *
+                                      UCT_IB_MLX5_MAX_BB;
     init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
     status = uct_ib_mlx5_devx_create_cq(&iface->super.super.super,
                                         UCT_IB_DIR_TX, &init_attr, &self->cq, 0,
@@ -99,6 +100,13 @@ uct_rc_gdaki_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     return UCS_OK;
 }
 
+static ucs_status_t uct_rc_gdaki_iface_get_address(uct_iface_h tl_iface,
+                                                   uct_iface_addr_t *addr)
+{
+    *(uint8_t*)addr = UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
+    return UCS_OK;
+}
+
 static ucs_status_t
 uct_rc_gdaki_ep_connect_to_ep_v2(uct_ep_h ep,
                                  const uct_device_addr_t *device_addr,
@@ -116,10 +124,6 @@ uct_rc_gdaki_ep_connect_to_ep_v2(uct_ep_h ep,
     uint32_t dest_qp_num;
     ucs_status_t status;
 
-    if (device_addr == NULL || ep_addr == NULL) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super.super,
                                                  ib_addr, path_index, &ah_attr,
                                                  &path_mtu);
@@ -130,14 +134,9 @@ uct_rc_gdaki_ep_connect_to_ep_v2(uct_ep_h ep,
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
     dest_qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
 
-    status = uct_rc_mlx5_iface_common_devx_connect_qp(
+    return uct_rc_mlx5_iface_common_devx_connect_qp(
             &iface->super, &gdaki_ep->qp.super, dest_qp_num, &ah_attr, path_mtu,
             path_index, iface->super.super.config.max_rd_atomic);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return UCS_OK;
 }
 
 int uct_rc_gdaki_ep_is_connected(uct_ep_h tl_ep,
@@ -160,6 +159,7 @@ int uct_rc_gdaki_ep_is_connected(uct_ep_h tl_ep,
         return 0;
     }
 
+    /* TODO unite code with uct_rc_mlx5_base_ep_is_connected */
     if (params->field_mask & UCT_EP_IS_CONNECTED_FIELD_EP_ADDR) {
         rc_addr = (uct_rc_mlx5_base_ep_address_t*)params->ep_addr;
         addr_qp = uct_ib_unpack_uint24(rc_addr->qp_num);
@@ -193,8 +193,7 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
      *    causing issue when trying to send standard PUT. Eventually we must probably
      *    introduce another type of lane (rma_batch#x).
      */
-    iface_attr->cap.flags = UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_PENDING |
-                            UCT_IFACE_FLAG_CONNECT_TO_EP;
+    iface_attr->cap.flags      = UCT_IFACE_FLAG_CONNECT_TO_EP;
     iface_attr->ep_addr_len    = sizeof(uct_rc_mlx5_base_ep_address_t);
     iface_attr->iface_addr_len = sizeof(uint8_t);
     iface_attr->overhead       = UCT_RC_MLX5_IFACE_OVERHEAD;
@@ -202,6 +201,18 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_rc_gdaki_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
+                       const uct_ib_iface_init_attr_t *init_attr,
+                       int preferred_cpu, size_t inl)
+{
+    uct_rc_gdaki_iface_t *iface = ucs_derived_of(ib_iface,
+                                                 uct_rc_gdaki_iface_t);
+
+    iface->super.cq[dir].type = UCT_IB_MLX5_OBJ_TYPE_NULL;
     return UCS_OK;
 }
 
@@ -222,10 +233,10 @@ static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
             .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_one_int,
             .ep_is_connected       = uct_rc_gdaki_ep_is_connected,
         },
-        .create_cq = (uct_ib_iface_create_cq_func_t)ucs_empty_function_return_success,
+        .create_cq  = uct_rc_gdaki_create_cq,
         .destroy_cq = (uct_ib_iface_destroy_cq_func_t)ucs_empty_function_return_success,
     },
-    .init_rx = (uct_rc_iface_init_rx_func_t)ucs_empty_function_return_success,
+    .init_rx    = (uct_rc_iface_init_rx_func_t)ucs_empty_function_return_success,
     .cleanup_rx = (uct_rc_iface_cleanup_rx_func_t)
             ucs_empty_function_return_success,
 };
@@ -240,17 +251,18 @@ static uct_iface_ops_t uct_rc_gdaki_iface_tl_ops = {
     .ep_pending_purge  = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .iface_close       = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_gdaki_iface_t),
     .iface_query       = uct_rc_gdaki_iface_query,
-    .iface_get_address = (uct_iface_get_address_func_t)
-            ucs_empty_function_return_success,
+    .iface_get_address = uct_rc_gdaki_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
-    .iface_flush = (uct_iface_flush_func_t)ucs_empty_function_return_success,
-    .iface_fence = (uct_iface_fence_func_t)ucs_empty_function_return_unsupported,
-    .iface_progress_enable  = (uct_iface_progress_enable_func_t)
+    .iface_flush              = (uct_iface_flush_func_t)
+            ucs_empty_function_return_success,
+    .iface_fence              = (uct_iface_fence_func_t)
             ucs_empty_function_return_unsupported,
-    .iface_progress_disable = (uct_iface_progress_disable_func_t)
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)
             ucs_empty_function_return_unsupported,
-    .iface_progress         = (uct_iface_progress_func_t)
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)
+            ucs_empty_function_return_unsupported,
+    .iface_progress           = (uct_iface_progress_func_t)
             ucs_empty_function_return_unsupported,
 };
 
@@ -266,10 +278,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     uct_ib_iface_init_attr_t init_attr = {};
     UCS_STRING_BUFFER_ONSTACK(strb, 64);
     char *gpu_name, *ib_name;
+    char pci_addr[UCS_SYS_BDF_NAME_MAX];
     ucs_status_t status;
+    doca_error_t derr;
+    int cuda_id;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
-                                              md->dp_ordering_cap.dc,
+                                              md->dp_ordering_cap.rc,
                                               &config->mlx5, "gdaki");
     if (status != UCS_OK) {
         return status;
@@ -287,11 +302,42 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
                               &uct_rc_gdaki_iface_tl_ops,
                               &uct_rc_gdaki_internal_ops, tl_md, worker, params,
                               &config->super, &config->mlx5, &init_attr);
+
+    if (memcmp(gpu_name, UCT_DEV_CUDA_NAME, UCT_DEV_CUDA_NAME_LEN)) {
+        ucs_error("wrong device name: %s\n", gpu_name);
+        return status;
+    }
+
+    cuda_id = atoi(gpu_name + UCT_DEV_CUDA_NAME_LEN);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetPCIBusId(
+                    pci_addr, UCS_SYS_BDF_NAME_MAX, cuda_id));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    derr = doca_gpu_create(pci_addr, &self->gpu_dev);
+    if (derr != DOCA_SUCCESS) {
+        status = UCS_ERR_IO_ERROR;
+        ucs_error("doca_gpu_create failed: %s %s", doca_error_get_descr(derr),
+                  pci_addr);
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&self->cuda_dev, cuda_id));
+    if (status != UCS_OK) {
+        goto err_doca;
+    }
+
     return UCS_OK;
+
+err_doca:
+    doca_gpu_destroy(self->gpu_dev);
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
 {
+    doca_gpu_destroy(self->gpu_dev);
 }
 
 UCS_CLASS_DEFINE(uct_rc_gdaki_iface_t, uct_rc_mlx5_iface_common_t);

@@ -21,17 +21,6 @@
 #include "rc_mlx5.inl"
 
 
-enum {
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
-
-    /* Tag Matching address. It additionally contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM
-    /* NOTE: DO NOT extend this enum because it will break wire
-     * compatibility */
-};
-
-
 /**
  * RC mlx5 interface configuration
  */
@@ -724,10 +713,6 @@ uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
 #if HAVE_DEVX
     uct_ib_mlx5_cq_t *scq = &iface->cq[UCT_IB_DIR_TX];
     uct_ib_mlx5_cq_t *rcq = &iface->cq[UCT_IB_DIR_RX];
-
-    if (iface->super.config.tx_cq_len == 0) {
-        return status;
-    }
 
     if (scq->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
         status = uct_rc_mlx5_devx_iface_subscribe_event(iface,

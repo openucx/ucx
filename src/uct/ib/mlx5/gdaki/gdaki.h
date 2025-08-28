@@ -12,6 +12,11 @@
 #include <cuda.h>
 #include <doca_gpunetio.h>
 
+
+#define UCT_DEV_CUDA_NAME "cuda"
+#define UCT_DEV_CUDA_NAME_LEN 4
+
+
 typedef struct uct_rc_gdaki_iface {
     uct_rc_mlx5_iface_common_t super;
     struct doca_gpu            *gpu_dev;
