@@ -214,6 +214,8 @@ void test_perf::test_params_init(const test_spec &test,
     params.max_outstanding = test.max_outstanding;
     params.send_mem_type   = test.send_mem_type;
     params.recv_mem_type   = test.recv_mem_type;
+    params.send_device     = {UCS_MEMORY_TYPE_LAST, UCX_PERF_MEM_DEV_DEFAULT};
+    params.recv_device     = {UCS_MEMORY_TYPE_LAST, UCX_PERF_MEM_DEV_DEFAULT};
     params.percentile_rank = 50.0;
 
     memset(params.uct.md_name, 0, sizeof(params.uct.md_name));

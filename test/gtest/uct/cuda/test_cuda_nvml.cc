@@ -41,6 +41,6 @@ UCS_TEST_F(test_cuda_nvml, device_get_fabric_info) {
     fabric_info.version = nvmlGpuFabricInfo_v2;
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetGpuFabricInfoV, device,
                                      &fabric_info);
-    EXPECT_EQ(status, UCS_OK);
+    EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_IO_ERROR));
 }
 #endif

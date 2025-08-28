@@ -286,6 +286,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
     ucs_bus_id_bit_rep_t bus_id_bit_rep;
     int kh_put_status;
     khiter_t hash_it;
+    ucs_status_t status;
     char *name;
 
     bus_id_bit_rep  = ucs_topo_get_bus_id_bit_repr(bus_id);
@@ -298,6 +299,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
     if (kh_put_status == UCS_KH_PUT_KEY_PRESENT) {
         *sys_dev = kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it);
+        status   = UCS_OK;
     } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_assert_always(ucs_topo_global_ctx.num_devices <
@@ -309,9 +311,15 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
         /* Set default name to abbreviated BDF */
         name = ucs_malloc(UCS_SYS_BDF_NAME_MAX, "sys_dev_bdf_name");
-        if (name != NULL) {
-            ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
+        if (name == NULL) {
+            ucs_error("failed to allocate memory for sys_dev_bdf_name");
+            status = UCS_ERR_NO_MEMORY;
+            kh_del(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash,
+                   hash_it);
+            goto out;
         }
+
+        ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
 
         ucs_topo_global_ctx.devices[*sys_dev].bus_id        = *bus_id;
         ucs_topo_global_ctx.devices[*sys_dev].name          = name;
@@ -327,10 +335,15 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                 UCS_SYS_DEVICE_ID_UNKNOWN;
 
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
+        status = UCS_OK;
+    } else {
+        ucs_error("failed to put key into hash table");
+        status = UCS_ERR_IO_ERROR;
     }
 
+out:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,

@@ -221,6 +221,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [false])
      AM_CONDITIONAL([INSTALL_DEVEL_HEADERS], [false])
      AM_CONDITIONAL([HAVE_EXAMPLES], [false])
+     AM_CONDITIONAL([HAVE_TEST_APPS], [false])
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [false])
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
      AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
@@ -335,6 +336,16 @@ AS_IF([test "x$with_docs_only" = xyes],
                    [],
                    [enable_examples=no])
     AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])
+
+     #
+     # Enable test apps build
+     #
+     AC_ARG_ENABLE([test-apps],
+                   AS_HELP_STRING([--enable-test-apps],
+                                  [Enable test apps build, default: NO]),
+                   [],
+                   [enable_test_apps=no])
+    AM_CONDITIONAL([HAVE_TEST_APPS], [test "x$enable_test_apps" = "xyes"])
     ]) # Docs only
 
 #
