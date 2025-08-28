@@ -8,28 +8,6 @@
 
 #include "uct_device_types.h"
 
-typedef struct uct_device_ep {
-
-} uct_device_ep_t;
-
-typedef uct_device_ep_t *uct_device_ep_h;
-
-#define UCT_DEVICE_EP_FUNC_NAME(_ep_type, _name) \
-    uct_device_ep_##_ep_type##_##_name
-
-
-#define UCT_DEVICE_EP_PUT_SINGLE_FUNC_NAME(_ep_type) \
-    UCT_DEVICE_EP_FUNC_NAME(_ep_type, put_single)
-
-#define UCT_DEVICE_EP_PUT_SINGLE_FUNC(_ep_type) \
-    UCT_DEVICE_FUNC(ucs_status_t, \
-                    UCT_DEVICE_EP_PUT_SINGLE_FUNC_NAME(_ep_type), \
-                    uct_device_ep_t *device_ep, uct_mem_element_h mem_elem, \
-                    void *address, uint64_t *remote_address, size_t length, \
-                    uint64_t flags, uct_dev_completion_t *comp)
-
-#define UCT_DEVICE_EP_PUT_SINGLE_CALL(_ep_type, ...) \
-    UCS_PROFILE_CALL(UCT_DEVICE_EP_PUT_SINGLE_FUNC_NAME(_ep_type), ##__VA_ARGS__)
 
 /**
  * @ingroup UCT_DEVICE
@@ -52,12 +30,12 @@ typedef uct_device_ep_t *uct_device_ep_h;
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-UCT_DEVICE_FUNC(ucs_status_t, uct_device_ep_put_single,
-                uct_device_ep_t *device_ep, uct_mem_element_h mem_elem,
-                void *address, uint64_t *remote_address, size_t length,
-                uint64_t flags, uct_dev_completion_t *comp)
+UCS_F_DEVICE ucs_status_t
+uct_device_ep_put_single(uct_device_ep_t *device_ep, uct_mem_element_h mem_elem,
+                         void *address, uint64_t *remote_address, size_t length,
+                         uint64_t flags, uct_dev_completion_t *comp)
 {
-    // TODO - add switch statetment and call ep specific put function using UCT_DEVICE_EP_PUT_SINGLE_CALL
+    // TODO - add switch statetment and call ep specific put function
     return UCS_OK;
 }
 

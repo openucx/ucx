@@ -1,10 +1,11 @@
 #ifndef UCT_DEVICE_TYPES_H
 #define UCT_DEVICE_TYPES_H
 
-#define UCT_DEVICE_FUNC(_ret_type, _name, ...) \
-    UCS_F_DEVICE _ret_type _name(__VA_ARGS__)
-#define UCT_DEVICE_FUNC_VOID(_name, ...) \
-    UCS_F_DEVICE void _name(__VA_ARGS__)
+typedef struct uct_device_ep {
+
+} uct_device_ep_t;
+
+typedef uct_device_ep_t *uct_device_ep_h;
 
 typedef void *uct_mem_element_h;
 
