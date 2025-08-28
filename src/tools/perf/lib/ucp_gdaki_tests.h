@@ -27,7 +27,7 @@ public:
         memcpy(m_cpu_ctx, &perf, sizeof(ucx_perf_context_t));
     }
 
-    virtual ucs_status_t run()
+    ucs_status_t run()
     {
         /* coverity[switch_selector_expr_is_constant] */
         switch (TYPE) {

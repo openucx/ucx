@@ -971,35 +971,26 @@ private:
     ucp_atomic_op_t     m_atomic_op;
 };
 
-template<ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
-static std::unique_ptr<ucp_perf_test_runner_base>
-ucp_perf_test_runner_create(ucx_perf_context_t &perf)
-{
-    // TODO GDAKI: check if CUDA kernel device is enabled by -a option
-    if (getenv("GDAKI")) {
 #if HAVE_CUDA // TODO GDAKI: change to HAVE_DOCA_GPUNETIO_H
-        return std::unique_ptr<ucp_perf_test_runner_base>(
-                new ucp_perf_test_gdaki_runner<CMD, TYPE, FLAGS>(perf));
+#define TEST_CASE_DEVICE(_perf, _cmd, _type, _flags, _mask) \
+    ucp_perf_test_gdaki_runner<_cmd, _type, _flags> r(*_perf); \
+    return r.run();
 #else
-        ucs_error("Missing dependencies to run with CUDA device");
-        return nullptr;
+#define TEST_CASE_DEVICE(_perf, _cmd, _type, _flags, _mask) \
+    ucs_error("Missing dependencies to run with CUDA device"); \
+    return UCS_ERR_UNSUPPORTED;
 #endif
-    }
-
-    return std::unique_ptr<ucp_perf_test_runner_base>(
-                new ucp_perf_test_runner<CMD, TYPE, FLAGS>(perf));
-}
 
 #define TEST_CASE(_perf, _cmd, _type, _flags, _mask) \
     if (((_perf)->params.command == (_cmd)) && \
         ((_perf)->params.test_type == (_type)) && \
         (((_perf)->params.flags & (_mask)) == (_flags))) \
     { \
-        auto r = ucp_perf_test_runner_create<_cmd, _type, _flags>(*(_perf)); \
-        if (!r) { \
-            return UCS_ERR_UNSUPPORTED; \
+        if ((_perf)->params.send_device.mem_type != UCS_MEMORY_TYPE_LAST) { \
+            TEST_CASE_DEVICE(_perf, _cmd, _type, _flags, _mask); \
         } \
-        return r->run(); \
+        ucp_perf_test_runner<_cmd, _type, _flags> r(*_perf); \
+        return r.run(); \
     }
 
 #define TEST_CASE_ALL_STREAM(_perf, _case) \

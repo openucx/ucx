@@ -17,7 +17,7 @@ libperf_gdaki_la_SOURCES = \
 
 libperf_gdaki_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS) -I$(top_srcdir)/src
 libperf_gdaki_la_LDFLAGS  = $(CUDA_LDFLAGS) -version-info $(SOVERSION)
-libperf_gdaki_la_LIBADD   = $(CUDART_LIBS) -lstdc++
+libperf_gdaki_la_LIBADD   = $(CUDART_LIBS)
 
 EXTRA_DIST = gdaki_mem.h
 

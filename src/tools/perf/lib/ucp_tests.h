@@ -18,10 +18,6 @@ public:
         m_perf(perf)
     {}
 
-    virtual ~ucp_perf_test_runner_base() {}
-
-    virtual ucs_status_t run() = 0;
-
     void request_wait(ucs_status_ptr_t request, ucs_memory_type_t mem_type,
                       const char *operation_name)
     {
