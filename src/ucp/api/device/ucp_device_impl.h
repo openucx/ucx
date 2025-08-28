@@ -80,8 +80,8 @@ ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
  */
 UCS_F_DEVICE ucs_status_t
 ucp_device_counter_inc(ucp_device_mem_list_handle_h mem_list,
-                       uint64_t inc_value, uint64_t remote_address,
-                       int mem_list_index, uint64_t flags,
+                       unsigned mem_list_index, uint64_t inc_value,
+                       uint64_t remote_address, uint64_t flags,
                        ucp_device_request_t *req)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
@@ -138,22 +138,22 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Posts few put operations followed by one increment operation.
+ * @brief Posts few put operations followed by one atomic increment operation.
  *
  * This device routine posts a batch of put operations using only some of the
  * descriptor list entries in the input handle, followed by an operation.
  * This increment operation can be polled on the receiver to detect completion
  * of all operations of the batch, started during the same routine call.
  *
- * The set of indexes from the descriptor list entries to use are to be passed
- * in the array @ref mem_list_indexes. The last entry of the descriptor list is to
+ * The set of indices from the descriptor list entries to use are to be passed
+ * in the array @ref mem_list_indices. The last entry of the descriptor list is to
  * be used for the final increment operation.
  *
  * The content of each entries in the arrays addresses, remote_addresses and
  * lengths must be valid for each corresponding descriptor list entry whose
- * index is referenced in @ref mem_list_indexes.
+ * index is referenced in @ref mem_list_indices.
  *
- * The size of the arrays mem_list_indexes, addresses, remote_addresses, and
+ * The size of the arrays mem_list_indices, addresses, remote_addresses, and
  * lengths are all equal. They are lower than the size of the descriptor list
  * array from the handle.
  *
@@ -161,14 +161,14 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
  * completion with @ref ucp_device_progress_req.
  *
  * This routine can be called repeatedly with the same handle and different
- * mem_list_indexes, addresses, lengths and increment related parameters. The
+ * mem_list_indices, addresses, lengths and increment related parameters. The
  * flags parameter can be used to modify the behavior of the routine.
  *
  * @param [in]  mem_list               Memory descriptor list handle to use.
- * @param [in]  mem_list_indexes       Array of indexes, to use in descriptor
+ * @param [in]  mem_list_indices       Array of indices, to use in descriptor
  *                                     list of entries from handle.
- * @param [in]  mem_list_count         Number of indexes in the array @ref
- *                                     mem_list_indexes.
+ * @param [in]  mem_list_count         Number of indices in the array @ref
+ *                                     mem_list_indices.
  * @param [in]  addresses              Array of local addresses to send from.
  * @param [in]  remote_addresses       Array of remote addresses to send to.
  * @param [in]  lengths                Array of lengths in bytes for each send.
@@ -181,7 +181,7 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
  */
 UCS_F_DEVICE ucs_status_t
 ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_elem,
-                             const unsigned *mem_elem_indexes,
+                             const unsigned *mem_elem_indices,
                              unsigned mem_elem_count,
                              void *const *addresses,
                              const uint64_t *remote_addresses,
