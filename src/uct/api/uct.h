@@ -1152,7 +1152,6 @@ struct uct_iface_attr {
 
         uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
         uint64_t             event_flags;/**< Flags from @ref UCT_RESOURCE_IFACE_EVENT_CAP */
-
     } cap;                               /**< Interface capabilities */
 
     size_t                   device_addr_len;/**< Size of device address */
