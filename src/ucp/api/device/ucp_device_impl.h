@@ -31,10 +31,10 @@
  * of the routine.
  *
  * @param [in]  mem_list        Memory descriptor list handle to use.
+ * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
  * @param [in]  address         Local virtual address to send data from.
  * @param [in]  remote_address  Remote virtual address to send data to.
  * @param [in]  length          Length in bytes of the data to send.
- * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
  *                              registration keys to use for the transfer.
  * @param [in]  flags           Flags usable to modify the function behavior.
  * @param [out] req             Request populated by the call.
@@ -43,9 +43,9 @@
  */
 UCS_F_DEVICE ucs_status_t
 ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
+                      unsigned mem_list_index,
                       const void *address, uint64_t remote_address,
-                      size_t length, unsigned mem_list_index,
-                      uint64_t flags, ucp_device_request_t *req)
+                      size_t length, uint64_t flags, ucp_device_request_t *req)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
 }
@@ -68,11 +68,11 @@ ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
  * routine.
  *
  * @param [in]  mem_list        Memory descriptor list handle to use.
+ * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
+ *                              remote key to use for the increment operation.
  * @param [in]  inc_value       Value used to increment the remote address.
  * @param [in]  remote_address  Remote virtual address to perform the increment
  *                              to.
- * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
- *                              remote key to use for the increment operation.
  * @param [in]  flags           Flags usable to modify the function behavior.
  * @param [out] req             Request populated by the call.
  *
@@ -180,9 +180,9 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_elem,
-                             const unsigned *mem_elem_indices,
-                             unsigned mem_elem_count,
+ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
+                             const unsigned *mem_list_indices,
+                             unsigned mem_list_count,
                              void *const *addresses,
                              const uint64_t *remote_addresses,
                              const size_t *lengths,
