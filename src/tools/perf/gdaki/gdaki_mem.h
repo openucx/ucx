@@ -10,19 +10,17 @@
 #include <ucs/sys/compiler_def.h>
 #include <tools/perf/lib/libperf_int.h>
 
+BEGIN_C_DECLS
 
-class gdaki_mem {
-public:
-    gdaki_mem(size_t size);
-    ~gdaki_mem();
+typedef struct {
+    void   *gpu_ptr;
+    void   *cpu_ptr;
+    size_t size;
+} gdaki_mem_t;
 
-    void *get_cpu_ptr() const { return m_cpu_ptr; }
-    void *get_gpu_ptr() const { return m_gpu_ptr; }
+ucs_status_t gdaki_mem_create(gdaki_mem_t *mem, size_t size);
+void gdaki_mem_destroy(gdaki_mem_t *mem);
 
-private:
-    void   *m_gpu_ptr;
-    void   *m_cpu_ptr;
-    size_t m_size;
-};
+END_C_DECLS
 
 #endif /* GDAKI_MEM_H_ */

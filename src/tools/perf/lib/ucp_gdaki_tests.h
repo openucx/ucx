@@ -19,12 +19,17 @@ public:
     using psn_t = uint64_t;
 
     ucp_perf_test_gdaki_runner(ucx_perf_context_t &perf) :
-        ucp_perf_test_runner_base_psn<uint64_t>(perf),
-        m_gdaki_mem(sizeof(ucx_perf_context_t)),
-        m_cpu_ctx(static_cast<ucx_perf_context_t*>(m_gdaki_mem.get_cpu_ptr())),
-        m_gpu_ctx(static_cast<ucx_perf_context_t*>(m_gdaki_mem.get_gpu_ptr()))
+        ucp_perf_test_runner_base_psn<uint64_t>(perf)
     {
-        memcpy(m_cpu_ctx, &perf, sizeof(ucx_perf_context_t));
+        ucs_status_t status;
+
+        status = gdaki_mem_create(&m_gdaki_mem, sizeof(ucx_perf_context_t));
+        if (status != UCS_OK) {
+            ucs_fatal("Failed to create GDAKI memory: %s",
+                      ucs_status_string(status));
+        }
+
+        memcpy(m_gdaki_mem.cpu_ptr, &perf, sizeof(ucx_perf_context_t));
     }
 
     ucs_status_t run()
@@ -51,9 +56,7 @@ public:
     }
 
 private:
-    gdaki_mem          m_gdaki_mem;
-    ucx_perf_context_t *m_cpu_ctx;
-    ucx_perf_context_t *m_gpu_ctx;
+    gdaki_mem_t m_gdaki_mem;
 
     ucs_status_t run_pingpong_batch_gdaki()
     {
