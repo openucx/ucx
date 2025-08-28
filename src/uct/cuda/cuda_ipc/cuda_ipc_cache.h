@@ -44,9 +44,24 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
 void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
 
 
+/**
+ * @brief Map an interprocess memory handle to a local address
+ * 
+ * This function maps an interprocess memory handle exported from another
+ * process to a local virtual address that can be accessed by the current
+ * process.
+ * 
+ * @param key          Pointer to the CUDA IPC remote memory key containing
+ *                     the memory handle and other metadata needed for mapping
+ * @param cu_dev       CUDA device handle where the memory should be mapped
+ * @param mapped_addr  Pointer to store the resulting mapped local address
+ * @param log_level    Log level for reporting failures during mapping operation
+ * 
+ * @return UCS_OK on success, or error status on failure
+ */
 ucs_status_t
 uct_cuda_ipc_map_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
-                           void **mapped_addr);
+                           void **mapped_addr, ucs_log_level_t log_level);
 
 
 ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
