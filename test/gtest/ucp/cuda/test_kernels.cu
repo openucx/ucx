@@ -36,13 +36,18 @@ int memcmp(const void *s1, const void *s2, size_t size)
     }
 
     if (cudaHostGetDevicePointer(&d_result, h_result, 0) != cudaSuccess) {
-        result = 1;
+        result = -1;
         goto out;
     }
 
     *h_result = 0;
     memcmp_kernel<<<16, 64>>>(s1, s2, d_result, size);
-    cudaDeviceSynchronize();
+
+    if (cudaDeviceSynchronize() != cudaSuccess) {
+        result = -1;
+        goto out;
+    }
+
     result = *h_result;
 
 out:

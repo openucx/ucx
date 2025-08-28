@@ -104,6 +104,13 @@ void print_progress(void *UCS_V_UNUSED rte_group,
     fflush(stdout);
 }
 
+static void
+get_accel_device_str(const ucx_perf_accel_dev_t *dev, char *str, size_t size)
+{
+    ucs_snprintf_safe(str, size, "%s:%d", ucs_memory_type_names[dev->mem_type],
+                      dev->device_id);
+}
+
 static void print_header(struct perftest_context *ctx)
 {
     const char *overhead_lat_str;
@@ -111,6 +118,7 @@ static void print_header(struct perftest_context *ctx)
     const char *test_api_str;
     test_type_t *test;
     unsigned i;
+    char mem_dev_str[16];
 
     test = (ctx->params.test_id == TEST_ID_UNDEFINED) ? NULL :
            &tests[ctx->params.test_id];
@@ -148,6 +156,14 @@ static void print_header(struct perftest_context *ctx)
         printf("| Data layout:  %-60s                               |\n", test_data_str);
         printf("| Send memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.send_mem_type]);
         printf("| Recv memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.recv_mem_type]);
+        if (ctx->params.super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+            get_accel_device_str(&ctx->params.super.send_device, mem_dev_str, sizeof(mem_dev_str));
+            printf("| Send device:  %-60s                               |\n", mem_dev_str);
+        }
+        if (ctx->params.super.recv_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+            get_accel_device_str(&ctx->params.super.recv_device, mem_dev_str, sizeof(mem_dev_str));
+            printf("| Recv device:  %-60s                               |\n", mem_dev_str);
+        }
         printf("| Message size: %-60zu                               |\n", ucx_perf_get_message_size(&ctx->params.super));
         printf("| Window size:  %-60u                               |\n", ctx->params.super.max_outstanding);
 
