@@ -319,7 +319,8 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
     if (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) {
         if (params->flags & UCP_MEM_MAP_NONBLOCK) {
             flags |= UCT_MD_MEM_FLAG_NONBLOCK;
-        } else if (params->flags & UCP_MEM_MAP_LOCK) {
+        } else if ((params->flags & UCP_MEM_MAP_LOCK) ||
+                   (params->flags & UCP_MEM_MAP_ALLOCATE)) {
             flags |= UCT_MD_MEM_FLAG_LOCK;
         }
 
