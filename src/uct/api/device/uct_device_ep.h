@@ -8,6 +8,13 @@
 
 #include "uct_device_types.h"
 
+/**
+ * @defgroup UCT_DEVICE Device API
+ * @ingroup UCT_API
+ * @{
+ * * This section describes UCT Device API.
+ * @}
+ */
 
 /**
  * @ingroup UCT_DEVICE
@@ -30,10 +37,10 @@
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-UCS_F_DEVICE ucs_status_t
-uct_device_ep_put_single(uct_device_ep_t *device_ep, uct_mem_element_h mem_elem,
-                         void *address, uint64_t *remote_address, size_t length,
-                         uint64_t flags, uct_dev_completion_t *comp)
+UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
+        uct_device_ep_h device_ep, const uct_mem_element_h mem_elem,
+        const void *address, uint64_t *remote_address, size_t length,
+        uint64_t flags, uct_dev_completion_t *comp)
 {
     // TODO - add switch statetment and call ep specific put function
     return UCS_OK;
