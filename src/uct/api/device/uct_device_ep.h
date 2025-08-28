@@ -39,7 +39,7 @@
  */
 UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
         uct_device_ep_h device_ep, const uct_mem_element_h mem_elem,
-        const void *address, uint64_t *remote_address, size_t length,
+        const void *address, uint64_t remote_address, size_t length,
         uint64_t flags, uct_dev_completion_t *comp)
 {
     // TODO - add switch statetment and call ep specific put function
