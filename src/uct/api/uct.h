@@ -438,6 +438,7 @@ typedef enum uct_atomic_op {
         /* Interface capability */
 #define UCT_IFACE_FLAG_INTER_NODE      UCS_BIT(54) /**< Interface is inter-node capable */
 #define UCT_IFACE_FLAG_EXPORT_EP       UCS_BIT(55) /**< Interface supports export ep */
+
 /**
  * @}
  */

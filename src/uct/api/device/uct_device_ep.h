@@ -12,6 +12,8 @@ typedef struct uct_device_ep {
 
 } uct_device_ep_t;
 
+typedef uct_device_ep_t *uct_device_ep_h;
+
 #define UCT_DEVICE_EP_FUNC_NAME(_ep_type, _name) \
     uct_device_ep_##_ep_type##_##_name
 

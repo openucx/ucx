@@ -15,8 +15,6 @@ typedef enum {
     UCT_DEV_GPU_COOPERATION_THREAD,
     UCT_DEV_GPU_COOPERATION_WARP,
     UCT_DEV_GPU_COOPERATION_BLOCK,
-    /* TODO add
-    UCT_DEV_GPU_COOPERATION_GRID */
 } uct_dev_cooperation_level_t;
 
 #endif
