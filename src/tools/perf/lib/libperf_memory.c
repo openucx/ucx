@@ -265,7 +265,7 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
 
     switch (perf->params.command) {
     case UCX_PERF_CMD_PUT:
-    case UCX_PERF_CMD_PUT_BATCH:
+    case UCX_PERF_CMD_PUT_MULTI:
         flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT;
         break;
     case UCX_PERF_CMD_GET:

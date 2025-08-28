@@ -33,14 +33,14 @@ public:
         switch (TYPE) {
         case UCX_PERF_TEST_TYPE_PINGPONG:
             switch (CMD) {
-            case UCX_PERF_CMD_PUT_BATCH:
+            case UCX_PERF_CMD_PUT_MULTI:
                 return run_pingpong_batch_gdaki();
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_TEST_TYPE_STREAM_UNI:
             switch (CMD) {
-            case UCX_PERF_CMD_PUT_BATCH:
+            case UCX_PERF_CMD_PUT_MULTI:
                 return run_stream_req_uni_batch_gdaki();
             default:
                 return UCS_ERR_INVALID_PARAM;

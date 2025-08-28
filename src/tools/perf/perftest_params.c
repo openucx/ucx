@@ -741,6 +741,12 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
         }
     }
 
+    // TODO GDAKI: once merged with master, replace with -a
+    if (getenv("GDAKI")) {
+        ctx->params.super.cuda_threads = ctx->params.super.thread_count;
+        ctx->params.super.thread_count = 1;
+    }
+
     return init_daemon_params(&ctx->params.super);
 
 err:

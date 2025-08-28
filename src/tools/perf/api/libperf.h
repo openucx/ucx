@@ -30,7 +30,7 @@ typedef enum {
 typedef enum {
     UCX_PERF_CMD_AM,
     UCX_PERF_CMD_PUT,
-    UCX_PERF_CMD_PUT_BATCH,
+    UCX_PERF_CMD_PUT_MULTI,
     UCX_PERF_CMD_GET,
     UCX_PERF_CMD_ADD,
     UCX_PERF_CMD_FADD,
@@ -272,7 +272,6 @@ typedef struct ucx_perf_params {
     double                 report_interval; /* Interval at which to call the report callback */
     double                 percentile_rank; /* The percentile rank of the percentile reported
                                                in latency tests */
-    int                    gdaki;           /* Whether to run gdaki test on GPU */
     unsigned               cuda_threads;    /* Number of cuda threads to use with gdaki */
 
     void                   *rte_group;      /* Opaque RTE group handle */

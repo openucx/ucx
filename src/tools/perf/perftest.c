@@ -80,18 +80,18 @@ test_type_t tests[] = {
     {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put bandwidth", "overhead", 32},
 
-    {"ucp_put_batch_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_BATCH, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    {"ucp_put_batch_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_STREAM_UNI,
 #ifdef HAVE_CUDA
-     "put batch bandwidth. Use gdaki if GPU is specified with -a", "overhead", 32},
+     "put batch bandwidth. Use gdaki if GPU is specified with -a", "latency", 32},
 #else
-     "put batch bandwidth", "overhead", 32},
+     "put batch bandwidth", "latency", 32},
 #endif
 
-    {"ucp_put_batch_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_BATCH, UCX_PERF_TEST_TYPE_PINGPONG,
+    {"ucp_put_batch_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_PINGPONG,
 #ifdef HAVE_CUDA
-     "put batch latency. Use gdaki if GPU is specified with -a", "overhead", 32},
+     "put batch latency. Use gdaki if GPU is specified with -a", "latency", 32},
 #else
-     "put batch latency", "overhead", 32},
+     "put batch latency", "latency", 32},
 #endif
 
     {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
