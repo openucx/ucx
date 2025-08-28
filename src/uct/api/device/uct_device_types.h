@@ -2,7 +2,7 @@
 #define UCT_DEVICE_TYPES_H
 
 typedef struct uct_device_ep {
-
+    unsigned uct_tl_id;
 } uct_device_ep_t;
 
 typedef uct_device_ep_t *uct_device_ep_h;
@@ -10,6 +10,7 @@ typedef uct_device_ep_t *uct_device_ep_h;
 typedef void *uct_mem_element_h;
 
 typedef struct uct_dev_completion {
+    unsigned count;
 } uct_dev_completion_t;
 
 typedef enum {
