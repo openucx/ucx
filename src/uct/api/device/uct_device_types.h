@@ -12,11 +12,11 @@ typedef struct uct_dev_completion {
 } uct_dev_completion_t;
 
 typedef enum {
-    UCT_DEV_SCALE_THREAD,
-    UCT_DEV_SCALE_WARP,
-    UCT_DEV_SCALE_BLOCK,
+    UCT_DEV_GPU_COOPERATION_THREAD,
+    UCT_DEV_GPU_COOPERATION_WARP,
+    UCT_DEV_GPU_COOPERATION_BLOCK,
     /* TODO add
-    UCT_DEV_SCALE_GRID */
+    UCT_DEV_GPU_COOPERATION_GRID */
 } uct_dev_scale_t;
 
 #endif
