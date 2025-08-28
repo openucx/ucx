@@ -99,6 +99,7 @@ typedef enum {
     UCT_RC_MLX5_SRQ_TOPO_LIST,
     UCT_RC_MLX5_SRQ_TOPO_CYCLIC,
     UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED,
+    UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST,
     UCT_RC_MLX5_SRQ_TOPO_LAST
 } uct_rc_mlx5_srq_topo_t;
 
@@ -412,6 +413,11 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        dp_ordering;
         uint8_t                        dp_ordering_force;
     } config;
+
+    struct {
+        unsigned                       max_message_size_strides;
+        unsigned                       num_strides;
+    } msg_based;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
 
@@ -593,7 +599,8 @@ void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                     uct_iface_attr_t *iface_attr,
-                                    size_t max_inline, size_t max_tag_eager_iov);
+                                    size_t max_inline, size_t max_tag_eager_iov,
+                                    unsigned max_message_size_strides);
 
 ucs_status_t
 uct_rc_mlx5_iface_common_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,

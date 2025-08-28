@@ -73,7 +73,10 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "                  cannot be used with DDP enabled.\n"
    "\n"
    "cyclic_emulated   SRQ is organized as a continuous array of WQEs, but HW\n"
-   "                  treats it as a linked list. Doesn`t require DEVX.",
+   "                  treats it as a linked list. Doesn`t require DEVX.\n"
+   "\n"
+   "msg_based         SRQ is organized as a striding linked list of messages,\n"
+   "                  a cqe is generated per message instead of per-packet",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
 
@@ -282,13 +285,15 @@ ucs_status_t uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 
     ucs_assert(iface->tm.cmd_wq.super.super.type == UCT_IB_MLX5_OBJ_TYPE_LAST);
 
-    attr.super.qp_type          = IBV_QPT_RC;
-    attr.super.cap.max_send_wr  = iface->tm.cmd_qp_len;
-    attr.super.cap.max_send_sge = 1;
-    attr.super.ibv.pd           = md->super.pd;
-    attr.super.srq_num          = iface->rx.srq.srq_num;
-    attr.super.port             = dev->first_port;
-    attr.mmio_mode              = iface->tx.mmio_mode;
+    attr.super.qp_type            = IBV_QPT_RC;
+    attr.super.cap.max_send_wr    = iface->tm.cmd_qp_len;
+    attr.super.cap.max_send_sge   = 1;
+    attr.super.ibv.pd             = md->super.pd;
+    attr.super.srq_num            = iface->rx.srq.srq_num;
+    attr.super.port               = dev->first_port;
+    attr.mmio_mode                = iface->tx.mmio_mode;
+    attr.is_srq_msg_based         = uct_rc_mlx5_iface_is_srq_msg_based(iface);
+    attr.max_msg_size_strides     = iface->msg_based.max_message_size_strides;
     status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
                                         &iface->cq[UCT_IB_DIR_RX],
                                         &iface->cq[UCT_IB_DIR_RX],
@@ -966,7 +971,6 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     }
 
     iface->super.rx.srq.quota = srq_attr->attr.max_wr;
-
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
                                         iface->tm.mp.num_strides);
@@ -1117,11 +1121,14 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
 
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                     uct_iface_attr_t *iface_attr,
-                                    size_t max_inline, size_t max_tag_eager_iov)
+                                    size_t max_inline, size_t max_tag_eager_iov,
+                                    unsigned max_message_size_strides)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
-                                                       uct_rc_mlx5_iface_common_t);
-    uct_ib_device_t *dev = uct_ib_iface_device(ib_iface);
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_device_t *dev  = uct_ib_iface_device(ib_iface);
+    unsigned max_msg_size = max_message_size_strides *
+                            ib_iface->config.stride_size;
 
     /* Atomics */
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
@@ -1184,6 +1191,20 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
 
     /* Tag Offload */
     uct_rc_mlx5_tag_query(iface, iface_attr, max_inline, max_tag_eager_iov);
+
+    /* Striding Message Based */
+    if (uct_rc_mlx5_iface_is_srq_msg_based(iface)) {
+        iface_attr->cap.am.max_bcopy =
+                ucs_min(max_msg_size - sizeof(uct_rc_mlx5_hdr_t),
+                        iface_attr->cap.am.max_bcopy);
+        iface_attr->cap.am.max_zcopy =
+                ucs_min(max_msg_size - sizeof(uct_rc_mlx5_hdr_t),
+                        iface_attr->cap.am.max_zcopy);
+        iface_attr->cap.get.max_bcopy = ucs_min(max_msg_size,
+                                                iface_attr->cap.get.max_bcopy);
+        iface_attr->cap.put.max_bcopy = ucs_min(max_msg_size,
+                                                iface_attr->cap.put.max_bcopy);
+    }
 }
 
 ucs_status_t

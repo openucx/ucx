@@ -242,9 +242,10 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                  sizeof(uct_dc_mlx5_iface_addr_t);
     iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
 
-    uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
-                                   max_am_inline,
-                                   UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE));
+    uct_rc_mlx5_iface_common_query(
+            &iface->super.super.super, iface_attr, max_am_inline,
+            UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE),
+            iface->super.msg_based.max_message_size_strides);
 
     if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) {
         iface_attr->cap.flags &= ~(UCT_IFACE_FLAG_PUT_SHORT |
@@ -396,6 +397,10 @@ ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
         attr.rdma_wr_disabled            = (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
                                            (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
         attr.log_num_dci_stream_channels = ucs_ilog2(num_dci_channels);
+        attr.is_srq_msg_based            = uct_rc_mlx5_iface_is_srq_msg_based(
+                &iface->super);
+        attr.max_msg_size_strides =
+                iface->super.msg_based.max_message_size_strides;
         status = uct_ib_mlx5_devx_create_qp(ib_iface,
                                             &iface->super.cq[UCT_IB_DIR_TX],
                                             &iface->super.cq[UCT_IB_DIR_RX],
@@ -723,7 +728,8 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
         goto err;
     }
 
-    if (iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST) {
+    if ((iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST)
+        || (iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_STRIDING_MESSAGE_BASED_LIST)) {
         if (iface->super.cq[UCT_IB_DIR_RX].zip ||
             iface->super.cq[UCT_IB_DIR_TX].zip) {
             iface->super.super.progress = uct_dc_mlx5_iface_progress_ll_zip;
