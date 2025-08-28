@@ -4,7 +4,7 @@
  * See file LICENSE for terms.
  */
 
-#include <ucp/cuda/test_kernels.h>
+#include "test_kernels.h"
 
 #include <cuda_runtime.h>
 #include <cstdint>
@@ -44,10 +44,11 @@ int memcmp(const void *s1, const void *s2, size_t size)
 
     if (cudaHostAlloc(&h_result, sizeof(*h_result), cudaHostAllocMapped)
         != cudaSuccess) {
-        throw std::runtime_error("cudaHostAlloc() failure");
+        throw std::bad_alloc();
     }
 
     if (cudaHostGetDevicePointer(&d_result, h_result, 0) != cudaSuccess) {
+        cudaFreeHost(h_result);
         throw std::runtime_error("cudaHostGetDevicePointer() failure");
     }
 

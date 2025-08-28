@@ -7,7 +7,7 @@
 #include <cuda_runtime.h>
 #include <ucp/ucp_test.h>
 
-#include <ucp/cuda/test_kernels.h>
+#include <cuda/test_kernels.h>
 
 class test_ucp_device : public ucp_test {
 public:
