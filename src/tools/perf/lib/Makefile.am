@@ -8,8 +8,12 @@
 # See file LICENSE for terms.
 #
 
+if HAVE_NVCC
+SUBDIRS = ../device
+endif
+
 noinst_LTLIBRARIES     = libucxperf.la
-libucxperf_la_CPPFLAGS = $(BASE_CPPFLAGS)
+libucxperf_la_CPPFLAGS = $(BASE_CPPFLAGS) -I$(top_srcdir)/src
 libucxperf_la_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS) $(LT_CFLAGS)
 libucxperf_la_CXXFLAGS = $(BASE_CXXFLAGS) $(OPENMP_CFLAGS)
 libucxperf_la_LDFLAGS  = $(RTE_LDFLAGS) $(OPENMP_CFLAGS)
@@ -22,7 +26,8 @@ libucxperf_la_LIBADD   = \
 CXXFLAGS              += -nostdlib $(PERF_LIB_CXXFLAGS) -std=c++11
 
 noinst_HEADERS = \
-	libperf_int.h
+	libperf_int.h \
+	ucp_tests.h
 
 libucxperf_la_SOURCES = \
 	libperf.c \
@@ -30,3 +35,7 @@ libucxperf_la_SOURCES = \
 	libperf_thread.c \
 	uct_tests.cc \
 	ucp_tests.cc
+
+if HAVE_NVCC
+libucxperf_la_LIBADD += $(abs_top_builddir)/src/tools/perf/device/libperf_device.la
+endif

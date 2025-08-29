@@ -80,6 +80,14 @@ test_type_t tests[] = {
     {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put bandwidth", "overhead", 32},
 
+#if HAVE_CUDA
+     {"ucp_put_multi_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "put multi bandwidth. Use gdaki if device is specified with -a", "latency", 32},
+
+    {"ucp_put_multi_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_PINGPONG,
+     "put multi latency. Use gdaki if device is specified with -a", "latency", 32},
+#endif
+
     {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "get latency / bandwidth / message rate", "latency", 1},
 
@@ -197,6 +205,7 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.recv_mem_type     = UCS_MEMORY_TYPE_HOST;
     params->super.send_device       = default_dev;
     params->super.recv_device       = default_dev;
+    params->super.cuda_threads      = 1;
     params->super.msg_size_cnt      = 1;
     params->super.iov_stride        = 0;
     params->super.ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
