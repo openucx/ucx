@@ -15,7 +15,7 @@
 #include "ucp_tests.h"
 
 #if HAVE_CUDA // TODO GDAKI: change to HAVE_DOCA_GPUNETIO_H
-#include "ucp_gdaki_tests.h"
+#include "ucp_device_tests.h"
 #endif
 
 #include <ucs/sys/preprocessor.h>
@@ -973,7 +973,7 @@ private:
 
 #if HAVE_CUDA // TODO GDAKI: change to HAVE_DOCA_GPUNETIO_H
 #define TEST_CASE_DEVICE(_perf, _cmd, _type, _flags, _mask) \
-    ucp_perf_test_gdaki_runner<_cmd, _type, _flags> r(*_perf); \
+    ucp_perf_test_device_runner<_cmd, _type, _flags> r(*_perf); \
     return r.run();
 #else
 #define TEST_CASE_DEVICE(_perf, _cmd, _type, _flags, _mask) \

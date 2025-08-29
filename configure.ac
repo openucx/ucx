@@ -399,7 +399,7 @@ AC_CONFIG_FILES([
                  cmake/ucx-config.cmake
                  cmake/ucx-targets.cmake
                  config/Makefile
-                 src/tools/perf/gdaki/Makefile
+                 src/tools/perf/device/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

@@ -9,7 +9,7 @@
 #
 
 if HAVE_NVCC
-SUBDIRS = ../gdaki
+SUBDIRS = ../device
 endif
 
 noinst_LTLIBRARIES     = libucxperf.la
@@ -38,8 +38,8 @@ libucxperf_la_SOURCES = \
 
 if HAVE_NVCC
 # TODO: if HAVE_GPUNETIO
-noinst_HEADERS += ucp_gdaki_tests.h
+noinst_HEADERS += ucp_device_tests.h
 
-libucxperf_la_LIBADD += $(abs_top_builddir)/src/tools/perf/gdaki/libperf_gdaki.la
+libucxperf_la_LIBADD += $(abs_top_builddir)/src/tools/perf/device/libperf_device.la
 # endif
 endif

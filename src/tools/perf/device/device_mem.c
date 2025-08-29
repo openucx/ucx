@@ -4,7 +4,7 @@
  * See file LICENSE for terms.
  */
 
-#include "gdaki_mem.h"
+#include "device_mem.h"
 #include <cuda_runtime.h>
 
 #define CUDA_CALL(_handler, _ret, _func, ...) \
@@ -20,7 +20,7 @@
         } \
     } while (0)
 
-ucs_status_t gdaki_mem_create(gdaki_mem_t *mem, size_t size)
+ucs_status_t device_mem_create(device_mem_t *mem, size_t size)
 {
     CUDA_CALL(ucs_error, UCS_ERR_IO_ERROR,
               cudaSetDeviceFlags, cudaDeviceMapHost |
@@ -39,7 +39,7 @@ ucs_status_t gdaki_mem_create(gdaki_mem_t *mem, size_t size)
     return UCS_OK;
 }
 
-void gdaki_mem_destroy(gdaki_mem_t *mem)
+void device_mem_destroy(device_mem_t *mem)
 {
     CUDA_CALL(ucs_warn, , cudaFreeHost, mem->cpu_ptr);
 }
