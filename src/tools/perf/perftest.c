@@ -206,6 +206,7 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.recv_mem_type     = UCS_MEMORY_TYPE_HOST;
     params->super.send_device       = default_dev;
     params->super.recv_device       = default_dev;
+    params->super.cuda_threads      = 1;
     params->super.msg_size_cnt      = 1;
     params->super.iov_stride        = 0;
     params->super.ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
