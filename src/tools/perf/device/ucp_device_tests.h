@@ -39,6 +39,7 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (TYPE) {
         case UCX_PERF_TEST_TYPE_PINGPONG:
+            /* coverity[switch_selector_expr_is_constant] */
             switch (CMD) {
             case UCX_PERF_CMD_PUT_MULTI:
                 return run_pingpong_batch_device();
@@ -46,6 +47,7 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_TEST_TYPE_STREAM_UNI:
+            /* coverity[switch_selector_expr_is_constant] */
             switch (CMD) {
             case UCX_PERF_CMD_PUT_MULTI:
                 return run_stream_req_uni_batch_device();
