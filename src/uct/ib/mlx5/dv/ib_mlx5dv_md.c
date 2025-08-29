@@ -38,8 +38,9 @@ uct_ib_mlx5_md_check_odp_common(uct_ib_mlx5_md_t *md, const char **reason_ptr)
     }
 
     /* Issue 4238670 */
-    if ((md->dp_ordering_cap.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-        (md->dp_ordering_cap.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL)) {
+    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        (md->dp_ordering_cap_devx.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        md->ddp_support_dv.rc || md->ddp_support_dv.dc) {
         *reason_ptr = "ODP does not work with DDP";
         return 0;
     }
@@ -2022,19 +2023,19 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
                                                uct_ib_device_t *dev)
 {
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_rc)) {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->dp_ordering_cap_devx.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_rc)) {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+        md->dp_ordering_cap_devx.rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     } else {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        md->dp_ordering_cap_devx.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_dc)) {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->dp_ordering_cap_devx.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_dc)) {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+        md->dp_ordering_cap_devx.dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     } else {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        md->dp_ordering_cap_devx.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if ((cap_2 != NULL) &&
@@ -2045,7 +2046,7 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
     ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
               uct_ib_device_name(dev),
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
-              md->dp_ordering_cap.rc, md->dp_ordering_cap.dc);
+              md->dp_ordering_cap_devx.rc, md->dp_ordering_cap_devx.dc);
 }
 
 static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
@@ -2280,6 +2281,9 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
+static ucs_status_t
+uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md);
+
 ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
                                              struct ibv_device *ibv_device,
                                              const uct_ib_md_config_t *md_config,
@@ -2476,6 +2480,11 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     }
 
     uct_ib_mlx5_devx_check_dp_ordering(md, cap, cap_2, dev);
+
+    status = uct_ib_mlx5dv_check_ddp(ctx, md);
+    if (status != UCS_OK) {
+        goto err_lru_cleanup;
+    }
 
     uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 
@@ -3253,15 +3262,15 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
     }
 
     if (ctx_dv.ooo_recv_wrs_caps.max_rc > 0) {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->ddp_support_dv.rc = 1;
     }
 
     if (ctx_dv.ooo_recv_wrs_caps.max_dct > 0) {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->ddp_support_dv.dc = 1;
     }
 #else
-    md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
-    md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    md->ddp_support_dv.rc = 0;
+    md->ddp_support_dv.dc = 0;
 #endif
     return UCS_OK;
 }

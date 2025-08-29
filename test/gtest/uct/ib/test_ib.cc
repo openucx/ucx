@@ -457,10 +457,10 @@ public:
 
         uct_ib_mlx5_md_t *ib_md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
         int rc_has_ddp          = has_transport("rc_mlx5") &&
-                                  (ib_md->dp_ordering_cap.rc ==
+                                  (ib_md->dp_ordering_cap_devx.rc ==
                                    UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
         int dc_has_ddp          = has_transport("dc_mlx5") &&
-                                  (ib_md->dp_ordering_cap.dc ==
+                                  (ib_md->dp_ordering_cap_devx.dc ==
                                    UCT_IB_MLX5_DP_ORDERING_OOO_ALL);
         return rc_has_ddp || dc_has_ddp;
     }
