@@ -553,7 +553,7 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
     // Activate first offload iface. Tag hashing is performed only if there is
     // more than one active interface.
     activate_offload_hashing(e(0), make_tag(e(0), tag));
-    int init_hash_size = receiver().worker()->num_active_ifaces > 1;
+    int init_hash_size = receiver().worker()->num_active_tag_ifaces > 1;
     EXPECT_EQ(init_hash_size,
               kh_size(&receiver().worker()->tm.offload.tag_hash));
 

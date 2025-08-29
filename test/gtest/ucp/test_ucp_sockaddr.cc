@@ -3307,7 +3307,10 @@ public:
     {
         ucp_worker_h worker = e.worker();
         for (unsigned i = 0; i < worker->num_ifaces; ++i) {
-            if (ucp_worker_iface_is_activated(worker->ifaces[i])) {
+            auto wiface = worker->ifaces[i];
+            if ((worker->context->tl_rscs[wiface->rsc_index].flags &
+                 UCP_TL_RSC_FLAG_COMM) &&
+                ucp_worker_iface_is_activated(wiface)) {
                 return true;
             }
         }
