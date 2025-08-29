@@ -34,6 +34,11 @@ public:
         memcpy(m_cpu_ctx, &perf, sizeof(ucx_perf_context_t));
     }
 
+    ~ucp_perf_test_device_runner()
+    {
+        device_mem_destroy(&m_device_mem);
+    }
+
     ucs_status_t run()
     {
         /* coverity[switch_selector_expr_is_constant] */
