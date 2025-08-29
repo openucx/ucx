@@ -245,8 +245,8 @@ typedef ucs_status_t (*uct_iface_reject_func_t)(uct_iface_h iface,
 
 /* endpoint - export */
 
-typedef ucs_status_t (*uct_iface_export_dev_ep_func_t)(
-        uct_ep_h ep, uct_device_ep_h dev_ep_p);
+typedef ucs_status_t (*uct_iface_export_device_ep_func_t)(
+        uct_ep_h ep, uct_device_ep_h *device_ep_p);
 
 /* interface - synchronization */
 
@@ -295,9 +295,9 @@ typedef int          (*uct_iface_is_reachable_func_t)(const uct_iface_h iface,
 
 /* interface - export */
 
-typedef ucs_status_t (*uct_iface_mem_element_pack_func_t)(
+typedef ucs_status_t (*uct_iface_device_mem_element_pack_func_t)(
         const uct_iface_h iface, const uct_mem_h memh, const uct_rkey_t rkey,
-        void *target);
+        uct_device_mem_element_h device_mem_element);
 
 
 /**

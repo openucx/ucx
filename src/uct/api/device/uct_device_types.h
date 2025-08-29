@@ -7,16 +7,16 @@ typedef struct uct_device_ep {
 
 typedef uct_device_ep_t *uct_device_ep_h;
 
-typedef void *uct_mem_element_h;
+typedef void *uct_device_mem_element_h;
 
-typedef struct uct_dev_completion {
+typedef struct uct_device_completion {
     unsigned count;
-} uct_dev_completion_t;
+} uct_device_completion_t;
 
 typedef enum {
-    UCT_DEV_GPU_COOPERATION_THREAD,
-    UCT_DEV_GPU_COOPERATION_WARP,
-    UCT_DEV_GPU_COOPERATION_BLOCK,
-} uct_dev_cooperation_level_t;
+    UCT_DEV_GPU_COOPERATION_LEVEL_THREAD,
+    UCT_DEV_GPU_COOPERATION_LEVEL_WARP,
+    UCT_DEV_GPU_COOPERATION_LEVEL_BLOCK
+} uct_device_cooperation_level_t;
 
 #endif

@@ -437,7 +437,6 @@ typedef enum uct_atomic_op {
 
         /* Interface capability */
 #define UCT_IFACE_FLAG_INTER_NODE      UCS_BIT(54) /**< Interface is inter-node capable */
-
 /**
  * @}
  */
@@ -1157,7 +1156,6 @@ struct uct_iface_attr {
     size_t                   device_addr_len;/**< Size of device address */
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
-    size_t                   mem_element_len;/**< Size of memory element */
     size_t                   max_conn_priv;  /**< Max size of the iface's private data.
                                                   used for connection
                                                   establishment with sockaddr */
@@ -1183,6 +1181,7 @@ struct uct_iface_attr {
                                                 achieve higher total bandwidth
                                                 compared to using only a single
                                                 endpoint. */
+    size_t                   mem_element_len;/**< Size of memory element */
 };
 
 
