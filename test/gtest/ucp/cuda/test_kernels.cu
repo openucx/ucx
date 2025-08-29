@@ -54,7 +54,12 @@ int memcmp(const void *s1, const void *s2, size_t size)
 
     *h_result = 0;
     memcmp_kernel<<<16, 64>>>(s1, s2, d_result, size);
-    cudaDeviceSynchronize();
+
+    if (cudaDeviceSynchronize() != cudaSuccess) {
+        result = -1;
+        goto out;
+    }
+
     result = *h_result;
     cudaFreeHost(h_result);
     return result;

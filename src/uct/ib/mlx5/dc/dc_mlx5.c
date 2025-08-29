@@ -1831,17 +1831,18 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
 
     status = uct_ib_mlx5_modify_qp_state(&iface->super.super.super,
                                          &txwq->super, IBV_QPS_RESET);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
+                  iface, dci_index, txwq->super.qp_num,
+                  ucs_status_string(status));
+    }
 
     uct_rc_mlx5_iface_commom_clean(&iface->super.cq[UCT_IB_DIR_TX], NULL,
                                    txwq->super.qp_num);
 
     /* Resume posting from to the beginning of the QP */
     uct_ib_mlx5_txwq_reset(txwq);
-    if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                  iface, dci_index, txwq->super.qp_num,
-                  ucs_status_string(status));
-    }
+    uct_ib_mlx5_init_wq_buf(txwq);
 
     status = uct_dc_mlx5_iface_dci_connect(iface, dci);
     if (status != UCS_OK) {

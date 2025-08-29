@@ -39,7 +39,15 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
         return UCS_ERR_NO_DEVICE;
     }
 
-    gpu_index = group_index % num_gpus;
+    gpu_index = (group_index == 0) ? perf->params.recv_device.device_id :
+                                     perf->params.send_device.device_id;
+    if (gpu_index == UCX_PERF_MEM_DEV_DEFAULT) {
+        gpu_index = group_index % num_gpus;
+    } else if (gpu_index >= num_gpus) {
+        ucs_error("Illegal cuda device %d number of devices %d", gpu_index,
+                  num_gpus);
+        return UCS_ERR_NO_DEVICE;
+    }
 
     CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, gpu_index);
 
@@ -150,6 +158,7 @@ static void ucx_perf_cuda_memcpy(void *dst, ucs_memory_type_t dst_mem_type,
 static void* ucx_perf_cuda_memset(void *dst, int value, size_t count)
 {
     CUDA_CALL(dst, cudaMemset, dst, value, count);
+    CUDA_CALL(dst, cudaDeviceSynchronize);
     return dst;
 }
 
@@ -174,8 +183,8 @@ UCS_STATIC_INIT {
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA]         = &cuda_allocator;
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] = &cuda_managed_allocator;
 }
+
 UCS_STATIC_CLEANUP {
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA]         = NULL;
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] = NULL;
-
 }
