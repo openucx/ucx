@@ -1608,6 +1608,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     init_attr.fc_req_size   = sizeof(uct_dc_fc_request_t);
     init_attr.max_rd_atomic = md->max_rd_atomic_dc;
     init_attr.tx_moderation = 0; /* disable tx moderation for dcs */
+    init_attr.dev_name      = params->mode.device.dev_name;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DC_TM) {
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;

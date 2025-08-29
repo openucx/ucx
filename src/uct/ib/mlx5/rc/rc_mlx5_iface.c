@@ -21,17 +21,6 @@
 #include "rc_mlx5.inl"
 
 
-enum {
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
-
-    /* Tag Matching address. It additionally contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM
-    /* NOTE: DO NOT extend this enum because it will break wire
-     * compatibility */
-};
-
-
 /**
  * RC mlx5 interface configuration
  */
@@ -942,6 +931,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
                                                    max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.dev_name              = params->mode.device.dev_name;
 
     if (md->dp_ordering_cap.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;

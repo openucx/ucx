@@ -444,6 +444,10 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
 
+    if (count == 0) {
+        return UCS_OK;
+    }
+
     iface->tx.ops_buffer = ucs_calloc(count, sizeof(*iface->tx.ops_buffer),
                                       "rc_tx_ops");
     if (iface->tx.ops_buffer == NULL) {
@@ -476,6 +480,10 @@ static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
     const unsigned total_count = iface->config.tx_cq_len;
     uct_rc_iface_send_op_t *op;
     unsigned free_count;
+
+    if (total_count == 0) {
+        return;
+    }
 
     free_count = 0;
     for (op = iface->tx.free_ops; op != NULL; op = op->next) {

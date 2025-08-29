@@ -793,6 +793,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
                                                    max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.dev_name              = params->mode.device.dev_name;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(
             md, &self->super,

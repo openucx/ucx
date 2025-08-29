@@ -1684,8 +1684,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                             dev->stats)
                      UCS_STATS_ARG(params->mode.device.dev_name));
 
-    status = uct_ib_device_find_port(dev, params->mode.device.dev_name,
-                                     &port_num);
+    status = uct_ib_device_find_port(dev, init_attr->dev_name, &port_num);
     if (status != UCS_OK) {
         goto err;
     }
