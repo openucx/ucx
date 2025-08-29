@@ -11,11 +11,8 @@
     do { \
         cudaError_t _cerr = _func(__VA_ARGS__); \
         if (_cerr != cudaSuccess) { \
-            char _msg[256]; \
-            snprintf(_msg, sizeof(_msg), "%s() failed: %d (%s)", \
-                     UCS_PP_MAKE_STRING(_func), (int)_cerr, \
-                     cudaGetErrorString(_cerr)); \
-            _handler(_msg); \
+            _handler("%s() failed: %d (%s)", UCS_PP_MAKE_STRING(_func), \
+                     (int)_cerr, cudaGetErrorString(_cerr)); \
             return _ret; \
         } \
     } while (0)
@@ -28,9 +25,11 @@ ucs_status_t device_mem_create(device_mem_t *mem, size_t size)
     CUDA_CALL(ucs_error, UCS_ERR_NO_MEMORY,
               cudaHostAlloc, &mem->cpu_ptr, size, cudaHostAllocMapped);
 
-#define ERR_HANDLER(_msg) \
-    ucs_error(_msg); \
-    cudaFreeHost(mem->cpu_ptr);
+#define ERR_HANDLER(fmt, ...) \
+    do { \
+        ucs_error(fmt, __VA_ARGS__); \
+        cudaFreeHost(mem->cpu_ptr); \
+    } while (0)
 
     CUDA_CALL(ERR_HANDLER, UCS_ERR_IO_ERROR,
               cudaHostGetDevicePointer, &mem->gpu_ptr, mem->cpu_ptr, 0);
