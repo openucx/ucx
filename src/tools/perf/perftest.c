@@ -13,6 +13,7 @@
 #endif
 
 #include "perftest.h"
+#include <device/libperf_device.h>
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
@@ -80,7 +81,7 @@ test_type_t tests[] = {
     {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put bandwidth", "overhead", 32},
 
-#ifdef HAVE_LIBPERF_DEVICE
+#if HAVE_LIBPERF_DEVICE
      {"ucp_put_multi_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put multi bandwidth. Use gdaki if device is specified with -a", "latency", 32},
 
