@@ -13,10 +13,7 @@
 
 #include "libperf_int.h"
 #include "ucp_tests.h"
-
-#if HAVE_CUDA // TODO GDAKI: change to HAVE_DOCA_GPUNETIO_H
-#include "ucp_device_tests.h"
-#endif
+#include "../device/libperf_device.h"
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/string.h>
@@ -971,7 +968,7 @@ private:
     ucp_atomic_op_t     m_atomic_op;
 };
 
-#if HAVE_CUDA // TODO GDAKI: change to HAVE_DOCA_GPUNETIO_H
+#if HAVE_LIBPERF_DEVICE
 #define TEST_CASE_DEVICE(_perf, _cmd, _type, _flags, _mask) \
     ucp_perf_test_device_runner<_cmd, _type, _flags> r(*_perf); \
     return r.run();

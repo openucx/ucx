@@ -10,8 +10,8 @@
 #  include "config.h"
 #endif
 
-#include "ucp_tests.h"
-#include <tools/perf/device/device_mem.h>
+#include <tools/perf/lib/ucp_tests.h>
+#include "device_mem.h"
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 class ucp_perf_test_device_runner: public ucp_perf_test_runner_base_psn<uint64_t> {

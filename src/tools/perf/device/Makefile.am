@@ -4,7 +4,6 @@
 #
 
 if HAVE_NVCC
-#TODO: if HAVE_GPUNETIO
 
 include $(top_srcdir)/config/cuda.am
 
@@ -20,7 +19,6 @@ libperf_device_la_CFLAGS   = $(BASE_CFLAGS) $(CUDA_CFLAGS)
 libperf_device_la_LDFLAGS  = $(CUDA_LDFLAGS) -version-info $(SOVERSION)
 libperf_device_la_LIBADD   = $(CUDART_LIBS)
 
-EXTRA_DIST = device_mem.h
+EXTRA_DIST = libperf_device.h device_mem.h ucp_device_tests.h
 
-# endif # HAVE_GPUNETIO
 endif # HAVE_NVCC

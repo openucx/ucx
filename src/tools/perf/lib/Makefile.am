@@ -37,9 +37,5 @@ libucxperf_la_SOURCES = \
 	ucp_tests.cc
 
 if HAVE_NVCC
-# TODO: if HAVE_GPUNETIO
-noinst_HEADERS += ucp_device_tests.h
-
 libucxperf_la_LIBADD += $(abs_top_builddir)/src/tools/perf/device/libperf_device.la
-# endif
 endif
