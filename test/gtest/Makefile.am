@@ -270,6 +270,7 @@ gtest_SOURCES += \
 
 if HAVE_NVCC
 NVCC_EXTRA_FLAGS = \
+	$(CUDA_CPPFLAGS) \
 	-I$(top_srcdir)/test/gtest
 include $(top_srcdir)/config/cuda.am
 
