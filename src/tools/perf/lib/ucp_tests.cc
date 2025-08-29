@@ -13,9 +13,10 @@
 
 #include "libperf_int.h"
 #include "ucp_tests.h"
-#include "../device/libperf_device.h"
+
+#include <tools/perf/device/libperf_device.h>
 #if HAVE_LIBPERF_DEVICE
-#include "../device/ucp_device_tests.h"
+#include <tools/perf/device/ucp_device_tests.h>
 #endif
 
 #include <ucs/sys/preprocessor.h>

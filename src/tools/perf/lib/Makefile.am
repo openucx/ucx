@@ -13,7 +13,7 @@ SUBDIRS = ../device
 endif
 
 noinst_LTLIBRARIES     = libucxperf.la
-libucxperf_la_CPPFLAGS = $(BASE_CPPFLAGS)
+libucxperf_la_CPPFLAGS = $(BASE_CPPFLAGS) -I$(top_srcdir)/src
 libucxperf_la_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS) $(LT_CFLAGS)
 libucxperf_la_CXXFLAGS = $(BASE_CXXFLAGS) $(OPENMP_CFLAGS)
 libucxperf_la_LDFLAGS  = $(RTE_LDFLAGS) $(OPENMP_CFLAGS)
