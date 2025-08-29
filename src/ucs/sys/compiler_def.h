@@ -253,4 +253,13 @@
         *(_b) = __tmp; \
     }
 
+/*
+ * Declare GPU specific functions
+ */
+#ifdef __NVCC__
+#define UCS_F_DEVICE static UCS_F_ALWAYS_INLINE __device__
+#else
+#define UCS_F_DEVICE static UCS_F_ALWAYS_INLINE
+#endif /* __NVCC__ */
+
 #endif /* UCS_COMPILER_DEF_H */
