@@ -4,10 +4,11 @@
  * See file LICENSE for terms.
  */
 
-#include <cstdint>
-#include <cuda_runtime.h>
-
 #include "test_kernels.h"
+
+#include <cuda_runtime.h>
+#include <cstdint>
+#include <stdexcept>
 
 namespace cuda {
 static __global__ void memcmp_kernel(const void* s1, const void* s2,
@@ -24,7 +25,18 @@ static __global__ void memcmp_kernel(const void* s1, const void* s2,
     }
 }
 
-// Compare generic CUDA buffers without copying them
+/**
+ * @brief Compares two blocks of device memory.
+ *
+ * Compares @a size bytes of the memory areas pointed to by @a s1 and @a s2,
+ * which must both point to device memory.
+ *
+ * @param s1   Pointer to the first block of device memory.
+ * @param s2   Pointer to the second block of device memory.
+ * @param size Number of bytes to compare.
+ *
+ * @return int Returns 0 only if the memory blocks are equal.
+ */
 int memcmp(const void *s1, const void *s2, size_t size)
 {
     int *h_result, *d_result;
@@ -32,25 +44,23 @@ int memcmp(const void *s1, const void *s2, size_t size)
 
     if (cudaHostAlloc(&h_result, sizeof(*h_result), cudaHostAllocMapped)
         != cudaSuccess) {
-        return -1;
+        throw std::bad_alloc();
     }
 
     if (cudaHostGetDevicePointer(&d_result, h_result, 0) != cudaSuccess) {
-        result = -1;
-        goto out;
+        cudaFreeHost(h_result);
+        throw std::runtime_error("cudaHostGetDevicePointer() failure");
     }
 
     *h_result = 0;
     memcmp_kernel<<<16, 64>>>(s1, s2, d_result, size);
 
     if (cudaDeviceSynchronize() != cudaSuccess) {
-        result = -1;
-        goto out;
+        cudaFreeHost(h_result);
+        throw std::runtime_error("cudaDeviceSynchronize() failure");
     }
 
     result = *h_result;
-
-out:
     cudaFreeHost(h_result);
     return result;
 }
