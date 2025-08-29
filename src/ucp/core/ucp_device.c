@@ -10,20 +10,59 @@
 
 #include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_types.h>
+#include <ucs/type/param.h>
 
+
+static ucs_status_t
+ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
+{
+    ucp_mem_h memh;
+    ucp_rkey_h rkey;
+    size_t num_elements;
+    size_t element_size;
+    const ucp_mem_list_elem_t *elements;
+    size_t i;
+
+    num_elements = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD,
+                               params, num_elements, NUM_ELEMENTS, 0);
+    element_size = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD,
+                               params, element_size, ELEMENT_SIZE, 0);
+    elements     = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD,
+                               params, elements, ELEMENTS, NULL);
+
+    /* TODO: Can we remove element_size */
+    if ((element_size != sizeof(*elements)) ||
+        (num_elements == 0)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    for (i = 0; i < num_elements; i++) {
+        memh = UCS_PARAM_VALUE(
+                           UCP_MEM_LIST_ELEM_FIELD, &params->elements[i],
+                           memh, MEMH, NULL);
+        rkey = UCS_PARAM_VALUE(
+                           UCP_MEM_LIST_ELEM_FIELD, &params->elements[i],
+                           rkey, RKEY, NULL);
+        if ((memh == NULL) || (rkey == NULL)) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}
 
 ucs_status_t
 ucp_mem_list_create(ucp_ep_h ep,
                     const ucp_mem_list_params_t *params,
                     ucp_device_mem_list_handle_h *handle_p)
 {
+    unsigned i;
     ucs_status_t status;
     ucp_device_mem_list_handle_h handle;
 
-    for (i = 0; i < params->num_elements; i++) {
-        memh = UCP_PARAM_FIELD_VALUE(params, memh, MEMH, NULL);
-        rkey = UCP_PARAM_FIELD_VALUE(params, rkey, RKEY, NULL);
-
+    status = ucp_mem_list_params_check(params);
+    if (status != UCS_OK) {
+        return status;
     }
 
     status = ucp_mem_do_alloc(context, NULL, sizeof(*handle),

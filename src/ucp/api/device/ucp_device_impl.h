@@ -16,6 +16,15 @@
 
 /**
  * @ingroup UCP_DEVICE
+ * @brief Host opaque descriptor list stored on GPU.
+ *
+ * Only device-side code has access to the content of this descriptor.
+ */
+typedef ucp_device_mem_list_handle_t *ucp_device_mem_list_handle_h;
+
+
+/**
+ * @ingroup UCP_DEVICE
  * @brief Posts one memory put operation.
  *
  * This device routine posts one put operation using descriptor list handle.

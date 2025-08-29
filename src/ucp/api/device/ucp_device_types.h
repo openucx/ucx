@@ -10,7 +10,7 @@
 #include <uct/api/uct.h>
 
 
-typedef struct ucp_mem_list_elem {
+typedef struct ucp_device_mem_list_elem {
 } ucp_device_mem_list_elem_t;
 
 
@@ -58,8 +58,6 @@ typedef struct {
      */
     ucp_device_mem_list_elem_t elems[];
 } ucp_device_mem_list_handle_t;
-
-typedef ucp_device_mem_list_handle_t *ucp_device_mem_list_handle_h;
 
 
 /**
