@@ -116,7 +116,7 @@ typedef struct ucp_mem_list_params {
  * @ingroup UCP_DEVICE
  * @brief Opaque descriptor list stored on GPU.
  *
- * Host side does not have access to the content of this descriptor.
+ * Host side app does not have access to the content of this descriptor.
  */
 struct ucp_device_mem_list_handle;
 typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
