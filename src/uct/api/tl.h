@@ -19,6 +19,8 @@
 #include <sys/types.h>
 #include <stddef.h>
 
+#include "device/uct_device_types.h"
+
 BEGIN_C_DECLS
 
 /** @file tl.h */
@@ -241,6 +243,11 @@ typedef ucs_status_t (*uct_iface_accept_func_t)(uct_iface_h iface,
 typedef ucs_status_t (*uct_iface_reject_func_t)(uct_iface_h iface,
                                                 uct_conn_request_h conn_request);
 
+/* endpoint - export */
+
+typedef ucs_status_t (*uct_iface_export_device_ep_func_t)(
+        uct_ep_h ep, uct_device_ep_h *device_ep_p);
+
 /* interface - synchronization */
 
 typedef ucs_status_t (*uct_iface_flush_func_t)(uct_iface_h iface,
@@ -285,6 +292,12 @@ typedef ucs_status_t (*uct_iface_get_address_func_t)(uct_iface_h iface,
 typedef int          (*uct_iface_is_reachable_func_t)(const uct_iface_h iface,
                                                       const uct_device_addr_t *dev_addr,
                                                       const uct_iface_addr_t *iface_addr);
+
+/* interface - export */
+
+typedef ucs_status_t (*uct_iface_device_mem_element_pack_func_t)(
+        const uct_iface_h iface, const uct_mem_h memh, const uct_rkey_t rkey,
+        uct_device_mem_element_h device_mem_element);
 
 
 /**

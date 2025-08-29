@@ -1181,6 +1181,7 @@ struct uct_iface_attr {
                                                 achieve higher total bandwidth
                                                 compared to using only a single
                                                 endpoint. */
+    size_t                   mem_element_len;/**< Size of memory element */
 };
 
 
