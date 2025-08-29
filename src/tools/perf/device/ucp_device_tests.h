@@ -29,7 +29,9 @@ public:
                       ucs_status_string(status));
         }
 
-        memcpy(m_device_mem.cpu_ptr, &perf, sizeof(ucx_perf_context_t));
+        m_gpu_ctx = static_cast<ucx_perf_context_t*>(m_device_mem.gpu_ptr);
+        m_cpu_ctx = static_cast<ucx_perf_context_t*>(m_device_mem.cpu_ptr);
+        memcpy(m_cpu_ctx, &perf, sizeof(ucx_perf_context_t));
     }
 
     ucs_status_t run()
@@ -56,7 +58,9 @@ public:
     }
 
 private:
-    device_mem_t m_device_mem;
+    device_mem_t       m_device_mem;
+    ucx_perf_context_t *m_cpu_ctx;
+    ucx_perf_context_t *m_gpu_ctx;
 
     ucs_status_t run_pingpong_batch_device()
     {
