@@ -216,6 +216,7 @@ void test_perf::test_params_init(const test_spec &test,
     params.recv_mem_type   = test.recv_mem_type;
     params.send_device     = {UCS_MEMORY_TYPE_LAST, UCX_PERF_MEM_DEV_DEFAULT};
     params.recv_device     = {UCS_MEMORY_TYPE_LAST, UCX_PERF_MEM_DEV_DEFAULT};
+    params.cuda_threads    = 1;
     params.percentile_rank = 50.0;
 
     memset(params.uct.md_name, 0, sizeof(params.uct.md_name));
