@@ -4,8 +4,13 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "device_mem.h"
 #include <cuda_runtime.h>
+
 
 #define CUDA_CALL(_handler, _ret, _func, ...) \
     do { \
