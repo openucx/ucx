@@ -586,6 +586,7 @@ typedef struct uct_ib_mlx5_cq_attr {
     unsigned cqe_size;
     size_t   umem_len;
     unsigned flags;
+    uint64_t umem_offset;
 } uct_ib_mlx5_cq_attr_t;
 
 
@@ -643,6 +644,7 @@ typedef struct uct_ib_mlx5_qp_attr {
     uint8_t                     log_num_dci_stream_channels;
     unsigned                    max_tx;
     unsigned                    len;
+    uint64_t                    umem_offset;
 } uct_ib_mlx5_qp_attr_t;
 
 
