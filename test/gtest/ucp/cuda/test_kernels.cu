@@ -56,8 +56,8 @@ int memcmp(const void *s1, const void *s2, size_t size)
     memcmp_kernel<<<16, 64>>>(s1, s2, d_result, size);
 
     if (cudaDeviceSynchronize() != cudaSuccess) {
-        result = -1;
-        goto out;
+        cudaFreeHost(h_result);
+        throw std::runtime_error("cudaDeviceSynchronize() failure");
     }
 
     result = *h_result;
