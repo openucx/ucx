@@ -7,6 +7,4 @@
 #ifndef LIBPERF_DEVICE_H_
 #define LIBPERF_DEVICE_H_
 
-#define HAVE_LIBPERF_DEVICE HAVE_CUDA
-
 #endif // LIBPERF_DEVICE_H_

@@ -971,7 +971,7 @@ private:
     ucp_atomic_op_t     m_atomic_op;
 };
 
-#if HAVE_LIBPERF_DEVICE
+#if HAVE_CUDA
 #define TEST_CASE_DEVICE(_perf, _cmd, _type, _flags, _mask) \
     ucp_perf_test_device_runner<_cmd, _type, _flags> r(*_perf); \
     return r.run();
