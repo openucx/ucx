@@ -17,6 +17,8 @@ parameters:
   default: ''
 - name: interference
   default: 'Yes'
+- name: active_disconnect
+  default: 'No'
 - name: extra_run_args
   default: ''
 
@@ -111,6 +113,9 @@ steps:
     analyzer_args="$analyzer_args -t 3"
     if [ '${{ parameters.interference }}' == 'No' ] ; then
       analyzer_args="$analyzer_args --no-allow-list"
+    fi
+    if [ '${{ parameters.active_disconnect}}' == 'Yes' ] ; then
+      analyzer_args="$analyzer_args --allow-active-disconnect"
     fi
     analyzer_args="$analyzer_args ${{ parameters.analyzer_allow_list_args }}"
     python ${analyzer} ${analyzer_args}
