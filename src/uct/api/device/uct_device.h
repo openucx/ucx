@@ -57,14 +57,14 @@ typedef struct uct_dev_completion {
  * This device routine writes a single memory block from the local address @a address
  * to the remote address @a remote_address using the device endpoint @a device_ep.
  * The memory element @a mem_elem must be valid and contain the local and remote
- * memory regions to be transfered.
+ * memory regions to be transferred.
  *
  * User can pass @a comp to track execution and completion status.
  * The @a flags parameter can be used to modify the behavior
  * of the routine.
  *
  * @param [in]  device_ep       Device endpoint to be used for the operation.
- * @param [in]  mem_elem        Memory element representing the memory to be transfered.
+ * @param [in]  mem_elem        Memory element representing the memory to be transferred.
  * @param [in]  address         Local virtual address to send data from.
  * @param [in]  remote_address  Remote virtual address to write data to.
  * @param [in]  length          Length in bytes of the data to send.
