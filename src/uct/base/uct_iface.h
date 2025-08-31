@@ -309,8 +309,8 @@ typedef ucs_status_t (*uct_ep_create_device_ep_func_t)(
 
 /* Pack memh and rkey into a device mem element */
 typedef ucs_status_t (*uct_iface_mem_element_pack_func_t)(
-    const uct_iface_h iface, uct_mem_h memh, uct_rkey_t rkey,
-    uct_device_mem_element_t *mem_element);
+        const uct_iface_h iface, uct_mem_h memh, uct_rkey_t rkey,
+        uct_device_mem_element_t *mem_element);
 
 
 /* Internal operations, not exposed by the external API */

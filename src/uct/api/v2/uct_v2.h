@@ -720,7 +720,7 @@ typedef struct uct_device_ep_params {
     /**
     * Mask of valid fields in this structure, for backward compatibility.
     */
-   uint64_t field_mask;
+    uint64_t field_mask;
 } uct_device_ep_params_t;
 
 

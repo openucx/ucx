@@ -18,39 +18,45 @@ namespace cuda {
  * Wrapper class for a host memory result variable, that can be mapped to device
  * memory and passed to a Cuda kernel.
  */
-template <typename T>
-class device_result_ptr {
+template<typename T> class device_result_ptr {
 public:
-    device_result_ptr() : m_ptr(allocate(), release) {
+    device_result_ptr() : m_ptr(allocate(), release)
+    {
     }
 
-    device_result_ptr(const T& value) : m_ptr(allocate(), release) {
+    device_result_ptr(const T &value) : m_ptr(allocate(), release)
+    {
         *m_ptr.get() = value;
     }
 
-    T& operator *() {
+    T &operator*()
+    {
         return *m_ptr.get();
     }
 
-    T* device_ptr() {
-        T* device_ptr;
-        if (cudaHostGetDevicePointer(&device_ptr, m_ptr.get(), 0) != cudaSuccess) {
+    T *device_ptr()
+    {
+        T *device_ptr;
+        if (cudaHostGetDevicePointer(&device_ptr, m_ptr.get(), 0) !=
+            cudaSuccess) {
             throw std::runtime_error("cudaHostGetDevicePointer() failure");
         }
         return device_ptr;
     }
 
 private:
-    static T* allocate()
+    static T *allocate()
     {
-        T* ptr = nullptr;
-        if (cudaHostAlloc(&ptr, sizeof(T), cudaHostAllocMapped) != cudaSuccess) {
+        T *ptr = nullptr;
+        if (cudaHostAlloc(&ptr, sizeof(T), cudaHostAllocMapped) !=
+            cudaSuccess) {
             throw std::bad_alloc();
         }
         return ptr;
     }
 
-    static void release(T* ptr) {
+    static void release(T *ptr)
+    {
         cudaFreeHost(ptr);
     }
 
@@ -80,8 +86,9 @@ static __global__ void memcmp_kernel(const void* s1, const void* s2,
 }
 
 static __global__ void
-ucp_put_single_kernel(ucp_device_mem_list_handle_h mem_list, const void *address,
-                      uint64_t remote_address, size_t length, ucs_status_t *status)
+ucp_put_single_kernel(ucp_device_mem_list_handle_h mem_list,
+                      const void *address, uint64_t remote_address,
+                      size_t length, ucs_status_t *status)
 {
     ucp_device_request_t req;
     ucs_status_t req_status;
@@ -126,9 +133,9 @@ int launch_memcmp(const void *s1, const void *s2, size_t size)
 /**
  * Basic single element put operation.
  */
-ucs_status_t
-launch_ucp_put_single(ucp_device_mem_list_handle_h mem_list, const void *address,
-                      uint64_t remote_address, size_t length)
+ucs_status_t launch_ucp_put_single(ucp_device_mem_list_handle_h mem_list,
+                                   const void *address, uint64_t remote_address,
+                                   size_t length)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
 

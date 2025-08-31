@@ -61,7 +61,8 @@ UCS_TEST_P(test_ucp_device, put_single)
     ucp_device_mem_list_handle_h mem_list = nullptr;
 
     ucs_status_t status = cuda::launch_ucp_put_single(mem_list, src.ptr(),
-                                                      (uint64_t)dst.ptr(), size);
+                                                      (uint64_t)dst.ptr(),
+                                                      size);
     EXPECT_EQ(UCS_ERR_NOT_IMPLEMENTED, status);
 }
 
