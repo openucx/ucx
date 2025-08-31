@@ -10,7 +10,7 @@
 #include "ucp_host.h"
 #include "ucp_device_types.h"
 
-#include <uct/api/device/uct_device.h>
+#include <uct/api/device/uct_device_impl.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 #include <stdint.h>

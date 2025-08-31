@@ -4,50 +4,13 @@
  * See file LICENSE for terms.
  */
 
-#ifndef UCT_DEVICE_H
-#define UCT_DEVICE_H
+#ifndef UCT_DEVICE_IMPL_H
+#define UCT_DEVICE_IMPL_H
+
+#include "uct_device_types.h"
 
 #include <uct/api/uct_def.h>
 #include <ucs/sys/compiler_def.h>
-#include <ucs/type/status.h>
-#include <stdint.h>
-#include <stdlib.h>
-
-/**
- * @defgroup UCT_DEVICE Device API
- * @ingroup UCT_API
- * * This section describes UCT Device API.
- * @{
- * @}
- */
-
-/* Device transport id (for internal use) */
-typedef enum {
-    UCT_DEVICE_TL_RC_MLX5_GDA,
-    UCT_DEVICE_TL_CUDA_IPC,
-    UCT_DEVICE_TL_LAST
-} uct_device_tl_id_t;
-
-
-/* Cooperation level when calling device functions */
-typedef enum {
-    UCT_DEVICE_LEVEL_THREAD,
-    UCT_DEVICE_LEVEL_WARP,
-    UCT_DEVICE_LEVEL_BLOCK
-} uct_device_level_t;
-
-
-/* Base class for all device endpoints */
-typedef struct uct_device_ep {
-    uint8_t uct_tl_id; /* Defined in uct_device_tl_id_t */
-} uct_device_ep_t;
-
-
-/* Completion object for device operations */
-typedef struct uct_dev_completion {
-    uint32_t     count;  /* How many operations are pending */
-    ucs_status_t status; /* Status of the operation */
-} uct_dev_completion_t;
 
 
 /**
