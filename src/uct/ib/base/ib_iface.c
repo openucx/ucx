@@ -708,6 +708,10 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
          * be used for routing in case of an interface with VRF is configured
          * and a RoCE IP interface uses this VRF table for routing.
          */
+        if (sa_remote->sa_family == AF_INET6) {
+            return 1;
+        }
+
         if (uct_ib_iface_get_loopback_ndev_index(&lo_ndev_index) != UCS_OK) {
             uct_iface_fill_info_str_buf(params,
                                         "loopback iface index is not found");
