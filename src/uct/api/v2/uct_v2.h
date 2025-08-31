@@ -713,6 +713,18 @@ typedef struct uct_ep_connect_to_ep_params {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for creating a device endpoint
+ */
+typedef struct uct_device_ep_params {
+    /**
+    * Mask of valid fields in this structure, for backward compatibility.
+    */
+   uint64_t field_mask;
+} uct_device_ep_params_t;
+
+
+/**
  * @ingroup UCT_MD
  * @brief Parameters for comparing remote keys using @ref uct_rkey_compare.
  */
@@ -1151,6 +1163,23 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
 int uct_ep_is_connected(uct_ep_h ep,
                         const uct_ep_is_connected_params_t *params);
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Create a device endpoint.
+ *
+ * @param [in] ep           Endpoint to create a device endpoint from.
+ * @param [in] params       Parameters for creating a device endpoint.
+ * @param [out] device_ep_p Filled with the created device endpoint.
+ *
+ * @return UCS_OK           Device endpoint created successfully.
+ *         Other            Error codes as defined by @ref ucs_status_t.
+ */
+ucs_status_t uct_ep_create_device_ep(uct_ep_h ep,
+                                      const uct_device_ep_params_t *params,
+                                      uct_device_ep_h *device_ep_p);
+
+
 /**
  * @ingroup UCT_MD
  *
@@ -1200,6 +1229,22 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
                                 const uct_rkey_unpack_params_t *params,
                                 uct_rkey_bundle_t *rkey_ob);
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Pack a memh and rkey into a device mem element.
+ *
+ * @param [in] iface          Interface to pack the memh and rkey into.
+ * @param [in] memh           Memory handle to pack.
+ * @param [in] rkey           Remote key to pack.
+ * @param [out] mem_element   Filled with the packed memh and rkey.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+ucs_status_t
+uct_iface_mem_element_pack_v2(uct_iface_h iface, uct_mem_h memh,
+                              uct_rkey_t rkey,
+                              uct_device_mem_element_t *mem_element);
 
 END_C_DECLS
 

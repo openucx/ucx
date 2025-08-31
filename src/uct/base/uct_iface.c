@@ -1068,3 +1068,22 @@ uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
 
     return uct_ep_connect_to_ep_v2(tl_ep, device_addr, ep_addr, &param);
 }
+
+ucs_status_t uct_ep_create_device_ep(uct_ep_h ep,
+                                      const uct_device_ep_params_t *params,
+                                      uct_device_ep_h *device_ep_p)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_create_device_ep(ep, params, device_ep_p);
+}
+
+ucs_status_t uct_iface_mem_element_pack(uct_iface_h tl_iface, uct_mem_h memh,
+                                        uct_rkey_t rkey,
+                                        uct_device_mem_element_t *mem_element)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    return iface->internal_ops->iface_mem_element_pack(tl_iface, memh, rkey,
+                                                        mem_element);
+}
