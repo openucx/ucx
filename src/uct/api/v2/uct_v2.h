@@ -359,7 +359,7 @@ typedef enum {
 /**
  * @ingroup UCT_RESOURCE
  * @brief uct_ep_connect_to_ep_v2 operation fields and flags
- * 
+ *
  * The enumeration allows specifying which fields in @ref
  * uct_ep_connect_to_ep_params_t are present and operation flags are used. It is
  * used to enable backward compatibility support.
@@ -1168,16 +1168,16 @@ int uct_ep_is_connected(uct_ep_h ep,
  * @ingroup UCT_RESOURCE
  * @brief Create a device endpoint.
  *
- * @param [in] ep           Endpoint to create a device endpoint from.
- * @param [in] params       Parameters for creating a device endpoint.
+ * @param [in]  ep          Endpoint to create a device endpoint from.
+ * @param [in]  params      Parameters for creating a device endpoint.
  * @param [out] device_ep_p Filled with the created device endpoint.
  *
  * @return UCS_OK           Device endpoint created successfully.
  *         Other            Error codes as defined by @ref ucs_status_t.
  */
 ucs_status_t uct_ep_create_device_ep(uct_ep_h ep,
-                                      const uct_device_ep_params_t *params,
-                                      uct_device_ep_h *device_ep_p);
+                                     const uct_device_ep_params_t *params,
+                                     uct_device_ep_h *device_ep_p);
 
 
 /**
@@ -1232,7 +1232,7 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Pack a memh and rkey into a device mem element.
+ * @brief Pack a memh and rkey into a single memory element structure.
  *
  * @param [in] iface          Interface to pack the memh and rkey into.
  * @param [in] memh           Memory handle to pack.

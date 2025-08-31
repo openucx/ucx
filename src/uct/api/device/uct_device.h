@@ -21,7 +21,7 @@
  * @}
  */
 
- /* Device transport id (for internal use)*/
+ /* Device transport id (for internal use) */
  typedef enum {
      UCT_DEVICE_TL_RC_MLX5_GDA,
      UCT_DEVICE_TL_CUDA_IPC,
@@ -31,10 +31,10 @@
 
  /* Cooperation level when calling device functions */
  typedef enum {
-    UCT_DEVICE_COOPERATION_THREAD,
-    UCT_DEVICE_COOPERATION_WARP,
-    UCT_DEVICE_COOPERATION_BLOCK,
-} uct_device_cooperation_t;
+    UCT_DEVICE_LEVEL_THREAD,
+    UCT_DEVICE_LEVEL_WARP,
+    UCT_DEVICE_LEVEL_BLOCK
+} uct_device_level_t;
 
 
 /* Base class for all device endpoints */
@@ -73,7 +73,7 @@ typedef struct uct_dev_completion {
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template<uct_device_cooperation_t cooperation = UCT_DEVICE_COOPERATION_THREAD>
+template<uct_device_level_t level = UCT_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
         const void *address, uint64_t remote_address, size_t length,
@@ -97,7 +97,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  *
  * @param [out] comp  Device completion object to initialize.
  */
-template<uct_device_cooperation_t cooperation = UCT_DEVICE_COOPERATION_THREAD>
+template<uct_device_level_t level = UCT_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE void uct_device_completion_init(uct_dev_completion_t *comp)
 {
     comp->count  = 0;

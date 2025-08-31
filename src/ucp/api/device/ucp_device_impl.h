@@ -214,7 +214,6 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
  * @brief Initialize a device request.
  *
  * @param [out] req  Device request to initialize.
- *
  */
 UCS_F_DEVICE void ucp_device_request_init(ucp_device_request_t *req)
 {
