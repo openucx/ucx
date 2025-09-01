@@ -7,15 +7,11 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
-#include <cstring>
-
-extern "C" {
 #include "ucp_device_types.h"
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 #include <stdint.h>
-}
 
 
 /**
@@ -23,11 +19,11 @@ extern "C" {
  * @brief Specify device level of cooperation to perform the transfer.
  */
 typedef enum {
-    UCP_DEVICE_COOP_THREAD = 0,
-    UCP_DEVICE_COOP_WARP   = 1,
-    UCP_DEVICE_COOP_BLOCK  = 2,
-    UCP_DEVICE_COOP_GRID   = 3
-} ucp_device_coop_t;
+    UCP_DEVICE_LEVEL_THREAD = 0,
+    UCP_DEVICE_LEVEL_WARP   = 1,
+    UCP_DEVICE_LEVEL_BLOCK  = 2,
+    UCP_DEVICE_LEVEL_GRID   = 3
+} ucp_device_level_t;
 
 
 /**
@@ -55,7 +51,7 @@ typedef enum {
  * addresses and length. The flags parameter can be used to modify the behavior
  * of the routine with bit from @ref ucp_device_flags_t.
  *
- * @tparam      coop            Level of cooperation of the transfer.
+ * @tparam      level           Level of cooperation of the transfer.
  * @param [in]  mem_list        Memory descriptor list handle to use.
  * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
  * @param [in]  address         Local virtual address to send data from.
@@ -67,7 +63,7 @@ typedef enum {
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template <ucp_device_coop_t coop = UCP_DEVICE_COOP_THREAD>
+template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
 ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
                       unsigned mem_list_index,
@@ -94,7 +90,7 @@ ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
  * address. The flags parameter can be used to modify the behavior of the
  * routine.
  *
- * @tparam      coop            Level of cooperation of the transfer.
+ * @tparam      level           Level of cooperation of the transfer.
  * @param [in]  mem_list        Memory descriptor list handle to use.
  * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
  *                              remote key to use for the increment operation.
@@ -106,7 +102,7 @@ ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template <ucp_device_coop_t coop = UCP_DEVICE_COOP_THREAD>
+template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
 ucp_device_counter_inc(ucp_device_mem_list_handle_h mem_list,
                        unsigned mem_list_index, uint64_t inc_value,
@@ -144,7 +140,7 @@ ucp_device_counter_inc(ucp_device_mem_list_handle_h mem_list,
  * parameter can be used to modify the behavior of the routine with bit from
  * @ref ucp_device_flags_t.
  *
- * @tparam      coop                   Level of cooperation of the transfer.
+ * @tparam      level                  Level of cooperation of the transfer.
  * @param [in]  mem_list               Memory descriptor list handle to use.
  * @param [in]  addresses              Array of local addresses to send from.
  * @param [in]  remote_addresses       Array of remote addresses to send to.
@@ -156,7 +152,7 @@ ucp_device_counter_inc(ucp_device_mem_list_handle_h mem_list,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template <ucp_device_coop_t coop = UCP_DEVICE_COOP_THREAD>
+template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
 ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
                      void *const *addresses, const uint64_t *remote_addresses,
@@ -197,7 +193,7 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
  * flags parameter can be used to modify the behavior of the routine with bit
  * from @ref ucp_device_flags_t.
  *
- * @tparam      coop                   Level of cooperation of the transfer.
+ * @tparam      level                  Level of cooperation of the transfer.
  * @param [in]  mem_list               Memory descriptor list handle to use.
  * @param [in]  mem_list_indices       Array of indices, to use in descriptor
  *                                     list of entries from handle.
@@ -213,7 +209,7 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template <ucp_device_coop_t coop = UCP_DEVICE_COOP_THREAD>
+template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
 ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
                              const unsigned *mem_list_indices,
@@ -237,7 +233,7 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
  * This device progress function checks and progresses a request representing a
  * batch of one or many operations in progress.
  *
- * @tparam      coop   Level of cooperation of the transfer.
+ * @tparam      level  Level of cooperation of the transfer.
  * @param [in]  req    Request containing operations in progress.
  *
  * @return UCS_OK           - The request has completed, no more operations are
@@ -246,7 +242,7 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
  *                            have not completed.
  * @return Error code as defined by @ref ucs_status_t
  */
-template <ucp_device_coop_t coop = UCP_DEVICE_COOP_THREAD>
+template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
 ucp_device_progress_req(ucp_device_request_t *req)
 {
