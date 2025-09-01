@@ -16,7 +16,7 @@
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Specify device level of cooperation to perform the transfer.
+ * @brief Cooperation level when calling device functions.
  */
 typedef enum {
     UCP_DEVICE_LEVEL_THREAD = 0,
