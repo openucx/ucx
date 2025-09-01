@@ -14,7 +14,6 @@
 #include <ucs/datastruct/string_buffer.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 #include <uct/cuda/base/cuda_iface.h>
-#include <uct/cuda/cuda_copy/cuda_copy_md.h>
 
 #include <doca_log.h>
 #include <cuda.h>
@@ -55,12 +54,19 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     doca_error_t derr;
     size_t dev_ep_size;
     uct_ib_mlx5_dbrec_t dbrec;
+    CUcontext primary_ctx;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
-    status = uct_cuda_copy_push_ctx(iface->cuda_dev, 1, UCS_LOG_LEVEL_ERROR);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxRetain(&primary_ctx, iface->cuda_dev));
     if (status != UCS_OK) {
         return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(primary_ctx));
+    if (status != UCS_OK) {
+        goto err_ctx;
     }
 
     init_attr.cq_len[UCT_IB_DIR_TX] = iface->super.super.config.tx_qp_len *
@@ -96,7 +102,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     if (derr != DOCA_SUCCESS) {
         ucs_error("doca_gpu_mem_alloc failed: %s", doca_error_get_descr(derr));
         status = UCS_ERR_IO_ERROR;
-        goto out;
+        goto err_ctx;
     }
 
     /* TODO add dmabuf_fd support */
@@ -180,8 +186,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         goto err_dev_ep;
     }
 
-    status = UCS_OK;
-    goto out;
+    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(NULL));
+    return UCS_OK;
 
 err_dev_ep:
     doca_gpu_verbs_unexport_qp(iface->gpu_dev, self->qp_cpu);
@@ -193,8 +199,9 @@ err_umem:
     mlx5dv_devx_umem_dereg(self->umem);
 err_mem:
     doca_gpu_mem_free(iface->gpu_dev, self->ep_gpu);
-out:
-    uct_cuda_copy_pop_alloc_ctx(iface->cuda_dev);
+err_ctx:
+    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(NULL));
+    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRelease(iface->cuda_dev));
     return status;
 }
 
@@ -214,6 +221,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
     uct_ib_mlx5_devx_destroy_cq_common(&self->cq);
     mlx5dv_devx_umem_dereg(self->umem);
     doca_gpu_mem_free(iface->gpu_dev, self->ep_gpu);
+    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRelease(iface->cuda_dev));
 }
 
 UCS_CLASS_DEFINE(uct_rc_gdaki_ep_t, uct_base_ep_t);
