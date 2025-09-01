@@ -194,6 +194,7 @@ static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
 };
 
 static uct_iface_internal_ops_t uct_tcp_sockcm_iface_internal_ops = {
+    .iface_query_v2        = (uct_iface_query_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = uct_tcp_sockcm_ep_query,

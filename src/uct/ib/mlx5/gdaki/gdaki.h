@@ -30,4 +30,10 @@ typedef struct uct_rc_gdaki_ep {
     uct_ib_mlx5_txwq_t qp;
 } uct_rc_gdaki_ep_t;
 
+
+typedef struct uct_rc_gdaki_device_mem_element {
+    uint32_t lkey;
+    uint32_t rkey;
+} uct_rc_gdaki_device_mem_element_t;
+
 #endif /* UCT_GDAKI_IFACE_H */
