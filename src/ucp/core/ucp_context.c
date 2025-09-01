@@ -1739,8 +1739,8 @@ ucp_update_memtype_md_map(uint64_t mem_types_map, ucs_memory_type_t mem_type,
 static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
-    ucp_md_map_t reg_block_md_map    = 0;
-    ucp_md_map_t reg_nonblock_md_map = 0;
+    ucp_md_map_t reg_block_md_map;
+    ucp_md_map_t reg_nonblock_md_map;
     ucs_memory_type_t mem_type;
     ucp_md_index_t md_index;
     const uct_md_attr_v2_t *md_attr;
@@ -1757,6 +1757,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
     }
 
     ucs_memory_type_for_each(mem_type) {
+        reg_block_md_map    = 0;
+        reg_nonblock_md_map = 0;
         for (md_index = 0; md_index < context->num_mds; ++md_index) {
             md_attr = &context->tl_mds[md_index].attr;
             if (md_attr->dmabuf_mem_types & UCS_BIT(mem_type)) {
@@ -1787,9 +1789,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
             }
         }
 
-        if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
-            if ((reg_nonblock_md_map != 0) ||
-                !context->config.ext.reg_nb_fallback) {
+        if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+            ((reg_nonblock_md_map != 0) || !context->config.ext.reg_nb_fallback)) {
                 /* Keep map of MDs supporting blocking registration
                  * if non-blocking registration is requested for the
                  * given memory type. In some cases blocking
@@ -1798,14 +1799,9 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
                 context->reg_block_md_map[mem_type] =
                     reg_block_md_map & ~reg_nonblock_md_map;
                 context->reg_md_map[mem_type]       = reg_nonblock_md_map;
-            } else {
-                /* Fallback: non-blocking registration was requested for this
-                 * memory type but no MD actually supports it, treat it as if
-                 * the request was not set (i.e., allow blocking-capable MDs as
-                 * well). */
-                context->reg_block_md_map[mem_type] = reg_block_md_map;
-                context->reg_md_map[mem_type]       = reg_block_md_map;
-            }
+        } else {
+            context->reg_block_md_map[mem_type] = reg_block_md_map;
+            context->reg_md_map[mem_type]       = reg_block_md_map;
         }
 
         /* If we have a dmabuf provider for a memory type, it means we can
