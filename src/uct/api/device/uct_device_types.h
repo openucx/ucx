@@ -22,7 +22,8 @@
 typedef enum {
     UCT_DEVICE_LEVEL_THREAD,
     UCT_DEVICE_LEVEL_WARP,
-    UCT_DEVICE_LEVEL_BLOCK
+    UCT_DEVICE_LEVEL_BLOCK,
+    UCT_DEVICE_LEVEL_GRID
 } uct_device_level_t;
 
 
@@ -41,10 +42,10 @@ typedef struct uct_device_ep {
 
 
 /* Completion object for device operations */
-typedef struct uct_dev_completion {
+typedef struct uct_device_completion {
     uint32_t     count;  /* How many operations are pending */
     ucs_status_t status; /* Status of the operation */
-} uct_dev_completion_t;
+} uct_device_completion_t;
 
 
 /* Base structure for all device memory elements */

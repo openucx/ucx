@@ -23,7 +23,7 @@
  * with @ref ucp_device_progress_req to detect request completion.
  */
 typedef struct ucp_device_request {
-    uct_dev_completion_t comp;
+    uct_device_completion_t comp;
 } ucp_device_request_t;
 
 

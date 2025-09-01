@@ -40,7 +40,7 @@ template<uct_device_level_t level = UCT_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
         const void *address, uint64_t remote_address, size_t length,
-        uint64_t flags, uct_dev_completion_t *comp)
+        uint64_t flags, uct_device_completion_t *comp)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         // return uct_rc_mlx5_gda_ep_put_single(device_ep, mem_elem, address,
@@ -61,7 +61,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  * @param [out] comp  Device completion object to initialize.
  */
 template<uct_device_level_t level = UCT_DEVICE_LEVEL_THREAD>
-UCS_F_DEVICE void uct_device_completion_init(uct_dev_completion_t *comp)
+UCS_F_DEVICE void uct_device_completion_init(uct_device_completion_t *comp)
 {
     comp->count  = 0;
     comp->status = UCS_OK;
