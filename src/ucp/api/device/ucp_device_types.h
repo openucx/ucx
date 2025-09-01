@@ -7,7 +7,11 @@
 #ifndef UCP_DEVICE_TYPES_H
 #define UCP_DEVICE_TYPES_H
 
+#include <cstring>
+
+extern "C" {
 #include <uct/api/uct.h>
+}
 
 
 typedef struct ucp_mem_list_elem {
