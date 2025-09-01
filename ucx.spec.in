@@ -2,7 +2,7 @@
 %bcond_without cma
 %bcond_with    cuda
 %bcond_with    gdrcopy
-%bcond_with    gdaki
+%bcond_with    gda
 %bcond_without ib
 %bcond_with    knem
 %bcond_without rdmacm
@@ -75,7 +75,7 @@ BuildRequires: valgrind-devel
 %if %{with mad}
 BuildRequires: libibmad-devel libibumad-devel
 %endif
-%if %{with gdaki}
+%if %{with gda}
 BuildRequires: doca-sdk-gpunetio-devel
 %endif
 
@@ -136,7 +136,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg ugni ugni \
            %_with_arg mad mad \
            %_with_arg ze ze \
-           %_with_arg gdaki gdaki \
+           %_with_arg gda gda \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -213,8 +213,8 @@ Provides static libraries required for developing with UCX.
 %if %{with vfs}
 %{_libdir}/pkgconfig/ucx-fuse.pc
 %endif
-%if %{with gdaki}
-%{_libdir}/pkgconfig/ucx-mlx5-gdaki.pc
+%if %{with gda}
+%{_libdir}/pkgconfig/ucx-ib-mlx5-gda.pc
 %endif
 
 %if %{with cma}
@@ -433,21 +433,21 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %{_libdir}/ucx/libucm_ze.so.*
 %endif
 
-%if %{with gdaki}
-%package mlx5-gdaki
+%if %{with gda}
+%package ib-mlx5-gda
 Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
 Requires: %{name}-ib%{?_isa} = %{version}-%{release}
 Requires: doca-sdk-gpunetio-devel
-Summary: UCX GDAKI support
+Summary: UCX GPU Direct Async support
 Group: System Environment/Libraries
 
-%description mlx5-gdaki
-Provide GDAKI (GPU Direct Asynchronous Kernel Initiated) support for UCX.
-GDAKI enables high-performance GPU-to-network communication using DOCA GPUNetIO
-technology for direct data transfer between GPU memory and network devices.
+%description ib-mlx5-gda
+Provide GPU Direct Async support for UCX. GPU Direct Async allows GPU kernels
+to initiate network communications directly without explicit synchronization
+with the host CPU.
 
-%files mlx5-gdaki
-%{_libdir}/ucx/libuct_ib_mlx5_gdaki.so.*
+%files ib-mlx5-gda
+%{_libdir}/ucx/libuct_ib_mlx5_gda.so.*
 %endif
 
 %changelog

@@ -285,7 +285,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap.rc,
-                                              &config->mlx5, "gdaki");
+                                              &config->mlx5, "rc_gda");
     if (status != UCS_OK) {
         return status;
     }
@@ -406,8 +406,8 @@ err:
     return status;
 }
 
-UCT_TL_DEFINE_ENTRY(&uct_ib_component, gdaki, uct_gdaki_query_tl_devices,
-                    uct_rc_gdaki_iface_t, "GDAKI_",
+UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_gda, uct_gdaki_query_tl_devices,
+                    uct_rc_gdaki_iface_t, "RC_GDA_",
                     uct_rc_gdaki_iface_config_table,
                     uct_rc_gdaki_iface_config_t);
 
@@ -435,4 +435,4 @@ static void uct_ib_doca_init(void)
     }
 }
 
-UCT_TL_INIT(&uct_ib_component, gdaki, ctor, uct_ib_doca_init(), )
+UCT_TL_INIT(&uct_ib_component, rc_gda, ctor, uct_ib_doca_init(), )

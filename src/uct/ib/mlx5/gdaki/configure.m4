@@ -53,7 +53,7 @@ CPPFLAGS="$save_CPPFLAGS"
 LDFLAGS="$save_LDFLAGS"
 
 AS_IF([test x$have_gpunetio = xyes], [
-    uct_ib_mlx5_modules="${uct_ib_mlx5_modules}:gdaki"
+    uct_ib_mlx5_modules="${uct_ib_mlx5_modules}:gda"
     AC_SUBST(GPUNETIO_CFLAGS)
     AC_SUBST(GPUNETIO_LDFLAGS)
     AC_SUBST(GPUNETIO_LIBS)
@@ -62,4 +62,4 @@ AS_IF([test x$have_gpunetio = xyes], [
 
 AM_CONDITIONAL([HAVE_GPUNETIO], [test x$have_gpunetio = xyes])
 AC_CONFIG_FILES([src/uct/ib/mlx5/gdaki/Makefile
-                 src/uct/ib/mlx5/gdaki/ucx-mlx5-gdaki.pc])
+                 src/uct/ib/mlx5/gdaki/ucx-ib-mlx5-gda.pc])
