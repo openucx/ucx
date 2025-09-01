@@ -1271,10 +1271,9 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  *
  * @return UCS_OK on success or error code in case of failure.
  */
-ucs_status_t
-uct_iface_mem_element_pack_v2(uct_iface_h iface, uct_mem_h memh,
-                              uct_rkey_t rkey,
-                              uct_device_mem_element_t *mem_element);
+ucs_status_t uct_iface_mem_element_pack(uct_iface_h iface, uct_mem_h memh,
+                                        uct_rkey_t rkey,
+                                        uct_device_mem_element_t *mem_element);
 
 END_C_DECLS
 
