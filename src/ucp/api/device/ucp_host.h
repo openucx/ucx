@@ -169,6 +169,7 @@ enum ucp_signal_attr_field {
     UCP_SIGNAL_ATTR_FIELD_SIGNAL_SIZE = UCS_BIT(0)
 };
 
+
 /**
  * @ingroup UCP_DEVICE
  * @brief UCP signal attributes.
@@ -231,7 +232,7 @@ typedef struct ucp_signal_query_params {
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t ucp_signal_query(ucp_context_h context_p,
+ucs_status_t ucp_signal_query(ucp_context_h context,
                               const ucp_signal_query_params_t *params,
                               ucp_signal_attr_t *attr);
 
@@ -277,7 +278,7 @@ typedef struct ucp_signal_init_params {
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Initialize the content of a signaling memory area.
+ * @brief Initialize the contents of a signaling memory area.
  *
  * This routine is called by the receive side to set up the memory area for
  * signaling. A remote sender can then use the provided rkey to notify when the
@@ -287,7 +288,7 @@ typedef struct ucp_signal_init_params {
  * function @ref ucp_device_counter_read.
  *
  * The memory type or memory handle from params, might be used to help setting
- * the content of the signal area.
+ * the contents of the signal area.
  *
  * @param [in] context   Context to use when initializing a signaling area.
  * @param [in] params    Parameters used to initialize the signal.
@@ -295,7 +296,7 @@ typedef struct ucp_signal_init_params {
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t ucp_signal_init(ucp_context_t *context,
+ucs_status_t ucp_signal_init(ucp_context_h context,
                              const ucp_signal_init_params_t *params,
                              void *signal);
 

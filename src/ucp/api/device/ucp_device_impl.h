@@ -211,7 +211,7 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
  *         error.
  */
 UCS_F_DEVICE uint64_t
-ucp_device_counter_read(void *signal)
+ucp_device_counter_read(const void *signal)
 {
     return 0;
 }
