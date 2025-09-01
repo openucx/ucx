@@ -713,18 +713,6 @@ typedef struct uct_ep_connect_to_ep_params {
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief Parameters for creating a device endpoint
- */
-typedef struct uct_device_ep_params {
-    /**
-    * Mask of valid fields in this structure, for backward compatibility.
-    */
-    uint64_t field_mask;
-} uct_device_ep_params_t;
-
-
-/**
  * @ingroup UCT_MD
  * @brief Parameters for comparing remote keys using @ref uct_rkey_compare.
  */
@@ -1211,18 +1199,15 @@ int uct_ep_is_connected(uct_ep_h ep,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Create a device endpoint.
+ * @brief Return the device endpoint associated with the given endpoint.
  *
  * @param [in]  ep          Endpoint to create a device endpoint from.
- * @param [in]  params      Parameters for creating a device endpoint.
- * @param [out] device_ep_p Filled with the created device endpoint.
+ * @param [out] device_ep_p Filled with the handle to the device endpoint.
  *
- * @return UCS_OK           Device endpoint created successfully.
+ * @return UCS_OK           Device endpoint obtained successfully.
  *         Other            Error codes as defined by @ref ucs_status_t.
  */
-ucs_status_t uct_ep_create_device_ep(uct_ep_h ep,
-                                     const uct_device_ep_params_t *params,
-                                     uct_device_ep_h *device_ep_p);
+ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
 
 
 /**

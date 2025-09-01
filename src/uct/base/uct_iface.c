@@ -1087,13 +1087,11 @@ uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
     return uct_ep_connect_to_ep_v2(tl_ep, device_addr, ep_addr, &param);
 }
 
-ucs_status_t uct_ep_create_device_ep(uct_ep_h ep,
-                                     const uct_device_ep_params_t *params,
-                                     uct_device_ep_h *device_ep_p)
+ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p)
 {
     const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
 
-    return iface->internal_ops->ep_create_device_ep(ep, params, device_ep_p);
+    return iface->internal_ops->ep_get_device_ep(ep, device_ep_p);
 }
 
 ucs_status_t uct_iface_mem_element_pack(uct_iface_h tl_iface, uct_mem_h memh,
