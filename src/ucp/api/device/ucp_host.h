@@ -157,6 +157,148 @@ ucp_mem_list_create(ucp_ep_h ep,
  */
 void ucp_mem_list_release(ucp_device_mem_list_handle_h handle);
 
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief UCP signal attributes field mask.
+ *
+ * This allows specifying which fields in @ref ucp_signal_attr_t are queried.
+ */
+enum ucp_signal_attr_field {
+    /* The @ref ucp_signal_attr_t::signal_size field is queried. */
+    UCP_SIGNAL_ATTR_FIELD_SIGNAL_SIZE = UCS_BIT(0)
+};
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief UCP signal attributes.
+ *
+ * The structure defines the attributes for the signaling functionality of the
+ * UCP device API.
+ */
+typedef struct ucp_signal_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from @ref
+     * ucp_signal_attr_field. Fields not specified in this mask will be
+     * ignored. Provides ABI compatibility with respect to adding new fields.
+     *
+     * The caller must set this field to indicate which attributes
+     * they want to query. Only the requested fields will be populated
+     * in the structure.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Size of the signal structure used by UCP device API for signaling
+     * operations.
+     *
+     * This field is an output parameter that indicates the size required
+     * by a signaling memory area. It can be used for signal area allocation,
+     * which can in turn be initialized with @ref ucp_signal_init.
+     */
+    size_t   signal_size;
+} ucp_signal_attr_t;
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Signal query parameters structure.
+ *
+ * The structure defines the optional parameters that can be used to query the
+ * signaling memory area properties with @ref ucp_signal_query.
+ */
+typedef struct ucp_signal_query_params {
+    /**
+     * Mask of valid fields in this structure. Fields not specified in this
+     * mask will be ignored. Provides ABI compatibility with respect to adding
+     * new fields.
+     */
+    uint64_t field_mask;
+} ucp_signal_query_params_t;
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Query signal attributes.
+ *
+ * This host routine of the device API fetches information about signaling
+ * memory area attributes. Those attributes can later be used for resource
+ * allocation and configuration.
+ *
+ * @param [in]     context  Context to use.
+ * @param [in]     params   Optional parameters to use for query.
+ * @param [in/out] attr     Filled with signal attributes.
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t ucp_signal_query(ucp_context_h context_p,
+                              const ucp_signal_query_params_t *params,
+                              ucp_signal_attr_t *attr);
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Signal init attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref
+ * ucp_signal_init_params_t are present. It is used to enable backward
+ * compatibility support.
+ */
+enum ucp_signal_init_params_field {
+    UCP_SIGNAL_INIT_PARAMS_FIELD_MEM_TYPE = UCS_BIT(0), /**< Source memory handle */
+    UCP_SIGNAL_INIT_PARAMS_FIELD_MEMH     = UCS_BIT(1)  /**< Unpacked remote memory key */
+};
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Parameters which can be used when calling @ref ucp_signal_init.
+ */
+typedef struct ucp_signal_init_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_signal_init_params_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t          field_mask;
+
+    /**
+     * Optional memory type for the given @a signal area.
+     */
+    ucs_memory_type_t mem_type;
+
+    /**
+     * Optional memory registration handle for the given @a signal area.
+     */
+    ucp_mem_h         memh;
+} ucp_signal_init_params_t;
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Initialize the content of a signaling memory area.
+ *
+ * This routine is called by the receive side to set up the memory area for
+ * signaling. A remote sender can then use the provided rkey to notify when the
+ * data has been successfully sent.
+ *
+ * The receive side can poll for completion on this signal using the device
+ * function @ref ucp_device_counter_read.
+ *
+ * The memory type or memory handle from params, might be used to help setting
+ * the content of the signal area.
+ *
+ * @param [in] context   Context to use when initializing a signaling area.
+ * @param [in] params    Parameters used to initialize the signal.
+ * @param [in] signal    Address of signaling area.
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t ucp_signal_init(ucp_context_t *context,
+                             const ucp_signal_init_params_t *params,
+                             void *signal);
+
 END_C_DECLS
 
 #endif /* UCP_HOST_H */

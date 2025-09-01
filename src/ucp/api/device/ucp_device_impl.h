@@ -197,6 +197,28 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
 
 /**
  * @ingroup UCP_DEVICE
+ * @brief Read a counter value from a signaling memory area.
+ *
+ * This function can be used on the receiving side to detect completion of a
+ * data transfer.
+ *
+ * The signaling memory area must be initialized with the host function
+ * @ref ucp_signal_init.
+ *
+ * @param [in]  signal     Signal memory area.
+ *
+ * @return Counter value of the signaling memory area, UINT64_MAX in case of
+ *         error.
+ */
+UCS_F_DEVICE uint64_t
+ucp_device_counter_read(void *signal)
+{
+    return 0;
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
  * @brief Progress a device request containing a batch of operations.
  *
  * This device progress function checks and progresses a request representing a
