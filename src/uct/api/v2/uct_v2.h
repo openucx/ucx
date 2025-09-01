@@ -1024,7 +1024,7 @@ typedef enum {
  */
 enum uct_iface_attr_field {
     /**
-     * Enables @ref uct_iface_attr_t::device_mem_element_size.
+     * Enables @ref uct_iface_attr_v2_t::device_mem_element_size.
      */
     UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE = UCS_BIT(0)
 };

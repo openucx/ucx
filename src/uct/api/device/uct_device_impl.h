@@ -50,7 +50,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
         // return uct_cuda_ipc_ep_put_single(device_ep, mem_elem, address,
         //                                   remote_address, length, flags, comp);
     }
-    return UCS_OK;
+    return UCS_ERR_UNSUPPORTED;
 }
 
 
