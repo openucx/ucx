@@ -236,14 +236,16 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
     .super = {
         .super = {
-            .iface_query_v2        = uct_rc_gdaki_iface_query_v2,
-            .iface_estimate_perf   = uct_ib_iface_estimate_perf,
-            .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-            .ep_connect_to_ep_v2   = uct_rc_gdaki_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_one_int,
-            .ep_is_connected       = uct_rc_gdaki_ep_is_connected,
+            .iface_query_v2         = uct_rc_gdaki_iface_query_v2,
+            .iface_estimate_perf    = uct_ib_iface_estimate_perf,
+            .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+            .ep_connect_to_ep_v2    = uct_rc_gdaki_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2  = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_one_int,
+            .ep_is_connected        = uct_rc_gdaki_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq  = uct_rc_gdaki_create_cq,
         .destroy_cq = (uct_ib_iface_destroy_cq_func_t)ucs_empty_function_return_success,
