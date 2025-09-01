@@ -17,7 +17,6 @@
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
 
 #include <doca_log.h>
-#include <cuda_runtime.h>
 #include <cuda.h>
 
 
@@ -54,7 +53,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     uct_rc_gdaki_dev_ep_t dev_ep       = {};
     ucs_status_t status;
     doca_error_t derr;
-    cudaError_t cerr;
     size_t dev_ep_size;
     uct_ib_mlx5_dbrec_t dbrec;
 
@@ -86,6 +84,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
                                               ucs_get_page_size());
 
     dev_ep_size = qp_attr.umem_offset + qp_attr.len;
+    /*
+     * dev_ep layout:
+     * +---------------------+-------+---------+---------+
+     * | counters, dbr       | ops   | cq buff | wq buff |
+     * +---------------------+-------+---------+---------+
+     */
     derr = doca_gpu_mem_alloc(iface->gpu_dev, dev_ep_size, ucs_get_page_size(),
                               DOCA_GPU_MEM_TYPE_GPU, (void**)&self->ep_gpu,
                               NULL);
@@ -156,25 +160,23 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 
     dev_ep.qp = self->qp_gpu;
 
-    cerr = cudaMemset(self->ep_gpu, 0, dev_ep_size);
-    if (cerr != cudaSuccess) {
-        ucs_error("cudaMemset failed: %s\n", cudaGetErrorString(cerr));
-        status = UCS_ERR_IO_ERROR;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemsetD8((CUdeviceptr)self->ep_gpu, 0, dev_ep_size));
+    if (status != UCS_OK) {
         goto err_dev_ep;
     }
 
-    cerr = cudaMemset(UCS_PTR_BYTE_OFFSET(self->ep_gpu, cq_attr.umem_offset),
-                      0xff, cq_attr.umem_len);
-    if (cerr != cudaSuccess) {
-        ucs_error("cudaMemset failed: %s\n", cudaGetErrorString(cerr));
-        status = UCS_ERR_IO_ERROR;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemsetD8((CUdeviceptr)UCS_PTR_BYTE_OFFSET(self->ep_gpu,
+                                                        cq_attr.umem_offset),
+                       0xff, cq_attr.umem_len));
+    if (status != UCS_OK) {
         goto err_dev_ep;
     }
 
-    cerr = cudaMemcpy(self->ep_gpu, &dev_ep, sizeof(dev_ep), cudaMemcpyDefault);
-    if (cerr != cudaSuccess) {
-        ucs_error("cudaMemcpy failed: %s\n", cudaGetErrorString(cerr));
-        status = UCS_ERR_IO_ERROR;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemcpyHtoD((CUdeviceptr)self->ep_gpu, &dev_ep, sizeof(dev_ep)));
+    if (status != UCS_OK) {
         goto err_dev_ep;
     }
 
