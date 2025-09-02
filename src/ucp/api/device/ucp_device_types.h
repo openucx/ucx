@@ -24,7 +24,7 @@
  * The handle and most of its content is stored on GPU memory, with the intent
  * to be as memory-local as possible.
  */
-typedef struct {
+typedef struct ucp_device_mem_list_handle {
     /**
      * Structure version. Allow runtime ABI compatibility checks between host
      * and device code.

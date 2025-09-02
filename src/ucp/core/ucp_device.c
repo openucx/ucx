@@ -13,7 +13,6 @@
 #include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_types.h>
 #include <ucs/type/param.h>
-#include <ucp/api/device/ucp_device_types.h>
 
 
 static ucs_status_t
