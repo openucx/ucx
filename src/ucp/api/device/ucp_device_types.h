@@ -7,12 +7,11 @@
 #ifndef UCP_DEVICE_TYPES_H
 #define UCP_DEVICE_TYPES_H
 
-#include <uct/api/uct.h>
+#include <uct/api/device/uct_device_types.h>
+#include <uct/api/uct_def.h>
 
 
-typedef struct ucp_mem_list_elem {
-} ucp_device_mem_list_elem_t;
-
+#define UCP_DEVICE_MEM_LIST_MAX_EPS 2
 
 /**
  * @ingroup UCP_DEVICE
@@ -26,50 +25,36 @@ typedef struct ucp_mem_list_elem {
  */
 typedef struct {
     /**
-     * Allow runtime ABI compatibility checks, between host and device code.
+     * Structure version. Allow runtime ABI compatibility checks between host
+     * and device code.
      */
-    int                        version;
+    uint16_t        version;
 
     /**
      * Protocol index computed by host handle management functions when
      * creating handle.
      */
-    int                        proto_idx;
+    uint8_t         proto_idx;
 
     /**
-     * Array of pointers to UCT exported endpoints, used for multi-lane
-     * transfers.
+     * Number of UCT device endpoints found in @a uct_ep array.
      */
-    uct_ep_h                   *uct_ep;
-
-    /**
-     * Number of UCT exported endpoints found in @a uct_ep array.
-     */
-    unsigned                   num_uct_eps;
+    uint8_t         num_uct_eps;
 
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    unsigned                   mem_list_length;
+    uint32_t        mem_list_length;
 
     /**
-     * Array of memory descriptors containing memory pairs to be used by device
-     * functions for memory transfers.
+     * Array of pointers to UCT device endpoints, used for multi-lane
+     * transfers.
      */
-    ucp_device_mem_list_elem_t elems[];
+    uct_device_ep_h uct_device_eps[UCP_DEVICE_MEM_LIST_MAX_EPS];
+
+    /* (mem_list_length * num_uct_eps) uct_device_mem_element objects will
+       follow this structure. The size of each element is according to the
+       selected transport. */
 } ucp_device_mem_list_handle_t;
-
-typedef ucp_device_mem_list_handle_t *ucp_device_mem_list_handle_h;
-
-
-/**
- * @ingroup UCP_DEVICE
- * @brief GPU request descriptor of a given batch
- *
- * This request tracks a batch of memory operations in progress. It can be used
- * with @ref ucp_device_progress_req to detect request completion.
- */
-typedef struct ucp_device_request {
-} ucp_device_request_t;
 
 #endif /* UCP_DEVICE_TYPES_H */

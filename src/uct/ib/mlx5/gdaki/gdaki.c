@@ -331,7 +331,8 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
      *    causing issue when trying to send standard PUT. Eventually we must probably
      *    introduce another type of lane (rma_batch#x).
      */
-    iface_attr->cap.flags      = UCT_IFACE_FLAG_CONNECT_TO_EP;
+    iface_attr->cap.flags      = UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                 UCT_IFACE_FLAG_DEVICE_EP;
     iface_attr->ep_addr_len    = sizeof(uct_rc_mlx5_base_ep_address_t);
     iface_attr->iface_addr_len = sizeof(uint8_t);
     iface_attr->overhead       = UCT_RC_MLX5_IFACE_OVERHEAD;
@@ -339,6 +340,17 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_rc_gdaki_iface_query_v2(uct_iface_h tl_iface,
+                                                uct_iface_attr_v2_t *iface_attr)
+{
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE) {
+        iface_attr->device_mem_element_size = sizeof(
+                uct_rc_gdaki_device_mem_element_t);
+    }
+
     return UCS_OK;
 }
 
@@ -363,13 +375,16 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf   = uct_ib_iface_estimate_perf,
-            .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-            .ep_connect_to_ep_v2   = uct_rc_gdaki_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_one_int,
-            .ep_is_connected       = uct_rc_gdaki_ep_is_connected,
+            .iface_query_v2         = uct_rc_gdaki_iface_query_v2,
+            .iface_estimate_perf    = uct_ib_iface_estimate_perf,
+            .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+            .ep_connect_to_ep_v2    = uct_rc_gdaki_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2  = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_one_int,
+            .ep_is_connected        = uct_rc_gdaki_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq  = uct_rc_gdaki_create_cq,
         .destroy_cq = (uct_ib_iface_destroy_cq_func_t)ucs_empty_function_return_success,

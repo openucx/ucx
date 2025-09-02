@@ -223,9 +223,12 @@ static void uct_srd_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
 static uct_ib_iface_ops_t uct_srd_iface_ops = {
     .super = {
+        .iface_query_v2        = uct_iface_base_query_v2,
         .iface_estimate_perf   = uct_ib_iface_estimate_perf,
         .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)
             ucs_empty_function,
+        .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)
+            ucs_empty_function_return_unsupported,
         .ep_query              = (uct_ep_query_func_t)
             ucs_empty_function_return_unsupported,
         .ep_invalidate         = (uct_ep_invalidate_func_t)
@@ -233,7 +236,9 @@ static uct_ib_iface_ops_t uct_srd_iface_ops = {
         .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)
             ucs_empty_function_return_unsupported,
         .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
-        .ep_is_connected       = uct_srd_ep_is_connected
+        .ep_is_connected       = uct_srd_ep_is_connected,
+        .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)
+            ucs_empty_function_return_unsupported
     },
     .create_cq      = uct_ib_verbs_create_cq,
     .destroy_cq     = uct_ib_verbs_destroy_cq,

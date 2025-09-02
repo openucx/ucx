@@ -7,11 +7,24 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
+#include "ucp_host.h"
 #include "ucp_device_types.h"
 
+#include <uct/api/device/uct_device_impl.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 #include <stdint.h>
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief GPU request descriptor of a given batch
+ *
+ * This request tracks a batch of memory operations in progress. It can be used
+ * with @ref ucp_device_progress_req to detect request completion.
+ */
+typedef struct ucp_device_request {
+    uct_device_completion_t comp;
+} ucp_device_request_t;
 
 
 /**
@@ -228,6 +241,19 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
 
 /**
  * @ingroup UCP_DEVICE
+ *
+ * @brief Initialize a device request.
+ *
+ * @param [out] req  Device request to initialize.
+ */
+UCS_F_DEVICE void ucp_device_request_init(ucp_device_request_t *req)
+{
+    uct_device_completion_init(&req->comp);
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
  * @brief Progress a device request containing a batch of operations.
  *
  * This device progress function checks and progresses a request representing a
@@ -246,6 +272,11 @@ template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
 ucp_device_progress_req(ucp_device_request_t *req)
 {
+    if (ucs_likely(req->comp.count == 0)) {
+        return req->comp.status;
+    }
+
+    /* TODO call uct progress function */
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
