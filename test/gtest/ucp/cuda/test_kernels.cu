@@ -7,68 +7,10 @@
 #include "test_kernels.h"
 
 #include <ucp/api/device/ucp_device_impl.h>
-#include <cuda_runtime.h>
-#include <stdexcept>
-#include <memory>
+#include <common/cuda.h>
 
 
-namespace cuda {
-
-/**
- * Wrapper class for a host memory result variable, that can be mapped to device
- * memory and passed to a Cuda kernel.
- */
-template<typename T> class device_result_ptr {
-public:
-    device_result_ptr() : m_ptr(allocate(), release)
-    {
-    }
-
-    device_result_ptr(const T &value) : m_ptr(allocate(), release)
-    {
-        *m_ptr.get() = value;
-    }
-
-    T &operator*()
-    {
-        return *m_ptr.get();
-    }
-
-    T *device_ptr()
-    {
-        T *device_ptr;
-        if (cudaHostGetDevicePointer(&device_ptr, m_ptr.get(), 0) !=
-            cudaSuccess) {
-            throw std::runtime_error("cudaHostGetDevicePointer() failure");
-        }
-        return device_ptr;
-    }
-
-private:
-    static T *allocate()
-    {
-        T *ptr = nullptr;
-        if (cudaHostAlloc(&ptr, sizeof(T), cudaHostAllocMapped) !=
-            cudaSuccess) {
-            throw std::bad_alloc();
-        }
-        return ptr;
-    }
-
-    static void release(T *ptr)
-    {
-        cudaFreeHost(ptr);
-    }
-
-    std::unique_ptr<T, decltype(&release)> m_ptr;
-};
-
-static void synchronize()
-{
-    if (cudaDeviceSynchronize() != cudaSuccess) {
-        throw std::runtime_error("cudaDeviceSynchronize() failure");
-    }
-}
+namespace ucp_cuda {
 
 static __global__ void memcmp_kernel(const void* s1, const void* s2,
                                      int* result, size_t size)
@@ -125,7 +67,7 @@ int launch_memcmp(const void *s1, const void *s2, size_t size)
     device_result_ptr<int> result = 0;
 
     memcmp_kernel<<<16, 64>>>(s1, s2, result.device_ptr(), size);
-    synchronize();
+    cuda_synchronize();
 
     return *result;
 }
@@ -141,9 +83,9 @@ ucs_status_t launch_ucp_put_single(ucp_device_mem_list_handle_h mem_list,
 
     ucp_put_single_kernel<<<1, 1>>>(mem_list, address, remote_address, length,
                                     status.device_ptr());
-    synchronize();
+    cuda_synchronize();
 
     return *status;
 }
 
-} // namespace cuda
+} // namespace ucp_cuda

@@ -39,12 +39,12 @@ UCS_TEST_P(test_ucp_device, mapped_buffer_kernel_memcmp)
     ASSERT_EQ(cudaSuccess, cudaMemset(src.ptr(), 0x11, size));
     ASSERT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0xde, size));
 
-    ASSERT_EQ(1, cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
+    ASSERT_EQ(1, ucp_cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
     ASSERT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0x11, size));
-    ASSERT_EQ(0, cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
+    ASSERT_EQ(0, ucp_cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
     ASSERT_EQ(cudaSuccess,
               cudaMemset(UCS_PTR_BYTE_OFFSET(dst.ptr(), size / 10), 0xfa, 10));
-    ASSERT_EQ(1, cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
+    ASSERT_EQ(1, ucp_cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
 }
 
 UCS_TEST_P(test_ucp_device, put_single)
@@ -60,9 +60,9 @@ UCS_TEST_P(test_ucp_device, put_single)
     // TODO create mem list
     ucp_device_mem_list_handle_h mem_list = nullptr;
 
-    ucs_status_t status = cuda::launch_ucp_put_single(mem_list, src.ptr(),
-                                                      (uint64_t)dst.ptr(),
-                                                      size);
+    ucs_status_t status = ucp_cuda::launch_ucp_put_single(mem_list, src.ptr(),
+                                                          (uint64_t)dst.ptr(),
+                                                          size);
     EXPECT_EQ(UCS_ERR_NOT_IMPLEMENTED, status);
 }
 

@@ -10,6 +10,11 @@
 #include <ucs/type/status.h>
 #include <stdint.h>
 
+
+#define UCT_DEVICE_CUDA_NAME     "cuda"
+#define UCT_DEVICE_CUDA_NAME_LEN 4
+
+
 /**
  * @defgroup UCT_DEVICE Device API
  * @ingroup UCT_API
@@ -25,6 +30,14 @@ typedef enum {
     UCT_DEVICE_LEVEL_BLOCK,
     UCT_DEVICE_LEVEL_GRID
 } uct_device_level_t;
+
+
+/**
+ * @brief Specify modifier flags for device sending functions.
+ */
+typedef enum {
+    UCT_DEVICE_FLAG_NODELAY = UCS_BIT(0) /**< Complete before return. */
+} uct_device_flags_t;
 
 
 /* Device transport id (for internal use) */
