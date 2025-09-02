@@ -246,11 +246,11 @@ static int ucp_is_md_selected_by_config(ucp_context_h context,
            !strncmp(cfg_cmpt_name, cmpt_name, UCT_COMPONENT_NAME_MAX);
 }
 
-static ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
-                                     size_t length, unsigned uct_flags,
-                                     ucs_memory_type_t mem_type,
-                                     ucs_sys_device_t sys_dev, const char *name,
-                                     uct_allocated_memory_t *mem)
+ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
+                              size_t length, unsigned uct_flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, const char *name,
+                              uct_allocated_memory_t *mem)
 {
     uct_alloc_method_t method;
     uct_mem_alloc_params_t params;
