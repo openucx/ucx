@@ -197,21 +197,20 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Read a counter value from a signaling memory area.
+ * @brief Read a counter value from memory.
  *
  * This function can be used on the receiving side to detect completion of a
  * data transfer.
  *
- * The signaling memory area must be initialized with the host function
- * @ref ucp_signal_init.
+ * The counter memory area must be initialized with the host function
+ * @ref ucp_device_counter_init.
  *
- * @param [in]  signal     Signal memory area.
+ * @param [in]  counter_ptr Counter memory area.
  *
- * @return Counter value of the signaling memory area, UINT64_MAX in case of
- *         error.
+ * @return value of the counter memory area, UINT64_MAX in case of error.
  */
 UCS_F_DEVICE uint64_t
-ucp_device_counter_read(const void *signal)
+ucp_device_counter_read(const void *counter_ptr)
 {
     return 0;
 }
