@@ -61,7 +61,7 @@ public:
             }
         }
 
-        const ucp_mem_list_params_t&
+        const ucp_mem_list_params_t &
         params(size_t elem_size = sizeof(ucp_mem_list_elem_t))
         {
             m_params.rkeys.clear();
@@ -71,12 +71,12 @@ public:
             for (auto i = 0; i < m_src.size(); ++i) {
                 m_params.elems[i].field_mask = UCP_MEM_LIST_ELEM_FIELD_MEMH |
                                                UCP_MEM_LIST_ELEM_FIELD_RKEY;
-                m_params.elems[i].memh = m_src[i]->memh();
+                m_params.elems[i].memh       = m_src[i]->memh();
                 m_params.rkeys.push_back(m_dst[i]->rkey(m_sender));
                 m_params.elems[i].rkey = m_params.rkeys.back();
             }
 
-            auto& params        = m_params.params;
+            auto &params        = m_params.params;
             params.field_mask   = UCP_MEM_LIST_PARAMS_FIELD_ELEMENTS |
                                   UCP_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
                                   UCP_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;

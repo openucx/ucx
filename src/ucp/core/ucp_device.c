@@ -43,10 +43,10 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
     }
 
     for (i = 0; i < num_elements; i++) {
-        memh = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &elements[i],
-                               memh, MEMH, NULL);
-        rkey = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &elements[i],
-                               rkey, RKEY, NULL);
+        memh = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &elements[i], memh,
+                               MEMH, NULL);
+        rkey = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &elements[i], rkey,
+                               RKEY, NULL);
         if ((memh == NULL) || (rkey == NULL)) {
             return UCS_ERR_INVALID_PARAM;
         }
