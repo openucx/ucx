@@ -110,6 +110,8 @@ typedef struct uct_tag_context       uct_tag_context_t;
 typedef uint64_t                     uct_tag_t;  /* tag type - 64 bit */
 typedef int                          uct_worker_cb_id_t;
 typedef void*                        uct_conn_request_h;
+typedef struct uct_device_ep         *uct_device_ep_h;
+typedef struct uct_device_mem_element uct_device_mem_element_t;
 
 /**
  * @}

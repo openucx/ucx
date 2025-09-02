@@ -120,7 +120,6 @@ typedef struct ucp_device_mem_list_params {
  *
  * Host side does not have access to the content of this descriptor.
  */
-struct ucp_device_mem_list_handle;
 typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
 
 

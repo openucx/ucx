@@ -28,7 +28,7 @@ do
 	fi
 
 	# devices files should be ignored for now
-	if test "$hfile" != "${hfile#ucp/api/device/}"
+	if test "$hfile" != "${hfile#uc[pt]/api/device/}"
 	then
 		echo "SKIPPED $hfile (device compiler)"
 		continue
