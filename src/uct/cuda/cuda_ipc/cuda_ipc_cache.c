@@ -487,6 +487,10 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
 
+    if (d_bptr == (uintptr_t)mapped_addr) {
+        return UCS_OK;
+    }
+
     status = uct_cuda_ipc_get_remote_cache(pid, cu_dev, &cache);
     if (status != UCS_OK) {
         return status;
@@ -528,6 +532,14 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
     int ret;
+
+    CUuuid uuid;
+    cuDeviceGetUuid(&uuid, cu_dev);
+    if ((memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0) &&
+        (getpid() == key->pid)) {
+        *mapped_addr = (CUdeviceptr*)key->d_bptr;
+        return UCS_OK;
+    }
 
     status = uct_cuda_ipc_get_remote_cache(key->pid, cu_dev, &cache);
     if (status != UCS_OK) {
@@ -571,6 +583,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     }
 
     status = uct_cuda_ipc_open_memhandle(key, cu_dev, (CUdeviceptr*)mapped_addr);
+    if (status == UCS_ERR_INVALID_PARAM) {
+        ucs_error("invalid param: %s", ucs_status_string(status));
+    }
+
     if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
             /* unmap all overlapping regions and retry*/
