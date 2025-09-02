@@ -27,6 +27,10 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
     const ucp_mem_list_elem_t *elements;
     ucp_md_map_t remote_md_map;
 
+    if (params == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     num_elements = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD,
                                params, num_elements, NUM_ELEMENTS, 0);
     element_size = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD,
@@ -59,15 +63,15 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
         if (i == 0) {
             cfg_index = rkey->cfg_index;
             if (cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
-                ucs_debug("invalid first rkey cfg_index=%d", cfg_index);
+                ucs_debug("invalid first rkey: cfg_index=%d", cfg_index);
                 return UCS_ERR_INVALID_PARAM;
             }
 
             remote_md_map = rkey->md_map;
         } else {
             if (rkey->cfg_index != cfg_index) {
-                ucs_debug("mismatched rkey config index : rkey[%lu]->cfg_index=%u "
-                          "cfg_index=%u",
+                ucs_debug("mismatched rkey config index: "
+                          "rkey[%lu]->cfg_index=%u cfg_index=%u",
                           i, rkey->cfg_index, cfg_index);
                 return UCS_ERR_UNSUPPORTED;
             }

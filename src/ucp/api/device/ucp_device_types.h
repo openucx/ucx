@@ -31,7 +31,7 @@ typedef struct ucp_device_mem_list_handle {
      * Structure version. Allow runtime ABI compatibility checks between host
      * and device code.
      */
-    uint16_t        version;
+    uint16_t               version;
 
     /**
      * Descriptor of the allocation for the @ref ucp_device_mem_list_handle.
@@ -42,23 +42,23 @@ typedef struct ucp_device_mem_list_handle {
      * Protocol index computed by host handle management functions when
      * creating handle.
      */
-    uint8_t         proto_idx;
+    uint8_t                proto_idx;
 
     /**
      * Number of UCT device endpoints found in @a uct_ep array.
      */
-    uint8_t         num_uct_eps;
+    uint8_t                num_uct_eps;
 
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    uint32_t        mem_list_length;
+    uint32_t               mem_list_length;
 
     /**
      * Array of pointers to UCT device endpoints, used for multi-lane
      * transfers.
      */
-    uct_device_ep_h uct_device_eps[UCP_DEVICE_MEM_LIST_MAX_EPS];
+    uct_device_ep_h        uct_device_eps[UCP_DEVICE_MEM_LIST_MAX_EPS];
 
     /* (mem_list_length * num_uct_eps) uct_device_mem_element objects will
        follow this structure. The size of each element is according to the
