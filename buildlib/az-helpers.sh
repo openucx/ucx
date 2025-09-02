@@ -213,7 +213,7 @@ try_load_cuda_env() {
 load_cuda_env() {
     try_load_cuda_env
     if [ "${have_cuda}" != "yes" ] ; then
-        if [ "${ucx_gpu_test}" = "yes" ] ; then
+        if [ "${ucx_gpu}" = "yes" ] ; then
             azure_log_error "CUDA load failed on GPU node $(hostname -s)"
             exit 1
         fi
