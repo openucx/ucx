@@ -31,32 +31,28 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    num_elements = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD,
-                               params, num_elements, NUM_ELEMENTS, 0);
-    element_size = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD,
-                               params, element_size, ELEMENT_SIZE, 0);
-    elements     = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD,
-                               params, elements, ELEMENTS, NULL);
+    num_elements = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params,
+                                   num_elements, NUM_ELEMENTS, 0);
+    element_size = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params,
+                                   element_size, ELEMENT_SIZE, 0);
+    elements     = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params, elements,
+                                   ELEMENTS, NULL);
 
-    if ((element_size != sizeof(*elements)) ||
-        (num_elements == 0)) {
+    if ((element_size != sizeof(*elements)) || (num_elements == 0)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     for (i = 0; i < num_elements; i++) {
-        memh = UCS_PARAM_VALUE(
-                           UCP_MEM_LIST_ELEM_FIELD, &params->elements[i],
-                           memh, MEMH, NULL);
-        rkey = UCS_PARAM_VALUE(
-                           UCP_MEM_LIST_ELEM_FIELD, &params->elements[i],
-                           rkey, RKEY, NULL);
+        memh = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &params->elements[i],
+                               memh, MEMH, NULL);
+        rkey = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &params->elements[i],
+                               rkey, RKEY, NULL);
         if ((memh == NULL) || (rkey == NULL)) {
             return UCS_ERR_INVALID_PARAM;
         }
 
         if (memh->mem_type != UCS_MEMORY_TYPE_CUDA) {
-            ucs_debug("invalid mem_type: i=%lu mem_type=%d", i,
-                      memh->mem_type);
+            ucs_debug("invalid mem_type: i=%lu mem_type=%d", i, memh->mem_type);
             return UCS_ERR_UNSUPPORTED;
         }
 
@@ -88,10 +84,9 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
     return UCS_OK;
 }
 
-ucs_status_t
-ucp_mem_list_create(ucp_ep_h ep,
-                    const ucp_mem_list_params_t *params,
-                    ucp_device_mem_list_handle_h *handle_p)
+ucs_status_t ucp_mem_list_create(ucp_ep_h ep,
+                                 const ucp_mem_list_params_t *params,
+                                 ucp_device_mem_list_handle_h *handle_p)
 {
     ucs_status_t status;
     ucp_device_mem_list_handle_h handle;
@@ -119,9 +114,8 @@ ucp_mem_list_create(ucp_ep_h ep,
 
     status = ucp_mem_do_alloc(ep->worker->context, NULL, sizeof(*handle),
                               UCT_MD_MEM_ACCESS_LOCAL_READ |
-                              UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                              UCS_MEMORY_TYPE_CUDA,
-                              UCS_SYS_DEVICE_ID_UNKNOWN,
+                                      UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+                              UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN,
                               "ucp_device_mem_list_handle_t", &mem);
     if (status != UCS_OK) {
         ucs_error("failed to allocate ucp_device_mem_list_handle_t: %s",
@@ -152,8 +146,7 @@ err:
     return status;
 }
 
-void ucp_mem_list_release(ucp_ep_h ep,
-                          ucp_device_mem_list_handle_h handle)
+void ucp_mem_list_release(ucp_ep_h ep, ucp_device_mem_list_handle_h handle)
 {
     ucp_device_mem_list_handle_t host_handle;
 

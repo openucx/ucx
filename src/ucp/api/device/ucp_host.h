@@ -155,8 +155,7 @@ ucp_mem_list_create(ucp_ep_h ep,
  * @param [in] ep         Remote endpoint used at creation time.
  * @param [in] handle     Created handle to release.
  */
-void ucp_mem_list_release(ucp_ep_h ep,
-                          ucp_device_mem_list_handle_h handle);
+void ucp_mem_list_release(ucp_ep_h ep, ucp_device_mem_list_handle_h handle);
 
 END_C_DECLS
 
