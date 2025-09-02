@@ -669,7 +669,7 @@ run_mpi_tests() {
 			# Prevent our tests from using UCX libraries from hpcx module by prepending
 			# our local library path first
 			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
-			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
+			export LD_LIBRARY_PATH=${ucx_inst}/lib:${ucx_inst}/lib/ucx:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
 			build release-mt --with-mpi --enable-assertions
 
@@ -688,7 +688,7 @@ run_mpi_tests() {
 					-mca btl tcp,self \
 					-mca btl_tcp_if_include lo \
 					-mca orte_allowed_exit_without_sync 1 \
-					-mca coll ^hcoll,ml"
+					-mca coll ^hcoll,ml,ucc"
 
 			run_ucx_perftest 1
 
