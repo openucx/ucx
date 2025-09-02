@@ -36,13 +36,11 @@ public:
             ucp_mem_list_params_t                  params;
         };
 
-        entity&                                  m_sender;
-        entity&                                  m_receiver;
-
-        std::vector<mapped_buffer_ptr>           m_src;
-        std::vector<mapped_buffer_ptr>           m_dst;
-
-        params                                   m_params;
+        entity&                        m_sender;
+        entity&                        m_receiver;
+        std::vector<mapped_buffer_ptr> m_src;
+        std::vector<mapped_buffer_ptr> m_dst;
+        params                         m_params;
 
     public:
         mem_list(entity &sender, entity &receiver) :
@@ -156,7 +154,7 @@ UCS_TEST_P(test_ucp_device, create_success)
     mem_list list(sender(), receiver());
     ucp_device_mem_list_handle_h handle = nullptr;
 
-    list.add(4 * UCS_MBYTE, 1);
+    list.add(4 * UCS_MBYTE, 4);
     ASSERT_EQ(UCS_OK,
               ucp_mem_list_create(sender().ep(), &list.params(), &handle));
     EXPECT_NE(nullptr, handle);
