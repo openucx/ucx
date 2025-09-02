@@ -3,6 +3,9 @@
  * See file LICENSE for terms.
  */
 
+#include "base/cuda_iface.h"
+#include "uct/api/uct_def.h"
+#include "uct/api/device/uct_device_types.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -27,16 +30,43 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_cuda_ipc_iface_t);
+    CUresult cerr;
+    uct_device_ep_t device_ep;
+    ucs_status_t status;
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     self->remote_pid = *(const pid_t*)params->iface_addr;
+
+    device_ep.uct_tl_id = UCT_DEVICE_TL_CUDA_IPC;
+    cerr = cuMemAlloc((CUdeviceptr *)&self->device_ep, sizeof(uct_device_ep_t));
+    if (cerr != CUDA_SUCCESS) {
+        ucs_error("cuMemAlloc failed: %s",
+                  uct_cuda_base_cu_get_error_string(cerr));
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    cerr = cuMemcpyHtoD((CUdeviceptr)self->device_ep, &device_ep,
+                        sizeof(uct_device_ep_t));
+    if (cerr != CUDA_SUCCESS) {
+        ucs_error("cuMemcpyHtoD failed: %s",
+                  uct_cuda_base_cu_get_error_string(cerr));
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
     return UCS_OK;
+err:
+    cuMemFree((CUdeviceptr)&self->device_ep);
+out:
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
+    cuMemFree((CUdeviceptr)&self->device_ep);
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_ep_t, uct_base_ep_t)
@@ -228,4 +258,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_zcopy,
     uct_cuda_ipc_trace_data(remote_addr, rkey, "PUT_ZCOPY [length %zu]",
                                 uct_iov_total_length(iov, iovcnt));
     return status;
+}
+
+ucs_status_t uct_cuda_ipc_ep_get_device_ep(uct_ep_h tl_ep,
+                                           uct_device_ep_h *device_ep_p)
+{
+    uct_cuda_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
+
+    *device_ep_p = ep->device_ep;
+    return UCS_OK;
 }
