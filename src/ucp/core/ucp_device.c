@@ -31,21 +31,22 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    num_elements = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params,
-                                   num_elements, NUM_ELEMENTS, 0);
     element_size = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params,
                                    element_size, ELEMENT_SIZE, 0);
-    elements     = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params, elements,
-                                   ELEMENTS, NULL);
+    num_elements = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params,
+                                   num_elements, NUM_ELEMENTS, 0);
+    elements     = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params,
+                                   elements, ELEMENTS, NULL);
 
-    if ((element_size != sizeof(*elements)) || (num_elements == 0)) {
+    if ((element_size != sizeof(*elements)) || (num_elements == 0) ||
+        (elements == NULL)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     for (i = 0; i < num_elements; i++) {
-        memh = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &params->elements[i],
+        memh = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &elements[i],
                                memh, MEMH, NULL);
-        rkey = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &params->elements[i],
+        rkey = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &elements[i],
                                rkey, RKEY, NULL);
         if ((memh == NULL) || (rkey == NULL)) {
             return UCS_ERR_INVALID_PARAM;
