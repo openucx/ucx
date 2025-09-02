@@ -9,9 +9,11 @@
 
 #include <uct/api/device/uct_device_types.h>
 #include <uct/api/uct_def.h>
+#include <uct/api/uct.h>
 
 
-#define UCP_DEVICE_MEM_LIST_MAX_EPS 2
+#define UCP_DEVICE_MEM_LIST_MAX_EPS    2
+#define UCP_DEVICE_MEM_LIST_VERSION_V1 1
 
 
 /**
@@ -30,6 +32,11 @@ typedef struct ucp_device_mem_list_handle {
      * and device code.
      */
     uint16_t        version;
+
+    /**
+     * Descriptor of the allocation for the @ref ucp_device_mem_list_handle.
+     */
+    uct_allocated_memory_t host_mem;
 
     /**
      * Protocol index computed by host handle management functions when
