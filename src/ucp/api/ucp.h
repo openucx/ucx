@@ -1209,6 +1209,11 @@ typedef struct ucp_context_attr {
      * Tracing and analysis tools can use name to identify this UCX context.
      */
     char                  name[UCP_ENTITY_NAME_MAX];
+
+    /**
+     * Size usable to allocate a counter memory for UCP Device API usage.
+     */
+    size_t                device_counter_size;
 } ucp_context_attr_t;
 
 

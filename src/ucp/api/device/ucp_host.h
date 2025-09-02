@@ -34,8 +34,8 @@ BEGIN_C_DECLS
  * It is used to enable backward compatibility support.
  */
 enum ucp_device_mem_list_elem_field {
-    UCP_MEM_LIST_ELEM_FIELD_MEMH = UCS_BIT(0), /**< Source memory handle */
-    UCP_MEM_LIST_ELEM_FIELD_RKEY = UCS_BIT(1)  /**< Unpacked remote memory key */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH = UCS_BIT(0), /**< Source memory handle */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY = UCS_BIT(1)  /**< Unpacked remote memory key */
 };
 
 
@@ -168,8 +168,8 @@ void ucp_device_mem_list_release(ucp_device_mem_list_handle_h handle);
  * compatibility support.
  */
 enum ucp_device_counter_init_params_field {
-    UCP_SIGNAL_INIT_PARAMS_FIELD_MEM_TYPE = UCS_BIT(0), /**< Source memory handle */
-    UCP_SIGNAL_INIT_PARAMS_FIELD_MEMH     = UCS_BIT(1)  /**< Unpacked remote memory key */
+    UCP_DEVICE_COUNTER_INIT_PARAMS_FIELD_MEM_TYPE = UCS_BIT(0), /**< Source memory handle */
+    UCP_DEVICE_COUNTER_INIT_PARAMS_FIELD_MEMH     = UCS_BIT(1)  /**< Unpacked remote memory key */
 };
 
 
