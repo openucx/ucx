@@ -63,9 +63,10 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params)
     return UCS_OK;
 }
 
-ucs_status_t ucp_device_mem_list_create(ucp_ep_h ep,
-                                 const ucp_device_mem_list_params_t *params,
-                                 ucp_device_mem_list_handle_h *handle_p)
+ucs_status_t
+ucp_device_mem_list_create(ucp_ep_h ep,
+                           const ucp_device_mem_list_params_t *params,
+                           ucp_device_mem_list_handle_h *handle_p)
 {
     ucs_status_t status;
     ucp_device_mem_list_handle_h handle;
@@ -113,7 +114,8 @@ err:
     return status;
 }
 
-void ucp_device_mem_list_release(ucp_ep_h ep, ucp_device_mem_list_handle_h handle)
+void ucp_device_mem_list_release(ucp_ep_h ep,
+                                 ucp_device_mem_list_handle_h handle)
 {
     ucp_device_mem_list_handle_t host_handle;
 

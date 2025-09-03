@@ -45,7 +45,7 @@ public:
         {
         }
 
-        const ucp_device_mem_list_params_t&
+        const ucp_device_mem_list_params_t &
         make(unsigned count = 1, size_t size = 0,
              ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA,
              size_t element_size = sizeof(ucp_device_mem_list_elem_t))
@@ -65,7 +65,7 @@ public:
             for (auto i = 0; i < m_src.size(); ++i) {
                 m_elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
                                         UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
-                m_elems[i].memh = m_src[i]->memh();
+                m_elems[i].memh       = m_src[i]->memh();
                 m_rkeys.push_back(m_dst[i]->rkey(m_sender));
                 m_elems[i].rkey = m_rkeys.back();
             }
@@ -75,7 +75,7 @@ public:
                                     UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
             m_params.element_size = element_size;
             m_params.num_elements = m_src.size();
-            m_params.elements     = m_elems.size()? m_elems.data() : nullptr;
+            m_params.elements     = m_elems.size() ? m_elems.data() : nullptr;
             return m_params;
         }
     };
@@ -123,15 +123,16 @@ UCS_TEST_P(test_ucp_device, put_single)
 
 UCS_TEST_P(test_ucp_device, create_fail)
 {
-    ucp_device_mem_list_handle_h handle = nullptr;
-    ucp_device_mem_list_params_t empty_params  = {};
+    ucp_device_mem_list_handle_h handle       = nullptr;
+    ucp_device_mem_list_params_t empty_params = {};
 
     ASSERT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_mem_list_create(sender().ep(), NULL, &handle));
 
     empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_mem_list_create(sender().ep(), &empty_params, &handle));
+              ucp_device_mem_list_create(sender().ep(), &empty_params,
+                                         &handle));
 
     mem_list list(sender(), receiver());
     auto params = list.make(0);
@@ -147,7 +148,7 @@ UCS_TEST_P(test_ucp_device, create_success)
     mem_list list(sender(), receiver());
     ucp_device_mem_list_handle_h handle = nullptr;
 
-    auto& params = list.make(4, 4 * UCS_MBYTE);
+    auto &params = list.make(4, 4 * UCS_MBYTE);
     ASSERT_EQ(UCS_OK,
               ucp_device_mem_list_create(sender().ep(), &params, &handle));
     EXPECT_NE(nullptr, handle);
