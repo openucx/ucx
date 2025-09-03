@@ -22,7 +22,6 @@ extern "C" {
 #define WARP_SIZE 32
 #define COPY_LOOP_UNROLL 8
 
-/* unused, keep for debugging */
 __device__ static inline void uct_cuda_ipc_copy_single_nv(void *dst,
                                                           const void *src,
                                                           size_t size)
@@ -190,11 +189,8 @@ uct_cuda_ipc_ep_put_single(uct_device_ep_h device_ep,
     size_t offset;
     void *mapped_rem_addr;
 
-
     offset = (uintptr_t)remote_address - cuda_ipc_mem_element->dst_bptr;
     mapped_rem_addr = (void *)((uintptr_t)cuda_ipc_mem_element->mapped_addr + offset);
-
-    uct_cuda_ipc_copy_single_nv(mapped_rem_addr, address, length);
 
     switch (level) {
         case UCT_DEVICE_LEVEL_THREAD:
