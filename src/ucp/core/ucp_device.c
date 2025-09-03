@@ -19,12 +19,12 @@
 static ucs_status_t
 ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
 {
+    ucp_md_map_t remote_md_map       = UCS_MASK(UCP_MAX_MDS);
     ucp_worker_cfg_index_t cfg_index = UCP_WORKER_CFG_INDEX_NULL;
     ucp_mem_h memh;
     ucp_rkey_h rkey;
     size_t i, num_elements, element_size;
     const ucp_mem_list_elem_t *elements;
-    ucp_md_map_t remote_md_map;
 
     if (params == NULL) {
         return UCS_ERR_INVALID_PARAM;
@@ -62,8 +62,6 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
                 ucs_debug("invalid first rkey: cfg_index=%d", cfg_index);
                 return UCS_ERR_INVALID_PARAM;
             }
-
-            remote_md_map = rkey->md_map;
         } else {
             if (rkey->cfg_index != cfg_index) {
                 ucs_debug("mismatched rkey config index: "
@@ -71,9 +69,9 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
                           i, rkey->cfg_index, cfg_index);
                 return UCS_ERR_UNSUPPORTED;
             }
-
-            remote_md_map &= rkey->md_map;
         }
+
+        remote_md_map &= rkey->md_map;
     }
 
     if (remote_md_map == 0) {
@@ -143,7 +141,7 @@ void ucp_mem_list_release(ucp_ep_h ep, ucp_device_mem_list_handle_h handle)
 
     ucp_mem_type_pack(ep->worker, &host_handle, handle, sizeof(*handle),
                       UCS_MEMORY_TYPE_CUDA);
-    ucs_assertv_always(handle->version != UCP_DEVICE_MEM_LIST_VERSION_V1,
-                       "handle->version=%u", handle->version);
+    ucs_assertv_always(host_handle.version == UCP_DEVICE_MEM_LIST_VERSION_V1,
+                       "handle->version=%u", host_handle.version);
     uct_mem_free(&host_handle.host_mem);
 }
