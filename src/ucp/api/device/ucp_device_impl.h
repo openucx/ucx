@@ -249,10 +249,12 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
  * The counter memory area must be initialized with the host function
  * @ref ucp_device_counter_init.
  *
+ * @tparam      level       Level of cooperation of the transfer.
  * @param [in]  counter_ptr Counter memory area.
  *
  * @return value of the counter memory area, UINT64_MAX in case of error.
  */
+template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE uint64_t
 ucp_device_counter_read(const void *counter_ptr)
 {

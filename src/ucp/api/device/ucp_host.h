@@ -218,10 +218,13 @@ typedef struct ucp_device_counter_init_params {
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_device_counter_init(ucp_context_h context,
                         const ucp_device_counter_init_params_t *params,
-                        void *counter_ptr);
+                        void *counter_ptr) {
+    /* TODO: actual Implementation will not be in headers */
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
 
 END_C_DECLS
 
