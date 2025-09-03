@@ -17,7 +17,10 @@
  ucs_status_t launch_uct_put_single(uct_device_ep_h device_ep,
                                     const uct_device_mem_element_t *mem_elem,
                                     const void *address, uint64_t remote_address,
-                                    size_t length);
+                                    size_t length,
+                                    uct_device_level_t level,
+                                    unsigned num_threads,
+                                    unsigned num_blocks);
 
  }; // namespace cuda
 
