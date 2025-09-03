@@ -16,42 +16,67 @@
 
 #include <cuda_runtime.h>
 
+typedef unsigned long long cuda_perf_time_t;
 
 struct cuda_perf_context {
     unsigned           max_outstanding;
     ucx_perf_counter_t max_iters;
+    cuda_perf_time_t   report_interval_ns;
     ucx_perf_counter_t completed_iters;
 };
+
+__device__ inline cuda_perf_time_t cuda_perf_get_time_ns()
+{
+    cuda_perf_time_t globaltimer;
+    /* 64-bit GPU global nanosecond timer */
+    asm volatile("mov.u64 %0, %globaltimer;" : "=l"(globaltimer));
+    return globaltimer;
+}
+
+__device__ static inline void
+cuda_update_perf_report(cuda_perf_context *ctx, ucx_perf_counter_t completed,
+                        ucx_perf_counter_t max_iters,
+                        cuda_perf_time_t &last_report_time)
+{
+    if (threadIdx.x == 0) {
+        cuda_perf_time_t current_time = cuda_perf_get_time_ns();
+        if ((current_time - last_report_time >= ctx->report_interval_ns) ||
+            (completed >= max_iters)) {
+            ctx->completed_iters = completed;
+            last_report_time     = current_time;
+            __threadfence();
+        }
+    }
+}
 
 __global__ void
 cuda_ucp_put_multi_bw_kernel(cuda_perf_context *ctx)
 {
-    for (uint64_t idx = 0; idx < ctx->max_iters; idx++) {
+    cuda_perf_time_t last_report_time = cuda_perf_get_time_ns();
+    ucx_perf_counter_t max_iters      = ctx->max_iters;
+
+    for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         // TODO: replace with actual put multi call
         __nanosleep(1000000); // 1ms
 
-        if (threadIdx.x == 0) {
-            ctx->completed_iters++;
-            __threadfence();
-        }
+        cuda_update_perf_report(ctx, idx + 1, max_iters, last_report_time);
     }
 }
 
 __global__ void
 cuda_ucp_put_multi_latency_kernel(cuda_perf_context *ctx, bool is_sender)
 {
-    for (uint64_t idx = 0; idx < ctx->max_iters; idx++) {
+    cuda_perf_time_t last_report_time = cuda_perf_get_time_ns();
+    ucx_perf_counter_t max_iters      = ctx->max_iters;
+
+    for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         // TODO: replace with actual put multi call
         // TODO: wait for completion
         __nanosleep(1000000); // 1ms
 
-        if (threadIdx.x == 0) {
-            ctx->completed_iters++;
-            __threadfence();
-        }
+        cuda_update_perf_report(ctx, idx + 1, max_iters, last_report_time);
     }
 }
-
 
 class cuda_ucp_test_runner: public ucp_perf_test_runner_base<uint64_t> {
 public:
@@ -70,9 +95,13 @@ public:
         m_cpu_ctx = static_cast<cuda_perf_context *>(m_device_mem.cpu_ptr);
         m_gpu_ctx = static_cast<cuda_perf_context *>(m_device_mem.gpu_ptr);
 
-        m_cpu_ctx->max_outstanding = perf.params.max_outstanding;
-        m_cpu_ctx->max_iters       = perf.params.max_iter;
-        m_cpu_ctx->completed_iters = 0;
+        m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
+        m_cpu_ctx->max_iters          = perf.params.max_iter;
+        /* Kernel report interval is 1/10 of the report interval, because we
+         * want to get intermediate report with average percentiles */
+        m_cpu_ctx->report_interval_ns = perf.params.report_interval / 10 *
+                                        UCS_NSEC_PER_SEC;
+        m_cpu_ctx->completed_iters    = 0;
 
         m_poll_interval = m_perf.params.report_interval / 10000;
     }

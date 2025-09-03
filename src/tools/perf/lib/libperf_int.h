@@ -107,6 +107,7 @@ struct ucx_perf_context {
 
     ucs_time_t                   timing_queue[TIMING_QUEUE_SIZE];
     unsigned                     timing_queue_head;
+    unsigned                     timing_queue_updates;
 
     const ucx_perf_allocator_t   *send_allocator;
     const ucx_perf_allocator_t   *recv_allocator;
@@ -230,14 +231,17 @@ static UCS_F_ALWAYS_INLINE void ucx_perf_update(ucx_perf_context_t *perf,
                                                 ucx_perf_counter_t iters,
                                                 size_t bytes)
 {
+    ucx_perf_counter_t msgs = ucs_max(iters, 1);
+
     perf->current.time   = ucs_get_time();
     perf->current.iters += iters;
     perf->current.bytes += bytes;
-    perf->current.msgs  += 1;
+    perf->current.msgs  += msgs;
 
     perf->timing_queue[perf->timing_queue_head] =
-                    perf->current.time - perf->prev_time;
+                            (perf->current.time - perf->prev_time) / msgs;
     ++perf->timing_queue_head;
+    ++perf->timing_queue_updates;
     if (perf->timing_queue_head == TIMING_QUEUE_SIZE) {
         perf->timing_queue_head = 0;
     }

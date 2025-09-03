@@ -211,18 +211,19 @@ void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
 {
     unsigned i;
 
-    perf->max_iter          = (perf->params.max_iter == 0) ? UINT64_MAX :
-                               perf->params.max_iter;
-    perf->report_interval   = ucs_time_from_sec(perf->params.report_interval);
-    perf->current.time      = 0;
-    perf->current.msgs      = 0;
-    perf->current.bytes     = 0;
-    perf->current.iters     = 0;
-    perf->prev.msgs         = 0;
-    perf->prev.bytes        = 0;
-    perf->prev.iters        = 0;
-    perf->timing_queue_head = 0;
-    perf->extra_info[0]     = '\0';
+    perf->max_iter             = (perf->params.max_iter == 0) ? UINT64_MAX :
+                                  perf->params.max_iter;
+    perf->report_interval      = ucs_time_from_sec(perf->params.report_interval);
+    perf->current.time         = 0;
+    perf->current.msgs         = 0;
+    perf->current.bytes        = 0;
+    perf->current.iters        = 0;
+    perf->prev.msgs            = 0;
+    perf->prev.bytes           = 0;
+    perf->prev.iters           = 0;
+    perf->timing_queue_head    = 0;
+    perf->timing_queue_updates = 0;
+    perf->extra_info[0]        = '\0';
 
     for (i = 0; i < TIMING_QUEUE_SIZE; ++i) {
         perf->timing_queue[i] = 0;
@@ -248,7 +249,8 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
     /* Latency */
     percentile = __find_percentile_quick_select(perf->timing_queue,
-                                                ucs_min(TIMING_QUEUE_SIZE, perf->current.iters),
+                                                ucs_min(TIMING_QUEUE_SIZE,
+                                                        perf->timing_queue_updates),
                                                 perf->params.percentile_rank);
     result->latency.percentile = ucs_time_to_sec(percentile) / factor;
 
