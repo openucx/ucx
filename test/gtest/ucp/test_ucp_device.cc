@@ -47,7 +47,8 @@ public:
 
         const ucp_device_mem_list_params_t&
         make(unsigned count = 1, size_t size = 0,
-             ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA)
+             ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA,
+             size_t element_size = sizeof(ucp_device_mem_list_elem_t))
         {
             m_rkeys.clear();
             m_src.clear();
@@ -72,7 +73,7 @@ public:
             m_params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
                                     UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
                                     UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
-            m_params.element_size = sizeof(ucp_device_mem_list_elem_t);
+            m_params.element_size = element_size;
             m_params.num_elements = m_src.size();
             m_params.elements     = m_elems.size()? m_elems.data() : nullptr;
             return m_params;
@@ -136,6 +137,9 @@ UCS_TEST_P(test_ucp_device, create_fail)
     auto params = list.make(0);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_mem_list_create(sender().ep(), &params, &handle));
+    auto params1 = list.make(1, 1 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA, 0);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_device_mem_list_create(sender().ep(), &params1, &handle));
 }
 
 UCS_TEST_P(test_ucp_device, create_success)

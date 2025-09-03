@@ -35,7 +35,7 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params)
     elements     = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params,
                                    elements, ELEMENTS, NULL);
 
-    if ((num_elements == 0) || (elements == NULL)) {
+    if ((element_size == 0) || (num_elements == 0) || (elements == NULL)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
