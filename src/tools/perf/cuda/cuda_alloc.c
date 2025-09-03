@@ -8,22 +8,13 @@
 #  include "config.h"
 #endif
 
-#include <tools/perf/lib/libperf_int.h>
+#include "cuda_device_mem.h"
 
 #include <cuda_runtime.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/ptr_arith.h>
 #include <uct/api/v2/uct_v2.h>
 
-#define CUDA_CALL(_ret_code, _func, ...) \
-    { \
-        cudaError_t _cerr = _func(__VA_ARGS__); \
-        if (_cerr != cudaSuccess) { \
-            ucs_error("%s() failed: %d (%s)", UCS_PP_MAKE_STRING(_func), \
-                      _cerr, cudaGetErrorString(_cerr)); \
-            return _ret_code; \
-        } \
-    }
 
 static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
 {
@@ -33,7 +24,7 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
 
     group_index = rte_call(perf, group_index);
 
-    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetDeviceCount, &num_gpus)
+    CUDA_CALL(ucs_error, UCS_ERR_NO_DEVICE, cudaGetDeviceCount, &num_gpus);
     if (num_gpus == 0) {
         ucs_error("no cuda devices available");
         return UCS_ERR_NO_DEVICE;
@@ -49,7 +40,7 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
         return UCS_ERR_NO_DEVICE;
     }
 
-    CUDA_CALL(UCS_ERR_NO_DEVICE, cudaSetDevice, gpu_index);
+    CUDA_CALL(ucs_error, UCS_ERR_NO_DEVICE, cudaSetDevice, gpu_index);
 
     /* actually set device context as calling cudaSetDevice may result in
      * context being initialized lazily */
@@ -63,10 +54,10 @@ static inline ucs_status_t ucx_perf_cuda_alloc(size_t length,
                                                void **address_p)
 {
     if (mem_type == UCS_MEMORY_TYPE_CUDA) {
-        CUDA_CALL(UCS_ERR_NO_MEMORY, cudaMalloc, address_p, length);
+        CUDA_CALL(ucs_error, UCS_ERR_NO_MEMORY, cudaMalloc, address_p, length);
     } else if (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
-        CUDA_CALL(UCS_ERR_NO_MEMORY, cudaMallocManaged, address_p, length,
-                  cudaMemAttachGlobal);
+        CUDA_CALL(ucs_error, UCS_ERR_NO_MEMORY, cudaMallocManaged, address_p,
+                  length, cudaMemAttachGlobal);
     } else {
         ucs_error("invalid memory type %s (%d)",
                   ucs_memory_type_names[mem_type], mem_type);
@@ -144,21 +135,21 @@ static void uct_perf_cuda_free(const ucx_perf_context_t *perf,
         ucs_error("failed to deregister memory");
     }
 
-    cudaFree(alloc_mem->address);
+    CUDA_CALL(ucs_warn, , cudaFree, alloc_mem->address);
 }
 
 static void ucx_perf_cuda_memcpy(void *dst, ucs_memory_type_t dst_mem_type,
                                  const void *src, ucs_memory_type_t src_mem_type,
                                  size_t count)
 {
-    CUDA_CALL(, cudaMemcpy, dst, src, count, cudaMemcpyDefault);
-    CUDA_CALL(, cudaDeviceSynchronize);
+    CUDA_CALL(ucs_error, , cudaMemcpy, dst, src, count, cudaMemcpyDefault);
+    CUDA_CALL(ucs_error, , cudaDeviceSynchronize);
 }
 
 static void* ucx_perf_cuda_memset(void *dst, int value, size_t count)
 {
-    CUDA_CALL(dst, cudaMemset, dst, value, count);
-    CUDA_CALL(dst, cudaDeviceSynchronize);
+    CUDA_CALL(ucs_error, dst, cudaMemset, dst, value, count);
+    CUDA_CALL(ucs_error, dst, cudaDeviceSynchronize);
     return dst;
 }
 

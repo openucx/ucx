@@ -7,13 +7,20 @@
 if HAVE_CUDA
 
 module_LTLIBRARIES               = libucx_perftest_cuda.la
-libucx_perftest_cuda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS) $(NVCC_EXTRA_FLAGS)
+libucx_perftest_cuda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 libucx_perftest_cuda_la_CFLAGS   = $(BASE_CFLAGS) $(CUDA_CFLAGS) $(LT_CFLAGS)
 libucx_perftest_cuda_la_LDFLAGS  = $(CUDA_LDFLAGS) -version-info $(SOVERSION)
-libucx_perftest_cuda_la_LIBADD   = $(CUDART_LIBS)
+
+libucx_perftest_cuda_la_LIBADD = \
+    $(CUDART_LIBS) \
+    $(abs_top_builddir)/src/tools/perf/lib/libucxperf.la \
+    -lstdc++
+
+NVCC_EXTRA_FLAGS = $(CUDA_CPPFLAGS)
 
 libucx_perftest_cuda_la_SOURCES = \
     cuda_alloc.c \
+    cuda_device_mem.c \
     cuda_kernel.cu
 
 include $(top_srcdir)/config/module.am
