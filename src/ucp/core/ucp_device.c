@@ -16,6 +16,30 @@
 #include <ucs/type/param.h>
 
 
+KHASH_TYPE(ucp_device_handle_allocs, ucp_device_mem_list_handle_h,
+           uct_allocated_memory_t);
+#define ucp_device_handle_hash_key(_handle) \
+    kh_int64_hash_func((uintptr_t)(_handle))
+KHASH_IMPL(ucp_device_handle_allocs, ucp_device_mem_list_handle_h,
+           uct_allocated_memory_t, 1,
+           ucp_device_handle_hash_key, kh_int64_hash_equal);
+
+static khash_t(ucp_device_handle_allocs) ucp_device_handle_hash;
+static ucs_spinlock_t ucp_device_handle_hash_lock;
+
+
+void ucp_device_init(void)
+{
+    ucs_spinlock_init(&ucp_device_handle_hash_lock, 0);
+    kh_init_inplace(ucp_device_handle_allocs, &ucp_device_handle_hash);
+}
+
+void ucp_device_cleanup(void)
+{
+    kh_destroy_inplace(ucp_device_handle_allocs, &ucp_device_handle_hash);
+    ucs_spinlock_destroy(&ucp_device_handle_hash_lock);
+}
+
 static ucs_status_t
 ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params)
 {
@@ -69,10 +93,11 @@ ucp_device_mem_list_create(ucp_ep_h ep,
                            ucp_device_mem_list_handle_h *handle_p)
 {
     ucs_status_t status;
-    ucp_device_mem_list_handle_h handle;
     ucp_device_mem_list_handle_t host_handle;
     uct_allocated_memory_t mem;
     ucp_memory_info_t mem_info;
+    khiter_t iter;
+    int ret;
 
     status = ucp_device_mem_list_params_check(params);
     if (status != UCS_OK) {
@@ -80,7 +105,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     }
 
     /* TODO: Allocate based on lane selection results */
-    status = ucp_mem_do_alloc(ep->worker->context, NULL, sizeof(*handle),
+    status = ucp_mem_do_alloc(ep->worker->context, NULL, sizeof(**handle_p),
                               UCT_MD_MEM_ACCESS_LOCAL_READ |
                                       UCT_MD_MEM_ACCESS_LOCAL_WRITE,
                               UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN,
@@ -102,11 +127,25 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     /* TODO actual lane lookup and population of handle */
     memset(&host_handle, 0, sizeof(host_handle));
     host_handle.version  = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    host_handle.host_mem = mem;
 
     ucp_mem_type_unpack(ep->worker, mem.address, &host_handle,
                         sizeof(host_handle), UCS_MEMORY_TYPE_CUDA);
+
+    ucs_spin_lock(&ucp_device_handle_hash_lock);
+    iter = kh_put(ucp_device_handle_allocs, &ucp_device_handle_hash,
+                  mem.address, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to hash handle=%p", mem.address);
+        ucs_spin_unlock(&ucp_device_handle_hash_lock);
+        goto err;
+    } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
+        ucs_fatal("handle=%p already found in hash", mem.address);
+    }
+
     *handle_p = mem.address;
+    kh_value(&ucp_device_handle_hash, iter) = mem;
+    ucs_spin_unlock(&ucp_device_handle_hash_lock);
+
     return UCS_OK;
 
 err:
@@ -114,18 +153,19 @@ err:
     return status;
 }
 
-void ucp_device_mem_list_release(ucp_ep_h ep,
-                                 ucp_device_mem_list_handle_h handle)
+void ucp_device_mem_list_release(ucp_device_mem_list_handle_h handle)
 {
-    ucp_device_mem_list_handle_t host_handle;
+    khiter_t iter;
+    uct_allocated_memory_t mem;
 
-    if (handle == NULL) {
-        return;
-    }
+    ucs_spin_lock(&ucp_device_handle_hash_lock);
+    iter = kh_get(ucp_device_handle_allocs, &ucp_device_handle_hash, handle);
 
-    ucp_mem_type_pack(ep->worker, &host_handle, handle, sizeof(*handle),
-                      UCS_MEMORY_TYPE_CUDA);
-    ucs_assertv_always(host_handle.version == UCP_DEVICE_MEM_LIST_VERSION_V1,
-                       "handle->version=%u", host_handle.version);
-    uct_mem_free(&host_handle.host_mem);
+    ucs_assertv_always((iter != kh_end(&ucp_device_handle_hash)),
+                       "handle=%p", handle);
+    mem = kh_value(&ucp_device_handle_hash, iter);
+    kh_del(ucp_device_handle_allocs, &ucp_device_handle_hash, iter);
+    ucs_spin_unlock(&ucp_device_handle_hash_lock);
+
+    uct_mem_free(&mem);
 }

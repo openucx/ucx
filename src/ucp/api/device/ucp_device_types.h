@@ -34,11 +34,6 @@ typedef struct ucp_device_mem_list_handle {
     uint16_t               version;
 
     /**
-     * Descriptor of the allocation for the @ref ucp_device_mem_list_handle.
-     */
-    uct_allocated_memory_t host_mem;
-
-    /**
      * Protocol index computed by host handle management functions when
      * creating handle.
      */

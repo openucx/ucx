@@ -152,7 +152,7 @@ UCS_TEST_P(test_ucp_device, create_success)
     ASSERT_EQ(UCS_OK,
               ucp_device_mem_list_create(sender().ep(), &params, &handle));
     EXPECT_NE(nullptr, handle);
-    ucp_device_mem_list_release(sender().ep(), handle);
+    ucp_device_mem_list_release(handle);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, gdaki, "rc,gdaki")
