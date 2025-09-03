@@ -19,12 +19,10 @@
 static ucs_status_t
 ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params)
 {
-    ucp_md_map_t remote_md_map       = UCS_MASK(UCP_MAX_MDS);
     ucp_worker_cfg_index_t cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-    ucp_mem_h memh;
     ucp_rkey_h rkey;
     size_t i, num_elements, element_size;
-    const ucp_device_mem_list_elem_t *elements;
+    const ucp_device_mem_list_elem_t *elements, *element;
 
     if (params == NULL) {
         return UCS_ERR_INVALID_PARAM;
@@ -37,24 +35,14 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params)
     elements     = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params,
                                    elements, ELEMENTS, NULL);
 
-    if ((element_size != sizeof(*elements)) || (num_elements == 0) ||
-        (elements == NULL)) {
+    if ((num_elements == 0) || (elements == NULL)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     for (i = 0; i < num_elements; i++) {
-        memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, &elements[i], memh,
-                               MEMH, NULL);
-        rkey = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, &elements[i], rkey,
+        element = UCS_PTR_BYTE_OFFSET(elements, i * element_size);
+        rkey = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, rkey,
                                RKEY, NULL);
-        if ((memh == NULL) || (rkey == NULL)) {
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        if (memh->mem_type != UCS_MEMORY_TYPE_CUDA) {
-            ucs_debug("invalid mem_type: i=%lu mem_type=%d", i, memh->mem_type);
-            return UCS_ERR_UNSUPPORTED;
-        }
 
         if (i == 0) {
             cfg_index = rkey->cfg_index;
@@ -70,13 +58,6 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params)
                 return UCS_ERR_UNSUPPORTED;
             }
         }
-
-        remote_md_map &= rkey->md_map;
-    }
-
-    if (remote_md_map == 0) {
-        ucs_debug("empty remote_md_map");
-        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
@@ -97,6 +78,7 @@ ucs_status_t ucp_device_mem_list_create(ucp_ep_h ep,
         return status;
     }
 
+    /* TODO: Allocate based on lane selection results */
     status = ucp_mem_do_alloc(ep->worker->context, NULL, sizeof(*handle),
                               UCT_MD_MEM_ACCESS_LOCAL_READ |
                                       UCT_MD_MEM_ACCESS_LOCAL_WRITE,

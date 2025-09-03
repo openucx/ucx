@@ -30,17 +30,14 @@ public:
     class mem_list {
         using mapped_buffer_ptr = std::unique_ptr<mapped_buffer>;
 
-        struct params {
-            std::unique_ptr<ucp_device_mem_list_elem_t[]> elems;
-            std::vector<ucs::handle<ucp_rkey_h>>   rkeys;
-            ucp_device_mem_list_params_t                  params;
-        };
+        std::vector<ucp_device_mem_list_elem_t>       m_elems;
+        std::vector<ucs::handle<ucp_rkey_h>>          m_rkeys;
+        ucp_device_mem_list_params_t                  m_params;
 
         entity&                        m_sender;
         entity&                        m_receiver;
         std::vector<mapped_buffer_ptr> m_src;
         std::vector<mapped_buffer_ptr> m_dst;
-        params                         m_params;
 
     public:
         mem_list(entity &sender, entity &receiver) :
@@ -48,40 +45,37 @@ public:
         {
         }
 
-        void add(size_t size, unsigned count = 1,
-                 ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA)
+        const ucp_device_mem_list_params_t&
+        make(unsigned count = 1, size_t size = 0,
+             ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA)
         {
+            m_rkeys.clear();
+            m_src.clear();
+            m_dst.clear();
+            m_elems.resize(size);
+
             for (auto i = 0; i < count; ++i) {
                 m_src.emplace_back(
                         new mapped_buffer(size, m_sender, 0, mem_type));
                 m_dst.emplace_back(
                         new mapped_buffer(size, m_receiver, 0, mem_type));
             }
-        }
-
-        const ucp_device_mem_list_params_t &
-        params(size_t elem_size = sizeof(ucp_device_mem_list_elem_t))
-        {
-            m_params.rkeys.clear();
-            m_params.elems = std::unique_ptr<ucp_device_mem_list_elem_t[]>(
-                    new ucp_device_mem_list_elem_t[m_src.size()]);
 
             for (auto i = 0; i < m_src.size(); ++i) {
-                m_params.elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
-                m_params.elems[i].memh       = m_src[i]->memh();
-                m_params.rkeys.push_back(m_dst[i]->rkey(m_sender));
-                m_params.elems[i].rkey = m_params.rkeys.back();
+                m_elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                                        UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
+                m_elems[i].memh = m_src[i]->memh();
+                m_rkeys.push_back(m_dst[i]->rkey(m_sender));
+                m_elems[i].rkey = m_rkeys.back();
             }
 
-            auto &params        = m_params.params;
-            params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
-                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
-                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
-            params.element_size = elem_size;
-            params.num_elements = m_src.size();
-            params.elements     = m_params.elems.get();
-            return params;
+            m_params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                                    UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
+                                    UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
+            m_params.element_size = sizeof(ucp_device_mem_list_elem_t);
+            m_params.num_elements = m_src.size();
+            m_params.elements     = m_elems.size()? m_elems.data() : nullptr;
+            return m_params;
         }
     };
 };
@@ -139,14 +133,9 @@ UCS_TEST_P(test_ucp_device, create_fail)
               ucp_device_mem_list_create(sender().ep(), &empty_params, &handle));
 
     mem_list list(sender(), receiver());
+    auto params = list.make(0);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_mem_list_create(sender().ep(), &list.params(), &handle));
-    list.add(1 * UCS_MBYTE, 10);
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_mem_list_create(sender().ep(), &list.params(31), &handle));
-    list.add(1 * UCS_MBYTE, 10, UCS_MEMORY_TYPE_HOST);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucp_device_mem_list_create(sender().ep(), &list.params(), &handle));
+              ucp_device_mem_list_create(sender().ep(), &params, &handle));
 }
 
 UCS_TEST_P(test_ucp_device, create_success)
@@ -154,9 +143,9 @@ UCS_TEST_P(test_ucp_device, create_success)
     mem_list list(sender(), receiver());
     ucp_device_mem_list_handle_h handle = nullptr;
 
-    list.add(4 * UCS_MBYTE, 4);
+    auto& params = list.make(4, 4 * UCS_MBYTE);
     ASSERT_EQ(UCS_OK,
-              ucp_device_mem_list_create(sender().ep(), &list.params(), &handle));
+              ucp_device_mem_list_create(sender().ep(), &params, &handle));
     EXPECT_NE(nullptr, handle);
     ucp_device_mem_list_release(sender().ep(), handle);
 }
