@@ -7,7 +7,6 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
-#include "ucp_host.h"
 #include "ucp_device_types.h"
 
 #include <uct/api/device/uct_device_impl.h>
@@ -46,15 +45,6 @@ typedef enum {
 typedef enum {
     UCP_DEVICE_FLAG_NODELAY = UCS_BIT(0) /**< Complete before return. */
 } ucp_device_flags_t;
-
-
-/**
- * @ingroup UCP_DEVICE
- * @brief Host opaque descriptor list stored on GPU.
- *
- * Only device-side code has access to the content of this descriptor.
- */
-typedef ucp_device_mem_list_handle_t *ucp_device_mem_list_handle_h;
 
 
 /**
