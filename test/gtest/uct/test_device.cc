@@ -59,9 +59,8 @@ protected:
 
     void cleanup()
     {
-        (void)UCT_CUDADRV_FUNC(cuCtxPopCurrent(NULL), UCS_LOG_LEVEL_WARN);
-        (void)UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRelease(m_cuda_dev),
-                               UCS_LOG_LEVEL_WARN);
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(m_cuda_dev));
         uct_test::cleanup();
     }
 
@@ -74,9 +73,9 @@ private:
 
 UCS_TEST_P(test_device, single)
 {
-    static const uint64_t SEED1 = 0x1111111111111111lu;
-    static const uint64_t SEED2 = 0x2222222222222222lu;
-    size_t length               = 1024;
+    constexpr uint64_t SEED1 = 0x1111111111111111lu;
+    constexpr uint64_t SEED2 = 0x2222222222222222lu;
+    constexpr size_t length  = 1024;
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 

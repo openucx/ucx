@@ -13,8 +13,8 @@
 namespace uct_cuda {
 
 ucs_status_t launch_single_kernel(uct_device_ep_h ep,
-                                  uct_device_mem_element_t *mem_elem, void *va,
-                                  uint64_t rva, size_t length);
+                                  uct_device_mem_element_t *mem_elem,
+                                  const void *va, uint64_t rva, size_t length);
 
 }; // namespace uct_cuda
 

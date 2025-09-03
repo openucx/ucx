@@ -66,7 +66,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(primary_ctx));
     if (status != UCS_OK) {
-        goto err_ctx;
+        goto err_ctx_release;
     }
 
     init_attr.cq_len[UCT_IB_DIR_TX] = iface->super.super.config.tx_qp_len *
@@ -201,6 +201,7 @@ err_mem:
     doca_gpu_mem_free(iface->gpu_dev, self->ep_gpu);
 err_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+err_ctx_release:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(iface->cuda_dev));
     return status;
 }

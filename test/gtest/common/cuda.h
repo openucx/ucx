@@ -27,9 +27,9 @@ public:
         *m_ptr.get() = value;
     }
 
-    T &operator*()
+    T &operator*() const
     {
-        return *m_ptr.get();
+        return *m_ptr;
     }
 
     T *device_ptr()
@@ -70,7 +70,8 @@ static inline void cuda_synchronize()
         throw std::runtime_error(ss.str());
     }
 
-    if (cudaDeviceSynchronize() != cudaSuccess) {
+    err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
         std::stringstream ss;
         ss << "cudaDeviceSynchronize(): " << cudaGetErrorString(err);
         throw std::runtime_error(ss.str());
