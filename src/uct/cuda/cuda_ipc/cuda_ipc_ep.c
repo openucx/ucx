@@ -30,7 +30,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_cuda_ipc_iface_t);
-    CUresult cerr;
     uct_device_ep_t device_ep;
     ucs_status_t status;
 
@@ -40,20 +39,16 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
     self->remote_pid = *(const pid_t*)params->iface_addr;
 
     device_ep.uct_tl_id = UCT_DEVICE_TL_CUDA_IPC;
-    cerr = cuMemAlloc((CUdeviceptr *)&self->device_ep, sizeof(uct_device_ep_t));
-    if (cerr != CUDA_SUCCESS) {
-        ucs_error("cuMemAlloc failed: %s",
-                  uct_cuda_base_cu_get_error_string(cerr));
-        status = UCS_ERR_NO_MEMORY;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemAlloc((CUdeviceptr *)&self->device_ep, sizeof(uct_device_ep_t)));
+    if (status != UCS_OK) {
         goto out;
     }
 
-    cerr = cuMemcpyHtoD((CUdeviceptr)self->device_ep, &device_ep,
-                        sizeof(uct_device_ep_t));
-    if (cerr != CUDA_SUCCESS) {
-        ucs_error("cuMemcpyHtoD failed: %s",
-                  uct_cuda_base_cu_get_error_string(cerr));
-        status = UCS_ERR_IO_ERROR;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemcpyHtoD((CUdeviceptr)self->device_ep, &device_ep,
+                          sizeof(uct_device_ep_t)));
+    if (status != UCS_OK) {
         goto err;
     }
 
