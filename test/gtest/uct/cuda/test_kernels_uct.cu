@@ -69,6 +69,7 @@ template<typename T> class device_result_ptr {
      }
  }
 
+ template<uct_device_level_t level>
  static __global__ void
  uct_put_single_kernel(uct_device_ep_h device_ep,
                        const uct_device_mem_element_t *mem_elem,
@@ -78,7 +79,7 @@ template<typename T> class device_result_ptr {
     uct_device_completion_t comp;
     uct_device_completion_init(&comp);
 
-    *status = uct_device_ep_put_single<UCT_DEVICE_LEVEL_BLOCK>(device_ep, mem_elem,
+    *status = uct_device_ep_put_single<level>(device_ep, mem_elem,
                                         address, remote_address,
                                         length, 0, &comp);
  }
@@ -89,12 +90,37 @@ template<typename T> class device_result_ptr {
  ucs_status_t launch_uct_put_single(uct_device_ep_h device_ep,
                                     const uct_device_mem_element_t *mem_elem,
                                     const void *address, uint64_t remote_address,
-                                    size_t length)
+                                    size_t length,
+                                    uct_device_level_t level,
+                                    unsigned num_threads,
+                                    unsigned num_blocks)
  {
      device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
 
-     uct_put_single_kernel<<<1, 1>>>(device_ep, mem_elem, address, remote_address, length,
-                                     status.device_ptr());
+    switch (level) {
+        case UCT_DEVICE_LEVEL_THREAD:
+            uct_put_single_kernel<UCT_DEVICE_LEVEL_THREAD><<<num_blocks, num_threads>>>(
+                device_ep, mem_elem, address, remote_address, length,
+                status.device_ptr());
+            break;
+        case UCT_DEVICE_LEVEL_WARP:
+            uct_put_single_kernel<UCT_DEVICE_LEVEL_WARP><<<num_blocks, num_threads>>>(
+                device_ep, mem_elem, address, remote_address, length,
+                status.device_ptr());
+            break;
+        case UCT_DEVICE_LEVEL_BLOCK:
+            uct_put_single_kernel<UCT_DEVICE_LEVEL_BLOCK><<<num_blocks, num_threads>>>(
+                device_ep, mem_elem, address, remote_address, length,
+                status.device_ptr());
+            break;
+        case UCT_DEVICE_LEVEL_GRID:
+            uct_put_single_kernel<UCT_DEVICE_LEVEL_GRID><<<num_blocks, num_threads>>>(
+                device_ep, mem_elem, address, remote_address, length,
+                status.device_ptr());
+            break;
+        default:
+            throw std::runtime_error("Unsupported level");
+    }
      synchronize();
 
      return *status;

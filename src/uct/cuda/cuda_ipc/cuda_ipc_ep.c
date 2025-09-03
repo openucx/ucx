@@ -54,7 +54,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
         ucs_error("cuMemcpyHtoD failed: %s",
                   uct_cuda_base_cu_get_error_string(cerr));
         status = UCS_ERR_IO_ERROR;
-        goto out;
+        goto err;
     }
 
     return UCS_OK;
