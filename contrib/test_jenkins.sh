@@ -449,7 +449,7 @@ run_ucx_perftest() {
 			opt_transports="-x posix"
 			tls="shm"
 			dev="all"
-		elif [[ " ${ip_ifaces[*]} " == *" ${ucx_dev} "* ]]; then
+		elif printf '%s\n' "$ip_ifaces" | grep -qxF "$ucx_dev"; then
 			opt_transports="-x tcp"
 			tls="tcp"
 			dev=$ucx_dev
@@ -688,7 +688,7 @@ run_mpi_tests() {
 					-mca btl tcp,self \
 					-mca btl_tcp_if_include lo \
 					-mca orte_allowed_exit_without_sync 1 \
-					-mca coll ^hcoll,ml"
+					-mca coll ^hcoll,ml,ucc"
 
 			run_ucx_perftest 1
 

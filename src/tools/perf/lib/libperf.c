@@ -85,6 +85,9 @@ typedef struct {
 
 const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_LAST];
 
+const ucx_perf_device_dispatcher_t*
+ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_LAST];
+
 static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_AM_SHORT)]         = "am short",
     [ucs_ilog2(UCT_IFACE_FLAG_AM_BCOPY)]         = "am bcopy",
@@ -477,6 +480,11 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_size = __get_max_size(params->uct.data_layout, attr.cap.put.max_short,
                                   attr.cap.put.max_bcopy, attr.cap.put.max_zcopy);
         max_iov  = attr.cap.put.max_iov;
+        break;
+    case UCX_PERF_CMD_PUT_MULTI:
+        min_size = 0;
+        max_size = 0;
+        max_iov  = 0;
         break;
     case UCX_PERF_CMD_GET:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_GET_SHORT,
@@ -877,6 +885,7 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
     message_size = ucx_perf_get_message_size(params);
     switch (params->command) {
     case UCX_PERF_CMD_PUT:
+    case UCX_PERF_CMD_PUT_MULTI:
     case UCX_PERF_CMD_GET:
         ucp_params->features |= UCP_FEATURE_RMA;
         break;
