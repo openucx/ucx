@@ -30,6 +30,7 @@ typedef enum {
 typedef enum {
     UCX_PERF_CMD_AM,
     UCX_PERF_CMD_PUT,
+    UCX_PERF_CMD_PUT_MULTI,
     UCX_PERF_CMD_GET,
     UCX_PERF_CMD_ADD,
     UCX_PERF_CMD_FADD,
@@ -282,6 +283,7 @@ typedef struct ucx_perf_params {
     double                 report_interval; /* Interval at which to call the report callback */
     double                 percentile_rank; /* The percentile rank of the percentile reported
                                                in latency tests */
+    unsigned               device_thread_count; /* Number of device threads */
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
@@ -324,6 +326,10 @@ typedef struct {
 /* Allocators for each memory type */
 typedef struct ucx_perf_allocator ucx_perf_allocator_t;
 extern const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[];
+
+/* Device test dispatchers for each memory type */
+typedef struct ucx_perf_device_dispatcher ucx_perf_device_dispatcher_t;
+extern const ucx_perf_device_dispatcher_t* ucx_perf_mem_type_device_dispatchers[];
 
 
 const char *ucp_perf_daemon_am_id_name(ucp_perf_daemon_am_id_t id);

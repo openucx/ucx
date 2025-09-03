@@ -12,6 +12,7 @@
 #endif
 
 #include "libperf_int.h"
+#include "ucp_tests.h"
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/string.h>
@@ -19,9 +20,9 @@
 
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
-class ucp_perf_test_runner {
+class ucp_perf_test_runner : public ucp_perf_test_runner_base<uint8_t> {
 public:
-    typedef uint8_t psn_t;
+    using psn_t = uint8_t;
 
     static const unsigned AM_ID     = UCP_PERF_AM_ID;
     static const ucp_tag_t TAG      = 0x1337a880u;
@@ -32,7 +33,7 @@ public:
     static const psn_t UNKNOWN_SN   = std::numeric_limits<psn_t>::max();
 
     ucp_perf_test_runner(ucx_perf_context_t &perf) :
-        m_perf(perf),
+        ucp_perf_test_runner_base<uint8_t>(perf),
         m_recvs_outstanding(0),
         m_sends_outstanding(0),
         m_max_outstanding(m_perf.params.max_outstanding),
@@ -174,6 +175,7 @@ public:
             m_am_rx_params.datatype     = *recv_dt;
             m_am_rx_params.cb.recv_am   = am_data_recv_cb;
             m_am_rx_params.user_data    = this;
+            /* cppcheck-suppress danglingLifetime */
             m_am_rx_buffer              = *recv_buffer;
             m_am_rx_length              = *recv_length;
             fill_common_params(m_am_rx_params, m_perf.ucp.recv_memh);
@@ -403,72 +405,6 @@ public:
     {
         while (m_recvs_outstanding >= (m_max_outstanding - n + 1)) {
             progress_responder();
-        }
-    }
-
-    UCS_F_ALWAYS_INLINE void *sn_ptr(void *buffer, size_t length)
-    {
-        return UCS_PTR_BYTE_OFFSET(buffer, length - sizeof(psn_t));
-    }
-
-    void request_wait(ucs_status_ptr_t request, ucs_memory_type_t mem_type,
-                      const char *operation_name)
-    {
-        ucs_status_t status;
-
-        if (UCS_PTR_IS_PTR(request)) {
-            do {
-                ucp_worker_progress(m_perf.ucp.worker);
-                status = ucp_request_check_status(request);
-            } while (status == UCS_INPROGRESS);
-            ucp_request_free(request);
-        } else {
-            status = UCS_PTR_STATUS(request);
-        }
-
-        if (status != UCS_OK) {
-            ucs_warn("failed to %s(memory_type=%s): %s", operation_name,
-                     ucs_memory_type_names[mem_type],
-                     ucs_status_string(status));
-        }
-    }
-
-    UCS_F_ALWAYS_INLINE psn_t read_sn(void *buffer, size_t length)
-    {
-        ucs_memory_type_t mem_type = m_perf.params.recv_mem_type;
-        const void *ptr            = sn_ptr(buffer, length);
-        ucp_request_param_t param  = {0};
-        ucs_status_ptr_t request;
-        psn_t sn;
-
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            return *(const volatile psn_t*)ptr;
-        } else {
-            request = ucp_get_nbx(m_perf.ucp.self_ep, &sn, sizeof(sn),
-                                  (uint64_t)ptr, m_perf.ucp.self_recv_rkey,
-                                  &param);
-            request_wait(request, mem_type, "read_sn");
-            request = ucp_ep_flush_nbx(m_perf.ucp.self_ep, &param);
-            request_wait(request, mem_type, "flush read_sn");
-            return sn;
-        }
-    }
-
-    UCS_F_ALWAYS_INLINE void write_sn(void *buffer, ucs_memory_type_t mem_type,
-                                      size_t length, psn_t sn, ucp_rkey_h rkey)
-    {
-        void *ptr                 = sn_ptr(buffer, length);
-        ucp_request_param_t param = {0};
-        ucs_status_ptr_t request;
-
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            *(volatile psn_t*)ptr = sn;
-        } else {
-            request = ucp_put_nbx(m_perf.ucp.self_ep, &sn, sizeof(sn),
-                                  (uint64_t)ptr, rkey, &param);
-            request_wait(request, mem_type, "write_sn");
-            request = ucp_ep_flush_nbx(m_perf.ucp.self_ep, &param);
-            request_wait(request, mem_type, "flush write_sn");
         }
     }
 
@@ -1014,7 +950,6 @@ private:
         }
     }
 
-    ucx_perf_context_t &m_perf;
     int                m_recvs_outstanding;
     int                m_sends_outstanding;
     const int          m_max_outstanding;
@@ -1030,7 +965,6 @@ private:
     ucp_request_param_t m_recv_params;
     ucp_atomic_op_t     m_atomic_op;
 };
-
 
 #define TEST_CASE(_perf, _cmd, _type, _flags, _mask) \
     if (((_perf)->params.command == (_cmd)) && \
@@ -1116,9 +1050,7 @@ static ucs_status_t ucp_perf_dispatch_am(ucx_perf_context_t *perf)
     return UCS_ERR_INVALID_PARAM;
 }
 
-typedef ucs_status_t (*ucp_dispatch_func_t)(ucx_perf_context_t *perf);
-
-static ucp_dispatch_func_t dispatchers[] = {
+static ucp_perf_dispatch_func_t dispatchers[] = {
     ucp_perf_dispatch_osd,
     ucp_perf_dispatch_tag,
     ucp_perf_dispatch_stream,
@@ -1127,14 +1059,25 @@ static ucp_dispatch_func_t dispatchers[] = {
 
 ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
 {
+    ucs_memory_type_t mem_type   = perf->params.send_device.mem_type;
     const size_t num_dispatchers = ucs_static_array_size(dispatchers);
     ucs_status_t status;
-    ucp_dispatch_func_t *dispatcher;
 
-    ucs_carray_for_each(dispatcher, dispatchers, num_dispatchers) {
-        status = (*dispatcher)(perf);
-        if (status != UCS_ERR_INVALID_PARAM) {
-            return status;
+    if (mem_type != UCS_MEMORY_TYPE_LAST) {
+        auto mem_type_dispatcher = ucx_perf_mem_type_device_dispatchers[mem_type];
+        if (mem_type_dispatcher != nullptr) {
+            status = (*mem_type_dispatcher->ucp_dispatch)(perf);
+            if (status != UCS_ERR_INVALID_PARAM) {
+                return status;
+            }
+        }
+    } else {
+        ucp_perf_dispatch_func_t *dispatcher;
+        ucs_carray_for_each(dispatcher, dispatchers, num_dispatchers) {
+            status = (*dispatcher)(perf);
+            if (status != UCS_ERR_INVALID_PARAM) {
+                return status;
+            }
         }
     }
 
