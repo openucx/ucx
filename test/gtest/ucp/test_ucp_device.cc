@@ -15,7 +15,7 @@ class test_ucp_device : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64);
+        add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64 | UCP_FEATURE_DEVICE);
     }
 
     virtual void init()
@@ -153,6 +153,10 @@ UCS_TEST_P(test_ucp_device, create_success)
               ucp_device_mem_list_create(sender().ep(), &params, &handle));
     EXPECT_NE(nullptr, handle);
     ucp_device_mem_list_release(handle);
+}
+
+UCS_TEST_P(test_ucp_device, device_lane)
+{
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, gdaki, "rc,gdaki")

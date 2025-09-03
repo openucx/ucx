@@ -230,6 +230,9 @@ struct ucp_ep_config_key {
     /* Lanes for high-bw memory access, sorted by priority, highest first */
     ucp_lane_index_t         rma_bw_lanes[UCP_MAX_LANES];
 
+    /* Lanes for high-bw memory access, sorted by priority, highest first */
+    ucp_lane_index_t         device_bw_lanes[UCP_MAX_LANES];
+
     /* Lane for obtaining remote memory pointer */
     ucp_lane_index_t         rkey_ptr_lane;
 
@@ -246,6 +249,9 @@ struct ucp_ep_config_key {
 
     /* Local memory domains to use for RMA protocol. */
     ucp_md_map_t             rma_md_map;
+
+    /* Device specific memory bandwidth map */
+    ucp_md_map_t             device_bw_md_map;
 
     /* Bitmap of remote mds which are reachable from this endpoint (with any set
      * of transports which could be selected in the future).
