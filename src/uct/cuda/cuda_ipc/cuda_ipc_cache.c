@@ -539,12 +539,17 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     ucs_status_t status;
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
+    CUuuid uuid;
     int ret;
 
-    CUuuid uuid;
-    cuDeviceGetUuid(&uuid, cu_dev);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
+    if (status != UCS_OK) {
+        return status;
+    }
+
     if ((memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0) &&
         (getpid() == key->pid)) {
+        /* TODO: added for test purpose to enable cuda_ipc tests in gtest */
         *mapped_addr = (CUdeviceptr*)key->d_bptr;
         return UCS_OK;
     }

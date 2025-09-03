@@ -418,7 +418,6 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
     int is_ctx_pushed;
     uct_cuda_ipc_device_mem_element_t cuda_ipc_mem_element;
     CUdevice cuda_device;
-    CUresult cerr;
 
     status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)mem_element,
                                              &cuda_device, &is_ctx_pushed);
@@ -428,18 +427,17 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
 
     cuda_ipc_mem_element.dst_bptr = (uintptr_t)key->super.d_bptr;
     status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device,
-                                        &cuda_ipc_mem_element.mapped_addr);
+                                        &cuda_ipc_mem_element.mapped_addr,
+                                        UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_error("failed to map memhandle: %d", status);
         goto out;
     }
 
-    cerr = cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
-                        sizeof(uct_cuda_ipc_device_mem_element_t));
-    if (cerr != CUDA_SUCCESS) {
-        ucs_error("cuMemcpyHtoD failed: %s",
-                  uct_cuda_base_cu_get_error_string(cerr));
-        status = UCS_ERR_IO_ERROR;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
+                          sizeof(uct_cuda_ipc_device_mem_element_t)));
+    if (status != UCS_OK) {
         goto out;
     }
 
