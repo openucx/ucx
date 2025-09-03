@@ -847,6 +847,12 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
         }
     }
 
+    if (ctx->params.super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+        /* TODO: Add getter function for thread count */
+        ctx->params.super.device_thread_count = ctx->params.super.thread_count;
+        ctx->params.super.thread_count        = 1;
+    }
+
     return init_daemon_params(&ctx->params.super);
 
 err:
