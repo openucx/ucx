@@ -17,24 +17,24 @@
 
 
 static ucs_status_t
-ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
+ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params)
 {
     ucp_md_map_t remote_md_map       = UCS_MASK(UCP_MAX_MDS);
     ucp_worker_cfg_index_t cfg_index = UCP_WORKER_CFG_INDEX_NULL;
     ucp_mem_h memh;
     ucp_rkey_h rkey;
     size_t i, num_elements, element_size;
-    const ucp_mem_list_elem_t *elements;
+    const ucp_device_mem_list_elem_t *elements;
 
     if (params == NULL) {
         return UCS_ERR_INVALID_PARAM;
     }
 
-    element_size = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params,
+    element_size = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params,
                                    element_size, ELEMENT_SIZE, 0);
-    num_elements = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params,
+    num_elements = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params,
                                    num_elements, NUM_ELEMENTS, 0);
-    elements     = UCS_PARAM_VALUE(UCP_MEM_LIST_PARAMS_FIELD, params,
+    elements     = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params,
                                    elements, ELEMENTS, NULL);
 
     if ((element_size != sizeof(*elements)) || (num_elements == 0) ||
@@ -43,9 +43,9 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
     }
 
     for (i = 0; i < num_elements; i++) {
-        memh = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &elements[i], memh,
+        memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, &elements[i], memh,
                                MEMH, NULL);
-        rkey = UCS_PARAM_VALUE(UCP_MEM_LIST_ELEM_FIELD, &elements[i], rkey,
+        rkey = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, &elements[i], rkey,
                                RKEY, NULL);
         if ((memh == NULL) || (rkey == NULL)) {
             return UCS_ERR_INVALID_PARAM;
@@ -82,8 +82,8 @@ ucp_mem_list_params_check(const ucp_mem_list_params_t *params)
     return UCS_OK;
 }
 
-ucs_status_t ucp_mem_list_create(ucp_ep_h ep,
-                                 const ucp_mem_list_params_t *params,
+ucs_status_t ucp_device_mem_list_create(ucp_ep_h ep,
+                                 const ucp_device_mem_list_params_t *params,
                                  ucp_device_mem_list_handle_h *handle_p)
 {
     ucs_status_t status;
@@ -92,7 +92,7 @@ ucs_status_t ucp_mem_list_create(ucp_ep_h ep,
     uct_allocated_memory_t mem;
     ucp_memory_info_t mem_info;
 
-    status = ucp_mem_list_params_check(params);
+    status = ucp_device_mem_list_params_check(params);
     if (status != UCS_OK) {
         return status;
     }
@@ -131,7 +131,7 @@ err:
     return status;
 }
 
-void ucp_mem_list_release(ucp_ep_h ep, ucp_device_mem_list_handle_h handle)
+void ucp_device_mem_list_release(ucp_ep_h ep, ucp_device_mem_list_handle_h handle)
 {
     ucp_device_mem_list_handle_t host_handle;
 

@@ -31,9 +31,9 @@ public:
         using mapped_buffer_ptr = std::unique_ptr<mapped_buffer>;
 
         struct params {
-            std::unique_ptr<ucp_mem_list_elem_t[]> elems;
+            std::unique_ptr<ucp_device_mem_list_elem_t[]> elems;
             std::vector<ucs::handle<ucp_rkey_h>>   rkeys;
-            ucp_mem_list_params_t                  params;
+            ucp_device_mem_list_params_t                  params;
         };
 
         entity&                        m_sender;
@@ -59,25 +59,25 @@ public:
             }
         }
 
-        const ucp_mem_list_params_t &
-        params(size_t elem_size = sizeof(ucp_mem_list_elem_t))
+        const ucp_device_mem_list_params_t &
+        params(size_t elem_size = sizeof(ucp_device_mem_list_elem_t))
         {
             m_params.rkeys.clear();
-            m_params.elems = std::unique_ptr<ucp_mem_list_elem_t[]>(
-                    new ucp_mem_list_elem_t[m_src.size()]);
+            m_params.elems = std::unique_ptr<ucp_device_mem_list_elem_t[]>(
+                    new ucp_device_mem_list_elem_t[m_src.size()]);
 
             for (auto i = 0; i < m_src.size(); ++i) {
-                m_params.elems[i].field_mask = UCP_MEM_LIST_ELEM_FIELD_MEMH |
-                                               UCP_MEM_LIST_ELEM_FIELD_RKEY;
+                m_params.elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
                 m_params.elems[i].memh       = m_src[i]->memh();
                 m_params.rkeys.push_back(m_dst[i]->rkey(m_sender));
                 m_params.elems[i].rkey = m_params.rkeys.back();
             }
 
             auto &params        = m_params.params;
-            params.field_mask   = UCP_MEM_LIST_PARAMS_FIELD_ELEMENTS |
-                                  UCP_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
-                                  UCP_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
+            params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
             params.element_size = elem_size;
             params.num_elements = m_src.size();
             params.elements     = m_params.elems.get();
@@ -129,24 +129,24 @@ UCS_TEST_P(test_ucp_device, put_single)
 UCS_TEST_P(test_ucp_device, create_fail)
 {
     ucp_device_mem_list_handle_h handle = nullptr;
-    ucp_mem_list_params_t empty_params  = {};
+    ucp_device_mem_list_params_t empty_params  = {};
 
     ASSERT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_mem_list_create(sender().ep(), NULL, &handle));
+              ucp_device_mem_list_create(sender().ep(), NULL, &handle));
 
-    empty_params.field_mask = UCP_MEM_LIST_PARAMS_FIELD_ELEMENTS;
+    empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_mem_list_create(sender().ep(), &empty_params, &handle));
+              ucp_device_mem_list_create(sender().ep(), &empty_params, &handle));
 
     mem_list list(sender(), receiver());
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_mem_list_create(sender().ep(), &list.params(), &handle));
+              ucp_device_mem_list_create(sender().ep(), &list.params(), &handle));
     list.add(1 * UCS_MBYTE, 10);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_mem_list_create(sender().ep(), &list.params(31), &handle));
+              ucp_device_mem_list_create(sender().ep(), &list.params(31), &handle));
     list.add(1 * UCS_MBYTE, 10, UCS_MEMORY_TYPE_HOST);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucp_mem_list_create(sender().ep(), &list.params(), &handle));
+              ucp_device_mem_list_create(sender().ep(), &list.params(), &handle));
 }
 
 UCS_TEST_P(test_ucp_device, create_success)
@@ -156,9 +156,9 @@ UCS_TEST_P(test_ucp_device, create_success)
 
     list.add(4 * UCS_MBYTE, 4);
     ASSERT_EQ(UCS_OK,
-              ucp_mem_list_create(sender().ep(), &list.params(), &handle));
+              ucp_device_mem_list_create(sender().ep(), &list.params(), &handle));
     EXPECT_NE(nullptr, handle);
-    ucp_mem_list_release(sender().ep(), handle);
+    ucp_device_mem_list_release(sender().ep(), handle);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, gdaki, "rc,gdaki")
