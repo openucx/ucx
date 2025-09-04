@@ -140,11 +140,16 @@ function az_module_unload() {
     module unload "${module}" || true
 }
 
+get_num_gpus() {
+    num_gpus=$(nvidia-smi -L | grep GPU | wc -l)
+    echo "$num_gpus"
+}
+
 # Ensure that GPU is present
 check_gpu() {
     name=$1
     if [ "$name" == "gpu" ]; then
-        if ! nvidia-smi -L |& grep -q GPU; then
+        if [ "$(get_num_gpus)" -eq 0 ]; then
             azure_log_error "No GPU device found on $(hostname -s)"
             exit 1
         fi
@@ -166,6 +171,10 @@ check_nv_peer_mem() {
     fi
 }
 
+has_doca() {
+    rpm -qa 'doca-ofed*' 2>/dev/null | grep -q .;
+}
+
 #
 # try load cuda modules if nvidia driver is installed
 #
@@ -185,7 +194,7 @@ try_load_cuda_env() {
 
     # Check number of available GPUs
     nvidia-smi -a || true
-    num_gpus=$(nvidia-smi -L | grep GPU | wc -l)
+    num_gpus=$(get_num_gpus)
     [ "${num_gpus}" -gt 0 ] || return 0
 
     # Check cuda env module
