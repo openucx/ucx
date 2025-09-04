@@ -35,6 +35,8 @@ jobs:
             CONTAINER: debian109
           debian125:
             CONTAINER: debian125
+          debian130:
+            CONTAINER: debian130
           sles15sp6:
             CONTAINER: sles15sp6
           rhel82:
