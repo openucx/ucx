@@ -25,7 +25,6 @@ ucs_status_t cuda_device_mem_create(cuda_device_mem_t *mem, size_t size)
     CUDA_CALL(ERR_HANDLER, UCS_ERR_IO_ERROR, cudaHostGetDevicePointer,
               &mem->gpu_ptr, mem->cpu_ptr, 0);
 
-    mem->size = size;
     return UCS_OK;
 }
 

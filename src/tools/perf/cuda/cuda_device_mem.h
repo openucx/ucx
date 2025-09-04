@@ -11,6 +11,7 @@
 
 BEGIN_C_DECLS
 
+/* TODO: move it to some common place */
 #define CUDA_CALL(_handler, _ret, _func, ...) \
     do { \
         cudaError_t _cerr = _func(__VA_ARGS__); \
@@ -23,9 +24,8 @@ BEGIN_C_DECLS
 
 
 typedef struct {
-    void   *cpu_ptr;
-    void   *gpu_ptr;
-    size_t size;
+    void    *cpu_ptr;
+    void    *gpu_ptr;
 } cuda_device_mem_t;
 
 ucs_status_t cuda_device_mem_create(cuda_device_mem_t *mem, size_t size);

@@ -9,6 +9,8 @@
 #endif
 
 
+#include <ucp/api/device/ucp_device_impl.h>
+#include <ucs/sys/compiler_def.h>
 #include "cuda_device_mem.h"
 #include <tools/perf/lib/ucp_tests.h>
 
@@ -25,7 +27,7 @@ struct cuda_perf_context {
     ucx_perf_counter_t completed_iters;
 };
 
-__device__ inline cuda_perf_time_t cuda_perf_get_time_ns()
+UCS_F_DEVICE cuda_perf_time_t cuda_perf_get_time_ns()
 {
     cuda_perf_time_t globaltimer;
     /* 64-bit GPU global nanosecond timer */
@@ -33,10 +35,10 @@ __device__ inline cuda_perf_time_t cuda_perf_get_time_ns()
     return globaltimer;
 }
 
-__device__ static inline void
-cuda_update_perf_report(cuda_perf_context *ctx, ucx_perf_counter_t completed,
-                        ucx_perf_counter_t max_iters,
-                        cuda_perf_time_t &last_report_time)
+UCS_F_DEVICE void cuda_update_perf_report(cuda_perf_context *ctx,
+                                          ucx_perf_counter_t completed,
+                                          ucx_perf_counter_t max_iters,
+                                          cuda_perf_time_t &last_report_time)
 {
     if (threadIdx.x == 0) {
         cuda_perf_time_t current_time = cuda_perf_get_time_ns();
@@ -49,6 +51,7 @@ cuda_update_perf_report(cuda_perf_context *ctx, ucx_perf_counter_t completed,
     }
 }
 
+template<ucp_device_level_t level>
 __global__ void
 cuda_ucp_put_multi_bw_kernel(cuda_perf_context *ctx)
 {
@@ -60,9 +63,11 @@ cuda_ucp_put_multi_bw_kernel(cuda_perf_context *ctx)
         __nanosleep(1000000); // 1ms
 
         cuda_update_perf_report(ctx, idx + 1, max_iters, last_report_time);
+        __syncthreads();
     }
 }
 
+template<ucp_device_level_t level>
 __global__ void
 cuda_ucp_put_multi_latency_kernel(cuda_perf_context *ctx, bool is_sender)
 {
@@ -75,6 +80,7 @@ cuda_ucp_put_multi_latency_kernel(cuda_perf_context *ctx, bool is_sender)
         __nanosleep(1000000); // 1ms
 
         cuda_update_perf_report(ctx, idx + 1, max_iters, last_report_time);
+        __syncthreads();
     }
 }
 
@@ -133,7 +139,8 @@ public:
 
         before();
 
-        cuda_ucp_put_multi_latency_kernel<<<1, thread_count>>>(m_gpu_ctx, my_index);
+        cuda_ucp_put_multi_latency_kernel<UCP_DEVICE_LEVEL_BLOCK>
+                                         <<<1, thread_count>>>(m_gpu_ctx, my_index);
         CUDA_CALL(ucs_error, UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel(length);
@@ -150,7 +157,8 @@ public:
 
         if (my_index == 1) {
             unsigned thread_count = m_perf.params.device_thread_count;
-            cuda_ucp_put_multi_bw_kernel<<<1, thread_count>>>(m_gpu_ctx);
+            cuda_ucp_put_multi_bw_kernel<UCP_DEVICE_LEVEL_BLOCK>
+                                        <<<1, thread_count>>>(m_gpu_ctx);
             CUDA_CALL(ucs_error, UCS_ERR_NO_DEVICE, cudaGetLastError);
 
             wait_for_kernel(length);
