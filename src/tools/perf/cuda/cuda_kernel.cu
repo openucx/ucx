@@ -35,17 +35,17 @@ UCS_F_DEVICE cuda_perf_time_t cuda_perf_get_time_ns()
     return globaltimer;
 }
 
-UCS_F_DEVICE void cuda_update_perf_report(cuda_perf_context *ctx,
+UCS_F_DEVICE void cuda_update_perf_report(cuda_perf_context &ctx,
                                           ucx_perf_counter_t completed,
                                           ucx_perf_counter_t max_iters,
                                           cuda_perf_time_t &last_report_time)
 {
     if (threadIdx.x == 0) {
         cuda_perf_time_t current_time = cuda_perf_get_time_ns();
-        if ((current_time - last_report_time >= ctx->report_interval_ns) ||
+        if ((current_time - last_report_time >= ctx.report_interval_ns) ||
             (completed >= max_iters)) {
-            ctx->completed_iters = completed;
-            last_report_time     = current_time;
+            ctx.completed_iters = completed;
+            last_report_time    = current_time;
             __threadfence();
         }
     }
@@ -53,10 +53,10 @@ UCS_F_DEVICE void cuda_update_perf_report(cuda_perf_context *ctx,
 
 template<ucp_device_level_t level>
 __global__ void
-cuda_ucp_put_multi_bw_kernel(cuda_perf_context *ctx)
+cuda_ucp_put_multi_bw_kernel(cuda_perf_context &ctx)
 {
     cuda_perf_time_t last_report_time = cuda_perf_get_time_ns();
-    ucx_perf_counter_t max_iters      = ctx->max_iters;
+    ucx_perf_counter_t max_iters      = ctx.max_iters;
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         // TODO: replace with actual put multi call
@@ -69,10 +69,10 @@ cuda_ucp_put_multi_bw_kernel(cuda_perf_context *ctx)
 
 template<ucp_device_level_t level>
 __global__ void
-cuda_ucp_put_multi_latency_kernel(cuda_perf_context *ctx, bool is_sender)
+cuda_ucp_put_multi_latency_kernel(cuda_perf_context &ctx, bool is_sender)
 {
     cuda_perf_time_t last_report_time = cuda_perf_get_time_ns();
-    ucx_perf_counter_t max_iters      = ctx->max_iters;
+    ucx_perf_counter_t max_iters      = ctx.max_iters;
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         // TODO: replace with actual put multi call
@@ -84,12 +84,12 @@ cuda_ucp_put_multi_latency_kernel(cuda_perf_context *ctx, bool is_sender)
     }
 }
 
-class cuda_ucp_test_runner: public ucp_perf_test_runner_base<uint64_t> {
+template <typename Base>
+class cuda_ucx_test_runner: public Base {
 public:
-    using psn_t = uint64_t;
+    using Base::m_perf;
 
-    cuda_ucp_test_runner(ucx_perf_context_t &perf) :
-        ucp_perf_test_runner_base<uint64_t>(perf)
+    cuda_ucx_test_runner(ucx_perf_context_t &perf) : Base(perf)
     {
         ucs_status_t status;
         status = cuda_device_mem_create(&m_device_mem, sizeof(cuda_perf_context));
@@ -107,10 +107,10 @@ public:
                                         UCS_NSEC_PER_SEC;
         m_cpu_ctx->completed_iters    = 0;
 
-        m_poll_interval = m_perf.params.report_interval / 10000;
+        m_poll_interval = perf.params.report_interval / 10000;
     }
 
-    ~cuda_ucp_test_runner() noexcept
+    ~cuda_ucx_test_runner() noexcept
     {
         cuda_device_mem_destroy(&m_device_mem);
     }
@@ -118,17 +118,60 @@ public:
     // TODO: remove once real GDAKI is used
     void send_signal(size_t length)
     {
+
         ucs_memory_type_t mem_type = m_perf.params.send_mem_type;
-        write_sn(m_perf.send_buffer, mem_type, length, m_perf.params.max_iter,
-                 m_perf.ucp.self_send_rkey);
+        Base::write_sn(m_perf.send_buffer, mem_type, length,
+                       m_perf.params.max_iter, m_perf.ucp.self_send_rkey);
 
         ucs_status_ptr_t request;
         ucp_request_param_t param = {0};
         request = ucp_put_nbx(m_perf.ucp.ep, m_perf.send_buffer, length,
                               m_perf.ucp.remote_addr, m_perf.ucp.rkey, &param);
-        request_wait(request, mem_type, "write_sn");
+        Base::request_wait(request, mem_type, "write_sn");
         request = ucp_ep_flush_nbx(m_perf.ucp.self_ep, &param);
-        request_wait(request, mem_type, "flush write_sn");
+        Base::request_wait(request, mem_type, "flush write_sn");
+    }
+
+    void wait_for(std::function<bool()> cond)
+    {
+        while (!cond()) {
+            // TODO: use cuStreamWaitValue64 if available
+            usleep(m_poll_interval);
+        }
+    }
+
+    void wait_for_kernel(size_t length)
+    {
+        ucx_perf_counter_t last_completed = 0;
+        wait_for([this, length, &last_completed]() {
+            ucx_perf_counter_t completed = m_cpu_ctx->completed_iters;
+            ucx_perf_counter_t delta     = completed - last_completed;
+            if (delta > 0) {
+                // TODO: calculate latency percentile on kernel
+                ucx_perf_update_multi(&m_perf, delta, delta * length, 0);
+            }
+            last_completed = completed;
+            return completed == m_perf.params.max_iter;
+        });
+    }
+
+    cuda_perf_context &gpu_ctx() const { return *m_gpu_ctx; }
+
+private:
+    cuda_device_mem_t m_device_mem;
+    cuda_perf_context *m_cpu_ctx;
+    cuda_perf_context *m_gpu_ctx;
+    double            m_poll_interval;
+};
+
+class cuda_ucp_test_runner:
+    public cuda_ucx_test_runner<ucp_perf_test_runner_base<uint64_t>> {
+public:
+    using psn_t = uint64_t;
+
+    cuda_ucp_test_runner(ucx_perf_context_t &perf) :
+        cuda_ucx_test_runner<ucp_perf_test_runner_base<uint64_t>>(perf)
+    {
     }
 
     ucs_status_t run_pingpong()
@@ -140,7 +183,7 @@ public:
         before();
 
         cuda_ucp_put_multi_latency_kernel<UCP_DEVICE_LEVEL_BLOCK>
-                                         <<<1, thread_count>>>(m_gpu_ctx, my_index);
+                                         <<<1, thread_count>>>(gpu_ctx(), my_index);
         CUDA_CALL(ucs_error, UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel(length);
@@ -158,7 +201,7 @@ public:
         if (my_index == 1) {
             unsigned thread_count = m_perf.params.device_thread_count;
             cuda_ucp_put_multi_bw_kernel<UCP_DEVICE_LEVEL_BLOCK>
-                                        <<<1, thread_count>>>(m_gpu_ctx);
+                                        <<<1, thread_count>>>(gpu_ctx());
             CUDA_CALL(ucs_error, UCS_ERR_NO_DEVICE, cudaGetLastError);
 
             wait_for_kernel(length);
@@ -194,34 +237,6 @@ private:
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
     }
-
-    void wait_for(std::function<bool()> cond)
-    {
-        while (!cond()) {
-            // TODO: use cuStreamWaitValue64 if available
-            usleep(m_poll_interval);
-        }
-    }
-
-    void wait_for_kernel(size_t length)
-    {
-        ucx_perf_counter_t last_completed = 0;
-        wait_for([this, length, &last_completed]() {
-            ucx_perf_counter_t completed = m_cpu_ctx->completed_iters;
-            ucx_perf_counter_t delta     = completed - last_completed;
-            if (delta > 0) {
-                // TODO: calculate latency percentile on kernel
-                ucx_perf_update_multi(&m_perf, delta, delta * length, 0);
-            }
-            last_completed = completed;
-            return completed == m_perf.params.max_iter;
-        });
-    }
-
-    cuda_device_mem_t m_device_mem;
-    cuda_perf_context *m_cpu_ctx;
-    cuda_perf_context *m_gpu_ctx;
-    double            m_poll_interval;
 };
 
 static ucs_status_t
