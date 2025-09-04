@@ -9,9 +9,12 @@
 
 #include <uct/api/device/uct_device_types.h>
 #include <uct/api/uct_def.h>
+#include <uct/api/uct.h>
 
 
-#define UCP_DEVICE_MEM_LIST_MAX_EPS 2
+#define UCP_DEVICE_MEM_LIST_MAX_EPS    2
+#define UCP_DEVICE_MEM_LIST_VERSION_V1 1
+
 
 /**
  * @ingroup UCP_DEVICE
@@ -23,7 +26,7 @@
  * The handle and most of its content is stored on GPU memory, with the intent
  * to be as memory-local as possible.
  */
-typedef struct {
+typedef struct ucp_device_mem_list_handle {
     /**
      * Structure version. Allow runtime ABI compatibility checks between host
      * and device code.

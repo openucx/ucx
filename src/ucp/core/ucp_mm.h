@@ -229,6 +229,12 @@ ucs_status_t ucp_mm_get_alloc_md_index(ucp_context_h context,
                                        ucp_md_index_t *md_idx_p,
                                        ucp_memory_info_t *mem_info_p);
 
+ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
+                              size_t length, unsigned uct_flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, const char *name,
+                              uct_allocated_memory_t *mem);
+
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)
 {

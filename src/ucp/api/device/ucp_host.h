@@ -75,9 +75,9 @@ typedef struct ucp_device_mem_list_elem {
  * are presents. It is used to enable backward compatibility support.
  */
 enum ucp_device_mem_list_params_field {
-    UCP_MEM_LIST_PARAMS_FIELD_ELEMENTS     = UCS_BIT(0), /**< Elements array base address */
-    UCP_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE = UCS_BIT(1), /**< Element size in bytes */
-    UCP_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS = UCS_BIT(2)  /**< Number of elements */
+    UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS     = UCS_BIT(0), /**< Elements array base address */
+    UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE = UCS_BIT(1), /**< Element size in bytes */
+    UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS = UCS_BIT(2)  /**< Number of elements */
 };
 
 
@@ -112,15 +112,6 @@ typedef struct ucp_device_mem_list_params {
      */
     const ucp_device_mem_list_elem_t *elements;
 } ucp_device_mem_list_params_t;
-
-
-/**
- * @ingroup UCP_DEVICE
- * @brief Opaque descriptor list stored on GPU.
- *
- * Host side does not have access to the content of this descriptor.
- */
-typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
 
 
 /**

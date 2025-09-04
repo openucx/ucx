@@ -134,7 +134,9 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)]  = "tag eager zcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_EP_CHECK)]         = "ep check",
-    [ucs_ilog2(UCT_IFACE_FLAG_EP_KEEPALIVE)]     = "ep keepalive"
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_KEEPALIVE)]     = "ep keepalive",
+    [ucs_ilog2(UCT_IFACE_FLAG_DEVICE_EP)]        = "device ep",
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_DEVICE)]    = "device atomic"
 };
 
 static const char *ucp_wireup_event_flags[] = {
@@ -2325,7 +2327,8 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                    criteria.remote_event_flags, criteria.title,
                                    ucp_wireup_peer_flags, NULL, 0)) {
             return lane;
-        } else if (ucp_worker_is_tl_p2p(worker, rsc_index)) {
+        } else if (ucp_worker_is_tl_p2p(worker, rsc_index) &&
+                   !ucp_worker_is_tl_device(worker, rsc_index)) {
             p2p_lane = lane;
         }
     }
@@ -2432,6 +2435,62 @@ ucp_wireup_select_context_init(ucp_wireup_select_context_t *select_ctx)
     UCS_STATIC_BITMAP_RESET_ALL(&select_ctx->tl_bitmap);
 }
 
+/* Also ignore error mode when set to peer failure */
+static ucs_status_t
+ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
+                            ucp_wireup_select_context_t *select_ctx)
+{
+    ucp_context_h context  = select_params->ep->worker->context;
+    unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
+                                                      select_ctx);
+    ucp_wireup_select_flags_t iface_rma_flags, peer_rma_flags;
+    ucp_wireup_select_bw_info_t bw_info = {};
+    ucp_tl_bitmap_t mem_type_tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap;
+
+    if (!context->config.ext.proto_enable ||
+        (ep_init_flags &
+         (UCP_EP_INIT_FLAG_MEM_TYPE | UCP_EP_INIT_CREATE_AM_LANE_ONLY))) {
+        return UCS_OK;
+    }
+
+    if (!ucs_test_flags(context->config.features, UCP_FEATURE_DEVICE)) {
+        return UCS_OK;
+    }
+
+    ucp_wireup_init_select_flags(&iface_rma_flags, 0, 0);
+    ucp_wireup_init_select_flags(&peer_rma_flags, 0, 0);
+    ucp_wireup_criteria_init(&bw_info.criteria);
+
+    bw_info.criteria.calc_score = ucp_wireup_rma_bw_score_func;
+    ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
+                                 UCT_IFACE_FLAG_DEVICE_EP, 0);
+
+    bw_info.local_dev_bitmap          = UINT64_MAX;
+    bw_info.remote_dev_bitmap         = UINT64_MAX;
+    bw_info.criteria.title            = "device remote memory access";
+    bw_info.criteria.lane_type        = UCP_LANE_TYPE_DEVICE;
+    bw_info.criteria.local_cmpt_flags = 0;
+
+    /*
+     * Device operated lanes are not fastpath, they need proto selection and
+     * memory list creation.
+     */
+    bw_info.max_lanes = ucp_wireup_bw_max_lanes(select_params);
+
+    UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap);
+    ucp_wireup_memaccess_bitmap(context, UCS_MEMORY_TYPE_CUDA,
+                                &mem_type_tl_bitmap);
+    (void)ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                  UCP_TL_BITMAP_AND_NOT(mem_type_tl_bitmap,
+                                                        tl_bitmap),
+                                  UCP_NULL_LANE, select_ctx, 0);
+
+    UCS_STATIC_BITMAP_OR_INPLACE(&tl_bitmap, mem_type_tl_bitmap);
+
+    return UCS_OK;
+}
+
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_err_handling_mode_t err_mode,
@@ -2487,6 +2546,12 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
 
     status = ucp_wireup_add_keepalive_lane(select_params, err_mode,
                                            select_ctx);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Add lanes that run operations on device */
+    status = ucp_wireup_add_device_lanes(select_params, select_ctx);
     if (status != UCS_OK) {
         return status;
     }

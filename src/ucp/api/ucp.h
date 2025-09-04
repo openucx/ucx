@@ -164,7 +164,10 @@ enum ucp_feature {
      * @ref ucp_mem_map and packed by @ref ucp_memh_pack with the flag
      * @ref UCP_MEMH_PACK_FLAG_EXPORT and use it for local operations
      */
-    UCP_FEATURE_EXPORTED_MEMH = UCS_BIT(7)
+    UCP_FEATURE_EXPORTED_MEMH = UCS_BIT(7),
+
+    /** Request device-based communication features */
+    UCP_FEATURE_DEVICE        = UCS_BIT(8)
 };
 
 

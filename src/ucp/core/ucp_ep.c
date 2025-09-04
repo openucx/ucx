@@ -3191,6 +3191,10 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
         ucs_string_buffer_appendf(strbuf, " rma_bw#%d", prio);
     }
 
+    if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
+        ucs_string_buffer_appendf(strbuf, " device");
+    }
+
     prio = ucp_ep_config_get_multi_lane_prio(key->amo_lanes, lane);
     if (prio != -1) {
         ucs_string_buffer_appendf(strbuf, " amo#%d", prio);
