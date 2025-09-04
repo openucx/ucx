@@ -870,12 +870,6 @@ typedef struct {
 } ucp_transports_t;
 
 
-/**
- * @ingroup UCP_DEVICE
- * @brief Opaque descriptor list stored on GPU.
- *
- * Host side app does not have access to the content of this descriptor.
- */
 typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
 
 #endif

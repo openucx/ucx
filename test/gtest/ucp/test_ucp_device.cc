@@ -41,7 +41,7 @@ public:
 
     public:
         mem_list(entity &sender, entity &receiver) :
-            m_sender(sender), m_receiver(receiver)
+            m_params({}), m_sender(sender), m_receiver(receiver)
         {
         }
 
