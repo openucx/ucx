@@ -70,10 +70,10 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
         size += sizeof(uint8_t) + tl_rkey_size;
     }
 
-    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        /* System device id */
-        size += sizeof(uint8_t);
+    /* System device id */
+    size += sizeof(uint8_t);
 
+    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
         /* Distance of each device */
         size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
     }
@@ -204,12 +204,12 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                   md_index, context->tl_mds[md_index].rsc.md_name);
     }
 
+    /* Pack system device id */
+    *ucs_serialize_next(&p, uint8_t) = memh->packed_sys_dev;
+
     if (ucs_likely(mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
         goto out_packed_size;
     }
-
-    /* Pack system device id */
-    *ucs_serialize_next(&p, uint8_t) = memh->packed_sys_dev;
 
     /* Pack distance from sys_dev to each device in distance_dev_map */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
@@ -791,7 +791,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
-    if (buffer < buffer_end) {
+    if ((buffer < buffer_end) || (ucp_ep_config(ep)->key.dst_version > 19)) {
         rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
     } else {
         rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;

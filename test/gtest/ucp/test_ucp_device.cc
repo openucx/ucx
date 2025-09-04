@@ -26,6 +26,12 @@ public:
         if (!is_loopback()) {
             receiver().connect(&sender(), get_ep_params());
         }
+
+        ucp_device_mem_list_handle_h handle;
+        while (ucp_device_mem_list_create(sender().ep(), NULL, &handle)\
+               == UCS_ERR_NOT_CONNECTED) {
+            progress();
+        }
     }
 
     class mem_list {
@@ -146,6 +152,7 @@ UCS_TEST_P(test_ucp_device, create_fail)
 
 UCS_TEST_P(test_ucp_device, create_success)
 {
+    scoped_log_handler wrap_err(wrap_errors_logger);
     mem_list list(sender(), receiver());
     ucp_device_mem_list_handle_h handle = nullptr;
 
@@ -154,10 +161,6 @@ UCS_TEST_P(test_ucp_device, create_success)
               ucp_device_mem_list_create(sender().ep(), &params, &handle));
     EXPECT_NE(nullptr, handle);
     ucp_device_mem_list_release(handle);
-}
-
-UCS_TEST_P(test_ucp_device, device_lane)
-{
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, gdaki, "rc,gdaki")
