@@ -166,7 +166,6 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->rkey_ptr_lane    = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
-    key->device_bw_md_map = 0;
     key->rma_md_map       = 0;
     key->reachable_md_map = 0;
     key->dst_md_cmpts     = NULL;
@@ -176,7 +175,6 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
-    memset(key->device_bw_lanes, UCP_NULL_LANE, sizeof(key->device_bw_lanes));
     memset(key->amo_lanes,    UCP_NULL_LANE, sizeof(key->amo_lanes));
 }
 
@@ -1967,8 +1965,6 @@ static int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,
                sizeof(key1->am_bw_lanes)) ||
         memcmp(key1->rma_bw_lanes, key2->rma_bw_lanes,
                sizeof(key1->rma_bw_lanes)) ||
-        memcmp(key1->device_bw_lanes, key2->device_bw_lanes,
-               sizeof(key1->device_bw_lanes)) ||
         memcmp(key1->amo_lanes, key2->amo_lanes, sizeof(key1->amo_lanes)) ||
         (key1->am_lane != key2->am_lane) ||
         (key1->tag_lane != key2->tag_lane) ||
@@ -1998,7 +1994,6 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     }
 
     if ((key1->rma_bw_md_map != key2->rma_bw_md_map) ||
-        (key1->device_bw_md_map != key2->device_bw_md_map) ||
         (key1->rma_md_map != key2->rma_md_map) ||
         (key1->reachable_md_map != key2->reachable_md_map) ||
         (key1->err_mode != key2->err_mode) ||
@@ -3196,9 +3191,8 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
         ucs_string_buffer_appendf(strbuf, " rma_bw#%d", prio);
     }
 
-    prio = ucp_ep_config_get_multi_lane_prio(key->device_bw_lanes, lane);
-    if (prio != -1) {
-        ucs_string_buffer_appendf(strbuf, " device_bw#%d", prio);
+    if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
+        ucs_string_buffer_appendf(strbuf, " device");
     }
 
     prio = ucp_ep_config_get_multi_lane_prio(key->amo_lanes, lane);
@@ -3326,14 +3320,6 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
         fprintf(stream, "#\n");
         fprintf(stream, "# %23s: mds ", "rma");
         ucs_for_each_bit(md_index, config->key.rma_md_map) {
-            fprintf(stream, "[%d] ", md_index);
-        }
-    }
-
-    if (context->config.features & UCP_FEATURE_DEVICE) {
-        fprintf(stream, "#\n");
-        fprintf(stream, "# %23s: mds ", "device_bw");
-        ucs_for_each_bit(md_index, config->key.device_bw_md_map) {
             fprintf(stream, "[%d] ", md_index);
         }
     }

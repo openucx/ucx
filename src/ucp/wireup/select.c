@@ -861,12 +861,6 @@ static int ucp_wireup_compare_lane_rma_bw_score(const void *elem1, const void *e
     return ucp_wireup_compare_score(elem1, elem2, arg, UCP_LANE_TYPE_RMA_BW);
 }
 
-static int ucp_wireup_compare_lane_device_bw_score(const void *elem1,
-                                                   const void *elem2, void *arg)
-{
-    return ucp_wireup_compare_score(elem1, elem2, arg, UCP_LANE_TYPE_DEVICE);
-}
-
 static int ucp_wireup_compare_lane_amo_score(const void *elem1, const void *elem2,
                                              void *arg)
 {
@@ -2443,8 +2437,8 @@ ucp_wireup_select_context_init(ucp_wireup_select_context_t *select_ctx)
 
 /* Also ignore error mode when set to peer failure */
 static ucs_status_t
-ucp_wireup_add_device_bw_lanes(const ucp_wireup_select_params_t *select_params,
-                               ucp_wireup_select_context_t *select_ctx)
+ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
+                            ucp_wireup_select_context_t *select_ctx)
 {
     ucp_context_h context  = select_params->ep->worker->context;
     unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
@@ -2461,7 +2455,6 @@ ucp_wireup_add_device_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     if (!ucs_test_flags(context->config.features, UCP_FEATURE_DEVICE)) {
-        ucs_debug("device operations feature disabled");
         return UCS_OK;
     }
 
@@ -2471,13 +2464,11 @@ ucp_wireup_add_device_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     bw_info.criteria.calc_score = ucp_wireup_rma_bw_score_func;
     ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
-                                 UCT_IFACE_FLAG_DEVICE_EP |
-                                 UCT_IFACE_FLAG_PUT_ZCOPY |
-                                 UCT_IFACE_FLAG_ATOMIC_DEVICE, 0);
+                                 UCT_IFACE_FLAG_DEVICE_EP, 0);
 
     bw_info.local_dev_bitmap          = UINT64_MAX;
     bw_info.remote_dev_bitmap         = UINT64_MAX;
-    bw_info.criteria.title            = "high-bw device remote memory access";
+    bw_info.criteria.title            = "device remote memory access";
     bw_info.criteria.lane_type        = UCP_LANE_TYPE_DEVICE;
     bw_info.criteria.local_cmpt_flags = 0;
 
@@ -2560,7 +2551,7 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     /* Add lanes that run operations on device */
-    status = ucp_wireup_add_device_bw_lanes(select_params, select_ctx);
+    status = ucp_wireup_add_device_lanes(select_params, select_ctx);
     if (status != UCS_OK) {
         return status;
     }
@@ -2717,10 +2708,6 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_RMA_BW)) {
             key->rma_bw_lanes[lane] = lane;
         }
-        if (select_ctx->lane_descs[lane].lane_types &
-            UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
-            key->device_bw_lanes[lane] = lane;
-        }
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_RKEY_PTR)) {
             ucs_assert(key->rkey_ptr_lane == UCP_NULL_LANE);
             key->rkey_ptr_lane = lane;
@@ -2748,9 +2735,6 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                 ucp_wireup_compare_lane_rma_score, select_ctx->lane_descs);
     ucs_qsort_r(key->rma_bw_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
                 ucp_wireup_compare_lane_rma_bw_score, select_ctx->lane_descs);
-    ucs_qsort_r(key->device_bw_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
-                ucp_wireup_compare_lane_device_bw_score,
-                select_ctx->lane_descs);
     ucs_qsort_r(key->amo_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
                 ucp_wireup_compare_lane_amo_score, select_ctx->lane_descs);
 
@@ -2779,13 +2763,6 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         rsc_index            = select_ctx->lane_descs[key->rkey_ptr_lane].rsc_index;
         md_index             = context->tl_rscs[rsc_index].md_index;
         key->rma_bw_md_map  |= UCS_BIT(md_index);
-    }
-
-    for (i = 0; key->device_bw_lanes[i] != UCP_NULL_LANE; i++) {
-        lane                   = key->device_bw_lanes[i];
-        rsc_index              = select_ctx->lane_descs[lane].rsc_index;
-        md_index               = context->tl_rscs[rsc_index].md_index;
-        key->device_bw_md_map |= UCS_BIT(md_index);
     }
 
     for (i = 0; key->rma_lanes[i] != UCP_NULL_LANE; i++) {

@@ -139,11 +139,10 @@ ucp_device_mem_list_create(ucp_ep_h ep,
                   mem.address, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
         ucs_error("failed to hash handle=%p", mem.address);
-        ucs_spin_unlock(&ucp_device_handle_hash_lock);
-        goto err;
+        goto err_unlock;
     } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
         ucs_error("handle=%p already found in hash", mem.address);
-        goto err;
+        goto err_unlock;
     }
 
     *handle_p                               = mem.address;
@@ -152,6 +151,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
 
     return UCS_OK;
 
+err_unlock:
+    ucs_spin_unlock(&ucp_device_handle_hash_lock);
 err:
     uct_mem_free(&mem);
     return status;
