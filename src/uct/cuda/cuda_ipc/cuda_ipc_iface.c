@@ -430,16 +430,12 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
                                         &cuda_ipc_mem_element.mapped_addr,
                                         UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
-        ucs_error("failed to map memhandle: %d", status);
         goto out;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
                           sizeof(uct_cuda_ipc_device_mem_element_t)));
-    if (status != UCS_OK) {
-        goto out;
-    }
 
 out:
     uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);

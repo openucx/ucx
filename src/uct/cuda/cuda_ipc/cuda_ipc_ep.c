@@ -42,8 +42,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
     if (self->device_ep != NULL) {
-        cuMemFree((CUdeviceptr)&self->device_ep);
-        self->device_ep = NULL;
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)self->device_ep));
     }
 }
 
@@ -245,26 +244,26 @@ ucs_status_t uct_cuda_ipc_ep_get_device_ep(uct_ep_h tl_ep,
     uct_device_ep_t device_ep;
     ucs_status_t status;
 
-    if (ep->device_ep == NULL) {
-        device_ep.uct_tl_id = UCT_DEVICE_TL_CUDA_IPC;
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemAlloc((CUdeviceptr *)&ep->device_ep, sizeof(uct_device_ep_t)));
-        if (status != UCS_OK) {
-            goto out;
-        }
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuMemcpyHtoD((CUdeviceptr)ep->device_ep, &device_ep,
-                            sizeof(uct_device_ep_t)));
-        if (status != UCS_OK) {
-            goto err;
-        }
+    if (ep->device_ep != NULL) {
+        goto out;
     }
-
+    device_ep.uct_tl_id = UCT_DEVICE_TL_CUDA_IPC;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemAlloc((CUdeviceptr *)&ep->device_ep, sizeof(uct_device_ep_t)));
+    if (status != UCS_OK) {
+        goto err;
+    }
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemcpyHtoD((CUdeviceptr)ep->device_ep, &device_ep, sizeof(uct_device_ep_t)));
+    if (status != UCS_OK) {
+        goto err_free_mem;
+    }
+out:
     *device_ep_p = ep->device_ep;
     return UCS_OK;
-err:
+err_free_mem:
     cuMemFree((CUdeviceptr)&ep->device_ep);
     ep->device_ep = NULL;
-out:
+err:
     return status;
 }

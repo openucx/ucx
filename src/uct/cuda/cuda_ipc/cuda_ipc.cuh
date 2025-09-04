@@ -7,6 +7,7 @@
 #ifndef UCT_CUDA_IPC_CUH
 #define UCT_CUDA_IPC_CUH
 
+#include "ucs/type/status.h"
 #include "uct/api/uct_def.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -22,20 +23,7 @@ extern "C" {
 #define WARP_SIZE 32
 #define COPY_LOOP_UNROLL 8
 
-__device__ static inline void uct_cuda_ipc_copy_single_nv(void *dst,
-                                                          const void *src,
-                                                          size_t size)
-{
-    size_t i;
-    char *s1 = (char *)src;
-    char *d1 = (char *)dst;
-
-    for (i = threadIdx.x; i <size; i += blockDim.x) {
-        d1[i] = s1[i];
-    }
-}
-
-static __device__ __forceinline__ int4 ld_global_cg(const int4* p) {
+__device__ __forceinline__ int4 ld_global_cg(const int4* p) {
     int4 v;
     asm volatile ("ld.global.cg.v4.s32 {%0,%1,%2,%3}, [%4];"
                   : "=r"(v.x), "=r"(v.y), "=r"(v.z), "=r"(v.w)
@@ -43,13 +31,13 @@ static __device__ __forceinline__ int4 ld_global_cg(const int4* p) {
     return v;
 }
 
-static __device__ __forceinline__ void st_global_cg(int4* p, const int4& v) {
+__device__ __forceinline__ void st_global_cg(int4* p, const int4& v) {
     asm volatile ("st.global.cg.v4.s32 [%0], {%1,%2,%3,%4};"
                   :
                   : "l"(p), "r"(v.x), "r"(v.y), "r"(v.z), "r"(v.w));
 }
 
-static __device__ __forceinline__ int2 ld_global_cg(const int2* p) {
+__device__ __forceinline__ int2 ld_global_cg(const int2* p) {
     int2 v;
     asm volatile ("ld.global.cg.v2.s32 {%0,%1}, [%2];"
                   : "=r"(v.x), "=r"(v.y)
@@ -57,26 +45,35 @@ static __device__ __forceinline__ int2 ld_global_cg(const int2* p) {
     return v;
 }
 
-static __device__ __forceinline__ void st_global_cg(int2* p, const int2& v) {
+__device__ __forceinline__ void st_global_cg(int2* p, const int2& v) {
     asm volatile ("st.global.cg.v2.s32 [%0], {%1,%2};"
                   :
                   : "l"(p), "r"(v.x), "r"(v.y));
 }
 
-#include <stdio.h>
+__device__ inline void uct_cuda_ipc_copy_single_nv(void *dst, const void *src,
+                                                   size_t size)
+{
+    auto s1 = reinterpret_cast<const char*>(src);
+    auto d1 = reinterpret_cast<char *>(dst);
+
+    for (size_t i = threadIdx.x; i <size; i += blockDim.x) {
+        d1[i] = s1[i];
+    }
+}
+
 template<int UNROLL>
-__device__ static void uct_cuda_ipc_copy_single(void *dst,
-                                                const void *src,
+__device__ inline void uct_cuda_ipc_copy_single(void *dst, const void *src,
                                                 size_t size)
 {
-    typedef int4 vec4;
-    typedef int2 vec2;
-    const char *s1  = reinterpret_cast<const char*>(src);
-    char       *d1  = reinterpret_cast<char *>(dst);
+    using vec4 = int4;
+    using vec2 = int2;
+    auto s1  = reinterpret_cast<const char*>(src);
+    auto d1  = reinterpret_cast<char *>(dst);
     const vec4 *s4;
     vec4 *d4;
     int warp, num_warps, idx;
-    size_t line, num_lines;
+    size_t num_lines;
 
     if (align_pow2((intptr_t)s1, sizeof(vec4)) && align_pow2((intptr_t)d1, sizeof(vec4))) {
         vec4 tmp[UNROLL];
@@ -88,7 +85,7 @@ __device__ static void uct_cuda_ipc_copy_single(void *dst,
         num_lines = (size / (WARP_SIZE * UNROLL * sizeof(vec4))) *
                     (WARP_SIZE * UNROLL);
 
-        for (line = warp * WARP_SIZE * UNROLL + idx; line < num_lines;
+        for (size_t line = warp * WARP_SIZE * UNROLL + idx; line < num_lines;
              line += num_warps * WARP_SIZE * UNROLL) {
 #pragma unroll
             for (int i = 0; i < UNROLL; i++) {
@@ -108,7 +105,7 @@ __device__ static void uct_cuda_ipc_copy_single(void *dst,
         s4 = s4 + num_lines;
         d4 = d4 + num_lines;
         num_lines = size / sizeof(vec4);
-        for (line = threadIdx.x; line < num_lines; line += blockDim.x) {
+        for (size_t line = threadIdx.x; line < num_lines; line += blockDim.x) {
             vec4 v = ld_global_cg(s4 + line);
             st_global_cg(d4 + line, v);
         }
@@ -136,7 +133,7 @@ __device__ static void uct_cuda_ipc_copy_single(void *dst,
         num_lines = (size / (WARP_SIZE * UNROLL * sizeof(vec2))) *
                     (WARP_SIZE * UNROLL);
 
-        for (line = warp * WARP_SIZE * UNROLL + idx; line < num_lines;
+        for (size_t line = warp * WARP_SIZE * UNROLL + idx; line < num_lines;
              line += num_warps * WARP_SIZE * UNROLL) {
 #pragma unroll
             for (int i = 0; i < UNROLL; i++) {
@@ -157,7 +154,7 @@ __device__ static void uct_cuda_ipc_copy_single(void *dst,
         s2 = s2 + num_lines;
         d2 = d2 + num_lines;
         num_lines = size / sizeof(vec2);
-        for (line = threadIdx.x; line < num_lines; line += blockDim.x) {
+        for (size_t line = threadIdx.x; line < num_lines; line += blockDim.x) {
             vec2 v2 = ld_global_cg(s2 + line);
             st_global_cg(d2 + line, v2);
         }
@@ -171,21 +168,21 @@ __device__ static void uct_cuda_ipc_copy_single(void *dst,
         d1 = reinterpret_cast<char*>(d2 + num_lines);
     }
 
-    for (line = threadIdx.x; line < size; line += blockDim.x) {
+    for (size_t line = threadIdx.x; line < size; line += blockDim.x) {
         d1[line] = s1[line];
     }
 }
 
 template<uct_device_level_t level = UCT_DEVICE_LEVEL_BLOCK>
-__device__ static inline ucs_status_t
+__device__ inline ucs_status_t
 uct_cuda_ipc_ep_put_single(uct_device_ep_h device_ep,
                            const uct_device_mem_element_t *mem_elem,
                            const void *address, uint64_t remote_address,
                            size_t length, uint64_t flags,
                            uct_device_completion_t *comp)
 {
-    uct_cuda_ipc_device_mem_element_t *cuda_ipc_mem_element =
-        (uct_cuda_ipc_device_mem_element_t *)mem_elem;
+    auto cuda_ipc_mem_element =
+        reinterpret_cast<const uct_cuda_ipc_device_mem_element_t *>(mem_elem);
     size_t offset;
     void *mapped_rem_addr;
 
@@ -205,7 +202,7 @@ uct_cuda_ipc_ep_put_single(uct_device_ep_h device_ep,
         case UCT_DEVICE_LEVEL_GRID:
             return UCS_ERR_UNSUPPORTED;
         default:
-            __builtin_unreachable();
+            return UCS_ERR_INVALID_PARAM;
     }
 
     __syncthreads();
