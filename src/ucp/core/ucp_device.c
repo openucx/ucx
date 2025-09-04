@@ -65,8 +65,11 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params)
 
     for (i = 0; i < num_elements; i++) {
         element = UCS_PTR_BYTE_OFFSET(elements, i * element_size);
-        rkey = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, rkey,
-                               RKEY, NULL);
+        rkey    = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, rkey,
+                                  RKEY, NULL);
+        if (rkey == NULL) {
+            return UCS_ERR_INVALID_PARAM;
+        }
 
         if (i == 0) {
             cfg_index = rkey->cfg_index;
@@ -139,7 +142,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
         ucs_spin_unlock(&ucp_device_handle_hash_lock);
         goto err;
     } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
-        ucs_fatal("handle=%p already found in hash", mem.address);
+        ucs_error("handle=%p already found in hash", mem.address);
+        goto err;
     }
 
     *handle_p                               = mem.address;
