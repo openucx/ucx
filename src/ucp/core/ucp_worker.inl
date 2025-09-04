@@ -252,8 +252,8 @@ ucp_worker_iface_is_tl_device(const uct_iface_attr_t *iface_attr)
 static UCS_F_ALWAYS_INLINE int
 ucp_worker_is_tl_device(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return ucp_worker_iface_is_tl_device(ucp_worker_iface_get_attr(worker,
-                                                                   rsc_index));
+    return ucp_worker_iface_is_tl_device(
+            ucp_worker_iface_get_attr(worker, rsc_index));
 }
 
 /**

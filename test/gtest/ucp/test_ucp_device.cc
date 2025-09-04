@@ -15,7 +15,8 @@ class test_ucp_device : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64 | UCP_FEATURE_DEVICE);
+        add_variant(variants,
+                    UCP_FEATURE_RMA | UCP_FEATURE_AMO64 | UCP_FEATURE_DEVICE);
     }
 
     virtual void init()

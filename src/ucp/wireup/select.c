@@ -862,8 +862,7 @@ static int ucp_wireup_compare_lane_rma_bw_score(const void *elem1, const void *e
 }
 
 static int ucp_wireup_compare_lane_device_bw_score(const void *elem1,
-                                                   const void *elem2,
-                                                   void *arg)
+                                                   const void *elem2, void *arg)
 {
     return ucp_wireup_compare_score(elem1, elem2, arg, UCP_LANE_TYPE_DEVICE);
 }
@@ -2448,16 +2447,16 @@ ucp_wireup_add_device_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                ucp_wireup_select_context_t *select_ctx)
 {
     ucp_context_h context  = select_params->ep->worker->context;
-    unsigned ep_init_flags = ucp_wireup_ep_init_flags(
-                                     select_params, select_ctx);
+    unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
+                                                      select_ctx);
     ucp_wireup_select_flags_t iface_rma_flags, peer_rma_flags;
     ucp_wireup_select_bw_info_t bw_info = {};
     ucp_tl_bitmap_t mem_type_tl_bitmap;
     ucp_tl_bitmap_t tl_bitmap;
 
     if (!context->config.ext.proto_enable ||
-        (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE |
-                          UCP_EP_INIT_CREATE_AM_LANE_ONLY))) {
+        (ep_init_flags &
+         (UCP_EP_INIT_FLAG_MEM_TYPE | UCP_EP_INIT_CREATE_AM_LANE_ONLY))) {
         return UCS_OK;
     }
 
@@ -2486,15 +2485,15 @@ ucp_wireup_add_device_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * Device operated lanes are not fastpath, they need proto selection and
      * memory list creation.
      */
-    bw_info.max_lanes                 = ucp_wireup_bw_max_lanes(select_params);
+    bw_info.max_lanes = ucp_wireup_bw_max_lanes(select_params);
 
     UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap);
     ucp_wireup_memaccess_bitmap(context, UCS_MEMORY_TYPE_CUDA,
                                 &mem_type_tl_bitmap);
-    (void)ucp_wireup_add_bw_lanes(
-            select_params, &bw_info,
-            UCP_TL_BITMAP_AND_NOT(mem_type_tl_bitmap, tl_bitmap),
-            UCP_NULL_LANE, select_ctx, 0);
+    (void)ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                  UCP_TL_BITMAP_AND_NOT(mem_type_tl_bitmap,
+                                                        tl_bitmap),
+                                  UCP_NULL_LANE, select_ctx, 0);
 
     UCS_STATIC_BITMAP_OR_INPLACE(&tl_bitmap, mem_type_tl_bitmap);
 
@@ -2718,7 +2717,8 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_RMA_BW)) {
             key->rma_bw_lanes[lane] = lane;
         }
-        if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
+        if (select_ctx->lane_descs[lane].lane_types &
+            UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
             key->device_bw_lanes[lane] = lane;
         }
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_RKEY_PTR)) {
@@ -2749,7 +2749,8 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     ucs_qsort_r(key->rma_bw_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
                 ucp_wireup_compare_lane_rma_bw_score, select_ctx->lane_descs);
     ucs_qsort_r(key->device_bw_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
-                ucp_wireup_compare_lane_device_bw_score, select_ctx->lane_descs);
+                ucp_wireup_compare_lane_device_bw_score,
+                select_ctx->lane_descs);
     ucs_qsort_r(key->amo_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
                 ucp_wireup_compare_lane_amo_score, select_ctx->lane_descs);
 
