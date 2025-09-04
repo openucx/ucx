@@ -97,9 +97,7 @@ public:
 
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
         m_cpu_ctx->max_iters          = perf.params.max_iter;
-        /* Kernel report interval is 1/10 of the report interval, because we
-         * want to get intermediate report with average percentiles */
-        m_cpu_ctx->report_interval_ns = perf.params.report_interval / 10 *
+        m_cpu_ctx->report_interval_ns = perf.params.report_interval *
                                         UCS_NSEC_PER_SEC;
         m_cpu_ctx->completed_iters    = 0;
 
@@ -204,7 +202,8 @@ private:
             ucx_perf_counter_t completed = m_cpu_ctx->completed_iters;
             ucx_perf_counter_t delta     = completed - last_completed;
             if (delta > 0) {
-                ucx_perf_update(&m_perf, delta, delta * length);
+                // TODO: calculate latency percentile on kernel
+                ucx_perf_update_multi(&m_perf, delta, delta * length, 0);
             }
             last_completed = completed;
             return completed == m_perf.params.max_iter;

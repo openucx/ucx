@@ -107,7 +107,6 @@ struct ucx_perf_context {
 
     ucs_time_t                   timing_queue[TIMING_QUEUE_SIZE];
     unsigned                     timing_queue_head;
-    unsigned                     timing_queue_updates;
 
     const ucx_perf_allocator_t   *send_allocator;
     const ucx_perf_allocator_t   *recv_allocator;
@@ -182,7 +181,9 @@ void uct_perf_ep_flush_b(ucx_perf_context_t *perf, int peer_index);
 void uct_perf_iface_flush_b(ucx_perf_context_t *perf);
 ucs_status_t uct_perf_test_dispatch(ucx_perf_context_t *perf);
 ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf);
-void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result);
+void ucx_perf_calc_result(ucx_perf_context_t *perf,
+                          ucs_time_t latency_percentile,
+                          ucx_perf_result_t *result);
 void uct_perf_barrier(ucx_perf_context_t *perf);
 void ucp_perf_thread_barrier(ucx_perf_context_t *perf);
 void ucp_perf_barrier(ucx_perf_context_t *perf);
@@ -203,7 +204,7 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params);
  */
 size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
 
-void ucx_perf_report(ucx_perf_context_t *perf);
+void ucx_perf_report(ucx_perf_context_t *perf, ucs_time_t latency_percentile);
 
 ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf);
 
@@ -231,17 +232,14 @@ static UCS_F_ALWAYS_INLINE void ucx_perf_update(ucx_perf_context_t *perf,
                                                 ucx_perf_counter_t iters,
                                                 size_t bytes)
 {
-    ucx_perf_counter_t msgs = ucs_max(iters, 1);
-
     perf->current.time   = ucs_get_time();
     perf->current.iters += iters;
     perf->current.bytes += bytes;
-    perf->current.msgs  += msgs;
+    perf->current.msgs  += 1;
 
     perf->timing_queue[perf->timing_queue_head] =
-                            (perf->current.time - perf->prev_time) / msgs;
+                    perf->current.time - perf->prev_time;
     ++perf->timing_queue_head;
-    ++perf->timing_queue_updates;
     if (perf->timing_queue_head == TIMING_QUEUE_SIZE) {
         perf->timing_queue_head = 0;
     }
@@ -250,7 +248,22 @@ static UCS_F_ALWAYS_INLINE void ucx_perf_update(ucx_perf_context_t *perf,
 
     if (ucs_unlikely((perf->current.time - perf->prev.time) >=
                      perf->report_interval)) {
-        ucx_perf_report(perf);
+        ucx_perf_report(perf, 0);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucx_perf_update_multi(ucx_perf_context_t *perf, ucx_perf_counter_t iters,
+                      size_t bytes, ucs_time_t latency_percentile)
+{
+    perf->current.time   = ucs_get_time();
+    perf->current.iters += iters;
+    perf->current.bytes += bytes;
+    perf->current.msgs  += iters;
+    perf->prev_time      = perf->current.time;
+
+    if (ucs_unlikely(perf->current.iters < perf->params.max_iter)) {
+        ucx_perf_report(perf, latency_percentile);
     }
 }
 
