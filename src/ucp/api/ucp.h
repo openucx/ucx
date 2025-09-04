@@ -430,10 +430,11 @@ enum ucp_lib_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_context_attr_field {
-    UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
-    UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1), /**< UCP context thread flag */
-    UCP_ATTR_FIELD_MEMORY_TYPES = UCS_BIT(2), /**< UCP supported memory types */
-    UCP_ATTR_FIELD_NAME         = UCS_BIT(3)  /**< UCP context name */
+    UCP_ATTR_FIELD_REQUEST_SIZE        = UCS_BIT(0), /**< UCP request size */
+    UCP_ATTR_FIELD_THREAD_MODE         = UCS_BIT(1), /**< UCP context thread flag */
+    UCP_ATTR_FIELD_MEMORY_TYPES        = UCS_BIT(2), /**< UCP supported memory types */
+    UCP_ATTR_FIELD_NAME                = UCS_BIT(3), /**< UCP context name */
+    UCP_ATTR_FIELD_DEVICE_COUNTER_SIZE = UCS_BIT(4)  /**< UCP Device API counter size */
 };
 
 
@@ -1208,6 +1209,11 @@ typedef struct ucp_context_attr {
      * Tracing and analysis tools can use name to identify this UCX context.
      */
     char                  name[UCP_ENTITY_NAME_MAX];
+
+    /**
+     * Size usable to allocate a counter memory for UCP Device API usage.
+     */
+    size_t                device_counter_size;
 } ucp_context_attr_t;
 
 

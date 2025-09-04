@@ -28,12 +28,14 @@ BEGIN_C_DECLS
  * @ingroup UCP_DEVICE
  * @brief Memory descriptor list attributes field mask.
  *
- * The enumeration allows specifying which fields in @ref ucp_mem_list_elem are
- * present. It is used to enable backward compatibility support.
+ * The enumeration allows specifying which fields in @ref
+ * ucp_device_mem_list_elem are present.
+ *
+ * It is used to enable backward compatibility support.
  */
-enum ucp_mem_list_elem_field {
-    UCP_MEM_LIST_ELEM_FIELD_MEMH = UCS_BIT(0), /**< Source memory handle */
-    UCP_MEM_LIST_ELEM_FIELD_RKEY = UCS_BIT(1)  /**< Unpacked remote memory key */
+enum ucp_device_mem_list_elem_field {
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH = UCS_BIT(0), /**< Source memory handle */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY = UCS_BIT(1)  /**< Unpacked remote memory key */
 };
 
 
@@ -44,10 +46,10 @@ enum ucp_mem_list_elem_field {
  * This describes a pair of local and remote memory for which a memory operation
  * can later be performed multiple times, possibly with varying memory offsets.
  */
-typedef struct ucp_mem_list_elem {
+typedef struct ucp_device_mem_list_elem {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_mem_list_elem_field.
+     * @ref ucp_device_mem_list_elem_field.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -62,17 +64,17 @@ typedef struct ucp_mem_list_elem {
      * Unpacked memory key for the remote memory endpoint.
      */
     ucp_rkey_h rkey;
-} ucp_mem_list_elem_t;
+} ucp_device_mem_list_elem_t;
 
 
 /**
  * @ingroup UCP_DEVICE
  * @brief Memory descriptor list create parameters field mask.
  *
- * The enumeration allows specifying which fields in @ref ucp_mem_list_params_t
+ * The enumeration allows specifying which fields in @ref ucp_device_mem_list_params_t
  * are presents. It is used to enable backward compatibility support.
  */
-enum ucp_mem_list_params_field {
+enum ucp_device_mem_list_params_field {
     UCP_MEM_LIST_PARAMS_FIELD_ELEMENTS     = UCS_BIT(0), /**< Elements array base address */
     UCP_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE = UCS_BIT(1), /**< Element size in bytes */
     UCP_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS = UCS_BIT(2)  /**< Number of elements */
@@ -84,12 +86,12 @@ enum ucp_mem_list_params_field {
  * @brief Memory descriptor list create parameters.
  *
  * The structure defines the parameters that can be used to create a handle
- * with @ref ucp_mem_list_create.
+ * with @ref ucp_device_mem_list_create.
  */
-typedef struct ucp_mem_list_params {
+typedef struct ucp_device_mem_list_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_mem_list_params_field.
+     * @ref ucp_device_mem_list_params_field.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -108,8 +110,8 @@ typedef struct ucp_mem_list_params {
     /**
      * Base address of the array of descriptor elements.
      */
-    const ucp_mem_list_elem_t *elements;
-} ucp_mem_list_params_t;
+    const ucp_device_mem_list_elem_t *elements;
+} ucp_device_mem_list_params_t;
 
 
 /**
@@ -118,7 +120,6 @@ typedef struct ucp_mem_list_params {
  *
  * Host side does not have access to the content of this descriptor.
  */
-struct ucp_device_mem_list_handle;
 typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
 
 
@@ -127,12 +128,12 @@ typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
  * @brief Memory descriptor list create function for batched RMA operations.
  *
  * This function creates and populates a descriptor list handle using parameters
- * inputs from @ref ucp_mem_list_params_t. This descriptor is created for
+ * inputs from @ref ucp_device_mem_list_params_t. This descriptor is created for
  * the given remote endpoint. It can be used on a GPU using the corresponding
  * device functions.
  *
  * It can be used repeatedly, until finally released by calling @ref
- * ucp_mem_list_release.
+ * ucp_device_mem_list_release.
  *
  * @param [in]  ep        Remote endpoint handle.
  * @param [in]  params    Parameters used to create the handle.
@@ -141,9 +142,9 @@ typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
  * @return Error code as defined by @ref ucs_status_t.
  */
 ucs_status_t
-ucp_mem_list_create(ucp_ep_h ep,
-                    const ucp_mem_list_params_t *params,
-                    ucp_device_mem_list_handle_h *handle);
+ucp_device_mem_list_create(ucp_ep_h ep,
+                           const ucp_device_mem_list_params_t *params,
+                           ucp_device_mem_list_handle_h *handle);
 
 
 /**
@@ -151,11 +152,79 @@ ucp_mem_list_create(ucp_ep_h ep,
  * @brief Release function for a descriptor list handle.
  *
  * This function releases the handle that was created using @ref
- * ucp_mem_list_create.
+ * ucp_device_mem_list_create.
  *
  * @param [in] handle     Created handle to release.
  */
-void ucp_mem_list_release(ucp_device_mem_list_handle_h handle);
+void ucp_device_mem_list_release(ucp_device_mem_list_handle_h handle);
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Signal init attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref
+ * ucp_device_counter_init_params_t are present. It is used to enable backward
+ * compatibility support.
+ */
+enum ucp_device_counter_init_params_field {
+    UCP_DEVICE_COUNTER_INIT_PARAMS_FIELD_MEM_TYPE = UCS_BIT(0), /**< Source memory handle */
+    UCP_DEVICE_COUNTER_INIT_PARAMS_FIELD_MEMH     = UCS_BIT(1)  /**< Unpacked remote memory key */
+};
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Parameters which can be used when calling @ref ucp_device_counter_init.
+ */
+typedef struct ucp_device_counter_init_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_device_counter_init_params_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t          field_mask;
+
+    /**
+     * Optional memory type for the given @a counter memory area.
+     */
+    ucs_memory_type_t mem_type;
+
+    /**
+     * Optional memory registration handle for the given @a counter memory area.
+     */
+    ucp_mem_h         memh;
+} ucp_device_counter_init_params_t;
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Initialize the contents of a counter memory area.
+ *
+ * This host routine is called by the receive side to set up the memory area for
+ * signaling with a counter. A remote sender can then use the provided rkey to
+ * notify when the data has been successfully sent.
+ *
+ * The receive side can poll for completion on this counter using the device
+ * function @ref ucp_device_counter_read.
+ *
+ * The memory type or memory handle from params, might be used to help setting
+ * the contents of the counting area.
+ *
+ * @param [in] context     Context to use when initializing a counter area.
+ * @param [in] params      Parameters used to initialize the counter area.
+ * @param [in] counter_ptr Address of the counting area.
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_device_counter_init(ucp_context_h context,
+                        const ucp_device_counter_init_params_t *params,
+                        void *counter_ptr) {
+    /* TODO: actual Implementation will not be in headers */
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
 
 END_C_DECLS
 

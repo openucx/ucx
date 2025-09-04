@@ -219,6 +219,14 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
 }
 
+ucs_status_t
+uct_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    return iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
+}
+
 static int uct_iface_is_same_device(const uct_iface_h iface,
                                     const uct_device_addr_t *device_addr)
 {
@@ -559,6 +567,16 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
 
     *num_tl_devices_p = 1;
     *tl_devices_p     = device;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+{
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE) {
+        iface_attr->device_mem_element_size = 0;
+    }
+
     return UCS_OK;
 }
 
@@ -1067,4 +1085,21 @@ uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
     const static uct_ep_connect_to_ep_params_t param = {.field_mask = 0};
 
     return uct_ep_connect_to_ep_v2(tl_ep, device_addr, ep_addr, &param);
+}
+
+ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_get_device_ep(ep, device_ep_p);
+}
+
+ucs_status_t uct_iface_mem_element_pack(uct_iface_h tl_iface, uct_mem_h memh,
+                                        uct_rkey_t rkey,
+                                        uct_device_mem_element_t *mem_element)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    return iface->internal_ops->iface_mem_element_pack(tl_iface, memh, rkey,
+                                                       mem_element);
 }
