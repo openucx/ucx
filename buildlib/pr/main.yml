@@ -63,6 +63,9 @@ resources:
     - container: debian125
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian12.5/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: debian130
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian13.0/builder:doca-3.2.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: sles15sp6
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles15sp6/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -229,6 +232,8 @@ stages:
               CONTAINER: debian109
             debian125:
               CONTAINER: debian125
+            debian130:
+              CONTAINER: debian130
             sles15sp6:
               CONTAINER: sles15sp6
             rhel82:
