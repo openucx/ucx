@@ -10,8 +10,8 @@ jobs:
       demands: ${{ parameters.demands }}
     container: $[ variables['CONTAINER'] ]
     strategy:
-      # x86 matrix
-      ${{ if contains(parameters.name, 'x86') }}:
+      # x86_64 matrix
+      ${{ if contains(parameters.name, 'x86_64') }}:
         matrix:
           rhel76:
             CONTAINER: rhel76
@@ -56,10 +56,10 @@ jobs:
           euleros2sp12:
             CONTAINER: euleros2sp12
       # ARM matrix
-      ${{ if contains(parameters.name, 'arm') }}:
+      ${{ if contains(parameters.name, 'aarch64') }}:
         matrix:
-          ubuntu2404_arm:
-            CONTAINER: ubuntu2404_arm
+          ubuntu2404_aarch64:
+            CONTAINER: ubuntu2404_aarch64
     timeoutInMinutes: 340
 
     steps:

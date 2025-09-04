@@ -54,7 +54,7 @@ resources:
     - container: ubuntu2404
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: ubuntu2404_arm
+    - container: ubuntu2404_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: debian113
@@ -208,17 +208,17 @@ stages:
     jobs:
       - template: build_job.yml
         parameters:
-          name: build_source_x86
+          name: build_x86_64
           demands:
             - ucx_docker
-          displayName: Build x86
+          displayName: Build on x86_64
 
       - template: build_job.yml
         parameters:
-          name: build_source_arm
+          name: build_aarch64
           demands:
             - ucx_arm64
-          displayName: Build ARM
+          displayName: Build on aarch64
 
   - stage: ucx_perftest_mad_rte
     dependsOn: [Static_check]
