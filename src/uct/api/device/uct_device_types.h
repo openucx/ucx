@@ -11,10 +11,6 @@
 #include <stdint.h>
 
 
-#define UCT_DEVICE_CUDA_NAME     "cuda"
-#define UCT_DEVICE_CUDA_NAME_LEN 4
-
-
 /**
  * @defgroup UCT_DEVICE Device API
  * @ingroup UCT_API

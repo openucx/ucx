@@ -10,12 +10,12 @@
 #include <common/cuda.h>
 
 
-namespace uct_cuda {
+namespace ucx_cuda {
 
-static __global__ void single_kernel(uct_device_ep_h ep,
-                                     uct_device_mem_element_t *mem_elem,
-                                     const void *va, uint64_t rva,
-                                     size_t length, ucs_status_t *status_p)
+static __global__ void
+uct_put_single_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
+                      const void *va, uint64_t rva, size_t length,
+                      ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
 
@@ -36,15 +36,16 @@ static __global__ void single_kernel(uct_device_ep_h ep,
 /**
  * Basic single element put operation.
  */
-ucs_status_t launch_single_kernel(uct_device_ep_h ep,
-                                  uct_device_mem_element_t *mem_elem,
-                                  const void *va, uint64_t rva, size_t length)
+ucs_status_t launch_uct_put_single(uct_device_ep_h ep,
+                                   uct_device_mem_element_t *mem_elem,
+                                   const void *va, uint64_t rva, size_t length)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
 
-    single_kernel<<<1, 1>>>(ep, mem_elem, va, rva, length, status.device_ptr());
-    cuda_synchronize();
+    uct_put_single_kernel<<<1, 1>>>(ep, mem_elem, va, rva, length,
+                                    status.device_ptr());
+    synchronize();
     return *status;
 }
 
-} // namespace uct_cuda
+} // namespace ucx_cuda

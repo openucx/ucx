@@ -7,12 +7,6 @@
 #ifndef UCT_GDAKI_CUH_H
 #define UCT_GDAKI_CUH_H
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
-#if HAVE_GPUNETIO
-
 #include <stdio.h>
 #include <stdint.h>
 
@@ -27,7 +21,7 @@
 
 #include "gdaki_dev.h"
 
-#define WARP_SIZE 32
+#define UCT_RC_MLX5_GDA_WARP_SIZE 32
 
 template<uct_device_level_t level>
 UCS_F_DEVICE void
@@ -40,7 +34,7 @@ uct_rc_mlx5_gda_exec_init(unsigned *lane_id, unsigned *num_lanes)
         break;
     case UCT_DEVICE_LEVEL_WARP:
         *lane_id   = doca_gpu_dev_verbs_get_lane_id();
-        *num_lanes = WARP_SIZE;
+        *num_lanes = UCT_RC_MLX5_GDA_WARP_SIZE;
         break;
     case UCT_DEVICE_LEVEL_BLOCK:
         *lane_id   = threadIdx.x;
@@ -77,6 +71,25 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
                                           &qp->sq_rsvd_index),
                                   static_cast<unsigned long long>(count));
 
+    /*
+     *  Attempt to reserve 'count' WQEs by atomically incrementing the reserved
+     *  index. If the reservation exceeds the available space in the work queue,
+     *  enter a rollback loop.
+     *
+     *  Rollback Logic:
+     *  - Calculate the next potential index (wqe_next) after attempting the
+     *    reservation.
+     *  - Use atomic CAS to check if the current reserved index matches wqe_next.
+     *    If it does, revert the reservation by resetting the reserved index to
+     *    wqe_base.
+     *  - A successful CAS indicates no other thread has modified the reserved
+     *    index, allowing the rollback to complete, and the function returns
+     *    -1ULL to signal insufficient resources.
+     *  - If CAS fails, it means another thread has modified the reserved index.
+     *    The loop continues to reevaluate resource availability to determine if
+     *    the reservation can now be satisfied, possibly due to other operations
+     *    freeing up resources.
+     */
     while (wqe_base + count > qp->sq_wqe_pi + qp->sq_wqe_num) {
         uint64_t wqe_next = wqe_base + count;
         if (atomicCAS(reinterpret_cast<unsigned long long*>(&qp->sq_rsvd_index),
@@ -105,11 +118,10 @@ uct_rc_mlx5_gda_reserv_wqe(struct doca_gpu_dev_verbs_qp *qp, unsigned count,
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
         struct doca_gpu_dev_verbs_qp *qp,
-        struct doca_gpu_dev_verbs_wqe *wqe_ptr, const uint32_t wqe_idx,
-        const uint32_t opcode,
-        enum doca_gpu_dev_verbs_wqe_ctrl_flags ctrl_flags, const uint64_t raddr,
-        const uint32_t rkey, const uint64_t laddr, const uint32_t lkey,
-        const uint32_t bytes, const int is_atomic, const uint64_t add)
+        struct doca_gpu_dev_verbs_wqe *wqe_ptr, uint32_t wqe_idx,
+        uint32_t opcode, enum doca_gpu_dev_verbs_wqe_ctrl_flags ctrl_flags,
+        uint64_t raddr, uint32_t rkey, uint64_t laddr, uint32_t lkey,
+        uint32_t bytes, int is_atomic, uint64_t add)
 {
     uint64_t *dseg_ptr  = (uint64_t*)wqe_ptr + 4 + 2 * is_atomic;
     uint64_t *cseg_ptr  = (uint64_t*)wqe_ptr;
@@ -263,45 +275,47 @@ uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
     uint32_t idx             = cqe_idx & (cqe_num - 1);
     void *curr_cqe           = (uint8_t*)cqe + idx * cqe_sz;
     struct mlx5_cqe64 *cqe64 = (struct mlx5_cqe64*)curr_cqe;
-    uint8_t opown            = READ_ONCE(cqe64->op_own);
-    if ((opown & MLX5_CQE_OWNER_MASK) ^ !!(cqe_idx & cqe_num)) {
+    uint8_t op_owner;
+
+    op_owner = READ_ONCE(cqe64->op_own);
+    if ((op_owner & MLX5_CQE_OWNER_MASK) ^ !!(cqe_idx & cqe_num)) {
         return UCS_INPROGRESS;
     }
 
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(cq->cqe_ci);
-    if (ref.compare_exchange_strong(cqe_idx, cqe_idx + 1,
-                                    cuda::std::memory_order_relaxed)) {
-        uint8_t opcode   = opown >> DOCA_GPUNETIO_VERBS_MLX5_CQE_OPCODE_SHIFT;
-        uint16_t wqe_cnt = uct_rc_mlx5_gda_bswap16(cqe64->wqe_counter);
-        uint16_t wqe_idx = wqe_cnt & qp->sq_wqe_mask;
-
-        if (opcode == MLX5_CQE_REQ_ERR) {
-            struct mlx5_err_cqe_ex *err_cqe = (struct mlx5_err_cqe_ex*)cqe64;
-            struct doca_gpu_dev_verbs_wqe *wqe_ptr;
-            wqe_ptr = doca_gpu_dev_verbs_get_wqe_ptr(qp, wqe_idx);
-            printf("thread%d:block%d: CQE[%d] with syndrome:%x vendor:%x hw:%x "
-                   "wqe_idx:0x%x qp:0x%x\n",
-                   threadIdx.x, blockIdx.x, idx, err_cqe->syndrome,
-                   err_cqe->vendor_err_synd, err_cqe->hw_err_synd, wqe_idx,
-                   doca_gpu_dev_verbs_bswap32(err_cqe->s_wqe_opcode_qpn) &
-                           0xffffff);
-            uct_rc_mlx5_gda_qedump("wQE", wqe_ptr, 64);
-            uct_rc_mlx5_gda_qedump("CQE", cqe64, 64);
-            return UCS_ERR_IO_ERROR;
-        }
-
-        if (ep->ops[wqe_idx].comp != NULL) {
-            ep->ops[wqe_idx].comp->count--; // TODO maybe atomic?
-        }
-
-        cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
-                qp->sq_wqe_pi);
-        uint64_t sq_wqe_pi = qp->sq_wqe_pi;
-        ref.fetch_max(((wqe_cnt - sq_wqe_pi) & 0xffff) + sq_wqe_pi + 1);
-
-        doca_gpu_dev_verbs_fence_release<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU>();
+    if (!ref.compare_exchange_strong(cqe_idx, cqe_idx + 1,
+                                     cuda::std::memory_order_relaxed)) {
+        return UCS_OK;
     }
 
+    uint8_t opcode   = op_owner >> DOCA_GPUNETIO_VERBS_MLX5_CQE_OPCODE_SHIFT;
+    uint16_t wqe_cnt = uct_rc_mlx5_gda_bswap16(cqe64->wqe_counter);
+    uint16_t wqe_idx = wqe_cnt & qp->sq_wqe_mask;
+
+    if (opcode == MLX5_CQE_REQ_ERR) {
+        struct mlx5_err_cqe_ex *err_cqe = (struct mlx5_err_cqe_ex*)cqe64;
+        struct doca_gpu_dev_verbs_wqe *wqe_ptr;
+        wqe_ptr = doca_gpu_dev_verbs_get_wqe_ptr(qp, wqe_idx);
+        printf("thread%d:block%d: CQE[%d] with syndrome:%x vendor:%x hw:%x "
+               "wqe_idx:0x%x qp:0x%x\n",
+               threadIdx.x, blockIdx.x, idx, err_cqe->syndrome,
+               err_cqe->vendor_err_synd, err_cqe->hw_err_synd, wqe_idx,
+               doca_gpu_dev_verbs_bswap32(err_cqe->s_wqe_opcode_qpn) &
+                       0xffffff);
+        uct_rc_mlx5_gda_qedump("wQE", wqe_ptr, 64);
+        uct_rc_mlx5_gda_qedump("CQE", cqe64, 64);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (ep->ops[wqe_idx].comp != NULL) {
+        ep->ops[wqe_idx].comp->count--; // TODO maybe atomic?
+    }
+
+    cuda::atomic_ref<uint64_t, cuda::thread_scope_device> pi_ref(qp->sq_wqe_pi);
+    uint64_t sq_wqe_pi = qp->sq_wqe_pi;
+    pi_ref.fetch_max(((wqe_cnt - sq_wqe_pi) & 0xffff) + sq_wqe_pi + 1);
+
+    doca_gpu_dev_verbs_fence_release<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU>();
     return UCS_OK;
 }
 
@@ -336,24 +350,5 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_progress(uct_device_ep_h tl_ep)
         return UCS_ERR_UNSUPPORTED;
     }
 }
-
-#else
-
-template<uct_device_level_t level>
-UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
-        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
-        const void *address, uint64_t remote_address, size_t length,
-        uint64_t flags, uct_device_completion_t *comp)
-{
-        return UCS_ERR_UNSUPPORTED;
-}
-
-template<uct_device_level_t level>
-UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_progress(uct_device_ep_h tl_ep)
-{
-        return UCS_ERR_UNSUPPORTED;
-}
-
-#endif
 
 #endif

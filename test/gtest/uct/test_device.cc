@@ -22,18 +22,13 @@ class test_device : public uct_test {
 protected:
     void init()
     {
-        CUresult res_drv;
         CUcontext ctx;
-        int cuda_id;
         ucs_status_t status;
 
         uct_test::init();
-
-        cuda_id = std::stoi(
-                GetParam()->dev_name.substr(UCT_DEVICE_CUDA_NAME_LEN));
-        res_drv = cuDeviceGet(&m_cuda_dev, cuda_id);
-        if (res_drv != CUDA_SUCCESS) {
-            ucs_error("cuDeviceGet returned %d.", res_drv);
+        status = uct_cuda_base_get_cuda_device(GetParam()->sys_device,
+                                               &m_cuda_dev);
+        if (status != UCS_OK) {
             return;
         }
 
@@ -92,8 +87,8 @@ UCS_TEST_P(test_device, single)
     uct_device_ep_h dev_ep;
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
     ASSERT_UCS_OK(
-            uct_cuda::launch_single_kernel(dev_ep, mem_elem, sendbuf.ptr(),
-                                           (uintptr_t)recvbuf.ptr(), length));
+            ucx_cuda::launch_uct_put_single(dev_ep, mem_elem, sendbuf.ptr(),
+                                            (uintptr_t)recvbuf.ptr(), length));
 
     recvbuf.pattern_check(SEED1);
     recvbuf.pattern_fill(SEED2);

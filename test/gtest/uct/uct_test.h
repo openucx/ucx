@@ -53,6 +53,7 @@ struct resource {
     std::string             dev_name;
     std::string             variant_name;
     uct_device_type_t       dev_type;
+    ucs_sys_device_t        sys_device;
     ucs::sock_addr_storage  listen_sock_addr;     /* sockaddr to listen on */
     ucs::sock_addr_storage  connect_sock_addr;    /* sockaddr to connect to */
     ucs::sock_addr_storage  source_sock_addr;     /* sockaddr to connect from */

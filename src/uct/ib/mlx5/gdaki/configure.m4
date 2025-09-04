@@ -57,7 +57,6 @@ AS_IF([test x$have_gpunetio = xyes], [
     AC_SUBST(GPUNETIO_CFLAGS)
     AC_SUBST(GPUNETIO_LDFLAGS)
     AC_SUBST(GPUNETIO_LIBS)
-    AC_DEFINE([HAVE_GPUNETIO], [1], [doca gpunetio support])
 ])
 ])
 

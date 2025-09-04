@@ -56,6 +56,7 @@ resource::resource(uct_component_h component,
                    tl_name(tl_resource.tl_name),
                    dev_name(tl_resource.dev_name),
                    dev_type(tl_resource.dev_type),
+                   sys_device(tl_resource.sys_device),
                    variant(DEFAULT_VARIANT)
 {
 }

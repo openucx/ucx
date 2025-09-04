@@ -10,7 +10,7 @@
 #include <common/cuda.h>
 
 
-namespace ucp_cuda {
+namespace ucx_cuda {
 
 static __global__ void memcmp_kernel(const void* s1, const void* s2,
                                      int* result, size_t size)
@@ -67,7 +67,7 @@ int launch_memcmp(const void *s1, const void *s2, size_t size)
     device_result_ptr<int> result = 0;
 
     memcmp_kernel<<<16, 64>>>(s1, s2, result.device_ptr(), size);
-    cuda_synchronize();
+    synchronize();
 
     return *result;
 }
@@ -83,9 +83,9 @@ ucs_status_t launch_ucp_put_single(ucp_device_mem_list_handle_h mem_list,
 
     ucp_put_single_kernel<<<1, 1>>>(mem_list, address, remote_address, length,
                                     status.device_ptr());
-    cuda_synchronize();
+    synchronize();
 
     return *status;
 }
 
-} // namespace ucp_cuda
+} // namespace ucx_cuda

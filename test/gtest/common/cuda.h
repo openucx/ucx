@@ -12,6 +12,8 @@
 #include <sstream>
 #include <memory>
 
+namespace ucx_cuda {
+
 /**
  * Wrapper class for a host memory result variable, that can be mapped to device
  * memory and passed to a Cuda kernel.
@@ -61,7 +63,7 @@ private:
     std::unique_ptr<T, decltype(&release)> m_ptr;
 };
 
-static inline void cuda_synchronize()
+static inline void synchronize()
 {
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
@@ -77,5 +79,7 @@ static inline void cuda_synchronize()
         throw std::runtime_error(ss.str());
     }
 }
+
+} // namespace ucx_cuda
 
 #endif

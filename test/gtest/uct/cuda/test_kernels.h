@@ -10,12 +10,12 @@
 #include <uct/api/uct_def.h>
 #include <uct/api/device/uct_device_types.h>
 
-namespace uct_cuda {
+namespace ucx_cuda {
 
-ucs_status_t launch_single_kernel(uct_device_ep_h ep,
-                                  uct_device_mem_element_t *mem_elem,
-                                  const void *va, uint64_t rva, size_t length);
+ucs_status_t launch_uct_put_single(uct_device_ep_h ep,
+                                   uct_device_mem_element_t *mem_elem,
+                                   const void *va, uint64_t rva, size_t length);
 
-}; // namespace uct_cuda
+}; // namespace ucx_cuda
 
 #endif
