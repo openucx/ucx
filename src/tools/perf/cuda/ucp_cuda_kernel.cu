@@ -60,13 +60,12 @@ public:
     ucs_status_t run_pingpong()
     {
         size_t length         = ucx_perf_get_message_size(&m_perf.params);
-        unsigned my_index     = rte_call(&m_perf, group_index);
         unsigned thread_count = m_perf.params.device_thread_count;
 
         before();
 
         ucp_perf_cuda_put_multi_latency_kernel
-            <UCP_DEVICE_LEVEL_BLOCK><<<1, thread_count>>>(gpu_ctx(), my_index);
+            <UCP_DEVICE_LEVEL_BLOCK><<<1, thread_count>>>(gpu_ctx(), index());
         CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel(length);
@@ -77,7 +76,7 @@ public:
     ucs_status_t run_stream_uni()
     {
         size_t length     = ucx_perf_get_message_size(&m_perf.params);
-        unsigned my_index = rte_call(&m_perf, group_index);
+        unsigned my_index = index();
 
         before();
 
@@ -92,10 +91,7 @@ public:
             // TODO: remove once real GDAKI is used
             send_signal(length);
         } else if (my_index == 0) {
-            wait_for([this, length]() {
-                psn_t sn = read_sn(m_perf.recv_buffer, length);
-                return sn == m_perf.params.max_iter;
-            });
+            wait_for_sn(length);
         }
 
         after();

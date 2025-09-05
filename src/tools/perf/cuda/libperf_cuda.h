@@ -12,8 +12,6 @@
 
 #include <cuda_runtime.h>
 
-#include <functional>
-
 
 typedef unsigned long long ucx_perf_cuda_time_t;
 
@@ -52,6 +50,7 @@ ucx_perf_cuda_update_report(ucx_perf_cuda_context &ctx,
 template <typename Base>
 class ucx_perf_cuda_test_runner: public Base {
 public:
+    using psn_t = uint64_t;
     using Base::m_perf;
 
     ucx_perf_cuda_test_runner(ucx_perf_context_t &perf) : Base(perf)
@@ -73,6 +72,11 @@ public:
                                         UCS_NSEC_PER_SEC;
         m_cpu_ctx->completed_iters    = 0;
         m_poll_interval               = perf.params.report_interval / 10000;
+        m_index                       = rte_call(&perf, group_index);
+        m_mem_type                    = m_index ? perf.params.send_mem_type :
+                                                  perf.params.recv_mem_type;
+        m_allocator                   = m_index ? perf.send_allocator :
+                                                  perf.recv_allocator;
     }
 
     ~ucx_perf_cuda_test_runner() noexcept
@@ -82,27 +86,44 @@ public:
 
     ucx_perf_cuda_context &gpu_ctx() const { return *m_gpu_ctx; }
 
-    void wait_for(std::function<bool()> cond)
+    unsigned index() const { return m_index; }
+
+    UCS_F_ALWAYS_INLINE psn_t get_sn(psn_t *ptr)
     {
-        while (!cond()) {
-            // TODO: use cuStreamWaitValue64 if available
-            usleep(m_poll_interval);
+        return Base::get_sn(ptr, m_mem_type, m_allocator);
+    }
+
+    psn_t wait_sn_geq(psn_t *ptr, psn_t value)
+    {
+        psn_t sn = get_sn(ptr);
+        if (sn >= value) {
+            return sn;
         }
+
+        // TODO: use cuStreamWaitValue64 if available
+        usleep(m_poll_interval);
+        return get_sn(ptr);
     }
 
     void wait_for_kernel(size_t length)
     {
         ucx_perf_counter_t last_completed = 0;
-        wait_for([this, length, &last_completed]() {
-            ucx_perf_counter_t completed = m_cpu_ctx->completed_iters;
+        while (last_completed < m_perf.params.max_iter) {
+            ucx_perf_counter_t completed =
+                    wait_sn_geq(&(gpu_ctx().completed_iters), last_completed);
             ucx_perf_counter_t delta     = completed - last_completed;
             if (delta > 0) {
                 // TODO: calculate latency percentile on kernel
                 ucx_perf_update_multi(&m_perf, delta, delta * length, 0);
             }
             last_completed = completed;
-            return completed == m_perf.params.max_iter;
-        });
+        }
+    }
+
+    void wait_for_sn(size_t length)
+    {
+        psn_t *ptr = Base::sn_ptr(m_perf.recv_buffer, length);
+        while (wait_sn_geq(ptr, m_perf.params.max_iter) < m_perf.params.max_iter);
     }
 
 private:
@@ -110,6 +131,9 @@ private:
     ucx_perf_cuda_context      *m_cpu_ctx;
     ucx_perf_cuda_context      *m_gpu_ctx;
     double                     m_poll_interval;
+    unsigned                   m_index;
+    ucs_memory_type_t          m_mem_type;
+    const ucx_perf_allocator_t *m_allocator;
 };
 
 
