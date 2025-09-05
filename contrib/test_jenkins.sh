@@ -642,7 +642,7 @@ run_ucx_perftest_cuda_device() {
 		return 0
 	fi
 
-	if ! has_doca; then
+	if ! has_gpunetio_devel; then
 		echo "==== DOCA not available, skipping CUDA device tests ===="
 		return 0
 	fi
@@ -652,6 +652,7 @@ run_ucx_perftest_cuda_device() {
 		return 0
 	fi
 
+    echo "==== Running ucx_perftest with cuda kernel ===="
 	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
 	ucx_perftest="$ucx_inst/bin/ucx_perftest"
 	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_device_cuda"
@@ -1237,7 +1238,7 @@ run_tests() {
 	do_distributed_task 3 4 run_ucp_client_server
 	do_distributed_task 0 4 test_no_cuda_context
 	do_distributed_task 1 4 run_ucx_perftest_with_daemon
-	do_distributed_task 2 4 run_ucx_perftest_cuda_device
+	do_distributed_task 1 4 run_ucx_perftest_cuda_device
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello
