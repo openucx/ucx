@@ -118,7 +118,6 @@ gtest_SOURCES = \
 	uct/test_many2one_am.cc \
 	uct/test_md.cc \
 	uct/test_mm.cc \
-	uct/sm/mm/mm_ep_predicate_shim.c \
 	uct/sm/mm/test_mm_fifo_room.cc \
 	uct/test_mem.cc \
 	uct/test_p2p_am.cc \

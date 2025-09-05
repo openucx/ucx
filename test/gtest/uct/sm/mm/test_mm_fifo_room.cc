@@ -5,9 +5,7 @@
 #include <common/test.h>
 #include <cstdint>
 #include "uct/sm/mm/base/mm_iface.h"
-
-extern "C" int ucx_mm_ep_can_send(uint64_t head, uint64_t tail,
-                                  uint32_t fifo_size);
+#include "uct/sm/mm/base/mm_ep.h"
 
 namespace {
 
@@ -77,7 +75,7 @@ static const case_item k_cases[] = {
 class test_mm_fifo_room : public ucs::test {
 protected:
     void check_case(const case_item &c) {
-        bool got = ucx_mm_ep_can_send(c.head, c.tail, c.fifo);
+        bool got = UCT_MM_EP_IS_ABLE_TO_SEND(c.head, c.tail, c.fifo);
         EXPECT_EQ(c.expect, got) << c.name;
     }
 };
