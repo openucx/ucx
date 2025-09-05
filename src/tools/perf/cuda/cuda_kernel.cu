@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-
+#include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_impl.h>
 #include <ucs/sys/compiler_def.h>
 #include "cuda_device_mem.h"
@@ -42,7 +42,7 @@ UCS_F_DEVICE void cuda_update_perf_report(cuda_perf_context &ctx,
 {
     if (threadIdx.x == 0) {
         cuda_perf_time_t current_time = cuda_perf_get_time_ns();
-        if ((current_time - last_report_time >= ctx.report_interval_ns) ||
+        if (((current_time - last_report_time) >= ctx.report_interval_ns) ||
             (completed >= max_iters)) {
             ctx.completed_iters = completed;
             last_report_time    = current_time;
@@ -184,7 +184,7 @@ public:
 
         cuda_ucp_put_multi_latency_kernel<UCP_DEVICE_LEVEL_BLOCK>
                                          <<<1, thread_count>>>(gpu_ctx(), my_index);
-        CUDA_CALL(ucs_error, UCS_ERR_NO_DEVICE, cudaGetLastError);
+        CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel(length);
         after();
@@ -202,7 +202,7 @@ public:
             unsigned thread_count = m_perf.params.device_thread_count;
             cuda_ucp_put_multi_bw_kernel<UCP_DEVICE_LEVEL_BLOCK>
                                         <<<1, thread_count>>>(gpu_ctx());
-            CUDA_CALL(ucs_error, UCS_ERR_NO_DEVICE, cudaGetLastError);
+            CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
             wait_for_kernel(length);
 

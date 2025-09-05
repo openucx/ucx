@@ -7,12 +7,13 @@
 #ifndef CUDA_DEVICE_MEM_H_
 #define CUDA_DEVICE_MEM_H_
 
+#include <ucs/debug/log_def.h>
 #include <tools/perf/lib/libperf_int.h>
 
 BEGIN_C_DECLS
 
 /* TODO: move it to some common place */
-#define CUDA_CALL(_handler, _ret, _func, ...) \
+#define CUDA_CALL_HANDLER(_handler, _ret, _func, ...) \
     do { \
         cudaError_t _cerr = _func(__VA_ARGS__); \
         if (_cerr != cudaSuccess) { \
@@ -21,6 +22,9 @@ BEGIN_C_DECLS
             return _ret; \
         } \
     } while (0)
+
+#define CUDA_CALL(_ret, _func, ...) \
+    CUDA_CALL_HANDLER(ucs_error, _ret, _func, __VA_ARGS__)
 
 
 typedef struct {

@@ -262,7 +262,7 @@ ucx_perf_update_multi(ucx_perf_context_t *perf, ucx_perf_counter_t iters,
     perf->current.msgs  += iters;
     perf->prev_time      = perf->current.time;
 
-    if (ucs_unlikely(perf->current.iters < perf->params.max_iter)) {
+    if (ucs_likely(perf->current.iters < perf->params.max_iter)) {
         ucx_perf_report(perf, latency_percentile);
     }
 }
