@@ -19,10 +19,9 @@ static constexpr uint64_t EA  = UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED;
  * takes ~146 years. Therefore tests cap counters at <= 2^62 to reflect
  * realistic long-running processes while still exercising wrap-related logic.
  */
-static constexpr uint64_t LIM = 1ull << 62;
-
+static constexpr uint64_t LIM       = 1ull << 62;
 /* 2^31 constant to guard against regressions to 32-bit comparisons */
-#define U64_2POW31 (1ull << 31)
+static constexpr uint64_t POW2_31   = 1ull << 31;
 
 struct case_item {
     const char *name;
@@ -50,10 +49,10 @@ static const case_item k_cases[] = {
     {"EA gt:>fifo",     EA | 300,                0,             256, false},
 
     /* Large deltas around 2^31 to catch regressions to 32-bit compare */
-    {"gt:d=2^31-1@t0",  U64_2POW31 - 1ull,       0,             256, false},
-    {"gt:d=2^31@t0",    U64_2POW31,              0,             256, false},
-    {"gt:d=2^31+1@t0",  U64_2POW31 + 1ull,       0,             256, false},
-    {"EA gt:d=2^31@t0", EA | U64_2POW31,         0,             256, false},
+    {"gt:d=2^31-1@t0",  POW2_31 - 1ull,          0,             256, false},
+    {"gt:d=2^31@t0",    POW2_31,                 0,             256, false},
+    {"gt:d=2^31+1@t0",  POW2_31 + 1ull,          0,             256, false},
+    {"EA gt:d=2^31@t0", EA | POW2_31,            0,             256, false},
 
     /* head == tail */
     {"eq:zero",         0,                       0,             256, true},
@@ -73,6 +72,8 @@ static const case_item k_cases[] = {
     {"cap:eq EA",       EA | LIM,                LIM,           256, true}
 };
 
+}
+
 class test_mm_fifo_room : public ucs::test {
 protected:
     void check_case(const case_item &c) {
@@ -85,6 +86,5 @@ UCS_TEST_F(test_mm_fifo_room, predicate_matrix) {
     for (const auto &c : k_cases) {
         check_case(c);
     }
-}
 
 }
