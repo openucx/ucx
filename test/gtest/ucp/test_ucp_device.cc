@@ -28,8 +28,8 @@ public:
         }
 
         ucp_device_mem_list_handle_h handle;
-        while (ucp_device_mem_list_create(sender().ep(), NULL, &handle)\
-               == UCS_ERR_NOT_CONNECTED) {
+        while (ucp_device_mem_list_create(sender().ep(), NULL, &handle) ==
+               UCS_ERR_NOT_CONNECTED) {
             progress();
         }
     }
