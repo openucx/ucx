@@ -16,44 +16,44 @@
 
 template<ucp_device_level_t level>
 __global__ void
-cuda_ucp_put_multi_bw_kernel(cuda_perf_context &ctx)
+ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx)
 {
-    cuda_perf_time_t last_report_time = cuda_perf_get_time_ns();
-    ucx_perf_counter_t max_iters      = ctx.max_iters;
+    ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
+    ucx_perf_counter_t max_iters          = ctx.max_iters;
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         // TODO: replace with actual put multi call
         __nanosleep(1000000); // 1ms
 
-        cuda_update_perf_report(ctx, idx + 1, max_iters, last_report_time);
+        ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
         __syncthreads();
     }
 }
 
 template<ucp_device_level_t level>
 __global__ void
-cuda_ucp_put_multi_latency_kernel(cuda_perf_context &ctx, bool is_sender)
+ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx, bool is_sender)
 {
-    cuda_perf_time_t last_report_time = cuda_perf_get_time_ns();
-    ucx_perf_counter_t max_iters      = ctx.max_iters;
+    ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
+    ucx_perf_counter_t max_iters          = ctx.max_iters;
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         // TODO: replace with actual put multi call
         // TODO: wait for completion
         __nanosleep(1000000); // 1ms
 
-        cuda_update_perf_report(ctx, idx + 1, max_iters, last_report_time);
+        ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
         __syncthreads();
     }
 }
 
-class cuda_ucp_test_runner:
-    public cuda_ucx_test_runner<ucp_perf_test_runner_base<uint64_t>> {
+class ucp_perf_cuda_test_runner:
+    public ucx_perf_cuda_test_runner<ucp_perf_test_runner_base<uint64_t>> {
 public:
     using psn_t = uint64_t;
 
-    cuda_ucp_test_runner(ucx_perf_context_t &perf) :
-        cuda_ucx_test_runner<ucp_perf_test_runner_base<uint64_t>>(perf)
+    ucp_perf_cuda_test_runner(ucx_perf_context_t &perf) :
+        ucx_perf_cuda_test_runner<ucp_perf_test_runner_base<uint64_t>>(perf)
     {
     }
 
@@ -65,8 +65,8 @@ public:
 
         before();
 
-        cuda_ucp_put_multi_latency_kernel<UCP_DEVICE_LEVEL_BLOCK>
-                                         <<<1, thread_count>>>(gpu_ctx(), my_index);
+        ucp_perf_cuda_put_multi_latency_kernel
+            <UCP_DEVICE_LEVEL_BLOCK><<<1, thread_count>>>(gpu_ctx(), my_index);
         CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel(length);
@@ -83,8 +83,8 @@ public:
 
         if (my_index == 1) {
             unsigned thread_count = m_perf.params.device_thread_count;
-            cuda_ucp_put_multi_bw_kernel<UCP_DEVICE_LEVEL_BLOCK>
-                                        <<<1, thread_count>>>(gpu_ctx());
+            ucp_perf_cuda_put_multi_bw_kernel<UCP_DEVICE_LEVEL_BLOCK>
+                                             <<<1, thread_count>>>(gpu_ctx());
             CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
             wait_for_kernel(length);
@@ -120,15 +120,31 @@ private:
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
     }
+
+    // TODO: remove once real GDAKI is used
+    void send_signal(size_t length)
+    {
+        ucs_memory_type_t mem_type = m_perf.params.send_mem_type;
+        write_sn(m_perf.send_buffer, mem_type, length, m_perf.params.max_iter,
+                 m_perf.ucp.self_send_rkey);
+
+        ucs_status_ptr_t request;
+        ucp_request_param_t param = {0};
+        request = ucp_put_nbx(m_perf.ucp.ep, m_perf.send_buffer, length,
+                              m_perf.ucp.remote_addr, m_perf.ucp.rkey, &param);
+        request_wait(request, mem_type, "write_sn");
+        request = ucp_ep_flush_nbx(m_perf.ucp.self_ep, &param);
+        request_wait(request, mem_type, "flush write_sn");
+    }
 };
 
-ucx_perf_device_dispatcher_t cuda_dispatcher;
+ucx_perf_device_dispatcher_t ucx_perf_cuda_dispatcher;
 
 UCS_STATIC_INIT {
-    cuda_dispatcher.ucp_dispatch = cuda_ucx_perf_dispatch<cuda_ucp_test_runner>;
+    ucx_perf_cuda_dispatcher.ucp_dispatch = ucx_perf_cuda_dispatch<ucp_perf_cuda_test_runner>;
 
-    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA]         = &cuda_dispatcher;
-    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA_MANAGED] = &cuda_dispatcher;
+    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA]         = &ucx_perf_cuda_dispatcher;
+    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA_MANAGED] = &ucx_perf_cuda_dispatcher;
 }
 
 UCS_STATIC_CLEANUP {

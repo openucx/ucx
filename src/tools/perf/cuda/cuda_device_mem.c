@@ -12,7 +12,8 @@
 
 #include <cuda_runtime.h>
 
-ucs_status_t cuda_device_mem_create(cuda_device_mem_t *mem, size_t size)
+ucs_status_t ucx_perf_cuda_device_mem_create(ucx_perf_cuda_device_mem_t *mem,
+                                             size_t size)
 {
     CUDA_CALL(UCS_ERR_NO_MEMORY, cudaHostAlloc, &mem->cpu_ptr, size,
               cudaHostAllocMapped);
@@ -28,7 +29,7 @@ ucs_status_t cuda_device_mem_create(cuda_device_mem_t *mem, size_t size)
     return UCS_OK;
 }
 
-void cuda_device_mem_destroy(cuda_device_mem_t *mem)
+void ucx_perf_cuda_device_mem_destroy(ucx_perf_cuda_device_mem_t *mem)
 {
     CUDA_CALL_HANDLER(ucs_warn, , cudaFreeHost, mem->cpu_ptr);
 }

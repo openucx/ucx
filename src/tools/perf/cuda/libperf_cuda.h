@@ -15,30 +15,31 @@
 #include <functional>
 
 
-typedef unsigned long long cuda_perf_time_t;
+typedef unsigned long long ucx_perf_cuda_time_t;
 
-struct cuda_perf_context {
-    unsigned           max_outstanding;
-    ucx_perf_counter_t max_iters;
-    cuda_perf_time_t   report_interval_ns;
-    ucx_perf_counter_t completed_iters;
+struct ucx_perf_cuda_context {
+    unsigned             max_outstanding;
+    ucx_perf_counter_t   max_iters;
+    ucx_perf_cuda_time_t report_interval_ns;
+    ucx_perf_counter_t   completed_iters;
 };
 
-UCS_F_DEVICE cuda_perf_time_t cuda_perf_get_time_ns()
+UCS_F_DEVICE ucx_perf_cuda_time_t ucx_perf_cuda_get_time_ns()
 {
-    cuda_perf_time_t globaltimer;
+    ucx_perf_cuda_time_t globaltimer;
     /* 64-bit GPU global nanosecond timer */
     asm volatile("mov.u64 %0, %globaltimer;" : "=l"(globaltimer));
     return globaltimer;
 }
 
-UCS_F_DEVICE void cuda_update_perf_report(cuda_perf_context &ctx,
-                                          ucx_perf_counter_t completed,
-                                          ucx_perf_counter_t max_iters,
-                                          cuda_perf_time_t &last_report_time)
+UCS_F_DEVICE void
+ucx_perf_cuda_update_report(ucx_perf_cuda_context &ctx,
+                            ucx_perf_counter_t completed,
+                            ucx_perf_counter_t max_iters,
+                            ucx_perf_cuda_time_t &last_report_time)
 {
     if (threadIdx.x == 0) {
-        cuda_perf_time_t current_time = cuda_perf_get_time_ns();
+        ucx_perf_cuda_time_t current_time = ucx_perf_cuda_get_time_ns();
         if (((current_time - last_report_time) >= ctx.report_interval_ns) ||
             (completed >= max_iters)) {
             ctx.completed_iters = completed;
@@ -49,54 +50,37 @@ UCS_F_DEVICE void cuda_update_perf_report(cuda_perf_context &ctx,
 }
 
 template <typename Base>
-class cuda_ucx_test_runner: public Base {
+class ucx_perf_cuda_test_runner: public Base {
 public:
     using Base::m_perf;
 
-    cuda_ucx_test_runner(ucx_perf_context_t &perf) : Base(perf)
+    ucx_perf_cuda_test_runner(ucx_perf_context_t &perf) : Base(perf)
     {
         ucs_status_t status;
-        status = cuda_device_mem_create(&m_device_mem, sizeof(cuda_perf_context));
+        status = ucx_perf_cuda_device_mem_create(&m_device_mem,
+                                                 sizeof(m_device_mem));
         if (status != UCS_OK) {
-            ucs_fatal("cuda_device_mem_create() failed: %s",
+            ucs_fatal("ucx_perf_cuda_device_mem_create() failed: %s",
                       ucs_status_string(status));
         }
 
-        m_cpu_ctx = static_cast<cuda_perf_context *>(m_device_mem.cpu_ptr);
-        m_gpu_ctx = static_cast<cuda_perf_context *>(m_device_mem.gpu_ptr);
+        m_cpu_ctx = static_cast<ucx_perf_cuda_context*>(m_device_mem.cpu_ptr);
+        m_gpu_ctx = static_cast<ucx_perf_cuda_context*>(m_device_mem.gpu_ptr);
 
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
         m_cpu_ctx->max_iters          = perf.params.max_iter;
         m_cpu_ctx->report_interval_ns = perf.params.report_interval *
                                         UCS_NSEC_PER_SEC;
         m_cpu_ctx->completed_iters    = 0;
-
-        m_poll_interval = perf.params.report_interval / 10000;
+        m_poll_interval               = perf.params.report_interval / 10000;
     }
 
-    ~cuda_ucx_test_runner() noexcept
+    ~ucx_perf_cuda_test_runner() noexcept
     {
-        cuda_device_mem_destroy(&m_device_mem);
+        ucx_perf_cuda_device_mem_destroy(&m_device_mem);
     }
 
-    cuda_perf_context &gpu_ctx() const { return *m_gpu_ctx; }
-
-    // TODO: remove once real GDAKI is used
-    void send_signal(size_t length)
-    {
-
-        ucs_memory_type_t mem_type = m_perf.params.send_mem_type;
-        Base::write_sn(m_perf.send_buffer, mem_type, length,
-                       m_perf.params.max_iter, m_perf.ucp.self_send_rkey);
-
-        ucs_status_ptr_t request;
-        ucp_request_param_t param = {0};
-        request = ucp_put_nbx(m_perf.ucp.ep, m_perf.send_buffer, length,
-                              m_perf.ucp.remote_addr, m_perf.ucp.rkey, &param);
-        Base::request_wait(request, mem_type, "write_sn");
-        request = ucp_ep_flush_nbx(m_perf.ucp.self_ep, &param);
-        Base::request_wait(request, mem_type, "flush write_sn");
-    }
+    ucx_perf_cuda_context &gpu_ctx() const { return *m_gpu_ctx; }
 
     void wait_for(std::function<bool()> cond)
     {
@@ -122,15 +106,15 @@ public:
     }
 
 private:
-    cuda_device_mem_t m_device_mem;
-    cuda_perf_context *m_cpu_ctx;
-    cuda_perf_context *m_gpu_ctx;
-    double            m_poll_interval;
+    ucx_perf_cuda_device_mem_t m_device_mem;
+    ucx_perf_cuda_context      *m_cpu_ctx;
+    ucx_perf_cuda_context      *m_gpu_ctx;
+    double                     m_poll_interval;
 };
 
 
 template<typename Runner> ucs_status_t
-cuda_ucx_perf_dispatch(ucx_perf_context_t *perf)
+ucx_perf_cuda_dispatch(ucx_perf_context_t *perf)
 {
     Runner runner(*perf);
     if (perf->params.command == UCX_PERF_CMD_PUT_MULTI) {
@@ -143,6 +127,6 @@ cuda_ucx_perf_dispatch(ucx_perf_context_t *perf)
     return UCS_ERR_INVALID_PARAM;
 }
 
-extern ucx_perf_device_dispatcher_t cuda_dispatcher;
+extern ucx_perf_device_dispatcher_t ucx_perf_cuda_dispatcher;
 
 #endif /* LIBPERF_CUDA_H_ */

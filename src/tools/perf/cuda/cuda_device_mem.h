@@ -30,10 +30,11 @@ BEGIN_C_DECLS
 typedef struct {
     void    *cpu_ptr;
     void    *gpu_ptr;
-} cuda_device_mem_t;
+} ucx_perf_cuda_device_mem_t;
 
-ucs_status_t cuda_device_mem_create(cuda_device_mem_t *mem, size_t size);
-void cuda_device_mem_destroy(cuda_device_mem_t *mem);
+ucs_status_t ucx_perf_cuda_device_mem_create(ucx_perf_cuda_device_mem_t *mem,
+                                             size_t size);
+void ucx_perf_cuda_device_mem_destroy(ucx_perf_cuda_device_mem_t *mem);
 
 END_C_DECLS
 
