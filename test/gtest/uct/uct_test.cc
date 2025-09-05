@@ -28,6 +28,7 @@ std::string resource::name() const {
 }
 
 resource::resource() : component(NULL), dev_type(UCT_DEVICE_TYPE_LAST),
+                       sys_device(UCS_SYS_DEVICE_ID_UNKNOWN),
                        variant(DEFAULT_VARIANT)
 {
     CPU_ZERO(&local_cpus);
