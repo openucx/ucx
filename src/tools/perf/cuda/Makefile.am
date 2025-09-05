@@ -21,7 +21,11 @@ NVCC_EXTRA_FLAGS = $(CUDA_CPPFLAGS)
 libucx_perftest_cuda_la_SOURCES = \
     cuda_alloc.c \
     cuda_device_mem.c \
-    cuda_kernel.cu
+    ucp_cuda_kernel.cu
+
+noinst_HEADERS = \
+    cuda_device_mem.h \
+    libperf_cuda.h
 
 include $(top_srcdir)/config/module.am
 include $(top_srcdir)/config/cuda.am

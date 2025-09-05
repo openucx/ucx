@@ -4,19 +4,16 @@
  * See file LICENSE for terms.
  */
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
+#ifndef LIBPERF_CUDA_H_
+#define LIBPERF_CUDA_H_
 
-#include <ucp/api/device/ucp_host.h>
-#include <ucp/api/device/ucp_device_impl.h>
-#include <ucs/sys/compiler_def.h>
+#include <tools/perf/lib/libperf_int.h>
 #include "cuda_device_mem.h"
-#include <tools/perf/lib/ucp_tests.h>
+
+#include <cuda_runtime.h>
 
 #include <functional>
 
-#include <cuda_runtime.h>
 
 typedef unsigned long long cuda_perf_time_t;
 
@@ -51,39 +48,6 @@ UCS_F_DEVICE void cuda_update_perf_report(cuda_perf_context &ctx,
     }
 }
 
-template<ucp_device_level_t level>
-__global__ void
-cuda_ucp_put_multi_bw_kernel(cuda_perf_context &ctx)
-{
-    cuda_perf_time_t last_report_time = cuda_perf_get_time_ns();
-    ucx_perf_counter_t max_iters      = ctx.max_iters;
-
-    for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
-        // TODO: replace with actual put multi call
-        __nanosleep(1000000); // 1ms
-
-        cuda_update_perf_report(ctx, idx + 1, max_iters, last_report_time);
-        __syncthreads();
-    }
-}
-
-template<ucp_device_level_t level>
-__global__ void
-cuda_ucp_put_multi_latency_kernel(cuda_perf_context &ctx, bool is_sender)
-{
-    cuda_perf_time_t last_report_time = cuda_perf_get_time_ns();
-    ucx_perf_counter_t max_iters      = ctx.max_iters;
-
-    for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
-        // TODO: replace with actual put multi call
-        // TODO: wait for completion
-        __nanosleep(1000000); // 1ms
-
-        cuda_update_perf_report(ctx, idx + 1, max_iters, last_report_time);
-        __syncthreads();
-    }
-}
-
 template <typename Base>
 class cuda_ucx_test_runner: public Base {
 public:
@@ -114,6 +78,8 @@ public:
     {
         cuda_device_mem_destroy(&m_device_mem);
     }
+
+    cuda_perf_context &gpu_ctx() const { return *m_gpu_ctx; }
 
     // TODO: remove once real GDAKI is used
     void send_signal(size_t length)
@@ -155,8 +121,6 @@ public:
         });
     }
 
-    cuda_perf_context &gpu_ctx() const { return *m_gpu_ctx; }
-
 private:
     cuda_device_mem_t m_device_mem;
     cuda_perf_context *m_cpu_ctx;
@@ -164,85 +128,11 @@ private:
     double            m_poll_interval;
 };
 
-class cuda_ucp_test_runner:
-    public cuda_ucx_test_runner<ucp_perf_test_runner_base<uint64_t>> {
-public:
-    using psn_t = uint64_t;
 
-    cuda_ucp_test_runner(ucx_perf_context_t &perf) :
-        cuda_ucx_test_runner<ucp_perf_test_runner_base<uint64_t>>(perf)
-    {
-    }
-
-    ucs_status_t run_pingpong()
-    {
-        size_t length         = ucx_perf_get_message_size(&m_perf.params);
-        unsigned my_index     = rte_call(&m_perf, group_index);
-        unsigned thread_count = m_perf.params.device_thread_count;
-
-        before();
-
-        cuda_ucp_put_multi_latency_kernel<UCP_DEVICE_LEVEL_BLOCK>
-                                         <<<1, thread_count>>>(gpu_ctx(), my_index);
-        CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
-
-        wait_for_kernel(length);
-        after();
-        return UCS_OK;
-    }
-
-    ucs_status_t run_stream_uni()
-    {
-        size_t length     = ucx_perf_get_message_size(&m_perf.params);
-        unsigned my_index = rte_call(&m_perf, group_index);
-
-        before();
-
-        if (my_index == 1) {
-            unsigned thread_count = m_perf.params.device_thread_count;
-            cuda_ucp_put_multi_bw_kernel<UCP_DEVICE_LEVEL_BLOCK>
-                                        <<<1, thread_count>>>(gpu_ctx());
-            CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
-
-            wait_for_kernel(length);
-
-            // TODO: remove once real GDAKI is used
-            send_signal(length);
-        } else if (my_index == 0) {
-            wait_for([this, length]() {
-                psn_t sn = read_sn(m_perf.recv_buffer, length);
-                return sn == m_perf.params.max_iter;
-            });
-        }
-
-        after();
-        return UCS_OK;
-    }
-
-private:
-    void before()
-    {
-        size_t length = ucx_perf_get_message_size(&m_perf.params);
-        ucs_assert(length >= sizeof(psn_t));
-
-        m_perf.send_allocator->memset(m_perf.send_buffer, 0, length);
-        m_perf.recv_allocator->memset(m_perf.recv_buffer, 0, length);
-
-        ucp_perf_barrier(&m_perf);
-        ucx_perf_test_start_clock(&m_perf);
-    }
-
-    void after()
-    {
-        ucx_perf_get_time(&m_perf);
-        ucp_perf_barrier(&m_perf);
-    }
-};
-
-static ucs_status_t
-ucp_perf_cuda_dispatch(ucx_perf_context_t *perf)
+template<typename Runner> ucs_status_t
+cuda_ucx_perf_dispatch(ucx_perf_context_t *perf)
 {
-    cuda_ucp_test_runner runner(*perf);
+    Runner runner(*perf);
     if (perf->params.command == UCX_PERF_CMD_PUT_MULTI) {
         if (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) {
             return runner.run_pingpong();
@@ -253,16 +143,6 @@ ucp_perf_cuda_dispatch(ucx_perf_context_t *perf)
     return UCS_ERR_INVALID_PARAM;
 }
 
-UCS_STATIC_INIT {
-    static ucx_perf_device_dispatcher_t cuda_dispatcher = {
-        .ucp_dispatch = ucp_perf_cuda_dispatch,
-    };
+extern ucx_perf_device_dispatcher_t cuda_dispatcher;
 
-    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA]         = &cuda_dispatcher;
-    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA_MANAGED] = &cuda_dispatcher;
-}
-
-UCS_STATIC_CLEANUP {
-    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA]         = NULL;
-    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA_MANAGED] = NULL;
-}
+#endif /* LIBPERF_CUDA_H_ */
