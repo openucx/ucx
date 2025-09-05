@@ -171,10 +171,6 @@ check_nv_peer_mem() {
     fi
 }
 
-has_doca() {
-    rpm -qa 'doca-ofed*' 2>/dev/null | grep -q .;
-}
-
 #
 # try load cuda modules if nvidia driver is installed
 #
