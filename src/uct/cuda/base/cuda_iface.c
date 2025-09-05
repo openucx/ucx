@@ -236,35 +236,11 @@ ucs_status_t uct_cuda_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
-static int uct_cuda_base_is_ctx_rsc_valid(const uct_cuda_ctx_rsc_t *ctx_rsc)
+void uct_cuda_base_stream_destroy(CUstream *stream)
 {
-#if CUDA_VERSION >= 12000
-    unsigned long long ctx_id;
-    CUresult result;
-
-    result = uct_cuda_base_ctx_get_id(ctx_rsc->ctx, &ctx_id);
-    if (result == CUDA_ERROR_CONTEXT_IS_DESTROYED) {
-        return 0;
-    } else if (result != CUDA_SUCCESS) {
-        UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_WARN, result);
-        return 0;
+    if (*stream != NULL) {
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
     }
-
-    return ctx_id == ctx_rsc->ctx_id;
-#else
-    /* Best effort check on older Cuda versions */
-    return uct_cuda_base_is_context_valid(ctx_rsc->ctx);
-#endif
-}
-
-void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
-                                  CUstream *stream)
-{
-    if ((*stream == NULL) || !uct_cuda_base_is_ctx_rsc_valid(ctx_rsc)) {
-        return;
-    }
-
-    UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
 }
 
 static void
@@ -279,12 +255,8 @@ uct_cuda_base_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 static void uct_cuda_base_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_event_desc_t *event_desc = obj;
-    uct_cuda_ctx_rsc_t *ctx_rsc       = ucs_container_of(mp, uct_cuda_ctx_rsc_t,
-                                                         event_mp);
 
-    if (uct_cuda_base_is_ctx_rsc_valid(ctx_rsc)) {
-        UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(event_desc->event));
-    }
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(event_desc->event));
 }
 
 void uct_cuda_base_queue_desc_init(uct_cuda_queue_desc_t *qdesc)
@@ -302,7 +274,7 @@ void uct_cuda_base_queue_desc_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
                  ucs_queue_length(&qdesc->event_queue));
     }
 
-    uct_cuda_base_stream_destroy(ctx_rsc, &qdesc->stream);
+    uct_cuda_base_stream_destroy(&qdesc->stream);
 }
 
 static ucs_mpool_ops_t uct_cuda_event_desc_mpool_ops = {

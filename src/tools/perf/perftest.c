@@ -80,6 +80,12 @@ test_type_t tests[] = {
     {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put bandwidth", "overhead", 32},
 
+    {"ucp_put_multi_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "put multi bandwidth", "overhead", 32},
+
+    {"ucp_put_multi_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_PINGPONG,
+     "put multi latency", "latency", 32},
+
     {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "get latency / bandwidth / message rate", "latency", 1},
 
@@ -202,6 +208,7 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.am_hdr_size   = 0;
+    params->super.device_thread_count = 1;
     params->super.ucp.is_daemon_mode  = 0;
     params->super.ucp.dmn_local_addr  = empty_addr;
     params->super.ucp.dmn_remote_addr = empty_addr;

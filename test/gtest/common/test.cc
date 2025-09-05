@@ -314,11 +314,6 @@ unsigned test_base::num_warnings()
 }
 
 void test_base::SetUpProxy() {
-    if (m_state == SKIPPED) {
-        return;
-    }
-
-    ucs_assert(m_state == NEW);
     m_num_valgrind_errors_before = VALGRIND_COUNT_ERRORS;
     m_num_warnings_before        = m_total_warnings;
     m_num_errors_before          = m_total_errors;
@@ -327,8 +322,14 @@ void test_base::SetUpProxy() {
     m_warnings.clear();
     m_first_warns_and_errors.clear();
     m_num_log_handlers_before = ucs_log_num_handlers();
+
     ucs_log_push_handler(count_warns_logger);
 
+    if (m_state == SKIPPED) {
+        return;
+    }
+
+    ucs_assert(m_state == NEW);
     try {
         check_skip_test();
         m_state = INITIALIZING;

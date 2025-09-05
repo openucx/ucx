@@ -776,4 +776,10 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
 
+
+void ucp_device_init(void);
+
+
+void ucp_device_cleanup(void);
+
 #endif

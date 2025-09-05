@@ -724,6 +724,7 @@ const char *ucp_feature_str[] = {
     [ucs_ilog2(UCP_FEATURE_WAKEUP)] = "UCP_FEATURE_WAKEUP",
     [ucs_ilog2(UCP_FEATURE_STREAM)] = "UCP_FEATURE_STREAM",
     [ucs_ilog2(UCP_FEATURE_AM)]     = "UCP_FEATURE_AM",
+    [ucs_ilog2(UCP_FEATURE_DEVICE)] = "UCP_FEATURE_DEVICE",
     NULL
 };
 
@@ -2725,9 +2726,11 @@ double ucp_tl_iface_latency_with_priority(ucp_context_h context,
 UCS_F_CTOR void ucp_global_init(void)
 {
     UCS_CONFIG_ADD_TABLE(ucp_config_table, &ucs_config_global_list);
+    ucp_device_init();
 }
 
 UCS_F_DTOR static void ucp_global_cleanup(void)
 {
+    ucp_device_cleanup();
     UCS_CONFIG_REMOVE_TABLE(ucp_config_table);
 }

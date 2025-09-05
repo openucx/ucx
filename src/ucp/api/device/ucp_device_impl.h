@@ -7,7 +7,6 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
-#include "ucp_host.h"
 #include "ucp_device_types.h"
 
 #include <uct/api/device/uct_device_impl.h>
@@ -241,7 +240,29 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
 
 /**
  * @ingroup UCP_DEVICE
+ * @brief Read a counter value from memory.
  *
+ * This function can be used on the receiving side to detect completion of a
+ * data transfer.
+ *
+ * The counter memory area must be initialized with the host function
+ * @ref ucp_device_counter_init.
+ *
+ * @tparam      level       Level of cooperation of the transfer.
+ * @param [in]  counter_ptr Counter memory area.
+ *
+ * @return value of the counter memory area, UINT64_MAX in case of error.
+ */
+template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
+UCS_F_DEVICE uint64_t
+ucp_device_counter_read(const void *counter_ptr)
+{
+    return 0;
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
  * @brief Initialize a device request.
  *
  * @param [out] req  Device request to initialize.
