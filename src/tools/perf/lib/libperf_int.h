@@ -72,9 +72,11 @@ struct ucx_perf_allocator {
 
 
 typedef ucs_status_t (*ucp_perf_dispatch_func_t)(ucx_perf_context_t *perf);
+typedef ucs_status_t (*uct_perf_dispatch_func_t)(ucx_perf_context_t *perf);
 
 struct ucx_perf_device_dispatcher {
     ucp_perf_dispatch_func_t ucp_dispatch;
+    uct_perf_dispatch_func_t uct_dispatch;
 };
 
 typedef struct {
