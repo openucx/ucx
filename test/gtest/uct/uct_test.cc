@@ -36,10 +36,11 @@ resource::resource() : component(NULL), dev_type(UCT_DEVICE_TYPE_LAST),
 resource::resource(uct_component_h component, const std::string& component_name,
                    const std::string& md_name, const ucs_cpu_set_t& local_cpus,
                    const std::string& tl_name, const std::string& dev_name,
-                   uct_device_type_t dev_type) :
+                   uct_device_type_t dev_type, ucs_sys_device_t sys_dev) :
                    component(component), component_name(component_name),
                    md_name(md_name), local_cpus(local_cpus), tl_name(tl_name),
                    dev_name(dev_name), dev_type(dev_type),
+                   sys_device(sys_dev),
                    variant(DEFAULT_VARIANT)
 {
 }
@@ -259,7 +260,7 @@ void uct_test::set_interface_rscs(uct_component_h cmpt, const char *cmpt_name,
     for (i = 0; i < 3; i++) {
         resource rsc(cmpt, std::string(cmpt_name), std::string(md_name),
                      local_cpus, "", std::string(ifa->ifa_name),
-                     UCT_DEVICE_TYPE_NET);
+                     UCT_DEVICE_TYPE_NET, UCS_SYS_DEVICE_ID_UNKNOWN);
         bool init_src_addr = (i == 1);
 
         if (i < 2) {

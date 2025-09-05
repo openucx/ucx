@@ -63,7 +63,7 @@ struct resource {
     resource(uct_component_h component, const std::string& component_name,
              const std::string& md_name, const ucs_cpu_set_t& local_cpus,
              const std::string& tl_name, const std::string& dev_name,
-             uct_device_type_t dev_type);
+             uct_device_type_t dev_type, ucs_sys_device_t sys_dev);
     resource(uct_component_h component, const uct_component_attr& cmpnt_attr,
              const uct_md_attr_t& md_attr,
              const uct_md_resource_desc_t& md_resource,

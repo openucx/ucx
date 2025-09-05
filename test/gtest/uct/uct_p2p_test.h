@@ -45,7 +45,7 @@ protected:
         p2p_resource(const resource& res) :
                      resource(res.component, res.component_name, res.md_name,
                               res.local_cpus, res.tl_name, res.dev_name,
-                              res.dev_type), loopback(false) {
+                              res.dev_type, res.sys_device), loopback(false) {
         }
     };
 
