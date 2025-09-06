@@ -272,6 +272,7 @@ if HAVE_NVCC
 if HAVE_GPUNETIO # temporarily all device code depends on doca
 NVCC_EXTRA_FLAGS = \
 	$(CUDA_CPPFLAGS) \
+	$(GPUNETIO_CFLAGS) \
 	-I$(top_srcdir)/test \
 	-I$(top_srcdir)/test/gtest
 include $(top_srcdir)/config/cuda.am

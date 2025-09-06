@@ -7,19 +7,10 @@
 #ifndef UCT_GDAKI_CUH_H
 #define UCT_GDAKI_CUH_H
 
-#include <stdio.h>
-#include <stdint.h>
-
-#include <memory>
-#include <cooperative_groups.h>
-
-#include <doca_gpunetio_verbs_def.h>
-#include <doca_gpunetio_dev_verbs_qp.cuh>
-
-#include <ucs/type/status.h>
-#include <uct/api/cuda/uct.h>
-
 #include "gdaki_dev.h"
+
+#include <doca_gpunetio_dev_verbs_qp.cuh>
+#include <cooperative_groups.h>
 
 #define UCT_RC_MLX5_GDA_WARP_SIZE 32
 
