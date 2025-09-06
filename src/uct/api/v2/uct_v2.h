@@ -1264,9 +1264,9 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  * @ingroup UCT_RESOURCE
  * @brief Pack a memh and rkey into a single memory element structure.
  *
- * @param [in] iface          Interface to pack the memh and rkey into.
- * @param [in] memh           Memory handle to pack.
- * @param [in] rkey           Remote key to pack.
+ * @param [in]  iface         Interface to pack the memh and rkey into.
+ * @param [in]  memh          Memory handle to pack.
+ * @param [in]  rkey          Remote key to pack.
  * @param [out] mem_element   Filled with the packed memh and rkey.
  *
  * @return UCS_OK on success or error code in case of failure.

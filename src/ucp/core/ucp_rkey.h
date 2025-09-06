@@ -54,7 +54,7 @@ struct ucp_rkey_config_key {
     /* Endpoint configuration index */
     ucp_worker_cfg_index_t ep_cfg_index;
 
-    /* Remove system device id */
+    /* Remote system device id */
     ucs_sys_device_t       sys_dev;
 
     /* Remote memory type */
