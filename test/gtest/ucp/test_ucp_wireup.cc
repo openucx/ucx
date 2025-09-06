@@ -1031,9 +1031,11 @@ public:
             ucp_md_index_t md_index         = worker->context->tl_rscs[rsc_index].md_index;
             const uct_md_attr_v2_t *md_attr = &worker->context->tl_mds[md_index].attr;
 
-            if ((worker->context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) ||
+            if (!(worker->context->tl_rscs[rsc_index].flags &
+                  UCP_TL_RSC_FLAG_COMM) ||
                 (md_attr->flags & UCT_MD_FLAG_SOCKADDR) ||
-                (worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_ACC)) {
+                (worker->context->tl_rscs[rsc_index].tl_rsc.dev_type ==
+                 UCT_DEVICE_TYPE_ACC)) {
                 // Skip TLs for wireup and CM and acceleration TLs
                 continue;
             }
@@ -1052,15 +1054,15 @@ public:
         return false;
     }
 
-    bool test_est_num_eps_fallback(size_t est_num_eps,
-                                   unsigned long &min_max_num_eps) {
+    void test_est_num_eps_fallback(size_t est_num_eps,
+                                   unsigned long &min_max_num_eps)
+    {
         size_t num_lanes = 0;
-        bool res         = true;
         bool has_only_unscalable;
 
         min_max_num_eps = UCS_ULUNITS_INF;
 
-        UCS_TEST_MESSAGE << "Testing " << est_num_eps << " number of EPs";
+        UCS_TEST_MESSAGE << "Testing with NUM_EPS=" << est_num_eps;
         modify_config("NUM_EPS", ucs::to_string(est_num_eps).c_str());
         test_ucp_wireup::init();
 
@@ -1085,19 +1087,19 @@ public:
             ucs_status_t status = uct_iface_query(uct_ep->iface, &iface_attr);
             ASSERT_UCS_OK(status);
 
-            num_lanes++;
-
-            if (!has_only_unscalable && (iface_attr.max_num_eps < est_num_eps)) {
-                res = false;
-                goto out;
-            }
+            EXPECT_TRUE(has_only_unscalable ||
+                        (iface_attr.max_num_eps >= est_num_eps))
+                    << "has_only_unscalable: " << has_only_unscalable
+                    << " iface_attr.max_num_eps: " << iface_attr.max_num_eps
+                    << " est_num_eps: " << est_num_eps;
 
             if (iface_attr.max_num_eps < min_max_num_eps) {
                 min_max_num_eps = iface_attr.max_num_eps;
             }
+
+            num_lanes++;
         }
 
-out:
         test_ucp_wireup::cleanup();
 
         if (est_num_eps == 1) {
@@ -1105,10 +1107,8 @@ out:
         } else if (has_only_unscalable) {
             /* If has only unscalable transports, check that the number of
              * lanes is the same as for the case when "est_num_eps == 1" */
-            res = (num_lanes == m_num_lanes);
+            EXPECT_EQ(num_lanes, m_num_lanes);
         }
-
-        return res;
     }
 
 private:
@@ -1127,15 +1127,12 @@ UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
            /* number of EPs was changed between iterations */
            (test_min_max_eps != prev_min_max_eps)) {
         if (test_min_max_eps > 1) {
-            EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps - 1,
-                                                  min_max_eps));
+            test_est_num_eps_fallback(test_min_max_eps - 1, min_max_eps);
         }
 
-        EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps,
-                                              min_max_eps));
+        test_est_num_eps_fallback(test_min_max_eps, min_max_eps);
+        test_est_num_eps_fallback(test_min_max_eps + 1, min_max_eps);
 
-        EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps + 1,
-                                              min_max_eps));
         prev_min_max_eps = test_min_max_eps;
         test_min_max_eps = min_max_eps;
     }
@@ -1764,13 +1761,14 @@ public:
                                "tag,unified");
     }
 
-    void check_fp_values(double unpacked, double original)
+    void
+    check_fp_values(const std::string &name, double unpacked, double original)
     {
         double max_error = original / pow(2, _UCS_FP8_MANTISSA_BITS);
-        EXPECT_NEAR(original, unpacked, max_error);
+        EXPECT_NEAR(original, unpacked, max_error) << name;
     }
 
-    const uct_iface_attr_t *get_iface_attr(const ucp_address_entry_t *ae)
+    const ucp_worker_iface_t *get_wiface(const ucp_address_entry_t *ae)
     {
         ucp_worker_h worker   = sender().worker();
         ucp_context_h context = worker->context;
@@ -1792,7 +1790,7 @@ public:
                  ae->tl_name_csum) &&
                 uct_iface_is_reachable_v2(wiface->iface, &params)) {
                 EXPECT_EQ(ae->md_index, context->tl_rscs[rsc_index].md_index);
-                return &wiface->attr;
+                return wiface;
             }
         }
 
@@ -1828,20 +1826,22 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
 
     const ucp_address_entry_t *ae;
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
-        auto attr = get_iface_attr(ae);
-        ASSERT_NE(nullptr, attr);
+        auto wiface = get_wiface(ae);
+        ASSERT_NE(nullptr, wiface);
 
         // Segment size is packed as a multiplicator of
         // UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR, thus the unpacked value may be
         // smaller than the original value by up to 64 bytes.
-        EXPECT_LT(ucp_address_iface_seg_size(attr) - ae->iface_attr.seg_size,
+        EXPECT_LT(ucp_address_iface_seg_size(&wiface->attr) -
+                          ae->iface_attr.seg_size,
                   UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR);
-        check_fp_values(ae->iface_attr.overhead, attr->overhead);
-        check_fp_values(ae->iface_attr.lat_ovh,
-                        ucp_tl_iface_latency(worker->context, &attr->latency));
-        check_fp_values(
-                ae->iface_attr.bandwidth,
-                ucp_tl_iface_bandwidth(worker->context, &attr->bandwidth));
+
+        check_fp_values("overhead", ae->iface_attr.overhead,
+                        wiface->attr.overhead);
+        check_fp_values("latency", ae->iface_attr.lat_ovh,
+                        ucp_wireup_iface_lat_distance_v2(wiface, 0));
+        check_fp_values("bandwidth", ae->iface_attr.bandwidth,
+                        ucp_wireup_iface_bw_distance(wiface));
     }
 
     ucs_free(unpacked_address.address_list);
