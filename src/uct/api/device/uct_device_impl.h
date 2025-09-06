@@ -12,6 +12,8 @@
 #include <uct/api/uct_def.h>
 #include <ucs/sys/compiler_def.h>
 
+#include <uct/ib/mlx5/gdaki/gdaki.cuh>
+
 
 /**
  * @ingroup UCT_DEVICE
@@ -36,19 +38,39 @@
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template<uct_device_level_t level = UCT_DEVICE_LEVEL_THREAD>
+template<uct_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
         const void *address, uint64_t remote_address, size_t length,
         uint64_t flags, uct_device_completion_t *comp)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
-        // return uct_rc_mlx5_gda_ep_put_single(device_ep, mem_elem, address,
-        //                                      remote_address, length, flags,
-        //                                      comp);
+        return uct_rc_mlx5_gda_ep_put_single<level>(device_ep, mem_elem,
+                                                    address, remote_address,
+                                                    length, flags, comp);
     } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         // return uct_cuda_ipc_ep_put_single(device_ep, mem_elem, address,
         //                                   remote_address, length, flags, comp);
+    }
+    return UCS_ERR_UNSUPPORTED;
+}
+
+
+/**
+ * @ingroup UCT_DEVICE
+ * @brief Progress all operations on device endpoint @a device_ep.
+ *
+ * @param [in]  device_ep       Device endpoint to be used for the operation.
+ *
+ * @return UCS_OK           - Some operation was completed.
+ * @return UCS_INPROGRESS   - No progress on the endpoint.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+template<uct_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_device_ep_progress(uct_device_ep_h device_ep)
+{
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
+        return uct_rc_mlx5_gda_ep_progress<level>(device_ep);
     }
     return UCS_ERR_UNSUPPORTED;
 }
@@ -60,7 +82,6 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  *
  * @param [out] comp  Device completion object to initialize.
  */
-template<uct_device_level_t level = UCT_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE void uct_device_completion_init(uct_device_completion_t *comp)
 {
     comp->count  = 0;
