@@ -230,7 +230,9 @@ void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
     ucx_perf_test_start_clock(perf);
 }
 
-void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
+void ucx_perf_calc_result(ucx_perf_context_t *perf,
+                          ucs_time_t latency_percentile,
+                          ucx_perf_result_t *result)
 {
     ucs_time_t percentile;
     double factor;
@@ -247,9 +249,15 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     result->elapsed_time = perf->current.time_acc - perf->start_time_acc;
 
     /* Latency */
-    percentile = __find_percentile_quick_select(perf->timing_queue,
-                                                ucs_min(TIMING_QUEUE_SIZE, perf->current.iters),
-                                                perf->params.percentile_rank);
+    if (latency_percentile == 0) {
+        percentile = __find_percentile_quick_select(
+                                perf->timing_queue,
+                                ucs_min(TIMING_QUEUE_SIZE, perf->current.iters),
+                                perf->params.percentile_rank);
+    } else {
+        percentile = latency_percentile;
+    }
+
     result->latency.percentile = ucs_time_to_sec(percentile) / factor;
 
     result->latency.moment_average =
@@ -2252,7 +2260,7 @@ ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
         status = ucx_perf_funcs[params->api].run(perf);
         ucx_perf_funcs[params->api].barrier(perf);
         if (status == UCS_OK) {
-            ucx_perf_calc_result(perf, result);
+            ucx_perf_calc_result(perf, 0, result);
             perf->params.report_func(perf->params.rte_group, result,
                                      perf->params.report_arg, perf->extra_info,
                                      1, 0);
@@ -2291,12 +2299,12 @@ unsigned rte_peer_index(unsigned group_size, unsigned group_index)
     return peer_index;
 }
 
-void ucx_perf_report(ucx_perf_context_t *perf)
+void ucx_perf_report(ucx_perf_context_t *perf, ucs_time_t latency_percentile)
 {
     ucx_perf_result_t result;
 
     ucx_perf_get_time(perf);
-    ucx_perf_calc_result(perf, &result);
+    ucx_perf_calc_result(perf, latency_percentile, &result);
     perf->params.report_func(perf->params.rte_group, &result,
                              perf->params.report_arg, "", 0, 0);
     perf->prev = perf->current;

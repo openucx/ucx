@@ -48,7 +48,7 @@ static ucs_status_t ucx_perf_thread_run_test(void* arg)
         goto out;
     }
 
-    ucx_perf_calc_result(perf, result);
+    ucx_perf_calc_result(perf, 0, result);
 
 out:
     return status;
