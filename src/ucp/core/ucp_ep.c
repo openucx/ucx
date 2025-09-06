@@ -1649,6 +1649,10 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
         return;
     }
 
+    if (ucp_context_usage_tracker_enabled(worker->context)) {
+        ucs_usage_tracker_remove(worker->usage_tracker.handle, ep);
+    }
+
     ucp_ep_match_remove_ep(worker, ep);
     ucp_ep_destroy_internal(ep);
 }
@@ -1865,14 +1869,41 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                           config_lane2->dst_md_index);
 }
 
+int ucp_ep_is_am_need_flush(ucp_ep_h ep, const ucp_ep_config_key_t *key)
+{
+    ucp_lane_index_t am_lane = ucp_ep_get_am_lane(ep);
+
+    /* In CM mode, messages are not sent before wireup is completed */
+    return !ucp_ep_has_cm_lane(ep) &&
+           /* AM lane exists */
+           (am_lane != UCP_NULL_LANE) && (key->am_lane != UCP_NULL_LANE) &&
+           /* Lane is operational */
+           (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) ||
+            !ucp_ep_is_lane_p2p(ep, am_lane));
+}
+
 ucp_lane_index_t
-ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *old_key,
+ucp_ep_config_find_match_lane(ucp_ep_h ep, const ucp_ep_config_key_t *old_key,
                               ucp_lane_index_t old_lane,
                               const ucp_ep_config_key_t *new_key)
 {
     ucp_lane_index_t new_lane;
+    int is_match;
+
+    if ((old_lane == ucp_ep_get_am_lane(ep)) &&
+        ucp_ep_is_am_need_flush(ep, new_key)) {
+        /* Old AM lane can be reused only by matching AM lane in new config */
+        is_match = ucp_ep_config_lane_is_peer_match(old_key, old_lane, new_key,
+                                                    new_key->am_lane);
+        return is_match ? new_key->am_lane : UCP_NULL_LANE;
+    }
 
     for (new_lane = 0; new_lane < new_key->num_lanes; ++new_lane) {
+        if ((new_lane == new_key->am_lane) &&
+            ucp_ep_is_am_need_flush(ep, new_key)) {
+            continue;
+        }
+
         if (ucp_ep_config_lane_is_peer_match(old_key, old_lane, new_key,
                                              new_lane)) {
             return new_lane;
@@ -1897,7 +1928,7 @@ static ucp_lane_index_t ucp_ep_config_find_reusable_lane(
         return new_key->cm_lane;
     }
 
-    new_lane = ucp_ep_config_find_match_lane(old_key, old_lane, new_key);
+    new_lane = ucp_ep_config_find_match_lane(ep, old_key, old_lane, new_key);
     if (new_lane == UCP_NULL_LANE) {
         /* No matching lane was found */
         return UCP_NULL_LANE;
@@ -3960,4 +3991,12 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
     ep->cfg_index = cfg_index;
     ucp_ep_config_activate_worker_ifaces(ep->worker, cfg_index);
     ucp_ep_config_proto_init(ep->worker, cfg_index);
+}
+
+int ucp_ep_is_prioritized(ucp_ep_h ep)
+{
+    const ucs_usage_tracker_h usage_tracker = ep->worker->usage_tracker.handle;
+
+    return (usage_tracker != NULL) &&
+           ucs_usage_tracker_is_promoted(usage_tracker, ep);
 }
