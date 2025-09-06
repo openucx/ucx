@@ -347,7 +347,8 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
          * Now, we immediately insert into cache to save on calling
          * OpenMemHandle for the same handle because the cache is globally
          * accessible using rkey->pid. */
-        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &d_mapped);
+        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &d_mapped,
+                                            UCS_LOG_LEVEL_DEBUG);
 
         *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
                       ? UCS_YES : UCS_NO;

@@ -113,7 +113,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return status;
     }
 
-    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device, &mapped_addr);
+    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device, &mapped_addr,
+                                        UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
