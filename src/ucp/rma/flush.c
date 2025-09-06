@@ -240,6 +240,7 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 
     ep->ext->flush_sys_dev_map = 0;
 
+    req->send.flush.mem.count           = count;
     req->send.flush.mem.started         = 0;
     req->send.uct.func                  = ucp_ep_flush_mem_progress;
     req->send.flush.mem.uct_comp.func   = ucp_ep_flush_mem_completion;
