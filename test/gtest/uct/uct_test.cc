@@ -1047,7 +1047,14 @@ void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
             UCS_TEST_ABORT("Failed to allocate rkey buffer");
         }
 
-        ucs_status_t status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
+        uct_md_mkey_pack_params_t params = {
+            .field_mask = 0
+        };
+
+        ucs_status_t status = uct_md_mkey_pack_v2(m_md, mem->memh,
+                                                  mem->address,
+                                                  mem->length,
+                                                  &params, rkey_buffer);
         ASSERT_UCS_OK(status);
 
         status = uct_rkey_unpack(m_resource.component, rkey_buffer,

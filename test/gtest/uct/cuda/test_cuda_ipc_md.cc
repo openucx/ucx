@@ -103,7 +103,8 @@ protected:
 
     void test_mkey_pack_on_thread(void *ptr, size_t size)
     {
-       uct_md_mem_reg_params_t reg_params = {};
+       uct_md_mem_reg_params_t reg_params  = {};
+       uct_rkey_bundle_t       rkey_bundle = {};
        uct_mem_h memh;
        ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), ptr, size, &reg_params, &memh));
 
@@ -119,26 +120,24 @@ protected:
                uct_rkey_unpack_params_t unpack_params = {};
                ucs_status_t status = uct_rkey_unpack_v2(
                                          md()->component, rkey.data(),
-                                         &unpack_params, NULL);
+                                         &unpack_params, &rkey_bundle);
                ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
 
                // No context and unknown sys_dev is provided
                unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
                unpack_params.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
                status = uct_rkey_unpack_v2(md()->component, rkey.data(),
-                                           &unpack_params, NULL);
+                                           &unpack_params, &rkey_bundle);
                ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
 
-               // No context and some valid sys_dev is provided, but
-               // cuIpcOpenMemHandle used by cuda_ipc_cache does not allow to
-               // open a handle that was created by the same process
+               // No context and some valid sys_dev is provided
                ucs_sys_device_t sys_dev;
                uct_cuda_base_get_sys_dev(0, &sys_dev);
 
                unpack_params.sys_device = sys_dev;
                status = uct_rkey_unpack_v2(md()->component, rkey.data(),
-                                           &unpack_params, NULL);
-               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+                                           &unpack_params, &rkey_bundle);
+               ASSERT_EQ(status, UCS_OK);
            } catch (...) {
                thread_exception = std::current_exception();
            }

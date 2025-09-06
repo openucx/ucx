@@ -487,6 +487,10 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
 
+    if (d_bptr == (uintptr_t)mapped_addr) {
+        return UCS_OK;
+    }
+
     status = uct_cuda_ipc_get_remote_cache(pid, cu_dev, &cache);
     if (status != UCS_OK) {
         return status;
@@ -527,7 +531,20 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     ucs_status_t status;
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
+    CUuuid uuid;
     int ret;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if ((memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0) &&
+        (getpid() == key->pid)) {
+        /* TODO: added for test purpose to enable cuda_ipc tests in gtest */
+        *mapped_addr = (CUdeviceptr*)key->d_bptr;
+        return UCS_OK;
+    }
 
     status = uct_cuda_ipc_get_remote_cache(key->pid, cu_dev, &cache);
     if (status != UCS_OK) {
