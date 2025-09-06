@@ -4,8 +4,8 @@
 #
 
 AC_ARG_WITH([doca-gpunetio],
-            [AS_HELP_STRING([--with-doca-gpunetio],
-                            [Use DOCA gpunetio])],
+            [AS_HELP_STRING([--with-doca-gpunetio=(DIR)],
+                            [Use DOCA gpunetio (Default is guess)])],
             [with_doca_gpunetio=$withval],
             [with_doca_gpunetio=guess])
 

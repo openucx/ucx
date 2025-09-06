@@ -313,7 +313,7 @@ static void uct_cuda_copy_ctx_rsc_destroy(uct_iface_h tl_iface,
         }
     }
 
-    uct_cuda_base_stream_destroy(cuda_ctx_rsc, &ctx_rsc->short_stream);
+    uct_cuda_base_stream_destroy(&ctx_rsc->short_stream);
     ucs_free(ctx_rsc);
 }
 

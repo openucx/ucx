@@ -14,8 +14,8 @@
 
 #include "gdaki_dev.h"
 
-#define UCT_DEV_CUDA_NAME "cuda"
-#define UCT_DEV_CUDA_NAME_LEN 4
+#define UCT_DEVICE_CUDA_NAME     "cuda"
+#define UCT_DEVICE_CUDA_NAME_LEN 4
 
 
 typedef struct uct_rc_gdaki_iface {
@@ -34,11 +34,5 @@ typedef struct uct_rc_gdaki_ep {
     struct doca_gpu_dev_verbs_qp *qp_gpu;
     uct_rc_gdaki_dev_ep_t        *ep_gpu;
 } uct_rc_gdaki_ep_t;
-
-
-typedef struct uct_rc_gdaki_device_mem_element {
-    uint32_t lkey;
-    uint32_t rkey;
-} uct_rc_gdaki_device_mem_element_t;
 
 #endif /* UCT_GDAKI_IFACE_H */

@@ -7,7 +7,6 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
-#include "ucp_host.h"
 #include "ucp_device_types.h"
 
 #include <uct/api/device/uct_device_impl.h>
