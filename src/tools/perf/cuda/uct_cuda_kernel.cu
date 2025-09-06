@@ -1,0 +1,133 @@
+/**
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
+#include "libperf_cuda.h"
+#include <uct/api/device/uct_device_types.h>
+#include <uct/api/device/uct_device_impl.h>
+#include <tools/perf/lib/uct_tests.h>
+
+
+template<uct_device_level_t level>
+__global__ void
+uct_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx)
+{
+    ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
+    ucx_perf_counter_t max_iters          = ctx.max_iters;
+
+    for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
+        // TODO: replace with actual put multi call
+        __nanosleep(1000000); // 1ms
+
+        ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
+        __syncthreads();
+    }
+}
+
+template<uct_device_level_t level>
+__global__ void
+uct_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx, bool is_sender)
+{
+    ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
+    ucx_perf_counter_t max_iters          = ctx.max_iters;
+
+    for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
+        // TODO: replace with actual put multi call
+        // TODO: wait for completion
+        __nanosleep(1000000); // 1ms
+
+        ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
+        __syncthreads();
+    }
+}
+
+class uct_perf_cuda_test_runner:
+    public ucx_perf_cuda_test_runner<uct_perf_test_runner_base<uint64_t>> {
+public:
+    using psn_t = uint64_t;
+
+    uct_perf_cuda_test_runner(ucx_perf_context_t &perf) :
+        ucx_perf_cuda_test_runner<uct_perf_test_runner_base<uint64_t>>(perf)
+    {
+    }
+
+    ucs_status_t run_pingpong()
+    {
+        size_t length         = ucx_perf_get_message_size(&m_perf.params);
+        unsigned my_index     = rte_call(&m_perf, group_index);
+        unsigned thread_count = m_perf.params.device_thread_count;
+
+        before();
+
+        uct_perf_cuda_put_multi_latency_kernel
+            <UCT_DEVICE_LEVEL_BLOCK><<<1, thread_count>>>(gpu_ctx(), my_index);
+        CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
+
+        wait_for_kernel(length);
+        after();
+        return UCS_OK;
+    }
+
+    ucs_status_t run_stream_uni()
+    {
+        size_t length     = ucx_perf_get_message_size(&m_perf.params);
+        unsigned my_index = rte_call(&m_perf, group_index);
+
+        before();
+
+        if (my_index == 1) {
+            unsigned thread_count = m_perf.params.device_thread_count;
+            uct_perf_cuda_put_multi_bw_kernel<UCT_DEVICE_LEVEL_BLOCK>
+                                             <<<1, thread_count>>>(gpu_ctx());
+            CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
+
+            wait_for_kernel(length);
+        } else if (my_index == 0) {
+            // wait_for_sn(length);
+        }
+
+        after();
+        return UCS_OK;
+    }
+
+private:
+    void before()
+    {
+        size_t length = ucx_perf_get_message_size(&m_perf.params);
+        ucs_assert(length >= sizeof(psn_t));
+
+        m_perf.send_allocator->memset(m_perf.send_buffer, 0, length);
+        m_perf.recv_allocator->memset(m_perf.recv_buffer, 0, length);
+
+        uct_perf_barrier(&m_perf);
+        ucx_perf_test_start_clock(&m_perf);
+    }
+
+    void after()
+    {
+        ucx_perf_get_time(&m_perf);
+        uct_perf_barrier(&m_perf);
+    }
+};
+
+// TODO: remove once merged with UCP test
+ucx_perf_device_dispatcher_t ucx_perf_cuda_dispatcher;
+
+UCS_STATIC_INIT {
+    ucx_perf_cuda_dispatcher.uct_dispatch = ucx_perf_cuda_dispatch<uct_perf_cuda_test_runner>;
+
+// TODO: remove once merged with UCP test
+    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA]         = &ucx_perf_cuda_dispatcher;
+    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA_MANAGED] = &ucx_perf_cuda_dispatcher;
+}
+
+UCS_STATIC_CLEANUP {
+    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA]         = NULL;
+    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA_MANAGED] = NULL;
+}
