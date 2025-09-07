@@ -31,6 +31,7 @@ ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
            (rkey_config_key1.ep_cfg_index == rkey_config_key2.ep_cfg_index) &&
            (rkey_config_key1.sys_dev == rkey_config_key2.sys_dev) &&
            (rkey_config_key1.mem_type == rkey_config_key2.mem_type) &&
+           (rkey_config_key1.flags == rkey_config_key2.flags) &&
            (rkey_config_key1.unreachable_md_map ==
             rkey_config_key2.unreachable_md_map);
 }
