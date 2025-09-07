@@ -66,8 +66,8 @@ resources:
     - container: sles15sp6
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles15sp6/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel90_doca31
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rhel9.0/builder:doca-3.1.0
+    - container: rhel94_doca31
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rhel9.4/builder:doca-3.1.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-centos7
@@ -330,7 +330,7 @@ stages:
         name: gpu
         demands: ucx_gpu -equals yes
         test_perf: 1
-        container: rhel90_doca31
+        container: rhel94_doca31
     - template: tests.yml
       parameters:
         name: new
