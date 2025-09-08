@@ -743,9 +743,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
          * done by the specific protocols (if selected) which use them.
          */
         status = ucp_ep_rkey_unpack_internal(
-                  ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
-                  ep_config->rndv.proto_rndv_rkey_skip_mds, sys_dev,
-                  1, &rkey);
+                ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
+                ep_config->rndv.proto_rndv_rkey_skip_mds, sys_dev, 1, &rkey);
         if (status != UCS_OK) {
             goto err;
         }

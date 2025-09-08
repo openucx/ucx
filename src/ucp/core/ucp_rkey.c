@@ -77,8 +77,7 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
         size += sizeof(uint8_t) + tl_rkey_size;
     }
 
-    if ((with_delim) ||
-        (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+    if ((with_delim) || (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
         /* System device id */
         size += sizeof(uint8_t);
 
@@ -849,8 +848,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
-    if (!legacy &&
-        (buffer >= buffer_end) && (ucp_ep_config(ep)->key.dst_version > 19)) {
+    if (!legacy && (buffer >= buffer_end) &&
+        (ucp_ep_config(ep)->key.dst_version > 19)) {
         buffer_end = (void*)UINTPTR_MAX;
     }
 
@@ -998,8 +997,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     if (worker->context->config.ext.proto_enable) {
         status = ucp_rkey_proto_resolve(rkey, ep, p,
                                         UCS_PTR_BYTE_OFFSET(buffer, length),
-                                        unreachable_md_map,
-                                        legacy);
+                                        unreachable_md_map, legacy);
         if (status != UCS_OK) {
             goto err_destroy;
         }
