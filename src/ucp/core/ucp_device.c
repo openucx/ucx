@@ -111,6 +111,7 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    *local_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     for (i = 0; i < num_elements; i++) {
         element = UCS_PTR_BYTE_OFFSET(elements, i * element_size);
         memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh,
