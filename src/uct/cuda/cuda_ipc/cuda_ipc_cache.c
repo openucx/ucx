@@ -496,7 +496,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
 
     /* checking if the mapped address is the same as the d_bptr
      * this is true for the case of single process memory mapping
-     *see uct_cuda_ipc_map_memhandle for more details */
+     * see uct_cuda_ipc_map_memhandle for more details */
     if (d_bptr == (uintptr_t)mapped_addr) {
         return UCS_OK;
     }
