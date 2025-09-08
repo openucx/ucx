@@ -334,8 +334,8 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     ASSERT_UCS_OK(status);
 
     ucp_sys_dev_map_t sys_dev_map = ucp_memh_sys_dev_map(memh);
-    EXPECT_EQ(ucp_rkey_packed_size(sender().ucph(), memh->md_map,
-                                   memh->sys_dev, sys_dev_map, 1),
+    EXPECT_EQ(ucp_rkey_packed_size(sender().ucph(), memh->md_map, memh->sys_dev,
+                                   sys_dev_map, 1),
               rkey_size);
 
     /* Unpack remote key buffer */

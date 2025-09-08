@@ -184,22 +184,22 @@ static void ucp_device_mem_list_lane_lookup(
         }
 
         if (!(remote_md_map & UCS_BIT(lane_key->dst_md_index))) {
-            ucs_trace("  lane[%u] missing remote md: dst_md_index=%u",
-                      lane, lane_key->dst_md_index);
+            ucs_trace("  lane[%u] missing remote md: dst_md_index=%u", lane,
+                      lane_key->dst_md_index);
             continue;
         }
 
         src_sys_dev = ucp_ep_get_tl_rsc(ep, lane)->sys_device;
         if (src_sys_dev != local_sys_dev) {
-            ucs_trace("  lane[%u] wrong source sys_dev: src_sys_dev=%u",
-                      lane, src_sys_dev);
+            ucs_trace("  lane[%u] wrong source sys_dev: src_sys_dev=%u", lane,
+                      src_sys_dev);
             continue;
         }
 
         src_md_index = ucp_ep_md_index(ep, lane);
         if (!(local_md_map & UCS_BIT(src_md_index))) {
-            ucs_trace("  lane[%u] missing local md: src_md_index=%u",
-                      lane, src_md_index);
+            ucs_trace("  lane[%u] missing local md: src_md_index=%u", lane,
+                      src_md_index);
             continue;
         }
 

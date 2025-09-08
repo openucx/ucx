@@ -62,8 +62,7 @@ const ucp_rma_proto_t *ucp_rma_proto_list[] = {
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
                             ucs_sys_device_t sys_dev,
-                            ucp_sys_dev_map_t sys_dev_map,
-                            int with_delim)
+                            ucp_sys_dev_map_t sys_dev_map, int with_delim)
 {
     size_t size, tl_rkey_size;
     unsigned md_index;
@@ -189,8 +188,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                  const ucp_memory_info_t *mem_info,
                  ucp_sys_dev_map_t sys_dev_map,
                  const ucs_sys_dev_distance_t *sys_distance, unsigned uct_flags,
-                 int with_delim,
-                 void *buffer)
+                 int with_delim, void *buffer)
 {
     void *p = buffer;
     uct_md_mkey_pack_params_t params;
@@ -236,17 +234,17 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                   md_index, context->tl_mds[md_index].rsc.md_name);
     }
 
-    if ((with_delim) ||
-        (mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+    if ((with_delim) || (mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
         /* Pack system device id */
-        *ucs_serialize_next(&p, uint8_t) = (memh != NULL? memh->packed_sys_dev :
-                                            UCS_SYS_DEVICE_ID_UNKNOWN);
+        *ucs_serialize_next(&p, uint8_t) = (memh != NULL ?
+                                                    memh->packed_sys_dev :
+                                                    UCS_SYS_DEVICE_ID_UNKNOWN);
 
         /* Pack distance from sys_dev to each device in distance_dev_map */
         ucs_for_each_bit(sys_dev, sys_dev_map) {
-            ucp_rkey_pack_distance(sys_dev, sys_distance++,
-                                   ucs_serialize_next(&p,
-                                                      ucp_rkey_packed_distance_t));
+            ucp_rkey_pack_distance(
+                    sys_dev, sys_distance++,
+                    ucs_serialize_next(&p, ucp_rkey_packed_distance_t));
         }
 
         if (with_delim) {
@@ -630,8 +628,7 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
 
 static size_t
 ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat,
-                     ucp_sys_dev_map_t sys_dev_map,
-                     int with_delim)
+                     ucp_sys_dev_map_t sys_dev_map, int with_delim)
 {
     ucp_context_h context = memh->context;
 
@@ -649,9 +646,8 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat,
                                 sys_dev_map, with_delim);
 }
 
-static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
-                                int rkey_compat, int with_delim,
-                                ucp_sys_dev_map_t sys_dev_map,
+static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
+                                int with_delim, ucp_sys_dev_map_t sys_dev_map,
                                 void *memh_buffer)
 {
     ucp_memory_info_t mem_info;
@@ -694,8 +690,8 @@ int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer)
 
 static ucs_status_t
 ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
-                       int rkey_compat, int with_delim,
-                       void **buffer_p, size_t *buffer_size_p)
+                       int rkey_compat, int with_delim, void **buffer_p,
+                       size_t *buffer_size_p)
 {
     ucp_context_h context = memh->context;
     ucs_status_t status;
@@ -860,9 +856,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
-    if ((buffer == buffer_end) &&
-        (ucp_ep_config(ep)->key.dst_version > 19)) {
-        buffer_end = (void *)UINTPTR_MAX;
+    if ((buffer == buffer_end) && (ucp_ep_config(ep)->key.dst_version > 19)) {
+        buffer_end = (void*)UINTPTR_MAX;
     }
 
     if (buffer < buffer_end) {
