@@ -14,6 +14,7 @@
 typedef struct uct_cuda_ipc_ep {
     uct_base_ep_t        super;
     pid_t                remote_pid;
+    uct_device_ep_h      device_ep;
 } uct_cuda_ipc_ep_t;
 
 
@@ -32,5 +33,8 @@ ucs_status_t uct_cuda_ipc_ep_put_zcopy(uct_ep_h tl_ep,
 
 int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
                                  const uct_ep_is_connected_params_t *params);
+
+ucs_status_t uct_cuda_ipc_ep_get_device_ep(uct_ep_h tl_ep,
+                                           uct_device_ep_h *device_ep_p);
 
 #endif

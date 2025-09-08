@@ -11,6 +11,7 @@
 
 #include <uct/api/uct_def.h>
 #include <ucs/sys/compiler_def.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
 
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 
@@ -49,8 +50,9 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
                                                     address, remote_address,
                                                     length, flags, comp);
     } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
-        // return uct_cuda_ipc_ep_put_single(device_ep, mem_elem, address,
-        //                                   remote_address, length, flags, comp);
+        return uct_cuda_ipc_ep_put_single<level>(device_ep, mem_elem, address,
+                                                 remote_address, length, flags,
+                                                 comp);
     }
     return UCS_ERR_UNSUPPORTED;
 }
