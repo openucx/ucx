@@ -779,10 +779,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
                  ucp_rkey_h rkey, ucp_ep_h ep, const void *buffer,
                  const void *buffer_end, ucp_md_map_t unreachable_md_map)
 {
+    uint8_t flags       = 0;
     ucp_worker_h worker = ep->worker;
     const void *p       = buffer;
     ucs_sys_dev_distance_t *lanes_distance;
     ucp_rkey_config_key_t rkey_config_key;
+    ucp_rkey_config_t *rkey_config;
     khiter_t khiter;
 
     /* Avoid calling ucp_ep_resolve_remote_id() from rkey_unpack, and let
@@ -799,15 +801,38 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 
     if ((buffer < buffer_end) || (ucp_ep_config(ep)->key.dst_version > 19)) {
         rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
+
+        /* Set distance to default when sys_dev there without lanes distance */
+        flags = ((rkey_config_key.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                 (buffer >= buffer_end)?
+                 UCP_RKEY_CONFIG_FLAGS_LANES_DISTANCE_DEFAULT : 0);
     } else {
         rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
     khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
                     rkey_config_key);
+
     if (ucs_likely(khiter != kh_end(&worker->rkey_config_hash))) {
         /* Found existing configuration in hash */
         rkey->cfg_index = kh_val(&worker->rkey_config_hash, khiter);
+        rkey_config     = &worker->rkey_config[rkey->cfg_index];
+
+        /* Parse and update lane distance if it was previsouly default */
+        if ((rkey_config->flags & UCP_RKEY_CONFIG_FLAGS_LANES_DISTANCE_DEFAULT) &&
+            (flags == 0)) {
+
+            lanes_distance = ucs_alloca(sizeof(*lanes_distance) * UCP_MAX_LANES);
+            ucp_rkey_unpack_lanes_distance(&ucp_ep_config(ep)->key, lanes_distance, p,
+                                           buffer_end);
+            ucp_worker_update_rkey_config_lanes(
+                                    ucp_worker_ep_config(worker,
+                                                         rkey_config->key.ep_cfg_index),
+                                    rkey->cfg_index,
+                                    lanes_distance,
+                                    rkey_config);
+            rkey_config->flags &= ~UCP_RKEY_CONFIG_FLAGS_LANES_DISTANCE_DEFAULT;
+        }
         return UCS_OK;
     }
 
@@ -815,7 +840,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     ucp_rkey_unpack_lanes_distance(&ucp_ep_config(ep)->key, lanes_distance, p,
                                    buffer_end);
     return ucp_worker_add_rkey_config(worker, &rkey_config_key, lanes_distance,
-                                      &rkey->cfg_index);
+                                      flags, &rkey->cfg_index);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
