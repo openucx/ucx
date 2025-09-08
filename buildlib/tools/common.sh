@@ -70,6 +70,10 @@ make_clean() {
 	$MAKEP ${1:-clean}
 }
 
+has_gpunetio_devel() {
+    [ -d "/opt/mellanox/doca" ]
+}
+
 #
 # Configure and build
 #   $1 - mode (devel|release)
@@ -82,6 +86,11 @@ build() {
 	if [ "X$have_cuda" == "Xyes" ]
 	then
 		config_args+=" --with-iodemo-cuda"
+
+		if has_gpunetio_devel
+		then
+			config_args+=" --with-doca-gpunetio=/opt/mellanox/doca"
+		fi
 	fi
 
 	../contrib/configure-${mode} ${config_args} "$@"
