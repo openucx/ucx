@@ -231,6 +231,89 @@ ucp_proto_rndv_put_common_request_init(ucp_request_t *req)
 }
 
 static void
+ucp_proto_rndv_put_add_proto(const ucp_proto_multi_init_params_t *params,
+                             uct_completion_callback_t comp_cb,
+                             uint8_t stat_counter, ucp_proto_perf_t *perf,
+                             ucp_proto_rndv_put_priv_t *rpriv)
+{
+    const size_t atp_size = sizeof(ucp_rndv_ack_hdr_t);
+    ucp_context_h context = params->super.super.worker->context;
+    const uct_iface_attr_t *iface_attr;
+    ucp_lane_index_t lane_idx, lane;
+    int send_atp, use_fence;
+    unsigned atp_map;
+
+    send_atp = !ucp_proto_rndv_init_params_is_ppln_frag(&params->super.super);
+
+    /* Check which lanes support sending ATP */
+    atp_map = 0;
+    for (lane_idx = 0; lane_idx < rpriv->bulk.mpriv.num_lanes; ++lane_idx) {
+        lane       = rpriv->bulk.mpriv.lanes[lane_idx].super.lane;
+        iface_attr = ucp_proto_common_get_iface_attr(&params->super.super, lane);
+        if (((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) &&
+             (iface_attr->cap.am.max_short >= atp_size)) ||
+            ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) &&
+             (iface_attr->cap.am.max_bcopy >= atp_size))) {
+            atp_map |= UCS_BIT(lane);
+        }
+    }
+
+    /* Use fence only if all lanes support sending ATP and flush is not forced
+     */
+    use_fence = send_atp && !context->config.ext.rndv_put_force_flush &&
+                (rpriv->bulk.mpriv.lane_map == atp_map);
+
+    /* All lanes can send ATP - invalidate am_lane, to use mpriv->lanes.
+     * Otherwise, would need to flush all lanes and send ATP on:
+     * - All lanes supporting ATP send. This ensures that data is flushed
+     *   remotely (i.e. resides in the target buffer), which may not be the case
+     *   with IB transports. An alternative would be to pass
+     *   UCT_FLUSH_FLAG_REMOTE to uct_ep_flush, but using this flag increases
+     *   UCP worker address size.
+     *   TODO: Consider calling UCT ep flush with remote flag when/if address
+     *   size is not an issue anymore.
+     * - Control lane if none of the lanes support sending ATP
+     */
+    if (use_fence) {
+        /* Send fence followed by ATP on all lanes */
+        rpriv->bulk.super.lane = UCP_NULL_LANE;
+        rpriv->put_comp_cb     = comp_cb;
+        rpriv->atp_comp_cb     = NULL;
+        rpriv->stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP;
+        rpriv->flush_map       = 0;
+        rpriv->atp_map         = rpriv->bulk.mpriv.lane_map;
+    } else {
+        /* Flush all lanes and send ATP on all supporting lanes (or control lane
+         * otherwise) */
+        if (send_atp) {
+            rpriv->put_comp_cb =
+                    ucp_proto_rndv_put_common_flush_completion_send_atp;
+            rpriv->atp_comp_cb = comp_cb;
+            rpriv->atp_map     = (atp_map == 0) ?
+                                UCS_BIT(rpriv->bulk.super.lane) : atp_map;
+        } else {
+            rpriv->put_comp_cb = comp_cb;
+            rpriv->atp_comp_cb = NULL;
+            rpriv->atp_map     = 0;
+        }
+        rpriv->stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FLUSH;
+        rpriv->flush_map       = rpriv->bulk.mpriv.lane_map;
+        ucs_assert(rpriv->flush_map != 0);
+    }
+
+    if (send_atp) {
+        ucs_assert(rpriv->atp_map != 0);
+    }
+    rpriv->atp_num_lanes = ucs_popcount(rpriv->atp_map);
+    rpriv->stat_counter  = stat_counter;
+
+    ucp_proto_select_add_proto(&params->super.super, params->super.cfg_thresh,
+                               params->super.cfg_priority, perf, rpriv,
+                               UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(rpriv,
+                                                                  bulk.mpriv));
+}
+
+static void
 ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                                 uint64_t rndv_modes, size_t max_length,
                                 uct_ep_operation_t memtype_op, unsigned flags,
@@ -239,7 +322,6 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                                 int support_ppln, uint8_t stat_counter,
                                 const ucp_memory_info_t *reg_mem_info)
 {
-    const size_t atp_size                = sizeof(ucp_rndv_ack_hdr_t);
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
@@ -273,13 +355,11 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         .opt_align_offs      = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.opt_zcopy_align),
     };
-    const uct_iface_attr_t *iface_attr;
-    ucp_lane_index_t lane_idx, lane;
     ucp_proto_rndv_put_priv_t rpriv;
-    int send_atp, use_fence;
-    ucp_proto_perf_t *perf;
+    ucp_proto_lane_select_t *select;
+    ucp_lane_index_t i;
+    ucp_proto_perf_t *bulk_perf, *perf;
     ucs_status_t status;
-    unsigned atp_map;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
@@ -288,81 +368,28 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         return;
     }
 
-    status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_PUT_DESC,
-                                      UCP_PROTO_RNDV_ATP_NAME, &perf,
-                                      &rpriv.bulk);
+    status = ucp_proto_multi_init(&params, UCP_PROTO_RNDV_PUT_DESC, &select);
     if (status != UCS_OK) {
         return;
     }
 
-    send_atp = !ucp_proto_rndv_init_params_is_ppln_frag(init_params);
-
-    /* Check which lanes support sending ATP */
-    atp_map = 0;
-    for (lane_idx = 0; lane_idx < rpriv.bulk.mpriv.num_lanes; ++lane_idx) {
-        lane       = rpriv.bulk.mpriv.lanes[lane_idx].super.lane;
-        iface_attr = ucp_proto_common_get_iface_attr(init_params, lane);
-        if (((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) &&
-             (iface_attr->cap.am.max_short >= atp_size)) ||
-            ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) &&
-             (iface_attr->cap.am.max_bcopy >= atp_size))) {
-            atp_map |= UCS_BIT(lane);
+    for (i = 0; i < select->num_selections; ++i) {
+        status = ucp_proto_multi_init_perf(&params, select, &select->selections[i],
+                                           &bulk_perf, &rpriv.bulk.mpriv);
+        if (status != UCS_OK) {
+            continue;
         }
-    }
 
-    /* Use fence only if all lanes support sending ATP and flush is not forced
-     */
-    use_fence = send_atp && !context->config.ext.rndv_put_force_flush &&
-                (rpriv.bulk.mpriv.lane_map == atp_map);
-
-    /* All lanes can send ATP - invalidate am_lane, to use mpriv->lanes.
-     * Otherwise, would need to flush all lanes and send ATP on:
-     * - All lanes supporting ATP send. This ensures that data is flushed
-     *   remotely (i.e. resides in the target buffer), which may not be the case
-     *   with IB transports. An alternative would be to pass
-     *   UCT_FLUSH_FLAG_REMOTE to uct_ep_flush, but using this flag increases
-     *   UCP worker address size.
-     *   TODO: Consider calling UCT ep flush with remote flag when/if address
-     *   size is not an issue anymore.
-     * - Control lane if none of the lanes support sending ATP
-     */
-    if (use_fence) {
-        /* Send fence followed by ATP on all lanes */
-        rpriv.bulk.super.lane = UCP_NULL_LANE;
-        rpriv.put_comp_cb     = comp_cb;
-        rpriv.atp_comp_cb     = NULL;
-        rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP;
-        rpriv.flush_map       = 0;
-        rpriv.atp_map         = rpriv.bulk.mpriv.lane_map;
-    } else {
-        /* Flush all lanes and send ATP on all supporting lanes (or control lane
-         * otherwise) */
-        if (send_atp) {
-            rpriv.put_comp_cb =
-                    ucp_proto_rndv_put_common_flush_completion_send_atp;
-            rpriv.atp_comp_cb = comp_cb;
-            rpriv.atp_map     = (atp_map == 0) ?
-                                UCS_BIT(rpriv.bulk.super.lane) : atp_map;
-        } else {
-            rpriv.put_comp_cb = comp_cb;
-            rpriv.atp_comp_cb = NULL;
-            rpriv.atp_map     = 0;
+        status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_ATP_NAME,
+                                          bulk_perf, &perf, &rpriv.bulk);
+        if (status != UCS_OK) {
+            continue;
         }
-        rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FLUSH;
-        rpriv.flush_map       = rpriv.bulk.mpriv.lane_map;
-        ucs_assert(rpriv.flush_map != 0);
+
+        ucp_proto_rndv_put_add_proto(&params, comp_cb, stat_counter, perf, &rpriv);
     }
 
-    if (send_atp) {
-        ucs_assert(rpriv.atp_map != 0);
-    }
-    rpriv.atp_num_lanes = ucs_popcount(rpriv.atp_map);
-    rpriv.stat_counter  = stat_counter;
-
-    ucp_proto_select_add_proto(&params.super.super, params.super.cfg_thresh,
-                               params.super.cfg_priority, perf, &rpriv,
-                               UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv,
-                                                                  bulk.mpriv));
+    ucp_proto_lane_select_destroy(select);
 }
 
 static const char *

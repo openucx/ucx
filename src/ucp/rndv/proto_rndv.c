@@ -621,21 +621,16 @@ ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
 
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
-                         const char *op_name, const char *ack_name,
+                         const char *ack_name, ucp_proto_perf_t *bulk_perf,
                          ucp_proto_perf_t **perf_p,
                          ucp_proto_rndv_bulk_priv_t *rpriv)
 {
     ucp_context_t *context        = init_params->super.super.worker->context;
     size_t rndv_align_thresh      = context->config.ext.rndv_align_thresh;
     ucp_proto_multi_priv_t *mpriv = &rpriv->mpriv;
-    ucp_proto_perf_t *bulk_perf, *ack_perf;
+    ucp_proto_perf_t *ack_perf;
     const char *proto_name;
     ucs_status_t status;
-
-    status = ucp_proto_multi_init(init_params, op_name, &bulk_perf, mpriv);
-    if (status != UCS_OK) {
-        return status;
-    }
 
     /* Adjust align split threshold by user configuration */
     mpriv->align_thresh = ucs_max(rndv_align_thresh,

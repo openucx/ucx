@@ -339,6 +339,7 @@ typedef struct ucp_worker {
     ucp_worker_cm_t                  *cms;                /* Array of CMs, one for each component */
     ucs_mpool_set_t                  am_mps;              /* Memory pool set for AM receives */
     ucs_mpool_t                      reg_mp;              /* Registered memory pool */
+    ucs_mpool_t                      proto_select_mp;     /* Protocol selection memory pool */
     ucp_worker_mpool_hash_t          mpool_hash;          /* Hash table of memory pools */
     ucs_queue_head_t                 rkey_ptr_reqs;       /* Queue of submitted RKEY PTR requests that
                                                            * are in-progress */

@@ -39,10 +39,15 @@ public:
     void add_mock_iface(
             const std::string &dev_name = "mock",
             iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
-            perf_attr_func_t perf_cb = cx7_perf_mock)
+            perf_attr_func_t perf_cb = [](uct_perf_attr_t& perf_attr) {})
     {
         m_iface_attrs_funcs[dev_name] = cb;
         m_perf_attrs_funcs[dev_name]  = perf_cb;
+    }
+
+    void add_mock_cx7_iface(const std::string &dev_name, iface_attr_func_t cb)
+    {
+        add_mock_iface(dev_name, cb, cx7_perf_mock);
     }
 
     void mock_transport(const std::string &tl_name)
@@ -163,8 +168,7 @@ private:
 
     static void cx7_perf_mock(uct_perf_attr_t& perf_attr)
     {
-        perf_attr.path_bandwidth.shared    = 0.95 * perf_attr.bandwidth.shared;
-        perf_attr.path_bandwidth.dedicated = 0;
+        perf_attr.path_bandwidth.shared = 0.95 * perf_attr.bandwidth.shared;
     }
 
     /* We have to use singleton to mock C functions */
@@ -515,7 +519,7 @@ public:
     virtual void init() override
     {
         /* Device with higher BW and latency */
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 2000;
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 600e-9;
@@ -523,7 +527,7 @@ public:
             iface_attr.cap.get.max_zcopy = 16384;
         });
         /* Device with smaller BW but lower latency */
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short = 208;
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 500e-9;
@@ -534,19 +538,38 @@ public:
 };
 
 UCS_TEST_P(test_ucp_proto_mock_rcx, memtype_copy_enable,
-           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1",
-           "MEMTYPE_COPY_ENABLE=n")
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1", "MEMTYPE_COPY_ENABLE=n",
+           "PROTO_VARIANTS=n")
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
     check_ep_config(sender(), {
-        {0,       0, "rendezvous no data fetch", ""},
-        {1,      64, "rendezvous zero-copy fenced write to remote",
-                     "rc_mlx5/mock_0:1"},
-        {21992, INF, "rendezvous zero-copy read from remote",
-                     "rc_mlx5/mock_0:1"},
+        {0,  0,  "rendezvous no data fetch", ""},
+        {1,  64, "rendezvous zero-copy fenced write to remote",
+                 "rc_mlx5/mock_0:1"},
+        {65, INF, "rendezvous zero-copy read from remote",
+                  "rc_mlx5/mock_0:1"},
+    }, key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, proto_variants_enable,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1", "MEMTYPE_COPY_ENABLE=n",
+           "PROTO_VARIANTS=y")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {0,     0,     "rendezvous no data fetch", ""},
+        {1,     64,    "rendezvous zero-copy fenced write to remote",
+                       "rc_mlx5/mock_1:1"},
+        {65,    16800, "rendezvous zero-copy read from remote",
+                       "rc_mlx5/mock_1:1"},
+        {16801, INF,   "rendezvous zero-copy read from remote",
+                       "rc_mlx5/mock_0:1"},
     }, key);
 }
 
@@ -642,7 +665,7 @@ public:
     virtual void init() override
     {
         /* Device with high BW and lower latency */
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 500e-9;
@@ -650,7 +673,7 @@ public:
             iface_attr.cap.get.max_zcopy = 16384;
         });
         /* Device with lower BW and higher latency */
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 600e-9;
@@ -690,7 +713,7 @@ public:
     {
         /* Device with high BW and lower latency, but 0 get_zcopy.
          * This use case is similar to cuda_ipc when NVLink is not available. */
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 500e-9;
@@ -698,7 +721,7 @@ public:
             iface_attr.cap.get.max_zcopy = 0;
         });
         /* Device with lower BW and higher latency */
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_cx7_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 600e-9;
@@ -725,6 +748,66 @@ UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx3, rcx, "rc_x")
+
+class test_ucp_proto_mock_variants : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_variants()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        /* Mock for "cuda_ipc" device. */
+        add_mock_iface("nvlink", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 0;
+            iface_attr.bandwidth.shared = 100e9;
+            iface_attr.latency.c        = 2000e-9;
+            iface_attr.latency.m        = 1e-9;
+        }, [](uct_perf_attr_t &perf_attr) {
+            perf_attr.path_bandwidth.shared = 0.5 * perf_attr.bandwidth.shared;
+        });
+        /* IB device attached to GPU */
+        add_mock_cx7_iface("fast:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 45e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        /* IB device not attached to GPU, therefore both BW and latency are
+         * limited by distance */
+        add_mock_cx7_iface("slow:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 25e9;
+            iface_attr.latency.c        = 900e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_variants, latency_variant,
+           "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=2", "RNDV_THRESH=0", "PROTO_VARIANTS=y")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    /*
+     * Variant for latency must not include slow lane, because it adds
+     * latency to the path.
+     */
+    check_ep_config(sender(), {
+        {1,       129, "rendezvous fragmented copy-in copy-out",
+         "rc_mlx5/fast:1/path0"},
+        {130,  229091, "rendezvous zero-copy read from remote",
+         "rc_mlx5/fast:1 50% on path0 and 50% on path1"},
+        {229092,  INF, "rendezvous zero-copy read from remote",
+         "rc_mlx5/nvlink 50% on path0 and 50% on path1"},
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_variants, rcx, "rc_x")
 
 class test_ucp_proto_mock_cma : public test_ucp_proto_mock {
 public:
