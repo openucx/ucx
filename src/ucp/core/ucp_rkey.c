@@ -140,16 +140,11 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
 
 ucp_sys_dev_map_t ucp_memh_sys_dev_map(ucp_mem_h memh)
 {
-    ucp_sys_dev_map_t sys_dev_map = 0;
-    ucp_md_index_t md_index;
-
     if (memh->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_for_each_bit(md_index, memh->md_map) {
-            sys_dev_map |= memh->context->tl_mds[md_index].sys_dev_map;
-        }
+        return UCS_MASK(ucs_topo_num_devices());
     }
 
-    return sys_dev_map;
+    return 0;
 }
 
 ucs_sys_device_t ucp_rkey_pack_sys_dev(ucp_mem_h memh)
@@ -831,9 +826,10 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
-                 (rkey, ep, buffer, buffer_end, unreachable_md_map),
+                 (rkey, ep, buffer, buffer_end, unreachable_md_map, legacy),
                  ucp_rkey_h rkey, ucp_ep_h ep, const void *buffer,
-                 const void *buffer_end, ucp_md_map_t unreachable_md_map)
+                 const void *buffer_end, ucp_md_map_t unreachable_md_map,
+                 int legacy)
 {
     ucp_worker_h worker = ep->worker;
     const void *p       = buffer;
@@ -853,7 +849,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
-    if ((buffer == buffer_end) && (ucp_ep_config(ep)->key.dst_version > 19)) {
+    if (!legacy &&
+        (buffer >= buffer_end) && (ucp_ep_config(ep)->key.dst_version > 19)) {
         buffer_end = (void*)UINTPTR_MAX;
     }
 
@@ -880,10 +877,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
                  (ep, buffer, length, unpack_md_map, skip_md_map, sys_dev,
-                  rkey_p),
+                  legacy, rkey_p),
                  ucp_ep_h ep, const void *buffer, size_t length,
                  ucp_md_map_t unpack_md_map, ucp_md_map_t skip_md_map,
-                 ucs_sys_device_t sys_dev, ucp_rkey_h *rkey_p)
+                 ucs_sys_device_t sys_dev, int legacy, ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -1001,7 +998,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     if (worker->context->config.ext.proto_enable) {
         status = ucp_rkey_proto_resolve(rkey, ep, p,
                                         UCS_PTR_BYTE_OFFSET(buffer, length),
-                                        unreachable_md_map);
+                                        unreachable_md_map,
+                                        legacy);
         if (status != UCS_OK) {
             goto err_destroy;
         }
