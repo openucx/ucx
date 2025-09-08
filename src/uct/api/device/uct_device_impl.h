@@ -57,6 +57,71 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
 
 
 /**
+ * @ingroup UCP_DEVICE
+ * @brief Posts few put operations followed by one atomic increment operation.
+ *
+ * This device routine posts a batch of put operations using only some of the
+ * descriptor list entries in the input handle, followed by an operation.
+ * This increment operation can be polled on the receiver to detect completion
+ * of all operations of the batch, started during the same routine call.
+ *
+ * The set of indices from the descriptor list entries to use are to be passed
+ * in the array @ref mem_list_indices. The last entry of the descriptor list is to
+ * be used for the final increment operation.
+ *
+ * The content of each entries in the arrays addresses, remote_addresses and
+ * lengths must be valid for each corresponding descriptor list entry whose
+ * index is referenced in @ref mem_list_indices.
+ *
+ * The size of the arrays mem_list_indices, addresses, remote_addresses, and
+ * lengths are all equal. They are lower than the size of the descriptor list
+ * array from the handle.
+ *
+ * The routine returns a request that can be progressed and checked for
+ * completion with @ref ucp_device_progress_req.
+ *
+ * This routine can be called repeatedly with the same handle and different
+ * mem_list_indices, addresses, lengths and increment related parameters. The
+ * flags parameter can be used to modify the behavior of the routine with bit
+ * from @ref ucp_device_flags_t.
+ *
+ * @tparam      level                  Level of cooperation of the transfer.
+ * @param [in]  mem_list               Memory descriptor list handle to use.
+ * @param [in]  mem_list_indices       Array of indices, to use in descriptor
+ *                                     list of entries from handle.
+ * @param [in]  mem_list_count         Number of indices in the array @ref
+ *                                     mem_list_indices.
+ * @param [in]  addresses              Array of local addresses to send from.
+ * @param [in]  remote_addresses       Array of remote addresses to send to.
+ * @param [in]  lengths                Array of lengths in bytes for each send.
+ * @param [in]  counter_index          Index of remote increment descriptor.
+ * @param [in]  counter_inc_value      Value of the remote increment.
+ * @param [in]  counter_remote_address Remote address to increment to.
+ * @param [in]  flags                  Flags to modify the function behavior.
+ * @param [out] req                    Request populated by the call.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+template<uct_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
+        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
+        const unsigned *mem_list_indices, unsigned mem_list_count,
+        void *const *addresses, const uint64_t *remote_addresses,
+        const size_t *lengths, unsigned counter_index,
+        uint64_t counter_inc_value, uint64_t counter_remote_address,
+        uint64_t flags, uct_device_completion_t *comp)
+{
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
+        return uct_rc_mlx5_gda_ep_put_multi_partial<level>(
+                device_ep, mem_list, mem_list_indices, mem_list_count,
+                addresses, remote_addresses, lengths, counter_index,
+                counter_inc_value, counter_remote_address, flags, comp);
+    }
+    return UCS_ERR_UNSUPPORTED;
+}
+
+
+/**
  * @ingroup UCT_DEVICE
  * @brief Progress all operations on device endpoint @a device_ep.
  *
