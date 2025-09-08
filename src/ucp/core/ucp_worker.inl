@@ -24,16 +24,6 @@ KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t,
 #define UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT 32
 
 /**
- * @return endpoint configuration by configuration index
- */
-static inline ucp_ep_config_t *
-ucp_worker_ep_config(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
-{
-    ucs_assert(cfg_index != UCP_WORKER_CFG_INDEX_NULL);
-    return &ucs_array_elem(&worker->ep_config, cfg_index);
-}
-
-/**
  * Resolve remote key configuration key to a remote key configuration index.
  *
  * @param [in]  worker          UCP worker to resolve configuration on.
@@ -47,30 +37,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_worker_rkey_config_get(
 {
     khiter_t khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
                              *key);
-    ucp_rkey_config_t *rkey_config;
-    ucp_ep_config_t *ep_config;
-
     if (ucs_likely(khiter != kh_end(&worker->rkey_config_hash))) {
         *cfg_index_p = kh_val(&worker->rkey_config_hash, khiter);
-        rkey_config  = &worker->rkey_config[*cfg_index_p];
-
-        if ((lanes_distance != NULL) &&
-            (rkey_config->flags &
-             UCP_RKEY_CONFIG_FLAGS_LANES_DISTANCE_DEFAULT)) {
-
-            ep_config   = ucp_worker_ep_config(worker,
-                                               rkey_config->key.ep_cfg_index);
-            ucp_worker_update_rkey_config_lanes(ep_config, *cfg_index_p,
-                                                lanes_distance, rkey_config);
-
-            rkey_config->flags &= ~UCP_RKEY_CONFIG_FLAGS_LANES_DISTANCE_DEFAULT;
-        }
-
         return UCS_OK;
     }
 
-    return ucp_worker_add_rkey_config(worker, key, lanes_distance, 0,
-                                      cfg_index_p);
+    return ucp_worker_add_rkey_config(worker, key, lanes_distance, cfg_index_p);
 }
 
 static UCS_F_ALWAYS_INLINE khint_t
@@ -383,5 +355,15 @@ static UCS_F_ALWAYS_INLINE void ucp_worker_track_ep_usage(ucp_request_t *req)
         } \
     }
 
+
+/**
+ * @return endpoint configuration by configuration index
+ */
+static inline ucp_ep_config_t
+*ucp_worker_ep_config(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
+{
+    ucs_assert(cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    return &ucs_array_elem(&worker->ep_config, cfg_index);
+}
 
 #endif

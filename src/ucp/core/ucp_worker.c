@@ -2145,42 +2145,20 @@ ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
             ucs_memory_type_names[key->mem_type], key->unreachable_md_map);
 }
 
-void
-ucp_worker_update_rkey_config_lanes(
-                                const ucp_ep_config_t *ep_config,
-                                ucp_worker_cfg_index_t rkey_cfg_index,
-                                const ucs_sys_dev_distance_t *lanes_distance,
-                                ucp_rkey_config_t *rkey_config)
-{
-    ucp_lane_index_t lane;
-    char buf[128];
-
-    /* Copy remote-memory distance of each lane to rkey config */
-    for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
-        if (rkey_config->key.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-            rkey_config->lanes_distance[lane] = ucs_topo_default_distance;
-        } else {
-            rkey_config->lanes_distance[lane] = lanes_distance[lane];
-        }
-        ucs_trace("rkey_config[%d] lane [%d] distance %s", rkey_cfg_index, lane,
-                  ucs_topo_distance_str(&rkey_config->lanes_distance[lane], buf,
-                                        sizeof(buf)));
-    }
-}
-
 ucs_status_t
 ucp_worker_add_rkey_config(ucp_worker_h worker,
                            const ucp_rkey_config_key_t *key,
                            const ucs_sys_dev_distance_t *lanes_distance,
-                           uint8_t flags,
                            ucp_worker_cfg_index_t *cfg_index_p)
 {
     const ucp_ep_config_t *ep_config = &ucs_array_elem(&worker->ep_config,
                                                        key->ep_cfg_index);
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t *rkey_config;
+    ucp_lane_index_t lane;
     ucs_status_t status;
     khiter_t khiter;
+    char buf[128];
     int khret;
     ucs_string_buffer_t log_strb;
 
@@ -2214,14 +2192,21 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                (lanes_distance != NULL));
 
     /* Initialize rkey configuration */
-    rkey_cfg_index     = worker->rkey_config_count;
-    rkey_config        = &worker->rkey_config[rkey_cfg_index];
-    rkey_config->key   = *key;
-    rkey_config->flags = flags;
+    rkey_cfg_index   = worker->rkey_config_count;
+    rkey_config      = &worker->rkey_config[rkey_cfg_index];
+    rkey_config->key = *key;
 
-    ucp_worker_update_rkey_config_lanes(ep_config, rkey_cfg_index,
-                                        lanes_distance,
-                                        rkey_config);
+    /* Copy remote-memory distance of each lane to rkey config */
+    for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+        if (key->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            rkey_config->lanes_distance[lane] = ucs_topo_default_distance;
+        } else {
+            rkey_config->lanes_distance[lane] = lanes_distance[lane];
+        }
+        ucs_trace("rkey_config[%d] lane [%d] distance %s", rkey_cfg_index, lane,
+                  ucs_topo_distance_str(&rkey_config->lanes_distance[lane], buf,
+                                        sizeof(buf)));
+    }
 
     /* Save key-to-index lookup */
     khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,

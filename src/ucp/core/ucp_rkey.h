@@ -68,13 +68,11 @@ struct ucp_rkey_config_key {
 #define UCP_SYS_DEVICE_FLUSH_BIT UCS_BIT(7)
 #define UCP_SYS_DEVICE_MAX_PACKED UCP_SYS_DEVICE_FLUSH_BIT - 1
 
-#define UCP_RKEY_CONFIG_FLAGS_LANES_DISTANCE_DEFAULT UCS_BIT(0)
-
 
 /**
  * Rkey configuration
  */
-typedef struct ucp_rkey_config {
+typedef struct {
     /* Configuration key */
     ucp_rkey_config_key_t    key;
 
@@ -86,9 +84,6 @@ typedef struct ucp_rkey_config {
      * defined by the configuration at index "key.ep_cfg_index".
      */
     ucs_sys_dev_distance_t   lanes_distance[UCP_MAX_LANES];
-
-    /* Flags describing content and validity of @ref ucp_rkey_config_t. */
-    uint8_t                  flags;
 
     /* Protocol selection data */
     ucp_proto_select_t       proto_select;
