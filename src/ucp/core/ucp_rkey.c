@@ -77,21 +77,18 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
         size += sizeof(uint8_t) + tl_rkey_size;
     }
 
-    if (with_delim) {
+    if ((with_delim) ||
+        (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
         /* System device id */
         size += sizeof(uint8_t);
 
         /* Distance of each device */
         size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
 
-        /* System device id: set to unknown as a delimiter */
-        size += sizeof(uint8_t);
-    } else if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        /* System device id */
-        size += sizeof(uint8_t);
-
-        /* Distance of each device */
-        size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
+        if (with_delim) {
+            /* System device id: set to unknown as a delimiter */
+            size += sizeof(uint8_t);
+        }
     }
 
     return size;
