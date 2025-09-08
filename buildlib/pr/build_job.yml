@@ -1,0 +1,79 @@
+parameters:
+  name:
+  demands: []
+  displayName:
+
+jobs:
+  - job: ${{ parameters.name }}
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    container: $[ variables['CONTAINER'] ]
+    strategy:
+      # x86_64 matrix
+      ${{ if contains(parameters.name, 'x86_64') }}:
+        matrix:
+          rhel76:
+            CONTAINER: rhel76
+            long_test: yes
+          ubuntu2004:
+            CONTAINER: ubuntu2004
+            long_test: yes
+            extra_modules: ""
+          ubuntu1804:
+            CONTAINER: ubuntu1804
+            extra_modules: ""
+          ubuntu2204:
+            CONTAINER: ubuntu2204
+          ubuntu2404:
+            CONTAINER: ubuntu2404
+          ubuntu2210:
+            CONTAINER: ubuntu2210
+          debian113:
+            CONTAINER: debian113
+          debian109:
+            CONTAINER: debian109
+          debian125:
+            CONTAINER: debian125
+          debian130:
+            CONTAINER: debian130
+          sles15sp6:
+            CONTAINER: sles15sp6
+          rhel82:
+            CONTAINER: rhel82
+          rhel90:
+            CONTAINER: rhel90
+          fedora41:
+            CONTAINER: fedora41
+          centos7:
+            CONTAINER: centos7_ib
+          centos10stream:
+            CONTAINER: centos10stream
+          ubuntu2004_rocm:
+            CONTAINER: ubuntu2004_rocm_5_4_0
+          ubuntu2204_rocm:
+            CONTAINER: ubuntu2204_rocm_6_0_0
+          kylin10sp3:
+            CONTAINER: kylin10sp3
+          euleros2sp12:
+            CONTAINER: euleros2sp12
+      # ARM matrix
+      ${{ if contains(parameters.name, 'aarch64') }}:
+        matrix:
+          ubuntu2404_aarch64:
+            CONTAINER: ubuntu2404_aarch64
+    timeoutInMinutes: 340
+
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+
+      - bash: |
+          ./buildlib/tools/builds.sh
+        displayName: ${{ parameters.displayName }}
+        env:
+          BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
+          long_test: $(long_test)
+          test_static: $(test_static)
