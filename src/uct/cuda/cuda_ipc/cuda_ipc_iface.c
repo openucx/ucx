@@ -418,6 +418,7 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
     int is_ctx_pushed;
     uct_cuda_ipc_device_mem_element_t cuda_ipc_mem_element;
     CUdevice cuda_device;
+    void *mapped_addr;
 
     status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)mem_element,
                                              &cuda_device, &is_ctx_pushed);
@@ -425,13 +426,12 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
         return status;
     }
 
-    cuda_ipc_mem_element.dst_bptr = (uintptr_t)key->super.d_bptr;
     status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device,
-                                        &cuda_ipc_mem_element.mapped_addr,
-                                        UCS_LOG_LEVEL_ERROR);
+                                        &mapped_addr, UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
+    cuda_ipc_mem_element.mapped_offset = (ptrdiff_t)mapped_addr - (ptrdiff_t)key->super.d_bptr;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
@@ -439,7 +439,6 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
 
 out:
     uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);
-
     return status;
 }
 

@@ -494,6 +494,9 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
 
+    /* checking if the mapped address is the same as the d_bptr
+     * this is true for the case of single process memory mapping
+     *see uct_cuda_ipc_map_memhandle for more details */
     if (d_bptr == (uintptr_t)mapped_addr) {
         return UCS_OK;
     }
@@ -547,9 +550,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         return status;
     }
 
-    if ((memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0) &&
-        (getpid() == key->pid)) {
-        /* TODO: added for test purpose to enable cuda_ipc tests in gtest */
+    if ((getpid() == key->pid) &&
+        (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {        /* TODO: added for test purpose to enable cuda_ipc tests in gtest
+         * mapped addrr is set to be same as d_bptr avoiding any calls to
+         * uct_cuda_ipc_open_memhandle which would fail with invalid argument
+         * error*/
         *mapped_addr = (CUdeviceptr*)key->d_bptr;
         return UCS_OK;
     }

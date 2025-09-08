@@ -6,11 +6,10 @@
 #ifndef UCT_CUDA_IPC_EP_DEVICE_H
 #define UCT_CUDA_IPC_EP_DEVICE_H
 
-#include <stdint.h>
+#include <stddef.h>
 
 typedef struct {
-    uintptr_t dst_bptr;
-    void      *mapped_addr;
+    ptrdiff_t mapped_offset;
 } uct_cuda_ipc_device_mem_element_t;
 
 #endif

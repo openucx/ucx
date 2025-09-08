@@ -4,17 +4,11 @@
  * See file LICENSE for terms.
  */
 
-#include "common/test_helpers.h"
-#include "uct/api/device/uct_device_types.h"
 #include <uct/uct_test.h>
-extern "C" {
-    #include <uct/base/uct_md.h>
-    #include <uct/cuda/base/cuda_iface.h>
-    #include <uct/api/v2/uct_v2.h>
-    #include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
-    }
-#include <cuda.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
+#include <uct/api/v2/uct_v2.h>
 #include "test_kernels_uct.h"
+#include <cuda.h>
 #include <memory>
 
 class test_cuda_ipc_rma : public uct_test {
