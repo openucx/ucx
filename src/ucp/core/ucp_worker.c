@@ -2377,7 +2377,7 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
     max_am_header  = SIZE_MAX;
     max_rts_size   = sizeof(ucp_rndv_rts_hdr_t) +
                      ucp_rkey_packed_size(context, UCS_MASK(context->num_mds),
-                                          UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                          UCS_SYS_DEVICE_ID_UNKNOWN, 0, 0);
     max_ucp_header = ucs_max(max_rts_size, UCP_AM_FIRST_FRAG_META_LEN);
 
     /* Make sure maximal AM header can fit into one bcopy fragment

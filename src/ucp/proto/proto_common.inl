@@ -378,7 +378,7 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
             req->send.ep->worker->context, md_map & memh->md_map, memh,
             dt_iter->type.contig.buffer, dt_iter->length, &dt_iter->mem_info,
             distance_dev_map, dev_distance,
-            ucp_ep_config(req->send.ep)->uct_rkey_pack_flags, rkey_buffer);
+            ucp_ep_config(req->send.ep)->uct_rkey_pack_flags, 0, rkey_buffer);
 
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
