@@ -33,7 +33,12 @@ typedef struct {
 static struct {
     ucp_md_map_t md_map;
     uint8_t      mem_type;
-} UCS_S_PACKED ucp_memh_rkey_dummy_buffer = {0, UCS_MEMORY_TYPE_HOST};
+    uint8_t      sys_dev;
+} UCS_S_PACKED ucp_memh_rkey_dummy_buffer = {
+    .md_map   = 0,
+    .mem_type = UCS_MEMORY_TYPE_HOST,
+    .sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN
+};
 
 
 static struct {
@@ -205,7 +210,8 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
     }
 
     /* Pack system device id */
-    *ucs_serialize_next(&p, uint8_t) = memh->packed_sys_dev;
+    *ucs_serialize_next(&p, uint8_t) = (memh != NULL? memh->packed_sys_dev :
+                                        UCS_SYS_DEVICE_ID_UNKNOWN);
 
     if (ucs_likely(mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
         goto out_packed_size;
