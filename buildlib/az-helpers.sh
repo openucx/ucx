@@ -193,20 +193,27 @@ try_load_cuda_env() {
     num_gpus=$(get_num_gpus)
     [ "${num_gpus}" -gt 0 ] || return 0
 
-    # Check cuda env module
-    az_module_load dev/cuda12.8 || return 0
-    have_cuda=yes
+    # Prefer local CUDA if available
+    cuda_local_dir="/usr/local/cuda"
+    if find ${cuda_local_dir}/ -name 'libcudart.so.1[2-9]*' | grep -q .; then
+        have_cuda="${cuda_local_dir}"
+    else
+        # Fallback to env module
+        az_module_load dev/cuda12.8 || return 0
+        have_cuda=yes
+    fi
 
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
     then
+        # TODO detect cuda version if using local CUDA
         az_module_load dev/gdrcopy2.4.4_cuda12.8.0 && have_gdrcopy=yes
     fi
 }
 
 load_cuda_env() {
     try_load_cuda_env
-    if [ "${have_cuda}" != "yes" ] ; then
+    if [ "${have_cuda}" == "no" ] ; then
         if [ "${ucx_gpu}" = "yes" ] ; then
             azure_log_error "CUDA load failed on GPU node $(hostname -s)"
             exit 1
