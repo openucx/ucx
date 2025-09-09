@@ -562,6 +562,46 @@ uct_rc_iface_init_max_rd_atomic(uct_rc_iface_t *iface,
     return UCS_OK;
 }
 
+ucs_status_t uct_set_rc_cfg(uct_rc_config_t *rc_cfg,
+                            const uct_rc_iface_common_config_t *config,
+                            const uct_ib_iface_init_attr_t *init_attr,
+                            uct_ib_md_t *md, unsigned tx_cq_size)
+{
+    uct_ib_device_t *dev = &md->dev;
+
+    rc_cfg->tx_qp_len      = config->super.tx.queue_len;
+    rc_cfg->tx_min_sge     = config->super.tx.min_sge;
+    rc_cfg->tx_min_inline  = config->super.tx.min_inline;
+    rc_cfg->tx_moderation  = init_attr->tx_moderation;
+    rc_cfg->tx_poll_always = config->tx.poll_always;
+    rc_cfg->tx_cq_len      = tx_cq_size;
+    rc_cfg->min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
+    rc_cfg->timeout        = uct_ib_to_qp_fabric_time(config->tx.timeout);
+    rc_cfg->rnr_retry      = uct_rc_iface_config_limit_value(
+                                                     "RNR_RETRY_COUNT",
+                                                     config->tx.rnr_retry_count,
+                                                     UCT_RC_QP_MAX_RETRY_COUNT);
+    rc_cfg->retry_cnt      = uct_rc_iface_config_limit_value(
+                                                     "RETRY_COUNT",
+                                                     config->tx.retry_count,
+                                                     UCT_RC_QP_MAX_RETRY_COUNT);
+    if (md->ece_enable) {
+        if (config->ece == UCS_ULUNITS_AUTO) {
+            rc_cfg->ece = UCT_IB_DEVICE_ECE_MAX;
+        } else {
+            rc_cfg->ece = config->ece;
+        }
+    } else if ((config->ece == UCS_ULUNITS_AUTO) || (config->ece == 0)) {
+        rc_cfg->ece = UCT_IB_DEVICE_ECE_DEFAULT;
+    } else {
+        ucs_error("%s: cannot set ECE value to 0x%lx since the device does not "
+                  "support ECE", uct_ib_device_name(dev), config->ece);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
@@ -575,6 +615,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     unsigned tx_cq_size;
     ucs_mpool_params_t mp_params;
 
+    status = uct_ib_device_find_port(dev, params->mode.device.dev_name,
+                                     (uint8_t *)&init_attr->port_num);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    ((uct_ib_iface_init_attr_t *)init_attr)->alloc = &uct_posix_alloc;
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, tl_md,
                               worker, params, &config->super, init_attr);
 
@@ -584,39 +631,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->tx.cq_available       = tx_cq_size - 2;
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
-    self->config.tx_qp_len      = config->super.tx.queue_len;
-    self->config.tx_min_sge     = config->super.tx.min_sge;
-    self->config.tx_min_inline  = config->super.tx.min_inline;
-    self->config.tx_moderation  = init_attr->tx_moderation;
-    self->config.tx_poll_always = config->tx.poll_always;
-    self->config.tx_cq_len      = tx_cq_size;
-    self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
-    self->config.timeout        = uct_ib_to_qp_fabric_time(config->tx.timeout);
-    self->config.rnr_retry      = uct_rc_iface_config_limit_value(
-                                                     "RNR_RETRY_COUNT",
-                                                     config->tx.rnr_retry_count,
-                                                     UCT_RC_QP_MAX_RETRY_COUNT);
-    self->config.retry_cnt      = uct_rc_iface_config_limit_value(
-                                                     "RETRY_COUNT",
-                                                     config->tx.retry_count,
-                                                     UCT_RC_QP_MAX_RETRY_COUNT);
 #if UCS_ENABLE_ASSERT
     self->tx.in_pending         = 0;
 #endif
     max_ib_msg_size             = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
 
-    if (md->ece_enable) {
-        if (config->ece == UCS_ULUNITS_AUTO) {
-            self->config.ece = UCT_IB_DEVICE_ECE_MAX;
-        } else {
-            self->config.ece = config->ece;
-        }
-    } else if ((config->ece == UCS_ULUNITS_AUTO) || (config->ece == 0)) {
-        self->config.ece = UCT_IB_DEVICE_ECE_DEFAULT;
-    } else {
-        ucs_error("%s: cannot set ECE value to 0x%lx since the device does not "
-                  "support ECE", uct_ib_device_name(dev), config->ece);
-        status = UCS_ERR_INVALID_PARAM;
+    status = uct_set_rc_cfg(&self->config, config, init_attr, md, tx_cq_size);
+    if (status != UCS_OK) {
         goto err;
     }
 
@@ -625,7 +646,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
         goto err;
     }
 
-    uct_rc_iface_adjust_max_get_zcopy(self, config, max_ib_msg_size,
+    uct_rc_iface_adjust_max_get_zcopy(&self->config, config, max_ib_msg_size,
                                       uct_ib_device_name(dev), "rc");
 
     if ((config->tx.max_get_bytes == UCS_MEMUNITS_INF) ||
@@ -809,19 +830,25 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
-void uct_rc_iface_fill_attr(uct_rc_iface_t *iface, uct_ib_qp_attr_t *attr,
-                            unsigned max_send_wr, struct ibv_srq *srq)
+void uct_ib_iface_fill_attr_rc(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
+                            uct_rc_config_t *rc_cfg, unsigned max_send_wr, struct ibv_srq *srq)
 {
     attr->srq                        = srq;
     attr->cap.max_send_wr            = max_send_wr;
     attr->cap.max_recv_wr            = 0;
-    attr->cap.max_send_sge           = iface->config.tx_min_sge;
+    attr->cap.max_send_sge           = rc_cfg->tx_min_sge;
     attr->cap.max_recv_sge           = 1;
-    attr->cap.max_inline_data        = iface->config.tx_min_inline;
-    attr->qp_type                    = iface->super.config.qp_type;
-    attr->sq_sig_all                 = !iface->config.tx_moderation;
-    attr->max_inl_cqe[UCT_IB_DIR_RX] = iface->super.config.max_inl_cqe[UCT_IB_DIR_RX];
-    attr->max_inl_cqe[UCT_IB_DIR_TX] = iface->super.config.max_inl_cqe[UCT_IB_DIR_TX];
+    attr->cap.max_inline_data        = rc_cfg->tx_min_inline;
+    attr->qp_type                    = iface->config.qp_type;
+    attr->sq_sig_all                 = !rc_cfg->tx_moderation;
+    attr->max_inl_cqe[UCT_IB_DIR_RX] = iface->config.max_inl_cqe[UCT_IB_DIR_RX];
+    attr->max_inl_cqe[UCT_IB_DIR_TX] = iface->config.max_inl_cqe[UCT_IB_DIR_TX];
+}
+
+void uct_rc_iface_fill_attr(uct_rc_iface_t *iface, uct_ib_qp_attr_t *attr,
+                            unsigned max_send_wr, struct ibv_srq *srq)
+{
+    uct_ib_iface_fill_attr_rc(&iface->super, attr, &iface->config, max_send_wr, srq);
 }
 
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
@@ -1049,20 +1076,20 @@ void uct_rc_iface_vfs_refresh(uct_iface_h iface)
 }
 
 void
-uct_rc_iface_adjust_max_get_zcopy(uct_rc_iface_t *iface,
+uct_rc_iface_adjust_max_get_zcopy(uct_rc_config_t *rc_cfg,
                                   const uct_rc_iface_common_config_t *config,
                                   size_t max_tl_get_zcopy, const char *tl_name,
                                   const char *dev_name)
 {
     if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
-        iface->config.max_get_zcopy = max_tl_get_zcopy;
+        rc_cfg->max_get_zcopy = max_tl_get_zcopy;
     } else if (config->tx.max_get_zcopy <= max_tl_get_zcopy) {
-        iface->config.max_get_zcopy = config->tx.max_get_zcopy;
+        rc_cfg->max_get_zcopy = config->tx.max_get_zcopy;
     } else {
         ucs_warn("%s_iface on %s:%d: reduced max_get_zcopy to %zu",
-                 tl_name, dev_name, iface->super.config.port_num,
+                 tl_name, dev_name, 1, //iface->super.config.port_num,
                  max_tl_get_zcopy);
-        iface->config.max_get_zcopy = max_tl_get_zcopy;
+        rc_cfg->max_get_zcopy = max_tl_get_zcopy;
     }
 }
 

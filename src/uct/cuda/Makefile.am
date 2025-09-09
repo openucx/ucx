@@ -5,7 +5,7 @@
 
 if HAVE_CUDA
 
-SUBDIRS = . gdr_copy
+SUBDIRS = . gdr_copy gdaki
 
 module_LTLIBRARIES      = libuct_cuda.la
 libuct_cuda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)

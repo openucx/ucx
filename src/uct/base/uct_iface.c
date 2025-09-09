@@ -82,6 +82,25 @@ static ucs_stats_class_t uct_iface_stats_class = {
 #endif
 
 
+static int
+ucs_posix_memalign_alloc(uct_alloc_t *self, void **ptr, size_t boundary,
+                         size_t size, int *dma_fd, const char *name)
+{
+    *dma_fd = UCT_DMABUF_FD_INVALID;
+    return ucs_posix_memalign(ptr, boundary, size, name);
+}
+
+static void
+ucs_alloc_free(uct_alloc_t *self, void *ptr)
+{
+    ucs_free(ptr);
+}
+
+uct_alloc_t uct_posix_alloc = {
+    .alloc = ucs_posix_memalign_alloc,
+    .free = ucs_alloc_free,
+};
+
 static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
                                               size_t length, unsigned flags)
 {
@@ -765,6 +784,15 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
                                   const uct_ep_addr_t *ep_addr)
 {
     return ep->iface->ops.ep_connect_to_ep(ep, dev_addr, ep_addr);
+}
+
+ucs_status_t uct_ep_export_dev(uct_ep_h ep, uct_dev_ep_h *dev_ep_p)
+{
+    if (ep->iface->ops.ep_export_dev == NULL) {
+        return UCS_ERR_NOT_IMPLEMENTED;
+    }
+
+    return ep->iface->ops.ep_export_dev(ep, dev_ep_p);
 }
 
 ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,

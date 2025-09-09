@@ -1,0 +1,69 @@
+From 6844172e352b9ccc78fd265ef5694d3f185b83fa Mon Sep 17 00:00:00 2001
+From: root <root@rock24.swx.labs.mlnx>
+Date: Wed, 11 Jun 2025 15:24:04 +0000
+Subject: [PATCH] GDAKI build
+
+---
+ src/ucs/datastruct/mpool.inl        | 4 ++++
+ src/uct/cuda/gdaki/Makefile.am      | 2 +-
+ src/uct/cuda/gdaki/configure.m4     | 2 +-
+ src/uct/ib/mlx5/rc/rc_mlx5_common.h | 2 +-
+ 4 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/src/ucs/datastruct/mpool.inl b/src/ucs/datastruct/mpool.inl
+index 25404ec..054a518 100644
+--- a/src/ucs/datastruct/mpool.inl
++++ b/src/ucs/datastruct/mpool.inl
+@@ -35,6 +35,10 @@ static inline void *ucs_mpool_get_inline(ucs_mpool_t *mp)
+     return obj;
+ }
+ 
++#ifndef ENABLE_DEBUG_DATA
++#define ENABLE_DEBUG_DATA 0
++#endif
++
+ static inline void
+ ucs_mpool_add_to_freelist(ucs_mpool_t *mp, ucs_mpool_elem_t *elem)
+ {
+diff --git a/src/uct/cuda/gdaki/Makefile.am b/src/uct/cuda/gdaki/Makefile.am
+index fffb6ff..50445c8 100644
+--- a/src/uct/cuda/gdaki/Makefile.am
++++ b/src/uct/cuda/gdaki/Makefile.am
+@@ -14,7 +14,7 @@ libuct_cuda_gdaki_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
+                                 $(top_builddir)/src/uct/ib/libuct_ib.la \
+                                 $(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la \
+                                 $(top_builddir)/src/uct/cuda/libuct_cuda.la \
+-                                $(CUDA_LIBS) -ldoca_gpunetio
++                                $(CUDA_LIBS) -ldoca_gpunetio -ldoca_rdma_verbs
+ 
+ libuct_cuda_gdaki_la_SOURCES = \
+ 	gdaki_iface.c \
+diff --git a/src/uct/cuda/gdaki/configure.m4 b/src/uct/cuda/gdaki/configure.m4
+index b552d5f..b7dd6a5 100644
+--- a/src/uct/cuda/gdaki/configure.m4
++++ b/src/uct/cuda/gdaki/configure.m4
+@@ -4,7 +4,7 @@
+ #
+ 
+ AC_CHECK_HEADERS([doca_gpunetio.h], [
+-AC_CHECK_LIB([doca_gpunetio], [doca_gpu_create], [have_gpunetio=yes])])
++AC_CHECK_LIB([doca_gpunetio], [doca_gpu_create], [have_gpunetio=yes], [], [-ldoca_rdma_verbs -ldoca_common])])
+ 
+ AS_IF([test $have_gpunetio = yes], [
+     uct_cuda_modules="${uct_cuda_modules}:gdaki"
+diff --git a/src/uct/ib/mlx5/rc/rc_mlx5_common.h b/src/uct/ib/mlx5/rc/rc_mlx5_common.h
+index 22eed92..719cf6e 100644
+--- a/src/uct/ib/mlx5/rc/rc_mlx5_common.h
++++ b/src/uct/ib/mlx5/rc/rc_mlx5_common.h
+@@ -409,7 +409,7 @@ typedef struct uct_rc_mlx5_iface_common {
+         uint8_t                        atomic_fence_flag;
+         uct_rc_mlx5_srq_topo_t         srq_topo;
+         //uint8_t                        log_ack_req_freq;
+-       // uint8_t                        dp_ordering;
++        uint8_t                        dp_ordering;
+         //uint8_t                        dp_ordering_force;
+     } config;
+     UCS_STATS_NODE_DECLARE(stats)
+-- 
+2.31.1
+

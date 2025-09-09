@@ -2764,6 +2764,147 @@ ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
 
 
 /**
+ * @ingroup UCP_COMM
+ * @brief Type of batch operation to perform.
+ */
+typedef enum {
+    UCP_RMA_PUT = 0,
+    UCP_RMA_GET
+} ucp_rma_opcode_t;
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Transfer block descriptor
+ */
+typedef struct {
+    /**
+     * Operation opcode as defined in @ref ucp_rma_opcode_t
+     */
+    ucp_rma_opcode_t opcode;
+
+    /**
+     * Local virtual address of the data to be transferred
+     */
+    void             *local_va;
+
+    /**
+     * Remote virtual address where the data will be written
+     */
+    uint64_t         remote_va;
+
+    /**
+     * Length of the data to be transferred in bytes
+     */
+    size_t           length;
+
+    /**
+     * Remote key for accessing the remote memory region
+     */
+    ucp_rkey_h       rkey;
+
+    /**
+     * Local memory handle for the data to be transferred
+     */
+    ucp_mem_h        memh;
+} ucp_rma_iov_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Optional batch parameters.
+ *
+ * To be used with @ref ucp_ep_rma_batch_prepare.
+ */
+typedef struct {
+    /* Mask of valid fields, currently none exist. */
+    uint64_t field_mask;
+} ucp_ep_prepare_batch_param_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief UCP batch execute flags
+ *
+ * The enumeration allows specifying which parts of the batch operations to perform.
+ */
+enum ucp_dev_batch_flags {
+    UCP_DEV_BATCH_FLAG_RMA_IOV = UCS_BIT(0), /**< post rma iov */
+    UCP_DEV_BATCH_FLAG_ATOMIC  = UCS_BIT(1), /**< post atomic */
+    UCP_DEV_BATCH_FLAG_COMP    = UCS_BIT(2), /**< post with cq update */
+    UCP_DEV_BATCH_FLAG_NODELAY = UCS_BIT(3), /**< post with DB */
+    UCP_DEV_BATCH_FLAG_DEFAULT = UCP_DEV_BATCH_FLAG_RMA_IOV |
+                                 UCP_DEV_BATCH_FLAG_ATOMIC |
+                                 UCP_DEV_BATCH_FLAG_COMP |
+                                 UCP_DEV_BATCH_FLAG_NODELAY
+};
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Local request handler creation for batched RMA operations.
+ *
+ * This creates and populates a request for batched RMA. This request is meant
+ * to be later exported to obtain a batch, usable on a given GPU.
+ *
+ * This sends to a remote endpoint, there could be multiple remote GPUs/HCA pairs
+ * referenced in the iov list, on the remote targeted node.
+ *
+ * Request request remains valid until all exports have been destroyed and
+ * @ref ucp_request_release has been called.
+ *
+ * An obtained batch from export is reusable, and this does not change the request.
+ *
+ * @param [in] ep               Remote endpoint handle.
+ * @param [in] iov              List of blocks to transfer
+ * @param [in] iovcnt           Number of transfers in the list
+ * @param [in] signal_va        Remote address of the signal variable
+ * @param [in] signal_rkey      Remote key for the signal variable
+ * @param [in] param            Optional params
+ *
+ * @return request              - The created request to export from
+ * @return UCS_PTR_IS_ERR(_ptr) - The operation failed
+ */
+ucs_status_ptr_t ucp_ep_rma_batch_prepare(ucp_ep_h ep,
+                                          const ucp_rma_iov_t *iov,
+                                          size_t iovcnt,
+                                          uint64_t signal_va,
+                                          ucp_rkey_h signal_rkey,
+                                          ucp_ep_prepare_batch_param_t *param);
+
+
+typedef struct ucp_batch ucp_batch_t;
+typedef ucp_batch_t *ucp_batch_h;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Creation of a batch that can directly be consumed by GPU code
+ *
+ * A batch is reusable and it contains parameters to transfer a list of blocks.
+ *
+ * @param [in] request          Request created with @ref ucp_ep_rma_batch_prepare
+ * @param [out] batch           Created reusable batch
+ *
+ * @return UCS_OK               - The batch was successfully created
+ * @return error                - Returns the error code
+ */
+ucs_status_t ucp_ep_rma_batch_export(void *request, ucp_batch_h *batch);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Destruction of an unused batch
+ *
+ * @param [in] request          Request with which the batch was created
+ * @param [in] batch            Batch to destroy
+ *
+ * @return UCS_OK               - The batch was successfully destroyed
+ * @return error                - Returns the error code
+ */
+ucs_status_t ucp_ep_rma_batch_release(void *request, ucp_batch_h batch);
+
+
+/**
  * @ingroup UCP_MEM
  * @brief Map or allocate memory for zero-copy operations.
  *

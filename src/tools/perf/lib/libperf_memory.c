@@ -125,7 +125,9 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     perf->ucp.recv_exported_mem.address = NULL;
 
     /* Allocate receive buffer memory */
-    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
+    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count +
+                                //TODO: Maybe allocate only for onesided tests.
+                                ONESIDED_SIGNAL_SIZE,
                                 params->recv_mem_type, &perf->recv_buffer,
                                 &perf->ucp.recv_memh);
     if (status != UCS_OK) {
@@ -180,8 +182,17 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
         goto err_free_send_iov_buffers;
     }
 
+    perf->ucp.rma_iov = malloc(sizeof(*perf->ucp.rma_iov) *
+                               perf->params.msg_size_cnt);
+    if (NULL == perf->ucp.rma_iov) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_recv_iov_buffers;
+    }
+
     return UCS_OK;
 
+err_free_recv_iov_buffers:
+    free(perf->ucp.recv_iov);
 err_free_send_iov_buffers:
     free(perf->ucp.send_iov);
 err_free_am_hdr:
@@ -205,6 +216,7 @@ void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
     ucp_perf_mem_free(perf, perf->ucp.send_memh);
     ucp_perf_mem_buf_free(&perf->ucp.recv_exported_mem);
     ucp_perf_mem_buf_free(&perf->ucp.send_exported_mem);
+    free(perf->ucp.rma_iov);
 }
 
 static void
@@ -265,6 +277,7 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
 
     switch (perf->params.command) {
     case UCX_PERF_CMD_PUT:
+    case UCX_PERF_CMD_PUT_BATCH:
         flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT;
         break;
     case UCX_PERF_CMD_GET:
@@ -297,7 +310,9 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
 
     /* Allocate receive buffer memory */
     status = perf->recv_allocator->uct_alloc(perf,
-                                             buffer_size * params->thread_count,
+                                             buffer_size * params->thread_count +
+                                             //TODO: Maybe allocate only for onesided tests.
+                                             ONESIDED_SIGNAL_SIZE,
                                              flags, &perf->uct.recv_mem);
     if (status != UCS_OK) {
         goto err_free_send;
@@ -311,16 +326,25 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
                                        perf->params.msg_size_cnt *
                                        params->thread_count);
     if (NULL == perf->uct.iov) {
-        status = UCS_ERR_NO_MEMORY;
-        ucs_error("Failed allocate send IOV(%lu) buffer: %s",
-                  perf->params.msg_size_cnt, ucs_status_string(status));
-        goto err_free_recv;
+        goto err_iov;
+    }
+
+    perf->uct.rma_iov = malloc(sizeof(*perf->uct.rma_iov) *
+                               perf->params.msg_size_cnt * 1);
+    if (NULL == perf->uct.rma_iov) {
+        goto err_free_iov;
     }
 
     ucs_debug("allocated memory. Send buffer %p, Recv buffer %p",
               perf->send_buffer, perf->recv_buffer);
     return UCS_OK;
 
+err_free_iov:
+    free(perf->uct.iov);
+err_iov:
+    status = UCS_ERR_NO_MEMORY;
+    ucs_error("Failed allocate send IOV(%lu) buffer: %s",
+              perf->params.msg_size_cnt, ucs_status_string(status));
 err_free_recv:
     perf->recv_allocator->uct_free(perf, &perf->uct.recv_mem);
 err_free_send:
@@ -334,6 +358,7 @@ void uct_perf_test_free_mem(ucx_perf_context_t *perf)
     perf->send_allocator->uct_free(perf, &perf->uct.send_mem);
     perf->recv_allocator->uct_free(perf, &perf->uct.recv_mem);
     free(perf->uct.iov);
+    free(perf->uct.rma_iov);
 }
 
 void ucx_perf_global_init()

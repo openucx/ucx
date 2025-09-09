@@ -18,6 +18,7 @@ $basedir/../configure \
 	--enable-profiling \
 	--enable-frame-pointer \
 	--enable-stats \
+	--enable-debug \
 	--enable-debug-data \
 	--enable-mt \
 	"$@"

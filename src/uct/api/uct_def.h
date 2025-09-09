@@ -110,6 +110,9 @@ typedef struct uct_tag_context       uct_tag_context_t;
 typedef uint64_t                     uct_tag_t;  /* tag type - 64 bit */
 typedef int                          uct_worker_cb_id_t;
 typedef void*                        uct_conn_request_h;
+typedef struct uct_batch             *uct_batch_h;
+typedef struct uct_dev_ep            *uct_dev_ep_h;
+typedef struct uct_dev_completion    uct_dev_completion_t;
 
 /**
  * @}
@@ -152,6 +155,19 @@ typedef struct uct_iov {
                              the buffer in bytes */
     unsigned  count;    /**< Number of payload elements in the buffer */
 } uct_iov_t;
+
+
+/**
+ * @ingroup UCT_RMA
+ * @brief Structure describing a single IOV entry for batch operations
+ */
+typedef struct {
+    void       *local_va; /**< Local virtual address of the data */
+    uint64_t   remote_va; /**< Remote virtual address */
+    size_t     length;    /**< Length of the data in bytes */
+    uct_rkey_t rkey;      /**< Remote key for remote memory region */
+    uct_mem_h  memh;      /**< Local memory handle for the data */
+} uct_rma_iov_t;
 
 
 /**

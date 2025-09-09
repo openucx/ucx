@@ -472,7 +472,7 @@ static ucp_md_map_t ucp_rkey_find_global_id_md_map(ucp_context_h context,
 }
 
 static void
-ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context, 
+ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context,
                                       const void **start_p,
                                       ucp_unpacked_exported_tl_mkey_t *tl_mkey)
 {
@@ -579,7 +579,7 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat)
 
     if (rkey_compat) {
         return ucp_rkey_packed_size(context, memh->md_map,
-                                    UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                    memh->sys_dev, 0);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
@@ -596,7 +596,8 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
 
     if (rkey_compat) {
         mem_info.type    = memh->mem_type;
-        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        mem_info.sys_dev = memh->sys_dev;
+
         return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
                                   ucp_memh_address(memh), ucp_memh_length(memh),
                                   &mem_info, 0, NULL, 0, memh_buffer);
@@ -767,11 +768,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
 
-    if (buffer < buffer_end) {
-        rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
-    } else {
-        rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-    }
+    rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
 
     khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
                     rkey_config_key);
