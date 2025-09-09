@@ -496,7 +496,10 @@ UCS_TEST_P(test_ucp_batch, export_wrong_req)
                                  1, host_reg[0]->rva(),
                                  host_reg[0]->unpack(sender().ep()), &param);
 
-    status = ucp_ep_rma_batch_export(req, &batch);
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_ep_rma_batch_export(req, &batch);
+    }
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
     ASSERT_UCS_OK(requests_wait({req}));
 }
