@@ -9,6 +9,7 @@
 
 #include "ucp_device_types.h"
 
+#include <ucp/api/ucp_def.h>
 #include <uct/api/device/uct_device_impl.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
