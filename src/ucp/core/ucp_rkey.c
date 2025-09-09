@@ -472,7 +472,7 @@ static ucp_md_map_t ucp_rkey_find_global_id_md_map(ucp_context_h context,
 }
 
 static void
-ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context, 
+ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context,
                                       const void **start_p,
                                       ucp_unpacked_exported_tl_mkey_t *tl_mkey)
 {
@@ -579,7 +579,7 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat)
 
     if (rkey_compat) {
         return ucp_rkey_packed_size(context, memh->md_map,
-                                    UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                    memh->sys_dev, 0);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
