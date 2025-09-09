@@ -107,8 +107,10 @@ void print_progress(void *UCS_V_UNUSED rte_group,
 static void
 get_accel_device_str(const ucx_perf_accel_dev_t *dev, char *str, size_t size)
 {
-    ucs_snprintf_safe(str, size, "%s:%d", ucs_memory_type_names[dev->mem_type],
-                      dev->device_id);
+    // TODO: retrieve runtime device id
+    ucs_snprintf_safe(str, size, (dev->device_id == UCX_PERF_MEM_DEV_DEFAULT) ?
+                      "%s" : "%s:%d",
+                      ucs_memory_type_names[dev->mem_type], dev->device_id);
 }
 
 static void print_header(struct perftest_context *ctx)
