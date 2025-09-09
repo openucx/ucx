@@ -12,18 +12,46 @@
 BEGIN_C_DECLS
 
 /* TODO: move it to some common place */
-#define CUDA_CALL_HANDLER(_handler, _ret, _func, ...) \
+#define _CALL(_handler, _log_level, _err_type, _ok, _err_func, _func, ...) \
     do { \
-        cudaError_t _cerr = _func(__VA_ARGS__); \
-        if (_cerr != cudaSuccess) { \
-            _handler("%s() failed: %d (%s)", UCS_PP_MAKE_STRING(_func), \
-                     (int)_cerr, cudaGetErrorString(_cerr)); \
-            return _ret; \
+        _err_type _cerr = _func(__VA_ARGS__); \
+        if (_cerr != _ok) { \
+            ucs_log(_log_level, "%s() failed: %d (%s)", \
+                    UCS_PP_MAKE_STRING(_func), (int)_cerr, _err_func(_cerr)); \
+            _handler; \
         } \
     } while (0)
 
-#define CUDA_CALL(_ret, _func, ...) \
-    CUDA_CALL_HANDLER(ucs_error, _ret, _func, __VA_ARGS__)
+#define CUDA_CALL(_handler, _log_level, _func, ...) \
+    _CALL(_handler, _log_level, cudaError_t, cudaSuccess, cudaGetErrorString, _func, __VA_ARGS__)
+
+#define CUDA_CALL_RET(_ret, _func, ...) \
+    CUDA_CALL(return _ret, UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
+
+#define CUDA_CALL_ERR(_func, ...) \
+    CUDA_CALL(, UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
+
+#define CUDA_CALL_WARN(_func, ...) \
+    CUDA_CALL(, UCS_LOG_LEVEL_WARN, _func, __VA_ARGS__)
+
+#define CU_ERR_STR(res) \
+    ({ \
+        const char* _str = NULL; \
+        cuGetErrorString((res), &_str); \
+        _str ? _str : "(unknown)"; \
+    })
+
+#define CU_CALL(_handler, _log_level, _func, ...) \
+    _CALL(_handler, _log_level, CUresult, CUDA_SUCCESS, CU_ERR_STR, _func, __VA_ARGS__)
+
+#define CU_CALL_RET(_ret, _func, ...) \
+    CU_CALL(return _ret, UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
+
+#define CU_CALL_ERR(_func, ...) \
+    CU_CALL(, UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
+
+#define CU_CALL_WARN(_func, ...) \
+    CU_CALL(, UCS_LOG_LEVEL_WARN, _func, __VA_ARGS__)
 
 END_C_DECLS
 
