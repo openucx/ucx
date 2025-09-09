@@ -853,7 +853,6 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
 #if CUDA_VERSION >= 11070
     PFN_cuMemGetHandleForAddressRange_v11070 get_handle_func;
     CUresult cu_err;
-    unsigned long long flags;
     int fd;
 
     /* Get fxn ptr for cuMemGetHandleForAddressRange in case installed libcuda
@@ -879,32 +878,19 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
     }
 #endif
 
-#if CUDA_VERSION >= 12080
-    flags  = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
     cu_err = get_handle_func((void*)&fd, address, length,
-                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, flags);
+                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
     if (cu_err == CUDA_SUCCESS) {
-        goto out;
+        ucs_trace("dmabuf for address 0x%lx length %zu is fd %d", address,
+                  length, fd);
+        return fd;
     }
+
+    ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
+              "DMA_BUF_FD) failed: %s",
+              address, length, uct_cuda_base_cu_get_error_string(cu_err));
 #endif
-
-    flags  = 0;
-    cu_err = get_handle_func((void*)&fd, address, length,
-                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, flags);
-    if (cu_err != CUDA_SUCCESS) {
-        ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
-                  "DMA_BUF_FD) failed: %s",
-                  address, length, uct_cuda_base_cu_get_error_string(cu_err));
-        return UCT_DMABUF_FD_INVALID;
-    }
-
-out:
-    ucs_trace("dmabuf for address 0x%lx length %zu flags %llx is fd %d",
-              address, length, flags, fd);
-    return fd;
-#else
     return UCT_DMABUF_FD_INVALID;
-#endif
 }
 
 ucs_status_t
