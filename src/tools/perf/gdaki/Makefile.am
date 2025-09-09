@@ -29,9 +29,9 @@ SUFFIXES = .cu
 	$(LIBTOOL) --tag=CXX --mode=compile $(NVCC_WRAP) "$(NVCC)" $(NVCC_FLAGS) \
 		-c $< -MD -MP -MT $@ -MF $@.d -o $@ -DHAVE_CONFIG_H $(BASE_CPPFLAGS) $(GPUNETIO_CFLAGS)
 
-libperf_gdaki_la_LDFLAGS = -version-info 0:0:0
+libperf_gdaki_la_LDFLAGS = $(CUDA_LDFLAGS) -version-info 0:0:0
 
-libperf_gdaki_la_CPPFLAGS = $(BASE_CPPFLAGS) -I$(top_srcdir)/src
+libperf_gdaki_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS) -I$(top_srcdir)/src
 
 libperf_gdaki_la_LIBADD = -lcuda -lcudart -lstdc++
 
