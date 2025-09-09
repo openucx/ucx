@@ -24,7 +24,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define UCS_NETLINK_MESSAGE_DONE(nlh) (nlh->nlmsg_type == NLMSG_DONE)
+#define UCS_NETLINK_IS_MESSAGE_DONE(_nlh) (_nlh->nlmsg_type == NLMSG_DONE)
 
 typedef struct {
     const struct sockaddr *sa_remote;
@@ -73,13 +73,18 @@ err:
 
 static ucs_status_t
 ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg, int *done_p)
+                      ucs_netlink_parse_cb_t parse_cb, void *arg, int *done_p,
+                      int is_dump)
 {
     ucs_status_t status        = UCS_INPROGRESS;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
 
-    *done_p = UCS_NETLINK_MESSAGE_DONE(nlh);
-    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) && !*done_p) {
+    if (is_dump) {
+        *done_p = UCS_NETLINK_IS_MESSAGE_DONE(nlh);
+    }
+
+    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
+           (!is_dump || !*done_p)) {
         if (nlh->nlmsg_type == NLMSG_ERROR) {
             struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
             ucs_error("received error response from netlink err=%d: %s\n",
@@ -89,7 +94,9 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
 
         status  = parse_cb(nlh, arg);
         nlh     = NLMSG_NEXT(nlh, msg_len);
-        *done_p = UCS_NETLINK_MESSAGE_DONE(nlh);
+        if (is_dump) {
+            *done_p = UCS_NETLINK_IS_MESSAGE_DONE(nlh);
+        }
     }
 
     return UCS_OK;
@@ -104,6 +111,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     struct nlmsghdr nlh = {0};
     int netlink_fd      = -1;
     int message_done    = 0;
+    int is_dump         = nlmsg_flags & NLM_F_DUMP;
     ucs_status_t status;
     struct iovec iov[2];
     size_t bytes_sent;
@@ -160,9 +168,9 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         }
 
         status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb,
-                                       arg, &message_done);
+                                       arg, &message_done, is_dump);
         ucs_free(recv_msg);
-    } while ((nlmsg_flags & NLM_F_DUMP) && !message_done);
+    } while (is_dump && !message_done);
 
 out:
     ucs_close_fd(&netlink_fd);
@@ -271,7 +279,6 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
 
     UCS_INIT_ONCE(&init_once) {
         rtm.rtm_family = AF_INET;
-        rtm.rtm_table  = RT_TABLE_UNSPEC;
         ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
                                  sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
                                  NULL);
