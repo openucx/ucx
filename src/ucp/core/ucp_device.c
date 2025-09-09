@@ -178,39 +178,39 @@ static void ucp_device_mem_list_lane_lookup(
 
         lane_key = &ep_config->key.lanes[lane];
         if (lane_key->dst_sys_dev != remote_sys_dev) {
-            ucs_trace("  lane[%u] wrong destination sys_dev: dst_sys_dev=%u",
+            ucs_trace("lane[%u] wrong destination sys_dev: dst_sys_dev=%u",
                       lane, lane_key->dst_sys_dev);
             continue;
         }
 
         if (!(remote_md_map & UCS_BIT(lane_key->dst_md_index))) {
-            ucs_trace("  lane[%u] missing remote md: dst_md_index=%u", lane,
+            ucs_trace("lane[%u] missing remote md: dst_md_index=%u", lane,
                       lane_key->dst_md_index);
             continue;
         }
 
         src_sys_dev = ucp_ep_get_tl_rsc(ep, lane)->sys_device;
         if (src_sys_dev != local_sys_dev) {
-            ucs_trace("  lane[%u] wrong source sys_dev: src_sys_dev=%u", lane,
+            ucs_trace("lane[%u] wrong source sys_dev: src_sys_dev=%u", lane,
                       src_sys_dev);
             continue;
         }
 
         src_md_index = ucp_ep_md_index(ep, lane);
         if (!(local_md_map & UCS_BIT(src_md_index))) {
-            ucs_trace("  lane[%u] missing local md: src_md_index=%u", lane,
+            ucs_trace("lane[%u] missing local md: src_md_index=%u", lane,
                       src_md_index);
             continue;
         }
 
         bandwidth = ucp_worker_iface_bandwidth(ep->worker,
                                                ucp_ep_get_rsc_index(ep, lane));
-        ucs_trace("  checking lane[%u] src_md_index=%u dst_md_index=%u "
+        ucs_trace("checking lane[%u] src_md_index=%u dst_md_index=%u "
                   "src_sys_dev=%u dst_sys_dev=%u bandwidth=%lfMB/s",
                   lane, src_md_index, lane_key->dst_md_index, src_sys_dev,
                   lane_key->dst_sys_dev, bandwidth / UCS_MBYTE);
 
-        ucs_assert(UCP_DEVICE_MEM_LIST_MAX_EPS == 2);
+        UCS_STATIC_ASSERT(UCP_DEVICE_MEM_LIST_MAX_EPS == 2);
         if (bandwidth > best_bw[0]) {
             best_bw[1] = best_bw[0];
             lanes[1]   = lanes[0];
@@ -223,7 +223,7 @@ static void ucp_device_mem_list_lane_lookup(
             continue;
         }
 
-        ucs_trace("  best lanes: lane[%u]=%lfMB/s lane[%u]=%lfMB/s", lanes[0],
+        ucs_trace("best lanes: lane[%u]=%lfMB/s lane[%u]=%lfMB/s", lanes[0],
                   best_bw[0] / UCS_MBYTE, lanes[1], best_bw[1] / UCS_MBYTE);
     }
 }
@@ -241,7 +241,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     uct_iface_attr_v2_t attr;
     ucs_status_t status;
     ucp_worker_iface_t *wiface;
-    ucp_device_mem_list_handle_h handle;
+    ucp_device_mem_list_handle_t handle;
     uct_mem_h uct_memh;
     uct_rkey_t uct_rkey;
     uct_device_mem_element_t *uct_element;
@@ -263,17 +263,38 @@ static ucs_status_t ucp_device_mem_list_create_handle(
             return status;
         }
 
-        ucs_trace("  query lane=%u device_mem_element_size=%zu", lanes[i],
+        ucs_trace("query lane=%u device_mem_element_size=%zu", lanes[i],
                   attr.device_mem_element_size);
 
         handle_size     += attr.device_mem_element_size;
         uct_elem_size[i] = attr.device_mem_element_size;
     }
 
+    if (i == 0) {
+        ucs_error("failed to select lane");
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    /* Populate handle header */
+    num_uct_eps            = i;
+    handle.version         = UCP_DEVICE_MEM_LIST_VERSION_V1;
+    handle.proto_idx       = 0;
+    handle.num_uct_eps     = num_uct_eps;
+    handle.mem_list_length = params->num_elements;
+    for (i = 0; i < num_uct_eps; i++) {
+        status = uct_ep_get_device_ep(ucp_ep_get_lane(ep, lanes[i]),
+                                      &handle.uct_device_eps[i]);
+        if (status != UCS_OK) {
+            ucs_error("failed to get device_ep for lane=%u", lanes[i]);
+            goto err;;
+        }
+
+        handle.uct_mem_element_size[i] = uct_elem_size[i];
+    }
+
     /* Allocate handle on the same device memory */
-    num_uct_eps  = i;
     handle_size *= params->num_elements;
-    handle_size += sizeof(*handle);
+    handle_size += sizeof(handle);
     status       = ucp_mem_do_alloc(ep->worker->context, NULL, handle_size,
                                     UCT_MD_MEM_ACCESS_LOCAL_READ |
                                             UCT_MD_MEM_ACCESS_LOCAL_WRITE,
@@ -285,32 +306,8 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         return status;
     }
 
-    /* Populate the handle */
-    handle = ucs_alloc_on_stack(handle_size, "host_device_mem_list_handle");
-    if (handle == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    handle->version            = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    handle->proto_idx          = 0;
-    handle->num_uct_eps        = num_uct_eps;
-    handle->mem_list_length    = params->num_elements;
-
-    /* Populate lane specific parameters */
-    for (i = 0; i < num_uct_eps; i++) {
-        status = uct_ep_get_device_ep(ucp_ep_get_lane(ep, lanes[i]),
-                                      &handle->uct_device_eps[i]);
-        if (status != UCS_OK) {
-            ucs_error("failed to get device_ep for lane=%u", lanes[i]);
-            goto err;
-        }
-
-        handle->uct_mem_element_size[i] = uct_elem_size[i];
-    }
-
     /* Populate element specific parameters */
-    uct_element = UCS_PTR_BYTE_OFFSET(handle, sizeof(*handle));
+    uct_element = UCS_PTR_TYPE_OFFSET(mem->address, ucs_typeof(handle));
     for (i = 0; i < num_uct_eps; i++) {
         local_md_index = ep_config->md_index[lanes[i]];
         wiface         = ucp_worker_iface(ep->worker,
@@ -332,7 +329,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
             uct_rkey = ucp_rkey_get_tl_rkey(ucp_element->rkey, rkey_index);
             ucs_assert(uct_rkey != UCT_INVALID_RKEY);
 
-            /* Element packing */
+            /* Element packing, expects device memory as destination */
             status = uct_iface_mem_element_pack(wiface->iface, uct_memh,
                                                 uct_rkey, uct_element);
             if (status != UCS_OK) {
@@ -346,12 +343,11 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         }
     }
 
-    ucs_assert(UCS_PTR_BYTE_OFFSET(handle, handle_size) == uct_element);
+    ucs_assert(UCS_PTR_BYTE_OFFSET(mem->address, handle_size) == uct_element);
 
-    /* Migrate the constructed handle to device memory */
-    ucp_mem_type_unpack(ep->worker, mem->address, handle, handle_size,
+    /* Migrate the constructed handle header to device memory */
+    ucp_mem_type_unpack(ep->worker, mem->address, &handle, sizeof(handle),
                         mem_type);
-    ucs_free_on_stack(handle, handle_size);
     return UCS_OK;
 
 err:

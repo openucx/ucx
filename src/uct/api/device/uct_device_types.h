@@ -19,12 +19,16 @@
  * @}
  */
 
-/* Cooperation level when calling device functions */
+/**
+ * @brief Cooperation level when calling device functions.
+ *
+ * Must map exactly @ref ucp_device_level_t.
+ */
 typedef enum {
-    UCT_DEVICE_LEVEL_THREAD,
-    UCT_DEVICE_LEVEL_WARP,
-    UCT_DEVICE_LEVEL_BLOCK,
-    UCT_DEVICE_LEVEL_GRID
+    UCT_DEVICE_LEVEL_THREAD = 0,
+    UCT_DEVICE_LEVEL_WARP   = 1,
+    UCT_DEVICE_LEVEL_BLOCK  = 2,
+    UCT_DEVICE_LEVEL_GRID   = 3
 } uct_device_level_t;
 
 

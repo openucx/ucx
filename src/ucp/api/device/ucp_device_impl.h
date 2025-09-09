@@ -24,12 +24,15 @@
  */
 typedef struct ucp_device_request {
     uct_device_completion_t comp;
+    uct_device_ep_h         device_ep;
 } ucp_device_request_t;
 
 
 /**
  * @ingroup UCP_DEVICE
  * @brief Cooperation level when calling device functions.
+ *
+ * Must map exactly @ref uct_device_level_t.
  */
 typedef enum {
     UCP_DEVICE_LEVEL_THREAD = 0,
@@ -78,12 +81,33 @@ typedef enum {
  */
 template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
-ucp_device_put_single(ucp_device_mem_list_handle_h mem_list,
+ucp_device_put_single(ucp_device_mem_list_handle_h handle,
                       unsigned mem_list_index,
                       const void *address, uint64_t remote_address,
                       size_t length, uint64_t flags, ucp_device_request_t *req)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    unsigned lane = 0;
+    const uct_device_mem_element_t *uct_elem;
+    size_t elem_offset;
+
+    if ((handle->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
+        (handle->num_uct_eps == 0) ||
+        (mem_list_index >= handle->mem_list_length) ||
+        (flags != 0)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    elem_offset     = mem_list_index * handle->uct_mem_element_size[lane];
+    uct_elem        = (uct_device_mem_element_t *)
+        UCS_PTR_BYTE_OFFSET(handle, sizeof(*handle) + elem_offset);
+
+    req->device_ep  = handle->uct_device_eps[lane];
+    req->comp.count = 1; /* TODO: Handle multiple device posts with same req? */
+    return uct_device_ep_put_single<(uct_device_level_t)level>(
+                                           req->device_ep, uct_elem, address,
+                                           remote_address, length,
+                                           UCT_DEVICE_FLAG_NODELAY,
+                                           &req->comp);
 }
 
 
@@ -294,12 +318,14 @@ template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
 ucp_device_progress_req(ucp_device_request_t *req)
 {
+    ucs_status_t status;
+
     if (ucs_likely(req->comp.count == 0)) {
         return req->comp.status;
     }
 
-    /* TODO call uct progress function */
-    return UCS_ERR_NOT_IMPLEMENTED;
+    status = uct_device_ep_progress<(uct_device_level_t)level>(req->device_ep);
+    return (status != UCS_OK? status : UCS_INPROGRESS);
 }
 
 #endif /* UCP_DEVICE_IMPL_H */
