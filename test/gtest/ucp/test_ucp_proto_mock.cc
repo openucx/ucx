@@ -862,3 +862,126 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
                               "rc_x,cuda,rocm")
+
+class test_ucp_proto_mock_rcx_twins : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_twins()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 208;
+            iface_attr.bandwidth.shared = 28e9;
+            iface_attr.latency.c        = 500e-9;
+            iface_attr.latency.m        = 1e-9;
+        };
+
+        add_mock_iface("mock_0:1", iface_attr_func);
+        add_mock_iface("mock_1:1", iface_attr_func);
+        add_mock_iface("mock_2:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 24e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_all_net_devices,
+           "IB_NUM_PATHS?=2")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    // PROTO_USE_SINGLE_NET_DEVICE=n [default]
+    // Use two network devices with the same bandwidth in 50/50 ratio
+    check_ep_config(sender(),
+                    {
+                            {0, 200, "short", "rc_mlx5/mock_0:1/path0"},
+                            {201, 404, "copy-in", "rc_mlx5/mock_0:1/path0"},
+                            {405, 8246, "zero-copy", "rc_mlx5/mock_0:1/path0"},
+                            {8247, 18540, "multi-frag zero-copy",
+                             "rc_mlx5/mock_0:1/path0"},
+                            {18541, INF,
+                             "rendezvous zero-copy read from remote",
+                             "50% on rc_mlx5/mock_0:1/path0 and 50% on "
+                             "rc_mlx5/mock_1:1/path0"},
+                    },
+                    key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device,
+           "IB_NUM_PATHS?=2", "PROTO_USE_SINGLE_NET_DEVICE=y")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    // PROTO_USE_SINGLE_NET_DEVICE=y, LOCAL_RANK=0 [default]
+    // Use two paths of the first network device in 50/50 ratio
+    check_ep_config(sender(),
+                    {
+                            {0, 200, "short", "rc_mlx5/mock_0:1/path0"},
+                            {201, 404, "copy-in", "rc_mlx5/mock_0:1/path0"},
+                            {405, 8246, "zero-copy", "rc_mlx5/mock_0:1/path0"},
+                            {8247, 18540, "multi-frag zero-copy",
+                             "rc_mlx5/mock_0:1/path0"},
+                            {18541, INF,
+                             "rendezvous zero-copy read from remote",
+                             "rc_mlx5/mock_0:1 50% on path0 and 50% on path1"},
+                    },
+                    key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_1,
+           "IB_NUM_PATHS?=2", "PROTO_USE_SINGLE_NET_DEVICE=y", "LOCAL_RANK=1")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    // PROTO_USE_SINGLE_NET_DEVICE=y, LOCAL_RANK=1
+    // Use two paths of the second network device in 50/50 ratio
+    check_ep_config(sender(),
+                    {
+                            {0, 200, "short", "rc_mlx5/mock_0:1/path0"},
+                            {201, 404, "copy-in", "rc_mlx5/mock_0:1/path0"},
+                            {405, 8246, "zero-copy", "rc_mlx5/mock_0:1/path0"},
+                            {8247, 18540, "multi-frag zero-copy",
+                             "rc_mlx5/mock_0:1/path0"},
+                            {18541, INF,
+                             "rendezvous zero-copy read from remote",
+                             "rc_mlx5/mock_1:1 50% on path0 and 50% on path1"},
+                    },
+                    key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_2,
+           "IB_NUM_PATHS?=2", "PROTO_USE_SINGLE_NET_DEVICE=y", "LOCAL_RANK=2")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    // PROTO_USE_SINGLE_NET_DEVICE=y, LOCAL_RANK=2
+    // Use two paths of the first network device in 50/50 ratio
+    check_ep_config(sender(),
+                    {
+                            {0, 200, "short", "rc_mlx5/mock_0:1/path0"},
+                            {201, 404, "copy-in", "rc_mlx5/mock_0:1/path0"},
+                            {405, 8246, "zero-copy", "rc_mlx5/mock_0:1/path0"},
+                            {8247, 18540, "multi-frag zero-copy",
+                             "rc_mlx5/mock_0:1/path0"},
+                            {18541, INF,
+                             "rendezvous zero-copy read from remote",
+                             "rc_mlx5/mock_0:1 50% on path0 and 50% on path1"},
+                    },
+                    key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins, rcx, "rc_x")

@@ -151,6 +151,91 @@ ucp_proto_multi_init_flush_sys_dev_mask(const ucp_rkey_config_key_t *key)
     return UCS_BIT(key->sys_dev & ~UCP_SYS_DEVICE_FLUSH_BIT);
 }
 
+static const uct_tl_resource_desc_t *
+ucp_proto_multi_get_tl_rsc(const ucp_proto_init_params_t *params,
+                           ucp_lane_index_t lane)
+{
+    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+    return &params->worker->context->tl_rscs[rsc_index].tl_rsc;
+}
+
+static uct_device_type_t
+ucp_proto_multi_get_dev_type(const ucp_proto_init_params_t *params,
+                             ucp_lane_index_t lane)
+{
+    return ucp_proto_multi_get_tl_rsc(params, lane)->dev_type;
+}
+
+static const char *
+ucp_proto_multi_get_dev_name(const ucp_proto_init_params_t *params,
+                             ucp_lane_index_t lane)
+{
+    return ucp_proto_multi_get_tl_rsc(params, lane)->dev_name;
+}
+
+static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
+        ucp_lane_index_t num_lanes, const ucp_proto_init_params_t *params,
+        const ucp_proto_common_tl_perf_t *lanes_perf, int fixed_first_lane,
+        ucp_lane_index_t *lanes, ucp_proto_perf_node_t **lanes_perf_nodes)
+{
+    double max_bandwidth;
+    ucp_lane_index_t i, lane, num_identical_devs, seed, num_filtered_lanes;
+    ucp_lane_map_t lane_map;
+    const char *dev_name;
+    const char *dev_names[UCP_PROTO_MAX_LANES];
+    const uct_tl_resource_desc_t *tl_rsc;
+
+    for (lane_map = 0, max_bandwidth = 0, i = 0; i < num_lanes; ++i) {
+        lane = lanes[i];
+        if (ucp_proto_multi_get_dev_type(params, lane) != UCT_DEVICE_TYPE_NET) {
+            continue;
+        }
+
+        lane_map     |= UCS_BIT(lane);
+        max_bandwidth = ucs_max(max_bandwidth, lanes_perf[lane].bandwidth);
+    }
+
+    num_identical_devs = 0;
+    ucs_for_each_bit(lane, lane_map) {
+        if (fabsf(lanes_perf[lane].bandwidth - max_bandwidth) >
+            UCP_PROTO_PERF_EPSILON) {
+            continue;
+        }
+
+        dev_name = ucp_proto_multi_get_dev_name(params, lane);
+        for (i = 0; i < num_identical_devs; ++i) {
+            if (strcmp(dev_names[i], dev_name) == 0) {
+                break;
+            }
+        }
+
+        if (i == num_identical_devs) {
+            dev_names[num_identical_devs++] = dev_name;
+        }
+    }
+
+    if (num_identical_devs == 0) {
+        return num_lanes;
+    }
+
+    seed = params->worker->context->config.ext.local_rank % num_identical_devs;
+    for (i = fixed_first_lane ? 1 : 0, num_filtered_lanes = i; i < num_lanes;
+         ++i) {
+        lane   = lanes[i];
+        tl_rsc = ucp_proto_multi_get_tl_rsc(params, lane);
+        if ((tl_rsc->dev_type == UCT_DEVICE_TYPE_NET) &&
+            (strcmp(tl_rsc->dev_name, dev_names[seed]) != 0)) {
+            ucp_proto_perf_node_deref(&lanes_perf_nodes[lane]);
+            ucs_trace("filtered out " UCP_PROTO_LANE_FMT,
+                      UCP_PROTO_LANE_ARG(params, lane, &lanes_perf[lane]));
+        } else {
+            lanes[num_filtered_lanes++] = lane;
+        }
+    }
+
+    return num_filtered_lanes;
+}
+
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   const char *perf_name,
                                   ucp_proto_perf_t **perf_p,
@@ -252,6 +337,14 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     num_lanes = num_fast_lanes;
+    if (context->config.ext.proto_use_single_net_device) {
+        num_lanes = ucp_proto_multi_filter_net_devices(num_lanes,
+                                                       &params->super.super,
+                                                       lanes_perf,
+                                                       fixed_first_lane, lanes,
+                                                       lanes_perf_nodes);
+    }
+
     ucp_proto_multi_select_bw_lanes(&params->super.super, lanes, num_lanes,
                                     params->max_lanes, lanes_perf,
                                     fixed_first_lane, &selection);
