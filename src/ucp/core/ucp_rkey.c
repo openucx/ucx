@@ -231,6 +231,10 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                                                     memh->packed_sys_dev :
                                                     UCS_SYS_DEVICE_ID_UNKNOWN);
 
+        ucs_assertv((sys_dev_map == 0) || (sys_distance != NULL),
+                    "sys_dev_map=0x%lx sys_dev=%u",
+                    sys_dev_map, mem_info->sys_dev);
+
         /* Pack distance from sys_dev to each device in distance_dev_map */
         ucs_for_each_bit(sys_dev, sys_dev_map) {
             ucp_rkey_pack_distance(
@@ -643,7 +647,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
 {
     ucp_memory_info_t mem_info;
     ucs_status_t status;
-    ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
+    ucs_sys_dev_distance_t sys_dev_distances[UCS_SYS_DEVICE_ID_MAX] = {};
     ucs_sys_dev_distance_t *sys_distance;
     ucs_sys_device_t ep_sys_dev;
 
@@ -657,7 +661,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
 
     mem_info.type    = memh->mem_type;
     mem_info.sys_dev = memh->sys_dev;
-    sys_distance     = lanes_distance;
+    sys_distance     = sys_dev_distances;
 
     ucs_for_each_bit(ep_sys_dev, sys_dev_map) {
         status = ucs_topo_get_distance(memh->sys_dev, ep_sys_dev, sys_distance);
@@ -669,7 +673,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
 
     return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
                               ucp_memh_address(memh), ucp_memh_length(memh),
-                              &mem_info, sys_dev_map, lanes_distance, 0,
+                              &mem_info, sys_dev_map, sys_dev_distances, 0,
                               with_delim, memh_buffer);
 }
 
