@@ -16,6 +16,7 @@ typedef struct {
 typedef struct {
     uct_device_ep_t              super;
     struct doca_gpu_dev_verbs_qp *qp;
+    void                         *atomic_va;
     uint32_t                     cq_dbrec[2];
     uint32_t                     qp_dbrec[2];
     uct_rc_gdaki_op_t            ops[0];
