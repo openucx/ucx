@@ -49,6 +49,41 @@ ucs_status_t launch_uct_put_single(uct_device_ep_h ep,
     return *status;
 }
 
+static __global__ void
+uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
+                  uint64_t rva, uint64_t add, ucs_status_t *status_p)
+{
+    uct_device_completion_t comp;
+
+    comp.count          = 1;
+    comp.status         = UCS_OK;
+    ucs_status_t status = uct_device_ep_atomic<UCT_DEVICE_LEVEL_THREAD>(
+            ep, mem_elem, add, rva, UCT_DEVICE_FLAG_NODELAY, &comp);
+    if (status != UCS_OK) {
+        *status_p = status;
+        return;
+    }
+
+    while (comp.count != 0) {
+        uct_device_ep_progress<UCT_DEVICE_LEVEL_THREAD>(ep);
+    }
+    *status_p = UCS_OK;
+}
+
+/**
+ * Atomic operation.
+ */
+ucs_status_t launch_uct_atomic(uct_device_ep_h ep,
+                               uct_device_mem_element_t *mem_elem, uint64_t rva,
+                               uint64_t add)
+{
+    device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
+
+    uct_atomic_kernel<<<1, 1>>>(ep, mem_elem, rva, add, status.device_ptr());
+    synchronize();
+    return *status;
+}
+
 template<size_t iovcnt>
 static __global__ void
 uct_put_partial_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,

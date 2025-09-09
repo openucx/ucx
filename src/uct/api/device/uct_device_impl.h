@@ -59,6 +59,41 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
 
 
 /**
+ * @ingroup UCT_DEVICE
+ * @brief Posts one atomic add operation.
+ *
+ * This device routine increments a single memory value by @a inc_value using the 
+ * device endpoint @a device_ep. The memory element @a mem_elem must be valid and 
+ * contain the remote memory region to be modified.
+ *
+ * User can pass @a comp to track execution and completion status.
+ * The @a flags parameter can be used to modify the behavior
+ * of the routine.
+ *
+ * @param [in]  device_ep       Device endpoint to be used for the operation.
+ * @param [in]  mem_elem        Memory element representing the memory to be modified.
+ * @param [in]  inc_value       Value of the remote increment.
+ * @param [in]  remote_address  Remote virtual address to write data to.
+ * @param [in]  flags           Flags to modify the function behavior.
+ * @param [in]  comp            Completion object to track the progress of operation.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+template<uct_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_device_ep_atomic(
+        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uint64_t inc_value, uint64_t remote_address, uint64_t flags,
+        uct_device_completion_t *comp)
+{
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
+        return uct_rc_mlx5_gda_ep_atomic<level>(device_ep, mem_elem, inc_value,
+                                                remote_address, flags, comp);
+    }
+    return UCS_ERR_UNSUPPORTED;
+}
+
+
+/**
  * @ingroup UCP_DEVICE
  * @brief Posts few put operations followed by one atomic increment operation.
  *

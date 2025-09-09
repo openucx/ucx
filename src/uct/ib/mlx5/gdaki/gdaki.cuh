@@ -176,12 +176,12 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(doca_gpu_dev_verbs_qp *qp,
 }
 
 template<uct_device_level_t level>
-UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
-        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
+UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
+        uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_element_t *tl_mem_elem,
         const void *address, uint64_t remote_address, size_t length,
-        uint64_t flags, uct_device_completion_t *comp)
+        uint64_t flags, uct_device_completion_t *comp, uint32_t opcode,
+        bool is_atomic, uint64_t add)
 {
-    auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_elem);
     doca_gpu_dev_verbs_qp *qp = ep->qp;
@@ -206,9 +206,9 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
 
         uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
                 qp, doca_gpu_dev_verbs_get_wqe_ptr(qp, wqe_idx), wqe_idx,
-                MLX5_OPCODE_RDMA_WRITE, cflag, remote_address, mem_elem->rkey,
-                reinterpret_cast<uint64_t>(address), mem_elem->lkey, length, 0,
-                0);
+                opcode, cflag, remote_address, mem_elem->rkey,
+                reinterpret_cast<uint64_t>(address), mem_elem->lkey, length,
+                is_atomic, add);
     }
 
     uct_rc_mlx5_gda_sync<level>();
@@ -219,6 +219,30 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
 
     uct_rc_mlx5_gda_sync<level>();
     return UCS_OK;
+}
+
+template<uct_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
+        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
+        const void *address, uint64_t remote_address, size_t length,
+        uint64_t flags, uct_device_completion_t *comp)
+{
+    auto ep = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, address,
+                                            remote_address, length, flags, comp,
+                                            MLX5_OPCODE_RDMA_WRITE, false, 0);
+}
+
+template<uct_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic(
+        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
+        uint64_t value, uint64_t remote_address, uint64_t flags,
+        uct_device_completion_t *comp)
+{
+    auto ep = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, ep->atomic_va,
+                                            remote_address, 8, flags, comp,
+                                            MLX5_OPCODE_ATOMIC_FA, true, value);
 }
 
 template<uct_device_level_t level>

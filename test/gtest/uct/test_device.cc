@@ -94,6 +94,37 @@ UCS_TEST_P(test_device, single)
     recvbuf.pattern_fill(SEED2);
 }
 
+UCS_TEST_P(test_device, atomic)
+{
+    mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0,
+                         UCS_MEMORY_TYPE_CUDA);
+    uint64_t signal_val = 0;
+    size_t i;
+
+    uct_iface_attr_v2_t iface_attr;
+    iface_attr.field_mask = UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &iface_attr));
+
+    mapped_buffer elembuf(iface_attr.device_mem_element_size, 0, *m_sender, 0,
+                          UCS_MEMORY_TYPE_CUDA);
+    uct_device_mem_element_t *mem_elem = (uct_device_mem_element_t*)
+                                                 elembuf.ptr();
+    ASSERT_UCS_OK(uct_iface_mem_element_pack(m_sender->iface(), nullptr,
+                                             signal.rkey(), mem_elem));
+
+    uct_device_ep_h dev_ep;
+    ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
+
+    for (i = 0; i < 100; i++) {
+        ASSERT_UCS_OK(ucx_cuda::launch_uct_atomic(dev_ep, mem_elem,
+                                                  (uintptr_t)signal.ptr(), 4));
+        signal_val += 4;
+        while (!mem_buffer::compare(&signal_val, signal.ptr(),
+                                    sizeof(signal_val), UCS_MEMORY_TYPE_CUDA))
+            ;
+    }
+}
+
 UCS_TEST_P(test_device, partial)
 {
     constexpr uint64_t SEED1 = 0x1111111111111111lu;
