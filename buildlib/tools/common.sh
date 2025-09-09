@@ -83,7 +83,7 @@ build() {
 	shift
 
 	config_args="--prefix=$ucx_inst --without-java"
-	if [ "X$have_cuda" != "Xno" ]
+	if [ -n "$have_cuda" ] && [ "X$have_cuda" != "Xno" ]
 	then
 		config_args+=" --with-cuda=$have_cuda --with-iodemo-cuda"
 
