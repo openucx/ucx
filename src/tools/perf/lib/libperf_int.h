@@ -72,9 +72,11 @@ struct ucx_perf_allocator {
 
 
 typedef ucs_status_t (*ucp_perf_dispatch_func_t)(ucx_perf_context_t *perf);
+typedef ucs_status_t (*uct_perf_dispatch_func_t)(ucx_perf_context_t *perf);
 
 struct ucx_perf_device_dispatcher {
     ucp_perf_dispatch_func_t ucp_dispatch;
+    uct_perf_dispatch_func_t uct_dispatch;
 };
 
 typedef struct {
@@ -246,6 +248,21 @@ static UCS_F_ALWAYS_INLINE void ucx_perf_update(ucx_perf_context_t *perf,
 
     if (ucs_unlikely((perf->current.time - perf->prev.time) >=
                      perf->report_interval)) {
+        ucx_perf_report(perf);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucx_perf_update_multi(ucx_perf_context_t *perf, ucx_perf_counter_t iters,
+                      size_t bytes)
+{
+    perf->current.time   = ucs_get_time();
+    perf->current.iters += iters;
+    perf->current.bytes += bytes;
+    perf->current.msgs  += iters;
+    perf->prev_time      = perf->current.time;
+
+    if (ucs_likely(perf->current.iters < perf->params.max_iter)) {
         ucx_perf_report(perf);
     }
 }
