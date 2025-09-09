@@ -247,8 +247,6 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
         }
     }
 
-
-out_packed_size:
     result = UCS_PTR_BYTE_DIFF(buffer, p);
 out:
     ucs_log_indent_level(UCS_LOG_LEVEL_TRACE, -1);
