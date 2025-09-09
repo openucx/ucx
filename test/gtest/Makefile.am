@@ -269,14 +269,23 @@ gtest_SOURCES += \
 	uct/cuda/test_cuda_nvml.cc
 
 if HAVE_NVCC
+if HAVE_GPUNETIO # temporarily all device code depends on doca
 NVCC_EXTRA_FLAGS = \
 	$(CUDA_CPPFLAGS) \
+	$(GPUNETIO_CFLAGS) \
+	-I$(top_srcdir)/test \
 	-I$(top_srcdir)/test/gtest
 include $(top_srcdir)/config/cuda.am
 
 gtest_SOURCES += \
+	uct/cuda/test_kernels.cu \
+	uct/test_device.cc \
 	ucp/cuda/test_kernels.cu \
-	ucp/test_ucp_device.cc
+	ucp/test_ucp_device.cc \
+	uct/cuda/test_kernels_uct.cu \
+	uct/cuda/test_cuda_ipc_device.cc
+
+endif
 endif
 
 gtest_CPPFLAGS += \

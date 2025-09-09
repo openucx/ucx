@@ -5,9 +5,9 @@
 
 SUFFIXES = .cu
 
-NVCC_CMD = $(NVCC_WRAP) $(NVCC) $(NVCCFLAGS) $(NVCC_EXTRA_FLAGS) \
-		   -c $< -MT $@ -MF $(DEPDIR)/cuda/$@.d -MMD -o $@ \
-		   -DHAVE_CONFIG_H $(BASE_NVCCFLAGS)
+NVCC_CMD = $(NVCC_WRAP) $(NVCC) -DHAVE_CONFIG_H \
+           $(BASE_NVCCFLAGS) $(NVCCFLAGS) $(NVCC_EXTRA_FLAGS) \
+           -c $< -MT $@ -MF $(DEPDIR)/cuda/$@.d -MMD -o $@
 NVCC_LT_CMD = $(LIBTOOL) --tag=CXX --mode=compile $(NVCC_CMD)
 
 define nvcc-build

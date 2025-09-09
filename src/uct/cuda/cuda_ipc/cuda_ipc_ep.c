@@ -3,6 +3,9 @@
  * See file LICENSE for terms.
  */
 
+#include "base/cuda_iface.h"
+#include "uct/api/uct_def.h"
+#include "uct/api/device/uct_device_types.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -32,11 +35,15 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     self->remote_pid = *(const pid_t*)params->iface_addr;
+    self->device_ep  = NULL;
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
+    if (self->device_ep != NULL) {
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)self->device_ep));
+    }
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_ep_t, uct_base_ep_t)
@@ -113,7 +120,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return status;
     }
 
-    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device, &mapped_addr);
+    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device, &mapped_addr,
+                                        UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
@@ -226,5 +234,39 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_zcopy,
                       uct_iov_total_length(iov, iovcnt));
     uct_cuda_ipc_trace_data(remote_addr, rkey, "PUT_ZCOPY [length %zu]",
                                 uct_iov_total_length(iov, iovcnt));
+    return status;
+}
+
+ucs_status_t uct_cuda_ipc_ep_get_device_ep(uct_ep_h tl_ep,
+                                           uct_device_ep_h *device_ep_p)
+{
+    uct_cuda_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
+    uct_device_ep_t device_ep;
+    ucs_status_t status;
+
+    if (ep->device_ep != NULL) {
+        goto out;
+    }
+
+    device_ep.uct_tl_id = UCT_DEVICE_TL_CUDA_IPC;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemAlloc((CUdeviceptr *)&ep->device_ep, sizeof(uct_device_ep_t)));
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemcpyHtoD((CUdeviceptr)ep->device_ep, &device_ep, sizeof(uct_device_ep_t)));
+    if (status != UCS_OK) {
+        goto err_free_mem;
+    }
+
+out:
+    *device_ep_p = ep->device_ep;
+    return UCS_OK;
+err_free_mem:
+    cuMemFree((CUdeviceptr)&ep->device_ep);
+    ep->device_ep = NULL;
+err:
     return status;
 }
