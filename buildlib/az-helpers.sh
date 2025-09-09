@@ -193,13 +193,19 @@ try_load_cuda_env() {
     num_gpus=$(get_num_gpus)
     [ "${num_gpus}" -gt 0 ] || return 0
 
-    # Check cuda env module
-    az_module_load dev/cuda12.8 || return 0
-    have_cuda=yes
+    # Prefer local CUDA if available
+    if find /usr/local/cuda/ -name libcudart.so &>/dev/null 2>&1; then
+        have_cuda="/usr/local/cuda"
+    else
+        # Fallback to env module
+        az_module_load dev/cuda12.8 || return 0
+        have_cuda=yes
+    fi
 
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
     then
+        # TODO detect cuda version if using local CUDA
         az_module_load dev/gdrcopy2.4.4_cuda12.8.0 && have_gdrcopy=yes
     fi
 }
