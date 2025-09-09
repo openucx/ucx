@@ -302,15 +302,9 @@ int
 ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem);
 
 
-<<<<<<< HEAD
 int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem);
 
 
-int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev);
-
-
-=======
->>>>>>> parent of e816f536d (UCP/CORE: Rkey pack featuring Direct NIC.)
 /**
  * Get the number of registered system devices.
  *

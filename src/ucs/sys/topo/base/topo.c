@@ -903,19 +903,6 @@ out:
     return status;
 }
 
-int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev)
-{
-    int result;
-
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    result = (sys_dev < ucs_topo_global_ctx.num_devices) &&
-             (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev !=
-              UCS_SYS_DEVICE_ID_UNKNOWN);
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    return result;
-}
-
 ucs_status_t
 ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value)
 {
