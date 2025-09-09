@@ -56,14 +56,13 @@ typedef struct ucp_device_mem_list_handle {
     uct_device_ep_h uct_device_eps[UCP_DEVICE_MEM_LIST_MAX_EPS];
 
     /**
-     * Cumulative sizes of each transport/interface specific element object.
+     * Size of a given UCT memory element object for each UCT.
      */
-    uint8_t         mem_list_offset[UCP_DEVICE_MEM_LIST_MAX_EPS + 1];
+    uint16_t        uct_mem_element_size[UCP_DEVICE_MEM_LIST_MAX_EPS];
 
     /**
-     * Here follows @ref mem_list_length times @ref num_uct_eps @ref
-     * uct_device_mem_element objects. The offset of each object for a given
-     * uct is available in @ref mem_list_offset.
+     * For each @ref num_uct_eps UCT endpoints, a list of @ref
+     * uct_device_mem_element objects.
      */
 } ucp_device_mem_list_handle_t;
 

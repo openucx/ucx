@@ -296,57 +296,54 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     handle->proto_idx          = 0;
     handle->num_uct_eps        = num_uct_eps;
     handle->mem_list_length    = params->num_elements;
-    handle->mem_list_offset[0] = 0;
 
     /* Populate lane specific parameters */
     for (i = 0; i < num_uct_eps; i++) {
-        handle->mem_list_offset[i + 1] = uct_elem_size[i] +
-                                         handle->mem_list_offset[i];
         status = uct_ep_get_device_ep(ucp_ep_get_lane(ep, lanes[i]),
                                       &handle->uct_device_eps[i]);
         if (status != UCS_OK) {
             ucs_error("failed to get device_ep for lane=%u", lanes[i]);
-            /* TODO: actually fail */
+            goto err;
         }
+
+        handle->uct_mem_element_size[i] = uct_elem_size[i];
     }
 
     /* Populate element specific parameters */
-    ucp_element = params->elements;
     uct_element = UCS_PTR_BYTE_OFFSET(handle, sizeof(*handle));
-    for (i = 0; i < params->num_elements; i++) {
-        for (j = 0; j < num_uct_eps; j++) {
+    for (i = 0; i < num_uct_eps; i++) {
+        local_md_index = ep_config->md_index[lanes[i]];
+        wiface         = ucp_worker_iface(ep->worker,
+                                          ucp_ep_get_rsc_index(ep, lanes[i]));
+        ucp_element    = params->elements;
+        for (j = 0; j < params->num_elements; j++) {
             /* Local registration */
-            local_md_index = ep_config->md_index[lanes[j]];
-            uct_memh       = ucp_element->memh->uct[local_md_index];
+            uct_memh = ucp_element->memh->uct[local_md_index];
             ucs_assertv((ucp_element->memh->md_map & UCS_BIT(local_md_index)) !=
                                 0,
                         "uct_memh=%p md_map=0x%lx local_md_index=%u", uct_memh,
                         ucp_element->memh->md_map, local_md_index);
-            ucs_assertv(uct_memh != UCT_MEM_HANDLE_NULL, "uct_memh=%p",
-                        uct_memh);
+            ucs_assert(uct_memh != UCT_MEM_HANDLE_NULL);
 
             /* Remote registration */
             rkey_index =
                     ucs_bitmap2idx(ucp_element->rkey->md_map,
-                                   ep_config->key.lanes[lanes[j]].dst_md_index);
+                                   ep_config->key.lanes[lanes[i]].dst_md_index);
             uct_rkey = ucp_rkey_get_tl_rkey(ucp_element->rkey, rkey_index);
             ucs_assert(uct_rkey != UCT_INVALID_RKEY);
 
             /* Element packing */
-            wiface = ucp_worker_iface(ep->worker,
-                                      ucp_ep_get_rsc_index(ep, lanes[j]));
             status = uct_iface_mem_element_pack(wiface->iface, uct_memh,
                                                 uct_rkey, uct_element);
             if (status != UCS_OK) {
                 ucs_error("failed to pack uct memory element for lane=%u",
-                          lanes[j]);
-                /* TODO: actually fail */
+                          lanes[i]);
+                goto err;
             }
 
-            uct_element = UCS_PTR_BYTE_OFFSET(uct_element, uct_elem_size[j]);
+            ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
+            uct_element = UCS_PTR_BYTE_OFFSET(uct_element, uct_elem_size[i]);
         }
-
-        ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
     }
 
     ucs_assert(UCS_PTR_BYTE_OFFSET(handle, handle_size) == uct_element);
