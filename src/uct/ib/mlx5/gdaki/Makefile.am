@@ -18,10 +18,14 @@ libuct_ib_mlx5_gda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                                  $(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la \
                                  $(top_builddir)/src/uct/cuda/libuct_cuda.la \
                                  $(CUDA_LIBS) $(GPUNETIO_LIBS)
-libuct_ib_mlx5_gda_ladir       = $(includedir)/uct/ib_mlx5/gdaki
+libuct_ib_mlx5_gda_ladir       = $(includedir)/uct/ib/mlx5/gdaki
 
 libuct_ib_mlx5_gda_la_SOURCES = \
 	gdaki.c
+
+nobase_dist_libuct_ib_mlx5_gda_la_HEADERS = \
+	gdaki.cuh \
+	gdaki_dev.h
 
 noinst_HEADERS = \
 	gdaki.h
