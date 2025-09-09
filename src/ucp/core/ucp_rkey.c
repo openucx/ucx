@@ -596,7 +596,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
 
     if (rkey_compat) {
         mem_info.type    = memh->mem_type;
-        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        mem_info.sys_dev = memh->sys_dev;
         return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
                                   ucp_memh_address(memh), ucp_memh_length(memh),
                                   &mem_info, 0, NULL, 0, memh_buffer);
