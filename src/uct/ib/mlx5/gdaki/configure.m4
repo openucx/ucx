@@ -34,6 +34,10 @@ AS_IF([test "x$cuda_happy" = "xyes"],
                              GPUNETIO_LDFLAGS="$GPUNETIO_LDFLAGS -Wl,-rpath-link,${with_doca_gpunetio}/${libdir}"
                          fi
                      done
+                     # Add CUDA lib dirs to rpath-link for gpunetio
+                     for cuda_libdir in $CUDA_LIB_DIRS; do
+                         GPUNETIO_LDFLAGS="$GPUNETIO_LDFLAGS -Wl,-rpath-link,${cuda_libdir}"
+                     done
                     ]) # "x$with_doca_gpunetio" != "xguess"
              ]) # "x$with_doca_gpunetio" != "xno"
 
@@ -41,8 +45,6 @@ AS_IF([test "x$cuda_happy" = "xyes"],
        save_LDFLAGS="$LDFLAGS"
        CPPFLAGS="$CPPFLAGS $CUDA_CFLAGS $GPUNETIO_CFLAGS"
        LDFLAGS="$LDFLAGS $CUDA_LDFLAGS $GPUNETIO_LDFLAGS"
-       AS_IF([test -n "$CUDA_LIB_DIR"],
-             [LDFLAGS="$LDFLAGS -Wl,-rpath-link,$CUDA_LIB_DIR"])
 
        gpunetio_happy=yes
        AC_CHECK_HEADERS([doca_gpunetio.h], [], [gpunetio_happy=no])
