@@ -27,11 +27,11 @@ AS_IF([test "x$cuda_happy" = "xyes"],
                     ],
                     [
                      GPUNETIO_CFLAGS="-I${with_doca_gpunetio}/include"
-                     for libdir in lib/x86_64-linux-gnu lib64; do
-                         if test -d "${with_doca_gpunetio}/${libdir}"; then
-                             GPUNETIO_LDFLAGS="$GPUNETIO_LDFLAGS -L${with_doca_gpunetio}/${libdir} "
+                     for doca_libdir in lib/x86_64-linux-gnu lib64; do
+                         if test -d "${with_doca_gpunetio}/${doca_libdir}"; then
+                             GPUNETIO_LDFLAGS="$GPUNETIO_LDFLAGS -L${with_doca_gpunetio}/${doca_libdir} "
                              # Add rpath-link to search for doca_gpunetio dependencies
-                             GPUNETIO_LDFLAGS="$GPUNETIO_LDFLAGS -Wl,-rpath-link,${with_doca_gpunetio}/${libdir}"
+                             GPUNETIO_LDFLAGS="$GPUNETIO_LDFLAGS -Wl,-rpath-link,${with_doca_gpunetio}/${doca_libdir}"
                          fi
                      done
                      # Add CUDA lib dirs to rpath-link for gpunetio
@@ -49,7 +49,7 @@ AS_IF([test "x$cuda_happy" = "xyes"],
        gpunetio_happy=yes
        AC_CHECK_HEADERS([doca_gpunetio.h], [], [gpunetio_happy=no])
        AC_CHECK_LIB([doca_gpunetio], [doca_gpu_verbs_bridge_export_qp],
-                    [], [gpunetio_happy=no], [$GPUNETIO_LIBS])
+                    [true], [gpunetio_happy=no], [$GPUNETIO_LIBS])
 
        CPPFLAGS="$save_CPPFLAGS"
        LDFLAGS="$save_LDFLAGS"
