@@ -246,6 +246,94 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic(
 }
 
 template<uct_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
+        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_list,
+        unsigned mem_list_count, void *const *addresses,
+        const uint64_t *remote_addresses, const size_t *lengths,
+        uint64_t counter_inc_value, uint64_t counter_remote_address,
+        uint64_t flags, uct_device_completion_t *comp)
+{
+    auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
+            tl_mem_list);
+    doca_gpu_dev_verbs_qp *qp = ep->qp;
+    unsigned cflag            = 0;
+    int count                 = mem_list_count;
+    int counter_index         = count - 1;
+    bool atomic               = false;
+    uint64_t wqe_idx;
+    unsigned lane_id;
+    unsigned num_lanes;
+    uint32_t fc;
+    uint64_t wqe_base;
+    size_t length;
+    void *address;
+    uint32_t lkey;
+    uint64_t remote_address;
+    uint32_t rkey;
+    int opcode;
+
+    if ((level != UCT_DEVICE_LEVEL_THREAD) &&
+        (level != UCT_DEVICE_LEVEL_WARP)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (counter_remote_address == 0) {
+        count--;
+    }
+
+    uct_rc_mlx5_gda_exec_init<level>(lane_id, num_lanes);
+    uct_rc_mlx5_gda_reserv_wqe<level>(qp, count, lane_id, wqe_base);
+    if (wqe_base == -1ULL) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    fc = doca_gpu_dev_verbs_wqe_idx_inc_mask(qp->sq_wqe_pi, qp->sq_wqe_num / 2);
+    wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_base, lane_id);
+    for (uint32_t i = lane_id; i < count; i += num_lanes) {
+        if (i == counter_index) {
+            atomic         = true;
+            address        = ep->atomic_va;
+            remote_address = counter_remote_address;
+            length         = 8;
+            opcode         = MLX5_OPCODE_ATOMIC_FA;
+        } else if (i < counter_index) {
+            address        = addresses[i];
+            remote_address = remote_addresses[i];
+            length         = lengths[i];
+            opcode         = MLX5_OPCODE_RDMA_WRITE;
+        } else {
+            continue;
+        }
+
+        if (((comp != nullptr) && (i == count - 1)) ||
+            ((comp == nullptr) && (wqe_idx == fc))) {
+            cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
+            ep->ops[wqe_idx & qp->sq_wqe_mask].comp = comp;
+        }
+
+        auto wqe_ptr = doca_gpu_dev_verbs_get_wqe_ptr(qp, wqe_idx);
+        lkey         = mem_list[i].lkey;
+        rkey         = mem_list[i].rkey;
+
+        uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
+                qp, wqe_ptr, wqe_idx, opcode, cflag, remote_address, rkey,
+                reinterpret_cast<uint64_t>(address), lkey, length, atomic,
+                counter_inc_value);
+        wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_idx, num_lanes);
+    }
+
+    uct_rc_mlx5_gda_sync<level>();
+
+    if (lane_id == 0) {
+        uct_rc_mlx5_gda_db(qp, wqe_base, count, flags);
+    }
+
+    uct_rc_mlx5_gda_sync<level>();
+    return UCS_OK;
+}
+
+template<uct_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
@@ -260,7 +348,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
     doca_gpu_dev_verbs_qp *qp = ep->qp;
     unsigned cflag            = 0;
     unsigned count            = mem_list_count;
-    int atomic                = 0;
+    bool atomic               = false;
     uint64_t wqe_idx;
     unsigned lane_id;
     unsigned num_lanes;
@@ -294,16 +382,16 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
     for (uint32_t i = lane_id; i < count; i += num_lanes) {
         if (i == mem_list_count) {
             idx            = counter_index;
-            atomic         = 1;
+            atomic         = true;
             address        = ep->atomic_va;
             remote_address = counter_remote_address;
             length         = 8;
             opcode         = MLX5_OPCODE_ATOMIC_FA;
         } else if (i < mem_list_count) {
             idx            = mem_list_indices[i];
-            address        = addresses[idx];
-            remote_address = remote_addresses[idx];
-            length         = lengths[idx];
+            address        = addresses[i];
+            remote_address = remote_addresses[i];
+            length         = lengths[i];
             opcode         = MLX5_OPCODE_RDMA_WRITE;
         } else {
             continue;
