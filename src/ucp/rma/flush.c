@@ -420,7 +420,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
         status = req->status;
         ucp_trace_req(req, "releasing flush ep %p, returning status %s",
                       ep, ucs_status_string(status));
-        ucp_request_put_param(param, req)
+        ucp_request_put_param(param, req);
         return UCS_STATUS_PTR(status);
     }
 
