@@ -23,6 +23,7 @@ CXXFLAGS              += -nostdlib $(PERF_LIB_CXXFLAGS) -std=c++11
 
 noinst_HEADERS = \
 	libperf_int.h \
+	uct_tests.h \
 	ucp_tests.h
 
 libucxperf_la_SOURCES = \

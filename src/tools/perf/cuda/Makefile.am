@@ -23,7 +23,8 @@ libucx_perftest_cuda_la_LIBADD  += \
     -lstdc++
 
 libucx_perftest_cuda_la_SOURCES += \
-    ucp_cuda_kernel.cu
+    ucp_cuda_kernel.cu \
+    uct_cuda_kernel.cu
 
 noinst_HEADERS = \
     cuda_common.h \

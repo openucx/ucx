@@ -482,9 +482,11 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_iov  = attr.cap.put.max_iov;
         break;
     case UCX_PERF_CMD_PUT_MULTI:
-        min_size = 0;
-        max_size = 0;
-        max_iov  = 0;
+        /* TODO: replace with real capabilities */
+        required_flags = UCT_IFACE_FLAG_DEVICE_EP;
+        min_size       = 0;
+        max_size       = SIZE_MAX;
+        max_iov        = SIZE_MAX;
         break;
     case UCX_PERF_CMD_GET:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_GET_SHORT,

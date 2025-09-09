@@ -21,6 +21,26 @@ struct ucx_perf_cuda_context {
     ucx_perf_counter_t   max_iters;
     ucx_perf_cuda_time_t report_interval_ns;
     ucx_perf_counter_t   completed_iters;
+    ucs_status_t         status;
+};
+
+template <typename T>
+class ucx_perf_cuda_mem {
+public:
+    ucx_perf_cuda_mem(size_t size = sizeof(T))
+    {
+        CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaMalloc, &m_ptr, size);
+    }
+
+    ~ucx_perf_cuda_mem()
+    {
+        CUDA_CALL_WARN(cudaFree, m_ptr);
+    }
+
+    T *ptr() const { return m_ptr; }
+
+private:
+    T *m_ptr;
 };
 
 UCS_F_DEVICE ucx_perf_cuda_time_t ucx_perf_cuda_get_time_ns()

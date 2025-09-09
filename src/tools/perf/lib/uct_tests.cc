@@ -17,21 +17,21 @@
 #endif
 
 #include "libperf_int.h"
+#include "uct_tests.h"
 
 #include <limits>
 
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, uct_perf_data_layout_t DATA, bool ONESIDED>
-class uct_perf_test_runner {
+class uct_perf_test_runner : public uct_perf_test_runner_base<uint8_t> {
 public:
-
-    typedef uint8_t psn_t;
+    using psn_t = uint8_t;
 
     uct_perf_test_runner(ucx_perf_context_t &perf) :
+        uct_perf_test_runner_base<uint8_t>(perf),
         m_perf(perf),
         m_max_outstanding(m_perf.params.max_outstanding),
         m_send_b_count(0)
-
     {
         ucs_assert_always(m_max_outstanding > 0);
 
@@ -127,33 +127,6 @@ public:
         }
 
         return length;
-    }
-
-    inline void set_sn(void *dst_sn, ucs_memory_type_t dst_mem_type,
-                       const void *src_sn,
-                       const ucx_perf_allocator_t *allocator) const
-    {
-        if (ucs_likely(allocator->mem_type == UCS_MEMORY_TYPE_HOST)) {
-            ucs_assert(dst_mem_type == UCS_MEMORY_TYPE_HOST);
-            *reinterpret_cast<psn_t*>(dst_sn) = *reinterpret_cast<const psn_t*>(src_sn);
-        }
-
-        allocator->memcpy(dst_sn, dst_mem_type, src_sn, UCS_MEMORY_TYPE_HOST,
-                          sizeof(psn_t));
-    }
-
-    inline psn_t get_sn(const volatile void *sn,
-                        ucs_memory_type_t mem_type,
-                        const ucx_perf_allocator_t *allocator) const {
-        if (ucs_likely(mem_type == UCS_MEMORY_TYPE_HOST)) {
-            return *reinterpret_cast<const volatile psn_t*>(sn);
-        }
-
-        psn_t host_sn;
-        allocator->memcpy(&host_sn, UCS_MEMORY_TYPE_HOST,
-                          const_cast<const void*>(sn), mem_type,
-                          sizeof(psn_t));
-        return host_sn;
     }
 
     inline void set_recv_sn(void *recv_sn,
@@ -807,17 +780,26 @@ ITERATE_TEST_CASES(DEFINE_DISPATCH_FUNC)
 
 ucs_status_t uct_perf_test_dispatch(ucx_perf_context_t *perf)
 {
-    using uct_dispatch_func_t                      = ucs_status_t
-        (*)(ucx_perf_context_t *perf);
-    static const uct_dispatch_func_t dispatchers[] = {
+    static const uct_perf_dispatch_func_t dispatchers[] = {
         ITERATE_TEST_CASES(DISPATCH_FUNC_ENTRY)
     };
     ucs_status_t status;
 
-    for (const auto &dispatcher : dispatchers) {
-        status = dispatcher(perf);
-        if (status != UCS_ERR_INVALID_PARAM) {
-            return status;
+    ucs_memory_type_t mem_type   = perf->params.send_device.mem_type;
+    if (mem_type != UCS_MEMORY_TYPE_LAST) {
+        auto mem_type_dispatcher = ucx_perf_mem_type_device_dispatchers[mem_type];
+        if (mem_type_dispatcher != nullptr) {
+            status = (*mem_type_dispatcher->uct_dispatch)(perf);
+            if (status != UCS_ERR_INVALID_PARAM) {
+                return status;
+            }
+        }
+    } else {
+        for (const auto &dispatcher : dispatchers) {
+            status = dispatcher(perf);
+            if (status != UCS_ERR_INVALID_PARAM) {
+                return status;
+            }
         }
     }
 

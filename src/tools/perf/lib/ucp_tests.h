@@ -16,6 +16,8 @@
 template<typename PSN>
 class ucp_perf_test_runner_base {
 public:
+    using psn_t = PSN;
+
     ucp_perf_test_runner_base(ucx_perf_context_t &perf) :
         m_perf(perf)
     {}

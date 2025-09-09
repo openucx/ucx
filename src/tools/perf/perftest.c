@@ -56,6 +56,12 @@ test_type_t tests[] = {
     {"put_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put bandwidth / message rate", "overhead", 32},
 
+    {"put_multi_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "put multi bandwidth", "overhead", 32},
+
+    {"put_multi_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_PINGPONG,
+     "put multi latency", "latency", 32},
+
     {"get_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "get bandwidth / message rate", "overhead", 32},
 
