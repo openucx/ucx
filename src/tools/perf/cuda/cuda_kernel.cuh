@@ -11,6 +11,7 @@
 #include <tools/perf/lib/libperf_int.h>
 
 #include <cuda_runtime.h>
+#include <cuda.h>
 
 
 typedef unsigned long long ucx_perf_cuda_time_t;
@@ -50,7 +51,7 @@ ucx_perf_cuda_update_report(ucx_perf_cuda_context &ctx,
 template <typename Base>
 class ucx_perf_cuda_test_runner: public Base {
 public:
-    using psn_t = uint64_t;
+    using psn_t = typename Base::psn_t;
     using Base::m_perf;
 
     ucx_perf_cuda_test_runner(ucx_perf_context_t &perf) : Base(perf)
@@ -66,8 +67,6 @@ public:
         m_cpu_ctx->report_interval_ns = perf.params.report_interval *
                                         UCS_NSEC_PER_SEC;
         m_cpu_ctx->completed_iters    = 0;
-
-        m_poll_interval               = perf.params.report_interval / 10000;
     }
 
     ~ucx_perf_cuda_test_runner()
@@ -98,8 +97,9 @@ public:
             return sn;
         }
 
-        // TODO: use cuStreamWaitValue64 if available
-        usleep(m_poll_interval);
+        CU_CALL_ERR(cuStreamWaitValue64, m_stream, (CUdeviceptr)gpu_ptr, value,
+                    CU_STREAM_WAIT_VALUE_GEQ);
+        CU_CALL_ERR(cuStreamSynchronize, m_stream);
         return get_sn(gpu_ptr, cpu_ptr);
     }
 
@@ -129,28 +129,29 @@ public:
 private:
     ucs_status_t init_ctx()
     {
-        CUDA_CALL(UCS_ERR_NO_MEMORY, cudaHostAlloc, &m_cpu_ctx,
-                  sizeof(ucx_perf_cuda_context), cudaHostAllocMapped);
+        CU_CALL_RET(UCS_ERR_IO_ERROR, cuStreamCreate, &m_stream,
+                    CU_STREAM_NON_BLOCKING);
+        CUDA_CALL_RET(UCS_ERR_NO_MEMORY, cudaHostAlloc, &m_cpu_ctx,
+                      sizeof(ucx_perf_cuda_context), cudaHostAllocMapped);
 
-        cudaError_t err = cudaHostGetDevicePointer(&m_gpu_ctx, m_cpu_ctx, 0);
-        if (err != cudaSuccess) {
-            ucs_error("cudaHostGetDevicePointer() failed: %s",
-                      cudaGetErrorString(err));
-            cudaFreeHost(m_cpu_ctx);
-            return UCS_ERR_IO_ERROR;
-        }
-
+        CUDA_CALL(goto err, UCS_LOG_LEVEL_ERROR, cudaHostGetDevicePointer,
+                  &m_gpu_ctx, m_cpu_ctx, 0);
         return UCS_OK;
+
+    err:
+        cudaFreeHost(m_cpu_ctx);
+        return UCS_ERR_IO_ERROR;
     }
 
     void destroy_ctx()
     {
-        CUDA_CALL_HANDLER(ucs_warn, , cudaFreeHost, m_cpu_ctx);
+        CU_CALL_WARN(cuStreamDestroy, m_stream);
+        CUDA_CALL_WARN(cudaFreeHost, m_cpu_ctx);
     }
 
     ucx_perf_cuda_context *m_cpu_ctx;
     ucx_perf_cuda_context *m_gpu_ctx;
-    double                m_poll_interval;
+    CUstream              m_stream;
 };
 
 
