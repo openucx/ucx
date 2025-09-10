@@ -194,8 +194,9 @@ try_load_cuda_env() {
     [ "${num_gpus}" -gt 0 ] || return 0
 
     # Prefer local CUDA if available
-    if find /usr/local/cuda/ -name libcudart.so &>/dev/null 2>&1; then
-        have_cuda="/usr/local/cuda"
+    cuda_local_dir="/usr/local/cuda"
+    if find ${cuda_local_dir}/ -name 'libcudart.so.1[2-9]*' &>/dev/null; then
+        have_cuda="${cuda_local_dir}"
     else
         # Fallback to env module
         az_module_load dev/cuda12.8 || return 0
