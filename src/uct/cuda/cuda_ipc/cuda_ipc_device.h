@@ -3,8 +3,8 @@
  * See file LICENSE for terms.
  */
 
-#ifndef UCT_CUDA_IPC_EP_DEVICE_H
-#define UCT_CUDA_IPC_EP_DEVICE_H
+#ifndef UCT_CUDA_IPC_DEVICE_H
+#define UCT_CUDA_IPC_DEVICE_H
 
 #include <stddef.h>
 

@@ -8,14 +8,14 @@
 #endif
 
 #include "cuda_ipc.inl"
+#include "cuda_ipc_device.h"
+#include "cuda_ipc_ep.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
-#include "cuda_ipc_ep.h"
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_nvml.h>
-#include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/assert.h>

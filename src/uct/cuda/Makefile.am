@@ -22,11 +22,12 @@ noinst_HEADERS = \
 	cuda_copy/cuda_copy_md.h \
 	cuda_copy/cuda_copy_iface.h \
 	cuda_copy/cuda_copy_ep.h \
-	cuda_ipc/cuda_ipc_md.h \
-	cuda_ipc/cuda_ipc_iface.h \
-	cuda_ipc/cuda_ipc_ep.h \
+	cuda_ipc/cuda_ipc.inl \
 	cuda_ipc/cuda_ipc_cache.h \
-	cuda_ipc/cuda_ipc.inl
+	cuda_ipc/cuda_ipc_device.h \
+	cuda_ipc/cuda_ipc_ep.h \
+	cuda_ipc/cuda_ipc_iface.h \
+	cuda_ipc/cuda_ipc_md.h
 
 libuct_cuda_la_SOURCES = \
 	base/cuda_iface.c \
