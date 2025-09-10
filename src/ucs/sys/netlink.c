@@ -73,14 +73,14 @@ err:
 
 static ucs_status_t
 ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg, int *done_p,
+                      ucs_netlink_parse_cb_t parse_cb, void *arg, int *is_done_p,
                       int is_dump)
 {
     ucs_status_t status        = UCS_INPROGRESS;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
 
     while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-           (!is_dump || !(*done_p = UCS_NETLINK_IS_MESSAGE_DONE(nlh)))) {
+           (!is_dump || !(*is_done_p = UCS_NETLINK_IS_MESSAGE_DONE(nlh)))) {
         if (nlh->nlmsg_type == NLMSG_ERROR) {
             struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
             ucs_error("received error response from netlink err=%d: %s\n",
@@ -103,7 +103,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
 {
     struct nlmsghdr nlh = {0};
     int netlink_fd      = -1;
-    int message_done    = 0;
+    int is_message_done = 0;
     int is_dump         = nlmsg_flags & NLM_F_DUMP;
     ucs_status_t status;
     struct iovec iov[2];
@@ -161,9 +161,9 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         }
 
         status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb,
-                                       arg, &message_done, is_dump);
+                                       arg, &is_message_done, is_dump);
         ucs_free(recv_msg);
-    } while (is_dump && !message_done);
+    } while (is_dump && !is_message_done);
 
 out:
     ucs_close_fd(&netlink_fd);
