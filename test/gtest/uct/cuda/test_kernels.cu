@@ -57,7 +57,7 @@ uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
 
     comp.count          = 1;
     comp.status         = UCS_OK;
-    ucs_status_t status = uct_device_ep_atomic<UCT_DEVICE_LEVEL_THREAD>(
+    ucs_status_t status = uct_device_ep_atomic_add<UCT_DEVICE_LEVEL_THREAD>(
             ep, mem_elem, add, rva, UCT_DEVICE_FLAG_NODELAY, &comp);
     if (status != UCS_OK) {
         *status_p = status;

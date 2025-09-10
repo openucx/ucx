@@ -234,7 +234,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
 }
 
 template<uct_device_level_t level>
-UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic(
+UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
         uint64_t value, uint64_t remote_address, uint64_t flags,
         uct_device_completion_t *comp)
