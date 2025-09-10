@@ -30,6 +30,10 @@ CUresult ucm_cuMemAllocAsync(CUdeviceptr *dptr, size_t size, CUstream hStream);
 CUresult ucm_cuMemAllocFromPoolAsync(CUdeviceptr *dptr, size_t size,
                                      CUmemoryPool pool, CUstream hStream);
 #endif
+#if CUDART_VERSION >= 12000
+CUresult ucm_cuLibraryGetGlobal(CUdeviceptr *dptr, size_t *bytes,
+                                CUlibrary library, const char *name);
+#endif
 CUresult ucm_cuMemFree(CUdeviceptr dptr);
 CUresult ucm_cuMemFree_v2(CUdeviceptr dptr);
 CUresult ucm_cuMemFreeHost(void *p);
