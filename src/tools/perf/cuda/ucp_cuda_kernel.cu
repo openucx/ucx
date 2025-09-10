@@ -50,8 +50,6 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx, bool is_sende
 class ucp_perf_cuda_test_runner:
     public ucx_perf_cuda_test_runner<ucp_perf_test_runner_base<uint64_t>> {
 public:
-    using psn_t = uint64_t;
-
     ucp_perf_cuda_test_runner(ucx_perf_context_t &perf) :
         ucx_perf_cuda_test_runner<ucp_perf_test_runner_base<uint64_t>>(perf)
     {
@@ -73,7 +71,7 @@ public:
 
         ucp_perf_cuda_put_multi_latency_kernel
             <UCP_DEVICE_LEVEL_BLOCK><<<1, thread_count>>>(gpu_ctx(), my_index);
-        CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
+        CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel(length);
         ucx_perf_get_time(&m_perf);
@@ -93,7 +91,7 @@ public:
             unsigned thread_count = m_perf.params.device_thread_count;
             ucp_perf_cuda_put_multi_bw_kernel<UCP_DEVICE_LEVEL_BLOCK>
                                              <<<1, thread_count>>>(gpu_ctx());
-            CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
+            CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
             wait_for_kernel(length);
 
