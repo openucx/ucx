@@ -116,6 +116,7 @@ test_ucp_proto::create_rkey_config_key(ucp_md_map_t md_map)
     rkey_config_key.mem_type           = UCS_MEMORY_TYPE_HOST;
     rkey_config_key.sys_dev            = UCS_SYS_DEVICE_ID_UNKNOWN;
     rkey_config_key.unreachable_md_map = 0;
+    rkey_config_key.flags              = 0;
 
     return rkey_config_key;
 }
