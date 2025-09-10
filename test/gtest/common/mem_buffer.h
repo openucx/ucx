@@ -111,11 +111,14 @@ public:
 
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);
+    mem_buffer(size_t size, ucs_memory_type_t mem_type, const void *data);
     virtual ~mem_buffer();
 
     ucs_memory_type_t mem_type() const;
 
     void *ptr() const;
+
+    uint64_t addr() const;
 
     size_t size() const;
 

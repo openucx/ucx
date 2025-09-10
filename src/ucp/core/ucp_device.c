@@ -120,8 +120,16 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
                                RKEY, NULL);
 
         /* TODO: Delegate most of checks below to proto selection */
-        if ((rkey == NULL) || (memh == NULL)) {
+        if (rkey == NULL) {
             return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (memh == NULL) {
+            if ((i < (num_elements - 1)) || (num_elements < 2)) {
+                return UCS_ERR_INVALID_PARAM;
+            }
+
+            continue;
         }
 
         if (i == 0) {
@@ -276,21 +284,27 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     }
 
     /* Populate handle header */
-    num_uct_eps            = i;
-    handle.version         = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    handle.proto_idx       = 0;
-    handle.num_uct_eps     = num_uct_eps;
-    handle.mem_list_length = params->num_elements;
+    num_uct_eps                      = i;
+    handle.version                   = UCP_DEVICE_MEM_LIST_VERSION_V1;
+    handle.proto_idx                 = 0;
+    handle.num_uct_eps               = num_uct_eps;
+    handle.mem_list_length           = params->num_elements;
     for (i = 0; i < num_uct_eps; i++) {
         status = uct_ep_get_device_ep(ucp_ep_get_lane(ep, lanes[i]),
                                       &handle.uct_device_eps[i]);
         if (status != UCS_OK) {
             ucs_error("failed to get device_ep for lane=%u", lanes[i]);
             goto err;
-            ;
         }
 
         handle.uct_mem_element_size[i] = uct_elem_size[i];
+
+        if (i == 0) {
+            handle.uct_mem_element_offset[0] = 0;
+        } else {
+            handle.uct_mem_element_offset[i] +=
+                handle.uct_mem_element_offset[i - 1] + uct_elem_size[i - 1];
+        }
     }
 
     /* Allocate handle on the same device memory */
@@ -316,12 +330,18 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         ucp_element    = params->elements;
         for (j = 0; j < params->num_elements; j++) {
             /* Local registration */
-            uct_memh = ucp_element->memh->uct[local_md_index];
-            ucs_assertv((ucp_element->memh->md_map & UCS_BIT(local_md_index)) !=
-                                0,
-                        "uct_memh=%p md_map=0x%lx local_md_index=%u", uct_memh,
-                        ucp_element->memh->md_map, local_md_index);
-            ucs_assert(uct_memh != UCT_MEM_HANDLE_NULL);
+            if (ucp_element->memh != NULL) {
+                uct_memh = ucp_element->memh->uct[local_md_index];
+                ucs_assertv((ucp_element->memh->md_map &
+                             UCS_BIT(local_md_index)) != 0,
+                            "uct_memh=%p md_map=0x%lx local_md_index=%u",
+                            uct_memh, ucp_element->memh->md_map,
+                            local_md_index);
+                ucs_assert(uct_memh != UCT_MEM_HANDLE_NULL);
+
+            } else {
+                uct_memh = NULL;
+            }
 
             /* Remote registration */
             rkey_index =

@@ -175,6 +175,12 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(doca_gpu_dev_verbs_qp *qp,
             &qp->sq_lock);
 }
 
+#define NTOH(_val) \
+    ((((_val)&0x000000ff) << 24) | \
+     (((_val)&0x0000ff00) << 8) | \
+     (((_val)&0x00ff0000) >> 8) | \
+     (((_val)&0xff000000) >> 24))
+
 template<uct_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_element_t *tl_mem_elem,
@@ -204,6 +210,11 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
             ep->ops[wqe_idx & qp->sq_wqe_mask].comp = comp;
         }
 
+#if 1
+        printf("i=%u (count:%u) idx=%u address=%p remote_address=0x%lx lkey/rkey=0x%x/0x%x length=%lu\n",
+               0, 0, 0, address, remote_address, NTOH(mem_elem->lkey),
+               NTOH(mem_elem->rkey), length);
+#endif
         uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
                 qp, doca_gpu_dev_verbs_get_wqe_ptr(qp, wqe_idx), wqe_idx,
                 opcode, cflag, remote_address, mem_elem->rkey,

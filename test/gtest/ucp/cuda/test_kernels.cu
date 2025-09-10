@@ -33,7 +33,7 @@ ucp_put_single_kernel(ucp_device_mem_list_handle_h mem_list,
                       const void *address, uint64_t remote_address,
                       size_t length, ucs_status_t *status)
 {
-    ucp_device_request_t req;
+    __shared__ ucp_device_request_t req;
     ucs_status_t req_status;
 
     ucp_device_request_init(&req);
@@ -51,6 +51,109 @@ ucp_put_single_kernel(ucp_device_mem_list_handle_h mem_list,
     *status = req_status;
 }
 
+
+static __global__ void
+ucp_put_multi_partial_kernel(ucp_device_mem_list_handle_h handle,
+                             const unsigned *mem_list_indices,
+                             unsigned mem_list_count,
+                             void *const *addresses,
+                             const uint64_t *remote_addresses,
+                             const size_t *lengths,
+                             uint64_t counter_inc_value,
+                             uint64_t counter_remote_address,
+                             ucs_status_t *status)
+{
+    __shared__ ucp_device_request_t req;
+    ucs_status_t req_status;
+
+    ucp_device_request_init(&req);
+    __syncwarp();
+    req_status = ucp_device_put_multi_partial<UCP_DEVICE_LEVEL_WARP>(handle,
+                                              mem_list_indices,
+                                              mem_list_count,
+                                              addresses,
+                                              remote_addresses,
+                                              lengths,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              0,
+                                              &req);
+    if (req_status != UCS_OK) {
+        *status = req_status;
+        return;
+    }
+
+    do {
+        req_status = ucp_device_progress_req(&req);
+    } while (req_status == UCS_INPROGRESS);
+    *status = req_status;
+}
+
+static __global__ void
+ucp_put_multi_kernel(ucp_device_mem_list_handle_h handle,
+                     void *const *addresses,
+                     const uint64_t *remote_addresses,
+                     const size_t *lengths,
+                     uint64_t counter_inc_value,
+                     uint64_t counter_remote_address,
+                     ucs_status_t *status)
+{
+    __shared__ ucp_device_request_t req;
+    ucs_status_t req_status;
+
+    ucp_device_request_init(&req);
+    req_status = ucp_device_put_multi<UCP_DEVICE_LEVEL_WARP>(handle,
+                                              addresses,
+                                              remote_addresses,
+                                              lengths,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              0,
+                                              &req);
+    if (req_status != UCS_OK) {
+        *status = req_status;
+        return;
+    }
+
+    do {
+        req_status = ucp_device_progress_req(&req);
+    } while (req_status == UCS_INPROGRESS);
+    *status = req_status;
+}
+
+static __global__ void
+ucp_counter_inc(ucp_device_mem_list_handle_h handle,
+                unsigned mem_list_index,
+                uint64_t counter_inc_value,
+                uint64_t counter_remote_address,
+                ucs_status_t *status)
+{
+    void *counter = reinterpret_cast<void*>(counter_remote_address);
+    __shared__ ucp_device_request_t req;
+    ucs_status_t req_status;
+
+    uint64_t expected = ucp_device_counter_read(counter) + counter_inc_value;
+    __syncwarp();
+    ucp_device_request_init(&req);
+    req_status =
+        ucp_device_counter_inc<UCP_DEVICE_LEVEL_WARP>(handle,
+                                                      mem_list_index,
+                                                      counter_inc_value,
+                                                      counter_remote_address,
+                                                      0,
+                                                      &req);
+    if (req_status != UCS_OK) {
+        *status = req_status;
+        return;
+    }
+
+    do {
+        req_status = ucp_device_progress_req(&req);
+    } while (req_status == UCS_INPROGRESS);
+
+    while (ucp_device_counter_read(counter) != expected);
+    *status = req_status;
+}
 
 /**
  * @brief Compares two blocks of device memory.
@@ -87,6 +190,72 @@ ucs_status_t launch_ucp_put_single(ucp_device_mem_list_handle_h mem_list,
     ucp_put_single_kernel<<<1, 1>>>(mem_list, mem_list_index, address,
                                     remote_address, length,
                                     status.device_ptr());
+    synchronize();
+
+    return *status;
+}
+
+/**
+ * Partial multi put operation.
+ */
+ucs_status_t launch_ucp_put_multi_partial(
+                            ucp_device_mem_list_handle_h handle,
+                            const unsigned *mem_list_indices,
+                            unsigned mem_list_count,
+                            void *const *addresses,
+                            const uint64_t *remote_addresses,
+                            const size_t *lengths,
+                            uint64_t counter_inc_value,
+                            uint64_t counter_remote_address)
+{
+    device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
+
+    ucp_put_multi_partial_kernel<<<1, 32>>>(handle, mem_list_indices,
+                                            mem_list_count, addresses,
+                         remote_addresses, lengths, counter_inc_value,
+                         counter_remote_address, status.device_ptr());
+    synchronize();
+
+    return *status;
+}
+
+/**
+ * Multi put operation.
+ */
+ucs_status_t launch_ucp_put_multi(
+                            ucp_device_mem_list_handle_h handle,
+                            void *const *addresses,
+                            const uint64_t *remote_addresses,
+                            const size_t *lengths,
+                            uint64_t counter_inc_value,
+                            uint64_t counter_remote_address)
+{
+    device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
+
+    ucp_put_multi_kernel<<<1, 32>>>(handle,
+                                    addresses,
+                         remote_addresses, lengths, counter_inc_value,
+                         counter_remote_address, status.device_ptr());
+    synchronize();
+
+    return *status;
+}
+
+/**
+ * Counter increment.
+ */
+ucs_status_t launch_ucp_counter_inc(ucp_device_mem_list_handle_h handle,
+                                    const unsigned mem_list_index,
+                                    uint64_t counter_inc_value,
+                                    uint64_t counter_remote_address)
+{
+    device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
+
+    ucp_counter_inc<<<1, 32>>>(handle,
+                               mem_list_index,
+                               counter_inc_value,
+                               counter_remote_address,
+                               status.device_ptr());
     synchronize();
 
     return *status;

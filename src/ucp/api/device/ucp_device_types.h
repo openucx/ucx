@@ -45,7 +45,8 @@ typedef struct ucp_device_mem_list_handle {
     uint8_t         num_uct_eps;
 
     /**
-     * Number of entries in the memory descriptors array @a elems.
+     * Number of entries in the memory descriptors array @a elems, per device
+     * endpoint.
      */
     uint32_t        mem_list_length;
 
@@ -59,6 +60,14 @@ typedef struct ucp_device_mem_list_handle {
      * Size of a given UCT memory element object for each UCT.
      */
     uint16_t        uct_mem_element_size[UCP_DEVICE_MEM_LIST_MAX_EPS];
+
+    /**
+     * Normalized start offset for each UCT memory element list.
+     *
+     * Actual offset is obtained with @a mem_list_length * @a
+     * uct_mem_element_offset for the given UCT device endpoint.
+     */
+    uint16_t        uct_mem_element_offset[UCP_DEVICE_MEM_LIST_MAX_EPS];
 
     /**
      * For each @ref num_uct_eps UCT endpoints, a list of @ref

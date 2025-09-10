@@ -558,6 +558,12 @@ mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed) :
     pattern_fill(seed);
 }
 
+mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type,
+                       const void *data) :
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
+    copy_to(ptr(), data, size, mem_type);
+}
+
 mem_buffer::~mem_buffer() {
     release(ptr(), mem_type());
 }
@@ -568,6 +574,10 @@ ucs_memory_type_t mem_buffer::mem_type() const {
 
 void *mem_buffer::ptr() const {
     return m_ptr;
+}
+
+uint64_t mem_buffer::addr() const {
+    return reinterpret_cast<uint64_t>(ptr());
 }
 
 size_t mem_buffer::size() const {

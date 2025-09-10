@@ -51,6 +51,34 @@ typedef enum {
 } ucp_device_flags_t;
 
 
+UCS_F_DEVICE ucs_status_t ucp_device_handle_check(
+                                     const ucp_device_mem_list_handle_h handle,
+                                     uint64_t flags)
+{
+    if ((handle->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
+        (handle->num_uct_eps == 0) || (flags != 0)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+
+UCS_F_DEVICE uct_device_mem_element_t *
+ucp_device_uct_elem_get(const ucp_device_mem_list_handle_h handle,
+                        unsigned lane,
+                        unsigned mem_list_index)
+{
+    size_t lane_offset, elem_offset;
+
+    lane_offset =
+        handle->mem_list_length * handle->uct_mem_element_offset[lane];
+    elem_offset =
+        mem_list_index * handle->uct_mem_element_size[lane];
+    return (uct_device_mem_element_t *)UCS_PTR_BYTE_OFFSET(handle,
+             sizeof(*handle) + lane_offset + elem_offset);
+}
+
 /**
  * @ingroup UCP_DEVICE
  * @brief Posts one memory put operation.
@@ -85,22 +113,23 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         const void *address, uint64_t remote_address, size_t length,
         uint64_t flags, ucp_device_request_t *req)
 {
-    unsigned lane = 0;
+    const unsigned lane = 0;
     const uct_device_mem_element_t *uct_elem;
-    size_t elem_offset;
+    ucs_status_t status;
 
-    if ((handle->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
-        (handle->num_uct_eps == 0) ||
-        (mem_list_index >= handle->mem_list_length) || (flags != 0)) {
+    status = ucp_device_handle_check(handle, flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (mem_list_index >= handle->mem_list_length) {
         return UCS_ERR_INVALID_PARAM;
     }
 
-    elem_offset     = mem_list_index * handle->uct_mem_element_size[lane];
-    uct_elem        = (uct_device_mem_element_t *)
-        UCS_PTR_BYTE_OFFSET(handle, sizeof(*handle) + elem_offset);
-
+    uct_elem        = ucp_device_uct_elem_get(handle, lane, mem_list_index);
     req->device_ep  = handle->uct_device_eps[lane];
     req->comp.count = 1; /* TODO: Handle multiple device posts with same req? */
+
     return uct_device_ep_put_single<(uct_device_level_t)level>(
             req->device_ep, uct_elem, address, remote_address, length,
             UCT_DEVICE_FLAG_NODELAY, &req->comp);
@@ -137,12 +166,30 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  */
 template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
-ucp_device_counter_inc(ucp_device_mem_list_handle_h mem_list,
+ucp_device_counter_inc(ucp_device_mem_list_handle_h handle,
                        unsigned mem_list_index, uint64_t inc_value,
                        uint64_t remote_address, uint64_t flags,
                        ucp_device_request_t *req)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    const unsigned lane = 0;
+    ucs_status_t status;
+    const uct_device_mem_element_t *uct_elem;
+
+    status = ucp_device_handle_check(handle, flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (mem_list_index >= handle->mem_list_length) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    uct_elem        = ucp_device_uct_elem_get(handle, lane, mem_list_index);
+    req->device_ep  = handle->uct_device_eps[lane];
+    req->comp.count = 1; /* TODO: Handle multiple device posts with same req? */
+    return uct_device_ep_atomic_add<(uct_device_level_t)level>(
+            req->device_ep, uct_elem, inc_value, remote_address,
+            UCT_DEVICE_FLAG_NODELAY, &req->comp);
 }
 
 
@@ -187,13 +234,36 @@ ucp_device_counter_inc(ucp_device_mem_list_handle_h mem_list,
  */
 template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
-ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
+ucp_device_put_multi(ucp_device_mem_list_handle_h handle,
                      void *const *addresses, const uint64_t *remote_addresses,
                      const size_t *lengths, uint64_t counter_inc_value,
                      uint64_t counter_remote_address, uint64_t flags,
                      ucp_device_request_t *req)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    const unsigned lane = 0;
+    ucs_status_t status;
+    uct_device_mem_element_t *uct_elem;
+
+    status = ucp_device_handle_check(handle, flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_elem        = ucp_device_uct_elem_get(handle, lane, 0);
+    req->device_ep  = handle->uct_device_eps[lane];
+    req->comp.count = 1;
+
+    return uct_device_ep_put_multi<(uct_device_level_t)level>(
+                                           req->device_ep,
+                                           uct_elem,
+                                           handle->mem_list_length,
+                                           addresses,
+                                           remote_addresses,
+                                           lengths,
+                                           counter_inc_value,
+                                           counter_remote_address,
+                                           UCT_DEVICE_FLAG_NODELAY,
+                                           &req->comp);
 }
 
 
@@ -244,7 +314,7 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list,
  */
 template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t
-ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
+ucp_device_put_multi_partial(ucp_device_mem_list_handle_h handle,
                              const unsigned *mem_list_indices,
                              unsigned mem_list_count,
                              void *const *addresses,
@@ -255,7 +325,33 @@ ucp_device_put_multi_partial(ucp_device_mem_list_handle_h mem_list,
                              uint64_t flags,
                              ucp_device_request_t *req)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    const unsigned lane = 0;
+    ucs_status_t status;
+    uct_device_mem_element_t *mem_list;
+
+    status = ucp_device_handle_check(handle, flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    req->device_ep  = handle->uct_device_eps[lane];
+    req->comp.count = 1; /* TODO: Handle multiple device posts with same req? */
+
+    mem_list = ucp_device_uct_elem_get(handle, lane, 0);
+
+    return uct_device_ep_put_multi_partial<(uct_device_level_t)level>(
+                                           req->device_ep,
+                                           mem_list,
+                                           mem_list_indices,
+                                           mem_list_count,
+                                           addresses,
+                                           remote_addresses,
+                                           lengths,
+                                           handle->mem_list_length - 1,
+                                           counter_inc_value,
+                                           counter_remote_address,
+                                           UCT_DEVICE_FLAG_NODELAY,
+                                           &req->comp);
 }
 
 
@@ -278,7 +374,7 @@ template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE uint64_t
 ucp_device_counter_read(const void *counter_ptr)
 {
-    return 0;
+    return *(uint64_t *)counter_ptr;
 }
 
 

@@ -381,6 +381,7 @@ uct_rc_gdaki_iface_mem_element_pack(const uct_iface_h tl_iface, uct_mem_h memh,
     mem_elem.rkey = htonl(uct_ib_md_direct_rkey(rkey));
     if (memh == NULL) {
         mem_elem.lkey = htonl(iface->atomic_mr->lkey);
+        printf("atomic: lkey=%x rkey=%x\n", mem_elem.lkey, mem_elem.rkey);
     } else {
         mem_elem.lkey = htonl(((uct_ib_mem_t*)memh)->lkey);
     }
