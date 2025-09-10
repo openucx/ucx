@@ -582,11 +582,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
 
-   {"LOCAL_RANK", "0",
-    "An optimization hint for the relative rank on a single node. Does not \n"
-    "affect semantics, only transport selection criteria and the resulting \n"
-    "performance.",
-    ucs_offsetof(ucp_context_config_t, local_rank), UCS_CONFIG_TYPE_UINT},
+   {"NODE_LOCAL_ID", "0",
+    "An optimization hint for the local identificator on a single node. Does \n"
+    "not affect semantics, only transport selection criteria and the \n"
+    "resulting performance.",
+    ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };

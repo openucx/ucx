@@ -217,8 +217,8 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** Use only one network device for all protocols */
     int                                    proto_use_single_net_device;
-    /** Relative rank on a single node */
-    unsigned                               local_rank;
+    /** Local identificator on a single node */
+    unsigned                               node_local_id;
 } ucp_context_config_t;
 
 

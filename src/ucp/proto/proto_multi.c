@@ -218,7 +218,8 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
         return num_lanes;
     }
 
-    seed = params->worker->context->config.ext.local_rank % num_identical_devs;
+    seed = params->worker->context->config.ext.node_local_id %
+           num_identical_devs;
     for (i = fixed_first_lane ? 1 : 0, num_filtered_lanes = i; i < num_lanes;
          ++i) {
         lane   = lanes[i];
