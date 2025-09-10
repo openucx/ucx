@@ -195,7 +195,7 @@ try_load_cuda_env() {
 
     # Prefer local CUDA if available
     cuda_local_dir="/usr/local/cuda"
-    if find ${cuda_local_dir}/ -name 'libcudart.so.1[2-9]*' &>/dev/null; then
+    if find ${cuda_local_dir}/ -name 'libcudart.so.1[2-9]*' | grep -q .; then
         have_cuda="${cuda_local_dir}"
     else
         # Fallback to env module
