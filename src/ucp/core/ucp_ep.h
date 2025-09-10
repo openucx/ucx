@@ -500,7 +500,6 @@ typedef struct {
                               are waiting for remote completion */
     uint32_t         send_sn; /* Sequence number of sent operations */
     uint32_t         cmpl_sn; /* Sequence number of completions */
-    uint32_t         mem_in_progress; /* Track ongoing memory flushes for this endpoint */
 } ucp_ep_flush_state_t;
 
 
@@ -555,12 +554,6 @@ typedef struct ucp_ep_ext {
      * structure. TODO allocate this array dynamically.
      */
     uct_ep_h                     *uct_eps;
-
-
-    /**
-     * Map of system devices that require a flush operation
-     */
-    ucp_sys_dev_map_t             flush_sys_dev_map;
 } ucp_ep_ext_t;
 
 
@@ -941,17 +934,5 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
  * @param [in] cfg_index  Endpoint configuration index.
  */
 void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
-
-
-/**
- * @brief Progress function for memory specific remote flushing.
- *
- * This call starts and progresses all memory specific remote flushes.
- *
- * @param[in] self        Pending request tracking the flush.
- *
- * @return Error code as defined by @ref ucs_status_t
- */
-ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
 
 #endif

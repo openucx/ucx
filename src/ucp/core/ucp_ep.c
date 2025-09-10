@@ -229,7 +229,6 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->unflushed_lanes              = 0;
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
-    ep->ext->flush_sys_dev_map            = 0;
 
     UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
                       sizeof(ep->ext->flush_state));
@@ -538,9 +537,8 @@ void ucp_ep_flush_state_reset(ucp_ep_h ep)
                 (flush_state->cmpl_sn == 0) &&
                 ucs_hlist_is_empty(&flush_state->reqs)));
 
-    flush_state->send_sn         = 0;
-    flush_state->cmpl_sn         = 0;
-    flush_state->mem_in_progress = 0;
+    flush_state->send_sn = 0;
+    flush_state->cmpl_sn = 0;
     ucs_hlist_head_init(&flush_state->reqs);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
 }

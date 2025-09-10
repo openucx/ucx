@@ -68,7 +68,6 @@ typedef struct ucp_mem {
     ucp_context_h       context;        /* UCP context that owns a memory handle */
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_sys_device_t    sys_dev;        /* System device index */
-    ucs_sys_device_t    packed_sys_dev; /* System device index */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */

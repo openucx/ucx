@@ -299,8 +299,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_rma_batch_prepare,
         req->send.batch.signal_rkey = signal_rkey;
     }
 
-    req->flags         = UCP_REQUEST_FLAG_COMPLETED | UCP_REQUEST_FLAG_BATCH;
-    req->send.batch.ep = ep;
+    req->flags               = UCP_REQUEST_FLAG_COMPLETED | UCP_REQUEST_FLAG_BATCH;
+    req->send.ep             = ep;
     req->send.batch.exported = 0;
 
     return req + 1;
@@ -380,7 +380,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rma_batch_release,
                  (request, batch), void *request, ucp_batch_h batch)
 {
     ucp_request_t *req = (ucp_request_t *)request - 1;
-    ucp_ep_h ep        = req->send.batch.ep;
+    ucp_ep_h ep        = req->send.ep;
     uct_ep_h uct_ep;
     ucp_batch_t host_batch;
 
@@ -442,7 +442,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rma_batch_export, (request, batch),
 {
     ucs_status_t status   = UCS_ERR_NO_RESOURCE;
     ucp_request_t *req    = (ucp_request_t*)request - 1;
-    ucp_ep_h ep           = req->send.batch.ep;
+    ucp_ep_h ep           = req->send.ep;
     ucp_context_h context = ep->worker->context;
     uct_rma_iov_t *iov    = NULL;
     int found_lane        = 0;

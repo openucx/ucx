@@ -13,7 +13,6 @@
 #include "ib_md.h"
 #include "ib_device.h"
 #include "ib_log.h"
-#include "ib_log.inl"
 
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
@@ -176,9 +175,6 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "enabled.\n",
      ucs_offsetof(uct_ib_md_config_t, ext.odp.mem_types),
      UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
-
-    {"DIRECT_NIC", "n", "Use Direct NIC functionality for GPU memory access",
-     ucs_offsetof(uct_ib_md_config_t, ext.direct_nic), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -515,8 +511,12 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
         return UCS_ERR_IO_ERROR;
     }
 
-    uct_ib_reg_mr_trace(title, md, address, length, dmabuf_fd, dmabuf_offset,
-                        access_flags, mr, retry, start_time);
+    ucs_trace("%s(pd=%p addr=%p len=%zu fd=%d offset=%zu access=0x%" PRIx64 "):"
+              " mr=%p lkey=0x%x retry=%lu took %.3f ms",
+              title, md->pd, address, length, dmabuf_fd, dmabuf_offset,
+              access_flags, mr, mr->lkey, retry,
+              ucs_time_to_msec(ucs_get_time() - start_time));
+    UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
 
     *mr_p = mr;
     return UCS_OK;
