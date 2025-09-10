@@ -52,11 +52,13 @@ public:
         {
         }
 
-        std::vector<mapped_buffer_ptr>& src() {
+        std::vector<mapped_buffer_ptr> &src()
+        {
             return m_src;
         }
 
-        std::vector<mapped_buffer_ptr>& dst() {
+        std::vector<mapped_buffer_ptr> &dst()
+        {
             return m_dst;
         }
 
@@ -146,12 +148,15 @@ UCS_TEST_P(test_ucp_device, put_single)
 
     // Target specific memory index
     unsigned mem_list_index = 3;
-    auto src_ptr = list.src()[mem_list_index]->ptr();
-    auto dst_ptr = reinterpret_cast<uint64_t>(list.dst()[mem_list_index]->ptr());
+    auto src_ptr            = list.src()[mem_list_index]->ptr();
+    auto dst_ptr            = reinterpret_cast<uint64_t>(
+            list.dst()[mem_list_index]->ptr());
 
     // Perform the transfer
-    ucs_status_t status = ucx_cuda::launch_ucp_put_single(
-        handle, mem_list_index, src_ptr, dst_ptr, size);
+    ucs_status_t status = ucx_cuda::launch_ucp_put_single(handle,
+                                                          mem_list_index,
+                                                          src_ptr, dst_ptr,
+                                                          size);
     EXPECT_EQ(UCS_OK, status);
 
     // Check proper index received data

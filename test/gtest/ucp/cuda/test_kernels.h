@@ -14,9 +14,8 @@ namespace ucx_cuda {
 int launch_memcmp(const void *s1, const void *s2, size_t size);
 
 ucs_status_t launch_ucp_put_single(ucp_device_mem_list_handle_h mem_list,
-                                   unsigned mem_list_index,
-                                   const void *address, uint64_t remote_address,
-                                   size_t length);
+                                   unsigned mem_list_index, const void *address,
+                                   uint64_t remote_address, size_t length);
 
 }; // namespace ucx_cuda
 

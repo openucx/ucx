@@ -232,8 +232,8 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                                                     UCS_SYS_DEVICE_ID_UNKNOWN);
 
         ucs_assertv((sys_dev_map == 0) || (sys_distance != NULL),
-                    "sys_dev_map=0x%lx sys_dev=%u",
-                    sys_dev_map, mem_info->sys_dev);
+                    "sys_dev_map=0x%lx sys_dev=%u", sys_dev_map,
+                    mem_info->sys_dev);
 
         /* Pack distance from sys_dev to each device in distance_dev_map */
         ucs_for_each_bit(sys_dev, sys_dev_map) {

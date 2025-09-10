@@ -79,12 +79,11 @@ typedef enum {
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template <ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
-UCS_F_DEVICE ucs_status_t
-ucp_device_put_single(ucp_device_mem_list_handle_h handle,
-                      unsigned mem_list_index,
-                      const void *address, uint64_t remote_address,
-                      size_t length, uint64_t flags, ucp_device_request_t *req)
+template<ucp_device_level_t level = UCP_DEVICE_LEVEL_THREAD>
+UCS_F_DEVICE ucs_status_t ucp_device_put_single(
+        ucp_device_mem_list_handle_h handle, unsigned mem_list_index,
+        const void *address, uint64_t remote_address, size_t length,
+        uint64_t flags, ucp_device_request_t *req)
 {
     unsigned lane = 0;
     const uct_device_mem_element_t *uct_elem;
@@ -92,8 +91,7 @@ ucp_device_put_single(ucp_device_mem_list_handle_h handle,
 
     if ((handle->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
         (handle->num_uct_eps == 0) ||
-        (mem_list_index >= handle->mem_list_length) ||
-        (flags != 0)) {
+        (mem_list_index >= handle->mem_list_length) || (flags != 0)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -104,10 +102,8 @@ ucp_device_put_single(ucp_device_mem_list_handle_h handle,
     req->device_ep  = handle->uct_device_eps[lane];
     req->comp.count = 1; /* TODO: Handle multiple device posts with same req? */
     return uct_device_ep_put_single<(uct_device_level_t)level>(
-                                           req->device_ep, uct_elem, address,
-                                           remote_address, length,
-                                           UCT_DEVICE_FLAG_NODELAY,
-                                           &req->comp);
+            req->device_ep, uct_elem, address, remote_address, length,
+            UCT_DEVICE_FLAG_NODELAY, &req->comp);
 }
 
 
@@ -325,7 +321,7 @@ ucp_device_progress_req(ucp_device_request_t *req)
     }
 
     status = uct_device_ep_progress<(uct_device_level_t)level>(req->device_ep);
-    return (status != UCS_OK? status : UCS_INPROGRESS);
+    return (status != UCS_OK ? status : UCS_INPROGRESS);
 }
 
 #endif /* UCP_DEVICE_IMPL_H */

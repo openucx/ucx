@@ -1234,8 +1234,8 @@ static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
         cmp_device = cmp_rsc->tl_rsc.sys_device;
 
         status = ucs_topo_get_distance(device, cmp_device, distance);
-        ucs_assertv_always(status == UCS_OK, "device=%u cmp_device=%u",
-                           device, cmp_device);
+        ucs_assertv_always(status == UCS_OK, "device=%u cmp_device=%u", device,
+                           cmp_device);
 
         ucs_trace("distance between %s/%s and %s/%s is %s",
                   context->tl_rscs[wiface->rsc_index].tl_rsc.tl_name,

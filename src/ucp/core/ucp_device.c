@@ -286,7 +286,8 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                                       &handle.uct_device_eps[i]);
         if (status != UCS_OK) {
             ucs_error("failed to get device_ep for lane=%u", lanes[i]);
-            goto err;;
+            goto err;
+            ;
         }
 
         handle.uct_mem_element_size[i] = uct_elem_size[i];
@@ -338,7 +339,8 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                 goto err;
             }
 
-            ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
+            ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element,
+                                              params->element_size);
             uct_element = UCS_PTR_BYTE_OFFSET(uct_element, uct_elem_size[i]);
         }
     }
