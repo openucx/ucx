@@ -634,21 +634,15 @@ static void uct_ib_doca_init(void)
     struct doca_log_backend *sdk_log;
     doca_error_t derr;
 
-    derr = doca_log_backend_create_standard();
+    derr = doca_log_level_set_global_sdk_limit(DOCA_LOG_LEVEL_WARNING);
     if (derr != DOCA_SUCCESS) {
-        ucs_error("doca_log_backend_create_standard failed: %d\n", derr);
+        ucs_error("doca_log_level_set_global_sdk_limit failed: %d\n", derr);
         return;
     }
 
     derr = doca_log_backend_create_with_file_sdk(stderr, &sdk_log);
     if (derr != DOCA_SUCCESS) {
         ucs_error("doca_log_backend_create_with_file_sdk failed: %d\n", derr);
-        return;
-    }
-
-    derr = doca_log_backend_set_sdk_level(sdk_log, DOCA_LOG_LEVEL_ERROR);
-    if (derr != DOCA_SUCCESS) {
-        ucs_error("doca_log_backend_set_sdk_level failed: %d\n", derr);
         return;
     }
 }
