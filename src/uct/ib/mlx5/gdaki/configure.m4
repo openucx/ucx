@@ -69,6 +69,6 @@ AS_IF([test "x$gpunetio_happy" = "xyes"],
              [AC_MSG_ERROR([doca_gpunetio not found])])
       ])
 
-AM_CONDITIONAL([HAVE_GPUNETIO], [test x$have_gpunetio = xyes])
+AM_CONDITIONAL([HAVE_GPUNETIO], [test x$gpunetio_happy = xyes])
 AC_CONFIG_FILES([src/uct/ib/mlx5/gdaki/Makefile
                  src/uct/ib/mlx5/gdaki/ucx-ib-mlx5-gda.pc])
