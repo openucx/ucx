@@ -607,7 +607,7 @@ static void uct_ib_doca_init(void)
         return;
     }
 
-    derr = doca_log_backend_set_sdk_level(sdk_log, DOCA_LOG_LEVEL_ERROR);
+    derr = doca_log_backend_set_sdk_level(sdk_log, DOCA_LOG_LEVEL_CRIT);
     if (derr != DOCA_SUCCESS) {
         ucs_error("doca_log_backend_set_sdk_level failed: %d\n", derr);
         return;
