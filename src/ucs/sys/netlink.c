@@ -79,12 +79,8 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
     ucs_status_t status        = UCS_INPROGRESS;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
 
-    if (is_dump) {
-        *done_p = UCS_NETLINK_IS_MESSAGE_DONE(nlh);
-    }
-
     while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-           (!is_dump || !*done_p)) {
+           (!is_dump || !(*done_p = UCS_NETLINK_IS_MESSAGE_DONE(nlh)))) {
         if (nlh->nlmsg_type == NLMSG_ERROR) {
             struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
             ucs_error("received error response from netlink err=%d: %s\n",
@@ -92,11 +88,8 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
             return UCS_ERR_IO_ERROR;
         }
 
-        status  = parse_cb(nlh, arg);
-        nlh     = NLMSG_NEXT(nlh, msg_len);
-        if (is_dump) {
-            *done_p = UCS_NETLINK_IS_MESSAGE_DONE(nlh);
-        }
+        status = parse_cb(nlh, arg);
+        nlh    = NLMSG_NEXT(nlh, msg_len);
     }
 
     return UCS_OK;
