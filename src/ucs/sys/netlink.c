@@ -24,6 +24,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define UCS_NETLINK_IS_MESSAGE_DONE(_nlh) (_nlh->nlmsg_type == NLMSG_DONE)
 
 typedef struct {
     const struct sockaddr *sa_remote;
@@ -72,13 +73,14 @@ err:
 
 static ucs_status_t
 ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg)
+                      ucs_netlink_parse_cb_t parse_cb, void *arg, int *is_done_p,
+                      int is_dump)
 {
     ucs_status_t status        = UCS_INPROGRESS;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
 
     while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-           (nlh->nlmsg_type != NLMSG_DONE)) {
+           (!is_dump || !(*is_done_p = UCS_NETLINK_IS_MESSAGE_DONE(nlh)))) {
         if (nlh->nlmsg_type == NLMSG_ERROR) {
             struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
             ucs_error("received error response from netlink err=%d: %s\n",
@@ -100,9 +102,9 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                          ucs_netlink_parse_cb_t parse_cb, void *arg)
 {
     struct nlmsghdr nlh = {0};
-    char *recv_msg      = NULL;
-    size_t recv_msg_len = 0;
     int netlink_fd      = -1;
+    int is_message_done = 0;
+    int is_dump         = nlmsg_flags & NLM_F_DUMP;
     ucs_status_t status;
     struct iovec iov[2];
     size_t bytes_sent;
@@ -131,33 +133,40 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     }
 
     /* get message size */
-    status = ucs_socket_recv_nb(netlink_fd, NULL, MSG_PEEK | MSG_TRUNC,
-                                &recv_msg_len);
-    if (status != UCS_OK) {
-        ucs_error("failed to get netlink message size %d (%s)",
-                  status, ucs_status_string(status));
-        goto out;
-    }
+    do {
+        size_t recv_msg_len = 0;
+        char *recv_msg;
 
-    recv_msg = ucs_malloc(recv_msg_len, "netlink recv message");
-    if (recv_msg == NULL) {
-        ucs_error("failed to allocate a buffer for netlink receive message of"
-                  " size %zu", recv_msg_len);
-        goto out;
-    }
+        status = ucs_socket_recv_nb(netlink_fd, NULL, MSG_PEEK | MSG_TRUNC,
+                                    &recv_msg_len);
+        if (status != UCS_OK) {
+            ucs_error("failed to get netlink message size %d (%s)",
+                    status, ucs_status_string(status));
+            goto out;
+        }
 
-    status = ucs_socket_recv(netlink_fd, recv_msg, recv_msg_len);
-    if (status != UCS_OK) {
-        ucs_error("failed to receive netlink message on fd=%d: %s",
-                  netlink_fd, ucs_status_string(status));
-        goto out;
-    }
+        recv_msg = ucs_malloc(recv_msg_len, "netlink recv message");
+        if (recv_msg == NULL) {
+            ucs_error("failed to allocate a buffer for netlink receive message of"
+                    " size %zu", recv_msg_len);
+            goto out;
+        }
 
-    status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
+        status = ucs_socket_recv(netlink_fd, recv_msg, recv_msg_len);
+        if (status != UCS_OK) {
+            ucs_error("failed to receive netlink message on fd=%d: %s",
+                    netlink_fd, ucs_status_string(status));
+            ucs_free(recv_msg);
+            goto out;
+        }
+
+        status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb,
+                                       arg, &is_message_done, is_dump);
+        ucs_free(recv_msg);
+    } while (is_dump && !is_message_done);
 
 out:
     ucs_close_fd(&netlink_fd);
-    ucs_free(recv_msg);
     return status;
 }
 
@@ -263,7 +272,6 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
 
     UCS_INIT_ONCE(&init_once) {
         rtm.rtm_family = AF_INET;
-        rtm.rtm_table  = RT_TABLE_MAIN;
         ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
                                  sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
                                  NULL);
