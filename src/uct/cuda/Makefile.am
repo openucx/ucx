@@ -14,6 +14,11 @@ libuct_cuda_la_LDFLAGS  = $(CUDA_LDFLAGS) -version-info $(SOVERSION)
 libuct_cuda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la \
                           $(CUDA_LIBS) $(NVML_LIBS)
+libuct_cuda_ladir       = $(includedir)/uct/cuda
+
+nobase_dist_libuct_cuda_la_HEADERS = \
+	cuda_ipc/cuda_ipc.cuh \
+	cuda_ipc/cuda_ipc_device.h
 
 noinst_HEADERS = \
 	base/cuda_md.h \
