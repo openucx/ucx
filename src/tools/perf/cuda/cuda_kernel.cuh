@@ -8,8 +8,9 @@
 #define CUDA_KERNEL_CUH_
 
 #include "cuda_common.h"
-#include <tools/perf/lib/libperf_int.h>
 
+#include <tools/perf/lib/libperf_int.h>
+#include <ucs/sys/device_code.h>
 #include <cuda_runtime.h>
 
 

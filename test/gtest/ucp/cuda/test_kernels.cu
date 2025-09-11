@@ -27,30 +27,94 @@ static __global__ void memcmp_kernel(const void* s1, const void* s2,
     }
 }
 
+UCS_F_DEVICE ucs_status_t ucp_device_wait_req(ucp_device_request_t *req)
+{
+    ucs_status_t status;
+    do {
+        status = ucp_device_progress_req(req);
+    } while (status == UCS_INPROGRESS);
+    return status;
+}
+
 static __global__ void
-ucp_put_single_kernel(ucp_device_mem_list_handle_h mem_list,
-                      unsigned mem_list_index,
-                      const void *address, uint64_t remote_address,
-                      size_t length, ucs_status_t *status)
+ucp_put_single_kernel(const kernel_params params, ucs_status_t *status)
 {
     ucp_device_request_t req;
     ucs_status_t req_status;
 
-    ucp_device_request_init(&req);
-    req_status = ucp_device_put_single(mem_list, mem_list_index,
-                                       address, remote_address,
-                                       length, 0, &req);
+    req_status = ucp_device_put_single(params.mem_list,
+                                       params.single.mem_list_index,
+                                       params.single.address,
+                                       params.single.remote_address,
+                                       params.single.length,
+                                       UCT_DEVICE_FLAG_NODELAY, &req);
     if (req_status != UCS_OK) {
         *status = req_status;
         return;
     }
 
-    do {
-        req_status = ucp_device_progress_req(&req);
-    } while (req_status == UCS_INPROGRESS);
-    *status = req_status;
+    *status = ucp_device_wait_req(&req);
 }
 
+static __global__ void
+ucp_put_multi_kernel(const kernel_params params, ucs_status_t *status)
+{
+    ucp_device_request_t req;
+    ucs_status_t req_status;
+
+    req_status = ucp_device_put_multi(params.mem_list, params.multi.addresses,
+                                      params.multi.remote_addresses,
+                                      params.multi.lengths,
+                                      params.multi.counter_inc_value,
+                                      params.multi.counter_remote_address,
+                                      UCT_DEVICE_FLAG_NODELAY, &req);
+    if (req_status != UCS_OK) {
+        *status = req_status;
+        return;
+    }
+
+    *status = ucp_device_wait_req(&req);
+}
+
+static __global__ void
+ucp_put_multi_partial_kernel(const kernel_params params, ucs_status_t *status)
+{
+    ucp_device_request_t req;
+    ucs_status_t req_status;
+
+    req_status = ucp_device_put_multi_partial(
+            params.mem_list, params.partial.mem_list_indices,
+            params.partial.mem_list_count, params.partial.addresses,
+            params.partial.remote_addresses, params.partial.lengths,
+            params.partial.counter_index, params.partial.counter_inc_value,
+            params.partial.counter_remote_address, UCT_DEVICE_FLAG_NODELAY,
+            &req);
+    if (req_status != UCS_OK) {
+        *status = req_status;
+        return;
+    }
+
+    *status = ucp_device_wait_req(&req);
+}
+
+static __global__ void
+ucp_counter_inc_kernel(const kernel_params params, ucs_status_t *status)
+{
+    ucp_device_request_t req;
+    ucs_status_t req_status;
+
+    req_status = ucp_device_counter_inc(params.mem_list,
+                                        params.counter.mem_list_index,
+                                        params.counter.inc_value,
+                                        params.counter.remote_address,
+                                        UCT_DEVICE_FLAG_NODELAY, &req);
+    if (req_status != UCS_OK) {
+        *status = req_status;
+        return;
+    }
+
+    *status = ucp_device_wait_req(&req);
+}
 
 /**
  * @brief Compares two blocks of device memory.
@@ -74,22 +138,49 @@ int launch_memcmp(const void *s1, const void *s2, size_t size)
     return *result;
 }
 
+class device_status_result_ptr : public device_result_ptr<ucs_status_t> {
+public:
+    device_status_result_ptr() :
+        device_result_ptr<ucs_status_t>(UCS_ERR_NOT_IMPLEMENTED)
+    {
+    }
+
+    ucs_status_t sync_read() const
+    {
+        synchronize();
+        return device_result_ptr<ucs_status_t>::operator*();
+    }
+};
+
 /**
  * Basic single element put operation.
  */
-ucs_status_t launch_ucp_put_single(ucp_device_mem_list_handle_h mem_list,
-                                   unsigned mem_list_index,
-                                   const void *address, uint64_t remote_address,
-                                   size_t length)
+ucs_status_t launch_ucp_put_single(const kernel_params &params)
 {
-    device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
+    device_status_result_ptr status;
+    ucp_put_single_kernel<<<1, 1>>>(params, status.device_ptr());
+    return status.sync_read();
+}
 
-    ucp_put_single_kernel<<<1, 1>>>(mem_list, mem_list_index, address,
-                                    remote_address, length,
-                                    status.device_ptr());
-    synchronize();
+ucs_status_t launch_ucp_put_multi(const kernel_params &params)
+{
+    device_status_result_ptr status;
+    ucp_put_multi_kernel<<<1, 1>>>(params, status.device_ptr());
+    return status.sync_read();
+}
 
-    return *status;
+ucs_status_t launch_ucp_put_multi_partial(const kernel_params &params)
+{
+    device_status_result_ptr status;
+    ucp_put_multi_partial_kernel<<<1, 1>>>(params, status.device_ptr());
+    return status.sync_read();
+}
+
+ucs_status_t launch_ucp_counter_inc(const kernel_params &params)
+{
+    device_status_result_ptr status;
+    ucp_counter_inc_kernel<<<1, 1>>>(params, status.device_ptr());
+    return status.sync_read();
 }
 
 } // namespace ucx_cuda

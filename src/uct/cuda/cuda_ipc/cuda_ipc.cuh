@@ -7,14 +7,11 @@
 #ifndef UCT_CUDA_IPC_CUH
 #define UCT_CUDA_IPC_CUH
 
-#include "ucs/type/status.h"
-#include "uct/api/uct_def.h"
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
+#include <uct/api/uct_def.h>
 #include <uct/api/device/uct_device_types.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
+#include <ucs/sys/device_code.h>
+#include <ucs/type/status.h>
 
 #define UCT_CUDA_IPC_IS_ALIGNED_POW2(_n, _p) (!((_n) & ((_p) - 1)))
 #define UCT_CUDA_IPC_WARP_SIZE 32
@@ -171,13 +168,11 @@ UCS_F_DEVICE void uct_cuda_ipc_copy_single(void *dst, const void *src, size_t si
     }
 }
 
-template<uct_device_level_t level = UCT_DEVICE_LEVEL_BLOCK>
-UCS_F_DEVICE ucs_status_t
-uct_cuda_ipc_ep_put_single(uct_device_ep_h device_ep,
-                           const uct_device_mem_element_t *mem_elem,
-                           const void *address, uint64_t remote_address,
-                           size_t length, uint64_t flags,
-                           uct_device_completion_t *comp)
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
+UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_single(
+        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        const void *address, uint64_t remote_address, size_t length,
+        uint64_t flags, uct_device_completion_t *comp)
 {
     auto cuda_ipc_mem_element =
         reinterpret_cast<const uct_cuda_ipc_device_mem_element_t *>(mem_elem);
@@ -186,21 +181,23 @@ uct_cuda_ipc_ep_put_single(uct_device_ep_h device_ep,
     mapped_rem_addr = (void *)((uintptr_t)(remote_address) + cuda_ipc_mem_element->mapped_offset);
 
     switch (level) {
-        case UCT_DEVICE_LEVEL_THREAD:
-            /* TODO: add vectorized version*/
-            memcpy(mapped_rem_addr, address, length);
-            break;
-        case UCT_DEVICE_LEVEL_WARP:
-            /* TODO: check if we can use uct_cuda_ipc_copy_single, need to see perf impact */
-            uct_cuda_ipc_copy_single_nv(mapped_rem_addr, address, length);
-            break;
-        case UCT_DEVICE_LEVEL_BLOCK:
-            uct_cuda_ipc_copy_single<UCT_CUDA_IPC_COPY_LOOP_UNROLL>(mapped_rem_addr, address, length);
-            break;
-        case UCT_DEVICE_LEVEL_GRID:
-            return UCS_ERR_UNSUPPORTED;
-        default:
-            return UCS_ERR_INVALID_PARAM;
+    case UCS_DEVICE_LEVEL_THREAD:
+        /* TODO: add vectorized version*/
+        memcpy(mapped_rem_addr, address, length);
+        break;
+    case UCS_DEVICE_LEVEL_WARP:
+        /* TODO: check if we can use uct_cuda_ipc_copy_single, need to see perf impact */
+        uct_cuda_ipc_copy_single_nv(mapped_rem_addr, address, length);
+        break;
+    case UCS_DEVICE_LEVEL_BLOCK:
+        uct_cuda_ipc_copy_single<UCT_CUDA_IPC_COPY_LOOP_UNROLL>(mapped_rem_addr,
+                                                                address,
+                                                                length);
+        break;
+    case UCS_DEVICE_LEVEL_GRID:
+        return UCS_ERR_UNSUPPORTED;
+    default:
+        return UCS_ERR_INVALID_PARAM;
     }
 
     __syncthreads();

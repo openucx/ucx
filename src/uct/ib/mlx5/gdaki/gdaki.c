@@ -157,8 +157,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         goto err_dev_ep;
     }
 
-    dev_ep.qp = self->qp_gpu;
-    dev_ep.atomic_va = iface->atomic_buff;
+    dev_ep.qp          = self->qp_gpu;
+    dev_ep.atomic_va   = iface->atomic_buff;
+    dev_ep.atomic_lkey = htonl(iface->atomic_mr->lkey);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemsetD8((CUdeviceptr)self->ep_gpu, 0, dev_ep_size));
@@ -374,13 +375,11 @@ uct_rc_gdaki_iface_mem_element_pack(const uct_iface_h tl_iface, uct_mem_h memh,
                                     uct_rkey_t rkey,
                                     uct_device_mem_element_t *mem_elem_p)
 {
-    uct_rc_gdaki_iface_t *iface = ucs_derived_of(tl_iface,
-                                                 uct_rc_gdaki_iface_t);
     uct_rc_gdaki_device_mem_element_t mem_elem;
 
     mem_elem.rkey = htonl(uct_ib_md_direct_rkey(rkey));
     if (memh == NULL) {
-        mem_elem.lkey = htonl(iface->atomic_mr->lkey);
+        mem_elem.lkey = UCT_IB_INVALID_MKEY;
     } else {
         mem_elem.lkey = htonl(((uct_ib_mem_t*)memh)->lkey);
     }
