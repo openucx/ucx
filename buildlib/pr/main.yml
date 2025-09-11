@@ -36,6 +36,12 @@ resources:
     - container: rhel90_ib
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
+    - container: rhel100
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rhel10.0/builder:mofed-25.04-0.5.9.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rhel100_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/rhel10.0/builder:mofed-25.04-0.5.9.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2004
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
