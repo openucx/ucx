@@ -79,8 +79,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  * lengths are all equal. They are lower than the size of the descriptor list
  * array from the handle.
  *
- * The routine returns a request that can be progressed and checked for
- * completion with @ref ucp_device_progress_req.
+ * The caller can then use @ref uct_device_ep_progress and the @a comp object to
+ * track completion.
  *
  * This routine can be called repeatedly with the same handle and different
  * mem_list_indices, addresses, lengths and increment related parameters. The
@@ -100,7 +100,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  * @param [in]  counter_inc_value      Value of the remote increment.
  * @param [in]  counter_remote_address Remote address to increment to.
  * @param [in]  flags                  Flags to modify the function behavior.
- * @param [out] req                    Request populated by the call.
+ * @param [in]  comp                   Completion object to track progress.
  *
  * @return Error code as defined by @ref ucs_status_t
  */

@@ -26,6 +26,12 @@ public:
         if (!is_loopback()) {
             receiver().connect(&sender(), get_ep_params());
         }
+
+        ucp_device_mem_list_handle_h handle;
+        while (ucp_device_mem_list_create(sender().ep(), NULL, &handle) ==
+               UCS_ERR_NOT_CONNECTED) {
+            progress();
+        }
     }
 
     class mem_list {
@@ -46,6 +52,16 @@ public:
         {
         }
 
+        std::vector<mapped_buffer_ptr> &src()
+        {
+            return m_src;
+        }
+
+        std::vector<mapped_buffer_ptr> &dst()
+        {
+            return m_dst;
+        }
+
         const ucp_device_mem_list_params_t &
         make(unsigned count = 1, size_t size = 0,
              ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA,
@@ -61,6 +77,9 @@ public:
                         new mapped_buffer(size, m_sender, 0, mem_type));
                 m_dst.emplace_back(
                         new mapped_buffer(size, m_receiver, 0, mem_type));
+
+                m_src.back()->pattern_fill(0x1234, size);
+                m_dst.back()->pattern_fill(0x4321, size);
             }
 
             for (auto i = 0; i < m_src.size(); ++i) {
@@ -103,23 +122,49 @@ UCS_TEST_P(test_ucp_device, mapped_buffer_kernel_memcmp)
     ASSERT_EQ(1, ucx_cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
 }
 
+UCS_TEST_P(test_ucp_device, create_success)
+{
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    mem_list list(sender(), receiver());
+    ucp_device_mem_list_handle_h handle = nullptr;
+
+    auto &params = list.make(4, 4 * UCS_MBYTE);
+    ASSERT_EQ(UCS_OK,
+              ucp_device_mem_list_create(sender().ep(), &params, &handle));
+    EXPECT_NE(nullptr, handle);
+    ucp_device_mem_list_release(handle);
+}
+
 UCS_TEST_P(test_ucp_device, put_single)
 {
-    const size_t size = 16 * UCS_KBYTE;
+    mem_list list(sender(), receiver());
+    const size_t size = 32 * UCS_KBYTE;
+    auto &params      = list.make(6, size);
 
-    mapped_buffer src(size, sender(), 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer dst(size, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
+    // Create memory list
+    ucp_device_mem_list_handle_h handle;
+    ASSERT_EQ(UCS_OK,
+              ucp_device_mem_list_create(sender().ep(), &params, &handle));
 
-    src.pattern_fill(0x1234, size);
-    src.pattern_check(0x1234, size);
+    // Target specific memory index
+    unsigned mem_list_index = 3;
+    auto src_ptr            = list.src()[mem_list_index]->ptr();
+    auto dst_ptr            = reinterpret_cast<uint64_t>(
+            list.dst()[mem_list_index]->ptr());
 
-    // TODO create mem list
-    ucp_device_mem_list_handle_h mem_list = nullptr;
-
-    ucs_status_t status = ucx_cuda::launch_ucp_put_single(mem_list, src.ptr(),
-                                                          (uint64_t)dst.ptr(),
+    // Perform the transfer
+    ucs_status_t status = ucx_cuda::launch_ucp_put_single(handle,
+                                                          mem_list_index,
+                                                          src_ptr, dst_ptr,
                                                           size);
-    EXPECT_EQ(UCS_ERR_NOT_IMPLEMENTED, status);
+    EXPECT_EQ(UCS_OK, status);
+
+    // Check proper index received data
+    list.dst()[mem_list_index - 1]->pattern_check(0x4321, size);
+    list.dst()[mem_list_index]->pattern_check(0x1234, size);
+    list.dst()[mem_list_index + 1]->pattern_check(0x4321, size);
+
+    ucp_device_mem_list_release(handle);
 }
 
 UCS_TEST_P(test_ucp_device, create_fail)
@@ -144,20 +189,4 @@ UCS_TEST_P(test_ucp_device, create_fail)
               ucp_device_mem_list_create(sender().ep(), &params1, &handle));
 }
 
-UCS_TEST_P(test_ucp_device, create_success)
-{
-    mem_list list(sender(), receiver());
-    ucp_device_mem_list_handle_h handle = nullptr;
-
-    auto &params = list.make(4, 4 * UCS_MBYTE);
-    ASSERT_EQ(UCS_OK,
-              ucp_device_mem_list_create(sender().ep(), &params, &handle));
-    EXPECT_NE(nullptr, handle);
-    ucp_device_mem_list_release(handle);
-}
-
-UCS_TEST_P(test_ucp_device, device_lane)
-{
-}
-
-UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, gdaki, "rc,gdaki")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, gdaki, "rc,rc_gda")

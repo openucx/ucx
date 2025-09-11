@@ -29,6 +29,7 @@ static __global__ void memcmp_kernel(const void* s1, const void* s2,
 
 static __global__ void
 ucp_put_single_kernel(ucp_device_mem_list_handle_h mem_list,
+                      unsigned mem_list_index,
                       const void *address, uint64_t remote_address,
                       size_t length, ucs_status_t *status)
 {
@@ -36,7 +37,8 @@ ucp_put_single_kernel(ucp_device_mem_list_handle_h mem_list,
     ucs_status_t req_status;
 
     ucp_device_request_init(&req);
-    req_status = ucp_device_put_single(mem_list, 0, address, remote_address,
+    req_status = ucp_device_put_single(mem_list, mem_list_index,
+                                       address, remote_address,
                                        length, 0, &req);
     if (req_status != UCS_OK) {
         *status = req_status;
@@ -76,12 +78,14 @@ int launch_memcmp(const void *s1, const void *s2, size_t size)
  * Basic single element put operation.
  */
 ucs_status_t launch_ucp_put_single(ucp_device_mem_list_handle_h mem_list,
+                                   unsigned mem_list_index,
                                    const void *address, uint64_t remote_address,
                                    size_t length)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
 
-    ucp_put_single_kernel<<<1, 1>>>(mem_list, address, remote_address, length,
+    ucp_put_single_kernel<<<1, 1>>>(mem_list, mem_list_index, address,
+                                    remote_address, length,
                                     status.device_ptr());
     synchronize();
 

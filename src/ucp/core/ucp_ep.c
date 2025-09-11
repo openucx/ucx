@@ -321,7 +321,7 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
 
     data->size = size;
     ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(rkey_ptr_md_index), 0,
-                                UCS_SYS_DEVICE_ID_UNKNOWN, &data->rkey);
+                                UCS_SYS_DEVICE_ID_UNKNOWN, 1, &data->rkey);
     rkey_index = ucs_bitmap2idx(data->rkey->md_map, rkey_ptr_md_index);
     status     = uct_rkey_ptr(data->rkey->tl_rkey[rkey_index].cmpt,
                               &data->rkey->tl_rkey[rkey_index].rkey, address,
@@ -2256,7 +2256,7 @@ size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_context_h context,
 {
     return sizeof(ucp_rndv_rts_hdr_t) +
            ucp_rkey_packed_size(context, key->rma_bw_md_map,
-                                UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                UCS_SYS_DEVICE_ID_UNKNOWN, 0, 0);
 }
 
 static void ucp_ep_config_init_short_thresh(ucp_memtype_thresh_t *thresh)
@@ -2648,7 +2648,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->rndv.put_zcopy.max          = SIZE_MAX;
     config->rndv.rkey_size              = ucp_rkey_packed_size(context,
                                                                config->key.rma_bw_md_map,
-                                                               UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                                               UCS_SYS_DEVICE_ID_UNKNOWN, 0,
+                                                               0);
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
         config->rndv.get_zcopy.lanes[lane] =
                 config->rndv.put_zcopy.lanes[lane] = UCP_NULL_LANE;
