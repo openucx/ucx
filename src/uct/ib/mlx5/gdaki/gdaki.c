@@ -104,8 +104,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     if (self->umem == NULL) {
         uct_ib_check_memlock_limit_msg(md->super.dev.ibv_context,
                                        UCS_LOG_LEVEL_ERROR,
-                                       "mlx5dv_devx_umem_reg(size=%zu)",
-                                       dev_ep_size);
+                                       "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
+                                       self->ep_gpu, dev_ep_size);
         status = UCS_ERR_NO_MEMORY;
         goto err_mem;
     }
