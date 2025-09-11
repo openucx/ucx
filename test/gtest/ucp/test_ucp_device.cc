@@ -189,4 +189,4 @@ UCS_TEST_P(test_ucp_device, create_fail)
               ucp_device_mem_list_create(sender().ep(), &params1, &handle));
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, gdaki, "rc,rc_gda")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")
