@@ -197,7 +197,7 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
 
     num_identical_devs = 0;
     ucs_for_each_bit(lane, lane_map) {
-        if (fabsf(lanes_perf[lane].bandwidth - max_bandwidth) >
+        if (fabs(lanes_perf[lane].bandwidth - max_bandwidth) >
             UCP_PROTO_PERF_EPSILON) {
             continue;
         }
