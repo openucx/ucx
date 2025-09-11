@@ -645,7 +645,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             if (status == UCS_OK) {
                 uar_supported = 1;
             } else {
-                ucs_warn("GDAKI not supported, please add "
+                ucs_diag("GDAKI not supported, please add "
                          "NVreg_RegistryDwords=\"PeerMappingOverride=1;\" "
                          "option for nvidia kernel driver");
                 uar_supported = 0;
