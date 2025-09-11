@@ -26,9 +26,16 @@
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_ep_fence_put(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq,
-                         uct_rkey_t *rkey, uint64_t *addr, uint16_t offset)
+                         uct_rkey_t *rkey, uint64_t *addr, uint16_t offset,
+                         uint8_t *fm_ce_se)
 {
-    uct_rc_ep_fence_put(&iface->super, &txwq->fi, rkey, addr, offset);
+    if (uct_rc_ep_fm(&iface->super, &txwq->fi, 1)) {
+        *fm_ce_se = iface->config.put_fence_flag;
+        *rkey     = uct_ib_resolve_atomic_rkey(*rkey, offset, addr);
+    } else {
+        *fm_ce_se = 0;
+        *rkey     = uct_ib_md_direct_rkey(*rkey);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void
