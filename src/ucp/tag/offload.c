@@ -53,7 +53,7 @@ ucp_tag_offload_iface(ucp_worker_t *worker, ucp_tag_t tag)
     khiter_t hash_it;
     ucp_tag_t key_tag;
 
-    if (worker->num_active_ifaces == 1) {
+    if (worker->num_active_tag_ifaces == 1) {
         ucs_assert(worker->tm.offload.iface != NULL);
         return worker->tm.offload.iface;
     }
