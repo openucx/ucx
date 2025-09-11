@@ -163,8 +163,8 @@ check_nv_peer_mem() {
         return 0
     fi
 
-    if ! lsmod | grep -q nv_peer_mem; then
-        lsmod | grep nv_peer_mem
+    if ! lsmod | grep -q 'nv.*_peer.*mem'; then
+        lsmod | grep 'nv.*_peer.*mem'
         systemctl status nv_peer_mem
         azure_log_error "nv_peer_mem module not loaded on $(hostname -s)"
         exit 1
@@ -180,7 +180,7 @@ try_load_cuda_env() {
     have_gdrcopy=no
 
     # List relevant modules
-    lsmod | grep -P "^(nvidia|nv_peer_mem|gdrdrv)\W" || true
+    lsmod | grep -P "^(nvidia|nv.*_peer.*mem|gdrdrv)\W" || true
 
     # Check nvidia driver
     [ -f "/proc/driver/nvidia/version" ] || return 0
