@@ -215,6 +215,10 @@ typedef struct ucp_context_config {
     /** Extend endpoint lanes connections of each local device to all remote
      *  devices */
     int                                    connect_all_to_all;
+    /** Use only one network device for all protocols */
+    int                                    proto_use_single_net_device;
+    /** Local identificator on a single node */
+    unsigned                               node_local_id;
 } ucp_context_config_t;
 
 
