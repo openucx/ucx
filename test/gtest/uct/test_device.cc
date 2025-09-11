@@ -94,4 +94,53 @@ UCS_TEST_P(test_device, single)
     recvbuf.pattern_fill(SEED2);
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_device, gdaki)
+UCS_TEST_P(test_device, partial)
+{
+    constexpr uint64_t SEED1 = 0x1111111111111111lu;
+    constexpr uint64_t SEED2 = 0x2222222222222222lu;
+    constexpr size_t iovcnt  = 31;
+    constexpr size_t length  = iovcnt * 32;
+    mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
+    mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
+    mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0,
+                         UCS_MEMORY_TYPE_CUDA);
+    uint64_t signal_val = 0;
+    size_t i;
+
+    uct_iface_attr_v2_t iface_attr;
+    iface_attr.field_mask = UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &iface_attr));
+
+    mapped_buffer elembuf(iface_attr.device_mem_element_size * (iovcnt + 1), 0,
+                          *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
+    for (i = 0; i < iovcnt; i++) {
+        ASSERT_UCS_OK(uct_iface_mem_element_pack(
+                m_sender->iface(), sendbuf.memh(), recvbuf.rkey(),
+                (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(
+                        elembuf.ptr(),
+                        iface_attr.device_mem_element_size * i)));
+    }
+
+    ASSERT_UCS_OK(uct_iface_mem_element_pack(
+            m_sender->iface(), NULL, signal.rkey(),
+            (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(
+                    elembuf.ptr(),
+                    iface_attr.device_mem_element_size * iovcnt)));
+
+    uct_device_ep_h dev_ep;
+    ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
+    for (i = 0; i < 100; i++) {
+        ASSERT_UCS_OK(ucx_cuda::launch_uct_put_partial<iovcnt>(
+                dev_ep, (uct_device_mem_element_t*)elembuf.ptr(), sendbuf.ptr(),
+                (uintptr_t)recvbuf.ptr(), (uintptr_t)signal.ptr(), length));
+
+        signal_val += 4;
+        while (!mem_buffer::compare(&signal_val, signal.ptr(),
+                                    sizeof(signal_val), UCS_MEMORY_TYPE_CUDA))
+            ;
+        recvbuf.pattern_check(SEED1);
+        recvbuf.pattern_fill(SEED2);
+    }
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_device, rc_gda)

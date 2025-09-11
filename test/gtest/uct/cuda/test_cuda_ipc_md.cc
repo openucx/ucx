@@ -137,8 +137,11 @@ protected:
                unpack_params.sys_device = sys_dev;
                status = uct_rkey_unpack_v2(md()->component, rkey.data(),
                                            &unpack_params, &rkey_bundle);
-               EXPECT_EQ(status, UCS_OK);
-               uct_rkey_release(md()->component, &rkey_bundle);
+               ASSERT_TRUE((status == UCS_OK) ||
+                           (status == UCS_ERR_UNREACHABLE));
+               if (status == UCS_OK) {
+                   uct_rkey_release(md()->component, &rkey_bundle);
+               }
            } catch (...) {
                thread_exception = std::current_exception();
            }

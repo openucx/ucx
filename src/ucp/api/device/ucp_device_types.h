@@ -55,9 +55,15 @@ typedef struct ucp_device_mem_list_handle {
      */
     uct_device_ep_h uct_device_eps[UCP_DEVICE_MEM_LIST_MAX_EPS];
 
-    /* (mem_list_length * num_uct_eps) uct_device_mem_element objects will
-       follow this structure. The size of each element is according to the
-       selected transport. */
+    /**
+     * Size of a given UCT memory element object for each UCT.
+     */
+    uint16_t        uct_mem_element_size[UCP_DEVICE_MEM_LIST_MAX_EPS];
+
+    /**
+     * For each @ref num_uct_eps UCT endpoints, a list of @ref
+     * uct_device_mem_element objects.
+     */
 } ucp_device_mem_list_handle_t;
 
 #endif /* UCP_DEVICE_TYPES_H */

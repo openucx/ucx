@@ -61,7 +61,7 @@ ucp_ep_rkey_unpack_reachable(ucp_ep_h ep, const void *buffer, size_t length,
                                               ep->cfg_index);
     return ucp_ep_rkey_unpack_internal(ep, buffer, length,
                                        config->key.reachable_md_map, 0,
-                                       UCS_SYS_DEVICE_ID_UNKNOWN, rkey_p);
+                                       UCS_SYS_DEVICE_ID_UNKNOWN, 0, rkey_p);
 }
 
 static UCS_F_ALWAYS_INLINE int

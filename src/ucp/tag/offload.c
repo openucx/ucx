@@ -198,7 +198,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         /* Calculate size for dummy (on-stack) RTS packet */
         md_map         = UCS_BIT(rndv_hdr->md_index);
         rkey_size      = ucp_rkey_packed_size(worker->context, md_map,
-                                              UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                              UCS_SYS_DEVICE_ID_UNKNOWN, 0, 0);
         dummy_rts_size = sizeof(*dummy_rts) + rkey_size;
 
         /* Build the dummy RTS packet, copy meta-data from unexpected rndv header

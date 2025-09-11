@@ -33,7 +33,14 @@ typedef struct {
 static struct {
     ucp_md_map_t md_map;
     uint8_t      mem_type;
-} UCS_S_PACKED ucp_memh_rkey_dummy_buffer = {0, UCS_MEMORY_TYPE_HOST};
+    uint8_t      sys_dev;
+    uint8_t      sys_dev_delim;
+} UCS_S_PACKED ucp_memh_rkey_dummy_buffer = {
+    .md_map        = 0,
+    .mem_type      = UCS_MEMORY_TYPE_HOST,
+    .sys_dev       = UCS_SYS_DEVICE_ID_UNKNOWN,
+    .sys_dev_delim = UCS_SYS_DEVICE_ID_UNKNOWN
+};
 
 
 static struct {
@@ -55,7 +62,7 @@ const ucp_rma_proto_t *ucp_rma_proto_list[] = {
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
                             ucs_sys_device_t sys_dev,
-                            ucp_sys_dev_map_t sys_dev_map)
+                            ucp_sys_dev_map_t sys_dev_map, int with_delim)
 {
     size_t size, tl_rkey_size;
     unsigned md_index;
@@ -70,12 +77,17 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
         size += sizeof(uint8_t) + tl_rkey_size;
     }
 
-    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if ((with_delim) || (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
         /* System device id */
         size += sizeof(uint8_t);
 
         /* Distance of each device */
         size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
+
+        if (with_delim) {
+            /* System device id: set to unknown as a delimiter */
+            size += sizeof(uint8_t);
+        }
     }
 
     return size;
@@ -125,6 +137,15 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
     distance->bandwidth = UCS_FP8_UNPACK(BANDWIDTH, packed_distance->bandwidth);
 }
 
+ucp_sys_dev_map_t ucp_memh_sys_dev_map(ucp_mem_h memh)
+{
+    if (memh->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_MASK(ucs_topo_num_devices());
+    }
+
+    return 0;
+}
+
 ucs_sys_device_t ucp_rkey_pack_sys_dev(ucp_mem_h memh)
 {
     ucs_sys_device_t sys_dev_packed = memh->sys_dev;
@@ -152,13 +173,13 @@ out:
 
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                  (context, md_map, memh, address, length, mem_info, sys_dev_map,
-                  sys_distance, uct_flags, buffer),
+                  sys_distance, uct_flags, with_delim, buffer),
                  ucp_context_h context, ucp_md_map_t md_map,
                  const ucp_mem_h memh, void *address, size_t length,
                  const ucp_memory_info_t *mem_info,
                  ucp_sys_dev_map_t sys_dev_map,
                  const ucs_sys_dev_distance_t *sys_distance, unsigned uct_flags,
-                 void *buffer)
+                 int with_delim, void *buffer)
 {
     void *p = buffer;
     uct_md_mkey_pack_params_t params;
@@ -204,21 +225,28 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                   md_index, context->tl_mds[md_index].rsc.md_name);
     }
 
-    if (ucs_likely(mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        goto out_packed_size;
+    if ((with_delim) || (mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        /* Pack system device id */
+        *ucs_serialize_next(&p, uint8_t) = (memh != NULL ?
+                                                    memh->packed_sys_dev :
+                                                    UCS_SYS_DEVICE_ID_UNKNOWN);
+
+        ucs_assertv((sys_dev_map == 0) || (sys_distance != NULL),
+                    "sys_dev_map=0x%lx sys_dev=%u", sys_dev_map,
+                    mem_info->sys_dev);
+
+        /* Pack distance from sys_dev to each device in distance_dev_map */
+        ucs_for_each_bit(sys_dev, sys_dev_map) {
+            ucp_rkey_pack_distance(
+                    sys_dev, sys_distance++,
+                    ucs_serialize_next(&p, ucp_rkey_packed_distance_t));
+        }
+
+        if (with_delim) {
+            *ucs_serialize_next(&p, uint8_t) = UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
     }
 
-    /* Pack system device id */
-    *ucs_serialize_next(&p, uint8_t) = memh->packed_sys_dev;
-
-    /* Pack distance from sys_dev to each device in distance_dev_map */
-    ucs_for_each_bit(sys_dev, sys_dev_map) {
-        ucp_rkey_pack_distance(sys_dev, sys_distance++,
-                               ucs_serialize_next(&p,
-                                                  ucp_rkey_packed_distance_t));
-    }
-
-out_packed_size:
     result = UCS_PTR_BYTE_DIFF(buffer, p);
 out:
     ucs_log_indent_level(UCS_LOG_LEVEL_TRACE, -1);
@@ -592,7 +620,8 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
 }
 
 static size_t
-ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat)
+ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat,
+                     ucp_sys_dev_map_t sys_dev_map, int with_delim)
 {
     ucp_context_h context = memh->context;
 
@@ -606,13 +635,19 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat)
         ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
     }
 
-    return ucp_rkey_packed_size(context, memh->md_map, memh->sys_dev, 0);
+    return ucp_rkey_packed_size(context, memh->md_map, memh->sys_dev,
+                                sys_dev_map, with_delim);
 }
 
-static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
-                                int rkey_compat, void *memh_buffer)
+static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
+                                int with_delim, ucp_sys_dev_map_t sys_dev_map,
+                                void *memh_buffer)
 {
     ucp_memory_info_t mem_info;
+    ucs_status_t status;
+    ucs_sys_dev_distance_t sys_dev_distances[UCS_SYS_DEVICE_ID_MAX] = {};
+    ucs_sys_dev_distance_t *sys_distance;
+    ucs_sys_device_t ep_sys_dev;
 
     if (flags & UCP_MEMH_PACK_FLAG_EXPORT) {
         return ucp_memh_exported_pack(memh, memh_buffer);
@@ -624,9 +659,20 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
 
     mem_info.type    = memh->mem_type;
     mem_info.sys_dev = memh->sys_dev;
+    sys_distance     = sys_dev_distances;
+
+    ucs_for_each_bit(ep_sys_dev, sys_dev_map) {
+        status = ucs_topo_get_distance(memh->sys_dev, ep_sys_dev, sys_distance);
+        ucs_assertv_always(status == UCS_OK, "mem_info->sys_dev=%d sys_dev=%d",
+                           memh->sys_dev, ep_sys_dev);
+
+        ++sys_distance;
+    }
+
     return ucp_rkey_pack_memh(memh->context, memh->md_map, memh,
                               ucp_memh_address(memh), ucp_memh_length(memh),
-                              &mem_info, 0, NULL, 0, memh_buffer);
+                              &mem_info, sys_dev_map, sys_dev_distances, 0,
+                              with_delim, memh_buffer);
 }
 
 int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer)
@@ -637,7 +683,8 @@ int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer)
 
 static ucs_status_t
 ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
-                       int rkey_compat, void **buffer_p, size_t *buffer_size_p)
+                       int rkey_compat, int with_delim, void **buffer_p,
+                       size_t *buffer_size_p)
 {
     ucp_context_h context = memh->context;
     ucs_status_t status;
@@ -645,6 +692,7 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
     void *memh_buffer;
     size_t size;
     uint64_t flags;
+    ucp_sys_dev_map_t sys_dev_map;
 
     flags = UCP_PARAM_VALUE(MEMH_PACK, params, flags, FLAGS, 0);
 
@@ -667,7 +715,9 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
-    size = ucp_memh_packed_size(memh, flags, rkey_compat);
+    sys_dev_map = ucp_memh_sys_dev_map(memh);
+    size        = ucp_memh_packed_size(memh, flags, rkey_compat, sys_dev_map,
+                                       with_delim);
 
     if ((flags & UCP_MEMH_PACK_FLAG_EXPORT) &&
         (ucp_memh_export_md_map(memh) == 0)) {
@@ -683,7 +733,8 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
         goto out;
     }
 
-    packed_size = ucp_memh_do_pack(memh, flags, rkey_compat, memh_buffer);
+    packed_size = ucp_memh_do_pack(memh, flags, rkey_compat, with_delim,
+                                   sys_dev_map, memh_buffer);
     if (packed_size < 0) {
         status = (ucs_status_t)packed_size;
         goto err_destroy;
@@ -708,7 +759,7 @@ ucs_status_t
 ucp_memh_pack(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
               void **buffer_p, size_t *buffer_size_p)
 {
-    return ucp_memh_pack_internal(memh, params, 0, buffer_p, buffer_size_p);
+    return ucp_memh_pack_internal(memh, params, 0, 1, buffer_p, buffer_size_p);
 }
 
 void ucp_memh_buffer_release(void *buffer,
@@ -726,7 +777,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
                            void **rkey_buffer_p, size_t *size_p)
 {
     ucp_memh_pack_params_t params = {0};
-    return ucp_memh_pack_internal(memh, &params, 1, rkey_buffer_p, size_p);
+    return ucp_memh_pack_internal(memh, &params, 1, 1, rkey_buffer_p, size_p);
 }
 
 void ucp_rkey_buffer_release(void *rkey_buffer)
@@ -745,10 +796,17 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
     ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_MAX];
     ucs_sys_device_t sys_dev;
     ucp_lane_index_t lane;
+    const ucp_rkey_packed_distance_t *packed_distance;
     char buf[128];
 
     /* Unpack lane distances and update distance_by_dev lookup */
     while (p < buffer_end) {
+        /* Newer version can add canary value to signal end of the list */
+        packed_distance = p;
+        if (packed_distance->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            break;
+        }
+
         ucp_rkey_unpack_distance(
                 ucs_serialize_next(&p, const ucp_rkey_packed_distance_t),
                 &sys_dev, &distance);
@@ -769,9 +827,10 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
-                 (rkey, ep, buffer, buffer_end, unreachable_md_map),
+                 (rkey, ep, buffer, buffer_end, unreachable_md_map, legacy),
                  ucp_rkey_h rkey, ucp_ep_h ep, const void *buffer,
-                 const void *buffer_end, ucp_md_map_t unreachable_md_map)
+                 const void *buffer_end, ucp_md_map_t unreachable_md_map,
+                 int legacy)
 {
     ucp_worker_h worker = ep->worker;
     const void *p       = buffer;
@@ -790,6 +849,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.md_map             = rkey->md_map;
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
+
+    if (!legacy && (buffer >= buffer_end) &&
+        (ucp_ep_config(ep)->key.dst_version > 19)) {
+        buffer_end = (void*)UINTPTR_MAX;
+    }
 
     if (buffer < buffer_end) {
         rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
@@ -814,10 +878,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
                  (ep, buffer, length, unpack_md_map, skip_md_map, sys_dev,
-                  rkey_p),
+                  legacy, rkey_p),
                  ucp_ep_h ep, const void *buffer, size_t length,
                  ucp_md_map_t unpack_md_map, ucp_md_map_t skip_md_map,
-                 ucs_sys_device_t sys_dev, ucp_rkey_h *rkey_p)
+                 ucs_sys_device_t sys_dev, int legacy, ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -935,7 +999,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     if (worker->context->config.ext.proto_enable) {
         status = ucp_rkey_proto_resolve(rkey, ep, p,
                                         UCS_PTR_BYTE_OFFSET(buffer, length),
-                                        unreachable_md_map);
+                                        unreachable_md_map, legacy);
         if (status != UCS_OK) {
             goto err_destroy;
         }
