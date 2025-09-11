@@ -104,8 +104,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     if (self->umem == NULL) {
         uct_ib_check_memlock_limit_msg(md->super.dev.ibv_context,
                                        UCS_LOG_LEVEL_ERROR,
-                                       "mlx5dv_devx_umem_reg(size=%zu)",
-                                       dev_ep_size);
+                                       "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
+                                       self->ep_gpu, dev_ep_size);
         status = UCS_ERR_NO_MEMORY;
         goto err_mem;
     }
@@ -567,17 +567,60 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_gdaki_iface_t, uct_iface_t, uct_md_h,
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 
 static ucs_status_t
-uct_gdaki_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+uct_gdaki_md_check_uar(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
+{
+    struct mlx5dv_devx_uar *uar;
+    ucs_status_t status;
+    CUcontext cuda_ctx;
+    unsigned flags;
+
+    status = uct_ib_mlx5_devx_alloc_uar(md, 0, &uar);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_dev));
+    if (status != UCS_OK) {
+        goto out_free_uar;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+    if (status != UCS_OK) {
+        goto out_ctx_release;
+    }
+
+    flags  = CU_MEMHOSTREGISTER_PORTABLE | CU_MEMHOSTREGISTER_DEVICEMAP |
+             CU_MEMHOSTREGISTER_IOMEMORY;
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuMemHostRegister(uar->reg_addr, UCT_IB_MLX5_BF_REG_SIZE, flags));
+    if (status == UCS_OK) {
+        UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemHostUnregister(uar->reg_addr));
+    }
+
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+out_ctx_release:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_dev));
+out_free_uar:
+    mlx5dv_devx_free_uar(uar);
+out:
+    return status;
+}
+
+static ucs_status_t
+uct_gdaki_query_tl_devices(uct_md_h tl_md,
+                           uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p)
 {
-    uct_ib_md_t *ib_md      = ucs_derived_of(md, uct_ib_md_t);
-    unsigned num_tl_devices = 0;
+    static int uar_supported = -1;
+    uct_ib_mlx5_md_t *md     = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    unsigned num_tl_devices  = 0;
     uct_tl_device_resource_t *tl_devices;
     ucs_status_t status;
     CUdevice device;
     ucs_sys_device_t dev;
     ucs_sys_dev_distance_t dist;
-    int num_gpus;
+    int i, num_gpus;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_gpus));
     if (status != UCS_OK) {
@@ -589,14 +632,35 @@ uct_gdaki_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
         return UCS_ERR_NO_MEMORY;
     }
 
-    for (int i = 0; i < num_gpus; i++) {
+    for (i = 0; i < num_gpus; i++) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&device, i));
         if (status != UCS_OK) {
             goto err;
         }
 
+        /*
+         * Save the result of UAR support in a global flag since to avoid the
+         * overhead of checking UAR support for each GPU and MD. Assume the
+         * support is the same for all GPUs and MDs in the system.
+         */
+        if (uar_supported == -1) {
+            status = uct_gdaki_md_check_uar(md, device);
+            if (status == UCS_OK) {
+                uar_supported = 1;
+            } else {
+                ucs_diag("GDAKI not supported, please add "
+                         "NVreg_RegistryDwords=\"PeerMappingOverride=1;\" "
+                         "option for nvidia kernel driver");
+                uar_supported = 0;
+            }
+        }
+        if (uar_supported == 0) {
+            status = UCS_ERR_NO_DEVICE;
+            goto err;
+        }
+
         uct_cuda_base_get_sys_dev(device, &dev);
-        status = ucs_topo_get_distance(dev, ib_md->dev.sys_dev, &dist);
+        status = ucs_topo_get_distance(dev, md->super.dev.sys_dev, &dist);
         if (status != UCS_OK) {
             goto err;
         }
@@ -608,8 +672,8 @@ uct_gdaki_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
 
         snprintf(tl_devices[num_tl_devices].name,
                  sizeof(tl_devices[num_tl_devices].name), "%s%d-%s:%d",
-                 UCT_DEVICE_CUDA_NAME, device, uct_ib_device_name(&ib_md->dev),
-                 ib_md->dev.first_port);
+                 UCT_DEVICE_CUDA_NAME, device,
+                 uct_ib_device_name(&md->super.dev), md->super.dev.first_port);
         tl_devices[num_tl_devices].type       = UCT_DEVICE_TYPE_NET;
         tl_devices[num_tl_devices].sys_device = dev;
         num_tl_devices++;
