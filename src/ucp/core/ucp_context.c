@@ -577,6 +577,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, connect_all_to_all),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"ON_DEMAND_WIREUP", "y", /* TODO: disable by default */
+   "Enable new protocol selection logic",
+   ucs_offsetof(ucp_context_config_t, on_demand_wireup), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
