@@ -1180,7 +1180,7 @@ run_nt_buffer_transfer_tests() {
 }
 
 set_ucx_common_test_env() {
-	export UCX_HANDLE_ERRORS=bt
+	export UCX_HANDLE_ERRORS=bt,freeze
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 1000))-$((33999 + EXECUTOR_NUMBER * 1000))"
 	export UCX_TCP_CM_REUSEADDR=y
