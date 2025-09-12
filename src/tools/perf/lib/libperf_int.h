@@ -228,24 +228,27 @@ static inline void ucx_perf_omp_barrier(ucx_perf_context_t *perf)
 
 static UCS_F_ALWAYS_INLINE void ucx_perf_update(ucx_perf_context_t *perf,
                                                 ucx_perf_counter_t iters,
-                                                size_t bytes)
+                                                size_t bytes_per_iter)
 {
     perf->current.time   = ucs_get_time();
     perf->current.iters += iters;
-    perf->current.bytes += bytes;
-    perf->current.msgs  += 1;
+    perf->current.bytes += bytes_per_iter * iters;
+    perf->current.msgs  += iters;
 
-    perf->timing_queue[perf->timing_queue_head] =
-                    perf->current.time - perf->prev_time;
-    ++perf->timing_queue_head;
-    if (perf->timing_queue_head == TIMING_QUEUE_SIZE) {
-        perf->timing_queue_head = 0;
+    if (iters == 1) {
+        perf->timing_queue[perf->timing_queue_head] = perf->current.time -
+                                                      perf->prev_time;
+        ++perf->timing_queue_head;
+        if (perf->timing_queue_head == TIMING_QUEUE_SIZE) {
+            perf->timing_queue_head = 0;
+        }
     }
 
     perf->prev_time = perf->current.time;
 
     if (ucs_unlikely((perf->current.time - perf->prev.time) >=
-                     perf->report_interval)) {
+                     perf->report_interval) &&
+        (perf->current.iters < perf->max_iter)) {
         ucx_perf_report(perf);
     }
 }
