@@ -594,6 +594,9 @@ uct_gdaki_md_check_uar(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
              CU_MEMHOSTREGISTER_IOMEMORY;
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuMemHostRegister(uar->reg_addr, UCT_IB_MLX5_BF_REG_SIZE, flags));
+    if (status == UCS_OK) {
+        UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemHostUnregister(uar->reg_addr));
+    }
 
     UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 out_ctx_release:
