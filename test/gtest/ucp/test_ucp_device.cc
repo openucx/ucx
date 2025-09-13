@@ -124,7 +124,6 @@ UCS_TEST_P(test_ucp_device, mapped_buffer_kernel_memcmp)
 
 UCS_TEST_P(test_ucp_device, create_success)
 {
-    scoped_log_handler wrap_err(wrap_errors_logger);
     mem_list list(sender(), receiver());
     ucp_device_mem_list_handle_h handle = nullptr;
 
@@ -172,6 +171,8 @@ UCS_TEST_P(test_ucp_device, create_fail)
     ucp_device_mem_list_handle_h handle       = nullptr;
     ucp_device_mem_list_params_t empty_params = {};
 
+    scoped_log_handler wrap_err(wrap_errors_logger);
+
     ASSERT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_mem_list_create(sender().ep(), NULL, &handle));
 
@@ -189,4 +190,4 @@ UCS_TEST_P(test_ucp_device, create_fail)
               ucp_device_mem_list_create(sender().ep(), &params1, &handle));
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, gdaki, "rc,rc_gda")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")

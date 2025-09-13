@@ -20,8 +20,11 @@ AC_DEFUN([AC_LANG_COMPILER(CUDA)], [
 
     AC_ARG_VAR([NVCC], [nvcc compiler path])
     AC_ARG_VAR([NVCCFLAGS], [nvcc compiler flags])
-    BASE_NVCCFLAGS="$BASE_NVCCFLAGS $with_nvcc_gencode"
-    AC_CHECK_TOOL([NVCC], [nvcc], [])
+    BASE_NVCCFLAGS="$BASE_NVCCFLAGS -g $with_nvcc_gencode"
+    AS_IF([test ! -z "$with_cuda" -a -d "$with_cuda/bin"],
+          [CUDA_BIN_PATH="$with_cuda/bin"],
+          [CUDA_BIN_PATH=""])
+    AC_PATH_PROG([NVCC], [nvcc], [], [$CUDA_BIN_PATH:$PATH])
     AC_SUBST([NVCC], [$NVCC])
 ])
 
@@ -82,8 +85,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          CUDART_LIBS=""
          CUDART_STATIC_LIBS=""
          NVML_LIBS=""
-         CUDA_BIN_PATH=""
-         CUDA_LIB_DIR=""
+         CUDA_LIB_DIRS=""
 
          AS_IF([test ! -z "$with_cuda" -a "x$with_cuda" != "xyes" -a "x$with_cuda" != "xguess"],
                [ucx_check_cuda_dir="$with_cuda"
@@ -91,8 +93,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                 ucx_check_cuda_libdir="$with_cuda/lib$libsuff"
                 CUDA_CPPFLAGS="-I$with_cuda/include"
                 CUDA_LDFLAGS="-L$ucx_check_cuda_libdir -L$ucx_check_cuda_libdir/stubs"
-                CUDA_BIN_PATH="$with_cuda/bin"
-                CUDA_LIB_DIR="$ucx_check_cuda_libdir"])
+                CUDA_LIB_DIRS="$ucx_check_cuda_libdir $with_cuda/compat"])
 
          CPPFLAGS="$CPPFLAGS $CUDA_CPPFLAGS"
          LDFLAGS="$LDFLAGS $CUDA_LDFLAGS"

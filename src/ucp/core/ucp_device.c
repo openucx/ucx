@@ -271,7 +271,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     }
 
     if (i == 0) {
-        ucs_error("failed to select lane");
+        ucs_fatal("failed to select lane");
         return UCS_ERR_NO_RESOURCE;
     }
 
