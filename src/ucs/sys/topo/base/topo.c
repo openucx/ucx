@@ -1016,7 +1016,7 @@ static void ucs_topo_release_devices()
     }
 }
 
-ucs_global_state_t* ucs_topo_extract_state()
+ucs_global_state_t* ucs_topo_extract_state(void)
 {
     ucs_global_state_t *state;
     size_t devices_size;

@@ -335,7 +335,7 @@ void ucs_topo_print_info(FILE *stream);
  *
  * @return A pointer to the saved state of the topology subsystem.
  */
-ucs_global_state_t *ucs_topo_extract_state();
+ucs_global_state_t *ucs_topo_extract_state(void);
 
 
 /**
