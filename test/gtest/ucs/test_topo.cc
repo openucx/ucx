@@ -25,6 +25,7 @@ static std::string get_sysfs_device_path(const std::string &bdf)
 class test_topo : public ucs::test {
 protected:
     std::vector<std::string> m_hcas, m_gpus, m_dmas;
+    ucs_global_state_t *m_topo_state;
 
     ucs_sys_device_t
     register_device(const std::string &name, const std::string &bdf)
@@ -75,14 +76,12 @@ public:
     virtual void init()
     {
         ucs::test::init();
-        ucs_topo_cleanup();
-        ucs_topo_init();
+        m_topo_state = ucs_topo_extract_state();
     }
 
     virtual void cleanup()
     {
-        ucs_topo_cleanup();
-        ucs_topo_init();
+        ucs_topo_restore_state(m_topo_state);
         ucs::test::cleanup();
     }
 };
@@ -149,7 +148,11 @@ UCS_TEST_F(test_topo, get_distance) {
 }
 
 UCS_TEST_F(test_topo, print_info) {
+    // Restore the state to print the info
+    ucs_topo_restore_state(m_topo_state);
     ucs_topo_print_info(stdout);
+    // Extract the state again
+    m_topo_state = ucs_topo_extract_state();
 }
 
 UCS_TEST_F(test_topo, bdf_name) {
