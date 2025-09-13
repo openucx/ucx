@@ -28,20 +28,15 @@ protected:
         uct_test::init();
         status = uct_cuda_base_get_cuda_device(GetParam()->sys_device,
                                                &m_cuda_dev);
-        if (status != UCS_OK) {
-            return;
-        }
+        ASSERT_UCS_OK(status, << " sys_device "
+                              << static_cast<int>(GetParam()->sys_device));
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));
-        if (status != UCS_OK) {
-            return;
-        }
+        ASSERT_UCS_OK(status);
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
-        if (status != UCS_OK) {
-            return;
-        }
+        ASSERT_UCS_OK(status);
 
         m_receiver = uct_test::create_entity(0);
         m_entities.push_back(m_receiver);
