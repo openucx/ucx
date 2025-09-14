@@ -175,7 +175,7 @@ __device__ __forceinline__ void st_na_relaxed(const int4 *ptr, int4 val) {
 __device__ static inline void
 uct_gdaki_wqe_prepare_put_or_atomic(struct doca_gpu_dev_verbs_qp *qp,
                                     struct doca_gpu_dev_verbs_wqe *wqe_ptr,
-                                    const uint32_t wqe_idx,
+                                    const uint16_t wqe_idx,
                                     const uint32_t opcode,
                                     enum doca_gpu_dev_verbs_wqe_ctrl_flags ctrl_flags,
                                     const uint64_t raddr,
