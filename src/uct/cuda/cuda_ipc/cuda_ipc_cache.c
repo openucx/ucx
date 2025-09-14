@@ -551,10 +551,12 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     }
 
     if ((getpid() == key->pid) &&
-        (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {        /* TODO: added for test purpose to enable cuda_ipc tests in gtest
+        (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {
+        /* TODO: added for test purpose to enable cuda_ipc tests in gtest
          * mapped addrr is set to be same as d_bptr avoiding any calls to
          * uct_cuda_ipc_open_memhandle which would fail with invalid argument
-         * error*/
+         * error
+         */
         *mapped_addr = (CUdeviceptr*)key->d_bptr;
         return UCS_OK;
     }
