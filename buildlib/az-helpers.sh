@@ -163,8 +163,8 @@ check_nv_peer_mem() {
         return 0
     fi
 
-    if ! lsmod | grep -q nv_peer_mem; then
-        lsmod | grep nv_peer_mem
+    if ! lsmod | grep -q 'nv.*_peer.*mem'; then
+        lsmod | grep 'nv.*_peer.*mem'
         systemctl status nv_peer_mem
         azure_log_error "nv_peer_mem module not loaded on $(hostname -s)"
         exit 1
@@ -180,7 +180,7 @@ try_load_cuda_env() {
     have_gdrcopy=no
 
     # List relevant modules
-    lsmod | grep -P "^(nvidia|nv_peer_mem|gdrdrv)\W" || true
+    lsmod | grep -P "^(nvidia|nv.*_peer.*mem|gdrdrv)\W" || true
 
     # Check nvidia driver
     [ -f "/proc/driver/nvidia/version" ] || return 0
@@ -193,20 +193,27 @@ try_load_cuda_env() {
     num_gpus=$(get_num_gpus)
     [ "${num_gpus}" -gt 0 ] || return 0
 
-    # Check cuda env module
-    az_module_load dev/cuda12.8 || return 0
-    have_cuda=yes
+    # Prefer local CUDA if available
+    cuda_local_dir="/usr/local/cuda"
+    if find ${cuda_local_dir}/ -name 'libcudart.so.1[2-9]*' | grep -q .; then
+        have_cuda="${cuda_local_dir}"
+    else
+        # Fallback to env module
+        az_module_load dev/cuda12.8 || return 0
+        have_cuda=yes
+    fi
 
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
     then
+        # TODO detect cuda version if using local CUDA
         az_module_load dev/gdrcopy2.4.4_cuda12.8.0 && have_gdrcopy=yes
     fi
 }
 
 load_cuda_env() {
     try_load_cuda_env
-    if [ "${have_cuda}" != "yes" ] ; then
+    if [ "${have_cuda}" == "no" ] ; then
         if [ "${ucx_gpu}" = "yes" ] ; then
             azure_log_error "CUDA load failed on GPU node $(hostname -s)"
             exit 1

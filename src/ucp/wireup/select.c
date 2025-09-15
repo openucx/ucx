@@ -2446,7 +2446,7 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_flags_t iface_rma_flags, peer_rma_flags;
     ucp_wireup_select_bw_info_t bw_info = {};
     ucp_tl_bitmap_t mem_type_tl_bitmap;
-    ucp_tl_bitmap_t tl_bitmap;
+    int found_lane;
 
     if (!context->config.ext.proto_enable ||
         (ep_init_flags &
@@ -2478,15 +2478,15 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
      */
     bw_info.max_lanes = ucp_wireup_bw_max_lanes(select_params);
 
-    UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap);
     ucp_wireup_memaccess_bitmap(context, UCS_MEMORY_TYPE_CUDA,
                                 &mem_type_tl_bitmap);
-    (void)ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                  UCP_TL_BITMAP_AND_NOT(mem_type_tl_bitmap,
-                                                        tl_bitmap),
-                                  UCP_NULL_LANE, select_ctx, 0);
-
-    UCS_STATIC_BITMAP_OR_INPLACE(&tl_bitmap, mem_type_tl_bitmap);
+    found_lane = ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                         mem_type_tl_bitmap, UCP_NULL_LANE,
+                                         select_ctx, 0);
+    if (!found_lane) {
+        ucs_error("could not find device lanes");
+        return UCS_ERR_UNREACHABLE;
+    }
 
     return UCS_OK;
 }

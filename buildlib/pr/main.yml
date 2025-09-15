@@ -57,6 +57,9 @@ resources:
     - container: ubuntu2404_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu2404_doca31_gpunetio
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: debian113
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -284,7 +287,7 @@ stages:
         name: gpu
         demands: ucx_gpu -equals yes
         test_perf: 1
-        container: rhel90_doca31
+        container: ubuntu2404_doca31_gpunetio
     - template: tests.yml
       parameters:
         name: new

@@ -390,4 +390,4 @@ UCS_TEST_P(test_ucp_device, create_fail)
     EXPECT_EQ(nullptr, handle);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, gdaki, "rc,rc_gda")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")

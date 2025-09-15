@@ -260,7 +260,7 @@ run_ucp_hello() {
 
 	mem_types_list="host "
 
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		mem_types_list+="cuda cuda-managed "
 	fi
@@ -297,7 +297,7 @@ run_ucp_hello() {
 run_uct_hello() {
 	mem_types_list="host "
 
-	if [ "X$have_cuda" == "Xyes" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+	if [ "X$have_cuda" != "Xno" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
 	then
 		mem_types_list+="cuda-managed "
 		if [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
@@ -333,7 +333,7 @@ run_client_server() {
 	msg_size_list="1 16 256 4096 65534"
 	api_list="am tag stream"
 
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		mem_types_list+=" cuda cuda-managed "
 	fi
@@ -374,7 +374,7 @@ run_io_demo() {
 	server_nonrdma_addr=$(get_non_rdma_ip_addr)
 	mem_types_list="host "
 
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		mem_types_list+="cuda cuda-managed "
 	fi
@@ -496,12 +496,12 @@ run_ucx_perftest() {
 
 	# run cuda tests if cuda module was loaded and GPU is found, and only in
 	# client/server mode, to reduce testing time
-	if [ "X$have_cuda" == "Xyes" ] && [ $with_mpi -ne 1 ]
+	if [ "X$have_cuda" != "Xno" ] && [ $with_mpi -ne 1 ]
 	then
 		gdr_options="n "
-		if (lsmod | grep -q "nv_peer_mem")
+		if (lsmod | grep -q 'nv.*_peer.*mem')
 		then
-			echo "GPUDirectRDMA module (nv_peer_mem) is present.."
+			echo "GPUDirectRDMA module (nv_peer_mem/nvidia_peermem) is present"
 			gdr_options+="y "
 		fi
 
@@ -637,7 +637,7 @@ run_ucx_perftest_with_daemon() {
 # Run UCX performance cuda device test
 #
 run_ucx_perftest_cuda_device() {
-	if [ "X$have_cuda" != "Xyes" ]; then
+	if [ "X$have_cuda" == "Xno" ]; then
 		echo "==== CUDA not available, skipping CUDA device tests ===="
 		return 0
 	fi
@@ -724,7 +724,7 @@ run_mpi_tests() {
 
 			test_malloc_hooks_mpi
 
-			if [ "X$have_cuda" == "Xyes" ] && [ -x ./test/mpi/test_mpi_cuda ]
+			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_mpi_cuda ]
 			then
 				echo "==== Running MPI CUDA tests ===="
 				${MPIRUN_COMMON} -np 2 ./test/mpi/test_mpi_cuda
@@ -927,7 +927,7 @@ test_malloc_hook() {
 
 test_no_cuda_context() {
 	echo "==== Running no CUDA context test ===="
-	if [ "X$have_cuda" == "Xyes" ] && [ -x ./test/apps/test_no_cuda_ctx ]
+	if [ "X$have_cuda" != "Xno" ] && [ -x ./test/apps/test_no_cuda_ctx ]
 	then
 		./test/apps/test_no_cuda_ctx
 	fi

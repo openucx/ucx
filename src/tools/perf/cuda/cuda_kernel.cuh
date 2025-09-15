@@ -48,13 +48,9 @@ ucx_perf_cuda_update_report(ucx_perf_cuda_context &ctx,
     }
 }
 
-template <typename Base>
-class ucx_perf_cuda_test_runner: public Base {
+class ucx_perf_cuda_test_runner {
 public:
-    using psn_t = uint64_t;
-    using Base::m_perf;
-
-    ucx_perf_cuda_test_runner(ucx_perf_context_t &perf) : Base(perf)
+    ucx_perf_cuda_test_runner(ucx_perf_context_t &perf) : m_perf(perf)
     {
         ucs_status_t status = init_ctx();
         if (status != UCS_OK) {
@@ -63,12 +59,15 @@ public:
         }
 
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
-        m_cpu_ctx->max_iters          = perf.params.max_iter;
-        m_cpu_ctx->report_interval_ns = perf.params.report_interval *
-                                        UCS_NSEC_PER_SEC;
+        m_cpu_ctx->max_iters          = perf.max_iter;
         m_cpu_ctx->completed_iters    = 0;
-
-        m_poll_interval               = perf.params.report_interval / 10000;
+        if (perf.report_interval == ULONG_MAX) {
+            m_cpu_ctx->report_interval_ns = ULONG_MAX;
+        } else {
+            m_cpu_ctx->report_interval_ns = ucs_time_to_nsec(
+                                                    perf.report_interval) /
+                                            100;
+        }
     }
 
     ~ucx_perf_cuda_test_runner()
@@ -78,54 +77,26 @@ public:
 
     ucx_perf_cuda_context &gpu_ctx() const { return *m_gpu_ctx; }
 
-    UCS_F_ALWAYS_INLINE psn_t get_sn(const psn_t *gpu_ptr, const psn_t *cpu_ptr)
+    void wait_for_kernel(size_t msg_length)
     {
-        if (cpu_ptr != nullptr) {
-            return *cpu_ptr;
-        }
-
-        unsigned my_index          = rte_call(&m_perf, group_index);
-        ucs_memory_type_t mem_type = my_index ? m_perf.params.send_mem_type :
-                                                m_perf.params.recv_mem_type;
-        auto allocator             = my_index ? m_perf.send_allocator :
-                                                m_perf.recv_allocator;
-        return Base::get_sn(gpu_ptr, mem_type, allocator);
-    }
-
-    psn_t wait_sn_geq(const psn_t *gpu_ptr, const psn_t *cpu_ptr, psn_t value)
-    {
-        psn_t sn = get_sn(gpu_ptr, cpu_ptr);
-        if (sn >= value) {
-            return sn;
-        }
-
-        // TODO: use cuStreamWaitValue64 if available
-        usleep(m_poll_interval);
-        return get_sn(gpu_ptr, cpu_ptr);
-    }
-
-    void wait_for_kernel(size_t length)
-    {
-        psn_t last_completed = 0;
-        while (last_completed < m_perf.params.max_iter) {
-            psn_t completed = wait_sn_geq(&m_gpu_ctx->completed_iters,
-                                          &m_cpu_ctx->completed_iters,
-                                          last_completed);
-            psn_t delta     = completed - last_completed;
+        ucx_perf_counter_t last_completed = 0;
+        ucx_perf_counter_t completed      = m_cpu_ctx->completed_iters;
+        while (1) {
+            ucx_perf_counter_t delta = completed - last_completed;
             if (delta > 0) {
                 // TODO: calculate latency percentile on kernel
-                ucx_perf_update_multi(&m_perf, delta, delta * length);
+                ucx_perf_update(&m_perf, delta, msg_length);
+            } else if (completed >= m_perf.max_iter) {
+                break;
             }
             last_completed = completed;
+            completed      = m_cpu_ctx->completed_iters;
+            usleep(100);
         }
     }
 
-    void wait_for_sn(size_t length)
-    {
-        const psn_t *ptr = Base::sn_ptr(m_perf.recv_buffer, length);
-        while (wait_sn_geq(ptr, nullptr, m_perf.params.max_iter)
-               < m_perf.params.max_iter);
-    }
+protected:
+    ucx_perf_context_t &m_perf;
 
 private:
     ucs_status_t init_ctx()
@@ -151,7 +122,6 @@ private:
 
     ucx_perf_cuda_context *m_cpu_ctx;
     ucx_perf_cuda_context *m_gpu_ctx;
-    double                m_poll_interval;
 };
 
 

@@ -109,7 +109,7 @@ uct_rc_mlx5_gda_reserv_wqe(struct doca_gpu_dev_verbs_qp *qp, unsigned count,
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
         doca_gpu_dev_verbs_qp *qp, doca_gpu_dev_verbs_wqe *wqe_ptr,
-        uint32_t wqe_idx, uint32_t opcode, unsigned ctrl_flags, uint64_t raddr,
+        uint16_t wqe_idx, uint32_t opcode, unsigned ctrl_flags, uint64_t raddr,
         uint32_t rkey, uint64_t laddr, uint32_t lkey, uint32_t bytes,
         bool is_atomic, uint64_t add)
 {
