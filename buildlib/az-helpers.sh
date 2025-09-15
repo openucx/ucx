@@ -163,9 +163,9 @@ check_nv_peer_mem() {
         return 0
     fi
 
-    # Accept both legacy nv_peer_mem and new nvidia_peermem
-    if ! lsmod | egrep -q '^(nvidia_peermem|nv_peer_mem)\b'; then
-        azure_log_error "NV peer memory module not loaded on $(hostname -s)"
+    if ! lsmod | grep -q 'nv.*_peer.*mem'; then
+        lsmod | grep 'nv.*_peer.*mem'
+        azure_log_error "nv_peer_mem module not loaded on $(hostname -s)"
         exit 1
     fi
 }
