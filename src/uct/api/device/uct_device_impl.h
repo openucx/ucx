@@ -252,7 +252,10 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_progress(uct_device_ep_h device_ep)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_progress<level>(device_ep);
+    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+        return UCS_OK;
     }
+
     return UCS_ERR_UNSUPPORTED;
 }
 

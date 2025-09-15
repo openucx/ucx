@@ -65,6 +65,7 @@ void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
 
 void test_ucp_device::init()
 {
+    m_env.push_back(new ucs::scoped_setenv("UCX_CUDA_IPC_ENABLE_SAME_PROCESS", "y"));
     ucp_test::init();
     sender().connect(&receiver(), get_ep_params());
     if (!is_loopback()) {
@@ -442,3 +443,4 @@ UCS_TEST_P(test_ucp_device, create_fail)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, cuda_ipc, "rc,cuda_ipc")

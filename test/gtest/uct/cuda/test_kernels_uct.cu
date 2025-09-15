@@ -96,6 +96,7 @@ ucs_status_t launch_uct_put_single(uct_device_ep_h device_ep,
                                    unsigned num_blocks)
  {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
+    cudaError_t st;
 
      switch (level) {
      case UCS_DEVICE_LEVEL_THREAD:
@@ -125,6 +126,12 @@ ucs_status_t launch_uct_put_single(uct_device_ep_h device_ep,
      default:
          throw std::runtime_error("Unsupported level");
      }
+
+     st = cudaGetLastError();
+     if (st != cudaSuccess) {
+         throw std::runtime_error(cudaGetErrorString(st));
+     }
+
      synchronize();
 
     return *status;

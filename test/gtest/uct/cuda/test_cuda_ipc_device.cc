@@ -122,7 +122,7 @@ Parameter packing in resource.variant (uint32_t):
                                              UCS_DEVICE_LEVEL_WARP,
                                              UCS_DEVICE_LEVEL_BLOCK,
                                              UCS_DEVICE_LEVEL_GRID};
-        const int num_threads[] = {1, 32, 128, 256, 512};
+        const int num_threads[] = {1, 32, 128, 256};
         const int offsets[]     = {0, 1, 4, 8};
 
         const size_t total = base.size() *
