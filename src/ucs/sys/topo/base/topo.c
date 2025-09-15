@@ -102,6 +102,12 @@ typedef struct ucs_topo_global_ctx {
 } ucs_topo_global_ctx_t;
 
 
+struct ucs_global_state {
+    unsigned                   num_devices;
+    ucs_topo_sys_device_info_t devices[];
+};
+
+
 const ucs_sys_dev_distance_t ucs_topo_default_distance = {
     .latency   = 0,
     .bandwidth = INFINITY
@@ -1000,6 +1006,75 @@ void ucs_topo_print_info(FILE *stream)
     }
 }
 
+static void ucs_topo_release_devices()
+{
+    ucs_topo_sys_device_info_t *device;
+
+    while (ucs_topo_global_ctx.num_devices-- > 0) {
+        device = &ucs_topo_global_ctx.devices[ucs_topo_global_ctx.num_devices];
+        ucs_free(device->name);
+    }
+}
+
+ucs_global_state_t *ucs_topo_extract_state(void)
+{
+    ucs_global_state_t *state;
+    size_t devices_size;
+
+    devices_size = sizeof(ucs_topo_sys_device_info_t) *
+                   ucs_topo_global_ctx.num_devices;
+
+    state = ucs_malloc(sizeof(*state) + devices_size, "ucs_global_state_t");
+    if (state == NULL) {
+        return NULL;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+
+    memcpy(state->devices, ucs_topo_global_ctx.devices, devices_size);
+    state->num_devices = ucs_topo_global_ctx.num_devices;
+
+    ucs_topo_global_ctx.num_devices = 0;
+    kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
+
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return state;
+}
+
+void ucs_topo_restore_state(ucs_global_state_t *state)
+{
+    const ucs_topo_sys_device_info_t *device;
+    ucs_sys_device_t sys_dev;
+    int kh_put_status;
+    khiter_t hash_it;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+
+    ucs_topo_release_devices();
+
+    memcpy(ucs_topo_global_ctx.devices, state->devices,
+           sizeof(ucs_topo_sys_device_info_t) * state->num_devices);
+    ucs_topo_global_ctx.num_devices = state->num_devices;
+
+    /* Create the hash table */
+    kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
+    for (sys_dev = 0; sys_dev < ucs_topo_global_ctx.num_devices; ++sys_dev) {
+        device  = &ucs_topo_global_ctx.devices[sys_dev];
+        hash_it = kh_put(bus_to_sys_dev,
+                         &ucs_topo_global_ctx.bus_to_sys_dev_hash,
+                         ucs_topo_get_bus_id_bit_repr(&device->bus_id),
+                         &kh_put_status);
+        ucs_assert((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
+                   (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR));
+        kh_val(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) = sys_dev;
+    }
+
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    ucs_free(state);
+}
+
 static ucs_sys_topo_provider_t ucs_sys_topo_provider_sysfs = {
     .name = "sysfs",
     .ops = {
@@ -1021,16 +1096,10 @@ void ucs_topo_init()
 
 void ucs_topo_cleanup()
 {
-    ucs_topo_sys_device_info_t *device;
-
     ucs_list_del(&ucs_sys_topo_provider_sysfs.list);
     ucs_list_del(&ucs_sys_topo_provider_default.list);
 
-    while (ucs_topo_global_ctx.num_devices-- > 0) {
-        device = &ucs_topo_global_ctx.devices[ucs_topo_global_ctx.num_devices];
-        ucs_free(device->name);
-    }
-
+    ucs_topo_release_devices();
     kh_destroy_inplace(bus_to_sys_dev,
                        &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_spinlock_destroy(&ucs_topo_global_ctx.lock);

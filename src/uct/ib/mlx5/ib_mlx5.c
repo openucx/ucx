@@ -569,9 +569,8 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
 }
 
 #if HAVE_DEVX
-static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md,
-                                               uint32_t flags,
-                                               struct mlx5dv_devx_uar **uar_p)
+ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, uint32_t flags,
+                                        struct mlx5dv_devx_uar **uar_p)
 {
     const char *uar_type_str      = (flags == UCT_IB_MLX5_UAR_ALLOC_TYPE_WC) ?
                                     "WC" : "NC_DEDICATED";

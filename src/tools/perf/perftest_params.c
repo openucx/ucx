@@ -637,6 +637,12 @@ ucs_status_t adjust_test_params(perftest_params_t *params,
         params->super.max_outstanding = test->window_size;
     }
 
+    if (params->super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+        /* TODO: Add getter function for thread count */
+        params->super.device_thread_count = params->super.thread_count;
+        params->super.thread_count        = 1;
+    }
+
     return UCS_OK;
 }
 
@@ -845,12 +851,6 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
             status = UCS_ERR_INVALID_PARAM;
             goto err;
         }
-    }
-
-    if (ctx->params.super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
-        /* TODO: Add getter function for thread count */
-        ctx->params.super.device_thread_count = ctx->params.super.thread_count;
-        ctx->params.super.thread_count        = 1;
     }
 
     return init_daemon_params(&ctx->params.super);
