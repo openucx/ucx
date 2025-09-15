@@ -28,8 +28,24 @@ protected:
         uct_test::init();
         status = uct_cuda_base_get_cuda_device(GetParam()->sys_device,
                                                &m_cuda_dev);
+        if (status != UCS_OK) {
+            /* cuda_ipc returns no device if no context is active */
+            int num_gpus = 0;
+
+            if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_gpus)) != UCS_OK ||
+                num_gpus == 0) {
+                status = UCS_ERR_NO_DEVICE;
+                goto out;
+            }
+            if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&m_cuda_dev, 0)) != UCS_OK) {
+                status = UCS_ERR_NO_DEVICE;
+                goto out;
+            };
+            status = UCS_OK;
+        }
+out:
         ASSERT_UCS_OK(status, << " sys_device "
-                              << static_cast<int>(GetParam()->sys_device));
+            << static_cast<int>(GetParam()->sys_device));
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));
@@ -219,3 +235,4 @@ UCS_TEST_P(test_device, partial)
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_device, rc_gda)
+_UCT_INSTANTIATE_TEST_CASE(test_device, cuda_ipc)
