@@ -88,10 +88,12 @@ class test_cuda_ipc_rma_device : public test_cuda_ipc_rma {
     void cleanup() {
         test_cuda_ipc_rma::cleanup();
     }
-    ucs_device_level_t get_device_level() const
-    {
-        return static_cast<ucs_device_level_t>((GetParam()->variant >> 24) &
-                                               0xFF);
+    ucs_device_level_t get_device_level() const {
+        return static_cast<ucs_device_level_t>((GetParam()->variant >> 28) & 0xF);
+    }
+
+    int get_num_blocks() const {
+        return (GetParam()->variant >> 24) & 0xF;
     }
 
     int get_num_threads() const {
@@ -107,9 +109,10 @@ class test_cuda_ipc_rma_device : public test_cuda_ipc_rma {
     static std::vector<const resource*> enum_resources(const std::string& tl_name) {
 /*
 Parameter packing in resource.variant (uint32_t):
-    [31:24] device_level  (uct_device_level_t, 0..255)
-    [23:12] num_threads   (int, 0..4095)  used: 1, 32, 128, 256, number of threads in a block for kernel
-    [11:0]  offset        (int, 0..4095)  used: 0, 1, 32, 64, send buffer offset
+    [31:28] device_level  (uct_device_level_t, 0..15)
+    [27:24] num_blocks    (int, 0..15)    used: 1, 2
+    [23:12] num_threads   (int, 0..4095)  used: 1, 32, 128, 256 (threads per block)
+    [11:0]  offset        (int, 0..4095)  used: 0, 1, 4, 8 (send buffer offset)
 */
         static std::vector<std::unique_ptr<resource>> storage;
         static std::vector<const resource*> out;
@@ -123,6 +126,7 @@ Parameter packing in resource.variant (uint32_t):
                                              UCS_DEVICE_LEVEL_BLOCK,
                                              UCS_DEVICE_LEVEL_GRID};
         const int num_threads[] = {1, 32, 128, 256};
+        const int num_blocks[]  = {1, 2};
         const int offsets[]     = {0, 1, 4, 8};
 
         const size_t total = base.size() *
@@ -136,30 +140,34 @@ Parameter packing in resource.variant (uint32_t):
             for (ucs_device_level_t dl : levels) {
                 for (int nt : num_threads) {
                     for (int off : offsets) {
-                        std::unique_ptr<resource> up(new resource(*r));
-                        up->variant = ((static_cast<int>(dl) & 0xFF) << 24) |
-                                      ((nt & 0xFFF) << 12) |
-                                      (off & 0xFFF);
-                        switch (dl) {
-                        case UCS_DEVICE_LEVEL_THREAD:
-                            up->variant_name = "thread";
-                            break;
-                        case UCS_DEVICE_LEVEL_WARP:
-                            up->variant_name = "warp";
-                            break;
-                        case UCS_DEVICE_LEVEL_BLOCK:
-                            up->variant_name = "block";
-                            break;
-                        case UCS_DEVICE_LEVEL_GRID:
-                            up->variant_name = "grid";
-                            break;
-                        default:
-                            break;
+                        for (int nb: num_blocks) {
+                            std::unique_ptr<resource> up(new resource(*r));
+                            up->variant = ((static_cast<int>(dl) & 0xF) << 28) |
+                                          ((nb & 0xF) << 24) |
+                                          ((nt & 0xFFF) << 12) |
+                                          (off & 0xFFF);
+                            switch (dl) {
+                            case UCS_DEVICE_LEVEL_THREAD:
+                                up->variant_name = "thread";
+                                break;
+                            case UCS_DEVICE_LEVEL_WARP:
+                                up->variant_name = "warp";
+                                break;
+                            case UCS_DEVICE_LEVEL_BLOCK:
+                                up->variant_name = "block";
+                                break;
+                            case UCS_DEVICE_LEVEL_GRID:
+                                up->variant_name = "grid";
+                                break;
+                            default:
+                                break;
+                            }
+                            up->variant_name += "- nt" + std::to_string(nt) +
+                                                "- nb" + std::to_string(nb) +
+                                                "- offset" + std::to_string(off);
+                            out.push_back(up.get());
+                            storage.emplace_back(std::move(up));
                         }
-                        up->variant_name += "- nt" + std::to_string(nt) +
-                                            "- offset" + std::to_string(off);
-                        out.push_back(up.get());
-                        storage.emplace_back(std::move(up));
                     }
                 }
             }
@@ -206,13 +214,17 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_zcopy_device)
     ucs_device_level_t device_level  = get_device_level();
     unsigned           num_threads   = get_num_threads();
     size_t             length        = base_length + offset;
-    unsigned           num_blocks    = 1;
+    unsigned           num_blocks    = get_num_blocks();
     uct_device_ep_h device_ep;
     uct_device_mem_element_t *mem_elem;
     void *send_buf;
 
     if (device_level == UCS_DEVICE_LEVEL_GRID) {
         GTEST_SKIP() << "Grid level is not supported";
+    }
+
+    if ((device_level == UCS_DEVICE_LEVEL_WARP) && (num_threads < 32)) {
+        GTEST_SKIP() << "Warp level is not supported for less than 32 threads";
     }
 
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
@@ -240,7 +252,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_device)
     size_t             mem_elem_size = get_mem_elem_size();
     ucs_device_level_t device_level  = get_device_level();
     unsigned           num_threads   = get_num_threads();
-    unsigned           num_blocks    = 1;
+    unsigned           num_blocks    = get_num_blocks();
     size_t             offset        = get_offset();
     const int          iovcnt        = 8;
     size_t             length        = iovcnt * (base_length + offset);
@@ -253,6 +265,10 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_device)
 
     if (device_level == UCS_DEVICE_LEVEL_GRID) {
         GTEST_SKIP() << "Grid level is not supported";
+    }
+
+    if ((device_level == UCS_DEVICE_LEVEL_WARP) && (num_threads < 32)) {
+        GTEST_SKIP() << "Warp level is not supported for less than 32 threads";
     }
 
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
@@ -314,7 +330,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
     size_t             mem_elem_size = get_mem_elem_size();
     ucs_device_level_t device_level  = get_device_level();
     unsigned           num_threads   = get_num_threads();
-    unsigned           num_blocks    = 1;
+    unsigned           num_blocks    = get_num_blocks();
     size_t             offset        = get_offset();
     const int          iovcnt        = 8;
     size_t             length        = iovcnt * (base_length + offset);
@@ -329,6 +345,10 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
 
     if (device_level == UCS_DEVICE_LEVEL_GRID) {
         GTEST_SKIP() << "Grid level is not supported";
+    }
+
+    if ((device_level == UCS_DEVICE_LEVEL_WARP) && (num_threads < 32)) {
+        GTEST_SKIP() << "Warp level is not supported for less than 32 threads";
     }
 
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
@@ -417,12 +437,16 @@ UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
     size_t             mem_elem_size = get_mem_elem_size();
     ucs_device_level_t device_level  = get_device_level();
     unsigned           num_threads   = get_num_threads();
-    unsigned           num_blocks    = 1;
+    unsigned           num_blocks    = get_num_blocks();
     uct_device_ep_h device_ep;
     uct_device_mem_element_t *mem_elem;
 
     if (device_level == UCS_DEVICE_LEVEL_GRID) {
         GTEST_SKIP() << "Grid level is not supported";
+    }
+
+    if ((device_level == UCS_DEVICE_LEVEL_WARP) && (num_threads < 32)) {
+        GTEST_SKIP() << "Warp level is not supported for less than 32 threads";
     }
 
     mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
