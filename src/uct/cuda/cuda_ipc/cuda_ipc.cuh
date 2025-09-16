@@ -88,23 +88,24 @@ UCS_F_DEVICE void uct_cuda_ipc_atomic_inc(uint64_t *dst, uint64_t inc_value)
 }
 
 template<ucs_device_level_t level>
-UCS_F_DEVICE void uct_cuda_ipc_level_sync();
-
-template<>
-void uct_cuda_ipc_level_sync<UCS_DEVICE_LEVEL_THREAD>() {}
-
-template<>
-void uct_cuda_ipc_level_sync<UCS_DEVICE_LEVEL_WARP>() {
-    __syncwarp();
+UCS_F_DEVICE void uct_cuda_ipc_level_sync()
+{
+    switch (level) {
+    case UCS_DEVICE_LEVEL_THREAD:
+        break;
+    case UCS_DEVICE_LEVEL_WARP:
+        __syncwarp();
+        break;
+    case UCS_DEVICE_LEVEL_BLOCK:
+        __syncthreads();
+        break;
+    case UCS_DEVICE_LEVEL_GRID:
+        assert(false);
+        /* not implemented */
+        break;
+    }
+    return;
 }
-
-template<>
-void uct_cuda_ipc_level_sync<UCS_DEVICE_LEVEL_BLOCK>() {
-    __syncthreads();
-}
-
-template<>
-void uct_cuda_ipc_level_sync<UCS_DEVICE_LEVEL_GRID>() {/* not implemented */}
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE void uct_cuda_ipc_copy_level(void *dst, const void *src, size_t len);

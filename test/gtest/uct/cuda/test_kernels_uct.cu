@@ -12,6 +12,12 @@
 #include <stdexcept>
 #include <memory>
 
+#define UCS_DEVICE_LEVEL_EXEC_ID 1
+
+#define UCS_DEVICE_LEVEL_EXEC_SELECT(scope_ok, count, id) \
+    ((scope_ok) ? (((count) > UCS_DEVICE_LEVEL_EXEC_ID) ? \
+                    ((id) == UCS_DEVICE_LEVEL_EXEC_ID) : true) : false)
+
 namespace cuda_uct {
 /**
  * Wrapper class for a host memory result variable, that can be mapped to device
@@ -80,49 +86,13 @@ template<typename T> class device_result_ptr {
 
     switch (level) {
     case UCS_DEVICE_LEVEL_THREAD:
-        if (block_id > 0) {
-            return false;
-        }
-
-        if (num_threads > 1) {
-            if (thread_id == 1) {
-                return true;
-            } else {
-                return false;
-            }
-        } else {
-            return true;
-        }
-        break;
+        return UCS_DEVICE_LEVEL_EXEC_SELECT(block_id == 0, num_threads, thread_id);
     case UCS_DEVICE_LEVEL_WARP:
-        if (block_id > 0) {
-            return false;
-        }
-
-        if (num_warps > 1) {
-            if (warp_id == 1) {
-                return true;
-            } else {
-                return false;
-            }
-        } else {
-            return true;
-        }
-        break;
+        return UCS_DEVICE_LEVEL_EXEC_SELECT(block_id == 0, num_warps, warp_id);
     case UCS_DEVICE_LEVEL_BLOCK:
-        if (num_blocks > 1) {
-            if (block_id == 1) {
-                return true;
-            } else {
-                return false;
-            }
-        } else {
-            return true;
-        }
-        break;
+        return UCS_DEVICE_LEVEL_EXEC_SELECT(true, num_blocks, block_id);
     case UCS_DEVICE_LEVEL_GRID:
         return true;
-        break;
     }
     return false;
  }
@@ -135,9 +105,8 @@ template<typename T> class device_result_ptr {
                        size_t length, ucs_status_t *status)
  {
     uct_device_completion_t comp;
-    bool do_op = is_op_enabled(level);
 
-    if (do_op) {
+    if (is_op_enabled(level)) {
         uct_device_completion_init(&comp);
         *status = uct_device_ep_put_single<level>(device_ep, mem_elem,
                                                   address, remote_address,
@@ -264,9 +233,8 @@ uct_put_multi_kernel(uct_device_ep_h ep,
                   ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
-    bool do_op = is_op_enabled(level);
 
-    if (do_op) {
+    if (is_op_enabled(level)) {
         uct_device_completion_init(&comp);
         *status_p = uct_device_ep_put_multi<level>(ep, mem_list, mem_list_count, addresses,
                                                    remote_addresses, lengths,
@@ -331,9 +299,8 @@ uct_put_multi_partial_kernel(uct_device_ep_h ep,
                              ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
-    bool do_op = is_op_enabled(level);
 
-    if (do_op) {
+    if (is_op_enabled(level)) {
         uct_device_completion_init(&comp);
         *status_p = uct_device_ep_put_multi_partial<level>(ep, mem_list, mem_list_indices, mem_list_count,
                                                            addresses, remote_addresses, lengths, counter_index,

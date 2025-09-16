@@ -18,6 +18,34 @@ extern "C" {
 
 #include "cuda/test_kernels.h"
 
+/* Ensure a CUDA context is active before UCX enumerates resources so that
+ * cuda_ipc sys_device is set properly. */
+static struct test_device_cuda_ctx_guard {
+    CUdevice  dev;
+    CUcontext ctx;
+    int       active;
+
+    test_device_cuda_ctx_guard() : dev(0), ctx(NULL), active(0) {
+        (void)UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+        if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&dev, 0)) == UCS_OK) {
+            if (UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&ctx, dev)) == UCS_OK) {
+                if (UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx)) == UCS_OK) {
+                    active = 1;
+                } else {
+                    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(dev));
+                }
+            }
+        }
+    }
+
+    ~test_device_cuda_ctx_guard() {
+        if (active) {
+            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(dev));
+        }
+    }
+} g_test_device_cuda_ctx_guard;
+
 class test_device : public uct_test {
 protected:
     void init()
@@ -28,22 +56,6 @@ protected:
         uct_test::init();
         status = uct_cuda_base_get_cuda_device(GetParam()->sys_device,
                                                &m_cuda_dev);
-        if (status != UCS_OK) {
-            /* cuda_ipc returns no device if no context is active */
-            int num_gpus = 0;
-
-            if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_gpus)) != UCS_OK ||
-                num_gpus == 0) {
-                status = UCS_ERR_NO_DEVICE;
-                goto out;
-            }
-            if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&m_cuda_dev, 0)) != UCS_OK) {
-                status = UCS_ERR_NO_DEVICE;
-                goto out;
-            };
-            status = UCS_OK;
-        }
-out:
         ASSERT_UCS_OK(status, << " sys_device "
             << static_cast<int>(GetParam()->sys_device));
 
