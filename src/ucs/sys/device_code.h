@@ -7,6 +7,8 @@
 #ifndef UCS_DEVICE_CODE_H
 #define UCS_DEVICE_CODE_H
 
+#include <stdint.h>
+
 /*
  * Declare GPU specific functions
  */
