@@ -237,7 +237,7 @@ ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
         // Different MD map means different config index on proto v2
         ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_size,
                                                   md_map, 0,
-                                                  UCS_SYS_DEVICE_ID_UNKNOWN, 0,
+                                                  UCS_SYS_DEVICE_ID_UNKNOWN,
                                                   &rkey));
     }
 
@@ -482,24 +482,26 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     if (is_proto_enabled()) {
         ucp_rkey_config_t *rkey_config = ucp_rkey_config(receiver().worker(),
                                                          rkey);
-        ucp_ep_config_t *ep_config     = ucp_ep_config(receiver().ep());
+        if (rkey_config->key.md_map != 0) {
+            ucp_ep_config_t *ep_config     = ucp_ep_config(receiver().ep());
 
-        EXPECT_EQ(receiver().ep()->cfg_index, rkey_config->key.ep_cfg_index);
-        EXPECT_EQ(mem_info.sys_dev, rkey_config->key.sys_dev);
-        EXPECT_EQ(mem_info.type, rkey_config->key.mem_type);
+            EXPECT_EQ(receiver().ep()->cfg_index, rkey_config->key.ep_cfg_index);
+            EXPECT_EQ(mem_info.sys_dev, rkey_config->key.sys_dev);
+            EXPECT_EQ(mem_info.type, rkey_config->key.mem_type);
 
-        /* Compare original system distance and unpacked rkey system distance */
-        for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes;
-             ++lane) {
-            sys_dev   = ep_config->key.lanes[lane].dst_sys_dev;
-            rkey_dist = rkey_config->lanes_distance[lane];
-            topo_dist = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
-                        ucs_topo_default_distance : sys_distance[sys_dev];
+            /* Compare original system distance and unpacked rkey system distance */
+            for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes;
+                    ++lane) {
+                sys_dev   = ep_config->key.lanes[lane].dst_sys_dev;
+                rkey_dist = rkey_config->lanes_distance[lane];
+                topo_dist = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                    ucs_topo_default_distance : sys_distance[sys_dev];
 
-            check_distance_precision(rkey_dist.bandwidth, topo_dist.bandwidth,
-                                     UCS_FP8_MIN_BW, UCS_FP8_MAX_BW);
-            check_distance_precision(rkey_dist.latency, topo_dist.latency,
-                                     UCS_FP8_MIN_LAT, UCS_FP8_MAX_LAT);
+                check_distance_precision(rkey_dist.bandwidth, topo_dist.bandwidth,
+                        UCS_FP8_MIN_BW, UCS_FP8_MAX_BW);
+                check_distance_precision(rkey_dist.latency, topo_dist.latency,
+                        UCS_FP8_MIN_LAT, UCS_FP8_MAX_LAT);
+            }
         }
     }
 
