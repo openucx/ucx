@@ -936,6 +936,10 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         ucp_params->features |= UCP_FEATURE_AM;
     }
 
+    if (params->send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+        ucp_params->features |= UCP_FEATURE_DEVICE;
+    }
+
     status = ucx_perf_test_check_params(params);
     if (status != UCS_OK) {
         return status;

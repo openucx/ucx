@@ -21,6 +21,7 @@ struct ucx_perf_cuda_context {
     ucx_perf_counter_t   max_iters;
     ucx_perf_cuda_time_t report_interval_ns;
     ucx_perf_counter_t   completed_iters;
+    ucs_status_t         status;
 };
 
 UCS_F_DEVICE ucx_perf_cuda_time_t ucx_perf_cuda_get_time_ns()
@@ -48,31 +49,63 @@ ucx_perf_cuda_update_report(ucx_perf_cuda_context &ctx,
     }
 }
 
+UCS_F_DEVICE uint64_t *ucx_perf_cuda_get_sn(const void *address, size_t length)
+{
+    return (uint64_t*)UCS_PTR_BYTE_OFFSET(address, length - sizeof(uint64_t));
+}
+
+UCS_F_DEVICE void ucx_perf_cuda_wait_sn(volatile uint64_t *sn, uint64_t value)
+{
+    if (threadIdx.x == 0) {
+        while (*sn < value);
+    }
+    __syncthreads();
+}
+
+/* Simple bitset */
+#define UCX_BIT_MASK(bit)       (1 << ((bit) & (CHAR_BIT - 1)))
+#define UCX_BIT_SET(set, bit)   (set[(bit)/CHAR_BIT] |= UCX_BIT_MASK(bit))
+#define UCX_BIT_RESET(set, bit) (set[(bit)/CHAR_BIT] &= ~UCX_BIT_MASK(bit))
+#define UCX_BIT_GET(set, bit)   (set[(bit)/CHAR_BIT] &  UCX_BIT_MASK(bit))
+#define UCX_BITSET_SIZE(bits)   ((bits + CHAR_BIT - 1) / CHAR_BIT)
+
+UCS_F_DEVICE size_t ucx_bitset_popcount(const uint8_t *set, size_t bits) {
+    size_t count = 0;
+    for (size_t i = 0; i < bits; i++) {
+        if (UCX_BIT_GET(set, i)) {
+            count++;
+        }
+    }
+    return count;
+}
+
+UCS_F_DEVICE size_t ucx_bitset_ffs(const uint8_t *set, size_t bits, size_t from) {
+    for (size_t i = from; i < bits; i++) {
+        if (UCX_BIT_GET(set, i)) {
+            return i;
+        }
+    }
+    return bits;
+}
+
 class ucx_perf_cuda_test_runner {
 public:
     ucx_perf_cuda_test_runner(ucx_perf_context_t &perf) : m_perf(perf)
     {
-        ucs_status_t status = init_ctx();
-        if (status != UCS_OK) {
-            ucs_fatal("failed to allocate device memory context: %s",
-                      ucs_status_string(status));
-        }
+        init_ctx();
 
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
         m_cpu_ctx->max_iters          = perf.max_iter;
         m_cpu_ctx->completed_iters    = 0;
-        if (perf.report_interval == ULONG_MAX) {
-            m_cpu_ctx->report_interval_ns = ULONG_MAX;
-        } else {
-            m_cpu_ctx->report_interval_ns = ucs_time_to_nsec(
-                                                    perf.report_interval) /
-                                            100;
-        }
+        m_cpu_ctx->report_interval_ns = (perf.report_interval == ULONG_MAX) ?
+                                        ULONG_MAX :
+                                        ucs_time_to_nsec(perf.report_interval) / 100;
+        m_cpu_ctx->status             = UCS_ERR_NOT_IMPLEMENTED;
     }
 
     ~ucx_perf_cuda_test_runner()
     {
-        destroy_ctx();
+        CUDA_CALL_WARN(cudaFreeHost, m_cpu_ctx);
     }
 
     ucx_perf_cuda_context &gpu_ctx() const { return *m_gpu_ctx; }
@@ -91,6 +124,7 @@ public:
             }
             last_completed = completed;
             completed      = m_cpu_ctx->completed_iters;
+            // TODO: use cuStreamWaitValue64 if available
             usleep(100);
         }
     }
@@ -99,25 +133,12 @@ protected:
     ucx_perf_context_t &m_perf;
 
 private:
-    ucs_status_t init_ctx()
+    void init_ctx()
     {
-        CUDA_CALL(UCS_ERR_NO_MEMORY, cudaHostAlloc, &m_cpu_ctx,
+        CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaHostAlloc, &m_cpu_ctx,
                   sizeof(ucx_perf_cuda_context), cudaHostAllocMapped);
-
-        cudaError_t err = cudaHostGetDevicePointer(&m_gpu_ctx, m_cpu_ctx, 0);
-        if (err != cudaSuccess) {
-            ucs_error("cudaHostGetDevicePointer() failed: %s",
-                      cudaGetErrorString(err));
-            cudaFreeHost(m_cpu_ctx);
-            return UCS_ERR_IO_ERROR;
-        }
-
-        return UCS_OK;
-    }
-
-    void destroy_ctx()
-    {
-        CUDA_CALL_HANDLER(ucs_warn, , cudaFreeHost, m_cpu_ctx);
+        CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaHostGetDevicePointer,
+                  &m_gpu_ctx, m_cpu_ctx, 0);
     }
 
     ucx_perf_cuda_context *m_cpu_ctx;

@@ -658,7 +658,7 @@ run_ucx_perftest_cuda_device() {
 	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_device_cuda"
 
 	# TODO: Run on all GPUs
-	ucp_client_args="-a cuda $(hostname)"
+	ucp_client_args="-a cuda:0 $(hostname)"
 
 	run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
 }
