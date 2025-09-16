@@ -218,7 +218,7 @@ typedef struct ucp_context_config {
     /** Use only one network device for all protocols */
     int                                    proto_use_single_net_device;
     /** Local identificator on a single node */
-    unsigned                               node_local_id;
+    unsigned long                          node_local_id;
 } ucp_context_config_t;
 
 
@@ -418,6 +418,9 @@ typedef struct ucp_context {
 
         /* How many endpoints are expected to be created on single node */
         int                       est_num_ppn;
+
+        /* Local identificator on a single node */
+        unsigned long             node_local_id;
 
         struct {
             size_t                         size;    /* Request size for user */
