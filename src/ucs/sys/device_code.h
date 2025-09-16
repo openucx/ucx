@@ -11,7 +11,7 @@
  * Declare GPU specific functions
  */
 #ifdef __NVCC__
-#define UCS_F_DEVICE __device__ static UCS_F_ALWAYS_INLINE
+#define UCS_F_DEVICE __device__ __forceinline__ static
 #else
 #define UCS_F_DEVICE static UCS_F_ALWAYS_INLINE
 #endif /* __NVCC__ */
