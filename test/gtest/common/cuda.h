@@ -11,6 +11,8 @@
 #include <stdexcept>
 #include <sstream>
 #include <memory>
+#include <vector>
+
 
 namespace ucx_cuda {
 
@@ -62,6 +64,38 @@ private:
 
     std::unique_ptr<T, decltype(&release)> m_ptr;
 };
+
+template<typename T> class device_vector {
+public:
+    device_vector(const std::vector<T> &vec)
+    {
+        if (cudaMalloc(&m_device_ptr, vec.size() * sizeof(T)) != cudaSuccess) {
+            throw std::bad_alloc();
+        }
+
+        cudaMemcpy(m_device_ptr, vec.data(), vec.size() * sizeof(T),
+                   cudaMemcpyHostToDevice);
+    }
+
+    ~device_vector()
+    {
+        cudaFree(m_device_ptr);
+    }
+
+    T *ptr() const
+    {
+        return reinterpret_cast<T*>(m_device_ptr);
+    }
+
+private:
+    void *m_device_ptr;
+};
+
+template<typename T>
+device_vector<T> make_device_vector(const std::vector<T> &vec)
+{
+    return device_vector<T>(vec);
+}
 
 static inline void synchronize()
 {

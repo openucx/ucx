@@ -432,3 +432,50 @@ void ucp_device_mem_list_release(ucp_device_mem_list_handle_h handle)
     uct_allocated_memory_t mem = ucp_device_mem_handle_hash_remove(handle);
     uct_mem_free(&mem);
 }
+
+static ucs_memory_type_t
+ucp_device_counter_mem_type(ucp_context_h context, const void *counter_ptr,
+                            const ucp_device_counter_params_t *params)
+{
+    ucs_memory_info_t mem_info;
+
+    if (params->field_mask & UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH) {
+        return params->memh->mem_type;
+    }
+
+    if (params->field_mask & UCP_DEVICE_COUNTER_PARAMS_FIELD_MEM_TYPE) {
+        return params->mem_type;
+    }
+
+    ucp_memory_detect_internal(context, counter_ptr, sizeof(uint64_t),
+                               &mem_info);
+    return mem_info.type;
+}
+
+ucs_status_t ucp_device_counter_init(ucp_worker_h worker,
+                                     const ucp_device_counter_params_t *params,
+                                     void *counter_ptr)
+{
+    uint64_t counter_value = 0;
+    ucs_memory_type_t mem_type;
+
+    mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
+                                           params);
+    ucp_mem_type_unpack(worker, counter_ptr, &counter_value,
+                        sizeof(counter_value), mem_type);
+    return UCS_OK;
+}
+
+uint64_t ucp_device_counter_read(ucp_worker_h worker,
+                                 const ucp_device_counter_params_t *params,
+                                 void *counter_ptr)
+{
+    ucs_memory_type_t mem_type;
+    uint64_t counter_value;
+
+    mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
+                                           params);
+    ucp_mem_type_pack(worker, &counter_value, counter_ptr,
+                      sizeof(counter_value), mem_type);
+    return counter_value;
+}

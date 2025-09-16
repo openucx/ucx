@@ -21,7 +21,7 @@ uct_put_single_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
 
     comp.count          = 1;
     comp.status         = UCS_OK;
-    ucs_status_t status = uct_device_ep_put_single<UCT_DEVICE_LEVEL_THREAD>(
+    ucs_status_t status = uct_device_ep_put_single<UCS_DEVICE_LEVEL_THREAD>(
             ep, mem_elem, va, rva, length, UCT_DEVICE_FLAG_NODELAY, &comp);
     if (status != UCS_OK) {
         *status_p = status;
@@ -29,7 +29,7 @@ uct_put_single_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
     }
 
     while (comp.count != 0) {
-        uct_device_ep_progress<UCT_DEVICE_LEVEL_THREAD>(ep);
+        uct_device_ep_progress<UCS_DEVICE_LEVEL_THREAD>(ep);
     }
     *status_p = UCS_OK;
 }
@@ -57,7 +57,7 @@ uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
 
     comp.count          = 1;
     comp.status         = UCS_OK;
-    ucs_status_t status = uct_device_ep_atomic_add<UCT_DEVICE_LEVEL_THREAD>(
+    ucs_status_t status = uct_device_ep_atomic_add<UCS_DEVICE_LEVEL_THREAD>(
             ep, mem_elem, add, rva, UCT_DEVICE_FLAG_NODELAY, &comp);
     if (status != UCS_OK) {
         *status_p = status;
@@ -65,7 +65,7 @@ uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
     }
 
     while (comp.count != 0) {
-        uct_device_ep_progress<UCT_DEVICE_LEVEL_THREAD>(ep);
+        uct_device_ep_progress<UCS_DEVICE_LEVEL_THREAD>(ep);
     }
     *status_p = UCS_OK;
 }
@@ -106,7 +106,7 @@ uct_put_multi_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
     __syncwarp();
     comp.count  = 1;
     comp.status = UCS_OK;
-    status      = uct_device_ep_put_multi<UCT_DEVICE_LEVEL_WARP>(
+    status      = uct_device_ep_put_multi<UCS_DEVICE_LEVEL_WARP>(
             ep, mem_list, iovcnt + 1, src, dst, sizes, 4, atomic_rva,
             UCT_DEVICE_FLAG_NODELAY, &comp);
     if (status != UCS_OK) {
@@ -115,7 +115,7 @@ uct_put_multi_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
     }
 
     while (comp.count != 0) {
-        uct_device_ep_progress<UCT_DEVICE_LEVEL_THREAD>(ep);
+        uct_device_ep_progress<UCS_DEVICE_LEVEL_THREAD>(ep);
     }
     *status_p = UCS_OK;
 }
@@ -168,7 +168,7 @@ uct_put_partial_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
     __syncwarp();
     comp.count  = 1;
     comp.status = UCS_OK;
-    status      = uct_device_ep_put_multi_partial<UCT_DEVICE_LEVEL_WARP>(
+    status      = uct_device_ep_put_multi_partial<UCS_DEVICE_LEVEL_WARP>(
             ep, mem_list, indices, iovcnt, src, dst, sizes, iovcnt, 4,
             atomic_rva, UCT_DEVICE_FLAG_NODELAY, &comp);
     if (status != UCS_OK) {
@@ -177,7 +177,7 @@ uct_put_partial_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
     }
 
     while (comp.count != 0) {
-        uct_device_ep_progress<UCT_DEVICE_LEVEL_THREAD>(ep);
+        uct_device_ep_progress<UCS_DEVICE_LEVEL_THREAD>(ep);
     }
     *status_p = UCS_OK;
 }

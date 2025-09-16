@@ -14,42 +14,42 @@
 
 constexpr unsigned uct_rc_mlx5_gda_warp_size = 32;
 
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE void
 uct_rc_mlx5_gda_exec_init(unsigned &lane_id, unsigned &num_lanes)
 {
     switch (level) {
-    case UCT_DEVICE_LEVEL_THREAD:
+    case UCS_DEVICE_LEVEL_THREAD:
         lane_id   = 0;
         num_lanes = 1;
         break;
-    case UCT_DEVICE_LEVEL_WARP:
+    case UCS_DEVICE_LEVEL_WARP:
         lane_id   = doca_gpu_dev_verbs_get_lane_id();
         num_lanes = uct_rc_mlx5_gda_warp_size;
         break;
-    case UCT_DEVICE_LEVEL_BLOCK:
+    case UCS_DEVICE_LEVEL_BLOCK:
         lane_id   = threadIdx.x;
         num_lanes = blockDim.x;
         break;
-    case UCT_DEVICE_LEVEL_GRID:
+    case UCS_DEVICE_LEVEL_GRID:
         lane_id   = threadIdx.x + blockIdx.x * blockDim.x;
         num_lanes = blockDim.x * gridDim.x;
         break;
     }
 }
 
-template<uct_device_level_t level> UCS_F_DEVICE void uct_rc_mlx5_gda_sync(void)
+template<ucs_device_level_t level> UCS_F_DEVICE void uct_rc_mlx5_gda_sync(void)
 {
     switch (level) {
-    case UCT_DEVICE_LEVEL_WARP:
+    case UCS_DEVICE_LEVEL_WARP:
         __syncwarp();
         break;
-    case UCT_DEVICE_LEVEL_BLOCK:
+    case UCS_DEVICE_LEVEL_BLOCK:
         __syncthreads();
         break;
-    case UCT_DEVICE_LEVEL_THREAD:
+    case UCS_DEVICE_LEVEL_THREAD:
         break;
-    case UCT_DEVICE_LEVEL_GRID:
+    case UCS_DEVICE_LEVEL_GRID:
         auto g = cooperative_groups::this_grid();
         g.sync();
     }
@@ -92,7 +92,7 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
     return wqe_base;
 }
 
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE void
 uct_rc_mlx5_gda_reserv_wqe(struct doca_gpu_dev_verbs_qp *qp, unsigned count,
                            unsigned lane_id, uint64_t &wqe_base)
@@ -100,9 +100,9 @@ uct_rc_mlx5_gda_reserv_wqe(struct doca_gpu_dev_verbs_qp *qp, unsigned count,
     if (lane_id == 0) {
         wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(qp, count);
     }
-    if (level == UCT_DEVICE_LEVEL_WARP) {
+    if (level == UCS_DEVICE_LEVEL_WARP) {
         wqe_base = __shfl_sync(0xffffffff, wqe_base, 0);
-    } else if (level == UCT_DEVICE_LEVEL_BLOCK) {
+    } else if (level == UCS_DEVICE_LEVEL_BLOCK) {
         __syncthreads();
     }
 }
@@ -175,15 +175,14 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(doca_gpu_dev_verbs_qp *qp,
             &qp->sq_lock);
 }
 
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_element_t *tl_mem_elem,
-        const void *address, uint64_t remote_address, size_t length,
-        uint64_t flags, uct_device_completion_t *comp, uint32_t opcode,
-        bool is_atomic, uint64_t add)
+        const void *address, uint32_t lkey, uint64_t remote_address,
+        uint32_t rkey, size_t length, uint64_t flags,
+        uct_device_completion_t *comp, uint32_t opcode, bool is_atomic,
+        uint64_t add)
 {
-    auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
-            tl_mem_elem);
     doca_gpu_dev_verbs_qp *qp = ep->qp;
     unsigned cflag            = 0;
     uint64_t wqe_idx;
@@ -206,9 +205,9 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
 
         uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
                 qp, doca_gpu_dev_verbs_get_wqe_ptr(qp, wqe_idx), wqe_idx,
-                opcode, cflag, remote_address, mem_elem->rkey,
-                reinterpret_cast<uint64_t>(address), mem_elem->lkey, length,
-                is_atomic, add);
+                opcode, cflag, remote_address, rkey,
+                reinterpret_cast<uint64_t>(address), lkey, length, is_atomic,
+                add);
     }
 
     uct_rc_mlx5_gda_sync<level>();
@@ -221,31 +220,40 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
     return UCS_OK;
 }
 
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
         const void *address, uint64_t remote_address, size_t length,
         uint64_t flags, uct_device_completion_t *comp)
 {
-    auto ep = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
+            tl_mem_elem);
+
     return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, address,
-                                            remote_address, length, flags, comp,
+                                            mem_elem->lkey, remote_address,
+                                            mem_elem->rkey, length, flags, comp,
                                             MLX5_OPCODE_RDMA_WRITE, false, 0);
 }
 
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
         uint64_t value, uint64_t remote_address, uint64_t flags,
         uct_device_completion_t *comp)
 {
-    auto ep = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
+            tl_mem_elem);
+
     return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, ep->atomic_va,
-                                            remote_address, 8, flags, comp,
-                                            MLX5_OPCODE_ATOMIC_FA, true, value);
+                                            ep->atomic_lkey, remote_address,
+                                            mem_elem->rkey, sizeof(uint64_t),
+                                            flags, comp, MLX5_OPCODE_ATOMIC_FA,
+                                            true, value);
 }
 
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_list,
         unsigned mem_list_count, void *const *addresses,
@@ -273,8 +281,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
     uint32_t rkey;
     int opcode;
 
-    if ((level != UCT_DEVICE_LEVEL_THREAD) &&
-        (level != UCT_DEVICE_LEVEL_WARP)) {
+    if ((level != UCS_DEVICE_LEVEL_THREAD) &&
+        (level != UCS_DEVICE_LEVEL_WARP)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -294,11 +302,13 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         if (i == counter_index) {
             atomic         = true;
             address        = ep->atomic_va;
+            lkey           = ep->atomic_lkey;
             remote_address = counter_remote_address;
             length         = 8;
             opcode         = MLX5_OPCODE_ATOMIC_FA;
         } else if (i < counter_index) {
             address        = addresses[i];
+            lkey           = mem_list[i].lkey;
             remote_address = remote_addresses[i];
             length         = lengths[i];
             opcode         = MLX5_OPCODE_RDMA_WRITE;
@@ -313,7 +323,6 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         }
 
         auto wqe_ptr = doca_gpu_dev_verbs_get_wqe_ptr(qp, wqe_idx);
-        lkey         = mem_list[i].lkey;
         rkey         = mem_list[i].rkey;
 
         uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
@@ -333,7 +342,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
     return UCS_OK;
 }
 
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
@@ -362,8 +371,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
     int opcode;
     uint32_t idx;
 
-    if ((level != UCT_DEVICE_LEVEL_THREAD) &&
-        (level != UCT_DEVICE_LEVEL_WARP)) {
+    if ((level != UCS_DEVICE_LEVEL_THREAD) &&
+        (level != UCS_DEVICE_LEVEL_WARP)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -384,12 +393,14 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
             idx            = counter_index;
             atomic         = true;
             address        = ep->atomic_va;
+            lkey           = ep->atomic_lkey;
             remote_address = counter_remote_address;
             length         = 8;
             opcode         = MLX5_OPCODE_ATOMIC_FA;
         } else if (i < mem_list_count) {
             idx            = mem_list_indices[i];
             address        = addresses[i];
+            lkey           = mem_list[idx].lkey;
             remote_address = remote_addresses[i];
             length         = lengths[i];
             opcode         = MLX5_OPCODE_RDMA_WRITE;
@@ -404,7 +415,6 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         }
 
         auto wqe_ptr = doca_gpu_dev_verbs_get_wqe_ptr(qp, wqe_idx);
-        lkey         = mem_list[idx].lkey;
         rkey         = mem_list[idx].rkey;
 
         uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
@@ -488,12 +498,12 @@ uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
     if (opcode == MLX5_CQE_REQ_ERR) {
         auto err_cqe = reinterpret_cast<mlx5_err_cqe_ex*>(cqe64);
         auto wqe_ptr = doca_gpu_dev_verbs_get_wqe_ptr(qp, wqe_idx);
-        printf("thread%d:block%d: CQE[%d] with syndrome:%x vendor:%x hw:%x "
-               "wqe_idx:0x%x qp:0x%x\n",
-               threadIdx.x, blockIdx.x, idx, err_cqe->syndrome,
-               err_cqe->vendor_err_synd, err_cqe->hw_err_synd, wqe_idx,
-               doca_gpu_dev_verbs_bswap32(err_cqe->s_wqe_opcode_qpn) &
-                       0xffffff);
+        ucs_device_error("CQE[%d] with syndrome:%x vendor:%x hw:%x "
+                         "wqe_idx:0x%x qp:0x%x",
+                         idx, err_cqe->syndrome, err_cqe->vendor_err_synd,
+                         err_cqe->hw_err_synd, wqe_idx,
+                         doca_gpu_dev_verbs_bswap32(err_cqe->s_wqe_opcode_qpn) &
+                                 0xffffff);
         uct_rc_mlx5_gda_qedump("wQE", wqe_ptr, 64);
         uct_rc_mlx5_gda_qedump("CQE", cqe64, 64);
         return UCS_ERR_IO_ERROR;
@@ -511,12 +521,12 @@ uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
     return UCS_OK;
 }
 
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_progress(uct_device_ep_h tl_ep)
 {
     uct_rc_gdaki_dev_ep_t *ep = (uct_rc_gdaki_dev_ep_t*)tl_ep;
 
-    if (level == UCT_DEVICE_LEVEL_BLOCK) {
+    if (level == UCS_DEVICE_LEVEL_BLOCK) {
         __shared__ ucs_status_t status;
 
         if (threadIdx.x == 0) {
@@ -525,7 +535,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_progress(uct_device_ep_h tl_ep)
 
         __syncthreads();
         return status;
-    } else if (level == UCT_DEVICE_LEVEL_WARP) {
+    } else if (level == UCS_DEVICE_LEVEL_WARP) {
         unsigned lane_id = doca_gpu_dev_verbs_get_lane_id();
         ucs_status_t status;
 
@@ -536,7 +546,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_progress(uct_device_ep_h tl_ep)
         status = (ucs_status_t)__shfl_sync(0xffffffff, status, 0);
         __syncwarp();
         return status;
-    } else if (level == UCT_DEVICE_LEVEL_THREAD) {
+    } else if (level == UCS_DEVICE_LEVEL_THREAD) {
         return uct_rc_mlx5_gda_progress_thread(ep);
     } else {
         return UCS_ERR_UNSUPPORTED;

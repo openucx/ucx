@@ -10,8 +10,8 @@
 #include "uct_device_types.h"
 
 #include <uct/api/uct_def.h>
-#include <ucs/sys/compiler_def.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
+#include <ucs/sys/device_code.h>
 
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 
@@ -39,7 +39,7 @@
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
         const void *address, uint64_t remote_address, size_t length,
@@ -62,8 +62,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  * @ingroup UCT_DEVICE
  * @brief Posts one atomic add operation.
  *
- * This device routine increments a single memory value by @a inc_value using the 
- * device endpoint @a device_ep. The memory element @a mem_elem must be valid and 
+ * This device routine increments a single memory value by @a inc_value using the
+ * device endpoint @a device_ep. The memory element @a mem_elem must be valid and
  * contain the remote memory region to be modified.
  *
  * User can pass @a comp to track execution and completion status.
@@ -79,7 +79,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
         uint64_t inc_value, uint64_t remote_address, uint64_t flags,
@@ -106,7 +106,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
  * lengths must be valid for each corresponding descriptor list entry whose
  * index is referenced in @ref mem_list_indices.
  *
- * The size of the arrays mem_list, addresses, remote_addresses, and lengths 
+ * The size of the arrays mem_list, addresses, remote_addresses, and lengths
  * are all equal.
  *
  * The routine returns a request that can be progressed and checked for
@@ -132,7 +132,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
         unsigned mem_list_count, void *const *addresses,
@@ -198,7 +198,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
@@ -227,7 +227,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
  * @return UCS_INPROGRESS   - No progress on the endpoint.
  * @return Error code as defined by @ref ucs_status_t
  */
-template<uct_device_level_t level>
+template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_progress(uct_device_ep_h device_ep)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {

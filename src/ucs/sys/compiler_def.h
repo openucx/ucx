@@ -149,9 +149,9 @@
 
 /**
  * Get the type of a structure or variable.
- * 
+ *
  * @param _type  Return the type of this argument.
- * 
+ *
  * @return The type of the given argument.
  */
 #define ucs_typeof(_type) \
@@ -252,14 +252,5 @@
         *(_a) = *(_b); \
         *(_b) = __tmp; \
     }
-
-/*
- * Declare GPU specific functions
- */
-#ifdef __NVCC__
-#define UCS_F_DEVICE __device__ static UCS_F_ALWAYS_INLINE
-#else
-#define UCS_F_DEVICE static UCS_F_ALWAYS_INLINE
-#endif /* __NVCC__ */
 
 #endif /* UCS_COMPILER_DEF_H */

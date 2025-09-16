@@ -14,9 +14,8 @@
 #include <tools/perf/lib/ucp_tests.h>
 
 
-template<ucp_device_level_t level>
-__global__ void
-ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx)
+template<ucs_device_level_t level>
+__global__ void ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx)
 {
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
@@ -30,9 +29,10 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx)
     }
 }
 
-template<ucp_device_level_t level>
+template<ucs_device_level_t level>
 __global__ void
-ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx, bool is_sender)
+ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
+                                       bool is_sender)
 {
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
@@ -67,8 +67,8 @@ public:
         ucp_perf_barrier(&m_perf);
         ucx_perf_test_start_clock(&m_perf);
 
-        ucp_perf_cuda_put_multi_latency_kernel
-            <UCP_DEVICE_LEVEL_BLOCK><<<1, thread_count>>>(gpu_ctx(), my_index);
+        ucp_perf_cuda_put_multi_latency_kernel<UCS_DEVICE_LEVEL_BLOCK>
+                <<<1, thread_count>>>(gpu_ctx(), my_index);
         CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
         wait_for_kernel(length);
 
@@ -88,8 +88,8 @@ public:
 
         if (my_index == 1) {
             unsigned thread_count = m_perf.params.device_thread_count;
-            ucp_perf_cuda_put_multi_bw_kernel<UCP_DEVICE_LEVEL_BLOCK>
-                                             <<<1, thread_count>>>(gpu_ctx());
+            ucp_perf_cuda_put_multi_bw_kernel<UCS_DEVICE_LEVEL_BLOCK>
+                    <<<1, thread_count>>>(gpu_ctx());
             CUDA_CALL(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel(length);
         }

@@ -152,23 +152,24 @@ void ucp_device_mem_list_release(ucp_device_mem_list_handle_h handle);
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Signal init attributes field mask.
+ * @brief Counter attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref
- * ucp_device_counter_init_params_t are present. It is used to enable backward
+ * ucp_device_counter_params_t are present. It is used to enable backward
  * compatibility support.
  */
-enum ucp_device_counter_init_params_field {
-    UCP_DEVICE_COUNTER_INIT_PARAMS_FIELD_MEM_TYPE = UCS_BIT(0), /**< Source memory handle */
-    UCP_DEVICE_COUNTER_INIT_PARAMS_FIELD_MEMH     = UCS_BIT(1)  /**< Unpacked remote memory key */
+enum ucp_device_counter_params_field {
+    UCP_DEVICE_COUNTER_PARAMS_FIELD_MEM_TYPE = UCS_BIT(0), /**< Source memory handle */
+    UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH     = UCS_BIT(1)  /**< Unpacked remote memory key */
 };
 
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Parameters which can be used when calling @ref ucp_device_counter_init.
+ * @brief Parameters which can be used when calling @ref ucp_device_counter_init
+ * and @ref ucp_device_counter_read.
  */
-typedef struct ucp_device_counter_init_params {
+typedef struct ucp_device_counter_params {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref ucp_device_counter_init_params_field.
@@ -186,7 +187,7 @@ typedef struct ucp_device_counter_init_params {
      * Optional memory registration handle for the given @a counter memory area.
      */
     ucp_mem_h         memh;
-} ucp_device_counter_init_params_t;
+} ucp_device_counter_params_t;
 
 
 /**
@@ -203,19 +204,33 @@ typedef struct ucp_device_counter_init_params {
  * The memory type or memory handle from params, might be used to help setting
  * the contents of the counting area.
  *
- * @param [in] context     Context to use when initializing a counter area.
+ * @param [in] worker      Worker to use when initializing a counter area.
  * @param [in] params      Parameters used to initialize the counter area.
  * @param [in] counter_ptr Address of the counting area.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_device_counter_init(ucp_context_h context,
-                        const ucp_device_counter_init_params_t *params,
-                        void *counter_ptr) {
-    /* TODO: actual Implementation will not be in headers */
-    return UCS_ERR_NOT_IMPLEMENTED;
-}
+ucs_status_t ucp_device_counter_init(ucp_worker_h worker,
+                                     const ucp_device_counter_params_t *params,
+                                     void *counter_ptr);
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Read the value of a counter memory area.
+ *
+ * This host routine is called by the receive side to read the value of a counter
+ * memory area.
+ *
+ * @param [in] worker      Worker to use when reading the counter value.
+ * @param [in] params      Parameters used to read the counter value.
+ * @param [in] counter_ptr Address of the counter memory area.
+ *
+ * @return Value of the counter memory area.
+ */
+uint64_t ucp_device_counter_read(ucp_worker_h worker,
+                                 const ucp_device_counter_params_t *params,
+                                 void *counter_ptr);
 
 END_C_DECLS
 
