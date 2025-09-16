@@ -54,7 +54,7 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
         CUDA_MAJOR_VERSION=`$NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 1`
         CUDA_MINOR_VERSION=`$NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 2`
         AC_MSG_RESULT([Detected CUDA version: $CUDA_MAJOR_VERSION.$CUDA_MINOR_VERSION])
-        AS_IF([test $CUDA_MAJOR_VERSION -lt $NVCC_CUDA_MIN_REQUIRED_MAJOR],
+        AS_IF([test $CUDA_MAJOR_VERSION -lt $NVCC_CUDA_MIN_REQUIRED_MAJOR -o \( $CUDA_MAJOR_VERSION -eq $NVCC_CUDA_MIN_REQUIRED_MAJOR -a $CUDA_MINOR_VERSION -lt $NVCC_CUDA_MIN_REQUIRED_MINOR \)],
             [AC_MSG_WARN([Minimum required CUDA version for device code: $NVCC_CUDA_MIN_REQUIRED_MAJOR.$NVCC_CUDA_MIN_REQUIRED_MINOR])
              NVCC=""
             ])
