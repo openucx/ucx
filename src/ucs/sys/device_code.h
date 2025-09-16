@@ -13,7 +13,7 @@
 #ifdef __NVCC__
 #define UCS_F_DEVICE __device__ __forceinline__ static
 #else
-#define UCS_F_DEVICE static UCS_F_ALWAYS_INLINE
+#define UCS_F_DEVICE static inline
 #endif /* __NVCC__ */
 
 
