@@ -68,9 +68,9 @@ private:
     /* TODO: make it runtime configurable / alloc on host */
     static const size_t CAPACITY = 128;
 
-    size_t m_size;
+    size_t               m_size;
     ucp_device_request_t m_requests[CAPACITY];
-    uint8_t m_pending[UCX_BITSET_SIZE(CAPACITY)];
+    uint8_t              m_pending[UCX_BITSET_SIZE(CAPACITY)];
 };
 
 template<ucs_device_level_t level>
