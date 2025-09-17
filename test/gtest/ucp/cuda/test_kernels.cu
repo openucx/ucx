@@ -12,15 +12,15 @@
 
 namespace ucx_cuda {
 
-static __global__ void memcmp_kernel(const void* s1, const void* s2,
-                                     int* result, size_t size)
+static __global__ void
+memcmp_kernel(const void *s1, const void *s2, int *result, size_t size)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     *result = 0;
     for (size_t i = idx; i < size; i += blockDim.x * gridDim.x) {
-        if (reinterpret_cast<const uint8_t*>(s1)[i]
-            != reinterpret_cast<const uint8_t*>(s2)[i]) {
+        if (reinterpret_cast<const uint8_t*>(s1)[i] !=
+            reinterpret_cast<const uint8_t*>(s2)[i]) {
             *result = 1;
             break;
         }
@@ -116,6 +116,21 @@ ucp_counter_inc_kernel(const kernel_params params, ucs_status_t *status)
     *status = ucp_device_wait_req(&req);
 }
 
+static __global__ void
+ucp_counter_write_kernel(const kernel_params params, ucs_status_t *status)
+{
+    ucp_device_counter_write(params.counter.address, params.counter.value);
+
+    *status = UCS_OK;
+}
+
+static __global__ void
+ucp_counter_read_kernel(const kernel_params params, ucs_status_t *status)
+{
+    uint64_t value = ucp_device_counter_read(params.counter.address);
+    *status = (value == params.counter.value ? UCS_OK : UCS_ERR_IO_ERROR);
+}
+
 /**
  * @brief Compares two blocks of device memory.
  *
@@ -180,6 +195,20 @@ ucs_status_t launch_ucp_counter_inc(const kernel_params &params)
 {
     device_status_result_ptr status;
     ucp_counter_inc_kernel<<<1, 1>>>(params, status.device_ptr());
+    return status.sync_read();
+}
+
+ucs_status_t launch_ucp_counter_write(const kernel_params &params)
+{
+    device_status_result_ptr status;
+    ucp_counter_write_kernel<<<1, 1>>>(params, status.device_ptr());
+    return status.sync_read();
+}
+
+ucs_status_t launch_ucp_counter_read(const kernel_params &params)
+{
+    device_status_result_ptr status;
+    ucp_counter_read_kernel<<<1, 1>>>(params, status.device_ptr());
     return status.sync_read();
 }
 

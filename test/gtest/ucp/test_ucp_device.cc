@@ -350,6 +350,32 @@ UCS_TEST_P(test_ucp_device, counter)
     EXPECT_EQ(1, list.dst_counter_read(mem_list_index));
 }
 
+UCS_TEST_P(test_ucp_device, local_counter)
+{
+    const size_t size = counter_size();
+    mem_list list(sender(), receiver(), size, 1);
+
+    static constexpr unsigned mem_list_index = 0;
+    list.dst_counter_init(mem_list_index);
+
+    // Perform the write
+    ucx_cuda::kernel_params params;
+    params.counter.address = list.src_ptr(mem_list_index);
+    params.counter.value   = 1;
+    ucs_status_t status    = ucx_cuda::launch_ucp_counter_write(params);
+    ASSERT_EQ(UCS_OK, status);
+
+    // Check counter value
+    EXPECT_EQ(true, mem_buffer::compare(&params.counter.value,
+                                        list.src_ptr(mem_list_index),
+                                        sizeof(params.counter.value),
+                                        UCS_MEMORY_TYPE_CUDA));
+
+
+    status = ucx_cuda::launch_ucp_counter_read(params);
+    ASSERT_EQ(UCS_OK, status);
+}
+
 UCS_TEST_P(test_ucp_device, create_fail)
 {
     ucp_device_mem_list_handle_h handle = nullptr;

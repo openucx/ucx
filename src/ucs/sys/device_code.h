@@ -47,6 +47,22 @@ UCS_F_DEVICE uint64_t ucs_device_atomic64_read(const uint64_t *ptr)
 }
 
 
+/*
+ * Write a 64-bit value to atomic counter global memory address.
+ */
+UCS_F_DEVICE void ucs_device_atomic64_write(uint64_t *ptr, uint64_t value)
+{
+#ifdef __NVCC__
+    asm volatile("st.release.sys.u64 [%0], %1;"
+             :
+             : "l"(ptr), "l"(value)
+             : "memory");
+#else
+    *ptr = value;
+#endif
+}
+
+
 /* Helper macro to print a message from a device function including the
  * thread and block indices */
 #define ucs_device_printf(_title, _fmt, ...) \
