@@ -131,8 +131,9 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        signal - signal-based timer\n");
     printf("\n");
     printf("  UCP only:\n");
-    printf("     -T <threads>   number of threads in the test (%d)\n",
+    printf("     -T <threads>[:<blocks>]   number of threads in the test (%d)\n",
            ctx->params.super.thread_count);
+    printf("                    blocks is optional, it corresponds to the number of device blocks\n");
     printf("     -M <thread>    thread support level for progress engine (single)\n");
     printf("                        single     - only the master thread can access\n");
     printf("                        serialized - one thread can access at a time\n");
@@ -169,23 +170,30 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("\n");
 }
 
-static ucs_status_t parse_device_id(const char *opt_arg, int *device_id)
+static ucs_status_t parse_int(const char *opt_arg, int *value, const char *desc,
+                              int min_value, int max_value)
 {
     char *endptr;
-    int parsed_device_id;
+    int parsed_value;
 
     if (opt_arg == NULL) {
-        ucs_error("device id string is NULL");
+        ucs_error("%s string is NULL", desc);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    parsed_device_id = strtol(opt_arg, &endptr, 10);
-    if ((endptr == opt_arg) || (*endptr != '\0') || (parsed_device_id < 0)) {
-        ucs_error("Failed to parse device id: %s", opt_arg);
+    parsed_value = strtol(opt_arg, &endptr, 10);
+    if ((endptr == opt_arg) || (*endptr != '\0')) {
+        ucs_error("failed to parse %s: %s", desc, opt_arg);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    *device_id = parsed_device_id;
+    if ((parsed_value < min_value) || (parsed_value > max_value)) {
+        ucs_error("value for %s (%s) is out of range: [%d, %d]", desc, opt_arg,
+                  min_value, max_value);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *value = parsed_value;
     return UCS_OK;
 }
 
@@ -235,7 +243,7 @@ parse_accel_device(char *opt_arg, ucx_perf_accel_dev_t *dev)
     if (NULL == token) {
         device_id = UCX_PERF_MEM_DEV_DEFAULT;
     } else {
-        status = parse_device_id(token, &device_id);
+        status = parse_int(token, &device_id, "device id", 0, INT_MAX);
         if (status != UCS_OK) {
             return status;
         }
@@ -302,6 +310,36 @@ static ucs_status_t parse_accel_device_params(const char *opt_arg,
         } else if (recv_device->device_id == UCX_PERF_MEM_DEV_DEFAULT) {
             recv_device->device_id = send_device->device_id;
         }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t parse_thread_params(const char *opt_arg,
+                                        unsigned *thread_count,
+                                        unsigned *block_count)
+{
+    const char *delim = ":";
+    char *saveptr = NULL;
+    char *token, *arg;
+    ucs_status_t status;
+
+    arg = ucs_alloca(strlen(opt_arg) + 1);
+    strcpy(arg, opt_arg);
+    token = strtok_r(arg, delim, &saveptr);
+    status = parse_int(token, thread_count, "thread count", 1, INT_MAX);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    token = strtok_r(NULL, delim, &saveptr);
+    if (token != NULL) {
+        status = parse_int(token, block_count, "block count", 1, INT_MAX);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        *block_count = 1;
     }
 
     return UCS_OK;
@@ -563,8 +601,8 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
             return UCS_ERR_INVALID_PARAM;
         }
     case 'T':
-        params->super.thread_count = atoi(opt_arg);
-        return UCS_OK;
+        return parse_thread_params(opt_arg, &params->super.thread_count,
+                                   &params->super.device_block_count);
     case 'A':
         if (!strcmp(opt_arg, "thread") || !strcmp(opt_arg, "thread_spinlock")) {
             params->super.async_mode = UCS_ASYNC_MODE_THREAD_SPINLOCK;
@@ -597,19 +635,11 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
             return UCS_ERR_INVALID_PARAM;
         }
     case 'm':
-        if (UCS_OK != parse_mem_type_params(opt_arg,
-                                            &params->super.send_mem_type,
-                                            &params->super.recv_mem_type)) {
-            return UCS_ERR_INVALID_PARAM;
-        }
-        return UCS_OK;
+        return parse_mem_type_params(opt_arg, &params->super.send_mem_type,
+                                     &params->super.recv_mem_type);
     case 'a':
-        if (UCS_OK != parse_accel_device_params(opt_arg,
-                                                &params->super.send_device,
-                                                &params->super.recv_device)) {
-            return UCS_ERR_INVALID_PARAM;
-        }
-        return UCS_OK;
+        return parse_accel_device_params(opt_arg, &params->super.send_device,
+                                         &params->super.recv_device);
     case 'y':
         params->super.flags |= UCX_PERF_TEST_FLAG_AM_RECV_COPY;
         return UCS_OK;

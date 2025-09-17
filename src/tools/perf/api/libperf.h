@@ -284,6 +284,7 @@ typedef struct ucx_perf_params {
     double                 percentile_rank; /* The percentile rank of the percentile reported
                                                in latency tests */
     unsigned               device_thread_count; /* Number of device threads */
+    unsigned               device_block_count; /* Number of device blocks */
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
