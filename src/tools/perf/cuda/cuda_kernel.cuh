@@ -150,7 +150,9 @@ template<typename Runner> ucs_status_t
 ucx_perf_cuda_dispatch(ucx_perf_context_t *perf)
 {
     Runner runner(*perf);
-    if (perf->params.command == UCX_PERF_CMD_PUT_MULTI) {
+    if ((perf->params.command == UCX_PERF_CMD_PUT_MULTI) ||
+        (perf->params.command == UCX_PERF_CMD_PUT_SINGLE) ||
+        (perf->params.command == UCX_PERF_CMD_PUT_PARTIAL)) {
         if (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) {
             return runner.run_pingpong();
         } else if (perf->params.test_type == UCX_PERF_TEST_TYPE_STREAM_UNI) {
