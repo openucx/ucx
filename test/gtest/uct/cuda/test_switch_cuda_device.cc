@@ -596,6 +596,10 @@ public:
 protected:
     void init() override
     {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA is not supported");
+        }
+
         ASSERT_EQ(cudaGetDeviceCount(&m_num_devices), cudaSuccess);
         if (m_num_devices < 2) {
             UCS_TEST_SKIP_R("less than two cuda devices available");
