@@ -74,6 +74,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
+    printf("                    compact form example: \"-s 1024:16 expands to [1024, ..., 1024] with 16 elements\n");
     printf("     -m <send mem type>[,<recv mem type>]\n");
     printf("                    memory type of message for sender and receiver (host)\n");
     print_memory_type_usage();
@@ -131,7 +132,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        signal - signal-based timer\n");
     printf("\n");
     printf("  UCP only:\n");
-    printf("     -T <threads>[:<blocks>]   number of threads in the test (%d)\n",
+    printf("     -T <threads>[:<blocks>]\n");
+    printf("                    number of threads in the test (%d)\n",
            ctx->params.super.thread_count);
     printf("                    blocks is optional, it corresponds to the number of device blocks\n");
     printf("     -M <thread>    thread support level for progress engine (single)\n");
@@ -345,8 +347,8 @@ static ucs_status_t parse_thread_params(const char *opt_arg,
     return UCS_OK;
 }
 
-static ucs_status_t parse_message_sizes_params(const char *opt_arg,
-                                               ucx_perf_params_t *params)
+static ucs_status_t
+parse_message_sizes_list(const char *opt_arg, ucx_perf_params_t *params)
 {
     const char delim = ',';
     size_t *msg_size_list, token_num, token_it;
@@ -386,6 +388,61 @@ static ucs_status_t parse_message_sizes_params(const char *opt_arg,
 
     params->msg_size_cnt = token_num;
     return UCS_OK;
+}
+
+static ucs_status_t
+parse_message_sizes_compact(const char *opt_arg, ucx_perf_params_t *params)
+{
+    const char *delim = ":";
+    char *saveptr = NULL;
+    char *token, *arg;
+    int msg_size, element_count, i;
+    size_t *msg_size_list;
+    ucs_status_t status;
+
+
+    arg = ucs_alloca(strlen(opt_arg) + 1);
+    strcpy(arg, opt_arg);
+    token = strtok_r(arg, delim, &saveptr);
+    status = parse_int(token, &msg_size, "message size", 1, INT_MAX);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    token = strtok_r(NULL, delim, &saveptr);
+    status = parse_int(token, &element_count, "elements", 1, INT_MAX);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    msg_size_list = realloc(params->msg_size_list,
+                            sizeof(*params->msg_size_list) * element_count);
+    if (NULL == msg_size_list) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    params->msg_size_list = msg_size_list;
+    for (i = 0; i < element_count; ++i) {
+        params->msg_size_list[i] = msg_size;
+    }
+
+    params->msg_size_cnt = element_count;
+    return UCS_OK;
+}
+
+static int is_compact_form(const char *input)
+{
+    return strchr(input, ':') != NULL;
+}
+
+static ucs_status_t parse_message_sizes_params(const char *opt_arg,
+                                               ucx_perf_params_t *params)
+{
+    if (is_compact_form(opt_arg)) {
+        return parse_message_sizes_compact(opt_arg, params);
+    }
+
+    return parse_message_sizes_list(opt_arg, params);
 }
 
 static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
