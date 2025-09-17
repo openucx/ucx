@@ -1,13 +1,12 @@
 # Create an empty draft to avoid race condition in distro release
 
 parameters:
-  arch:
   container:  
   demands: []
 
 jobs:
-  - job: DraftRelease_${{ parameters.arch }}
-    displayName: Draft release ${{ parameters.arch }}
+  - job: DraftRelease
+    displayName: Draft release
     container: ${{ parameters.container }}    
     pool:
       name: MLNX
