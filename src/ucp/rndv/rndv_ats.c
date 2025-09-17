@@ -57,7 +57,7 @@ static void ucp_proto_rndv_ats_query(const ucp_proto_query_params_t *params,
     const ucp_proto_rndv_ack_priv_t *apriv = params->priv;
 
     ucp_proto_default_query(params, attr);
-    attr->lane_map |= UCS_BIT(apriv->lane);
+    UCS_STATIC_BITMAP_SET(&attr->lane_map, apriv->lane);
 }
 
 ucp_proto_t ucp_rndv_ats_proto = {
