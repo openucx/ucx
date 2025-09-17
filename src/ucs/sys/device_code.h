@@ -30,6 +30,24 @@ typedef enum {
 } ucs_device_level_t;
 
 
+static UCS_F_ALWAYS_INLINE const char*
+ucs_device_level_name(ucs_device_level_t level)
+{
+    switch (level) {
+    case UCS_DEVICE_LEVEL_THREAD:
+        return "thread";
+    case UCS_DEVICE_LEVEL_WARP:
+        return "warp";
+    case UCS_DEVICE_LEVEL_BLOCK:
+        return "block";
+    case UCS_DEVICE_LEVEL_GRID:
+        return "grid";
+    default:
+        return "unknown";
+    }
+}
+
+
 /*
  * Read a 64-bit atomic value from a global memory address.
  */

@@ -71,6 +71,11 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                   Accelerator device type and device id to use for running the test.\n");
     printf("                    device id is optional, it corresponds to the index of\n");
     printf("                    the device in the list of available devices\n");
+    printf("     -L <level>     device cooperation level for gdaki (thread)\n");
+    printf("                    thread - thread level\n");
+    printf("                    warp   - warp level\n");
+    printf("                    block  - block level\n");
+    printf("                    grid   - grid level\n");
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
@@ -445,6 +450,21 @@ static ucs_status_t parse_message_sizes_params(const char *opt_arg,
     return parse_message_sizes_list(opt_arg, params);
 }
 
+static ucs_status_t parse_device_level(const char *opt_arg,
+                                       ucs_device_level_t *device_level)
+{
+    ucs_device_level_t level;
+    for (level = UCS_DEVICE_LEVEL_THREAD; level <= UCS_DEVICE_LEVEL_GRID; ++level) {
+        if (!strcmp(opt_arg, ucs_device_level_name(level))) {
+            *device_level = level;
+            return UCS_OK;
+        }
+    }
+
+    ucs_error("Invalid option argument for device level: %s", opt_arg);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
                                               ucp_perf_datatype_t *datatype)
 {
@@ -697,6 +717,8 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'a':
         return parse_accel_device_params(opt_arg, &params->super.send_device,
                                          &params->super.recv_device);
+    case 'L':
+        return parse_device_level(opt_arg, &params->super.device_level);
     case 'y':
         params->super.flags |= UCX_PERF_TEST_FLAG_AM_RECV_COPY;
         return UCS_OK;
