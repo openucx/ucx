@@ -139,7 +139,8 @@ ucp_perf_cuda_put_single(ucp_device_mem_list_handle_h mem_list,
     ucs_status_t status;
 
     status = ucp_device_put_single<level>(mem_list, mem_list_index, address,
-                                          remote_address, length, 0, &req);
+                                          remote_address, length,
+                                          UCP_DEVICE_FLAG_NODELAY, &req);
     if (status != UCS_OK) {
         return status;
     }
