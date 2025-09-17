@@ -6,8 +6,6 @@
 NVCC_CUDA_MIN_REQUIRED_MAJOR=10
 NVCC_CUDA_MIN_REQUIRED_MINOR=2
 
-ARCH7_CODE="-gencode=arch=compute_52,code=sm_52"
-ARCH8_CODE="-gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61"
 ARCH9_CODE="-gencode=arch=compute_70,code=sm_70"
 ARCH10_CODE="-gencode=arch=compute_75,code=sm_75"
 ARCH110_CODE="-gencode=arch=compute_80,code=sm_80"
@@ -18,7 +16,6 @@ ARCH128_CODE="-gencode=arch=compute_100,code=sm_100 -gencode=arch=compute_120,co
 ARCH130_CODE="-gencode=arch=compute_110,code=sm_110"
 
 
-ARCH8_PTX="-gencode=arch=compute_61,code=compute_61"
 ARCH9_PTX="-gencode=arch=compute_70,code=compute_70"
 ARCH10_PTX=""
 ARCH110_PTX="-gencode=arch=compute_80,code=compute_80"
@@ -73,20 +70,20 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                                  [12],
                                      [AS_CASE([$CUDA_MINOR_VERSION],
                                               [0|1|2|3],
-                                                  [NVCC_ARCH="${ARCH7_CODE} ${ARCH8_CODE} ${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH120_PTX}"],
+                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH120_PTX}"],
                                               [4|5|6|7],
-                                                  [NVCC_ARCH="${ARCH7_CODE} ${ARCH8_CODE} ${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH124_PTX}"],
+                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH124_PTX}"],
                                               [*],
-                                                  [NVCC_ARCH="${ARCH7_CODE} ${ARCH8_CODE} ${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH128_CODE} ${ARCH128_PTX}"])],
+                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH128_CODE} ${ARCH128_PTX}"])],
 
                                  [11],
                                      [AS_CASE([$CUDA_MINOR_VERSION],
                                               [0],
-                                                  [NVCC_ARCH="${ARCH7_CODE} ${ARCH8_CODE} ${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH110_PTX}"],
+                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH110_PTX}"],
                                               [*],
-                                                  [NVCC_ARCH="${ARCH7_CODE} ${ARCH8_CODE} ${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH111_PTX}"])],
+                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH111_PTX}"])],
                                  [*],
-                                     [NVCC_ARCH="${ARCH7_CODE} ${ARCH8_CODE} ${ARCH9_CODE} ${ARCH9_PTX}"])],
+                                     [NVCC_ARCH="${ARCH9_CODE} ${ARCH9_PTX}"])],
                         [NVCC_ARCH="$with_nvcc_gencode"])
                 BASE_NVCCFLAGS="$BASE_NVCCFLAGS $NVCC_ARCH"
                 AC_MSG_CHECKING([$NVCC needs explicit c++11 option])
