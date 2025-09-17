@@ -13,6 +13,8 @@
 #include <ucp/api/device/ucp_device_impl.h>
 #include <tools/perf/lib/ucp_tests.h>
 
+#include <vector>
+
 
 class ucp_perf_cuda_request_manager {
 public:
@@ -78,12 +80,11 @@ ucp_perf_cuda_send_nbx(ucp_device_mem_list_handle_h mem_list,
                        ucp_device_request_t &req)
 {
     switch (cmd) {
-    case UCX_PERF_CMD_PUT_SINGLE: {
-        ucx_perf_cuda_element &elem = element_list.elements[0];
-        return ucp_device_put_single<level>(mem_list, elem.index,
-                                            elem.address, elem.remote_address,
-                                            elem.length, 0, &req);
-    }
+    case UCX_PERF_CMD_PUT_SINGLE:
+        return ucp_device_put_single<level>(mem_list, element_list.m_indices[0],
+                                            element_list.m_addresses[0],
+                                            element_list.m_remote_addresses[0],
+                                            element_list.m_lengths[0], 0, &req);
     // case UCX_PERF_CMD_PUT_MULTI:
     //     return ucp_device_put_multi<level>(mem_list, element_list->elements,
     //                                        element_list->count, 0, &req);
@@ -256,7 +257,7 @@ public:
         unsigned my_index = rte_call(&m_perf, group_index);
 
         unique_mem_list_ptr handle(nullptr, nullptr);
-        unique_element_list_ptr element_list(nullptr, nullptr);
+        unique_element_list_ptr element_list;
 
         if (my_index == 1) {
             handle = create_mem_list();
@@ -324,31 +325,36 @@ private:
         return unique_mem_list_ptr(mem_list, ucp_device_mem_list_release);
     }
 
-    using unique_element_list_ptr =
-        ucx_perf_cuda_unique_ptr<ucx_perf_cuda_element_list>;
+    using unique_element_list_ptr = std::unique_ptr<ucx_perf_cuda_element_list>;
 
     unique_element_list_ptr create_element_list() const
     {
-        size_t count                 = m_perf.params.msg_size_cnt;
-        unique_element_list_ptr list =
-            ucx_perf_cuda_make_unique<ucx_perf_cuda_element_list>(
-                sizeof(ucx_perf_cuda_element_list) +
-                (count * sizeof(ucx_perf_cuda_element)));
+        size_t count = m_perf.params.msg_size_cnt;
+        unique_element_list_ptr element_list =
+            unique_element_list_ptr(new ucx_perf_cuda_element_list(count));
 
-        size_t offset = 0;
-        for (unsigned i = 0; i < count; ++i) {
-            ucx_perf_cuda_element elem = {
-                .index          = i,
-                .address        = (char *)m_perf.send_buffer + offset,
-                .remote_address = m_perf.ucp.remote_addr + offset,
-                .length         = m_perf.params.msg_size_list[i]
-            };
-            offset += elem.length;
-            CUDA_CALL_ERR(cudaMemcpy, &list->elements[i], &elem, sizeof(elem),
-                          cudaMemcpyHostToDevice);
+        std::vector<unsigned> indices(count);
+        std::vector<void*> addresses(count);
+        std::vector<uint64_t> remote_addresses(count);
+        std::vector<size_t> lengths(count);
+        for (unsigned i = 0, offset = 0; i < count; ++i) {
+            indices[i]          = i;
+            addresses[i]        = (char *)m_perf.send_buffer + offset;
+            remote_addresses[i] = m_perf.ucp.remote_addr + offset;
+            lengths[i]          = m_perf.params.msg_size_list[i];
+            offset             += lengths[i];
         }
 
-        return list;
+        CUDA_CALL_ERR(cudaMemcpy, element_list->m_indices, indices.data(),
+                      count * sizeof(unsigned), cudaMemcpyHostToDevice);
+        CUDA_CALL_ERR(cudaMemcpy, element_list->m_addresses, addresses.data(),
+                      count * sizeof(void*), cudaMemcpyHostToDevice);
+        CUDA_CALL_ERR(cudaMemcpy, element_list->m_remote_addresses,
+                      remote_addresses.data(), count * sizeof(uint64_t),
+                      cudaMemcpyHostToDevice);
+        CUDA_CALL_ERR(cudaMemcpy, element_list->m_lengths, lengths.data(),
+                      count * sizeof(size_t), cudaMemcpyHostToDevice);
+        return element_list;
     }
 };
 
