@@ -698,7 +698,7 @@ static void uct_ib_doca_init(void)
     struct doca_log_backend *sdk_log;
     doca_error_t derr;
 
-    derr = doca_log_level_set_global_sdk_limit(DOCA_LOG_LEVEL_WARNING);
+    derr = doca_log_level_set_global_sdk_limit(DOCA_LOG_LEVEL_ERROR);
     if (derr != DOCA_SUCCESS) {
         ucs_error("doca_log_level_set_global_sdk_limit failed: %d\n", derr);
         return;
