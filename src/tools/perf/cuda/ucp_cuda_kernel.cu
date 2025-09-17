@@ -71,7 +71,7 @@ private:
     uint8_t              m_pending[UCX_BITSET_SIZE(CAPACITY)];
 };
 
-template<ucs_device_level_t level>
+template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 __global__ void
 ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
                                   ucp_device_mem_list_handle_h mem_list,
@@ -149,7 +149,7 @@ ucp_perf_cuda_put_single(ucp_device_mem_list_handle_h mem_list,
     return status;
 }
 
-template<ucs_device_level_t level>
+template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 __global__ void
 ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
                                        ucp_device_mem_list_handle_h mem_list,
@@ -206,9 +206,8 @@ public:
 
     ucs_status_t run_pingpong()
     {
-        size_t length         = ucx_perf_get_message_size(&m_perf.params);
-        unsigned thread_count = m_perf.params.device_thread_count;
-        unsigned my_index     = rte_call(&m_perf, group_index);
+        size_t length     = ucx_perf_get_message_size(&m_perf.params);
+        unsigned my_index = rte_call(&m_perf, group_index);
 
         unique_mem_list_ptr handle = create_mem_list();
         if (!handle) {
@@ -223,10 +222,10 @@ public:
         ucp_perf_barrier(&m_perf);
         ucx_perf_test_start_clock(&m_perf);
 
-        ucp_perf_cuda_put_multi_latency_kernel
-            <UCS_DEVICE_LEVEL_THREAD><<<1, thread_count>>>(
-                gpu_ctx(), handle.get(), 0, m_perf.send_buffer,
-                m_perf.ucp.remote_addr, length, m_perf.recv_buffer, my_index);
+        UCX_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_latency_kernel,
+                            gpu_ctx(), handle.get(), 0, m_perf.send_buffer,
+                            m_perf.ucp.remote_addr, length, m_perf.recv_buffer,
+                            my_index);
         CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel(length);
@@ -262,11 +261,9 @@ public:
         ucx_perf_test_start_clock(&m_perf);
 
         if (my_index == 1) {
-            unsigned thread_count = m_perf.params.device_thread_count;
-            ucp_perf_cuda_put_multi_bw_kernel
-                <UCS_DEVICE_LEVEL_THREAD><<<1, thread_count>>>(
-                    gpu_ctx(), handle.get(), 0, m_perf.send_buffer,
-                    m_perf.ucp.remote_addr, length);
+            UCX_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_bw_kernel,
+                                gpu_ctx(), handle.get(), 0, m_perf.send_buffer,
+                                m_perf.ucp.remote_addr, length);
             CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel(length);
         } else if (my_index == 0) {

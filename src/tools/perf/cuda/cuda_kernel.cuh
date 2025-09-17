@@ -112,6 +112,49 @@ ucx_perf_cuda_unique_ptr<T> ucx_perf_cuda_make_unique(size_t size) {
     return ucx_perf_cuda_unique_ptr<T>(raw, [](T* p){ if (p) cudaFree(p); });
 }
 
+#define UCX_KERNEL_CMD(level, cmd, blocks, threads, func, ...) \
+    do { \
+        switch (cmd) { \
+        case UCX_PERF_CMD_PUT_SINGLE: \
+            func<level, UCX_PERF_CMD_PUT_SINGLE><<<blocks, threads>>>(__VA_ARGS__); \
+            break; \
+        case UCX_PERF_CMD_PUT_MULTI: \
+            func<level, UCX_PERF_CMD_PUT_MULTI><<<blocks, threads>>>(__VA_ARGS__); \
+            break; \
+        case UCX_PERF_CMD_PUT_PARTIAL: \
+            func<level, UCX_PERF_CMD_PUT_PARTIAL><<<blocks, threads>>>(__VA_ARGS__); \
+            break; \
+        default: \
+            ucs_error("Unsupported cmd: %d", cmd); \
+            break; \
+        } \
+    } while (0)
+
+#define UCX_KERNEL_DISPATCH(perf, func, ...) \
+    do { \
+        ucs_device_level_t _level = perf.params.device_level; \
+        ucx_perf_cmd_t _cmd       = perf.params.command; \
+        unsigned _blocks          = perf.params.device_block_count; \
+        unsigned _threads         = perf.params.device_thread_count; \
+        switch (_level) { \
+        case UCS_DEVICE_LEVEL_THREAD: \
+            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_THREAD, _cmd, _blocks, _threads, func, __VA_ARGS__); \
+            break; \
+        case UCS_DEVICE_LEVEL_WARP: \
+            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_WARP, _cmd, _blocks, _threads, func, __VA_ARGS__); \
+            break; \
+        case UCS_DEVICE_LEVEL_BLOCK: \
+            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_BLOCK, _cmd, _blocks, _threads, func, __VA_ARGS__); \
+            break; \
+        case UCS_DEVICE_LEVEL_GRID: \
+            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_GRID, _cmd, _blocks, _threads, func, __VA_ARGS__); \
+            break; \
+        default: \
+            ucs_error("Unsupported level: %d", _level); \
+            break; \
+        } \
+    } while (0)
+
 class ucx_perf_cuda_test_runner {
 public:
     ucx_perf_cuda_test_runner(ucx_perf_context_t &perf) : m_perf(perf)
