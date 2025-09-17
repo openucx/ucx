@@ -129,8 +129,6 @@ services:
         CUDA_VERSION: 12.5.1
         NV_DRIVER_VERSION: 555
         ARCH: x86_64
-
-
   ubuntu22.04-mofed5-cuda13:
     image: ubuntu22.04-mofed5-cuda13:1
     build:
