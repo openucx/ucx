@@ -13,6 +13,8 @@
 #include <ucs/sys/device_code.h>
 #include <cuda_runtime.h>
 
+#include <memory>
+
 
 typedef unsigned long long ucx_perf_cuda_time_t;
 
@@ -86,6 +88,28 @@ UCS_F_DEVICE size_t ucx_bitset_ffs(const uint8_t *set, size_t bits, size_t from)
         }
     }
     return bits;
+}
+
+struct ucx_perf_cuda_element {
+    unsigned index;
+    void     *address;
+    uint64_t remote_address;
+    size_t   length;
+};
+
+struct ucx_perf_cuda_element_list {
+    size_t                count;
+    ucx_perf_cuda_element elements[0];
+};
+
+template <typename T>
+using ucx_perf_cuda_unique_ptr = std::unique_ptr<T, void(*)(T*)>;
+
+template <typename T>
+ucx_perf_cuda_unique_ptr<T> ucx_perf_cuda_make_unique(size_t size) {
+    T* raw = nullptr;
+    CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaMalloc, &raw, size);
+    return ucx_perf_cuda_unique_ptr<T>(raw, [](T* p){ if (p) cudaFree(p); });
 }
 
 class ucx_perf_cuda_test_runner {

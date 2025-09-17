@@ -13,8 +13,6 @@
 #include <ucp/api/device/ucp_device_impl.h>
 #include <tools/perf/lib/ucp_tests.h>
 
-#include <memory>
-
 
 class ucp_perf_cuda_request_manager {
 public:
@@ -217,6 +215,11 @@ public:
             return UCS_ERR_NO_MEMORY;
         }
 
+        unique_element_list_ptr element_list = create_element_list();
+        if (!element_list) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
         ucp_perf_barrier(&m_perf);
         ucx_perf_test_start_clock(&m_perf);
 
@@ -240,15 +243,25 @@ public:
         size_t length     = ucx_perf_get_message_size(&m_perf.params);
         unsigned my_index = rte_call(&m_perf, group_index);
 
-        ucp_perf_barrier(&m_perf);
-        ucx_perf_test_start_clock(&m_perf);
+        unique_mem_list_ptr handle(nullptr, nullptr);
+        unique_element_list_ptr element_list(nullptr, nullptr);
 
         if (my_index == 1) {
-            unique_mem_list_ptr handle = create_mem_list();
+            handle = create_mem_list();
             if (!handle) {
                 return UCS_ERR_NO_MEMORY;
             }
 
+            element_list = create_element_list();
+            if (!element_list) {
+                return UCS_ERR_NO_MEMORY;
+            }
+        }
+
+        ucp_perf_barrier(&m_perf);
+        ucx_perf_test_start_clock(&m_perf);
+
+        if (my_index == 1) {
             unsigned thread_count = m_perf.params.device_thread_count;
             ucp_perf_cuda_put_multi_bw_kernel
                 <UCS_DEVICE_LEVEL_THREAD><<<1, thread_count>>>(
@@ -274,19 +287,22 @@ private:
 
     unique_mem_list_ptr create_mem_list() const
     {
-        ucp_device_mem_list_elem_t elem;
-        elem.field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                          UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
-        elem.memh       = m_perf.ucp.send_memh;
-        elem.rkey       = m_perf.ucp.rkey;
+        size_t count = m_perf.params.msg_size_cnt;
+        ucp_device_mem_list_elem_t elems[count];
+        for (size_t i = 0; i < count; ++i) {
+            elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
+            elems[i].memh       = m_perf.ucp.send_memh;
+            elems[i].rkey       = m_perf.ucp.rkey;
+        }
 
         ucp_device_mem_list_params_t params;
         params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
         params.element_size = sizeof(ucp_device_mem_list_elem_t);
-        params.num_elements = 1;
-        params.elements     = &elem;
+        params.num_elements = count;
+        params.elements     = elems;
 
         ucp_device_mem_list_handle_h mem_list;
         ucs_status_t status = ucp_device_mem_list_create(m_perf.ucp.ep, &params,
@@ -296,6 +312,33 @@ private:
         }
 
         return unique_mem_list_ptr(mem_list, ucp_device_mem_list_release);
+    }
+
+    using unique_element_list_ptr =
+        ucx_perf_cuda_unique_ptr<ucx_perf_cuda_element_list>;
+
+    unique_element_list_ptr create_element_list() const
+    {
+        size_t count                 = m_perf.params.msg_size_cnt;
+        unique_element_list_ptr list =
+            ucx_perf_cuda_make_unique<ucx_perf_cuda_element_list>(
+                sizeof(ucx_perf_cuda_element_list) +
+                (count * sizeof(ucx_perf_cuda_element)));
+
+        size_t offset = 0;
+        for (unsigned i = 0; i < count; ++i) {
+            ucx_perf_cuda_element elem = {
+                .index          = i,
+                .address        = (char *)m_perf.send_buffer + offset,
+                .remote_address = m_perf.ucp.remote_addr + offset,
+                .length         = m_perf.params.msg_size_list[i]
+            };
+            offset += elem.length;
+            CUDA_CALL_ERR(cudaMemcpy, &list->elements[i], &elem, sizeof(elem),
+                          cudaMemcpyHostToDevice);
+        }
+
+        return list;
     }
 };
 
