@@ -368,7 +368,7 @@ UCS_F_DEVICE uint64_t ucp_device_counter_read(const void *counter_ptr)
  * @ingroup UCP_DEVICE
  * @brief Write value to the counter memory area.
  *
- * This function can be used to set counter to some specific value.
+ * This function can be used to set counter to a specific value.
  *
  * The counter memory area must be initialized with the host function
  * @ref ucp_device_counter_init.

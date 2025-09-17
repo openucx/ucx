@@ -48,7 +48,7 @@ UCS_F_DEVICE uint64_t ucs_device_atomic64_read(const uint64_t *ptr)
 
 
 /*
- * Write a 64-bit value to atomic counter global memory address.
+ * Write a 64-bit value to counter global memory address.
  */
 UCS_F_DEVICE void ucs_device_atomic64_write(uint64_t *ptr, uint64_t value)
 {

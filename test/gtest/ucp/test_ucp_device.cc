@@ -371,7 +371,7 @@ UCS_TEST_P(test_ucp_device, local_counter)
                                         sizeof(params.counter.value),
                                         UCS_MEMORY_TYPE_CUDA));
 
-
+    // Check counter value using device API
     status = ucx_cuda::launch_ucp_counter_read(params);
     ASSERT_EQ(UCS_OK, status);
 }
