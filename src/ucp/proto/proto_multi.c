@@ -151,32 +151,10 @@ ucp_proto_multi_init_flush_sys_dev_mask(const ucp_rkey_config_key_t *key)
     return UCS_BIT(key->sys_dev & ~UCP_SYS_DEVICE_FLUSH_BIT);
 }
 
-static const uct_tl_resource_desc_t *
-ucp_proto_multi_get_tl_rsc(const ucp_proto_init_params_t *params,
-                           ucp_lane_index_t lane)
-{
-    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
-    return &params->worker->context->tl_rscs[rsc_index].tl_rsc;
-}
-
-static uct_device_type_t
-ucp_proto_multi_get_dev_type(const ucp_proto_init_params_t *params,
-                             ucp_lane_index_t lane)
-{
-    return ucp_proto_multi_get_tl_rsc(params, lane)->dev_type;
-}
-
-static const char *
-ucp_proto_multi_get_dev_name(const ucp_proto_init_params_t *params,
-                             ucp_lane_index_t lane)
-{
-    return ucp_proto_multi_get_tl_rsc(params, lane)->dev_name;
-}
-
 static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
         ucp_lane_index_t num_lanes, const ucp_proto_init_params_t *params,
-        const ucp_proto_common_tl_perf_t *lanes_perf, int fixed_first_lane,
-        ucp_lane_index_t *lanes, ucp_proto_perf_node_t **lanes_perf_nodes)
+        const ucp_proto_common_tl_perf_t *tl_perfs, int fixed_first_lane,
+        ucp_lane_index_t *lanes, ucp_proto_perf_node_t **perf_nodes)
 {
     double max_bandwidth;
     ucp_lane_index_t i, lane, num_identical_devs, seed, num_filtered_lanes;
@@ -187,22 +165,22 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
 
     for (lane_map = 0, max_bandwidth = 0, i = 0; i < num_lanes; ++i) {
         lane = lanes[i];
-        if (ucp_proto_multi_get_dev_type(params, lane) != UCT_DEVICE_TYPE_NET) {
+        if (!ucp_proto_common_is_net_dev(params, lane)) {
             continue;
         }
 
         lane_map     |= UCS_BIT(lane);
-        max_bandwidth = ucs_max(max_bandwidth, lanes_perf[lane].bandwidth);
+        max_bandwidth = ucs_max(max_bandwidth, tl_perfs[lane].bandwidth);
     }
 
     num_identical_devs = 0;
     ucs_for_each_bit(lane, lane_map) {
-        if (fabs(lanes_perf[lane].bandwidth - max_bandwidth) >
+        if (fabs(tl_perfs[lane].bandwidth - max_bandwidth) >
             UCP_PROTO_PERF_EPSILON) {
             continue;
         }
 
-        dev_name = ucp_proto_multi_get_dev_name(params, lane);
+        dev_name = ucp_proto_common_get_dev_name(params, lane);
         for (i = 0; i < num_identical_devs; ++i) {
             if (strcmp(dev_names[i], dev_name) == 0) {
                 break;
@@ -223,12 +201,12 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
     for (i = fixed_first_lane ? 1 : 0, num_filtered_lanes = i; i < num_lanes;
          ++i) {
         lane   = lanes[i];
-        tl_rsc = ucp_proto_multi_get_tl_rsc(params, lane);
+        tl_rsc = ucp_proto_common_get_tl_rsc(params, lane);
         if ((tl_rsc->dev_type == UCT_DEVICE_TYPE_NET) &&
             (strcmp(tl_rsc->dev_name, dev_names[seed]) != 0)) {
-            ucp_proto_perf_node_deref(&lanes_perf_nodes[lane]);
+            ucp_proto_perf_node_deref(&perf_nodes[lane]);
             ucs_trace("filtered out " UCP_PROTO_LANE_FMT,
-                      UCP_PROTO_LANE_ARG(params, lane, &lanes_perf[lane]));
+                      UCP_PROTO_LANE_ARG(params, lane, &tl_perfs[lane]));
         } else {
             lanes[num_filtered_lanes++] = lane;
         }
