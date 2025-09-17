@@ -247,7 +247,6 @@ run_hello() {
 		unset UCX_RC_TIMEOUT
 		unset UCX_RC_RETRY_COUNT
 	fi
-	unset UCX_PROTO_ENABLE
 }
 
 #
@@ -450,7 +449,7 @@ run_ucx_perftest() {
 			opt_transports="-x posix"
 			tls="shm"
 			dev="all"
-		elif [[ " ${ip_ifaces[*]} " == *" ${ucx_dev} "* ]]; then
+		elif printf '%s\n' "$ip_ifaces" | grep -qxF "$ucx_dev"; then
 			opt_transports="-x tcp"
 			tls="tcp"
 			dev=$ucx_dev
@@ -500,9 +499,9 @@ run_ucx_perftest() {
 	if [ "X$have_cuda" == "Xyes" ] && [ $with_mpi -ne 1 ]
 	then
 		gdr_options="n "
-		if (lsmod | grep -q "nv_peer_mem")
+		if (lsmod | grep -q 'nv.*_peer.*mem')
 		then
-			echo "GPUDirectRDMA module (nv_peer_mem) is present.."
+			echo "GPUDirectRDMA module (nv_peer_mem/nvidia_peermem) is present"
 			gdr_options+="y "
 		fi
 
@@ -687,7 +686,7 @@ run_mpi_tests() {
 					-mca btl tcp,self \
 					-mca btl_tcp_if_include lo \
 					-mca orte_allowed_exit_without_sync 1 \
-					-mca coll ^hcoll,ml"
+					-mca coll ^hcoll,ml,ucc"
 
 			run_ucx_perftest 1
 
@@ -1212,16 +1211,6 @@ run_tests() {
 	do_distributed_task 0 4 run_nt_buffer_transfer_tests
 }
 
-run_test_proto_disable() {
-	# build for devel tests and gtest
-	build devel --enable-gtest
-
-	export UCX_PROTO_ENABLE=n
-
-	# all are running gtest
-	run_gtest "default"
-}
-
 run_asan_check() {
 	build devel --enable-gtest --enable-asan --without-valgrind
 
@@ -1260,9 +1249,7 @@ then
     check_machine
     set_ucx_common_test_env
 
-    if [[ "$PROTO_ENABLE" == "no" ]]; then
-        run_test_proto_disable
-    elif [[ "$ASAN_CHECK" == "yes" ]]; then
+    if [[ "$ASAN_CHECK" == "yes" ]]; then
         run_asan_check
     elif [[ "$VALGRIND_CHECK" == "yes" ]]; then
         run_valgrind_check

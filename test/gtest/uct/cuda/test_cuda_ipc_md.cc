@@ -193,6 +193,15 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_legacy)
 UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
 {
 #if HAVE_CUDA_FABRIC
+    int driver_version;
+    EXPECT_EQ(CUDA_SUCCESS, cuDriverGetVersion(&driver_version));
+    if (driver_version == 13000) {
+        UCS_TEST_SKIP_R("in CUDA 13.0, calling cuMemPoolDestroy results in a "
+                        "segmentation fault if "
+                        "cuMemPoolExportToShareableHandle returned an error "
+                        "before that");
+    }
+
     size_t size = 4 * UCS_MBYTE;
     CUdeviceptr ptr;
     CUmemoryPool mpool;
