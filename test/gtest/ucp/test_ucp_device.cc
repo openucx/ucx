@@ -65,7 +65,7 @@ void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
 
 void test_ucp_device::init()
 {
-    modify_config("CUDA_IPC_ENABLE_SAME_PROCESS", "y", SETENV_IF_NOT_EXIST);
+    m_env.push_back(new ucs::scoped_setenv("UCX_CUDA_IPC_ENABLE_SAME_PROCESS", "y"));
     ucp_test::init();
     sender().connect(&receiver(), get_ep_params());
     if (!is_loopback()) {
