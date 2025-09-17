@@ -7,6 +7,7 @@
 #ifndef UCS_DEVICE_CODE_H
 #define UCS_DEVICE_CODE_H
 
+#include <ucs/sys/compiler_def.h>
 #include <stdint.h>
 
 /*
