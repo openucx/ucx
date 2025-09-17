@@ -120,7 +120,6 @@ static __global__ void
 ucp_counter_write_kernel(const kernel_params params, ucs_status_t *status)
 {
     ucp_device_counter_write(params.counter.address, params.counter.value);
-
     *status = UCS_OK;
 }
 
