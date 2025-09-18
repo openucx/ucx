@@ -388,11 +388,11 @@ protected:
         }
     }
 
-    static void check_proto_select(const entity &e,
-                                   const ucp_proto_select_t &proto_select,
-                                   const proto_select_data_vec_t &data_vec,
-                                   const ucp_proto_select_key_t &key,
-                                   ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL)
+    static void check_proto_select(
+            const entity &e, const ucp_proto_select_t &proto_select,
+            const proto_select_data_vec_t &data_vec,
+            const ucp_proto_select_key_t &key,
+            ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL)
     {
         ucp_proto_select_elem_t select_elem;
         ucp_proto_select_key_t select_key;
@@ -1031,9 +1031,12 @@ void test_ucp_proto_mock_rcx_twins_get::check_config(
     ucp_mem_h mem;
     ASSERT_UCS_OK(ucp_mem_map(receiver().ucph(), &mem_map_params, &mem));
     ucs::handle<ucp_mem_h, ucp_context_h> mem_h{
-        mem, [](ucp_mem_h mem, ucp_context_h context) {
-            static_cast<void>(ucp_mem_unmap(context, mem));
-        }, sender().ucph()};
+        mem,
+        [](ucp_mem_h mem, ucp_context_h context) {
+             static_cast<void>(ucp_mem_unmap(context, mem));
+        },
+        sender().ucph()
+    };
 
     void *rkey_buffer;
     size_t rkey_buffer_size;
