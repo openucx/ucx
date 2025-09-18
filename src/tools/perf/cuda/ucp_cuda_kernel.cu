@@ -5,7 +5,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#  include "config.h"
 #endif
 
 #include "cuda_kernel.cuh"
@@ -77,12 +77,13 @@ template<ucs_device_level_t level>
 __global__ void
 ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
                                   ucp_device_mem_list_handle_h mem_list,
-                                  unsigned mem_list_index, const void *address,
-                                  uint64_t remote_address, size_t length)
+                                  unsigned mem_list_index,
+                                  const void *address, uint64_t remote_address,
+                                  size_t length)
 {
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
-    uint64_t *sn = ucx_perf_cuda_get_sn(address, length);
+    uint64_t *sn                          = ucx_perf_cuda_get_sn(address, length);
     ucp_perf_cuda_request_manager request_mgr(ctx.max_outstanding);
     ucs_status_t status;
 
@@ -94,7 +95,7 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
             }
         }
 
-        *sn                       = idx + 1;
+        *sn = idx + 1;
         ucp_device_request_t &req = request_mgr.get_request();
         status = ucp_device_put_single<level>(mem_list, mem_list_index, address,
                                               remote_address, length,
@@ -117,9 +118,9 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
     ctx.status = status;
 }
 
-__global__ void ucp_perf_cuda_wait_multi_bw_kernel(ucx_perf_cuda_context &ctx,
-                                                   const void *address,
-                                                   size_t length)
+__global__ void
+ucp_perf_cuda_wait_multi_bw_kernel(ucx_perf_cuda_context &ctx,
+                                   const void *address, size_t length)
 {
     volatile uint64_t *sn = ucx_perf_cuda_get_sn(address, length);
     while (*sn < ctx.max_iters) {
@@ -130,9 +131,10 @@ __global__ void ucp_perf_cuda_wait_multi_bw_kernel(ucx_perf_cuda_context &ctx,
 }
 
 template<ucs_device_level_t level>
-UCS_F_DEVICE ucs_status_t ucp_perf_cuda_put_single(
-        ucp_device_mem_list_handle_h mem_list, unsigned mem_list_index,
-        const void *address, uint64_t remote_address, size_t length)
+UCS_F_DEVICE ucs_status_t
+ucp_perf_cuda_put_single(ucp_device_mem_list_handle_h mem_list,
+                         unsigned mem_list_index, const void *address,
+                         uint64_t remote_address, size_t length)
 {
     ucp_device_request_t req;
     ucs_status_t status;
@@ -152,16 +154,20 @@ UCS_F_DEVICE ucs_status_t ucp_perf_cuda_put_single(
 }
 
 template<ucs_device_level_t level>
-__global__ void ucp_perf_cuda_put_multi_latency_kernel(
-        ucx_perf_cuda_context &ctx, ucp_device_mem_list_handle_h mem_list,
-        unsigned mem_list_index, const void *address, uint64_t remote_address,
-        size_t length, const void *recv_address, bool is_sender)
+__global__ void
+ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
+                                       ucp_device_mem_list_handle_h mem_list,
+                                       unsigned mem_list_index,
+                                       const void *address,
+                                       uint64_t remote_address,
+                                       size_t length, const void *recv_address,
+                                       bool is_sender)
 {
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
-    uint64_t *sn        = ucx_perf_cuda_get_sn(address, length);
-    uint64_t *recv_sn   = ucx_perf_cuda_get_sn(recv_address, length);
-    ucs_status_t status = UCS_OK;
+    uint64_t *sn                          = ucx_perf_cuda_get_sn(address, length);
+    uint64_t *recv_sn                     = ucx_perf_cuda_get_sn(recv_address, length);
+    ucs_status_t status                   = UCS_OK;
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         if (is_sender) {
@@ -216,11 +222,10 @@ public:
         ucp_perf_barrier(&m_perf);
         ucx_perf_test_start_clock(&m_perf);
 
-        ucp_perf_cuda_put_multi_latency_kernel<UCS_DEVICE_LEVEL_THREAD>
-                <<<1, thread_count>>>(gpu_ctx(), handle.get(), 0,
-                                      m_perf.send_buffer,
-                                      m_perf.ucp.remote_addr, length,
-                                      m_perf.recv_buffer, my_index);
+        ucp_perf_cuda_put_multi_latency_kernel
+            <UCS_DEVICE_LEVEL_THREAD><<<1, thread_count>>>(
+                gpu_ctx(), handle.get(), 0, m_perf.send_buffer,
+                m_perf.ucp.remote_addr, length, m_perf.recv_buffer, my_index);
         CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel(length);
@@ -247,16 +252,15 @@ public:
             }
 
             unsigned thread_count = m_perf.params.device_thread_count;
-            ucp_perf_cuda_put_multi_bw_kernel<UCS_DEVICE_LEVEL_THREAD>
-                    <<<1, thread_count>>>(gpu_ctx(), handle.get(), 0,
-                                          m_perf.send_buffer,
-                                          m_perf.ucp.remote_addr, length);
+            ucp_perf_cuda_put_multi_bw_kernel
+                <UCS_DEVICE_LEVEL_THREAD><<<1, thread_count>>>(
+                    gpu_ctx(), handle.get(), 0, m_perf.send_buffer,
+                    m_perf.ucp.remote_addr, length);
             CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel(length);
         } else if (my_index == 0) {
-            ucp_perf_cuda_wait_multi_bw_kernel<<<1, 1>>>(gpu_ctx(),
-                                                         m_perf.recv_buffer,
-                                                         length);
+            ucp_perf_cuda_wait_multi_bw_kernel<<<1, 1>>>(
+                    gpu_ctx(), m_perf.recv_buffer, length);
         }
 
         CUDA_CALL_RET(UCS_ERR_IO_ERROR, cudaDeviceSynchronize);
@@ -267,8 +271,8 @@ public:
 
 private:
     using unique_mem_list_ptr =
-            std::unique_ptr<struct ucp_device_mem_list_handle,
-                            decltype(&ucp_device_mem_list_release)>;
+        std::unique_ptr<struct ucp_device_mem_list_handle,
+                        decltype(&ucp_device_mem_list_release)>;
 
     unique_mem_list_ptr create_mem_list() const
     {
@@ -299,19 +303,14 @@ private:
 
 ucx_perf_device_dispatcher_t ucx_perf_cuda_dispatcher;
 
-UCS_STATIC_INIT
-{
-    ucx_perf_cuda_dispatcher.ucp_dispatch =
-            ucx_perf_cuda_dispatch<ucp_perf_cuda_test_runner>;
+UCS_STATIC_INIT {
+    ucx_perf_cuda_dispatcher.ucp_dispatch = ucx_perf_cuda_dispatch<ucp_perf_cuda_test_runner>;
 
-    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA] =
-            &ucx_perf_cuda_dispatcher;
-    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA_MANAGED] =
-            &ucx_perf_cuda_dispatcher;
+    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA]         = &ucx_perf_cuda_dispatcher;
+    ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA_MANAGED] = &ucx_perf_cuda_dispatcher;
 }
 
-UCS_STATIC_CLEANUP
-{
+UCS_STATIC_CLEANUP {
     ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA]         = NULL;
     ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_CUDA_MANAGED] = NULL;
 }
