@@ -126,7 +126,7 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
     UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7), /**< estimated_num_ppn */
     UCP_PARAM_FIELD_NAME              = UCS_BIT(8),  /**< name */
-    UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9)   /**< node_local_id */
+    UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9)
 };
 
 
@@ -1151,8 +1151,8 @@ typedef struct ucp_params {
      * OpenSHMEM libraries, this number will specify the local identificator on
      * a single node in the job. Does not affect semantics, only transport
      * selection criteria and the resulting performance.
-     * The value can be also set by the UCX_NODE_ID environment variable, which
-     * will override the number of endpoints set by @e node_local_id
+     * The value can be also set by the UCX_LOCAL_NODE_ID environment variable,
+     * which will override the id set by @e node_local_id
      */
     size_t                             node_local_id;
 } ucp_params_t;

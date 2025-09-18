@@ -430,6 +430,4 @@ ucp_proto_common_get_dev_name(const ucp_proto_init_params_t *params,
     return ucp_proto_common_get_tl_rsc(params, lane)->dev_name;
 }
 
-
-
 #endif

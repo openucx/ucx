@@ -898,7 +898,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_all_net_devices,
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    // PROTO_USE_SINGLE_NET_DEVICE=n [default]
+    // SINGLE_NET_DEVICE=n [default]
     // Use two network devices with the same bandwidth in 50/50 ratio
     check_ep_config(sender(),
                     {
@@ -916,13 +916,13 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_all_net_devices,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device,
-           "IB_NUM_PATHS?=2", "PROTO_USE_SINGLE_NET_DEVICE=y")
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y")
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    // PROTO_USE_SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=0 [default]
+    // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=0 [default]
     // Use two paths of the first network device in 50/50 ratio
     check_ep_config(sender(),
                     {
@@ -939,14 +939,14 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_1,
-           "IB_NUM_PATHS?=2", "PROTO_USE_SINGLE_NET_DEVICE=y",
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y",
            "NODE_LOCAL_ID=1")
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    // PROTO_USE_SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=1
+    // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=1
     // Use two paths of the second network device in 50/50 ratio
     check_ep_config(sender(),
                     {
@@ -963,14 +963,14 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_1,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_2,
-           "IB_NUM_PATHS?=2", "PROTO_USE_SINGLE_NET_DEVICE=y",
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y",
            "NODE_LOCAL_ID=2")
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    // PROTO_USE_SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=2
+    // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=2
     // Use two paths of the first network device in 50/50 ratio
     check_ep_config(sender(),
                     {

@@ -577,8 +577,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, connect_all_to_all),
    UCS_CONFIG_TYPE_BOOL},
 
-  {"PROTO_USE_SINGLE_NET_DEVICE", "n",
-   "Use only one network device for all protocols.",
+  {"SINGLE_NET_DEVICE", "n", "Use only one network device for all protocols.",
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
 

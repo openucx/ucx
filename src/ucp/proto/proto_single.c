@@ -49,7 +49,7 @@ ucp_proto_single_update_lane(const ucp_proto_single_init_params_t *params,
     const char *dev_name;
 
     if (context->config.ext.proto_use_single_net_device &&
-        context->config.node_local_id != 0) {
+        (context->config.node_local_id != 0)) {
         return;
     }
 
