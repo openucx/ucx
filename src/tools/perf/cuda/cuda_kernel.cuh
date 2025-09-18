@@ -51,15 +51,16 @@ ucx_perf_cuda_update_report(ucx_perf_cuda_context &ctx,
     }
 }
 
-UCS_F_DEVICE uint64_t *ucx_perf_cuda_get_sn(const void *address, size_t length)
+static UCS_F_ALWAYS_INLINE uint64_t *
+ucx_perf_cuda_get_sn(const void *address, size_t length)
 {
     return (uint64_t*)UCS_PTR_BYTE_OFFSET(address, length - sizeof(uint64_t));
 }
 
-UCS_F_DEVICE void ucx_perf_cuda_wait_sn(volatile uint64_t *sn, uint64_t value)
+UCS_F_DEVICE void ucx_perf_cuda_wait_sn(const uint64_t *sn, uint64_t value)
 {
     if (threadIdx.x == 0) {
-        while (*sn < value);
+        while (ucs_device_atomic64_read(sn) < value);
     }
     __syncthreads();
 }

@@ -79,6 +79,9 @@ struct ucp_perf_cuda_params {
     void                         **addresses;
     uint64_t                     *remote_addresses;
     size_t                       *lengths;
+    uint64_t                     counter_remote;
+    uint64_t                     *counter_send;
+    uint64_t                     *counter_recv;
     ucp_device_flags_t           flags;
 };
 
@@ -88,7 +91,7 @@ public:
     {
         init_mem_list(perf);
         init_elements(perf);
-        m_params.flags = UCP_DEVICE_FLAG_NODELAY;
+        init_counters(perf);
     }
 
     ~ucp_perf_cuda_params_handler()
@@ -151,6 +154,16 @@ private:
         device_clone(&m_params.lengths, lengths.data(), count);
     }
 
+    void init_counters(const ucx_perf_context_t &perf)
+    {
+        size_t length           = ucx_perf_get_message_size(&perf.params);
+        m_params.counter_remote = (uint64_t)ucx_perf_cuda_get_sn(
+                                        (void*)perf.ucp.remote_addr, length);
+        m_params.counter_send   = ucx_perf_cuda_get_sn(perf.send_buffer, length);
+        m_params.counter_recv   = ucx_perf_cuda_get_sn(perf.recv_buffer, length);
+        m_params.flags          = UCP_DEVICE_FLAG_NODELAY;
+    }
+
     template<typename T>
     void device_clone(T **dst, const T *src, size_t count)
     {
@@ -168,16 +181,14 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                        ucp_device_request_t &req)
 {
     switch (cmd) {
-    case UCX_PERF_CMD_PUT_SINGLE: {
+    case UCX_PERF_CMD_PUT_SINGLE:
         /* TODO: Change to ucp_device_counter_write */
-        uint64_t *sn = ucx_perf_cuda_get_sn(params.addresses[0], params.lengths[0]);
-        *sn = idx + 1;
+        *params.counter_send = idx + 1;
         return ucp_device_put_single<level>(params.mem_list, params.indices[0],
                                             params.addresses[0],
                                             params.remote_addresses[0],
                                             params.lengths[0], params.flags,
                                             &req);
-    }
     // case UCX_PERF_CMD_PUT_MULTI:
     //     return ucp_device_put_multi<level>(mem_list, element_list->elements,
     //                                        element_list->count, 0, &req);
@@ -239,7 +250,7 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
 
     while (request_mgr.get_pending_count() > 0) {
         status = request_mgr.progress<level>(max_iters);
-        if (status != UCS_OK) {
+        if (UCS_STATUS_IS_ERR(status)) {
             break;
         }
     }
@@ -251,26 +262,21 @@ template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 __global__ void
 ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
                                        ucp_perf_cuda_params params,
-                                       const void *recv_address, size_t length,
                                        bool is_sender)
 {
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
-    uint64_t *sn                          = ucx_perf_cuda_get_sn(params.addresses[0], length);
-    uint64_t *recv_sn                     = ucx_perf_cuda_get_sn(recv_address, length);
     ucs_status_t status                   = UCS_OK;
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         if (is_sender) {
-            *sn    = idx + 1;
             status = ucp_perf_cuda_send_sync<level, cmd>(params, idx);
             if (status != UCS_OK) {
                 break;
             }
-            ucx_perf_cuda_wait_sn(recv_sn, idx + 1);
+            ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
         } else {
-            ucx_perf_cuda_wait_sn(recv_sn, idx + 1);
-            *sn    = idx + 1;
+            ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
             status = ucp_perf_cuda_send_sync<level, cmd>(params, idx);
             if (status != UCS_OK) {
                 break;
@@ -286,9 +292,10 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
 
 __global__ void
 ucp_perf_cuda_wait_multi_bw_kernel(ucx_perf_cuda_context &ctx,
-                                   const void *address, size_t length)
+                                   ucp_perf_cuda_params params)
 {
-    volatile uint64_t *sn = ucx_perf_cuda_get_sn(address, length);
+    // TODO: we can use ucp_device_counter_read, but it adds latency
+    volatile uint64_t *sn = params.counter_recv;
     while (*sn < ctx.max_iters) {
         __nanosleep(100000); // 100us
     }
@@ -309,7 +316,6 @@ public:
 
     ucs_status_t run_pingpong()
     {
-        size_t length     = ucx_perf_get_message_size(&m_perf.params);
         unsigned my_index = rte_call(&m_perf, group_index);
         ucp_perf_cuda_params_handler params_handler(m_perf);
 
@@ -317,8 +323,7 @@ public:
         ucx_perf_test_start_clock(&m_perf);
 
         UCX_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_latency_kernel,
-                            *m_gpu_ctx, params_handler.get_params(),
-                            m_perf.recv_buffer, length, my_index);
+                            *m_gpu_ctx, params_handler.get_params(), my_index);
         CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel();
@@ -333,7 +338,6 @@ public:
     ucs_status_t run_stream_uni()
     {
         unsigned my_index = rte_call(&m_perf, group_index);
-
         ucp_perf_cuda_params_handler params_handler(m_perf);
 
         ucp_perf_barrier(&m_perf);
@@ -345,9 +349,8 @@ public:
             CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel();
         } else if (my_index == 0) {
-            size_t length = ucx_perf_get_message_size(&m_perf.params);
             ucp_perf_cuda_wait_multi_bw_kernel<<<1, 1>>>(
-                    *m_gpu_ctx, m_perf.recv_buffer, length);
+                    *m_gpu_ctx, params_handler.get_params());
         }
 
         CUDA_CALL_RET(UCS_ERR_IO_ERROR, cudaDeviceSynchronize);
