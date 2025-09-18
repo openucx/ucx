@@ -223,7 +223,8 @@ ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx)
 
     do {
         status = ucp_device_progress_req<level>(&req);
-    } while (status == UCS_INPROGRESS);
+        // TODO: remove NO_RESOURCE
+    } while ((status == UCS_INPROGRESS) || (status == UCS_ERR_NO_RESOURCE));
 
     return status;
 }
@@ -240,9 +241,10 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         while (request_mgr.get_pending_count() >= ctx.max_outstanding) {
-            status = request_mgr.progress<level>(1);
-            if (status != UCS_OK) {
-                continue;
+            request_mgr.progress<level>(1);
+            if (UCS_STATUS_IS_ERR(status)) {
+                ctx.status = status;
+                return;
             }
         }
 
