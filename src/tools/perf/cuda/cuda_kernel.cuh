@@ -153,8 +153,9 @@ public:
         CUDA_CALL_WARN(cudaFreeHost, m_cpu_ctx);
     }
 
-    void wait_for_kernel(size_t msg_length)
+    void wait_for_kernel()
     {
+        size_t msg_length                 = ucx_perf_get_message_size(&m_perf.params);
         ucx_perf_counter_t last_completed = 0;
         ucx_perf_counter_t completed      = m_cpu_ctx->completed_iters;
         while (1) {
