@@ -13,8 +13,6 @@
 #include <ucs/sys/device_code.h>
 #include <cuda_runtime.h>
 
-#include <memory>
-
 
 typedef unsigned long long ucx_perf_cuda_time_t;
 

@@ -14,6 +14,7 @@
 #include <tools/perf/lib/ucp_tests.h>
 
 #include <vector>
+#include <stdexcept>
 
 
 class ucp_perf_cuda_request_manager {
