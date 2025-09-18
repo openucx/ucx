@@ -159,8 +159,8 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
     double max_bandwidth;
     ucp_lane_index_t i, lane, num_identical_devs, seed, num_filtered_lanes;
     ucp_lane_map_t lane_map;
-    const char *dev_name;
-    const char *dev_names[UCP_PROTO_MAX_LANES];
+    ucs_sys_device_t sys_dev;
+    ucs_sys_device_t sys_devs[UCP_PROTO_MAX_LANES];
     const uct_tl_resource_desc_t *tl_rsc;
 
     for (lane_map = 0, max_bandwidth = 0, i = 0; i < num_lanes; ++i) {
@@ -180,15 +180,15 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
             continue;
         }
 
-        dev_name = ucp_proto_common_get_dev_name(params, lane);
+        sys_dev = ucp_proto_common_get_sys_dev(params, lane);
         for (i = 0; i < num_identical_devs; ++i) {
-            if (strcmp(dev_names[i], dev_name) == 0) {
+            if (sys_dev == sys_devs[i]) {
                 break;
             }
         }
 
         if (i == num_identical_devs) {
-            dev_names[num_identical_devs++] = dev_name;
+            sys_devs[num_identical_devs++] = sys_dev;
         }
     }
 
@@ -202,7 +202,7 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
         lane   = lanes[i];
         tl_rsc = ucp_proto_common_get_tl_rsc(params, lane);
         if ((tl_rsc->dev_type == UCT_DEVICE_TYPE_NET) &&
-            (strcmp(tl_rsc->dev_name, dev_names[seed]) != 0)) {
+            (tl_rsc->sys_device != sys_devs[seed])) {
             ucp_proto_perf_node_deref(&perf_nodes[lane]);
             ucs_trace("filtered out " UCP_PROTO_LANE_FMT,
                       UCP_PROTO_LANE_ARG(params, lane, &tl_perfs[lane]));

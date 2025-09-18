@@ -44,9 +44,9 @@ ucp_proto_single_update_lane(const ucp_proto_single_init_params_t *params,
     const ucp_context_h context                = init_params->worker->context;
     double bandwidth;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
-    const char *dev_names[UCP_PROTO_MAX_LANES];
+    ucs_sys_device_t sys_devs[UCP_PROTO_MAX_LANES];
     ucp_lane_index_t num_lanes, num_identical_devs, i, lane, j;
-    const char *dev_name;
+    ucs_sys_device_t sys_dev;
 
     if (context->config.ext.proto_use_single_net_device &&
         (context->config.node_local_id != 0)) {
@@ -57,9 +57,9 @@ ucp_proto_single_update_lane(const ucp_proto_single_init_params_t *params,
         return;
     }
 
-    bandwidth    = ucp_proto_single_get_bandwidth(common_params, *lane_p);
-    lanes[0]     = *lane_p;
-    dev_names[0] = ucp_proto_common_get_dev_name(init_params, lanes[0]);
+    bandwidth   = ucp_proto_single_get_bandwidth(common_params, *lane_p);
+    lanes[0]    = *lane_p;
+    sys_devs[0] = ucp_proto_common_get_sys_dev(init_params, lanes[0]);
 
     num_lanes = ucp_proto_common_find_lanes(
             init_params, common_params->flags, params->lane_type,
@@ -78,16 +78,16 @@ ucp_proto_single_update_lane(const ucp_proto_single_init_params_t *params,
             continue;
         }
 
-        dev_name = ucp_proto_common_get_dev_name(init_params, lane);
+        sys_dev = ucp_proto_common_get_sys_dev(init_params, lane);
         for (j = 0; j < num_identical_devs; ++j) {
-            if (strcmp(dev_names[j], dev_name) == 0) {
+            if (sys_dev == sys_devs[j]) {
                 break;
             }
         }
 
         if (j == num_identical_devs) {
-            lanes[num_identical_devs]       = lane;
-            dev_names[num_identical_devs++] = dev_name;
+            lanes[num_identical_devs]      = lane;
+            sys_devs[num_identical_devs++] = sys_dev;
         }
     }
 

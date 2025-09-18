@@ -423,11 +423,4 @@ ucp_proto_common_is_net_dev(const ucp_proto_init_params_t *params,
            UCT_DEVICE_TYPE_NET;
 }
 
-static UCS_F_ALWAYS_INLINE const char *
-ucp_proto_common_get_dev_name(const ucp_proto_init_params_t *params,
-                             ucp_lane_index_t lane)
-{
-    return ucp_proto_common_get_tl_rsc(params, lane)->dev_name;
-}
-
 #endif
