@@ -465,8 +465,8 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 
         if (peer_params.super.msg_size_cnt != 0) {
             peer_params.super.msg_size_list =
-                    calloc(ctx->params.super.msg_size_cnt,
-                           sizeof(*ctx->params.super.msg_size_list));
+                    calloc(peer_params.super.msg_size_cnt,
+                           sizeof(*peer_params.super.msg_size_list));
             if (peer_params.super.msg_size_list == NULL) {
                 status = UCS_ERR_NO_MEMORY;
                 goto err_close_connfd;
