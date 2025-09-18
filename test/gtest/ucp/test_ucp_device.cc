@@ -253,7 +253,7 @@ UCS_TEST_P(test_ucp_device, put_single_repeat)
     params.single.remote_address = list.dst_ptr(mem_list_index);
     params.single.length         = size;
 
-    for (size_t i = 0; i < 1024; i++) {
+    for (size_t i = 0; i < 4096; i++) {
         ucs_status_t status = ucx_cuda::launch_ucp_put_single(params);
         ASSERT_EQ(UCS_OK, status);
     }
