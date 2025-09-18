@@ -54,7 +54,7 @@ public:
     __device__ ucp_device_request_t &get_request()
     {
         assert(get_pending_count() < m_size);
-        size_t index = ucx_bitset_ffs(m_pending, m_size, 0);
+        size_t index = ucx_bitset_ffns(m_pending, m_size, 0);
         UCX_BIT_SET(m_pending, index);
         return m_requests[index];
     }
@@ -89,16 +89,13 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         while (request_mgr.get_pending_count() >= ctx.max_outstanding) {
-            status = request_mgr.progress<level>(1);
-            if (status != UCS_OK) {
-                break;
-            }
+            request_mgr.progress<level>(1);
         }
 
         *sn = idx + 1;
         ucp_device_request_t &req = request_mgr.get_request();
         status = ucp_device_put_single<level>(mem_list, mem_list_index, address,
-                                              remote_address, length, 0, &req);
+                                              remote_address, length, UCP_DEVICE_FLAG_NODELAY, &req);
         if (status != UCS_OK) {
             break;
         }
@@ -109,7 +106,7 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
 
     while (request_mgr.get_pending_count() > 0) {
         status = request_mgr.progress<level>(max_iters);
-        if (status != UCS_OK) {
+        if (UCS_STATUS_IS_ERR(status)) {
             break;
         }
     }
@@ -139,7 +136,7 @@ ucp_perf_cuda_put_single(ucp_device_mem_list_handle_h mem_list,
     ucs_status_t status;
 
     status = ucp_device_put_single<level>(mem_list, mem_list_index, address,
-                                          remote_address, length, 0, &req);
+                                          remote_address, length, UCP_DEVICE_FLAG_NODELAY, &req);
     if (status != UCS_OK) {
         return status;
     }
