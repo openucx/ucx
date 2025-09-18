@@ -98,7 +98,8 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
         *sn = idx + 1;
         ucp_device_request_t &req = request_mgr.get_request();
         status = ucp_device_put_single<level>(mem_list, mem_list_index, address,
-                                              remote_address, length, UCP_DEVICE_FLAG_NODELAY, &req);
+                                              remote_address, length,
+                                              UCP_DEVICE_FLAG_NODELAY, &req);
         if (status != UCS_OK) {
             break;
         }
@@ -139,7 +140,8 @@ ucp_perf_cuda_put_single(ucp_device_mem_list_handle_h mem_list,
     ucs_status_t status;
 
     status = ucp_device_put_single<level>(mem_list, mem_list_index, address,
-                                          remote_address, length, UCP_DEVICE_FLAG_NODELAY, &req);
+                                          remote_address, length,
+                                          UCP_DEVICE_FLAG_NODELAY, &req);
     if (status != UCS_OK) {
         return status;
     }
