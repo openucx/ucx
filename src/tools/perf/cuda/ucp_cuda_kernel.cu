@@ -225,6 +225,7 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
         }
 
         ucp_device_request_t &req = request_mgr.get_request();
+        // TODO: remove loop once API is changed
         do {
             status = ucp_perf_cuda_send_nbx<level, cmd>(params, idx, req);
             if (status == UCS_ERR_NO_RESOURCE) {
