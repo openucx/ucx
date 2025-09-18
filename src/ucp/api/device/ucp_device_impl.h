@@ -115,7 +115,7 @@ ucp_device_prepare_multi(ucp_device_mem_list_handle_h mem_list_h,
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
- * It will only return when the message was posted or an error occured.
+ * It will only return when the message was posted or an error occurred.
  * To do so, it might progress.
  *
  * This routine can be called repeatedly with the same handle and different
@@ -240,7 +240,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
- * It will only return when all the messages were posted or an error occured.
+ * It will only return when all the messages were posted or an error occurred.
  * To do so, it might progress.
  *
  * This routine can be called repeatedly with the same handle and different
@@ -322,7 +322,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
- * It will only return when all the messages were posted or an error occured.
+ * It will only return when all the messages were posted or an error occurred.
  * To do so, it might progress.
  *
  * This routine can be called repeatedly with the same handle and different
