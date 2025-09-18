@@ -191,8 +191,8 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
         return ucp_device_put_single<level>(params.mem_list, params.indices[0],
                                             params.addresses[0],
                                             params.remote_addresses[0],
-                                            params.lengths[0], params.flags,
-                                            &req);
+                                            params.lengths[0] + ONESIDED_SIGNAL_SIZE,
+                                            params.flags, &req);
     case UCX_PERF_CMD_PUT_MULTI:
         return ucp_device_put_multi<level>(params.mem_list, params.addresses,
                                            params.remote_addresses,
