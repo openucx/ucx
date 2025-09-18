@@ -276,8 +276,7 @@ public:
     {
         ucp_ep_config_t *config = ucp_worker_ep_config(e.worker(),
                                                        ep_config_index(e));
-        check_proto_select(e, config->proto_select, data_vec, key,
-                           UCP_WORKER_CFG_INDEX_NULL);
+        check_proto_select(e, config->proto_select, data_vec, key);
     }
 
     static void check_rkey_config(const entity &e,
@@ -345,8 +344,8 @@ protected:
     {
         ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
         ucp_proto_select_elem_info(e.worker(), ep_config_index(e),
-                                   rkey_cfg_index, &select_param,
-                                   &select_elem, 1, &strb);
+                                   rkey_cfg_index, &select_param, &select_elem,
+                                   1, &strb);
 
         char *line;
         ucs_string_buffer_for_each_token(line, &strb, "\n") {
@@ -393,7 +392,7 @@ protected:
                                    const ucp_proto_select_t &proto_select,
                                    const proto_select_data_vec_t &data_vec,
                                    const ucp_proto_select_key_t &key,
-                                   ucp_worker_cfg_index_t rkey_cfg_index)
+                                   ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL)
     {
         ucp_proto_select_elem_t select_elem;
         ucp_proto_select_key_t select_key;
@@ -1019,12 +1018,6 @@ protected:
     void check_config(const proto_select_data_vec_t &data_vec);
 };
 
-namespace {
-    void unmap_memh(ucp_mem_h mem, ucp_context_h contex) {
-        static_cast<void>(ucp_mem_unmap(contex, mem));
-    }
-}
-
 void test_ucp_proto_mock_rcx_twins_get::check_config(
         const proto_select_data_vec_t &data_vec)
 {
@@ -1037,8 +1030,10 @@ void test_ucp_proto_mock_rcx_twins_get::check_config(
 
     ucp_mem_h mem;
     ASSERT_UCS_OK(ucp_mem_map(receiver().ucph(), &mem_map_params, &mem));
-    ucs::handle<ucp_mem_h, ucp_context_h> mem_h{mem, unmap_memh,
-                                                sender().ucph()};
+    ucs::handle<ucp_mem_h, ucp_context_h> mem_h{
+        mem, [](ucp_mem_h mem, ucp_context_h context) {
+            static_cast<void>(ucp_mem_unmap(context, mem));
+        }, sender().ucph()};
 
     void *rkey_buffer;
     size_t rkey_buffer_size;
@@ -1053,8 +1048,8 @@ void test_ucp_proto_mock_rcx_twins_get::check_config(
     uint8_t local;
     ucp_request_param_t req_param;
     req_param.op_attr_mask = 0;
-    auto status = ucp_get_nbx(sender().ep(), &local, sizeof(local),
-                              (uint64_t)&remote, rkey, &req_param);
+    auto status            = ucp_get_nbx(sender().ep(), &local, sizeof(local),
+                                         (uint64_t)&remote, rkey, &req_param);
     request_wait(status);
 
     ucp_proto_select_key_t key = any_key();
