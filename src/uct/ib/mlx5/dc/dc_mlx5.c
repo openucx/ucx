@@ -140,6 +140,11 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dcis_initial_capacity),
      UCS_CONFIG_TYPE_ULUNITS},
 
+    {"FULL_HANDSHAKE_LATENCY", "140ns",
+     "DC Full Handshake extra latency",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, fhs_latency),
+     UCS_CONFIG_TYPE_TIME_UNITS},
+
     {NULL}
 };
 
@@ -205,6 +210,41 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     }
 }
 
+static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
+{
+    uct_ib_iface_t *ib_iface          = &iface->super.super.super;
+    uct_ib_mlx5_md_t UCS_V_UNUSED *md = uct_ib_mlx5_iface_md(ib_iface);
+    uint16_t ooo_sl_mask              = 0;
+
+#if HAVE_DEVX
+    if (uct_ib_mlx5_devx_query_ooo_sl_mask(md, ib_iface->config.port_num,
+                                           &ooo_sl_mask) != UCS_OK) {
+        return 0;
+    }
+#endif
+
+    /* DevX isn't used for DCI */
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI)) {
+        /* Order semantics determined by SL */
+        return UCS_BIT(ib_iface->config.sl) & ooo_sl_mask;
+    }
+
+    if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE) {
+        /* Forced full handshake */
+        return 1;
+    }
+
+    /* AR/DDP is disabled */
+    if (iface->super.config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_IBTA) {
+        return 0;
+    }
+
+    /* rdma_wr_disabled is not supported */
+    return !(md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED) ||
+           /* RDMA write is required */
+           !(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT);
+}
+
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
@@ -241,6 +281,11 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                  sizeof(uct_dc_mlx5_iface_flush_addr_t) :
                                  sizeof(uct_dc_mlx5_iface_addr_t);
     iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
+
+    if (uct_dc_mlx5_iface_is_full_handshake(iface)) {
+        /* FHS adds extra round trip */
+        iface_attr->latency.c += ucs_time_to_sec(iface->tx.fhs_latency);
+    }
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
                                    max_am_inline,
@@ -1665,6 +1710,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.fc_hard_req_progress_cb_id = UCS_CALLBACKQ_ID_NULL;
     self->tx.num_dci_pools              = 0;
     self->flags                         = 0;
+    self->tx.fhs_latency                = config->fhs_latency;
     self->tx.av_fl_mlid = self->super.super.super.path_bits[0] & 0x7f;
 
     kh_init_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
