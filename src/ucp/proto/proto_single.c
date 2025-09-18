@@ -48,8 +48,8 @@ ucp_proto_single_update_lane(const ucp_proto_single_init_params_t *params,
     ucp_lane_index_t num_lanes, num_same_bw_devs, i, lane, j;
     ucs_sys_device_t sys_dev;
 
-    if (context->config.ext.proto_use_single_net_device &&
-        (context->config.node_local_id != 0)) {
+    if (!context->config.ext.proto_use_single_net_device ||
+        (context->config.node_local_id == 0)) {
         return;
     }
 
