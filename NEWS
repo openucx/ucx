@@ -11,6 +11,13 @@
 ### Features:
 ### Bugfixes:
 
+## 1.19.1 (Sep 18, 2025)
+### Features:
+#### UCP
+* Do not require transport memory support if rendezvous protocol is not used
+#### Build
+* Added CUDA 13 support to the release pipeline
+
 ## 1.19.0 (June 18, 2025)
 ### Features:
 #### UCP
