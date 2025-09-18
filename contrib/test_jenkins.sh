@@ -661,6 +661,7 @@ run_ucx_perftest_cuda_device() {
 	ucp_client_args="-a cuda:0 $(hostname)"
 
 	run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+	run_client_server_app "UCX_TLS=^cuda_ipc $ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
 }
 
 #
