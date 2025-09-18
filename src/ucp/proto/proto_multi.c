@@ -197,7 +197,7 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
     }
 
     seed = params->worker->context->config.node_local_id % num_identical_devs;
-    for (i = fixed_first_lane ? 1 : 0, num_filtered_lanes = i; i < num_lanes;
+    for (i = !!fixed_first_lane, num_filtered_lanes = i; i < num_lanes;
          ++i) {
         lane   = lanes[i];
         tl_rsc = ucp_proto_common_get_tl_rsc(params, lane);
