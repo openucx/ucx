@@ -115,6 +115,7 @@ ucp_device_prepare_multi(ucp_device_mem_list_handle_h mem_list_h,
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
+ * It will only return when the message was posted. To do so, it might progress.
  *
  * This routine can be called repeatedly with the same handle and different
  * addresses and length. The flags parameter can be used to modify the behavior
@@ -149,8 +150,19 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         return status;
     }
 
-    return uct_device_ep_put_single<level>(device_ep, uct_elem, address,
-                                           remote_address, length, flags, comp);
+    for (;;) {
+        status = uct_device_ep_put_single<level>(device_ep, uct_elem, address,
+                                                 remote_address, length, flags,
+                                                 comp);
+        if (status != UCS_ERR_NO_RESOURCE) {
+            return status;
+        }
+
+        assert(device_ep->uct_tl_id != UCT_DEVICE_TL_CUDA_IPC);
+        uct_device_ep_progress<level>(device_ep);
+    }
+
+    return status;
 }
 
 
@@ -225,6 +237,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
+ * It will only return when all the messages were posted. To do so, it might progress.
  *
  * This routine can be called repeatedly with the same handle and different
  * @a addresses, @a lengths and counter related parameters. The @a flags
@@ -261,11 +274,22 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
         return status;
     }
 
-    return uct_device_ep_put_multi<level>(device_ep, uct_mem_list,
-                                          mem_list_h->mem_list_length,
-                                          addresses, remote_addresses, lengths,
-                                          counter_inc_value,
-                                          counter_remote_address, flags, comp);
+    for (;;) {
+        status = uct_device_ep_put_multi<level>(device_ep, uct_mem_list,
+                                                mem_list_h->mem_list_length,
+                                                addresses, remote_addresses,
+                                                lengths, counter_inc_value,
+                                                counter_remote_address, flags,
+                                                comp);
+        if (status != UCS_ERR_NO_RESOURCE) {
+            return status;
+        }
+
+        assert(device_ep->uct_tl_id != UCT_DEVICE_TL_CUDA_IPC);
+        uct_device_ep_progress<level>(device_ep);
+    }
+
+    return status;
 }
 
 
@@ -292,6 +316,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
+ * It will only return when all the messages were posted. To do so, it might progress.
  *
  * This routine can be called repeatedly with the same handle and different
  * mem_list_indices, addresses, lengths and increment related parameters. The
@@ -334,10 +359,20 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
         return status;
     }
 
-    return uct_device_ep_put_multi_partial<level>(
-            device_ep, uct_mem_list, mem_list_indices, mem_list_count,
-            addresses, remote_addresses, lengths, counter_index,
-            counter_inc_value, counter_remote_address, flags, comp);
+    for (;;) {
+        status = uct_device_ep_put_multi_partial<level>(
+                device_ep, uct_mem_list, mem_list_indices, mem_list_count,
+                addresses, remote_addresses, lengths, counter_index,
+                counter_inc_value, counter_remote_address, flags, comp);
+        if (status != UCS_ERR_NO_RESOURCE) {
+            return status;
+        }
+
+        assert(device_ep->uct_tl_id != UCT_DEVICE_TL_CUDA_IPC);
+        uct_device_ep_progress<level>(device_ep);
+    }
+
+    return status;
 }
 
 
