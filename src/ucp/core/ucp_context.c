@@ -581,11 +581,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
 
-   {"NODE_LOCAL_ID", "auto",
-    "An optimization hint for the local identificator on a single node. Does \n"
-    "not affect semantics, only transport selection criteria and the \n"
-    "resulting performance.",
-    ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
+  {"NODE_LOCAL_ID", "auto",
+   "An optimization hint for the local identificator on a single node. Does \n"
+   "not affect semantics, only transport selection criteria and the \n"
+   "resulting performance.",
+   ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
 
   {NULL}
 };
@@ -2009,8 +2009,7 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
                                                         estimated_num_ppn,
                                                         ESTIMATED_NUM_PPN, 1);
 
-    context->config.node_local_id = UCP_PARAM_FIELD_VALUE(params,
-                                                          node_local_id,
+    context->config.node_local_id = UCP_PARAM_FIELD_VALUE(params, node_local_id,
                                                           NODE_LOCAL_ID, 0);
 
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&

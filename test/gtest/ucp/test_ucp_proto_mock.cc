@@ -898,8 +898,6 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_all_net_devices,
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    // SINGLE_NET_DEVICE=n [default]
-    // Use two network devices with the same bandwidth in 50/50 ratio
     check_ep_config(sender(),
                     {
                             {0, 200, "short", "rc_mlx5/mock_0:1/path0"},
@@ -907,6 +905,9 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_all_net_devices,
                             {405, 8246, "zero-copy", "rc_mlx5/mock_0:1/path0"},
                             {8247, 18540, "multi-frag zero-copy",
                              "rc_mlx5/mock_0:1/path0"},
+                            // SINGLE_NET_DEVICE=n [default]
+                            // Use two network devices with the same bandwidth
+                            // in 50/50 ratio
                             {18541, INF,
                              "rendezvous zero-copy read from remote",
                              "50% on rc_mlx5/mock_0:1/path0 and 50% on "
@@ -922,8 +923,6 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device,
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=0 [default]
-    // Use two paths of the first network device in 50/50 ratio
     check_ep_config(sender(),
                     {
                             {0, 200, "short", "rc_mlx5/mock_0:1/path0"},
@@ -931,6 +930,9 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device,
                             {405, 8246, "zero-copy", "rc_mlx5/mock_0:1/path0"},
                             {8247, 18540, "multi-frag zero-copy",
                              "rc_mlx5/mock_0:1/path0"},
+                            // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=0 [default]
+                            // Use two paths of the first network device in
+                            // 50/50 ratio
                             {18541, INF,
                              "rendezvous zero-copy read from remote",
                              "rc_mlx5/mock_0:1 50% on path0 and 50% on path1"},
@@ -939,15 +941,12 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_1,
-           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y",
-           "NODE_LOCAL_ID=1")
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=1
-    // Use two paths of the second network device in 50/50 ratio
     check_ep_config(sender(),
                     {
                             {0, 200, "short", "rc_mlx5/mock_0:1/path0"},
@@ -955,6 +954,9 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_1,
                             {405, 8246, "zero-copy", "rc_mlx5/mock_0:1/path0"},
                             {8247, 18540, "multi-frag zero-copy",
                              "rc_mlx5/mock_0:1/path0"},
+                            // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=1
+                            // Use two paths of the second network device in
+                            // 50/50 ratio
                             {18541, INF,
                              "rendezvous zero-copy read from remote",
                              "rc_mlx5/mock_1:1 50% on path0 and 50% on path1"},
@@ -963,15 +965,12 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_1,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_2,
-           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y",
-           "NODE_LOCAL_ID=2")
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=2
-    // Use two paths of the first network device in 50/50 ratio
     check_ep_config(sender(),
                     {
                             {0, 200, "short", "rc_mlx5/mock_0:1/path0"},
@@ -979,6 +978,9 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins, use_single_net_device_rank_2,
                             {405, 8246, "zero-copy", "rc_mlx5/mock_0:1/path0"},
                             {8247, 18540, "multi-frag zero-copy",
                              "rc_mlx5/mock_0:1/path0"},
+                            // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=2
+                            // Use two paths of the first network device in
+                            // 50/50 ratio
                             {18541, INF,
                              "rendezvous zero-copy read from remote",
                              "rc_mlx5/mock_0:1 50% on path0 and 50% on path1"},

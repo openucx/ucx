@@ -125,7 +125,7 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5), /**< mt_workers_shared */
     UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
     UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7), /**< estimated_num_ppn */
-    UCP_PARAM_FIELD_NAME              = UCS_BIT(8),  /**< name */
+    UCP_PARAM_FIELD_NAME              = UCS_BIT(8), /**< name */
     UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9)
 };
 

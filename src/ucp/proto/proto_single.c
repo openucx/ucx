@@ -40,8 +40,8 @@ ucp_proto_single_update_lane(const ucp_proto_single_init_params_t *params,
                              ucp_lane_index_t *lane_p)
 {
     const ucp_proto_common_init_params_t *common_params = &params->super;
-    const ucp_proto_init_params_t *init_params          = &common_params->super;
-    const ucp_context_h context = init_params->worker->context;
+    const ucp_proto_init_params_t *init_params = &common_params->super;
+    const ucp_context_h context                = init_params->worker->context;
     double bandwidth;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     const char *dev_names[UCP_PROTO_MAX_LANES];
