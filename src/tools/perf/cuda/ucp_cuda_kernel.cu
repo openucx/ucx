@@ -189,9 +189,12 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                                             params.remote_addresses[0],
                                             params.lengths[0], params.flags,
                                             &req);
-    // case UCX_PERF_CMD_PUT_MULTI:
-    //     return ucp_device_put_multi<level>(mem_list, element_list->elements,
-    //                                        element_list->count, 0, &req);
+    case UCX_PERF_CMD_PUT_MULTI:
+        return ucp_device_put_multi<level>(params.mem_list, params.addresses,
+                                           params.remote_addresses,
+                                           params.lengths, 1,
+                                           params.counter_remote, params.flags,
+                                           &req);
     // case UCX_PERF_CMD_PUT_PARTIAL:
     //     return ucp_device_put_partial<level>(mem_list, element_list->elements,
     //                                         element_list->count, 0, &req);
