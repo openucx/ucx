@@ -195,9 +195,16 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                                            params.lengths, 1,
                                            params.counter_remote, params.flags,
                                            &req);
-    // case UCX_PERF_CMD_PUT_PARTIAL:
-    //     return ucp_device_put_partial<level>(mem_list, element_list->elements,
-    //                                         element_list->count, 0, &req);
+    case UCX_PERF_CMD_PUT_PARTIAL:
+        return ucp_device_put_multi_partial<level>(params.mem_list,
+                                                   params.indices,
+                                                   params.mem_list->mem_list_length,
+                                                   params.addresses,
+                                                   params.remote_addresses,
+                                                   params.lengths,
+                                                   params.mem_list->mem_list_length,
+                                                   1, params.counter_remote,
+                                                   params.flags, &req);
     }
 
     return UCS_ERR_INVALID_PARAM;
