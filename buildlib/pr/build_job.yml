@@ -43,6 +43,8 @@ jobs:
             CONTAINER: rhel82
           rhel90:
             CONTAINER: rhel90
+          rhel100:
+            CONTAINER: rhel100
           fedora41:
             CONTAINER: fedora41
           centos7:
@@ -62,6 +64,8 @@ jobs:
         matrix:
           ubuntu2404_aarch64:
             CONTAINER: ubuntu2404_aarch64
+          rhel100_aarch64:
+            CONTAINER: rhel100_aarch64
     timeoutInMinutes: 340
 
     steps:

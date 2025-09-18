@@ -199,15 +199,14 @@ try_load_cuda_env() {
         have_cuda="${cuda_local_dir}"
     else
         # Fallback to env module
-        az_module_load dev/cuda12.8 || return 0
+        az_module_load dev/cuda13.0.0 || return 0
         have_cuda=yes
     fi
 
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
     then
-        # TODO detect cuda version if using local CUDA
-        az_module_load dev/gdrcopy2.4.4_cuda12.8.0 && have_gdrcopy=yes
+        az_module_load dev/gdrcopy2.5.1_cuda13.0.0 && have_gdrcopy=yes
     fi
 }
 

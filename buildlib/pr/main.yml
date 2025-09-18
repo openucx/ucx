@@ -36,6 +36,12 @@ resources:
     - container: rhel90_ib
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
+    - container: rhel100
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rhel10.0/builder:mofed-25.07-0.9.7.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rhel100_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/rhel10.0/builder:mofed-25.07-0.9.7.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2004
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -165,6 +171,12 @@ resources:
     - container: ubuntu22_cuda_12_1
       image: nvidia/cuda:12.1.0-devel-ubuntu22.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
+    - container: ubuntu22_cuda_13_0
+      image: nvidia/cuda:13.0.0-devel-ubuntu22.04
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
+    - container: ubuntu24_cuda_13_0
+      image: nvidia/cuda:13.0.0-devel-ubuntu24.04
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
@@ -185,6 +197,12 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu22_cuda12
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda12:3
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: ubuntu22_cuda13
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda13:1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: ubuntu24_cuda13
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu24.04-mofed24.10-cuda13:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu2204_rocm_6_0_0
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu2204:rocm-6.0.0
