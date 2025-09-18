@@ -54,7 +54,7 @@ public:
     __device__ ucp_device_request_t &get_request()
     {
         assert(get_pending_count() < m_size);
-        size_t index = ucx_bitset_ffs(m_pending, m_size, 0);
+        size_t index = ucx_bitset_ffns(m_pending, m_size, 0);
         UCX_BIT_SET(m_pending, index);
         return m_requests[index];
     }
@@ -220,15 +220,17 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
         while (request_mgr.get_pending_count() >= ctx.max_outstanding) {
             status = request_mgr.progress<level>(1);
             if (status != UCS_OK) {
-                break;
+                continue;
             }
         }
 
         ucp_device_request_t &req = request_mgr.get_request();
-        status = ucp_perf_cuda_send_nbx<level, cmd>(params, idx, req);
-        if (status != UCS_OK) {
-            break;
-        }
+        do {
+            status = ucp_perf_cuda_send_nbx<level, cmd>(params, idx, req);
+            if (status == UCS_ERR_NO_RESOURCE) {
+                request_mgr.progress<level>(1);
+            }
+        } while (status == UCS_ERR_NO_RESOURCE);
 
         ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
         __syncthreads();

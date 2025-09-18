@@ -81,9 +81,9 @@ UCS_F_DEVICE size_t ucx_bitset_popcount(const uint8_t *set, size_t bits) {
     return count;
 }
 
-UCS_F_DEVICE size_t ucx_bitset_ffs(const uint8_t *set, size_t bits, size_t from) {
+UCS_F_DEVICE size_t ucx_bitset_ffns(const uint8_t *set, size_t bits, size_t from) {
     for (size_t i = from; i < bits; i++) {
-        if (UCX_BIT_GET(set, i)) {
+        if (!UCX_BIT_GET(set, i)) {
             return i;
         }
     }
