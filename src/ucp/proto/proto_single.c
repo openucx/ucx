@@ -49,6 +49,8 @@ ucp_proto_single_update_lane(const ucp_proto_single_init_params_t *params,
     ucs_sys_device_t sys_dev;
 
     if (!context->config.ext.proto_use_single_net_device ||
+        /* skip lane update for node_local_id 0 since the original lane would be
+         * selected anyway */
         (context->config.node_local_id == 0)) {
         return;
     }
