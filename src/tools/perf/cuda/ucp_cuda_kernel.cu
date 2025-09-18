@@ -204,12 +204,10 @@ ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params)
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 __global__ void
 ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
-                                  ucp_perf_cuda_params params,
-                                  const void *address, size_t length)
+                                  ucp_perf_cuda_params params)
 {
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
-    uint64_t *sn                          = ucx_perf_cuda_get_sn(address, length);
     ucp_perf_cuda_request_manager request_mgr(ctx.max_outstanding);
     ucs_status_t status;
 
@@ -221,7 +219,13 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
             }
         }
 
-        *sn = idx + 1;
+        /* TODO: Change to ucp_device_counter_write */
+        if ((cmd == UCX_PERF_CMD_PUT_SINGLE) && (idx == max_iters - 1)) {
+            uint64_t *sn = ucx_perf_cuda_get_sn(params.addresses[0],
+                                                params.lengths[0]);
+            *sn = idx + 1;
+        }
+
         ucp_device_request_t &req = request_mgr.get_request();
         status = ucp_perf_cuda_send_nbx<level, cmd>(params, req);
         if (status != UCS_OK) {
@@ -313,7 +317,7 @@ public:
         ucx_perf_test_start_clock(&m_perf);
 
         UCX_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_latency_kernel,
-                            gpu_ctx(), params_handler.get_params(), m_perf.send_buffer,
+                            *m_gpu_ctx, params_handler.get_params(), m_perf.send_buffer,
                             length, m_perf.recv_buffer, my_index);
         CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
@@ -323,7 +327,7 @@ public:
 
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
-        return UCS_OK;
+        return m_cpu_ctx->status;
     }
 
     ucs_status_t run_stream_uni()
@@ -338,19 +342,18 @@ public:
 
         if (my_index == 1) {
             UCX_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_bw_kernel,
-                                gpu_ctx(), params_handler.get_params(),
-                                m_perf.send_buffer, length);
+                                *m_gpu_ctx, params_handler.get_params());
             CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel(length);
         } else if (my_index == 0) {
             ucp_perf_cuda_wait_multi_bw_kernel<<<1, 1>>>(
-                    gpu_ctx(), m_perf.recv_buffer, length);
+                    *m_gpu_ctx, m_perf.recv_buffer, length);
         }
 
         CUDA_CALL_RET(UCS_ERR_IO_ERROR, cudaDeviceSynchronize);
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
-        return UCS_OK;
+        return m_cpu_ctx->status;
     }
 };
 

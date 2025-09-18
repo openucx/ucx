@@ -153,8 +153,6 @@ public:
         CUDA_CALL_WARN(cudaFreeHost, m_cpu_ctx);
     }
 
-    ucx_perf_cuda_context &gpu_ctx() const { return *m_gpu_ctx; }
-
     void wait_for_kernel(size_t msg_length)
     {
         ucx_perf_counter_t last_completed = 0;
@@ -176,6 +174,8 @@ public:
 
 protected:
     ucx_perf_context_t &m_perf;
+    ucx_perf_cuda_context *m_cpu_ctx;
+    ucx_perf_cuda_context *m_gpu_ctx;
 
 private:
     void init_ctx()
@@ -185,9 +185,6 @@ private:
         CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaHostGetDevicePointer,
                   &m_gpu_ctx, m_cpu_ctx, 0);
     }
-
-    ucx_perf_cuda_context *m_cpu_ctx;
-    ucx_perf_cuda_context *m_gpu_ctx;
 };
 
 
