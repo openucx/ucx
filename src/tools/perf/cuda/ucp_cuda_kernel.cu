@@ -76,6 +76,7 @@ private:
 
 struct ucp_perf_cuda_params {
     ucp_device_mem_list_handle_h mem_list;
+    size_t                       length;
     unsigned                     *indices;
     void                         **addresses;
     uint64_t                     *remote_addresses;
@@ -160,11 +161,14 @@ private:
 
     void init_counters(const ucx_perf_context_t &perf)
     {
-        size_t length           = ucx_perf_get_message_size(&perf.params);
+        m_params.length         = ucx_perf_get_message_size(&perf.params);
         m_params.counter_remote = (uint64_t)ucx_perf_cuda_get_sn(
-                                        (void*)perf.ucp.remote_addr, length);
-        m_params.counter_send   = ucx_perf_cuda_get_sn(perf.send_buffer, length);
-        m_params.counter_recv   = ucx_perf_cuda_get_sn(perf.recv_buffer, length);
+                                        (void*)perf.ucp.remote_addr,
+                                        m_params.length);
+        m_params.counter_send   = ucx_perf_cuda_get_sn(perf.send_buffer,
+                                                       m_params.length);
+        m_params.counter_recv   = ucx_perf_cuda_get_sn(perf.recv_buffer,
+                                                       m_params.length);
         m_params.flags          = UCP_DEVICE_FLAG_NODELAY;
     }
 
@@ -191,7 +195,7 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
         return ucp_device_put_single<level>(params.mem_list, params.indices[0],
                                             params.addresses[0],
                                             params.remote_addresses[0],
-                                            params.lengths[0] + ONESIDED_SIGNAL_SIZE,
+                                            params.length + ONESIDED_SIGNAL_SIZE,
                                             params.flags, &req);
     case UCX_PERF_CMD_PUT_MULTI:
         return ucp_device_put_multi<level>(params.mem_list, params.addresses,
