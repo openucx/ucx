@@ -158,9 +158,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
             return status;
         }
 
-        assert(device_ep->uct_tl_id != UCT_DEVICE_TL_CUDA_IPC);
-        uct_device_ep_progress<level>(device_ep);
-    }
+        status = uct_device_ep_progress<level>(device_ep);
+        if (UCS_STATUS_IS_ERR(status)) {
+            return status;
+        }
+    }    
 
     return status;
 }
@@ -285,8 +287,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
             return status;
         }
 
-        assert(device_ep->uct_tl_id != UCT_DEVICE_TL_CUDA_IPC);
-        uct_device_ep_progress<level>(device_ep);
+        status = uct_device_ep_progress<level>(device_ep);
+        if (UCS_STATUS_IS_ERR(status)) {
+            return status;
+        }
     }
 
     return status;
@@ -368,8 +372,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
             return status;
         }
 
-        assert(device_ep->uct_tl_id != UCT_DEVICE_TL_CUDA_IPC);
-        uct_device_ep_progress<level>(device_ep);
+        status = uct_device_ep_progress<level>(device_ep);
+        if (UCS_STATUS_IS_ERR(status)) {
+            return status;
+        }
+
     }
 
     return status;
