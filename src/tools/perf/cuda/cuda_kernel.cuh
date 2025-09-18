@@ -90,30 +90,6 @@ UCS_F_DEVICE size_t ucx_bitset_ffs(const uint8_t *set, size_t bits, size_t from)
     return bits;
 }
 
-struct ucx_perf_cuda_element_list {
-    size_t   m_count;
-    unsigned *m_indices;
-    void     **m_addresses;
-    uint64_t *m_remote_addresses;
-    size_t   *m_lengths;
-
-    ucx_perf_cuda_element_list(size_t count) : m_count(count)
-    {
-        CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaMalloc, &m_indices, count * sizeof(unsigned));
-        CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaMalloc, &m_addresses, count * sizeof(void*));
-        CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaMalloc, &m_remote_addresses, count * sizeof(uint64_t));
-        CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaMalloc, &m_lengths, count * sizeof(size_t));
-    }
-
-    ~ucx_perf_cuda_element_list()
-    {
-        CUDA_CALL_WARN(cudaFree, m_indices);
-        CUDA_CALL_WARN(cudaFree, m_addresses);
-        CUDA_CALL_WARN(cudaFree, m_remote_addresses);
-        CUDA_CALL_WARN(cudaFree, m_lengths);
-    }
-};
-
 #define UCX_KERNEL_CMD(level, cmd, blocks, threads, func, ...) \
     do { \
         switch (cmd) { \
