@@ -659,7 +659,7 @@ run_ucx_perftest_cuda_device() {
 
 	# TODO: Run on all GPUs & NICs combinations
 	ucp_client_args="-a cuda:0 $(hostname)"
-	gda_tls="tcp,cuda_copy,rc_gda"
+	gda_tls="cuda_copy,rc,rc_gda"
 	cuda_ipc_tls="cuda_ipc,cuda_copy,rc"
 
 	for tls in "$cuda_ipc_tls" "$gda_tls"
