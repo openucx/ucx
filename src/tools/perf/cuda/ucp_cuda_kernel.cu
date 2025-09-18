@@ -109,7 +109,8 @@ public:
 private:
     void init_mem_list(const ucx_perf_context_t &perf)
     {
-        size_t count = perf.params.msg_size_cnt;
+        /* +1 for the counter */
+        size_t count = perf.params.msg_size_cnt + 1;
         ucp_device_mem_list_elem_t elems[count];
         for (size_t i = 0; i < count; ++i) {
             elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
@@ -135,7 +136,8 @@ private:
 
     void init_elements(const ucx_perf_context_t &perf)
     {
-        size_t count = perf.params.msg_size_cnt;
+        /* +1 for the counter */
+        size_t count = perf.params.msg_size_cnt + 1;
 
         std::vector<unsigned> indices(count);
         std::vector<void*> addresses(count);
@@ -145,7 +147,8 @@ private:
             indices[i]          = i;
             addresses[i]        = (char *)perf.send_buffer + offset;
             remote_addresses[i] = perf.ucp.remote_addr + offset;
-            lengths[i]          = perf.params.msg_size_list[i];
+            lengths[i]          = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
+                                                     perf.params.msg_size_list[i];
             offset             += lengths[i];
         }
 
@@ -196,16 +199,18 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                                            params.lengths, 1,
                                            params.counter_remote, params.flags,
                                            &req);
-    case UCX_PERF_CMD_PUT_PARTIAL:
+    case UCX_PERF_CMD_PUT_PARTIAL:{
+        unsigned counter_index = params.mem_list->mem_list_length - 1;
         return ucp_device_put_multi_partial<level>(params.mem_list,
                                                    params.indices,
-                                                   params.mem_list->mem_list_length,
+                                                   counter_index,
                                                    params.addresses,
                                                    params.remote_addresses,
                                                    params.lengths,
-                                                   params.mem_list->mem_list_length,
-                                                   1, params.counter_remote,
+                                                   counter_index, 1,
+                                                   params.counter_remote,
                                                    params.flags, &req);
+        }
     }
 
     return UCS_ERR_INVALID_PARAM;

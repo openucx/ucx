@@ -112,7 +112,8 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     }
 
     /* Allocate send buffer memory */
-    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
+    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count +
+                                ONESIDED_SIGNAL_SIZE,
                                 params->send_mem_type, &perf->send_buffer,
                                 &perf->ucp.send_memh);
     if (status != UCS_OK) {
@@ -125,7 +126,8 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     perf->ucp.recv_exported_mem.address = NULL;
 
     /* Allocate receive buffer memory */
-    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
+    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count +
+                                ONESIDED_SIGNAL_SIZE,
                                 params->recv_mem_type, &perf->recv_buffer,
                                 &perf->ucp.recv_memh);
     if (status != UCS_OK) {
