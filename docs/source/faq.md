@@ -201,8 +201,6 @@ by `ucx_info -d` command.
 > **IMPORTANT NOTE**
 > In some cases restricting the transports can lead to unexpected and undefined behavior:
 > * Using *rc_verbs* or *rc_mlx5* also requires *ud_verbs* or *ud_mlx5* transport for bootstrap.
-> * Applications using GPU memory must also specify GPU transports for detecting and
->   handling non-host memory.
 
 In addition to the built-in transports it's possible to use aliases which specify multiple transports.  
 
@@ -347,9 +345,6 @@ GPU memory (for example,
 and UCX compiled with GPU support. Then you can run the application as usual (for
 example, with MPI) and whenever GPU memory is passed to UCX, it either use GPU-direct
 for zero copy operations, or copy the data to/from host memory.
-> NOTE When specifying UCX_TLS explicitly, must also specify cuda/rocm for GPU memory
-> support, otherwise the GPU memory will not be recognized.
-> For example: `UCX_TLS=rc,cuda` or `UCX_TLS=dc,rocm`
 
 #### I'm running UCX with GPU memory and getting a segfault, why?
 

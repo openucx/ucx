@@ -573,13 +573,26 @@ out:
     return status;
 }
 
+static int ucp_worker_iface_can_recv_tag(const ucp_worker_iface_t *wiface)
+{
+    const uint64_t cap_flags = UCT_IFACE_FLAG_CB_SYNC |
+                               UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+                               UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                               UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                               UCT_IFACE_FLAG_TAG_RNDV_ZCOPY;
+    ucp_context_h context    = wiface->worker->context;
+
+    return (wiface->attr.cap.flags & cap_flags) &&
+           (context->tl_rscs[wiface->rsc_index].flags & UCP_TL_RSC_FLAG_COMM);
+}
+
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 {
     ucp_worker_h worker = wiface->worker;
 
-    ucs_trace("activate " UCP_WIFACE_FMT " a_count=%u a_ifaces=%u",
+    ucs_trace("activate " UCP_WIFACE_FMT " a_count %u tag_ifaces %u",
               UCP_WIFACE_ARG(wiface), wiface->activate_count,
-              worker->num_active_ifaces);
+              worker->num_active_tag_ifaces);
 
     if (wiface->activate_count++ > 0) {
         return; /* was already activated */
@@ -602,7 +615,9 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
         ucs_list_add_tail(&worker->arm_ifaces, &wiface->arm_list);
     }
 
-    ++worker->num_active_ifaces;
+    if (ucp_worker_iface_can_recv_tag(wiface)) {
+        ++worker->num_active_tag_ifaces;
+    }
 
     uct_iface_progress_enable(wiface->iface,
                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV | uct_flags);
@@ -731,9 +746,9 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
 {
     ucp_worker_h worker = wiface->worker;
 
-    ucs_trace("deactivate " UCP_WIFACE_FMT " force=%d a_count=%u a_ifaces=%u",
+    ucs_trace("deactivate " UCP_WIFACE_FMT " force=%d a_count %u tag_ifaces %u",
               UCP_WIFACE_ARG(wiface), force, wiface->activate_count,
-              worker->num_active_ifaces);
+              worker->num_active_tag_ifaces);
 
     if (!force) {
         ucs_assertv(wiface->activate_count > 0, UCP_WIFACE_FMT,
@@ -744,7 +759,9 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
             return;
         }
 
-        --worker->num_active_ifaces;
+        if (ucp_worker_iface_can_recv_tag(wiface)) {
+            --worker->num_active_tag_ifaces;
+        }
     }
 
     /* Avoid progress on the interface to reduce overhead */
@@ -2488,17 +2505,17 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         return UCS_ERR_NO_MEMORY;
     }
 
-    worker->context              = context;
-    worker->uuid                 = ucs_generate_uuid((uintptr_t)worker);
-    worker->flush_ops_count      = 0;
-    worker->fence_seq            = 0;
-    worker->inprogress           = 0;
-    worker->rkey_config_count    = 0;
-    worker->num_active_ifaces    = 0;
-    worker->num_ifaces           = 0;
-    worker->am_message_id        = ucs_generate_uuid(0);
-    worker->rkey_ptr_cb_id       = UCS_CALLBACKQ_ID_NULL;
-    worker->num_all_eps          = 0;
+    worker->context               = context;
+    worker->uuid                  = ucs_generate_uuid((uintptr_t)worker);
+    worker->flush_ops_count       = 0;
+    worker->fence_seq             = 0;
+    worker->inprogress            = 0;
+    worker->rkey_config_count     = 0;
+    worker->num_active_tag_ifaces = 0;
+    worker->num_ifaces            = 0;
+    worker->am_message_id         = ucs_generate_uuid(0);
+    worker->rkey_ptr_cb_id        = UCS_CALLBACKQ_ID_NULL;
+    worker->num_all_eps           = 0;
     ucp_worker_keepalive_reset(worker);
     ucs_queue_head_init(&worker->rkey_ptr_reqs);
     ucs_list_head_init(&worker->arm_ifaces);
