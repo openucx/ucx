@@ -119,4 +119,3 @@ go.work
 go.work.sum
 bindings/go/pkg/
 bindings/go/go.sum
-*.d
