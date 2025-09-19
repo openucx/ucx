@@ -11,6 +11,7 @@
 #define UCX_LIBPERF_H
 
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/device_code.h>
 
 BEGIN_C_DECLS
 
@@ -30,7 +31,9 @@ typedef enum {
 typedef enum {
     UCX_PERF_CMD_AM,
     UCX_PERF_CMD_PUT,
+    UCX_PERF_CMD_PUT_SINGLE,
     UCX_PERF_CMD_PUT_MULTI,
+    UCX_PERF_CMD_PUT_PARTIAL,
     UCX_PERF_CMD_GET,
     UCX_PERF_CMD_ADD,
     UCX_PERF_CMD_FADD,
@@ -265,6 +268,7 @@ typedef struct ucx_perf_params {
     ucs_memory_type_t      recv_mem_type;   /* Recv memory type */
     ucx_perf_accel_dev_t   send_device;     /* Send memory device for gdaki */
     ucx_perf_accel_dev_t   recv_device;     /* Recv memory device for gdaki */
+    ucs_device_level_t     device_level;    /* Device level for gdaki */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size
@@ -284,6 +288,7 @@ typedef struct ucx_perf_params {
     double                 percentile_rank; /* The percentile rank of the percentile reported
                                                in latency tests */
     unsigned               device_thread_count; /* Number of device threads */
+    unsigned               device_block_count; /* Number of device blocks */
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */

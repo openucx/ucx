@@ -481,7 +481,9 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
                                   attr.cap.put.max_bcopy, attr.cap.put.max_zcopy);
         max_iov  = attr.cap.put.max_iov;
         break;
+    case UCX_PERF_CMD_PUT_SINGLE:
     case UCX_PERF_CMD_PUT_MULTI:
+    case UCX_PERF_CMD_PUT_PARTIAL:
         min_size = 0;
         max_size = 0;
         max_iov  = 0;
@@ -885,7 +887,9 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
     message_size = ucx_perf_get_message_size(params);
     switch (params->command) {
     case UCX_PERF_CMD_PUT:
+    case UCX_PERF_CMD_PUT_SINGLE:
     case UCX_PERF_CMD_PUT_MULTI:
+    case UCX_PERF_CMD_PUT_PARTIAL:
     case UCX_PERF_CMD_GET:
         ucp_params->features |= UCP_FEATURE_RMA;
         break;
