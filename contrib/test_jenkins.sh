@@ -664,8 +664,10 @@ run_ucx_perftest_cuda_device() {
 
 	for tls in "$cuda_ipc_tls" "$gda_tls"
 	do
-		run_client_server_app "UCX_TLS=$tls $ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+		export UCX_TLS=${tls}
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
 	done
+	unset UCX_TLS
 }
 
 #

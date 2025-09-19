@@ -60,24 +60,21 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
 }
 
 
-template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD,
-         typename uct_device_ep_put_t, typename... Args>
-UCS_F_DEVICE ucs_status_t
-ucp_device_put_blocking(uct_device_ep_put_t uct_device_ep_put,
-                        uct_device_ep_t *device_ep, Args... args)
-{
-    ucs_status_t status;
-    do {
-        status = uct_device_ep_put(device_ep, args...);
-        if (status != UCS_ERR_NO_RESOURCE) {
-            return status;
-        }
-
-        status = uct_device_ep_progress<level>(device_ep);
-    } while (!UCS_STATUS_IS_ERR(status));
-
-    return status;
-}
+/**
+ * Macro for blocking device put operations with retry logic
+ */
+#define UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put, device_ep, ...) \
+    ({ \
+        ucs_status_t status; \
+        do { \
+            status = uct_device_ep_put<level>(device_ep, __VA_ARGS__); \
+            if (status != UCS_ERR_NO_RESOURCE) { \
+                break; \
+            } \
+            status = uct_device_ep_progress<level>(device_ep); \
+        } while (!UCS_STATUS_IS_ERR(status)); \
+        status; \
+    })
 
 
 UCS_F_DEVICE ucs_status_t ucp_device_prepare_single(
@@ -171,9 +168,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         return status;
     }
 
-    return ucp_device_put_blocking<level>(uct_device_ep_put_single<level>,
-                                          device_ep, uct_elem, address,
-                                          remote_address, length, flags, comp);
+    return UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put_single,
+                                   device_ep, uct_elem, address,
+                                   remote_address, length, flags, comp);
 }
 
 
@@ -286,12 +283,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
         return status;
     }
 
-    return ucp_device_put_blocking<level>(uct_device_ep_put_multi<level>,
-                                          device_ep, uct_mem_list,
-                                          mem_list_h->mem_list_length,
-                                          addresses, remote_addresses, lengths,
-                                          counter_inc_value,
-                                          counter_remote_address, flags, comp);
+    return UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put_multi,
+                                   device_ep, uct_mem_list,
+                                   mem_list_h->mem_list_length,
+                                   addresses, remote_addresses, lengths,
+                                   counter_inc_value,
+                                   counter_remote_address, flags, comp);
 }
 
 
@@ -362,11 +359,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
         return status;
     }
 
-    return ucp_device_put_blocking<level>(
-            uct_device_ep_put_multi_partial<level>, device_ep, uct_mem_list,
-            mem_list_indices, mem_list_count, addresses, remote_addresses,
-            lengths, counter_index, counter_inc_value, counter_remote_address,
-            flags, comp);
+    return UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put_multi_partial,
+                                   device_ep, uct_mem_list,
+                                   mem_list_indices, mem_list_count, addresses,
+                                   remote_addresses, lengths, counter_index,
+                                   counter_inc_value, counter_remote_address,
+                                   flags, comp);
 }
 
 
