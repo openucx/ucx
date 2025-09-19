@@ -61,7 +61,7 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
 
 
 /**
- * Macro for blocking device put operations with retry logic
+ * Macro for device put operations with retry logic
  */
 #define UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put, device_ep, ...) \
     ({ \
