@@ -132,8 +132,7 @@ ucp_device_prepare_multi(ucp_device_mem_list_handle_h mem_list_h,
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
- * It will only return when the message was posted or an error occurred.
- * To do so, it might progress.
+ * The routine returns only after the message has been posted or an error has occurred.
  *
  * This routine can be called repeatedly with the same handle and different
  * addresses and length. The flags parameter can be used to modify the behavior
@@ -168,9 +167,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         return status;
     }
 
-    return UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put_single,
-                                   device_ep, uct_elem, address,
-                                   remote_address, length, flags, comp);
+    return UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put_single, device_ep,
+                                   uct_elem, address, remote_address, length,
+                                   flags, comp);
 }
 
 
@@ -245,8 +244,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
- * It will only return when all the messages were posted or an error occurred.
- * To do so, it might progress.
+ * The routine returns only after all the messages have been posted or an error has occurred.
  *
  * This routine can be called repeatedly with the same handle and different
  * @a addresses, @a lengths and counter related parameters. The @a flags
@@ -283,12 +281,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
         return status;
     }
 
-    return UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put_multi,
-                                   device_ep, uct_mem_list,
-                                   mem_list_h->mem_list_length,
+    return UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put_multi, device_ep,
+                                   uct_mem_list, mem_list_h->mem_list_length,
                                    addresses, remote_addresses, lengths,
-                                   counter_inc_value,
-                                   counter_remote_address, flags, comp);
+                                   counter_inc_value, counter_remote_address,
+                                   flags, comp);
 }
 
 
@@ -315,8 +312,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
- * It will only return when all the messages were posted or an error occurred.
- * To do so, it might progress.
+ * The routine returns only after all the messages have been posted or an error has occurred.
  *
  * This routine can be called repeatedly with the same handle and different
  * mem_list_indices, addresses, lengths and increment related parameters. The
@@ -360,11 +356,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
     }
 
     return UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put_multi_partial,
-                                   device_ep, uct_mem_list,
-                                   mem_list_indices, mem_list_count, addresses,
-                                   remote_addresses, lengths, counter_index,
-                                   counter_inc_value, counter_remote_address,
-                                   flags, comp);
+                                   device_ep, uct_mem_list, mem_list_indices,
+                                   mem_list_count, addresses, remote_addresses,
+                                   lengths, counter_index, counter_inc_value,
+                                   counter_remote_address, flags, comp);
 }
 
 
