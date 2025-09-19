@@ -2479,9 +2479,8 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
 
     ucp_wireup_memaccess_bitmap(context, UCS_MEMORY_TYPE_CUDA,
                                 &mem_type_tl_bitmap);
-    (void)ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                  mem_type_tl_bitmap, UCP_NULL_LANE,
-                                  select_ctx, 0);
+    (void)ucp_wireup_add_bw_lanes(select_params, &bw_info, mem_type_tl_bitmap,
+                                  UCP_NULL_LANE, select_ctx, 0);
 
     return UCS_OK;
 }
