@@ -74,7 +74,7 @@ ucp_device_put_blocking(uct_device_ep_put_t uct_device_ep_put,
         }
 
         status = uct_device_ep_progress<level>(device_ep);
-    } while (!UCS_STATUS_IS_ERR(status));
+    } while (status != UCS_OK);
 
     return status;
 }
