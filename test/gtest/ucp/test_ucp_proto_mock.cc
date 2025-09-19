@@ -991,21 +991,21 @@ void test_ucp_proto_mock_rcx_twins_put::check_config(
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins_put, use_single_net_device_rank_0,
-           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
 {
     check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
                   {2049, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins_put, use_single_net_device_rank_1,
-           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
 {
     check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
                   {2049, INF, "zero-copy", "rc_mlx5/mock_2:1/path0"}});
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins_put, use_single_net_device_rank_2,
-           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
 {
     check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
                   {2049, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
@@ -1063,21 +1063,21 @@ void test_ucp_proto_mock_rcx_twins_get::check_config(
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get, use_single_net_device_rank_0,
-           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
 {
     check_config({{0, 624, "copy-out", "rc_mlx5/mock_0:1/path0"},
                   {625, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get, use_single_net_device_rank_1,
-           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
 {
     check_config({{0, 624, "copy-out", "rc_mlx5/mock_2:1/path0"},
                   {625, INF, "zero-copy", "rc_mlx5/mock_2:1/path0"}});
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get, use_single_net_device_rank_2,
-           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
 {
     check_config({{0, 624, "copy-out", "rc_mlx5/mock_0:1/path0"},
                   {625, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
