@@ -15,6 +15,7 @@ CGOLDFLAGS=-L$(abs_top_builddir)/src/ucp/$(objdir) -lucp -L$(abs_top_builddir)/s
 
 if HAVE_CUDA
 CGOLDFLAGS+=$(CUDA_LDFLAGS) $(CUDA_LIBS) $(CUDART_LIBS)
+CGOCFLAGS+=$(CUDA_CPPFLAGS)
 GOTAGS=cuda
 else
 GOTAGS=
