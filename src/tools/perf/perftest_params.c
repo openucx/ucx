@@ -138,9 +138,11 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("\n");
     printf("  UCP only:\n");
     printf("     -T <threads>[:<blocks>]\n");
-    printf("                    number of threads in the test (%d)\n",
+    printf("                    number of threads in the test (%d).\n",
            ctx->params.super.thread_count);
     printf("                    blocks is optional, it corresponds to the number of device blocks\n");
+    printf("                    if blocks is specified, then threads value corresponds to the number\n");
+    printf("                    of device threads in each block\n");
     printf("     -M <thread>    thread support level for progress engine (single)\n");
     printf("                        single     - only the master thread can access\n");
     printf("                        serialized - one thread can access at a time\n");
