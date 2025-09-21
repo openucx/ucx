@@ -188,15 +188,8 @@ try_load_cuda_env() {
     num_gpus=$(nvidia-smi -L | grep GPU | wc -l)
     [ "${num_gpus}" -gt 0 ] || return 0
 
-    # Prefer local CUDA if available
-    cuda_local_dir="/usr/local/cuda"
-    if find ${cuda_local_dir}/ -name 'libcudart.so.1[2-9]*' | grep -q .; then
-        have_cuda="${cuda_local_dir}"
-    else
-        # Fallback to env module
-        az_module_load dev/cuda13.0.0 || return 0
-        have_cuda=yes
-    fi
+    az_module_load dev/cuda13.0.0 || return 0
+    have_cuda=yes
 
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
