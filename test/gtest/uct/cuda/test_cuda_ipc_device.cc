@@ -146,25 +146,11 @@ Parameter packing in resource.variant (uint32_t):
                                           ((nb & 0xF) << 24) |
                                           ((nt & 0xFFF) << 12) |
                                           (off & 0xFFF);
-                            switch (dl) {
-                            case UCS_DEVICE_LEVEL_THREAD:
-                                up->variant_name = "thread";
-                                break;
-                            case UCS_DEVICE_LEVEL_WARP:
-                                up->variant_name = "warp";
-                                break;
-                            case UCS_DEVICE_LEVEL_BLOCK:
-                                up->variant_name = "block";
-                                break;
-                            case UCS_DEVICE_LEVEL_GRID:
-                                up->variant_name = "grid";
-                                break;
-                            default:
-                                break;
-                            }
+                            up->variant_name = ucs_device_level_names[dl];
                             up->variant_name += "- nt" + std::to_string(nt) +
                                                 "- nb" + std::to_string(nb) +
-                                                "- offset" + std::to_string(off);
+                                                "- offset" +
+                                                std::to_string(off);
                             out.push_back(up.get());
                             storage.emplace_back(std::move(up));
                         }

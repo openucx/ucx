@@ -815,6 +815,12 @@ ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags)
     return iface->internal_ops->ep_invalidate(ep, flags);
 }
 
+void uct_device_ep_init(uct_device_ep_t *device_ep, uct_device_tl_id_t tl_id)
+{
+    device_ep->uct_tl_id = tl_id;
+    ucs_device_log_config_init(&device_ep->log_config);
+}
+
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
 {
     ep->iface = iface;

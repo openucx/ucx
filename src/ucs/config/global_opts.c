@@ -29,6 +29,7 @@ ucs_global_opts_t ucs_global_opts = {
     .log_file_rotate       = 0,
     .log_buffer_size       = 1024,
     .log_data_size         = 0,
+    .device_log_level      = UCS_LOG_LEVEL_WARN,
     .mpool_fifo            = 0,
     .handle_errors         = UCS_BIT(UCS_HANDLE_ERROR_BACKTRACE),
     .error_signals         = { NULL, 0 },
@@ -113,6 +114,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
  {"LOG_DATA_SIZE", "0",
   "How much packet payload to print, at most, in data mode.",
   ucs_offsetof(ucs_global_opts_t, log_data_size), UCS_CONFIG_TYPE_ULONG},
+
+ {"DEVICE_LOG_LEVEL", "warn",
+  "Logging level for device functions.",
+  ucs_offsetof(ucs_global_opts_t, device_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
  {"LOG_PRINT_ENABLE", "n",
   "Enable output of ucs_print(). This option is intended for use by the library developers.",

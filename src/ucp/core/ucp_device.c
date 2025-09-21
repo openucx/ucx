@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_mm.h>
 #include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_types.h>
+#include <ucp/wireup/wireup_ep.h>
 #include <ucs/type/param.h>
 #include <ucp/wireup/wireup_ep.h>
 

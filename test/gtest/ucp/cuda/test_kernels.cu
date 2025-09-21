@@ -4,6 +4,8 @@
  * See file LICENSE for terms.
  */
 
+#define UCS_DEVICE_MAX_LOG_LEVEL UCS_LOG_LEVEL_TRACE_POLL
+
 #include "test_kernels.h"
 
 #include <ucp/api/device/ucp_device_impl.h>
@@ -56,8 +58,9 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
     case TEST_UCP_DEVICE_KERNEL_COUNTER_READ:
         uint64_t value = ucp_device_counter_read(params.local_counter.address);
         if (value != params.local_counter.value) {
-            ucs_device_error("counter value mismatch: expected %lu, got %lu",
-                             params.local_counter.value, value);
+            ucs_device_log(ERROR, &params.log_config,
+                           "counter value mismatch: expected %lu, got %lu",
+                           params.local_counter.value, value);
             return UCS_ERR_IO_ERROR;
         }
         /* req_ptr is not used in this case */
@@ -116,7 +119,7 @@ ucp_test_kernel(const test_ucp_device_kernel_params_t params,
                 ucs_status_t *status_ptr)
 {
     if (blockDim.x > device_request<level>::MAX_THREADS) {
-        ucs_device_error("blockDim.x > MAX_THREADS");
+        ucs_device_log(ERROR, &params.log_config, "blockDim.x > MAX_THREADS");
         *status_ptr = UCS_ERR_INVALID_PARAM;
         return;
     }

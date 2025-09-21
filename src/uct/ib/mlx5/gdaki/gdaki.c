@@ -172,6 +172,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         goto err_dev_ep;
     }
 
+    uct_device_ep_init(&dev_ep.super, UCT_DEVICE_TL_RC_MLX5_GDA);
     dev_ep.atomic_va   = iface->atomic_buff;
     dev_ep.atomic_lkey = htonl(iface->atomic_mr->lkey);
 

@@ -4,13 +4,14 @@
  * See file LICENSE for terms.
  */
 
+#include "cuda/test_kernels.h"
+
 #include <cuda_runtime.h>
 #include <ucp/ucp_test.h>
-
 #include <ucp/api/device/ucp_device_types.h>
+#include <ucs/device/device_common.h>
 
 #include <common/cuda.h>
-#include "cuda/test_kernels.h"
 
 class test_ucp_device : public ucp_test {
 public:
@@ -254,12 +255,9 @@ class test_ucp_device_kernel : public test_ucp_device {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        // TODO move to UCS
-        static const char *ucs_device_level_names[] = {"thread", "warp",
-                                                       "block", "grid"};
         add_variant_values(variants, test_ucp_device::get_test_variants,
                            UCS_BIT(UCS_DEVICE_LEVEL_THREAD) |
-                                   UCS_BIT(UCS_DEVICE_LEVEL_WARP),
+                           UCS_BIT(UCS_DEVICE_LEVEL_WARP),
                            ucs_device_level_names);
     }
 
@@ -276,6 +274,7 @@ protected:
         params.num_blocks                      = 1;
         params.level                           = get_device_level();
         params.num_iters                       = num_iters;
+        ucs_device_log_config_init(&params.log_config);
         return params;
     }
 
@@ -345,11 +344,8 @@ protected:
     test_ucp_device_kernel_params_t init_params()
     {
         // TODO: Test different sizes and alignment
-        test_ucp_device_kernel_params_t params;
-        params.num_threads = get_num_threads();
-        params.num_blocks  = 1;
-        params.level       = get_device_level();
-        params.num_iters   = get_num_iters();
+        auto params      = test_ucp_device_kernel::init_params();
+        params.num_iters = get_num_iters();
         switch (get_send_mode()) {
         case NODELAY_WITH_REQ:
             params.with_no_delay = true;
