@@ -188,20 +188,19 @@ try_load_cuda_env() {
     num_gpus=$(nvidia-smi -L | grep GPU | wc -l)
     [ "${num_gpus}" -gt 0 ] || return 0
 
-    # Check cuda env module
-    az_module_load dev/cuda12.8 || return 0
+    az_module_load dev/cuda13.0.0 || return 0
     have_cuda=yes
 
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
     then
-        az_module_load dev/gdrcopy2.4.4_cuda12.8.0 && have_gdrcopy=yes
+        az_module_load dev/gdrcopy2.5.1_cuda13.0.0 && have_gdrcopy=yes
     fi
 }
 
 load_cuda_env() {
     try_load_cuda_env
-    if [ "${have_cuda}" != "yes" ] ; then
+    if [ "${have_cuda}" == "no" ] ; then
         if [ "${ucx_gpu}" = "yes" ] ; then
             azure_log_error "CUDA load failed on GPU node $(hostname -s)"
             exit 1
