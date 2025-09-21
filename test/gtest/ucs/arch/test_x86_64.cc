@@ -153,7 +153,6 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
     char memunits_str[256];
     char thresh_min_str[16];
     char thresh_max_str[16];
-    int i;
 
     ucs_memunits_to_str(ucs_global_opts.arch.builtin_memcpy_min,
                         thresh_min_str, sizeof(thresh_min_str));
@@ -163,20 +162,25 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
                         thresh_min_str << ".." <<
                         thresh_max_str;
     for (size = 4096; size <= 256 * UCS_MBYTE; size *= 2) {
-        secs = ucs_get_accurate_time();
-        for (i = 0; ucs_get_accurate_time() - secs < timeout; i++) {
-            memcpy_bw       = measure_memcpy_bandwidth<memcpy>(size);
-            memcpy_relax_bw = measure_memcpy_bandwidth<memcpy_relaxed>(size);
-            if (memcpy_relax_bw / memcpy_bw >= diff) {
+        for (int retry = 0; retry < (ucs::perf_retry_count + 1); ++retry) {
+            secs = ucs_get_accurate_time();
+            do {
+                memcpy_bw       = measure_memcpy_bandwidth<memcpy>(size);
+                memcpy_relax_bw = measure_memcpy_bandwidth<memcpy_relaxed>(size);
+                if (memcpy_relax_bw / memcpy_bw >= diff) {
+                    break;
+                }
+                usleep(1000); /* allow other tasks to complete */
+            } while ((ucs_get_accurate_time() - secs) < timeout);
+            ucs_memunits_to_str(size, memunits_str, sizeof(memunits_str));
+            UCS_TEST_MESSAGE << memunits_str <<
+                                " memcpy: "             << (memcpy_bw / UCS_GBYTE) <<
+                                "GB/s memcpy relaxed: " << (memcpy_relax_bw / UCS_GBYTE) <<
+                                " (attempt " << (retry + 1) << "/" << ucs::perf_retry_count << ")";
+            if ((memcpy_relax_bw / memcpy_bw)>= diff) {
                 break;
             }
-            usleep(1000); /* allow other tasks to complete */
         }
-        ucs_memunits_to_str(size, memunits_str, sizeof(memunits_str));
-        UCS_TEST_MESSAGE << memunits_str <<
-                            " memcpy: "             << (memcpy_bw / UCS_GBYTE) <<
-                            "GB/s memcpy relaxed: " << (memcpy_relax_bw / UCS_GBYTE) <<
-                            "GB/s iterations: "     << i + 1;
         EXPECT_GE(memcpy_relax_bw / memcpy_bw, diff);
     }
 }

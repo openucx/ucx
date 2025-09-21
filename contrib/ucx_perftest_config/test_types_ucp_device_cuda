@@ -1,0 +1,7 @@
+#
+# UCP basic device cuda tests
+#
+ucp_device_cuda_bw_1k_1thread         -t ucp_put_multi_bw -m cuda -s 1024 -n 10000
+ucp_device_cuda_bw_1k_128threads      -t ucp_put_multi_bw -m cuda -s 1024 -n 10000 -T 128
+ucp_device_cuda_lat_1k_1thread        -t ucp_put_multi_lat -m cuda -s 1024 -n 10000
+ucp_device_cuda_lat_1k_128threads     -t ucp_put_multi_lat -m cuda -s 1024 -n 10000 -T 128

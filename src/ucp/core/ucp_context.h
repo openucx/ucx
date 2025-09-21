@@ -326,6 +326,11 @@ typedef struct ucp_tl_md {
      * Global VA memory handle
      */
     uct_mem_h              gva_mr;
+
+    /**
+     * Set of known system devices associated to the MD
+     */
+    ucp_sys_dev_map_t      sys_dev_map;
 } ucp_tl_md_t;
 
 
@@ -770,5 +775,11 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
+
+
+void ucp_device_init(void);
+
+
+void ucp_device_cleanup(void);
 
 #endif

@@ -77,6 +77,7 @@ static void usage()
     printf("                        's' : stream \n");
     printf("                        'm' : active messages \n");
     printf("                        'x' : exported memory handle \n");
+    printf("                        'd' : device-based operations\n");
     printf("                       Modifiers to use in combination with above features:\n");
     printf("                        'w' : wakeup\n");
     printf("                        'e' : error handling\n");
@@ -226,6 +227,9 @@ int main(int argc, char **argv)
                             UCP_EP_PARAM_FIELD_ERR_HANDLER;
                     ucp_ep_params.err_mode       = UCP_ERR_HANDLING_MODE_PEER;
                     ucp_ep_params.err_handler.cb = ep_error_callback;
+                    break;
+                case 'd':
+                    ucp_features |= UCP_FEATURE_DEVICE;
                     break;
                 default:
                     usage();

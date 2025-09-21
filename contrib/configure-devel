@@ -14,6 +14,7 @@ basedir=$(cd $(dirname $0) && pwd)
 $basedir/../configure \
 	--enable-gtest \
 	--enable-examples \
+	--enable-test-apps \
 	--with-valgrind \
 	--enable-profiling \
 	--enable-frame-pointer \

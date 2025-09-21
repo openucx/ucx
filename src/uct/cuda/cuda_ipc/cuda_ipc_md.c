@@ -184,15 +184,10 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
             UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
                         &key->ph.handle.fabric_handle, handle,
                         CU_MEM_HANDLE_TYPE_FABRIC, 0));
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
         if (status != UCS_OK) {
-            cuMemRelease(handle);
             ucs_debug("unable to export handle for VMM ptr: %p", addr);
             goto non_ipc;
-        }
-
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemRelease(handle));
-        if (status != UCS_OK) {
-            goto out_pop_ctx;
         }
 
         key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
@@ -352,7 +347,8 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
          * Now, we immediately insert into cache to save on calling
          * OpenMemHandle for the same handle because the cache is globally
          * accessible using rkey->pid. */
-        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &d_mapped);
+        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &d_mapped,
+                                            UCS_LOG_LEVEL_DEBUG);
 
         *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
                       ? UCS_YES : UCS_NO;

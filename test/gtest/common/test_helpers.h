@@ -1056,6 +1056,13 @@ const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs();
  */
 void skip_on_address_sanitizer();
 
+
+/**
+ * Returns whether to skip HW TM offload tests
+ */
+bool skip_hw_tm_offload();
+
+
 /**
  * Class for mocking C function pointers
  * The class is used to mock C function pointers, by replacing the original

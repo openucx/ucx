@@ -18,8 +18,10 @@
 #include <ucs/arch/generic/cpu.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>
+#ifndef __NVCC__
 #ifdef __ARM_NEON
 #include <arm_neon.h>
+#endif
 #endif
 #ifdef __ARM_FEATURE_SVE
 #include <arm_sve.h>

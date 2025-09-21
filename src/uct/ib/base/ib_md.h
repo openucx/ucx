@@ -108,6 +108,7 @@ typedef struct uct_ib_md_ext_config {
                                                        reuse*/
     unsigned long            reg_retry_cnt; /**< Memory registration retry count */
     unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
+    int                      direct_nic; /**< Direct NIC with GPU functionality */
 } uct_ib_md_ext_config_t;
 
 

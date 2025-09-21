@@ -10,7 +10,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = cuda rocm ze lib mad
+SUBDIRS = lib cuda rocm ze mad
 CC      = $(UCX_PERFTEST_CC)
 
 noinst_HEADERS = \
@@ -43,6 +43,7 @@ dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_uct \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp_daemon \
+	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp_device_cuda \
 	$(top_srcdir)/contrib/ucx_perftest_config/transports
 
 

@@ -17,7 +17,6 @@
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
 
-
 static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
@@ -90,6 +89,11 @@ ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
+    if ((init_params->rkey_config_key != NULL) &&
+        ucp_rkey_need_remote_flush(init_params->rkey_config_key)) {
+        return;
+    }
+
     ucp_proto_single_probe(&params);
 }
 
@@ -111,30 +115,52 @@ static size_t ucp_proto_put_offload_bcopy_pack(void *dest, void *arg)
     return ucp_proto_multi_data_pack(pack_ctx, dest);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_put_offload_update_remote_flush(ucp_ep_h ep,
+                                          ucp_sys_dev_map_t flush_sys_dev_mask,
+                                          uct_rkey_t tl_rkey, uct_ep_h uct_ep,
+                                          uint64_t address)
+{
+    if (ucs_test_all_flags(ep->ext->flush_sys_dev_map, flush_sys_dev_mask)) {
+        return;
+    }
+
+    ucp_worker_remote_flush_hash_put(&ep->worker->remote_flush_hash, ep,
+                                     ucs_ffs64_safe(flush_sys_dev_mask),
+                                     tl_rkey, uct_ep, address);
+    ep->ext->flush_sys_dev_map |= flush_sys_dev_mask;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
                                       const ucp_proto_multi_lane_priv_t *lpriv,
                                       ucp_datatype_iter_t *next_iter,
                                       ucp_lane_index_t *lane_shift)
 {
-    ucp_ep_t *ep                        = req->send.ep;
+    ucp_ep_h ep        = req->send.ep;
+    uct_ep_h uct_ep    = ucp_ep_get_lane(ep, lpriv->super.lane);
+    uint64_t address   = req->send.rma.remote_addr +
+                         req->send.state.dt_iter.offset;
+    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
+                                              lpriv->super.rkey_index);
+
     ucp_proto_multi_pack_ctx_t pack_ctx = {
         .req         = req,
         .max_payload = ucp_proto_multi_max_payload(req, lpriv, 0),
         .next_iter   = next_iter
     };
     ssize_t packed_size;
-    uct_rkey_t tl_rkey;
+    ucs_status_t status;
 
-    tl_rkey     = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
-                                       lpriv->super.rkey_index);
-    packed_size = uct_ep_put_bcopy(ucp_ep_get_lane(ep, lpriv->super.lane),
-                                   ucp_proto_put_offload_bcopy_pack, &pack_ctx,
-                                   req->send.rma.remote_addr +
-                                   req->send.state.dt_iter.offset,
-                                   tl_rkey);
+    packed_size = uct_ep_put_bcopy(uct_ep, ucp_proto_put_offload_bcopy_pack,
+                                   &pack_ctx, address, tl_rkey);
+    status      = ucp_proto_bcopy_send_func_status(packed_size);
+    if (!UCS_STATUS_IS_ERR(status)) {
+        ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
+                                                  tl_rkey, uct_ep, address);
+    }
 
-    return ucp_proto_bcopy_send_func_status(packed_size);
+    return status;
 }
 
 static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
@@ -222,19 +248,27 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                                       ucp_datatype_iter_t *next_iter,
                                       ucp_lane_index_t *lane_shift)
 {
+    ucp_ep_h ep        = req->send.ep;
+    uct_ep_h uct_ep    = ucp_ep_get_lane(ep, lpriv->super.lane);
+    uint64_t address   = req->send.rma.remote_addr +
+                         req->send.state.dt_iter.offset;
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
     uct_iov_t iov;
+    ucs_status_t status;
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
-    return uct_ep_put_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                            &iov, 1,
-                            req->send.rma.remote_addr +
-                            req->send.state.dt_iter.offset,
-                            tl_rkey, &req->send.state.uct_comp);
+    status = uct_ep_put_zcopy(uct_ep, &iov, 1, address, tl_rkey,
+                              &req->send.state.uct_comp);
+    if (!UCS_STATUS_IS_ERR(status)) {
+        ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
+                                                  tl_rkey, uct_ep, address);
+    }
+
+    return status;
 }
 
 static ucs_status_t

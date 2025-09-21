@@ -185,7 +185,7 @@ ucs_numa_node_parse_distances(ucs_numa_node_t source, ucs_numa_node_t dest)
     ucs_numa_distance_t distance_to_dest = UCS_NUMA_MIN_DISTANCE;
     ucs_numa_node_t node                 = 0;
     ucs_numa_distance_t distance;
-    ucs_kh_put_t kh_put_status;
+    int kh_put_status;
     khiter_t hash_it;
     FILE *distance_fp;
 

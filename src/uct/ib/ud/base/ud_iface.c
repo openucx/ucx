@@ -448,6 +448,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     init_attr->rx_hdr_len  = UCT_UD_RX_HDR_LEN;
     init_attr->seg_size    = ucs_min(mtu, config->super.seg_size) + UCT_IB_GRH_LEN;
     init_attr->qp_type     = IBV_QPT_UD;
+    init_attr->dev_name    = params->mode.device.dev_name;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, md, worker,
                               params, &config->super, init_attr);

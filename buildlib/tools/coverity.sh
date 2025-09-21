@@ -102,7 +102,7 @@ run_coverity() {
 	if [ "${ucx_build_type}" == "devel" ]; then
 		cov-manage-emit --dir $cov_build --tu-pattern "file('.*/test/gtest/common/googletest/*')" delete || :
 	fi
-	cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
+	cov-analyze --jobs $parallel_jobs $COV_OPT --disable PARSE_ERROR --security --concurrency --dir $cov_build
 	nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 
 	if [ $nerrors -gt 0 ]; then

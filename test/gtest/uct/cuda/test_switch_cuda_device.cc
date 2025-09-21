@@ -288,6 +288,9 @@ protected:
     void init() override {
         test_switch_cuda_device::init();
 
+        int current_device;
+        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+
         for (auto device = 0; device < m_num_devices; ++device) {
             uct_md_mem_attr_t attr       = {
                 .field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV
@@ -304,6 +307,8 @@ protected:
                              << static_cast<int>(attr.sys_dev);
             m_sys_dev.push_back(attr.sys_dev);
         }
+
+        EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
 
         ASSERT_EQ(m_num_devices, m_sys_dev.size());
     }
@@ -349,6 +354,9 @@ protected:
     {
         CUdevice current;
 
+        int current_device;
+        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+
         // Ensure a valid context for each device
         for (auto device = 0; device < m_num_devices; ++device) {
             ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
@@ -365,11 +373,16 @@ protected:
             EXPECT_EQ(m_num_devices - 1, current);
             ASSERT_UCS_OK(uct_mem_free(&mem));
         }
+
+        EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
     }
 
     void test_same_device_alloc(ucs_memory_type_t mem_type,
                                 bool set_sys_dev = true)
     {
+        int current_device;
+        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+
         for (auto device = 0; device < m_num_devices; ++device) {
             ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
             ASSERT_UCS_OK(allocate(mem_type,
@@ -379,6 +392,8 @@ protected:
             EXPECT_EQ(m_sys_dev[device], sys_device);
             ASSERT_UCS_OK(uct_mem_free(&mem));
         }
+
+        EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
     }
 
     void skip_if_no_fabric(ucs_memory_type_t mem_type)
@@ -526,7 +541,7 @@ public:
         rkey_release(sender(), rkey_dest);
 
         // Set back an original device to avoid test failures
-        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+        EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
     }
 
     template<typename mem_alloc_t1, typename mem_alloc_t2>
@@ -581,6 +596,10 @@ public:
 protected:
     void init() override
     {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA is not supported");
+        }
+
         ASSERT_EQ(cudaGetDeviceCount(&m_num_devices), cudaSuccess);
         if (m_num_devices < 2) {
             UCS_TEST_SKIP_R("less than two cuda devices available");

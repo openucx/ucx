@@ -724,6 +724,7 @@ const char *ucp_feature_str[] = {
     [ucs_ilog2(UCP_FEATURE_WAKEUP)] = "UCP_FEATURE_WAKEUP",
     [ucs_ilog2(UCP_FEATURE_STREAM)] = "UCP_FEATURE_STREAM",
     [ucs_ilog2(UCP_FEATURE_AM)]     = "UCP_FEATURE_AM",
+    [ucs_ilog2(UCP_FEATURE_DEVICE)] = "UCP_FEATURE_DEVICE",
     NULL
 };
 
@@ -1190,6 +1191,7 @@ static void ucp_add_tl_resource_if_enabled(
         const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
         uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
 {
+    ucp_tl_md_t *md = &context->tl_mds[md_index];
     uint8_t rsc_flags;
     ucp_rsc_index_t dev_index, i;
 
@@ -1219,6 +1221,10 @@ static void ucp_add_tl_resource_if_enabled(
             }
         }
         context->tl_rscs[context->num_tls].dev_index = dev_index;
+
+        if (resource->sys_device < UCP_MAX_SYS_DEVICES) {
+            md->sys_dev_map |= UCS_BIT(resource->sys_device);
+        }
 
         ++context->num_tls;
         ++(*num_resources_p);
@@ -1429,8 +1435,9 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
     ucs_status_t status;
 
     /* Initialize tl_md structure */
-    tl_md->cmpt_index = cmpt_index;
-    tl_md->rsc        = *md_rsc;
+    tl_md->cmpt_index  = cmpt_index;
+    tl_md->rsc         = *md_rsc;
+    tl_md->sys_dev_map = 0;
 
     /* Read MD configuration */
     status = uct_md_config_read(context->tl_cmpts[cmpt_index].cmpt, NULL, NULL,
@@ -2535,6 +2542,10 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
         ucs_strncpy_safe(attr->name, context->name, UCP_ENTITY_NAME_MAX);
     }
 
+    if (attr->field_mask & UCP_ATTR_FIELD_DEVICE_COUNTER_SIZE) {
+        attr->device_counter_size = sizeof(uint64_t);
+    }
+
     return UCS_OK;
 }
 
@@ -2719,9 +2730,11 @@ double ucp_tl_iface_latency_with_priority(ucp_context_h context,
 UCS_F_CTOR void ucp_global_init(void)
 {
     UCS_CONFIG_ADD_TABLE(ucp_config_table, &ucs_config_global_list);
+    ucp_device_init();
 }
 
 UCS_F_DTOR static void ucp_global_cleanup(void)
 {
+    ucp_device_cleanup();
     UCS_CONFIG_REMOVE_TABLE(ucp_config_table);
 }

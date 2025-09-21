@@ -145,6 +145,10 @@ $ make -C test/gtest test
   See [ucx issue 5749](https://github.com/openucx/ucx/issues/5749) for more
   details.
 
+* If network routing is incorrectly recognized, leading to peers reported as
+  "unreachable", change the default reachability check mode by setting:
+  UCX_IB_ROCE_REACHABILITY_MODE=all.
+
 <hr>
 
 

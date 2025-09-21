@@ -20,7 +20,9 @@ nobase_dist_libuct_la_HEADERS = \
 	api/tl.h \
 	api/uct_def.h \
 	api/uct.h \
-	api/version.h
+	api/version.h \
+	api/device/uct_device_impl.h \
+	api/device/uct_device_types.h
 
 noinst_HEADERS = \
 	base/uct_md.h \
