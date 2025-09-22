@@ -391,7 +391,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_progress_req(ucp_device_request_t *req)
     }
 
     status = uct_device_ep_progress<level>(req->device_ep);
-    return (status != UCS_OK ? status : UCS_INPROGRESS);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return (ucs_likely(req->comp.count == 0)) ? req->comp.status :
+                                                UCS_INPROGRESS;
 }
 
 #endif /* UCP_DEVICE_IMPL_H */

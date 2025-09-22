@@ -250,8 +250,9 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         while (request_mgr.get_pending_count() >= ctx.max_outstanding) {
-            request_mgr.progress<level>(1);
+            status = request_mgr.progress<level>(1);
             if (UCS_STATUS_IS_ERR(status)) {
+                ucs_device_error("progress failed: %d", status);
                 ctx.status = status;
                 return;
             }
@@ -273,6 +274,7 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
     while (request_mgr.get_pending_count() > 0) {
         status = request_mgr.progress<level>(max_iters);
         if (UCS_STATUS_IS_ERR(status)) {
+            ucs_device_error("progress failed: %d", status);
             break;
         }
     }
