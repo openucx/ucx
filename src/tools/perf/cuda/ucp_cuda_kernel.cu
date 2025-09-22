@@ -19,7 +19,9 @@
 
 class ucp_perf_cuda_request_manager {
 public:
-    __device__ ucp_perf_cuda_request_manager(size_t size) : m_size(size)
+    __device__
+    ucp_perf_cuda_request_manager(size_t size, ucp_device_request_t *requests)
+        : m_size(size), m_requests(&requests[size * threadIdx.x])
     {
         assert(m_size <= CAPACITY);
         for (size_t i = 0; i < m_size; ++i) {
@@ -70,7 +72,7 @@ private:
     static const size_t CAPACITY = 128;
 
     size_t               m_size;
-    ucp_device_request_t m_requests[CAPACITY];
+    ucp_device_request_t *m_requests;
     uint8_t              m_pending[UCX_BITSET_SIZE(CAPACITY)];
 };
 
@@ -222,9 +224,9 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
 
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 UCS_F_DEVICE ucs_status_t
-ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx)
+ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
+                        ucp_device_request_t &req)
 {
-    ucp_device_request_t req;
     ucs_status_t status = ucp_perf_cuda_send_nbx<level, cmd>(params, idx, req);
     if (status != UCS_OK) {
         return status;
@@ -243,9 +245,10 @@ __global__ void
 ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
                                   ucp_perf_cuda_params params)
 {
+    extern __shared__ ucp_device_request_t requests[];
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
-    ucp_perf_cuda_request_manager request_mgr(ctx.max_outstanding);
+    ucp_perf_cuda_request_manager request_mgr(ctx.max_outstanding, requests);
     ucs_status_t status;
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
@@ -268,7 +271,6 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
         } while (status == UCS_ERR_NO_RESOURCE);
 
         ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
-        __syncthreads();
     }
 
     while (request_mgr.get_pending_count() > 0) {
@@ -288,27 +290,28 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
                                        ucp_perf_cuda_params params,
                                        bool is_sender)
 {
+    extern __shared__ ucp_device_request_t requests[];
+    ucp_device_request_t &req             = requests[threadIdx.x];
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
     ucs_status_t status                   = UCS_OK;
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         if (is_sender) {
-            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx);
+            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req);
             if (status != UCS_OK) {
                 break;
             }
             ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
         } else {
             ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
-            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx);
+            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req);
             if (status != UCS_OK) {
                 break;
             }
         }
 
         ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
-        __syncthreads();
     }
 
     ctx.status = status;
