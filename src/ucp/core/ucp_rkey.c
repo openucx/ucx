@@ -67,6 +67,10 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
     size  = sizeof(ucp_md_map_t); /* Memory domains map */
     size += sizeof(uint8_t); /* Memory type */
 
+    if (md_map == 0) {
+        return size;
+    }
+
     ucs_for_each_bit(md_index, md_map) {
         tl_rkey_size = context->tl_mds[md_index].attr.rkey_packed_size;
         ucs_assertv_always(tl_rkey_size <= UINT8_MAX, "md %s: tl_rkey_size=%zu",
@@ -74,10 +78,7 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
         size += sizeof(uint8_t) + tl_rkey_size;
     }
 
-    if (md_map != 0) {
-        /* System device id */
-        size += sizeof(uint8_t);
-    }
+    size += sizeof(uint8_t);  /* System device id */
 
     if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
         /* Distance of each device */
@@ -234,7 +235,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
          *ucs_serialize_next(&p, uint8_t) = memh->packed_sys_dev;
     }
 
-    if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if ((mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) || (md_map == 0)) {
         goto out_packed_size;
     }
 

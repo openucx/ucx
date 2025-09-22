@@ -1067,53 +1067,58 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
 
 UCS_TEST_P(test_ucp_mmap, no_sys_dev_with_zero_md_map)
 {
-    const size_t buffer_size = 4096;
-    mem_buffer buf(buffer_size, UCS_MEMORY_TYPE_HOST);
+    const std::vector<ucs_memory_type_t> &mem_types =
+            mem_buffer::supported_mem_types();
 
-    ucp_mem_h memh;
-    ucp_mem_map_params_t params;
-    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
-    params.address    = buf.ptr();
-    params.length     = buffer_size;
+    for (auto mem_type : mem_types) {
+        const size_t buffer_size = 4096;
+        mem_buffer buf(buffer_size, mem_type);
 
-    ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = buf.ptr();
+        params.length     = buffer_size;
 
-    // Detect system device of the allocated memory
-    ucp_memory_info_t mem_info;
-    ucp_memory_detect(sender().ucph(), ucp_memh_address(memh),
-                      ucp_memh_length(memh), &mem_info);
-    EXPECT_EQ(memh->mem_type, mem_info.type);
+        ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
 
-    // Force md_map to 0 by using empty md_map
-    ucp_md_map_t zero_md_map = 0;
-    ucp_sys_dev_map_t sys_dev_map = ucp_memh_sys_dev_map(memh);
-    std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
+        // Detect system device of the allocated memory
+        ucp_memory_info_t mem_info;
+        ucp_memory_detect(sender().ucph(), ucp_memh_address(memh),
+                          ucp_memh_length(memh), &mem_info);
+        EXPECT_EQ(memh->mem_type, mem_info.type);
 
-    // When md_map = 0, the packed size should be minimal (no sys_device)
-    size_t required_size = ucp_rkey_packed_size(sender().ucph(), zero_md_map,
-                                                mem_info.sys_dev, sys_dev_map, 1);
-    std::vector<char> rkey_buf(required_size);
-    ssize_t packed_size = ucp_rkey_pack_memh(sender().ucph(), zero_md_map,
-            memh, buf.ptr(), buffer_size,
-            &mem_info, sys_dev_map, &sys_distance[0],
-            0, 1, &rkey_buf[0]);
-    ASSERT_GE(packed_size, 0);
+        // Force md_map to 0 by using empty md_map
+        ucp_md_map_t zero_md_map      = 0;
+        ucp_sys_dev_map_t sys_dev_map = ucp_memh_sys_dev_map(memh);
+        std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
 
-    // The buffer should contain minimal data (md_map=0)
-    const void *p = &rkey_buf[0];
-    ucp_md_map_t packed_md_map = *ucs_serialize_next(&p, const ucp_md_map_t);
-    EXPECT_EQ(0UL, packed_md_map);
+        size_t required_size = ucp_rkey_packed_size(
+                                  sender().ucph(), zero_md_map,
+                                  mem_info.sys_dev, sys_dev_map, 1);
+        std::vector<char> rkey_buf(required_size);
+        ssize_t packed_size = ucp_rkey_pack_memh(sender().ucph(), zero_md_map,
+                memh, buf.ptr(), buffer_size,
+                &mem_info, sys_dev_map, &sys_distance[0],
+                0, 1, &rkey_buf[0]);
 
-    // When md_map = 0, sys_device should not be packed
-    // The buffer should end after memory type
-    uint8_t mem_type = *ucs_serialize_next(&p, const uint8_t);
-    EXPECT_EQ(UCS_MEMORY_TYPE_HOST, mem_type);
+        EXPECT_EQ(packed_size, required_size);
 
-    // No additional data (sys_device, distances) should be present
-    EXPECT_EQ(UCS_PTR_BYTE_DIFF(&rkey_buf[0], p), packed_size);
+        const void *p = &rkey_buf[0];
+        ucp_md_map_t packed_md_map = *ucs_serialize_next(&p, const ucp_md_map_t);
+        EXPECT_EQ(0UL, packed_md_map);
 
-    ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+        // When md_map is 0, sys_device should not be packed
+        // The buffer should end after memory type
+        uint8_t packed_mem_type = *ucs_serialize_next(&p, const uint8_t);
+        EXPECT_EQ(mem_type, packed_mem_type);
+
+        // No additional data (sys_device, distances) should be present
+        EXPECT_EQ(UCS_PTR_BYTE_DIFF(&rkey_buf[0], p), packed_size);
+
+        ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+    }
 }
 
 UCS_TEST_P(test_ucp_mmap, rkey_api_lanes_distance)
