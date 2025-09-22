@@ -764,7 +764,7 @@ public:
                 send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
                 wait_recv_window(m_max_outstanding);
-                ucx_perf_update(&m_perf, 1, length);
+                ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
         } else if (my_index == 1) {
@@ -773,7 +773,7 @@ public:
                 wait_recv_window(m_max_outstanding);
                 send(ep, send_buffer, send_length, send_datatype, sn,
                      remote_addr, rkey, m_perf.current.iters == 0);
-                ucx_perf_update(&m_perf, 1, length);
+                ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
         }
@@ -828,7 +828,7 @@ public:
                 send(ep, send_buffer, send_length, send_datatype,
                      sn, remote_addr, rkey);
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
-                ucx_perf_update(&m_perf, 1, length);
+                ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
 
@@ -837,7 +837,7 @@ public:
         } else if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
-                ucx_perf_update(&m_perf, 1, length);
+                ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
 
@@ -850,7 +850,7 @@ public:
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype, sn,
                      remote_addr, rkey, m_perf.current.iters == 0);
-                ucx_perf_update(&m_perf, 1, length);
+                ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
 

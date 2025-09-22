@@ -163,11 +163,12 @@ public:
         size_t msg_length                 = ucx_perf_get_message_size(&m_perf.params);
         ucx_perf_counter_t last_completed = 0;
         ucx_perf_counter_t completed      = m_cpu_ctx->completed_iters;
-        while (1) {
+        unsigned thread_count             = m_perf.params.device_thread_count;
+        while (true) {
             ucx_perf_counter_t delta = completed - last_completed;
             if (delta > 0) {
                 // TODO: calculate latency percentile on kernel
-                ucx_perf_update(&m_perf, delta, msg_length);
+                ucx_perf_update(&m_perf, delta, delta * thread_count, msg_length);
             } else if (completed >= m_perf.max_iter) {
                 break;
             }

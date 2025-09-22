@@ -271,6 +271,7 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
         } while (status == UCS_ERR_NO_RESOURCE);
 
         ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
+        __syncthreads();
     }
 
     while (request_mgr.get_pending_count() > 0) {
