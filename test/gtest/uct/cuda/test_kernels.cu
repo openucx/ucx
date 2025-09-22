@@ -132,14 +132,14 @@ launch_uct_put_multi(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
 
     uct_put_multi_kernel<iovcnt>
-            <<<1, uct_rc_mlx5_gda_warp_size>>>(ep, mem_list, va, rva,
-                                               atomic_rva, length,
-                                               status.device_ptr());
+            <<<1, UCS_DEVICE_NUM_THREADS_IN_WARP>>>(ep, mem_list, va, rva,
+                                                    atomic_rva, length,
+                                                    status.device_ptr());
     synchronize();
     return *status;
 }
 
-template ucs_status_t launch_uct_put_multi<uct_rc_mlx5_gda_warp_size - 1>(
+template ucs_status_t launch_uct_put_multi<UCS_DEVICE_NUM_THREADS_IN_WARP - 1>(
         uct_device_ep_h ep, uct_device_mem_element_t *mem_list, const void *va,
         uint64_t rva, uint64_t atomic_rva, size_t length);
 
@@ -194,14 +194,15 @@ launch_uct_put_partial(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
 
     uct_put_partial_kernel<iovcnt>
-            <<<1, uct_rc_mlx5_gda_warp_size>>>(ep, mem_list, va, rva,
-                                               atomic_rva, length,
-                                               status.device_ptr());
+            <<<1, UCS_DEVICE_NUM_THREADS_IN_WARP>>>(ep, mem_list, va, rva,
+                                                    atomic_rva, length,
+                                                    status.device_ptr());
     synchronize();
     return *status;
 }
 
-template ucs_status_t launch_uct_put_partial<uct_rc_mlx5_gda_warp_size - 1>(
+template ucs_status_t
+launch_uct_put_partial<UCS_DEVICE_NUM_THREADS_IN_WARP - 1>(
         uct_device_ep_h ep, uct_device_mem_element_t *mem_list, const void *va,
         uint64_t rva, uint64_t atomic_rva, size_t length);
 

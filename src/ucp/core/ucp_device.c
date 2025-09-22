@@ -237,7 +237,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
 {
     size_t handle_size = 0;
     size_t uct_elem_size[UCP_DEVICE_MEM_LIST_MAX_EPS];
-    uint8_t i, j, num_uct_eps;
+    unsigned i, j, num_uct_eps;
     uct_iface_attr_v2_t attr;
     ucs_status_t status;
     ucp_worker_iface_t *wiface;

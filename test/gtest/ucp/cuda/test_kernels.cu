@@ -10,205 +10,169 @@
 #include <common/cuda.h>
 
 
-namespace ucx_cuda {
-
-static __global__ void
-memcmp_kernel(const void *s1, const void *s2, int *result, size_t size)
-{
-    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    *result = 0;
-    for (size_t i = idx; i < size; i += blockDim.x * gridDim.x) {
-        if (reinterpret_cast<const uint8_t*>(s1)[i] !=
-            reinterpret_cast<const uint8_t*>(s2)[i]) {
-            *result = 1;
-            break;
-        }
-    }
-}
-
-UCS_F_DEVICE ucs_status_t ucp_device_wait_req(ucp_device_request_t *req)
+template<ucs_device_level_t level>
+ucs_status_t UCS_F_DEVICE
+ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
+                             uint64_t flags, ucp_device_request_t *req_ptr)
 {
     ucs_status_t status;
+
+    switch (params.operation) {
+    case TEST_UCP_DEVICE_KERNEL_PUT_SINGLE:
+        status = ucp_device_put_single<level>(params.mem_list,
+                                              params.single.mem_list_index,
+                                              params.single.address,
+                                              params.single.remote_address,
+                                              params.single.length, flags,
+                                              req_ptr);
+        break;
+    case TEST_UCP_DEVICE_KERNEL_PUT_MULTI:
+        status = ucp_device_put_multi<level>(
+                params.mem_list, params.multi.addresses,
+                params.multi.remote_addresses, params.multi.lengths,
+                params.multi.counter_inc_value,
+                params.multi.counter_remote_address, flags, req_ptr);
+        break;
+    case TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL:
+        status = ucp_device_put_multi_partial<level>(
+                params.mem_list, params.partial.mem_list_indices,
+                params.partial.mem_list_count, params.partial.addresses,
+                params.partial.remote_addresses, params.partial.lengths,
+                params.partial.counter_index, params.partial.counter_inc_value,
+                params.partial.counter_remote_address, flags, req_ptr);
+        break;
+    case TEST_UCP_DEVICE_KERNEL_COUNTER_INC:
+        status = ucp_device_counter_inc<level>(
+                params.mem_list, params.counter_inc.mem_list_index,
+                params.counter_inc.inc_value, params.counter_inc.remote_address,
+                flags, req_ptr);
+        break;
+    case TEST_UCP_DEVICE_KERNEL_COUNTER_WRITE:
+        ucp_device_counter_write(params.local_counter.address,
+                                 params.local_counter.value);
+        status = UCS_OK;
+        break;
+    case TEST_UCP_DEVICE_KERNEL_COUNTER_READ:
+        uint64_t value = ucp_device_counter_read(params.local_counter.address);
+        if (value != params.local_counter.value) {
+            ucs_device_error("counter value mismatch: expected %lu, got %lu",
+                             params.local_counter.value, value);
+            status = UCS_ERR_IO_ERROR;
+        } else {
+            status = UCS_OK;
+        }
+        break;
+    }
+
+    if ((status != UCS_OK) || !(flags & UCT_DEVICE_FLAG_NODELAY) ||
+        (req_ptr == nullptr)) {
+        return status;
+    }
+
     do {
-        status = ucp_device_progress_req(req);
+        status = ucp_device_progress_req<level>(req_ptr);
     } while (status == UCS_INPROGRESS);
     return status;
 }
 
-static __global__ void
-ucp_put_single_kernel(const kernel_params params, ucs_status_t *status)
-{
-    ucp_device_request_t req;
-    ucs_status_t req_status;
-
-    req_status = ucp_device_put_single(params.mem_list,
-                                       params.single.mem_list_index,
-                                       params.single.address,
-                                       params.single.remote_address,
-                                       params.single.length,
-                                       UCT_DEVICE_FLAG_NODELAY, &req);
-    if (req_status != UCS_OK) {
-        *status = req_status;
-        return;
-    }
-
-    *status = ucp_device_wait_req(&req);
-}
-
-static __global__ void
-ucp_put_multi_kernel(const kernel_params params, ucs_status_t *status)
-{
-    ucp_device_request_t req;
-    ucs_status_t req_status;
-
-    req_status = ucp_device_put_multi(params.mem_list, params.multi.addresses,
-                                      params.multi.remote_addresses,
-                                      params.multi.lengths,
-                                      params.multi.counter_inc_value,
-                                      params.multi.counter_remote_address,
-                                      UCT_DEVICE_FLAG_NODELAY, &req);
-    if (req_status != UCS_OK) {
-        *status = req_status;
-        return;
-    }
-
-    *status = ucp_device_wait_req(&req);
-}
-
-static __global__ void
-ucp_put_multi_partial_kernel(const kernel_params params, ucs_status_t *status)
-{
-    ucp_device_request_t req;
-    ucs_status_t req_status;
-
-    req_status = ucp_device_put_multi_partial(
-            params.mem_list, params.partial.mem_list_indices,
-            params.partial.mem_list_count, params.partial.addresses,
-            params.partial.remote_addresses, params.partial.lengths,
-            params.partial.counter_index, params.partial.counter_inc_value,
-            params.partial.counter_remote_address, UCT_DEVICE_FLAG_NODELAY,
-            &req);
-    if (req_status != UCS_OK) {
-        *status = req_status;
-        return;
-    }
-
-    *status = ucp_device_wait_req(&req);
-}
-
-static __global__ void
-ucp_counter_inc_kernel(const kernel_params params, ucs_status_t *status)
-{
-    ucp_device_request_t req;
-    ucs_status_t req_status;
-
-    req_status = ucp_device_counter_inc(params.mem_list,
-                                        params.counter.mem_list_index,
-                                        params.counter.inc_value,
-                                        params.counter.remote_address,
-                                        UCT_DEVICE_FLAG_NODELAY, &req);
-    if (req_status != UCS_OK) {
-        *status = req_status;
-        return;
-    }
-
-    *status = ucp_device_wait_req(&req);
-}
-
-static __global__ void
-ucp_counter_write_kernel(const kernel_params params, ucs_status_t *status)
-{
-    ucp_device_counter_write(params.counter.address, params.counter.value);
-    *status = UCS_OK;
-}
-
-static __global__ void
-ucp_counter_read_kernel(const kernel_params params, ucs_status_t *status)
-{
-    uint64_t value = ucp_device_counter_read(params.counter.address);
-    *status = (value == params.counter.value ? UCS_OK : UCS_ERR_IO_ERROR);
-}
-
-/**
- * @brief Compares two blocks of device memory.
- *
- * Compares @a size bytes of the memory areas pointed to by @a s1 and @a s2,
- * which must both point to device memory.
- *
- * @param s1   Pointer to the first block of device memory.
- * @param s2   Pointer to the second block of device memory.
- * @param size Number of bytes to compare.
- *
- * @return int Returns 0 only if the memory blocks are equal.
- */
-int launch_memcmp(const void *s1, const void *s2, size_t size)
-{
-    device_result_ptr<int> result = 0;
-
-    memcmp_kernel<<<16, 64>>>(s1, s2, result.device_ptr(), size);
-    synchronize();
-
-    return *result;
-}
-
-class device_status_result_ptr : public device_result_ptr<ucs_status_t> {
+template<ucs_device_level_t level> class device_request {
 public:
-    device_status_result_ptr() :
-        device_result_ptr<ucs_status_t>(UCS_ERR_NOT_IMPLEMENTED)
+    static constexpr size_t MAX_THREADS = 256;
+
+    __device__ device_request(ucp_device_request_t *shared_reqs) :
+        m_ptr(&shared_reqs[threadIdx.x / threads_per_req()])
     {
     }
 
-    ucs_status_t sync_read() const
+    __device__ static constexpr size_t num_shared_reqs()
     {
-        synchronize();
-        return device_result_ptr<ucs_status_t>::operator*();
+        return MAX_THREADS / threads_per_req();
     }
+
+    __device__ ucp_device_request_t *ptr() const
+    {
+        return m_ptr;
+    }
+
+private:
+    __device__ static constexpr size_t threads_per_req()
+    {
+        switch (level) {
+        case UCS_DEVICE_LEVEL_THREAD:
+            return 1;
+        case UCS_DEVICE_LEVEL_WARP:
+            return UCS_DEVICE_NUM_THREADS_IN_WARP;
+        default:
+            return MAX_THREADS;
+        }
+    }
+
+    ucp_device_request_t *m_ptr;
 };
+
+template<ucs_device_level_t level>
+static __global__ void
+ucp_test_kernel(const test_ucp_device_kernel_params_t params,
+                ucs_status_t *status_ptr)
+{
+    if (blockDim.x > device_request<level>::MAX_THREADS) {
+        ucs_device_error("blockDim.x > MAX_THREADS");
+        *status_ptr = UCS_ERR_INVALID_PARAM;
+        return;
+    }
+
+    __shared__ ucp_device_request_t
+            shared_reqs[device_request<level>::num_shared_reqs()];
+    device_request<level> req(shared_reqs);
+
+    for (size_t i = 0; i < params.num_iters - 1; i++) {
+        uint64_t flags = 0;
+        if (params.with_no_delay) {
+            flags |= UCT_DEVICE_FLAG_NODELAY;
+        }
+
+        ucp_device_request_t *req_ptr = params.with_request ? req.ptr() :
+                                                              nullptr;
+
+        ucs_status_t status = ucp_test_kernel_do_operation<level>(params, flags,
+                                                                  req_ptr);
+        if (status != UCS_OK) {
+            *status_ptr = status;
+            return;
+        }
+    }
+
+    // Last iteration must use no-delay flag and request, to be able to wait
+    // properly for completion. Alternatively, we could add a device flush
+    // flush function to the API.
+    *status_ptr = ucp_test_kernel_do_operation<level>(params,
+                                                      UCT_DEVICE_FLAG_NODELAY,
+                                                      req.ptr());
+}
 
 /**
  * Basic single element put operation.
  */
-ucs_status_t launch_ucp_put_single(const kernel_params &params)
+ucs_status_t
+launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
 {
-    device_status_result_ptr status;
-    ucp_put_single_kernel<<<1, 1>>>(params, status.device_ptr());
-    return status.sync_read();
-}
+    ucx_cuda::device_result_ptr<ucs_status_t> status(UCS_ERR_NOT_IMPLEMENTED);
 
-ucs_status_t launch_ucp_put_multi(const kernel_params &params)
-{
-    device_status_result_ptr status;
-    ucp_put_multi_kernel<<<1, 1>>>(params, status.device_ptr());
-    return status.sync_read();
-}
+    switch (params.level) {
+    case UCS_DEVICE_LEVEL_THREAD:
+        ucp_test_kernel<UCS_DEVICE_LEVEL_THREAD>
+                <<<params.num_blocks, params.num_threads>>>(
+                        params, status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_WARP:
+        ucp_test_kernel<UCS_DEVICE_LEVEL_WARP>
+                <<<params.num_blocks, params.num_threads>>>(
+                        params, status.device_ptr());
+        break;
+    default:
+        return UCS_ERR_INVALID_PARAM;
+    }
 
-ucs_status_t launch_ucp_put_multi_partial(const kernel_params &params)
-{
-    device_status_result_ptr status;
-    ucp_put_multi_partial_kernel<<<1, 1>>>(params, status.device_ptr());
-    return status.sync_read();
+    ucx_cuda::synchronize();
+    return *status;
 }
-
-ucs_status_t launch_ucp_counter_inc(const kernel_params &params)
-{
-    device_status_result_ptr status;
-    ucp_counter_inc_kernel<<<1, 1>>>(params, status.device_ptr());
-    return status.sync_read();
-}
-
-ucs_status_t launch_ucp_counter_write(const kernel_params &params)
-{
-    device_status_result_ptr status;
-    ucp_counter_write_kernel<<<1, 1>>>(params, status.device_ptr());
-    return status.sync_read();
-}
-
-ucs_status_t launch_ucp_counter_read(const kernel_params &params)
-{
-    device_status_result_ptr status;
-    ucp_counter_read_kernel<<<1, 1>>>(params, status.device_ptr());
-    return status.sync_read();
-}
-
-} // namespace ucx_cuda

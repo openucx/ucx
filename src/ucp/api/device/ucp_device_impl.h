@@ -60,8 +60,8 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
 }
 
 
-UCS_F_DEVICE ucs_status_t ucp_device_prepare_single(
-        ucp_device_mem_list_handle_h mem_list_h, unsigned mem_list_index,
+UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
+        ucp_device_mem_list_handle_h mem_list_h, unsigned first_mem_elem_index,
         ucp_device_request_t *req, uct_device_ep_t *&device_ep,
         const uct_device_mem_element_t *&uct_elem,
         uct_device_completion_t *&comp)
@@ -70,34 +70,14 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_single(
     size_t elem_offset;
 
     if ((mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
-        (mem_list_index >= mem_list_h->mem_list_length)) {
+        (first_mem_elem_index >= mem_list_h->mem_list_length)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     device_ep   = mem_list_h->uct_device_eps[lane];
-    elem_offset = mem_list_index * mem_list_h->uct_mem_element_size[lane];
-    uct_elem = (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(mem_list_h + 1,
-                                                              elem_offset);
-    ucp_device_request_init(device_ep, req, comp);
-
-    return UCS_OK;
-}
-
-
-UCS_F_DEVICE ucs_status_t
-ucp_device_prepare_multi(ucp_device_mem_list_handle_h mem_list_h,
-                         ucp_device_request_t *req, uct_device_ep_t *&device_ep,
-                         const uct_device_mem_element_t *&uct_mem_list,
-                         uct_device_completion_t *&comp)
-{
-    const unsigned lane = 0;
-
-    if (mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    device_ep    = mem_list_h->uct_device_eps[lane];
-    uct_mem_list = (uct_device_mem_element_t*)(mem_list_h + 1);
+    elem_offset = first_mem_elem_index * mem_list_h->uct_mem_element_size[lane];
+    uct_elem    = (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(mem_list_h + 1,
+                                                                 elem_offset);
     ucp_device_request_init(device_ep, req, comp);
 
     return UCS_OK;
@@ -143,14 +123,23 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
-    status = ucp_device_prepare_single(mem_list_h, mem_list_index, req,
-                                       device_ep, uct_elem, comp);
+    status = ucp_device_prepare_send(mem_list_h, mem_list_index, req, device_ep,
+                                     uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }
 
-    return uct_device_ep_put_single<level>(device_ep, uct_elem, address,
-                                           remote_address, length, flags, comp);
+    do {
+        status = uct_device_ep_put_single<level>(device_ep, uct_elem, address,
+                                                 remote_address, length, flags,
+                                                 comp);
+        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+            return status;
+        }
+
+        status = uct_device_ep_progress<level>(device_ep);
+    } while (!UCS_STATUS_IS_ERR(status));
+    return status;
 }
 
 
@@ -193,14 +182,22 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
-    status = ucp_device_prepare_single(mem_list_h, mem_list_index, req,
-                                       device_ep, uct_elem, comp);
+    status = ucp_device_prepare_send(mem_list_h, mem_list_index, req, device_ep,
+                                     uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }
 
-    return uct_device_ep_atomic_add<level>(device_ep, uct_elem, inc_value,
-                                           remote_address, flags, comp);
+    do {
+        status = uct_device_ep_atomic_add<level>(device_ep, uct_elem, inc_value,
+                                                 remote_address, flags, comp);
+        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+            return status;
+        }
+
+        status = uct_device_ep_progress<level>(device_ep);
+    } while (!UCS_STATUS_IS_ERR(status));
+    return status;
 }
 
 
@@ -255,17 +252,26 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
-    status = ucp_device_prepare_multi(mem_list_h, req, device_ep, uct_mem_list,
-                                      comp);
+    status = ucp_device_prepare_send(mem_list_h, 0, req, device_ep,
+                                     uct_mem_list, comp);
     if (status != UCS_OK) {
         return status;
     }
 
-    return uct_device_ep_put_multi<level>(device_ep, uct_mem_list,
-                                          mem_list_h->mem_list_length,
-                                          addresses, remote_addresses, lengths,
-                                          counter_inc_value,
-                                          counter_remote_address, flags, comp);
+    do {
+        status = uct_device_ep_put_multi<level>(device_ep, uct_mem_list,
+                                                mem_list_h->mem_list_length,
+                                                addresses, remote_addresses,
+                                                lengths, counter_inc_value,
+                                                counter_remote_address, flags,
+                                                comp);
+        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+            return status;
+        }
+
+        status = uct_device_ep_progress<level>(device_ep);
+    } while (!UCS_STATUS_IS_ERR(status));
+    return status;
 }
 
 
@@ -328,16 +334,24 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
-    status = ucp_device_prepare_multi(mem_list_h, req, device_ep, uct_mem_list,
-                                      comp);
+    status = ucp_device_prepare_send(mem_list_h, 0, req, device_ep,
+                                     uct_mem_list, comp);
     if (status != UCS_OK) {
         return status;
     }
 
-    return uct_device_ep_put_multi_partial<level>(
-            device_ep, uct_mem_list, mem_list_indices, mem_list_count,
-            addresses, remote_addresses, lengths, counter_index,
-            counter_inc_value, counter_remote_address, flags, comp);
+    do {
+        status = uct_device_ep_put_multi_partial<level>(
+                device_ep, uct_mem_list, mem_list_indices, mem_list_count,
+                addresses, remote_addresses, lengths, counter_index,
+                counter_inc_value, counter_remote_address, flags, comp);
+        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+            return status;
+        }
+
+        status = uct_device_ep_progress<level>(device_ep);
+    } while (!UCS_STATUS_IS_ERR(status));
+    return status;
 }
 
 

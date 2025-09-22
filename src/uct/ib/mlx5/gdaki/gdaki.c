@@ -82,6 +82,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
                                                       cq_attr.umem_len,
                                               ucs_get_page_size());
 
+    /* Disable inline scatter to TX CQE */
+    qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
+
     dev_ep_size = qp_attr.umem_offset + qp_attr.len;
     /*
      * dev_ep layout:
@@ -96,6 +99,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         ucs_error("doca_gpu_mem_alloc failed: %s", doca_error_get_descr(derr));
         status = UCS_ERR_IO_ERROR;
         goto err_ctx;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemsetD8((CUdeviceptr)self->ep_gpu, 0, dev_ep_size));
+    if (status != UCS_OK) {
+        goto err_mem;
     }
 
     /* TODO add dmabuf_fd support */
@@ -136,8 +145,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     derr = doca_gpu_verbs_bridge_export_qp(
             iface->gpu_dev, self->qp.super.qp_num,
             UCS_PTR_BYTE_OFFSET(self->ep_gpu, qp_attr.umem_offset),
-            qp_attr.max_tx, self->ep_gpu->qp_dbrec, self->qp.reg->addr.ptr,
-            UCT_IB_MLX5_BF_REG_SIZE * 2, self->cq.cq_num,
+            qp_attr.max_tx, &self->ep_gpu->qp_dbrec[MLX5_SND_DBR],
+            self->qp.reg->addr.ptr, UCT_IB_MLX5_BF_REG_SIZE * 2,
+            self->cq.cq_num,
             UCS_PTR_BYTE_OFFSET(self->ep_gpu, cq_attr.umem_offset),
             cq_attr.cq_size, self->ep_gpu->cq_dbrec, UCT_GDAKI_DOCA_NOTUSE,
             UCT_GDAKI_DOCA_NOTUSEPTR, UCT_GDAKI_DOCA_NOTUSE,
@@ -160,12 +170,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     dev_ep.qp          = self->qp_gpu;
     dev_ep.atomic_va   = iface->atomic_buff;
     dev_ep.atomic_lkey = htonl(iface->atomic_mr->lkey);
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemsetD8((CUdeviceptr)self->ep_gpu, 0, dev_ep_size));
-    if (status != UCS_OK) {
-        goto err_dev_ep;
-    }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemsetD8((CUdeviceptr)UCS_PTR_BYTE_OFFSET(self->ep_gpu,

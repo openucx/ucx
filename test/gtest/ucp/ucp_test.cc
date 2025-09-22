@@ -1298,6 +1298,11 @@ ucp_mem_h ucp_test::mapped_buffer::memh() const
     return m_memh;
 }
 
+ucp_worker_h ucp_test::mapped_buffer::worker() const
+{
+    return m_entity.worker();
+}
+
 void test_ucp_context::get_test_variants(std::vector<ucp_test_variant> &variants)
 {
     add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP);

@@ -9,6 +9,7 @@ AC_ARG_WITH([doca-gpunetio],
             [with_doca_gpunetio=$withval],
             [with_doca_gpunetio=guess])
 
+UCX_CHECK_CUDA
 
 AS_IF([test "x$cuda_happy" = "xyes"],
       [
@@ -66,7 +67,7 @@ AS_IF([test "x$gpunetio_happy" = "xyes"],
       [
        # gpunetio was requested but not found
        AS_IF([test "x$with_doca_gpunetio" != "xno" -a "x$with_doca_gpunetio" != "xguess"],
-             [AC_MSG_ERROR([doca_gpunetio not found])])
+             [AC_MSG_ERROR([doca_gpunetio not found (cuda found: $cuda_happy)])])
       ])
 
 AM_CONDITIONAL([HAVE_GPUNETIO], [test x$gpunetio_happy = xyes])

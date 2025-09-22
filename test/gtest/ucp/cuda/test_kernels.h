@@ -8,10 +8,25 @@
 #define CUDA_TEST_KERNELS_H_
 
 #include <ucp/api/device/ucp_host.h>
+#include <ucs/sys/device_code.h>
 
-namespace ucx_cuda {
+typedef enum {
+    TEST_UCP_DEVICE_KERNEL_PUT_SINGLE,
+    TEST_UCP_DEVICE_KERNEL_PUT_MULTI,
+    TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL,
+    TEST_UCP_DEVICE_KERNEL_COUNTER_INC,
+    TEST_UCP_DEVICE_KERNEL_COUNTER_WRITE,
+    TEST_UCP_DEVICE_KERNEL_COUNTER_READ
+} test_ucp_device_operation_t;
 
-struct kernel_params {
+typedef struct {
+    unsigned                     num_threads;
+    unsigned                     num_blocks;
+    test_ucp_device_operation_t  operation;
+    ucs_device_level_t           level;
+    bool                         with_no_delay;
+    bool                         with_request;
+    size_t                       num_iters;
     ucp_device_mem_list_handle_h mem_list;
     union {
         struct {
@@ -22,11 +37,9 @@ struct kernel_params {
         } single;
         struct {
             unsigned mem_list_index;
-            void* address;
-            uint64_t value;
             uint64_t inc_value;
             uint64_t remote_address;
-        } counter;
+        } counter_inc;
         struct {
             void *const    *addresses;
             const uint64_t *remote_addresses;
@@ -44,24 +57,14 @@ struct kernel_params {
             uint64_t       counter_inc_value;
             uint64_t       counter_remote_address;
         } partial;
+        struct {
+            void     *address;
+            uint64_t value;
+        } local_counter;
     };
-};
+} test_ucp_device_kernel_params_t;
 
-
-int launch_memcmp(const void *s1, const void *s2, size_t size);
-
-ucs_status_t launch_ucp_put_single(const kernel_params &params);
-
-ucs_status_t launch_ucp_put_multi(const kernel_params &params);
-
-ucs_status_t launch_ucp_put_multi_partial(const kernel_params &params);
-
-ucs_status_t launch_ucp_counter_inc(const kernel_params &params);
-
-ucs_status_t launch_ucp_counter_write(const kernel_params &params);
-
-ucs_status_t launch_ucp_counter_read(const kernel_params &params);
-
-}; // namespace ucx_cuda
+ucs_status_t
+launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params);
 
 #endif

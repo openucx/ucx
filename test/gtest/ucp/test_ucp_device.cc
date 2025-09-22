@@ -49,11 +49,15 @@ protected:
         std::vector<std::unique_ptr<mapped_buffer>> m_src, m_dst;
         std::vector<ucs::handle<ucp_rkey_h>>        m_rkeys;
         ucp_device_mem_list_handle_h                m_mem_list_h;
-
-        ucp_device_counter_params_t dst_counter_params(unsigned index) const;
     };
 
     size_t counter_size();
+
+    static void counter_init(const mapped_buffer &buffer);
+
+    static uint64_t counter_read(const mapped_buffer &buffer);
+
+    void launch_kernel(const test_ucp_device_kernel_params_t &params);
 };
 
 
@@ -77,6 +81,7 @@ void test_ucp_device::init()
         progress();
     }
 }
+
 test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
                                     size_t size, unsigned count,
                                     ucs_memory_type_t mem_type) :
@@ -148,27 +153,14 @@ std::vector<uint64_t> test_ucp_device::mem_list::dst_ptrs() const
     return result;
 }
 
-ucp_device_counter_params_t
-test_ucp_device::mem_list::dst_counter_params(unsigned index) const
-{
-    ucp_device_counter_params_t params;
-    params.field_mask = UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH;
-    params.memh       = m_dst[index]->memh();
-    return params;
-}
-
 void test_ucp_device::mem_list::dst_counter_init(unsigned index)
 {
-    ucp_device_counter_params_t params = dst_counter_params(index);
-    ASSERT_UCS_OK(ucp_device_counter_init(m_receiver.worker(), &params,
-                                          m_dst[index]->ptr()));
+    test_ucp_device::counter_init(*m_dst[index]);
 }
 
 uint64_t test_ucp_device::mem_list::dst_counter_read(unsigned index) const
 {
-    ucp_device_counter_params_t params = dst_counter_params(index);
-    return ucp_device_counter_read(m_receiver.worker(), &params,
-                                   m_dst[index]->ptr());
+    return test_ucp_device::counter_read(*m_dst[index]);
 }
 
 void test_ucp_device::mem_list::dst_pattern_check(unsigned index,
@@ -190,190 +182,27 @@ size_t test_ucp_device::counter_size()
     return attr.device_counter_size;
 }
 
-UCS_TEST_P(test_ucp_device, mapped_buffer_kernel_memcmp)
+void test_ucp_device::counter_init(const mapped_buffer &buffer)
 {
-    size_t size = 100 * UCS_MBYTE;
+    ucp_device_counter_params_t params;
+    params.field_mask = UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH;
+    params.memh       = buffer.memh();
+    ASSERT_UCS_OK(
+            ucp_device_counter_init(buffer.worker(), &params, buffer.ptr()));
+}
 
-    mapped_buffer dst(size, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer src(size, sender(), 0, UCS_MEMORY_TYPE_CUDA);
-
-    src.pattern_fill(0x1234, size);
-    src.pattern_check(0x1234, size);
-
-    ASSERT_EQ(cudaSuccess, cudaMemset(src.ptr(), 0x11, size));
-    ASSERT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0xde, size));
-
-    ASSERT_EQ(1, ucx_cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
-    ASSERT_EQ(cudaSuccess, cudaMemset(dst.ptr(), 0x11, size));
-    ASSERT_EQ(0, ucx_cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
-    ASSERT_EQ(cudaSuccess,
-              cudaMemset(UCS_PTR_BYTE_OFFSET(dst.ptr(), size / 10), 0xfa, 10));
-    ASSERT_EQ(1, ucx_cuda::launch_memcmp(src.ptr(), dst.ptr(), size));
+uint64_t test_ucp_device::counter_read(const mapped_buffer &buffer)
+{
+    ucp_device_counter_params_t params;
+    params.field_mask = UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH;
+    params.memh       = buffer.memh();
+    return ucp_device_counter_read(buffer.worker(), &params, buffer.ptr());
 }
 
 UCS_TEST_P(test_ucp_device, create_success)
 {
     mem_list list(sender(), receiver(), 4 * UCS_MBYTE, 4);
     EXPECT_NE(nullptr, list.handle());
-}
-
-UCS_TEST_P(test_ucp_device, put_single)
-{
-    static constexpr size_t size = 32 * UCS_KBYTE;
-    mem_list list(sender(), receiver(), size, 6);
-
-    // Perform the transfer
-    static constexpr unsigned mem_list_index = 3;
-    ucx_cuda::kernel_params params;
-    params.mem_list              = list.handle();
-    params.single.mem_list_index = mem_list_index;
-    params.single.address        = list.src_ptr(mem_list_index);
-    params.single.remote_address = list.dst_ptr(mem_list_index);
-    params.single.length         = size;
-    ucs_status_t status          = ucx_cuda::launch_ucp_put_single(params);
-    ASSERT_EQ(UCS_OK, status);
-
-    // Check proper index received data
-    list.dst_pattern_check(mem_list_index - 1, mem_list::SEED_DST);
-    list.dst_pattern_check(mem_list_index, mem_list::SEED_SRC);
-    list.dst_pattern_check(mem_list_index + 1, mem_list::SEED_DST);
-}
-
-UCS_TEST_P(test_ucp_device, put_multi)
-{
-    static constexpr size_t size    = 32 * UCS_KBYTE;
-    static constexpr unsigned count = 32;
-    mem_list list(sender(), receiver(), size, count + 1);
-
-    const unsigned counter_index = count;
-    list.dst_counter_init(counter_index);
-
-    auto addresses        = ucx_cuda::make_device_vector(list.src_ptrs());
-    auto remote_addresses = ucx_cuda::make_device_vector(list.dst_ptrs());
-    auto lengths          = ucx_cuda::make_device_vector(std::vector<size_t>(count, size));
-
-    // Perform the transfer
-    ucx_cuda::kernel_params params;
-    params.mem_list                     = list.handle();
-    params.multi.addresses              = addresses.ptr();
-    params.multi.remote_addresses       = remote_addresses.ptr();
-    params.multi.lengths                = lengths.ptr();
-    params.multi.counter_remote_address = list.dst_ptr(counter_index);
-    params.multi.counter_inc_value      = 1;
-    ucs_status_t status = ucx_cuda::launch_ucp_put_multi(params);
-    ASSERT_EQ(UCS_OK, status);
-
-    // Check received data
-    for (unsigned i = 0; i < count; ++i) {
-        list.dst_pattern_check(i, mem_list::SEED_SRC);
-    }
-
-    // Check counter
-    EXPECT_EQ(1, list.dst_counter_read(counter_index));
-}
-
-UCS_TEST_P(test_ucp_device, put_multi_partial)
-{
-    static constexpr size_t size          = 32 * UCS_KBYTE;
-    static constexpr unsigned total_count = 32;
-    mem_list list(sender(), receiver(), size, total_count + 1);
-
-    const unsigned counter_index = total_count;
-    list.dst_counter_init(counter_index);
-
-    // Random list of indexes
-    std::vector<unsigned> indexes_vec;
-    for (unsigned i = 0; i < total_count; ++i) {
-        if (ucs::rand() % 2) {
-            indexes_vec.push_back(i);
-        }
-    }
-
-    std::vector<void*> addresses_vec;
-    std::vector<uint64_t> remote_addresses_vec;
-    for (auto index : indexes_vec) {
-        addresses_vec.push_back(list.src_ptr(index));
-        remote_addresses_vec.push_back(list.dst_ptr(index));
-    }
-
-    auto indexes          = ucx_cuda::make_device_vector(indexes_vec);
-    auto addresses        = ucx_cuda::make_device_vector(addresses_vec);
-    auto remote_addresses = ucx_cuda::make_device_vector(remote_addresses_vec);
-    auto lengths          = ucx_cuda::make_device_vector(
-            std::vector<size_t>(indexes_vec.size(), size));
-
-    // Perform the transfer
-    ucx_cuda::kernel_params params;
-    params.mem_list                       = list.handle();
-    params.partial.addresses              = addresses.ptr();
-    params.partial.remote_addresses       = remote_addresses.ptr();
-    params.partial.lengths                = lengths.ptr();
-    params.partial.mem_list_indices       = indexes.ptr();
-    params.partial.mem_list_count         = indexes_vec.size();
-    params.partial.counter_index          = counter_index;
-    params.partial.counter_remote_address = list.dst_ptr(counter_index);
-    params.partial.counter_inc_value      = 1;
-    ucs_status_t status = ucx_cuda::launch_ucp_put_multi_partial(params);
-    ASSERT_EQ(UCS_OK, status);
-
-    // Check received data
-    std::set<unsigned> indexes_set(indexes_vec.begin(), indexes_vec.end());
-    for (auto index : indexes_vec) {
-        uint64_t seed = (indexes_set.find(index) == indexes_set.end()) ?
-                                mem_list::SEED_DST :
-                                mem_list::SEED_SRC;
-        list.dst_pattern_check(index, seed);
-    }
-
-    // Check counter
-    EXPECT_EQ(1, list.dst_counter_read(counter_index));
-}
-
-UCS_TEST_P(test_ucp_device, counter)
-{
-    const size_t size = counter_size();
-    mem_list list(sender(), receiver(), size, 1);
-
-    static constexpr unsigned mem_list_index = 0;
-    list.dst_counter_init(mem_list_index);
-
-    // Perform the transfer
-    ucx_cuda::kernel_params params;
-    params.mem_list               = list.handle();
-    params.counter.mem_list_index = mem_list_index;
-    params.counter.inc_value      = 1;
-    params.counter.remote_address = list.dst_ptr(mem_list_index);
-    ucs_status_t status           = ucx_cuda::launch_ucp_counter_inc(params);
-    ASSERT_EQ(UCS_OK, status);
-
-    // Check destination
-    EXPECT_EQ(1, list.dst_counter_read(mem_list_index));
-}
-
-UCS_TEST_P(test_ucp_device, local_counter)
-{
-    const size_t size = counter_size();
-    mem_list list(sender(), receiver(), size, 1);
-
-    static constexpr unsigned mem_list_index = 0;
-    list.dst_counter_init(mem_list_index);
-
-    // Perform the write
-    ucx_cuda::kernel_params params;
-    params.counter.address = list.src_ptr(mem_list_index);
-    params.counter.value   = 1;
-    ucs_status_t status    = ucx_cuda::launch_ucp_counter_write(params);
-    ASSERT_EQ(UCS_OK, status);
-
-    // Check counter value
-    EXPECT_EQ(true, mem_buffer::compare(&params.counter.value,
-                                        list.src_ptr(mem_list_index),
-                                        sizeof(params.counter.value),
-                                        UCS_MEMORY_TYPE_CUDA));
-
-    // Check counter value using device API
-    status = ucx_cuda::launch_ucp_counter_read(params);
-    ASSERT_EQ(UCS_OK, status);
 }
 
 UCS_TEST_P(test_ucp_device, create_fail)
@@ -417,3 +246,321 @@ UCS_TEST_P(test_ucp_device, create_fail)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")
+
+
+class test_ucp_device_kernel : public test_ucp_device {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        // TODO move to UCS
+        static const char *ucs_device_level_names[] = {"thread", "warp",
+                                                       "block", "grid"};
+        add_variant_values(variants, test_ucp_device::get_test_variants,
+                           UCS_BIT(UCS_DEVICE_LEVEL_THREAD) |
+                                   UCS_BIT(UCS_DEVICE_LEVEL_WARP),
+                           ucs_device_level_names);
+    }
+
+protected:
+    ucs_device_level_t get_device_level() const
+    {
+        return static_cast<ucs_device_level_t>(get_variant_value(0));
+    }
+
+    test_ucp_device_kernel_params_t init_params(unsigned num_iters = 1)
+    {
+        test_ucp_device_kernel_params_t params = {};
+        params.num_threads                     = get_num_threads();
+        params.num_blocks                      = 1;
+        params.level                           = get_device_level();
+        params.num_iters                       = num_iters;
+        return params;
+    }
+
+    virtual unsigned get_num_threads() const
+    {
+        switch (get_device_level()) {
+        case UCS_DEVICE_LEVEL_THREAD:
+            return 1;
+        case UCS_DEVICE_LEVEL_WARP:
+            return UCS_DEVICE_NUM_THREADS_IN_WARP;
+        default:
+            return 1;
+        }
+    }
+
+    void launch_kernel(const test_ucp_device_kernel_params_t &params)
+    {
+        ucs_status_t status = launch_test_ucp_device_kernel(params);
+        ASSERT_UCS_OK(status);
+    }
+};
+
+UCS_TEST_P(test_ucp_device_kernel, local_counter)
+{
+    mapped_buffer counter_buffer(counter_size(), receiver(), 0,
+                                 UCS_MEMORY_TYPE_CUDA);
+    const uint64_t value = 1764;
+
+    // Perform the write
+    auto params                  = init_params(1);
+    params.operation             = TEST_UCP_DEVICE_KERNEL_COUNTER_WRITE;
+    params.local_counter.address = counter_buffer.ptr();
+    params.local_counter.value   = value;
+    launch_kernel(params);
+
+    EXPECT_TRUE(mem_buffer::compare(&value, counter_buffer.ptr(), sizeof(value),
+                                    counter_buffer.mem_type()));
+
+    // Check counter value using device API
+    params.operation = TEST_UCP_DEVICE_KERNEL_COUNTER_READ;
+    launch_kernel(params);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_kernel, rc_gda,
+                                        "rc,rc_gda")
+
+
+class test_ucp_device_xfer : public test_ucp_device_kernel {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_device_kernel::get_test_variants,
+                           NODELAY_WITH_REQ, "nodelay_with_req");
+        add_variant_values(variants, test_ucp_device_kernel::get_test_variants,
+                           NODELAY_WITHOUT_REQ, "nodelay_without_req");
+        add_variant_values(variants, test_ucp_device_kernel::get_test_variants,
+                           LAZY_WITHOUT_REQ, "lazy_without_req");
+    }
+
+protected:
+    typedef enum {
+        NODELAY_WITH_REQ,
+        NODELAY_WITHOUT_REQ,
+        LAZY_WITHOUT_REQ,
+    } send_mode_t;
+
+    test_ucp_device_kernel_params_t init_params()
+    {
+        // TODO: Test different sizes and alignment
+        test_ucp_device_kernel_params_t params;
+        params.num_threads = get_num_threads();
+        params.num_blocks  = 1;
+        params.level       = get_device_level();
+        params.num_iters   = get_num_iters();
+        switch (get_send_mode()) {
+        case NODELAY_WITH_REQ:
+            params.with_no_delay = true;
+            params.with_request  = true;
+            break;
+        case NODELAY_WITHOUT_REQ:
+            params.with_no_delay = true;
+            params.with_request  = false;
+            break;
+        case LAZY_WITHOUT_REQ:
+            params.with_no_delay = false;
+            params.with_request  = false;
+            break;
+        default:
+            UCS_TEST_ABORT("Invalid send mode");
+        }
+        return params;
+    }
+
+    send_mode_t get_send_mode() const
+    {
+        return static_cast<send_mode_t>(get_variant_value(1));
+    }
+
+    virtual unsigned get_num_threads() const override
+    {
+        switch (get_device_level()) {
+        case UCS_DEVICE_LEVEL_THREAD:
+            /* When using thread-level use less threads to shorten the test */
+            return 8;
+        case UCS_DEVICE_LEVEL_WARP:
+            return 128;
+        default:
+            return 1;
+        }
+    }
+
+    unsigned get_multi_elem_count() const
+    {
+        /* When using thread-level use less threads to shorten the test */
+        switch (get_device_level()) {
+        case UCS_DEVICE_LEVEL_THREAD:
+            /* Thread level uses less elements to not overflow the QP */
+            // TODO UCT should protect against a deadlock where multiple threads
+            // in same warp send too many operations on the same QP
+            return 16;
+        case UCS_DEVICE_LEVEL_WARP:
+            return 32;
+        default:
+            return 1;
+        }
+    }
+
+    size_t get_num_iters() const
+    {
+        return 10;
+    }
+
+    size_t get_num_ops_multiplier() const
+    {
+        switch (get_device_level()) {
+        case UCS_DEVICE_LEVEL_THREAD:
+            return get_num_threads();
+        case UCS_DEVICE_LEVEL_WARP:
+            return get_num_threads() / 32;
+        default:
+            return 1;
+        }
+    }
+
+    void wait_for_counter(const mem_list &list, unsigned counter_index)
+    {
+        const size_t multiplier = get_num_ops_multiplier();
+        uint64_t target_value   = get_num_iters() * multiplier;
+
+        wait_for_cond(
+                [&list, counter_index, target_value]() {
+                    return list.dst_counter_read(counter_index) == target_value;
+                },
+                [] {});
+        EXPECT_EQ(get_num_iters() * multiplier,
+                  list.dst_counter_read(counter_index))
+                << "multiplier: " << multiplier;
+    }
+};
+
+UCS_TEST_P(test_ucp_device_xfer, put_single)
+{
+    static constexpr size_t size = 32 * UCS_KBYTE;
+    mem_list list(sender(), receiver(), size, 6);
+
+    // Perform the transfer
+    static constexpr unsigned mem_list_index = 3;
+    auto params = init_params();
+    params.operation             = TEST_UCP_DEVICE_KERNEL_PUT_SINGLE;
+    params.mem_list              = list.handle();
+    params.single.mem_list_index = mem_list_index;
+    params.single.address        = list.src_ptr(mem_list_index);
+    params.single.remote_address = list.dst_ptr(mem_list_index);
+    params.single.length         = size;
+    launch_kernel(params);
+
+    // Check proper index received data
+    list.dst_pattern_check(mem_list_index - 1, mem_list::SEED_DST);
+    list.dst_pattern_check(mem_list_index, mem_list::SEED_SRC);
+    list.dst_pattern_check(mem_list_index + 1, mem_list::SEED_DST);
+}
+
+UCS_TEST_P(test_ucp_device_xfer, put_multi)
+{
+    static constexpr size_t size = 32 * UCS_KBYTE;
+    unsigned count               = get_multi_elem_count();
+    mem_list list(sender(), receiver(), size, count + 1);
+
+    const unsigned counter_index = count;
+    list.dst_counter_init(counter_index);
+
+    auto addresses        = ucx_cuda::make_device_vector(list.src_ptrs());
+    auto remote_addresses = ucx_cuda::make_device_vector(list.dst_ptrs());
+    auto lengths          = ucx_cuda::make_device_vector(std::vector<size_t>(count, size));
+    auto params           = init_params();
+    params.operation      = TEST_UCP_DEVICE_KERNEL_PUT_MULTI;
+
+    params.mem_list                     = list.handle();
+    params.multi.addresses              = addresses.ptr();
+    params.multi.remote_addresses       = remote_addresses.ptr();
+    params.multi.lengths                = lengths.ptr();
+    params.multi.counter_remote_address = list.dst_ptr(counter_index);
+    params.multi.counter_inc_value      = 1;
+    launch_kernel(params);
+
+    // Check received data
+    for (unsigned i = 0; i < count; ++i) {
+        list.dst_pattern_check(i, mem_list::SEED_SRC);
+    }
+
+    wait_for_counter(list, counter_index);
+}
+
+UCS_TEST_P(test_ucp_device_xfer, put_multi_partial)
+{
+    static constexpr size_t size = 32 * UCS_KBYTE;
+    unsigned total_count         = get_multi_elem_count() * 2;
+    mem_list list(sender(), receiver(), size, total_count + 1);
+
+    const unsigned counter_index = total_count;
+    list.dst_counter_init(counter_index);
+
+    // Random list of indexes
+    std::vector<unsigned> indexes_vec;
+    for (unsigned i = 0; i < total_count; ++i) {
+        if (ucs::rand() % 2) {
+            indexes_vec.push_back(i);
+        }
+    }
+
+    std::vector<void*> addresses_vec;
+    std::vector<uint64_t> remote_addresses_vec;
+    for (auto index : indexes_vec) {
+        addresses_vec.push_back(list.src_ptr(index));
+        remote_addresses_vec.push_back(list.dst_ptr(index));
+    }
+
+    auto indexes          = ucx_cuda::make_device_vector(indexes_vec);
+    auto addresses        = ucx_cuda::make_device_vector(addresses_vec);
+    auto remote_addresses = ucx_cuda::make_device_vector(remote_addresses_vec);
+    auto lengths          = ucx_cuda::make_device_vector(
+            std::vector<size_t>(indexes_vec.size(), size));
+    auto params           = init_params();
+    params.operation      = TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL;
+
+    params.mem_list                       = list.handle();
+    params.partial.addresses              = addresses.ptr();
+    params.partial.remote_addresses       = remote_addresses.ptr();
+    params.partial.lengths                = lengths.ptr();
+    params.partial.mem_list_indices       = indexes.ptr();
+    params.partial.mem_list_count         = indexes_vec.size();
+    params.partial.counter_index          = counter_index;
+    params.partial.counter_remote_address = list.dst_ptr(counter_index);
+    params.partial.counter_inc_value      = 1;
+    launch_kernel(params);
+
+    // Check received data
+    std::set<unsigned> indexes_set(indexes_vec.begin(), indexes_vec.end());
+    for (auto index : indexes_vec) {
+        uint64_t seed = (indexes_set.find(index) == indexes_set.end()) ?
+                                mem_list::SEED_DST :
+                                mem_list::SEED_SRC;
+        list.dst_pattern_check(index, seed);
+    }
+
+    wait_for_counter(list, counter_index);
+}
+
+UCS_TEST_P(test_ucp_device_xfer, counter)
+{
+    const size_t size = counter_size();
+    mem_list list(sender(), receiver(), size, 1);
+
+    static constexpr unsigned mem_list_index = 0;
+    list.dst_counter_init(mem_list_index);
+
+    auto params                       = init_params();
+    params.operation                  = TEST_UCP_DEVICE_KERNEL_COUNTER_INC;
+    params.mem_list                   = list.handle();
+    params.counter_inc.mem_list_index = mem_list_index;
+    params.counter_inc.inc_value      = 1;
+    params.counter_inc.remote_address = list.dst_ptr(mem_list_index);
+    launch_kernel(params);
+
+    // Check destination
+    wait_for_counter(list, mem_list_index);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_xfer, rc_gda,
+                                        "rc,rc_gda")
