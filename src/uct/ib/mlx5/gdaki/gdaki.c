@@ -15,12 +15,8 @@
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 #include <uct/cuda/base/cuda_iface.h>
 
-#include <doca_log.h>
 #include <cuda.h>
 
-
-#define UCT_GDAKI_DOCA_NOTUSE    1
-#define UCT_GDAKI_DOCA_NOTUSEPTR (void*)1
 
 typedef struct {
     uct_rc_iface_common_config_t      super;
@@ -40,6 +36,32 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
 };
 
 
+ucs_status_t
+uct_rc_gdaki_alloc(size_t size, size_t align, void **p_buf, CUdeviceptr *p_orig)
+{
+    unsigned int flag = 1;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc(p_orig, size + align - 1));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *p_buf = (void*)ucs_align_up_pow2_ptr(*p_orig, align);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+                                  (CUdeviceptr)*p_buf));
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    return UCS_OK;
+
+err:
+    cuMemFree(*p_orig);
+    return status;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
@@ -51,7 +73,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
     uct_rc_gdaki_dev_ep_t dev_ep       = {};
     ucs_status_t status;
-    doca_error_t derr;
     size_t dev_ep_size;
     uct_ib_mlx5_dbrec_t dbrec;
 
@@ -89,12 +110,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
      * | counters, dbr       | ops   | cq buff | wq buff |
      * +---------------------+-------+---------+---------+
      */
-    derr = doca_gpu_mem_alloc(iface->gpu_dev, dev_ep_size, ucs_get_page_size(),
-                              DOCA_GPU_MEM_TYPE_GPU, (void**)&self->ep_gpu,
-                              NULL);
-    if (derr != DOCA_SUCCESS) {
-        ucs_error("doca_gpu_mem_alloc failed: %s", doca_error_get_descr(derr));
-        status = UCS_ERR_IO_ERROR;
+    status      = uct_rc_gdaki_alloc(dev_ep_size, ucs_get_page_size(),
+                                     (void**)&self->ep_gpu, &self->ep_raw);
+    if (status != UCS_OK) {
         goto err_ctx;
     }
 
@@ -133,33 +151,29 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         goto err_cq;
     }
 
-    derr = doca_gpu_verbs_bridge_export_qp(
-            iface->gpu_dev, self->qp.super.qp_num,
-            UCS_PTR_BYTE_OFFSET(self->ep_gpu, qp_attr.umem_offset),
-            qp_attr.max_tx, self->ep_gpu->qp_dbrec, self->qp.reg->addr.ptr,
-            UCT_IB_MLX5_BF_REG_SIZE * 2, self->cq.cq_num,
-            UCS_PTR_BYTE_OFFSET(self->ep_gpu, cq_attr.umem_offset),
-            cq_attr.cq_size, self->ep_gpu->cq_dbrec, UCT_GDAKI_DOCA_NOTUSE,
-            UCT_GDAKI_DOCA_NOTUSEPTR, UCT_GDAKI_DOCA_NOTUSE,
-            UCT_GDAKI_DOCA_NOTUSEPTR, UCT_GDAKI_DOCA_NOTUSE,
-            UCT_GDAKI_DOCA_NOTUSE, UCT_GDAKI_DOCA_NOTUSEPTR,
-            UCT_GDAKI_DOCA_NOTUSE, UCT_GDAKI_DOCA_NOTUSEPTR, 0, &self->qp_cpu);
-    if (derr != DOCA_SUCCESS) {
-        ucs_error("doca_gpu_verbs_bridge_export_qp failed: %s",
-                  doca_error_get_descr(derr));
-        status = UCS_ERR_INVALID_PARAM;
-        goto err_qp;
-    }
+    (void)cuMemHostRegister(self->qp.reg->addr.ptr, UCT_IB_MLX5_BF_REG_SIZE * 2,
+                            CU_MEMHOSTREGISTER_PORTABLE |
+                            CU_MEMHOSTREGISTER_DEVICEMAP |
+                            CU_MEMHOSTREGISTER_IOMEMORY);
 
-    derr = doca_gpu_verbs_get_qp_dev(self->qp_cpu, &self->qp_gpu);
-    if (derr != DOCA_SUCCESS) {
-        status = UCS_ERR_INVALID_PARAM;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemHostGetDevicePointer((CUdeviceptr*)&self->sq_db,
+                                      self->qp.reg->addr.ptr, 0));
+    if (status != UCS_OK) {
         goto err_dev_ep;
     }
 
-    dev_ep.qp          = self->qp_gpu;
     dev_ep.atomic_va   = iface->atomic_buff;
     dev_ep.atomic_lkey = htonl(iface->atomic_mr->lkey);
+
+    dev_ep.sq_num       = self->qp.super.qp_num;
+    dev_ep.sq_wqe_daddr = UCS_PTR_BYTE_OFFSET(self->ep_gpu,
+                                              qp_attr.umem_offset);
+    dev_ep.sq_wqe_num   = qp_attr.max_tx;
+    dev_ep.sq_dbrec     = &self->ep_gpu->qp_dbrec[MLX5_SND_DBR];
+    dev_ep.cqe_daddr = UCS_PTR_BYTE_OFFSET(self->ep_gpu, cq_attr.umem_offset);
+    dev_ep.cqe_num   = cq_attr.cq_size;
+    dev_ep.sq_db     = self->sq_db;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemsetD8((CUdeviceptr)self->ep_gpu, 0, dev_ep_size));
@@ -185,15 +199,14 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 
 err_dev_ep:
-    doca_gpu_verbs_unexport_qp(iface->gpu_dev, self->qp_cpu);
-err_qp:
+    (void)cuMemHostUnregister(dev_ep.sq_db);
     uct_ib_mlx5_devx_destroy_qp_common(&self->qp.super);
 err_cq:
     uct_ib_mlx5_devx_destroy_cq_common(&self->cq);
 err_umem:
     mlx5dv_devx_umem_dereg(self->umem);
 err_mem:
-    doca_gpu_mem_free(iface->gpu_dev, self->ep_gpu);
+    cuMemFree(self->ep_raw);
 err_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return status;
@@ -201,20 +214,11 @@ err_ctx:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
 {
-    uct_rc_gdaki_iface_t *iface = ucs_derived_of(self->super.super.iface,
-                                                 uct_rc_gdaki_iface_t);
-    doca_error_t derr;
-
-    derr = doca_gpu_verbs_unexport_qp(iface->gpu_dev, self->qp_cpu);
-    if (derr != DOCA_SUCCESS) {
-        ucs_warn("doca_gpu_rdma_verbs_unexport_qp failed: %s",
-                 doca_error_get_descr(derr));
-    }
-
+    (void)cuMemHostUnregister(self->sq_db);
     uct_ib_mlx5_devx_destroy_qp_common(&self->qp.super);
     uct_ib_mlx5_devx_destroy_cq_common(&self->cq);
     mlx5dv_devx_umem_dereg(self->umem);
-    doca_gpu_mem_free(iface->gpu_dev, self->ep_gpu);
+    cuMemFree(self->ep_raw);
 }
 
 UCS_CLASS_DEFINE(uct_rc_gdaki_ep_t, uct_base_ep_t);
@@ -456,7 +460,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     char *gpu_name, *ib_name;
     char pci_addr[UCS_SYS_BDF_NAME_MAX];
     ucs_status_t status;
-    doca_error_t derr;
     int cuda_id;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
@@ -493,7 +496,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&self->cuda_dev, cuda_id));
     if (status != UCS_OK) {
-        goto err_doca;
+        return status;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
@@ -507,23 +510,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_ctx_release;
     }
 
-    derr = doca_gpu_create(pci_addr, &self->gpu_dev);
-    if (derr != DOCA_SUCCESS) {
-        status = UCS_ERR_IO_ERROR;
-        ucs_error("doca_gpu_create failed: %s %s", doca_error_get_descr(derr),
-                  pci_addr);
+    status = uct_rc_gdaki_alloc(sizeof(uint64_t), sizeof(uint64_t),
+                                (void**)&self->atomic_buff, &self->atomic_raw);
+    if (status != UCS_OK) {
         goto err_ctx;
     }
-
-    derr = doca_gpu_mem_alloc(self->gpu_dev, sizeof(uint64_t), sizeof(uint64_t),
-                              DOCA_GPU_MEM_TYPE_GPU, (void**)&self->atomic_buff,
-                              NULL);
-    if (derr != DOCA_SUCCESS) {
-        ucs_error("doca_gpu_mem_alloc failed: %s", doca_error_get_descr(derr));
-        status = UCS_ERR_IO_ERROR;
-        goto err_doca;
-    }
-
 
     self->atomic_mr = ibv_reg_mr(md->super.pd, self->atomic_buff,
                                  sizeof(uint64_t),
@@ -540,9 +531,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     return UCS_OK;
 
 err_atomic:
-    doca_gpu_mem_free(self->gpu_dev, self->atomic_buff);
-err_doca:
-    doca_gpu_destroy(self->gpu_dev);
+    cuMemFree(self->atomic_raw);
 err_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 err_ctx_release:
@@ -553,8 +542,7 @@ err_ctx_release:
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
 {
     ibv_dereg_mr(self->atomic_mr);
-    doca_gpu_mem_free(self->gpu_dev, self->atomic_buff);
-    doca_gpu_destroy(self->gpu_dev);
+    cuMemFree(self->atomic_raw);
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(self->cuda_dev));
 }
 
@@ -693,22 +681,4 @@ UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_gda, uct_gdaki_query_tl_devices,
                     uct_rc_gdaki_iface_config_table,
                     uct_rc_gdaki_iface_config_t);
 
-static void uct_ib_doca_init(void)
-{
-    struct doca_log_backend *sdk_log;
-    doca_error_t derr;
-
-    derr = doca_log_level_set_global_sdk_limit(DOCA_LOG_LEVEL_ERROR);
-    if (derr != DOCA_SUCCESS) {
-        ucs_error("doca_log_level_set_global_sdk_limit failed: %d\n", derr);
-        return;
-    }
-
-    derr = doca_log_backend_create_with_file_sdk(stderr, &sdk_log);
-    if (derr != DOCA_SUCCESS) {
-        ucs_error("doca_log_backend_create_with_file_sdk failed: %d\n", derr);
-        return;
-    }
-}
-
-UCT_TL_INIT(&uct_ib_component, rc_gda, ctor, uct_ib_doca_init(), )
+UCT_TL_INIT(&uct_ib_component, rc_gda, ctor, , )
