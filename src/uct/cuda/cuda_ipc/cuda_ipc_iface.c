@@ -437,7 +437,7 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
-    cuda_ipc_mem_element.mapped_offset = UCS_PTR_BYTE_DIFF(mapped_addr, key->super.d_bptr);
+    cuda_ipc_mem_element.mapped_offset = UCS_PTR_BYTE_DIFF(key->super.d_bptr, mapped_addr);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
