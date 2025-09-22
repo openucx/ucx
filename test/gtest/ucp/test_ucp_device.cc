@@ -241,11 +241,11 @@ UCS_TEST_P(test_ucp_device, put_single)
 
 UCS_TEST_P(test_ucp_device, put_single_repeat)
 {
-    static constexpr size_t size = 32 * UCS_KBYTE;
+    constexpr size_t size = 32 * UCS_KBYTE;
     mem_list list(sender(), receiver(), size, 6);
 
     // Perform the transfer
-    static constexpr unsigned mem_list_index = 3;
+    constexpr unsigned mem_list_index = 3;
     ucx_cuda::kernel_params params;
     params.mem_list              = list.handle();
     params.single.mem_list_index = mem_list_index;
