@@ -63,17 +63,17 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
 /**
  * Macro for device put operations with retry logic
  */
-#define UCP_DEVICE_PUT_BLOCKING(level, uct_device_ep_put, device_ep, ...) \
+#define UCP_DEVICE_PUT_BLOCKING(_level, _uct_device_ep_put, _device_ep, ...) \
     ({ \
-        ucs_status_t status; \
+        ucs_status_t _status; \
         do { \
-            status = uct_device_ep_put<level>(device_ep, __VA_ARGS__); \
-            if (status != UCS_ERR_NO_RESOURCE) { \
+            _status = _uct_device_ep_put<_level>(_device_ep, __VA_ARGS__); \
+            if (_status != UCS_ERR_NO_RESOURCE) { \
                 break; \
             } \
-            status = uct_device_ep_progress<level>(device_ep); \
-        } while (!UCS_STATUS_IS_ERR(status)); \
-        status; \
+            _status = uct_device_ep_progress<_level>(_device_ep); \
+        } while (!UCS_STATUS_IS_ERR(_status)); \
+        _status; \
     })
 
 
