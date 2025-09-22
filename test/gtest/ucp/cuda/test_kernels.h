@@ -22,6 +22,8 @@ struct kernel_params {
         } single;
         struct {
             unsigned mem_list_index;
+            void* address;
+            uint64_t value;
             uint64_t inc_value;
             uint64_t remote_address;
         } counter;
@@ -55,6 +57,10 @@ ucs_status_t launch_ucp_put_multi(const kernel_params &params);
 ucs_status_t launch_ucp_put_multi_partial(const kernel_params &params);
 
 ucs_status_t launch_ucp_counter_inc(const kernel_params &params);
+
+ucs_status_t launch_ucp_counter_write(const kernel_params &params);
+
+ucs_status_t launch_ucp_counter_read(const kernel_params &params);
 
 }; // namespace ucx_cuda
 

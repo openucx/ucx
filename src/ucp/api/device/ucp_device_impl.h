@@ -367,6 +367,28 @@ UCS_F_DEVICE uint64_t ucp_device_counter_read(const void *counter_ptr)
 
 /**
  * @ingroup UCP_DEVICE
+ * @brief Write value to the counter memory area.
+ *
+ * This function can be used to set counter to a specific value.
+ *
+ * The counter memory area must be initialized with the host function
+ * @ref ucp_device_counter_init.
+ *
+ * @tparam      level       Level of cooperation of the transfer.
+ * @param [in]  counter_ptr Counter memory area.
+ * @param [in]  value       Value to write.
+ *
+ */
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
+UCS_F_DEVICE void ucp_device_counter_write(void *counter_ptr, uint64_t value)
+{
+    return ucs_device_atomic64_write(
+            reinterpret_cast<uint64_t*>(counter_ptr), value);
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
  * @brief Progress a device request containing a batch of operations.
  *
  * This device progress function checks and progresses a request representing a
