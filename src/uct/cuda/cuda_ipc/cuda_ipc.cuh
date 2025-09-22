@@ -304,9 +304,7 @@ uct_cuda_ipc_ep_put_single(uct_device_ep_h device_ep,
     mapped_rem_addr = uct_cuda_ipc_map_remote(cuda_ipc_mem_element, remote_address);
     uct_cuda_ipc_copy_level<level>(mapped_rem_addr, address, length);
     uct_cuda_ipc_level_sync<level>();
-    if (threadIdx.x == 0) {
-        --comp->count;
-    }
+    --comp->count;
 
     return UCS_OK;
 }
