@@ -201,9 +201,8 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_single(
     }
 
     __syncthreads();
-    if (threadIdx.x == 0) {
-        comp->count  = 0;
-    }
+    // TODO: temporary fix, to be removed once cuda_ipc PR is merged
+    comp->count = 0;
     return UCS_OK;
 }
 
