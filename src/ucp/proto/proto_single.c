@@ -45,7 +45,7 @@ ucp_proto_single_update_lane(const ucp_proto_single_init_params_t *params,
     double bandwidth;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     ucs_sys_device_t sys_devs[UCP_PROTO_MAX_LANES];
-    ucp_lane_index_t num_lanes, num_same_bw_devs, i, lane, j;
+    ucp_lane_index_t num_lanes, num_same_bw_devs, i, lane;
     ucs_sys_device_t sys_dev;
 
     if (!context->config.ext.proto_use_single_net_device ||
@@ -75,25 +75,21 @@ ucp_proto_single_update_lane(const ucp_proto_single_init_params_t *params,
             continue;
         }
 
-        if (ucp_proto_single_get_bandwidth(common_params, lane) - bandwidth >
-            UCP_PROTO_PERF_EPSILON) {
+        if (!ucp_proto_common_bandwidth_equal(
+                ucp_proto_single_get_bandwidth(common_params, lane), bandwidth)) {
             continue;
         }
 
         sys_dev = ucp_proto_common_get_sys_dev(init_params, lane);
-        for (j = 0; j < num_same_bw_devs; ++j) {
-            if (sys_dev == sys_devs[j]) {
-                break;
-            }
-        }
-
-        if (j == num_same_bw_devs) {
-            lanes[num_same_bw_devs]      = lane;
-            sys_devs[num_same_bw_devs++] = sys_dev;
+        if (ucp_proto_common_add_unique_sys_dev(sys_dev, sys_devs,
+                                                &num_same_bw_devs,
+                                                UCP_PROTO_MAX_LANES)) {
+            lanes[num_same_bw_devs - 1] = lane;
         }
     }
 
-    *lane_p = lanes[context->config.node_local_id % num_same_bw_devs];
+    *lane_p = lanes[ucp_proto_common_select_sys_dev_by_node_id(init_params,
+                                                               num_same_bw_devs)];
 }
 
 ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,

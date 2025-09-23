@@ -156,8 +156,9 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
         const ucp_proto_common_tl_perf_t *tl_perfs, int fixed_first_lane,
         ucp_lane_index_t *lanes, ucp_proto_perf_node_t **perf_nodes)
 {
+    ucp_lane_index_t num_max_bw_devs = 0;
     double max_bandwidth;
-    ucp_lane_index_t i, lane, num_max_bw_devs, seed, num_filtered_lanes;
+    ucp_lane_index_t i, lane, seed, num_filtered_lanes;
     ucp_lane_map_t lane_map;
     ucs_sys_device_t sys_dev;
     ucs_sys_device_t sys_devs[UCP_PROTO_MAX_LANES];
@@ -173,30 +174,23 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
         max_bandwidth = ucs_max(max_bandwidth, tl_perfs[lane].bandwidth);
     }
 
-    num_max_bw_devs = 0;
     ucs_for_each_bit(lane, lane_map) {
-        if (fabs(tl_perfs[lane].bandwidth - max_bandwidth) >
-            UCP_PROTO_PERF_EPSILON) {
+        if (!ucp_proto_common_bandwidth_equal(tl_perfs[lane].bandwidth,
+                                              max_bandwidth)) {
             continue;
         }
 
         sys_dev = ucp_proto_common_get_sys_dev(params, lane);
-        for (i = 0; i < num_max_bw_devs; ++i) {
-            if (sys_dev == sys_devs[i]) {
-                break;
-            }
-        }
-
-        if (i == num_max_bw_devs) {
-            sys_devs[num_max_bw_devs++] = sys_dev;
-        }
+        ucp_proto_common_add_unique_sys_dev(sys_dev, sys_devs, &num_max_bw_devs,
+                                            UCP_PROTO_MAX_LANES);
     }
 
     if (num_max_bw_devs == 0) {
         return num_lanes;
     }
 
-    seed = params->worker->context->config.node_local_id % num_max_bw_devs;
+    seed = ucp_proto_common_select_sys_dev_by_node_id(params, num_max_bw_devs);
+
     for (i = !!fixed_first_lane, num_filtered_lanes = i; i < num_lanes; ++i) {
         lane   = lanes[i];
         tl_rsc = ucp_proto_common_get_tl_rsc(params, lane);
