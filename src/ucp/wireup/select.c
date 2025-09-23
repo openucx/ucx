@@ -2674,7 +2674,6 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
      */
     for (lane = 0; lane < key->num_lanes; ++lane) {
         ucs_assert(select_ctx->lane_descs[lane].lane_types != 0);
-        addr_indices[lane]            = select_ctx->lane_descs[lane].addr_index;
         key->lanes[lane].rsc_index    = select_ctx->lane_descs[lane].rsc_index;
         key->lanes[lane].dst_md_index = select_ctx->lane_descs[lane].dst_md_index;
         key->lanes[lane].dst_sys_dev  = select_ctx->lane_descs[lane].dst_sys_dev;
@@ -2682,7 +2681,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         key->lanes[lane].seg_size     = select_ctx->lane_descs[lane].seg_size;
         key->lanes[lane].path_index   = ucp_wireup_default_path_index(
                                        select_ctx->lane_descs[lane].path_index);
-
+        addr_indices[lane]            = select_ctx->lane_descs[lane].addr_index;
         ucs_trace("ep %p: construct lane %d to addr_index %d", ep, lane,
                   select_ctx->lane_descs[lane].addr_index);
 

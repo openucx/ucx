@@ -1276,7 +1276,7 @@ ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((lane == ucp_ep_get_cm_lane(ep)) || (uct_ep == NULL)) {
             continue;
         }
@@ -1303,7 +1303,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
     uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if ((uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep)) {
             num_failed_tl_ep++;
         }
@@ -1326,7 +1326,7 @@ ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps, uct_ep_h failed_ep)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep        = ucp_ep_get_lane(ep, lane);
+        uct_ep        = ucp_ep_get_lane_raw(ep, lane);
         uct_eps[lane] = uct_ep;
 
         /* Set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
@@ -1954,11 +1954,12 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->seg_size == config_lane2->seg_size);
 }
 
-static int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,
-                                               const ucp_ep_config_key_t *key2)
+int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,
+                                        const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane;
 
+    /* Compare lanes layout */
     if ((key1->num_lanes != key2->num_lanes) ||
         memcmp(key1->rma_lanes, key2->rma_lanes, sizeof(key1->rma_lanes)) ||
         memcmp(key1->am_bw_lanes, key2->am_bw_lanes,
@@ -3427,7 +3428,7 @@ ucp_wireup_ep_t* ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
         return NULL;
     }
 
-    uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep = ucp_ep_get_lane_raw(ep, lane);
     return (uct_ep != NULL) ? ucp_wireup_ep(uct_ep) : NULL;
 }
 
@@ -3441,7 +3442,7 @@ uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
         return NULL;
     }
 
-    if (ucp_ep_get_lane(ep, lane) == NULL) {
+    if (ucp_ep_get_lane_raw(ep, lane) == NULL) {
         return NULL;
     }
 
@@ -3460,13 +3461,21 @@ int ucp_ep_is_local_connected(ucp_ep_h ep)
 {
     int is_local_connected = !!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
     ucp_wireup_ep_t *wireup_ep;
+    uct_ep_h uct_ep;
     ucp_lane_index_t i;
 
     if (ucp_ep_has_cm_lane(ep)) {
         /* For CM case need to check all wireup lanes because transport lanes
          * can be not connected yet. */
         for (i = 0; is_local_connected && (i < ucp_ep_num_lanes(ep)); ++i) {
-            wireup_ep          = ucp_wireup_ep(ucp_ep_get_lane(ep, i));
+            uct_ep = ucp_ep_get_lane_raw(ep, i);
+            if (uct_ep == NULL) {
+                ucs_assert(ep->worker->context->config.ext.on_demand_wireup);
+                ucs_assert(!ucp_ep_is_lane_p2p(ep, i));
+                continue;
+            }
+
+            wireup_ep          = ucp_wireup_ep(uct_ep);
             is_local_connected = (wireup_ep == NULL) ||
                                  (wireup_ep->flags &
                                   UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);

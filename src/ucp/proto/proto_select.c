@@ -194,8 +194,8 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     init_params.select_param   = select_param;
     init_params.ep_cfg_index   = ep_cfg_index;
     init_params.rkey_cfg_index = rkey_cfg_index;
-    init_params.ep_config_key  = &ucs_array_elem(&worker->ep_config,
-                                                 ep_cfg_index).key;
+    init_params.ep_config_key  = &ucp_worker_ep_config(worker,
+                                                       ep_cfg_index)->key;
     init_params.ctx            = proto_init;
 
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {

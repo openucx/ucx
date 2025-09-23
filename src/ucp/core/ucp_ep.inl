@@ -29,8 +29,20 @@ static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_fast_lane(ucp_ep_h ep,
     return ep->uct_eps[lane_index];	
 }
 
+/**
+ * @brief Get the raw @ref uct_ep pointer for the given lane index.
+ *
+ * @param ep         The endpoint.
+ * @param lane_index The lane index.
+ * @return           The @ref uct_ep pointer for the given lane index if it's
+ *                   initialized, otherwise NULL.
+ *
+ * NOTE: This function is assumed to be used only in the wireup path when the
+ *       state of the endpoint is known and from @ref ucp_ep_get_lane() to
+ *       inittiate on demand wireup of uninitialized lanes.
+ */
 static UCS_F_ALWAYS_INLINE uct_ep_h
-ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
+ucp_ep_get_lane_raw(ucp_ep_h ep, ucp_lane_index_t lane_index)
 {
     ucs_assertv(lane_index < UCP_MAX_LANES, "lane=%d", lane_index);
 
@@ -39,6 +51,31 @@ ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
     } else {
         return ep->ext->uct_eps[lane_index - UCP_MAX_FAST_PATH_LANES];
     }
+}
+
+/**
+ * @brief Get the uct_ep pointer for the given lane index.
+ *
+ * @param ep         The endpoint.
+ * @param lane_index The lane index.
+ * @return           The @ref uct_ep pointer for the given lane index.
+ *
+ * NOTE: This is a common wrapper function to access lanes by index from data
+ *       path. It starts on demand wireup protocol for uninitialized lanes and
+ *       returns a valid pointer.
+ */
+static UCS_F_ALWAYS_INLINE uct_ep_h
+ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
+{
+    uct_ep_h uct_ep;
+    ucs_assertv(lane_index < UCP_MAX_LANES, "lane=%d", lane_index);
+
+    uct_ep = ucp_ep_get_lane_raw(ep, lane_index);
+    if (ucs_likely(uct_ep != NULL)) {
+        return uct_ep;
+    }
+
+    return ucp_wireup_init_slow_lane(ep, lane_index - UCP_MAX_FAST_PATH_LANES);
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,
@@ -135,6 +172,18 @@ static inline size_t ucp_ep_get_max_iov(ucp_ep_h ep, ucp_lane_index_t lane)
 static inline ucp_lane_index_t ucp_ep_num_lanes(ucp_ep_h ep)
 {
     return ucp_ep_config(ep)->key.num_lanes;
+}
+
+static inline ucp_lane_index_t ucp_ep_num_valid_lanes(ucp_ep_h ep)
+{
+    ucp_lane_index_t num_lanes;
+    ucp_lane_index_t i;
+
+    for (num_lanes = 0, i = 0; i < ucp_ep_num_lanes(ep); ++i) {
+        num_lanes += (ucp_ep_get_lane_raw(ep, i) != NULL);
+    }
+
+    return num_lanes;
 }
 
 static inline int ucp_ep_is_lane_p2p(ucp_ep_h ep, ucp_lane_index_t lane)

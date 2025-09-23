@@ -109,8 +109,9 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
         /* Search for next lane to start flush */
         lane   = ucs_ffs64(all_lanes & ~req->send.flush.started_lanes);
-        uct_ep = ucp_ep_get_lane(ep, lane);
+        uct_ep = ucp_ep_get_lane_raw(ep, lane);
         if (uct_ep == NULL) {
+            ucs_info("ep %p flush not connected lane %d", ep, lane);
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
             continue;
         }
@@ -307,7 +308,8 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
              * wireup is done because connect2iface does not create wireup_ep
              * without cm mode */
             ucs_assertv(!(req->send.flush.started_lanes &
-                          ucp_ep_config(ep)->p2p_lanes),
+                          ucp_ep_config(ep)->p2p_lanes) ||
+                        ep->worker->context->config.ext.on_demand_wireup,
                         "req=%p flush started_lanes=0x%" PRIx64
                         " p2p_lanes=0x%" PRIx64,
                         req, req->send.flush.started_lanes,
@@ -343,10 +345,10 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     ucs_assertv(lane != UCP_NULL_LANE, "ep=%p flush_req=%p lane=%d",
                 ep, req, lane);
 
-    status = uct_ep_flush(ucp_ep_get_lane(ep, lane), req->send.flush.uct_flags,
+    status = uct_ep_flush(ucp_ep_get_lane_raw(ep, lane), req->send.flush.uct_flags,
                           &req->send.state.uct_comp);
     ucp_trace_req(req, "flush ep %p lane[%d]=%p: %s", ep, lane,
-                  ucp_ep_get_lane(ep, lane), ucs_status_string(status));
+                  ucp_ep_get_lane_raw(ep, lane), ucs_status_string(status));
     if (status == UCS_OK) {
         ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
     } else if (status == UCS_INPROGRESS) {
@@ -364,7 +366,8 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     /* If the operation has not completed, and not started on all lanes, add
      * slow-path progress to resume */
     if (!completed &&
-        (req->send.flush.started_lanes != UCS_MASK(ucp_ep_num_lanes(ep)))) {
+        (req->send.flush.started_lanes !=
+         UCS_MASK(ucp_ep_num_valid_lanes(ep)))) {
         ucp_ep_flush_request_resched(ep, req);
     }
 
@@ -445,6 +448,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const char *debug_name,
                                        unsigned uct_flags)
 {
+    ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep);
     ucs_status_t status;
     ucp_request_t *req;
 
@@ -468,12 +472,12 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     req->send.flush.uct_flags       = uct_flags;
     req->send.flush.sw_started      = 0;
     req->send.flush.sw_done         = 0;
-    req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
+    req->send.flush.num_lanes       = num_lanes;
     req->send.flush.started_lanes   = 0;
     req->send.lane                  = UCP_NULL_LANE;
     req->send.uct.func              = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
-    req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
+    req->send.state.uct_comp.count  = num_lanes;
     req->send.state.uct_comp.status = UCS_OK;
 
     ucp_request_set_super(req, worker_req);

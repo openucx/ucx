@@ -777,6 +777,9 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
                                 const ucp_ep_config_key_t *key2,
                                 ucp_lane_index_t lane);
 
+int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,
+                                        const ucp_ep_config_key_t *key2);
+
 /**
  * @brief Compare two endpoint configurations.
  *
