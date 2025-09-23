@@ -63,7 +63,7 @@ typedef struct ucp_device_mem_list_elem {
     ucp_mem_h  memh;
 
     /**
-     * Local address of the memory to be transferred.
+     * Local address of the memory to be transferred from.
      */
     void *     local_addr;
 
