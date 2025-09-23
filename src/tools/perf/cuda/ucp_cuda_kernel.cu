@@ -234,8 +234,7 @@ ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
 
     do {
         status = ucp_device_progress_req<level>(&req);
-        // TODO: remove NO_RESOURCE
-    } while ((status == UCS_INPROGRESS) || (status == UCS_ERR_NO_RESOURCE));
+    } while (status == UCS_INPROGRESS);
 
     return status;
 }
@@ -245,30 +244,28 @@ __global__ void
 ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
                                   ucp_perf_cuda_params params)
 {
+    // TODO: use thread-local memory once we support it
     extern __shared__ ucp_device_request_t requests[];
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
+    ucs_status_t status                   = UCS_OK;
     ucp_perf_cuda_request_manager request_mgr(ctx.max_outstanding, requests);
-    ucs_status_t status;
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         while (request_mgr.get_pending_count() >= ctx.max_outstanding) {
             status = request_mgr.progress<level>(1);
             if (UCS_STATUS_IS_ERR(status)) {
                 ucs_device_error("progress failed: %d", status);
-                ctx.status = status;
-                return;
+                goto out;
             }
         }
 
         ucp_device_request_t &req = request_mgr.get_request();
-        // TODO: remove loop once API is changed
-        do {
-            status = ucp_perf_cuda_send_nbx<level, cmd>(params, idx, req);
-            if (status == UCS_ERR_NO_RESOURCE) {
-                request_mgr.progress<level>(1);
-            }
-        } while (status == UCS_ERR_NO_RESOURCE);
+        status = ucp_perf_cuda_send_nbx<level, cmd>(params, idx, req);
+        if (status != UCS_OK) {
+            ucs_device_error("send failed: %d", status);
+            goto out;
+        }
 
         ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
         __syncthreads();
@@ -277,11 +274,12 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
     while (request_mgr.get_pending_count() > 0) {
         status = request_mgr.progress<level>(max_iters);
         if (UCS_STATUS_IS_ERR(status)) {
-            ucs_device_error("progress failed: %d", status);
-            break;
+            ucs_device_error("final progress failed: %d", status);
+            goto out;
         }
     }
 
+out:
     ctx.status = status;
 }
 
@@ -291,6 +289,7 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
                                        ucp_perf_cuda_params params,
                                        bool is_sender)
 {
+    // TODO: use thread-local memory once we support it
     extern __shared__ ucp_device_request_t requests[];
     ucp_device_request_t &req             = requests[threadIdx.x];
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
@@ -301,6 +300,7 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
         if (is_sender) {
             status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req);
             if (status != UCS_OK) {
+                ucs_device_error("sender send failed: %d", status);
                 break;
             }
             ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
@@ -308,11 +308,13 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
             ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
             status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req);
             if (status != UCS_OK) {
+                ucs_device_error("receiver send failed: %d", status);
                 break;
             }
         }
 
         ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
+        __syncthreads();
     }
 
     ctx.status = status;
