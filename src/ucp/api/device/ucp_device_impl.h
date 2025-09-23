@@ -60,6 +60,23 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
 }
 
 
+/**
+ * Macro for device put operations with retry logic
+ */
+#define UCP_DEVICE_SEND_BLOCKING(_level, _uct_device_ep_send, _device_ep, ...) \
+({ \
+    ucs_status_t _status; \
+    do { \
+        _status = _uct_device_ep_send<_level>(_device_ep, __VA_ARGS__); \
+        if (_status != UCS_ERR_NO_RESOURCE) { \
+            break; \
+        } \
+        _status = uct_device_ep_progress<_level>(_device_ep); \
+    } while (!UCS_STATUS_IS_ERR(_status)); \
+    _status; \
+})
+
+
 UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
         ucp_device_mem_list_handle_h mem_list_h, unsigned first_mem_elem_index,
         ucp_device_request_t *req, uct_device_ep_t *&device_ep,
@@ -95,6 +112,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
+ * The routine returns only after the message has been posted or an error has occurred.
  *
  * This routine can be called repeatedly with the same handle and different
  * addresses and length. The flags parameter can be used to modify the behavior
@@ -129,17 +147,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         return status;
     }
 
-    do {
-        status = uct_device_ep_put_single<level>(device_ep, uct_elem, address,
-                                                 remote_address, length, flags,
-                                                 comp);
-        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-            return status;
-        }
-
-        status = uct_device_ep_progress<level>(device_ep);
-    } while (!UCS_STATUS_IS_ERR(status));
-    return status;
+    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_single, device_ep,
+                                    uct_elem, address, remote_address, length,
+                                    flags, comp);
 }
 
 
@@ -188,16 +198,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
         return status;
     }
 
-    do {
-        status = uct_device_ep_atomic_add<level>(device_ep, uct_elem, inc_value,
-                                                 remote_address, flags, comp);
-        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-            return status;
-        }
-
-        status = uct_device_ep_progress<level>(device_ep);
-    } while (!UCS_STATUS_IS_ERR(status));
-    return status;
+    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
+                                    uct_elem, inc_value, remote_address, flags,
+                                    comp);
 }
 
 
@@ -222,6 +225,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
+ * The routine returns only after all the messages have been posted or an error has occurred.
  *
  * This routine can be called repeatedly with the same handle and different
  * @a addresses, @a lengths and counter related parameters. The @a flags
@@ -258,20 +262,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
         return status;
     }
 
-    do {
-        status = uct_device_ep_put_multi<level>(device_ep, uct_mem_list,
-                                                mem_list_h->mem_list_length,
-                                                addresses, remote_addresses,
-                                                lengths, counter_inc_value,
-                                                counter_remote_address, flags,
-                                                comp);
-        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-            return status;
-        }
-
-        status = uct_device_ep_progress<level>(device_ep);
-    } while (!UCS_STATUS_IS_ERR(status));
-    return status;
+    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_multi, device_ep,
+                                    uct_mem_list, mem_list_h->mem_list_length,
+                                    addresses, remote_addresses, lengths,
+                                    counter_inc_value, counter_remote_address,
+                                    flags, comp);
 }
 
 
@@ -298,6 +293,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
+ * The routine returns only after all the messages have been posted or an error has occurred.
  *
  * This routine can be called repeatedly with the same handle and different
  * mem_list_indices, addresses, lengths and increment related parameters. The
@@ -340,18 +336,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
         return status;
     }
 
-    do {
-        status = uct_device_ep_put_multi_partial<level>(
-                device_ep, uct_mem_list, mem_list_indices, mem_list_count,
-                addresses, remote_addresses, lengths, counter_index,
-                counter_inc_value, counter_remote_address, flags, comp);
-        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-            return status;
-        }
-
-        status = uct_device_ep_progress<level>(device_ep);
-    } while (!UCS_STATUS_IS_ERR(status));
-    return status;
+    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_multi_partial,
+                                    device_ep, uct_mem_list, mem_list_indices,
+                                    mem_list_count, addresses, remote_addresses,
+                                    lengths, counter_index, counter_inc_value,
+                                    counter_remote_address, flags, comp);
 }
 
 
@@ -426,7 +415,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_progress_req(ucp_device_request_t *req)
     }
 
     status = uct_device_ep_progress<level>(req->device_ep);
-    return (status != UCS_OK ? status : UCS_INPROGRESS);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return (ucs_likely(req->comp.count == 0)) ? req->comp.status :
+                                                UCS_INPROGRESS;
 }
 
 #endif /* UCP_DEVICE_IMPL_H */

@@ -161,6 +161,8 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(doca_gpu_dev_verbs_qp *qp,
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
             qp->sq_ready_index);
     uint64_t wqe_base_orig = wqe_base;
+
+    __threadfence();
     while (!ref.compare_exchange_strong(wqe_base, wqe_base + count,
                                         cuda::std::memory_order_relaxed)) {
         wqe_base = wqe_base_orig;
