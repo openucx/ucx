@@ -7,6 +7,7 @@
 #include "test_kernels.h"
 
 #include <ucp/api/device/ucp_device_impl.h>
+#include <ucs/debug/log.h>
 #include <common/cuda.h>
 
 
@@ -144,10 +145,38 @@ ucp_test_kernel(const test_ucp_device_kernel_params_t params,
 
     // Last iteration must use no-delay flag and request, to be able to wait
     // properly for completion. Alternatively, we could add a device flush
-    // flush function to the API.
+    // function to the API.
     *status_ptr = ucp_test_kernel_do_operation<level>(params,
                                                       UCT_DEVICE_FLAG_NODELAY,
                                                       req.ptr());
+}
+
+static ucs_status_t check_warp_size()
+{
+    CUdevice cuda_device;
+    CUresult result;
+    int warp_size;
+
+    result = cuCtxGetDevice(&cuda_device);
+    if (result != CUDA_SUCCESS) {
+        ucs_error("cuCtxGetDevice failed: %d", result);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    result = cuDeviceGetAttribute(&warp_size, CU_DEVICE_ATTRIBUTE_WARP_SIZE,
+                                  cuda_device);
+    if (result != CUDA_SUCCESS) {
+        ucs_error("cuDeviceGetAttribute failed: %d", result);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (UCS_DEVICE_NUM_THREADS_IN_WARP != warp_size) {
+        ucs_error("Warp size mismatch: expected %d, got %d",
+                  UCS_DEVICE_NUM_THREADS_IN_WARP, warp_size);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
 }
 
 /**
@@ -156,6 +185,13 @@ ucp_test_kernel(const test_ucp_device_kernel_params_t params,
 ucs_status_t
 launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
 {
+    ucs_status_t check_status;
+
+    check_status = check_warp_size();
+    if (check_status != UCS_OK) {
+        return check_status;
+    }
+
     ucx_cuda::device_result_ptr<ucs_status_t> status(UCS_ERR_NOT_IMPLEMENTED);
 
     switch (params.level) {

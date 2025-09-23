@@ -391,8 +391,6 @@ protected:
         switch (get_device_level()) {
         case UCS_DEVICE_LEVEL_THREAD:
             /* Thread level uses less elements to not overflow the QP */
-            // TODO UCT should protect against a deadlock where multiple threads
-            // in same warp send too many operations on the same QP
             return 16;
         case UCS_DEVICE_LEVEL_WARP:
             return 32;
