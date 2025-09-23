@@ -239,6 +239,31 @@ UCS_TEST_P(test_ucp_device, put_single)
     list.dst_pattern_check(mem_list_index + 1, mem_list::SEED_DST);
 }
 
+UCS_TEST_P(test_ucp_device, put_single_repeat)
+{
+    constexpr size_t size = 32 * UCS_KBYTE;
+    mem_list list(sender(), receiver(), size, 6);
+
+    // Perform the transfer
+    constexpr unsigned mem_list_index = 3;
+    ucx_cuda::kernel_params params;
+    params.mem_list              = list.handle();
+    params.single.mem_list_index = mem_list_index;
+    params.single.address        = list.src_ptr(mem_list_index);
+    params.single.remote_address = list.dst_ptr(mem_list_index);
+    params.single.length         = size;
+
+    for (size_t i = 0; i < 4096; i++) {
+        ucs_status_t status = ucx_cuda::launch_ucp_put_single(params);
+        ASSERT_EQ(UCS_OK, status);
+    }
+
+    // Check proper index received data
+    list.dst_pattern_check(mem_list_index - 1, mem_list::SEED_DST);
+    list.dst_pattern_check(mem_list_index, mem_list::SEED_SRC);
+    list.dst_pattern_check(mem_list_index + 1, mem_list::SEED_DST);
+}
+
 UCS_TEST_P(test_ucp_device, put_multi)
 {
     static constexpr size_t size    = 32 * UCS_KBYTE;

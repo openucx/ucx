@@ -657,10 +657,18 @@ run_ucx_perftest_cuda_device() {
 	ucx_perftest="$ucx_inst/bin/ucx_perftest"
 	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_device_cuda"
 
-	# TODO: Run on all GPUs
+	# TODO: Run on all GPUs & NICs combinations
 	ucp_client_args="-a cuda:0 $(hostname)"
+	gda_tls="cuda_copy,rc,rc_gda"
+	cuda_ipc_tls="cuda_copy,rc,cuda_ipc"
 
-	run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+	# TODO: Run with cuda_ipc_tls
+	for tls in "$gda_tls"
+	do
+		export UCX_TLS=${tls}
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+	done
+	unset UCX_TLS
 }
 
 #
