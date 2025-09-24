@@ -407,4 +407,26 @@ ucp_proto_common_get_dev_index(const ucp_proto_init_params_t *params,
     return params->worker->context->tl_rscs[rsc_index].dev_index;
 }
 
+static UCS_F_ALWAYS_INLINE const uct_tl_resource_desc_t *
+ucp_proto_common_get_tl_rsc(const ucp_proto_init_params_t *params,
+                            ucp_lane_index_t lane)
+{
+    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+    return &params->worker->context->tl_rscs[rsc_index].tl_rsc;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_is_net_dev(const ucp_proto_init_params_t *params,
+                            ucp_lane_index_t lane)
+{
+    return ucp_proto_common_get_tl_rsc(params, lane)->dev_type ==
+           UCT_DEVICE_TYPE_NET;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_bandwidth_equal(double bw1, double bw2)
+{
+    return fabs(bw1 - bw2) <= UCP_PROTO_PERF_EPSILON;
+}
+
 #endif

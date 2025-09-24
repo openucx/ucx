@@ -125,7 +125,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5), /**< mt_workers_shared */
     UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
     UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7), /**< estimated_num_ppn */
-    UCP_PARAM_FIELD_NAME              = UCS_BIT(8)  /**< name */
+    UCP_PARAM_FIELD_NAME              = UCS_BIT(8), /**< name */
+    UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9)
 };
 
 
@@ -1144,6 +1145,16 @@ typedef struct ucp_params {
      * unique name will be created for you.
      */
     const char                         *name;
+
+    /**
+     * An optimization hint for a single node. For example, when used from MPI or
+     * OpenSHMEM libraries, this number will specify the local identificator on
+     * a single node in the job. Does not affect semantics, only transport
+     * selection criteria and the resulting performance.
+     * The value can be also set by the UCX_LOCAL_NODE_ID environment variable,
+     * which will override the id set by @e node_local_id
+     */
+    size_t                             node_local_id;
 } ucp_params_t;
 
 
