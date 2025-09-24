@@ -158,6 +158,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     rkey_config_key.ep_cfg_index = ep_cfg_index;
     rkey_config_key.sys_dev      = params->super.reg_mem_info.sys_dev;
     rkey_config_key.mem_type     = params->super.reg_mem_info.type;
+    rkey_config_key.flags        = 0;
 
     rkey_config_key.unreachable_md_map = 0;
 

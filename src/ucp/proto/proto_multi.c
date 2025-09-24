@@ -141,14 +141,17 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
      * path ratio */
 }
 
-static ucp_sys_dev_map_t
-ucp_proto_multi_init_flush_sys_dev_mask(const ucp_rkey_config_key_t *key)
+static ucp_sys_dev_map_t ucp_proto_multi_init_flush_sys_dev_mask(
+        const ucp_proto_multi_init_params_t *params, ucp_lane_index_t lane)
 {
-    if (key == NULL || !ucp_rkey_need_remote_flush(key)) {
+    const ucp_rkey_config_key_t *key = params->super.super.rkey_config_key;
+
+    if ((key == NULL) || !ucp_rkey_need_remote_flush(key) ||
+        !ucp_proto_common_is_net_dev(&params->super.super, lane)) {
         return 0;
     }
 
-    return UCS_BIT(key->sys_dev & ~UCP_SYS_DEVICE_FLUSH_BIT);
+    return UCS_BIT(key->sys_dev);
 }
 
 static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
@@ -450,8 +453,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         lpriv->max_frag_sum   = mpriv->max_frag_sum;
         lpriv->opt_align      = ucp_proto_multi_get_lane_opt_align(params, lane);
         mpriv->align_thresh   = ucs_max(mpriv->align_thresh, lpriv->opt_align);
-        lpriv->flush_sys_dev_mask = ucp_proto_multi_init_flush_sys_dev_mask(
-                params->super.super.rkey_config_key);
+        lpriv->flush_sys_dev_mask =
+                ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
 
