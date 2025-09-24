@@ -81,54 +81,54 @@ ucx_bitset_ffns(const uint8_t *set, size_t bits, size_t from)
     return bits;
 }
 
-#define UCX_KERNEL_CMD(level, cmd, blocks, threads, shared_size, func, ...) \
-    do { \
-        switch (cmd) { \
-        case UCX_PERF_CMD_PUT_SINGLE: \
-            func<level, UCX_PERF_CMD_PUT_SINGLE><<<blocks, threads, shared_size>>>(__VA_ARGS__); \
-            break; \
-        case UCX_PERF_CMD_PUT_MULTI: \
-            func<level, UCX_PERF_CMD_PUT_MULTI><<<blocks, threads, shared_size>>>(__VA_ARGS__); \
-            break; \
-        case UCX_PERF_CMD_PUT_PARTIAL: \
-            func<level, UCX_PERF_CMD_PUT_PARTIAL><<<blocks, threads, shared_size>>>(__VA_ARGS__); \
-            break; \
-        default: \
-            ucs_error("Unsupported cmd: %d", cmd); \
-            break; \
-        } \
-    } while (0)
+#define UCX_PERF_SWITCH_CMD(_cmd, _func, ...) \
+    switch (_cmd) { \
+    case UCX_PERF_CMD_PUT_SINGLE: \
+        _func(UCX_PERF_CMD_PUT_SINGLE, __VA_ARGS__); \
+        break; \
+    case UCX_PERF_CMD_PUT_MULTI: \
+        _func(UCX_PERF_CMD_PUT_MULTI, __VA_ARGS__); \
+        break; \
+    case UCX_PERF_CMD_PUT_PARTIAL: \
+        _func(UCX_PERF_CMD_PUT_PARTIAL, __VA_ARGS__); \
+        break; \
+    default: \
+        ucs_error("Unsupported cmd: %d", _cmd); \
+        break; \
+    }
 
-#define UCX_KERNEL_DISPATCH(perf, func, ...) \
-    do { \
-        ucs_device_level_t _level = perf.params.device_level; \
-        ucx_perf_cmd_t _cmd       = perf.params.command; \
-        unsigned _blocks          = perf.params.device_block_count; \
-        unsigned _threads         = perf.params.device_thread_count; \
-        size_t _shared_size       = _threads * perf.params.max_outstanding * \
-                                    sizeof(ucp_device_request_t); \
-        switch (_level) { \
+#define UCX_PERF_SWITCH_LEVEL(_level, _func, ...) \
+    switch (_level) { \
         case UCS_DEVICE_LEVEL_THREAD: \
-            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_THREAD, _cmd, _blocks, _threads,\
-                           _shared_size, func, __VA_ARGS__); \
+            _func(UCS_DEVICE_LEVEL_THREAD, __VA_ARGS__); \
             break; \
         case UCS_DEVICE_LEVEL_WARP: \
-            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_WARP, _cmd, _blocks, _threads,\
-                           _shared_size, func, __VA_ARGS__); \
+            _func(UCS_DEVICE_LEVEL_WARP, __VA_ARGS__); \
             break; \
         case UCS_DEVICE_LEVEL_BLOCK: \
-            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_BLOCK, _cmd, _blocks, _threads,\
-                           _shared_size, func, __VA_ARGS__); \
-            break; \
         case UCS_DEVICE_LEVEL_GRID: \
-            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_GRID, _cmd, _blocks, _threads,\
-                           _shared_size, func, __VA_ARGS__); \
-            break; \
         default: \
             ucs_error("Unsupported level: %d", _level); \
             break; \
-        } \
+    }
+
+#define UCX_PERF_KERNEL_DISPATCH_CMD_LEVEL(_cmd, _level, _perf, _kernel, ...) \
+    do { \
+        unsigned _blocks    = _perf.params.device_block_count; \
+        unsigned _threads   = _perf.params.device_thread_count; \
+        size_t _shared_size = _threads * _perf.params.max_outstanding * \
+                              sizeof(ucp_device_request_t); \
+        _kernel<_level, _cmd><<<_blocks, _threads, _shared_size>>>(__VA_ARGS__); \
     } while (0)
+
+#define UCX_PERF_KERNEL_DISPATCH_CMD(_level, _perf, _kernel, ...) \
+    UCX_PERF_SWITCH_CMD(_perf.params.command, UCX_PERF_KERNEL_DISPATCH_CMD_LEVEL, \
+                        _level, _perf, _kernel, __VA_ARGS__);
+
+#define UCX_PERF_KERNEL_DISPATCH(_perf, _kernel, ...) \
+    UCX_PERF_SWITCH_LEVEL(_perf.params.device_level, UCX_PERF_KERNEL_DISPATCH_CMD, \
+                          _perf, _kernel, __VA_ARGS__);
+
 
 class ucx_perf_cuda_test_runner {
 public:
