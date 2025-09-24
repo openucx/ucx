@@ -356,8 +356,9 @@ public:
         ucp_perf_barrier(&m_perf);
         ucx_perf_test_start_clock(&m_perf);
 
-        UCX_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_latency_kernel,
-                            *m_gpu_ctx, params_handler.get_params(), my_index);
+        UCX_PERF_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_latency_kernel,
+                                 *m_gpu_ctx, params_handler.get_params(),
+                                 my_index);
         CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
 
         wait_for_kernel();
@@ -378,8 +379,8 @@ public:
         ucx_perf_test_start_clock(&m_perf);
 
         if (my_index == 1) {
-            UCX_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_bw_kernel,
-                                *m_gpu_ctx, params_handler.get_params());
+            UCX_PERF_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_bw_kernel,
+                                     *m_gpu_ctx, params_handler.get_params());
             CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel();
         } else if (my_index == 0) {
