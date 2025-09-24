@@ -155,10 +155,10 @@ private:
             offset             += lengths[i];
         }
 
-        device_clone(&m_params.indices, indices.data(), count);
-        device_clone(&m_params.addresses, addresses.data(), count);
-        device_clone(&m_params.remote_addresses, remote_addresses.data(), count);
-        device_clone(&m_params.lengths, lengths.data(), count);
+        m_params.indices          = device_vector(indices);
+        m_params.addresses        = device_vector(addresses);
+        m_params.remote_addresses = device_vector(remote_addresses);
+        m_params.lengths          = device_vector(lengths);
     }
 
     void init_counters(const ucx_perf_context_t &perf)
@@ -175,11 +175,13 @@ private:
     }
 
     template<typename T>
-    void device_clone(T **dst, const T *src, size_t count)
+    T* device_vector(const std::vector<T> &src)
     {
-        CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaMalloc, dst, count * sizeof(T));
-        CUDA_CALL_ERR(cudaMemcpy, *dst, src, count * sizeof(T),
-                      cudaMemcpyHostToDevice);
+        size_t size = src.size() * sizeof(T);
+        T *dst;
+        CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaMalloc, &dst, size);
+        CUDA_CALL_ERR(cudaMemcpy, dst, src.data(), size, cudaMemcpyHostToDevice);
+        return dst;
     }
 
     ucp_perf_cuda_params m_params;
@@ -187,8 +189,8 @@ private:
 
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 UCS_F_DEVICE ucs_status_t
-ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
-                       ucp_device_request_t &req)
+ucp_perf_cuda_send_async(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
+                         ucp_device_request_t &req)
 {
     switch (cmd) {
     case UCX_PERF_CMD_PUT_SINGLE:
@@ -227,7 +229,7 @@ UCS_F_DEVICE ucs_status_t
 ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                         ucp_device_request_t &req)
 {
-    ucs_status_t status = ucp_perf_cuda_send_nbx<level, cmd>(params, idx, req);
+    ucs_status_t status = ucp_perf_cuda_send_async<level, cmd>(params, idx, req);
     if (status != UCS_OK) {
         return status;
     }
@@ -261,7 +263,7 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
         }
 
         ucp_device_request_t &req = request_mgr.get_request();
-        status = ucp_perf_cuda_send_nbx<level, cmd>(params, idx, req);
+        status = ucp_perf_cuda_send_async<level, cmd>(params, idx, req);
         if (status != UCS_OK) {
             ucs_device_error("send failed: %d", status);
             goto out;
