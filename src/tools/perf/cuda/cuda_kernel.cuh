@@ -70,16 +70,6 @@ UCS_F_DEVICE void ucx_perf_cuda_wait_sn(const uint64_t *sn, uint64_t value)
 #define UCX_BIT_GET(set, bit)   (set[(bit)/CHAR_BIT] &  UCX_BIT_MASK(bit))
 #define UCX_BITSET_SIZE(bits)   ((bits + CHAR_BIT - 1) / CHAR_BIT)
 
-UCS_F_DEVICE size_t ucx_bitset_popcount(const uint8_t *set, size_t bits) {
-    size_t count = 0;
-    for (size_t i = 0; i < bits; i++) {
-        if (UCX_BIT_GET(set, i)) {
-            count++;
-        }
-    }
-    return count;
-}
-
 UCS_F_DEVICE size_t
 ucx_bitset_ffns(const uint8_t *set, size_t bits, size_t from)
 {

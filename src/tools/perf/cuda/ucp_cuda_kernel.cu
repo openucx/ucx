@@ -21,7 +21,7 @@ class ucp_perf_cuda_request_manager {
 public:
     __device__
     ucp_perf_cuda_request_manager(size_t size, ucp_device_request_t *requests)
-        : m_size(size), m_requests(&requests[size * threadIdx.x])
+        : m_size(size), m_pending_count(0), m_requests(&requests[size * threadIdx.x])
     {
         assert(m_size <= CAPACITY);
         for (size_t i = 0; i < m_size; ++i) {
@@ -42,6 +42,7 @@ public:
                     continue;
                 }
                 UCX_BIT_RESET(m_pending, i);
+                --m_pending_count;
                 if (status != UCS_OK) {
                     break;
                 }
@@ -59,12 +60,13 @@ public:
         assert(get_pending_count() < m_size);
         size_t index = ucx_bitset_ffns(m_pending, m_size, 0);
         UCX_BIT_SET(m_pending, index);
+        ++m_pending_count;
         return m_requests[index];
     }
 
     __device__ size_t get_pending_count() const
     {
-        return ucx_bitset_popcount(m_pending, m_size);
+        return m_pending_count;
     }
 
 private:
@@ -72,6 +74,7 @@ private:
     static const size_t CAPACITY = 128;
 
     size_t               m_size;
+    size_t               m_pending_count;
     ucp_device_request_t *m_requests;
     uint8_t              m_pending[UCX_BITSET_SIZE(CAPACITY)];
 };
@@ -316,7 +319,6 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
         }
 
         ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
-        __syncthreads();
     }
 
     ctx.status = status;
