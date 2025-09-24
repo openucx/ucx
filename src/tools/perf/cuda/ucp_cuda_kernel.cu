@@ -21,7 +21,7 @@ class ucp_perf_cuda_request_manager {
 public:
     __device__
     ucp_perf_cuda_request_manager(size_t size, ucp_device_request_t *requests)
-        : m_size(size), m_pending_count(0), m_requests(&requests[size * threadIdx.x])
+        : m_size(size), m_pending_count(0), m_requests(requests)
     {
         assert(m_size <= CAPACITY);
         for (size_t i = 0; i < m_size; ++i) {
@@ -250,10 +250,13 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
                                   ucp_perf_cuda_params params)
 {
     // TODO: use thread-local memory once we support it
-    extern __shared__ ucp_device_request_t requests[];
+    extern __shared__ ucp_device_request_t shared_requests[];
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
     ucs_status_t status                   = UCS_OK;
+    ucp_device_request_t *requests        =
+        &shared_requests[ctx.max_outstanding *
+                         ucx_perf_cuda_thread_index<level>(threadIdx.x)];
     ucp_perf_cuda_request_manager request_mgr(ctx.max_outstanding, requests);
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
@@ -295,15 +298,16 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
                                        bool is_sender)
 {
     // TODO: use thread-local memory once we support it
-    extern __shared__ ucp_device_request_t requests[];
-    ucp_device_request_t &req             = requests[threadIdx.x];
+    extern __shared__ ucp_device_request_t shared_requests[];
     ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
     ucx_perf_counter_t max_iters          = ctx.max_iters;
     ucs_status_t status                   = UCS_OK;
+    ucp_device_request_t *req             =
+        &shared_requests[ucx_perf_cuda_thread_index<level>(threadIdx.x)];
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         if (is_sender) {
-            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req);
+            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, *req);
             if (status != UCS_OK) {
                 ucs_device_error("sender send failed: %d", status);
                 break;
@@ -311,7 +315,7 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
             ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
         } else {
             ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
-            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req);
+            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, *req);
             if (status != UCS_OK) {
                 ucs_device_error("receiver send failed: %d", status);
                 break;

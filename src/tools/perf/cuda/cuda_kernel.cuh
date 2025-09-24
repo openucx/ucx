@@ -63,6 +63,20 @@ UCS_F_DEVICE void ucx_perf_cuda_wait_sn(const uint64_t *sn, uint64_t value)
     __syncthreads();
 }
 
+template<ucs_device_level_t level>
+__host__ UCS_F_DEVICE unsigned ucx_perf_cuda_thread_index(size_t tid)
+{
+    switch (level) {
+    case UCS_DEVICE_LEVEL_THREAD: return tid;
+    /* TODO: use UCS_DEVICE_NUM_THREADS_IN_WARP */
+    case UCS_DEVICE_LEVEL_WARP:   return tid / 32;
+    default:                      return 0;
+    }
+}
+
+#define UCX_PERF_THREAD_INDEX_SET(_level, _tid, _outval) \
+    (_outval) = ucx_perf_cuda_thread_index<_level>(_tid)
+
 /* Simple bitset */
 #define UCX_BIT_MASK(bit)       (1 << ((bit) & (CHAR_BIT - 1)))
 #define UCX_BIT_SET(set, bit)   (set[(bit)/CHAR_BIT] |= UCX_BIT_MASK(bit))
@@ -116,8 +130,9 @@ ucx_bitset_ffns(const uint8_t *set, size_t bits, size_t from)
     do { \
         unsigned _blocks    = _perf.params.device_block_count; \
         unsigned _threads   = _perf.params.device_thread_count; \
-        size_t _shared_size = _threads * _perf.params.max_outstanding * \
-                              sizeof(ucp_device_request_t); \
+        size_t _shared_size = _perf.params.max_outstanding * \
+                              sizeof(ucp_device_request_t) * \
+                              ucx_perf_cuda_thread_index<_level>(_threads); \
         _kernel<_level, _cmd><<<_blocks, _threads, _shared_size>>>(__VA_ARGS__); \
     } while (0)
 
@@ -156,11 +171,16 @@ public:
         ucx_perf_counter_t last_completed = 0;
         ucx_perf_counter_t completed      = m_cpu_ctx->completed_iters;
         unsigned thread_count             = m_perf.params.device_thread_count;
+        ucs_device_level_t level          = m_perf.params.device_level;
+        unsigned msgs_per_iter;
+        UCX_PERF_SWITCH_LEVEL(level, UCX_PERF_THREAD_INDEX_SET, thread_count,
+                              msgs_per_iter);
+
         while (true) {
             ucx_perf_counter_t delta = completed - last_completed;
             if (delta > 0) {
                 // TODO: calculate latency percentile on kernel
-                ucx_perf_update(&m_perf, delta, delta * thread_count, msg_length);
+                ucx_perf_update(&m_perf, delta, delta * msgs_per_iter, msg_length);
             } else if (completed >= m_perf.max_iter) {
                 break;
             }
