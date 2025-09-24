@@ -451,7 +451,7 @@ public:
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
                        rkey, NULL);
-                ucx_perf_update(&m_perf, 1, length);
+                ucx_perf_update(&m_perf, 1, 1, length);
 
                 do {
                     progress_responder();
@@ -471,7 +471,7 @@ public:
 
                 send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
                        rkey, NULL);
-                ucx_perf_update(&m_perf, 1, length);
+                ucx_perf_update(&m_perf, 1, 1, length);
                 ++send_sn;
             }
         }
@@ -538,7 +538,7 @@ public:
                        &m_completion);
             }
 
-            ucx_perf_update(&m_perf, 1, length);
+            ucx_perf_update(&m_perf, 1, 1, length);
         }
 
         if (!flow_control) {
@@ -699,7 +699,7 @@ public:
         ucx_perf_get_time(&m_perf);
         ucs_assert(outstanding() == 0);
         if (my_index == 1) {
-            ucx_perf_update(&m_perf, 0, 0);
+            ucx_perf_update(&m_perf, 0, 1, 0);
         }
 
         return UCS_OK;

@@ -30,6 +30,7 @@ BEGIN_C_DECLS
 #define UCT_PERF_TEST_AM_ID  5
 #define ADDR_BUF_SIZE        4096
 #define EXTRA_INFO_SIZE      256
+#define ONESIDED_SIGNAL_SIZE sizeof(uint64_t)
 
 #define UCX_PERF_TEST_FOREACH(perf) \
     while (!ucx_perf_context_done(perf))
@@ -228,12 +229,13 @@ static inline void ucx_perf_omp_barrier(ucx_perf_context_t *perf)
 
 static UCS_F_ALWAYS_INLINE void ucx_perf_update(ucx_perf_context_t *perf,
                                                 ucx_perf_counter_t iters,
+                                                ucx_perf_counter_t msgs,
                                                 size_t bytes_per_iter)
 {
     perf->current.time   = ucs_get_time();
     perf->current.iters += iters;
-    perf->current.bytes += bytes_per_iter * iters;
-    perf->current.msgs  += iters;
+    perf->current.bytes += msgs * bytes_per_iter;
+    perf->current.msgs  += msgs;
 
     if (iters == 1) {
         perf->timing_queue[perf->timing_queue_head] = perf->current.time -
@@ -249,21 +251,6 @@ static UCS_F_ALWAYS_INLINE void ucx_perf_update(ucx_perf_context_t *perf,
     if (ucs_unlikely((perf->current.time - perf->prev.time) >=
                      perf->report_interval) &&
         (perf->current.iters < perf->max_iter)) {
-        ucx_perf_report(perf);
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucx_perf_update_multi(ucx_perf_context_t *perf, ucx_perf_counter_t iters,
-                      size_t bytes)
-{
-    perf->current.time   = ucs_get_time();
-    perf->current.iters += iters;
-    perf->current.bytes += bytes;
-    perf->current.msgs  += iters;
-    perf->prev_time      = perf->current.time;
-
-    if (ucs_likely(perf->current.iters < perf->params.max_iter)) {
         ucx_perf_report(perf);
     }
 }

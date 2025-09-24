@@ -328,6 +328,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  * @param [in]  addresses              Array of local addresses to send from.
  * @param [in]  remote_addresses       Array of remote addresses to send to.
  * @param [in]  lengths                Array of lengths in bytes for each send.
+ * @param [in]  counter_index          Index of remote increment descriptor.
  * @param [in]  counter_inc_value      Value of the remote increment.
  * @param [in]  counter_remote_address Remote address to increment to.
  * @param [in]  flags                  Flags to modify the function behavior.
