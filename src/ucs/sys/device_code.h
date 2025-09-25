@@ -7,6 +7,7 @@
 #ifndef UCS_DEVICE_CODE_H
 #define UCS_DEVICE_CODE_H
 
+#include <ucs/sys/compiler_def.h>
 #include <stdint.h>
 
 /*
@@ -32,6 +33,24 @@ typedef enum {
     UCS_DEVICE_LEVEL_BLOCK  = 2,
     UCS_DEVICE_LEVEL_GRID   = 3
 } ucs_device_level_t;
+
+
+static UCS_F_ALWAYS_INLINE const char*
+ucs_device_level_name(ucs_device_level_t level)
+{
+    switch (level) {
+    case UCS_DEVICE_LEVEL_THREAD:
+        return "thread";
+    case UCS_DEVICE_LEVEL_WARP:
+        return "warp";
+    case UCS_DEVICE_LEVEL_BLOCK:
+        return "block";
+    case UCS_DEVICE_LEVEL_GRID:
+        return "grid";
+    default:
+        return "unknown";
+    }
+}
 
 
 /*

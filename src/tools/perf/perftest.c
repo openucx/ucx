@@ -80,11 +80,23 @@ test_type_t tests[] = {
     {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put bandwidth", "overhead", 32},
 
+    {"ucp_put_single_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_SINGLE, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "put single bandwidth", "overhead", 32},
+
+    {"ucp_put_single_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_SINGLE, UCX_PERF_TEST_TYPE_PINGPONG,
+     "put single latency", "latency", 1},
+
     {"ucp_put_multi_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put multi bandwidth", "overhead", 32},
 
     {"ucp_put_multi_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_PINGPONG,
      "put multi latency", "latency", 32},
+
+    {"ucp_put_partial_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_PARTIAL, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "put partial bandwidth", "overhead", 32},
+
+    {"ucp_put_partial_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_PARTIAL, UCX_PERF_TEST_TYPE_PINGPONG,
+     "put partial latency", "latency", 32},
 
     {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "get latency / bandwidth / message rate", "latency", 1},
@@ -203,12 +215,14 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.recv_mem_type     = UCS_MEMORY_TYPE_HOST;
     params->super.send_device       = default_dev;
     params->super.recv_device       = default_dev;
+    params->super.device_level      = UCS_DEVICE_LEVEL_THREAD;
     params->super.msg_size_cnt      = 1;
     params->super.iov_stride        = 0;
     params->super.ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.am_hdr_size   = 0;
     params->super.device_thread_count = 1;
+    params->super.device_block_count  = 1;
     params->super.ucp.is_daemon_mode  = 0;
     params->super.ucp.dmn_local_addr  = empty_addr;
     params->super.ucp.dmn_remote_addr = empty_addr;
@@ -451,8 +465,8 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 
         if (peer_params.super.msg_size_cnt != 0) {
             peer_params.super.msg_size_list =
-                    calloc(ctx->params.super.msg_size_cnt,
-                           sizeof(*ctx->params.super.msg_size_list));
+                    calloc(peer_params.super.msg_size_cnt,
+                           sizeof(*peer_params.super.msg_size_list));
             if (peer_params.super.msg_size_list == NULL) {
                 status = UCS_ERR_NO_MEMORY;
                 goto err_close_connfd;

@@ -91,13 +91,14 @@ uct_put_multi_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
                      size_t length, ucs_status_t *status_p)
 {
     __shared__ uct_device_completion_t comp;
-    size_t sizes[iovcnt];
-    void *src[iovcnt];
-    uint64_t dst[iovcnt];
+    __shared__ size_t sizes[iovcnt];
+    __shared__ void *src[iovcnt];
+    __shared__ uint64_t dst[iovcnt];
     int lane_id = threadIdx.x;
     ucs_status_t status;
 
-    if (lane_id <= iovcnt) {
+    if (lane_id < iovcnt) {
+        /* TODO: what if iovcnt > num_lanes? */
         sizes[lane_id] = length / iovcnt;
         src[lane_id]   = (void*)((uintptr_t)va + length / iovcnt * lane_id);
         dst[lane_id]   = rva + length / iovcnt * lane_id;
@@ -135,6 +136,10 @@ launch_uct_put_multi(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
             <<<1, UCS_DEVICE_NUM_THREADS_IN_WARP>>>(ep, mem_list, va, rva,
                                                     atomic_rva, length,
                                                     status.device_ptr());
+    cudaError_t st = cudaGetLastError();
+    if (st != cudaSuccess) {
+        throw std::runtime_error(cudaGetErrorString(st));
+    }
     synchronize();
     return *status;
 }
@@ -151,14 +156,14 @@ uct_put_partial_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
                        size_t length, ucs_status_t *status_p)
 {
     __shared__ uct_device_completion_t comp;
-    unsigned indices[iovcnt];
-    size_t sizes[iovcnt];
-    void *src[iovcnt];
-    uint64_t dst[iovcnt];
+    __shared__ unsigned indices[iovcnt];
+    __shared__ size_t sizes[iovcnt];
+    __shared__ void *src[iovcnt];
+    __shared__ uint64_t dst[iovcnt];
     int lane_id = threadIdx.x;
     ucs_status_t status;
 
-    if (lane_id <= iovcnt) {
+    if (lane_id < iovcnt) {
         indices[lane_id] = lane_id;
         sizes[lane_id]   = length / iovcnt;
         src[lane_id]     = (void*)((uintptr_t)va + length / iovcnt * lane_id);
@@ -197,6 +202,10 @@ launch_uct_put_partial(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
             <<<1, UCS_DEVICE_NUM_THREADS_IN_WARP>>>(ep, mem_list, va, rva,
                                                     atomic_rva, length,
                                                     status.device_ptr());
+    cudaError_t st = cudaGetLastError();
+    if (st != cudaSuccess) {
+        throw std::runtime_error(cudaGetErrorString(st));
+    }
     synchronize();
     return *status;
 }

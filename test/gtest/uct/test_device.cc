@@ -18,6 +18,34 @@ extern "C" {
 
 #include "cuda/test_kernels.h"
 
+/* Ensure a CUDA context is active before UCX enumerates resources so that
+ * cuda_ipc sys_device is set properly. */
+static struct test_device_cuda_ctx_guard {
+    CUdevice  dev;
+    CUcontext ctx;
+    int       active;
+
+    test_device_cuda_ctx_guard() : dev(0), ctx(NULL), active(0) {
+        (void)UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+        if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&dev, 0)) == UCS_OK) {
+            if (UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&ctx, dev)) == UCS_OK) {
+                if (UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx)) == UCS_OK) {
+                    active = 1;
+                } else {
+                    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(dev));
+                }
+            }
+        }
+    }
+
+    ~test_device_cuda_ctx_guard() {
+        if (active) {
+            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(dev));
+        }
+    }
+} g_test_device_cuda_ctx_guard;
+
 class test_device : public uct_test {
 protected:
     void init()
@@ -29,7 +57,7 @@ protected:
         status = uct_cuda_base_get_cuda_device(GetParam()->sys_device,
                                                &m_cuda_dev);
         ASSERT_UCS_OK(status, << " sys_device "
-                              << static_cast<int>(GetParam()->sys_device));
+            << static_cast<int>(GetParam()->sys_device));
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));
@@ -219,3 +247,4 @@ UCS_TEST_P(test_device, partial)
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_device, rc_gda)
+_UCT_INSTANTIATE_TEST_CASE(test_device, cuda_ipc)
