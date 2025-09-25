@@ -103,6 +103,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
                                                       cq_attr.umem_len,
                                               ucs_get_page_size());
 
+    /* Disable inline scatter to TX CQE */
+    qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
+
     dev_ep_size = qp_attr.umem_offset + qp_attr.len;
     /*
      * dev_ep layout:
@@ -114,6 +117,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
                                      (void**)&self->ep_gpu, &self->ep_raw);
     if (status != UCS_OK) {
         goto err_ctx;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemsetD8((CUdeviceptr)self->ep_gpu, 0, dev_ep_size));
+    if (status != UCS_OK) {
+        goto err_mem;
     }
 
     /* TODO add dmabuf_fd support */
@@ -174,12 +183,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     dev_ep.cqe_daddr = UCS_PTR_BYTE_OFFSET(self->ep_gpu, cq_attr.umem_offset);
     dev_ep.cqe_num   = cq_attr.cq_size;
     dev_ep.sq_db     = self->sq_db;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemsetD8((CUdeviceptr)self->ep_gpu, 0, dev_ep_size));
-    if (status != UCS_OK) {
-        goto err_dev_ep;
-    }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemsetD8((CUdeviceptr)UCS_PTR_BYTE_OFFSET(self->ep_gpu,

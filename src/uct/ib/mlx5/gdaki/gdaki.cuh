@@ -12,7 +12,8 @@
 #include <doca_gpunetio_dev_verbs_qp.cuh>
 #include <cooperative_groups.h>
 
-constexpr unsigned uct_rc_mlx5_gda_warp_size = 32;
+#define UCT_RC_GDA_RESV_WQE_NO_RESOURCE -1ULL
+
 
 UCS_F_DEVICE void *
 uct_rc_mlx5_gda_get_wqe_ptr(uct_rc_gdaki_dev_ep_t *ep, uint16_t wqe_idx)
@@ -61,7 +62,7 @@ uct_rc_mlx5_gda_exec_init(unsigned &lane_id, unsigned &num_lanes)
         break;
     case UCS_DEVICE_LEVEL_WARP:
         lane_id   = doca_gpu_dev_verbs_get_lane_id();
-        num_lanes = uct_rc_mlx5_gda_warp_size;
+        num_lanes = UCS_DEVICE_NUM_THREADS_IN_WARP;
         break;
     case UCS_DEVICE_LEVEL_BLOCK:
         lane_id   = threadIdx.x;
@@ -91,9 +92,25 @@ template<ucs_device_level_t level> UCS_F_DEVICE void uct_rc_mlx5_gda_sync(void)
     }
 }
 
-UCS_F_DEVICE uint64_t
-uct_rc_mlx5_gda_reserv_wqe_thread(uct_rc_gdaki_dev_ep_t *ep, unsigned count)
+UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_max_alloc_wqe_base(
+    uct_rc_gdaki_dev_ep_t *ep, unsigned count)
 {
+    /* TODO optimize by including sq_wqe_num in qp->sq_wqe_pi and updating it
+       when processing a new completion */
+    return ep->sq_wqe_pi + ep->sq_wqe_num - count;
+}
+
+UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
+    uct_rc_gdaki_dev_ep_t *ep, unsigned count)
+{
+    /* Do not attempt to reserve if the available space is less than the
+     * requested count, to avoid starvation of threads trying to rollback the
+     * reservation with atomicCAS. */
+    uint64_t max_wqe_base = uct_rc_mlx5_gda_max_alloc_wqe_base(ep, count);
+    if (ep->sq_rsvd_index > max_wqe_base) {
+        return UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
+    }
+
     uint64_t wqe_base = atomicAdd(reinterpret_cast<unsigned long long*>(
                                           &ep->sq_rsvd_index),
                                   static_cast<unsigned long long>(count));
@@ -111,18 +128,20 @@ uct_rc_mlx5_gda_reserv_wqe_thread(uct_rc_gdaki_dev_ep_t *ep, unsigned count)
      *    wqe_base.
      *  - A successful CAS indicates no other thread has modified the reserved
      *    index, allowing the rollback to complete, and the function returns
-     *    -1ULL to signal insufficient resources.
+     *    UCT_RC_GDA_RESV_WQE_NO_RESOURCE to signal insufficient resources.
      *  - If CAS fails, it means another thread has modified the reserved index.
      *    The loop continues to reevaluate resource availability to determine if
      *    the reservation can now be satisfied, possibly due to other operations
      *    freeing up resources.
      */
-    while (wqe_base + count > ep->sq_wqe_pi + ep->sq_wqe_num) {
+    while (wqe_base > max_wqe_base) {
         uint64_t wqe_next = wqe_base + count;
         if (atomicCAS(reinterpret_cast<unsigned long long*>(&ep->sq_rsvd_index),
                       wqe_next, wqe_base) == wqe_next) {
-            return -1ULL;
+            return UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
         }
+
+        max_wqe_base = uct_rc_mlx5_gda_max_alloc_wqe_base(ep, count);
     }
 
     return wqe_base;
@@ -195,7 +214,8 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
         wqe_base = wqe_base_orig;
     }
 
-    if (!(flags & UCT_DEVICE_FLAG_NODELAY)) {
+    if (!(flags & UCT_DEVICE_FLAG_NODELAY) &&
+        !((wqe_base ^ (wqe_base + count)) & 128)) {
         return;
     }
 
@@ -224,7 +244,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
 
     uct_rc_mlx5_gda_exec_init<level>(lane_id, num_lanes);
     uct_rc_mlx5_gda_reserv_wqe<level>(ep, 1, lane_id, wqe_idx);
-    if (wqe_idx == -1ULL) {
+    if (wqe_idx == UCT_RC_GDA_RESV_WQE_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -296,11 +316,11 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
-    unsigned cflag            = 0;
     int count                 = mem_list_count;
     int counter_index         = count - 1;
     bool atomic               = false;
     uint64_t wqe_idx;
+    unsigned cflag;
     unsigned lane_id;
     unsigned num_lanes;
     uint32_t fc;
@@ -323,7 +343,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
 
     uct_rc_mlx5_gda_exec_init<level>(lane_id, num_lanes);
     uct_rc_mlx5_gda_reserv_wqe<level>(ep, count, lane_id, wqe_base);
-    if (wqe_base == -1ULL) {
+    if (wqe_base == UCT_RC_GDA_RESV_WQE_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -347,6 +367,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
             continue;
         }
 
+        cflag = 0;
         if (((comp != nullptr) && (i == count - 1)) ||
             ((comp == nullptr) && (wqe_idx == fc))) {
             cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
@@ -385,12 +406,12 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
-    unsigned cflag            = 0;
     unsigned count            = mem_list_count;
     bool atomic               = false;
     uint64_t wqe_idx;
     unsigned lane_id;
     unsigned num_lanes;
+    unsigned cflag;
     uint32_t fc;
     uint64_t wqe_base;
     size_t length;
@@ -412,7 +433,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
 
     uct_rc_mlx5_gda_exec_init<level>(lane_id, num_lanes);
     uct_rc_mlx5_gda_reserv_wqe<level>(ep, count, lane_id, wqe_base);
-    if (wqe_base == -1ULL) {
+    if (wqe_base == UCT_RC_GDA_RESV_WQE_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -438,6 +459,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
             continue;
         }
 
+        cflag = 0;
         if (((comp != nullptr) && (i == count - 1)) ||
             ((comp == nullptr) && (wqe_idx == fc))) {
             cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
@@ -531,7 +553,7 @@ uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
                          err_cqe->hw_err_synd, wqe_idx,
                          doca_gpu_dev_verbs_bswap32(err_cqe->s_wqe_opcode_qpn) &
                                  0xffffff);
-        uct_rc_mlx5_gda_qedump("wQE", wqe_ptr, 64);
+        uct_rc_mlx5_gda_qedump("WQE", wqe_ptr, 64);
         uct_rc_mlx5_gda_qedump("CQE", cqe64, 64);
         return UCS_ERR_IO_ERROR;
     }

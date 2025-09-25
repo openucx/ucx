@@ -1821,6 +1821,7 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
     ucp_lane_map_t tag_lanes_map    = 0;
     ucp_lane_map_t rma_lanes_map    = 0;
     ucp_lane_map_t amo_lanes_map    = 0;
+    ucp_lane_map_t device_lanes_map = 0;
     ucp_lane_map_t stream_lanes_map = 0;
     ucp_lane_map_t am_lanes_map     = 0;
     ucp_lane_map_t ka_lanes_map     = 0;
@@ -1867,6 +1868,10 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
             ka_lanes_map |= UCS_BIT(lane);
         }
 
+        if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
+            device_lanes_map |= UCS_BIT(lane);
+        }
+
         if ((ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane) >= 0)) {
             rma_lanes_map |= UCS_BIT(lane);
         }
@@ -1897,6 +1902,7 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
                                !rma_emul ? "rma" : "rma_am", &strb);
     ucp_worker_add_feature_rsc(context, key, amo_lanes_map,
                                !amo_emul ? "amo" : "amo_am", &strb);
+    ucp_worker_add_feature_rsc(context, key, device_lanes_map, "device", &strb);
     ucp_worker_add_feature_rsc(context, key, am_lanes_map, "am", &strb);
     ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream", &strb);
     ucp_worker_add_feature_rsc(context, key, ka_lanes_map, "ka", &strb);

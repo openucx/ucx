@@ -20,6 +20,10 @@
 #endif /* __NVCC__ */
 
 
+/* Number of threads in a warp */
+#define UCS_DEVICE_NUM_THREADS_IN_WARP 32
+
+
 /**
  * @brief Cooperation level when calling device functions.
  */
