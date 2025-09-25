@@ -63,12 +63,12 @@ typedef struct ucp_device_mem_list_elem {
     ucp_mem_h  memh;
 
     /**
-     * Local address of the memory to be transferred from.
+     * Local memory address for the device transfer operations.
      */
-    void *     local_addr;
+    void*     local_addr;
 
     /**
-     * Remote address of the memory to be transferred to.
+     * Remote memory address for the device transfer operations.
      */
     uint64_t   remote_addr;
 
