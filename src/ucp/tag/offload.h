@@ -159,7 +159,7 @@ ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag, size_t length)
        avoid unwanted postings of receive buffers (those, which are expected to
        arrive from offload incapable iface) to the HW. */
     if (ucs_unlikely((length >= worker->tm.offload.thresh) &&
-                     (worker->num_active_ifaces > 1))) {
+                     (worker->num_active_tag_ifaces > 1))) {
         tag_key = worker->context->config.tag_sender_mask & tag;
         hash_it = kh_get(ucp_tag_offload_hash, &worker->tm.offload.tag_hash,
                          tag_key);

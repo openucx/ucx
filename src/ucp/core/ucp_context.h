@@ -38,9 +38,12 @@ KHASH_IMPL(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*, 1,
 
 
 enum {
-    /* The flag indicates that the resource may be used for auxiliary
-     * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
+    /* The flag indicates that the resource may be used for normal communication */
+    UCP_TL_RSC_FLAG_COMM = UCS_BIT(0),
+    /* The flag indicates that the resource may be used for auxiliary wireup */
+    UCP_TL_RSC_FLAG_AUX  = UCS_BIT(1),
+    /* The flag indicates that the resource may be used for memory copy */
+    UCP_TL_RSC_FLAG_MEM  = UCS_BIT(2),
 };
 
 #define UCP_OP_ATTR_INDEX_MASK (UCP_OP_ATTR_FLAG_NO_IMM_CMPL    | \
@@ -232,6 +235,8 @@ struct ucp_config {
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
+    /** Array of transport names to use for memory copy */
+    ucs_config_allow_list_t                mem_tls;
     /** Array of protocol names to use */
     ucs_config_allow_list_t                protos;
     /** Array of memory allocation methods */
@@ -594,6 +599,7 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 extern ucp_am_handler_t *ucp_am_handlers[];
 extern const char       *ucp_feature_str[];
+extern const char       *ucp_tl_rsc_flag_names[];
 
 
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,

@@ -138,13 +138,13 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
-const char *ucp_object_versions[] = {
+static const char *ucp_object_versions[] = {
     [UCP_OBJECT_VERSION_V1]   = "v1",
     [UCP_OBJECT_VERSION_V2]   = "v2",
     [UCP_OBJECT_VERSION_LAST] = NULL
 };
 
-const char *ucp_extra_op_attr_flags_names[] = {
+static const char *ucp_extra_op_attr_flags_names[] = {
     [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_NO_IMM_CMPL)]    = "no_imm_cmpl",
     [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FAST_CMPL)]      = "fast_cmpl",
     [UCP_OP_ATTR_INDEX(UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)] = "force_imm_cmpl",
@@ -634,6 +634,10 @@ static ucs_config_field_t ucp_config_table[] = {
    " and disables aliasing.",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
 
+  {"MEM_TLS", "cuda_copy,gdr_copy,rocm_copy,ze_copy",
+   "Comma-separated list of transports to use for memory copy. The order is not meaningful\n",
+   ucs_offsetof(ucp_config_t, mem_tls), UCS_CONFIG_TYPE_ALLOW_LIST},
+
   {"PROTOS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of glob patterns specifying protocols to use.\n"
    "The order is not meaningful.\n"
@@ -719,8 +723,8 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "dc_x",  { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
-  { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
-  { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
+  { "rocm",  { "rocm_copy", "rocm_ipc", NULL } },
+  { "ze",    { "ze_copy", "ze_ipc", NULL } },
   { "gga",   { "gga_mlx5", NULL } },
   { NULL }
 };
@@ -736,6 +740,13 @@ const char *ucp_feature_str[] = {
     [ucs_ilog2(UCP_FEATURE_AM)]     = "UCP_FEATURE_AM",
     [ucs_ilog2(UCP_FEATURE_DEVICE)] = "UCP_FEATURE_DEVICE",
     NULL
+};
+
+
+const char *ucp_tl_rsc_flag_names[] = {
+    [ucs_ilog2(UCP_TL_RSC_FLAG_COMM)] = "comm",
+    [ucs_ilog2(UCP_TL_RSC_FLAG_MEM)]  = "mem",
+    [ucs_ilog2(UCP_TL_RSC_FLAG_AUX)]  = "aux"
 };
 
 
@@ -929,8 +940,9 @@ void ucp_apply_uct_config_list(ucp_context_h context, void *config)
  * 'str:str_suffix' string.
  * @return bitmap of indexes in which the string appears in the array.
  */
-static uint64_t ucp_str_array_search(const char **array, unsigned array_len,
-                                     const char *str, const char *str_suffix)
+static uint64_t ucp_str_array_search(const char *const *array,
+                                     unsigned array_len, const char *str,
+                                     const char *str_suffix)
 {
     const size_t len = strlen(str);
     uint64_t result;
@@ -954,14 +966,14 @@ static uint64_t ucp_str_array_search(const char **array, unsigned array_len,
     return result;
 }
 
-static unsigned ucp_tl_alias_count(ucp_tl_alias_t *alias)
+static unsigned ucp_tl_alias_count(const ucp_tl_alias_t *alias)
 {
     unsigned count;
     for (count = 0; alias->tls[count] != NULL; ++count);
     return count;
 }
 
-static int ucp_tls_array_is_present(const char **tls, unsigned count,
+static int ucp_tls_array_is_present(const char *const *tls, unsigned count,
                                     const char *tl_name, const char *str_suffix,
                                     uint64_t *tl_cfg_mask)
 {
@@ -1023,8 +1035,8 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
     return !!mask;
 }
 
-static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
-                                    const char *str_suffix)
+static int ucp_tls_alias_is_present(const ucp_tl_alias_t *alias,
+                                    const char *tl_name, const char *str_suffix)
 {
     unsigned tl_alias_count = ucp_tl_alias_count(alias);
     uint64_t dummy_mask     = 0;
@@ -1036,11 +1048,12 @@ static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
 static uint8_t
 ucp_transports_list_search(const char *tl_name,
                            const ucs_config_names_array_t *tl_array,
+                           const ucp_tl_alias_t *tl_aliases,
                            uint64_t *tl_cfg_mask)
 {
+    const ucp_tl_alias_t *alias;
     uint8_t search_result = 0;
     uint64_t tmp_tl_cfg_mask;
-    ucp_tl_alias_t *alias;
     int tl_in_alias, tl_aux_in_alias;
 
     if (ucp_config_is_tl_name_present(tl_array, tl_name, 0, NULL,
@@ -1055,7 +1068,7 @@ ucp_transports_list_search(const char *tl_name,
         search_result |= UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN;
     }
 
-    for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
+    for (alias = tl_aliases; alias->alias != NULL; ++alias) {
         tmp_tl_cfg_mask = 0;
         if (ucp_config_is_tl_name_present(tl_array, alias->alias, 1, NULL,
                                           &tmp_tl_cfg_mask)) {
@@ -1096,45 +1109,48 @@ ucp_transports_list_search(const char *tl_name,
     return search_result;
 }
 
-static int
-ucp_is_resource_in_transports_list(const char *tl_name,
-                                   const ucs_config_allow_list_t *allow_list,
-                                   const ucs_string_set_t *aux_tls,
-                                   uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
+/* Returns which flags are enabled for the resource, out of the flags provided
+   in rsc_flags */
+static uint8_t ucp_tl_resource_check_transports_list(
+        const char *tl_name, const ucs_config_allow_list_t *allow_list,
+        const ucs_string_set_t *aux_tls, const ucp_tl_alias_t *tl_aliases,
+        uint8_t rsc_usage_mask, uint64_t *tl_cfg_mask)
 {
     uint8_t search_result;
 
     if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
-        return 1;
+        return rsc_usage_mask;
     }
 
-    ucs_assert(allow_list->array.count > 0);
     search_result = ucp_transports_list_search(tl_name, &allow_list->array,
-                                               tl_cfg_mask);
+                                               tl_aliases, tl_cfg_mask);
 
     if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW) {
         /* Enable the transport, if UCX_TLS=tl_name, or alias={tl_name} and
          * UCX_TLS=alias. */
         if (search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY) {
-            return 1;
+            return rsc_usage_mask;
         }
 
-        /* Enable the transport as an auxiliary, if UCX_TLS=tl_name:aux, or
+        /* Enable the transport only as an auxiliary, if UCX_TLS=tl_name:aux, or
          * alias={tl_name} and UCX_TLS=alias:aux, or alias={tl_name:aux} and
          * UCX_TLS=alias. */
         if (search_result & (UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN |
                              UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_ALIAS)) {
-            *rsc_flags |= UCP_TL_RSC_FLAG_AUX;
-            return 1;
+            return rsc_usage_mask & UCP_TL_RSC_FLAG_AUX;
         }
 
         return 0;
     }
 
+    /*** Deny-list mode ***/
+
     if (!ucs_string_set_contains(aux_tls, tl_name)) {
         /* Disable the transport which is not used as an auxiliary, if
          * UCX_TLS=^tl_name, or alias={tl_name} and UCX_TLS=^alias. */
-        return !(search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY);
+        return (search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY) ?
+                       0 :
+                       rsc_usage_mask;
     }
 
     /* A transport that can be used as an auxiliary is disabled by
@@ -1153,38 +1169,55 @@ ucp_is_resource_in_transports_list(const char *tl_name,
      * UCX_TLS=^tl_name2 or UCX_TLS=^alias2 should not break the usage of
      * tl_name1 keeping tl_name2 enabled as auxiliary transport. */
     if (search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY) {
-        *rsc_flags |= UCP_TL_RSC_FLAG_AUX;
+        return rsc_usage_mask & UCP_TL_RSC_FLAG_AUX;
     }
 
     /* Enable the transport, if it is not in the deny list, or if it is only
      * presented as an auxiliary transport in the deny list. */
-    return 1;
+    return rsc_usage_mask;
 }
 
-static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
-                                   const ucp_config_t *config,
-                                   const ucs_string_set_t *aux_tls,
-                                   uint8_t *rsc_flags, uint64_t dev_cfg_masks[],
-                                   uint64_t *tl_cfg_mask)
+/* Returns which flags are enabled for the resource, given the provided
+   configuration and set of auxiliary transports */
+static uint8_t
+ucp_tl_resource_usage_flags(const uct_tl_resource_desc_t *resource,
+                            const ucp_config_t *config,
+                            const ucs_string_set_t *aux_tls,
+                            uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
 {
-    int device_enabled, tl_enabled;
+    UCS_STRING_BUFFER_ONSTACK(rsc_flags_strb, 256);
+    const ucp_tl_alias_t empty_tl_aliases[] = {{NULL}};
+    uint8_t rsc_flags                       = 0;
 
     /* Find the enabled devices */
-    device_enabled = ucp_is_resource_in_device_list(
-            resource, config->devices, &dev_cfg_masks[resource->dev_type],
-            resource->dev_type);
-
+    if (!ucp_is_resource_in_device_list(resource, config->devices,
+                                        &dev_cfg_masks[resource->dev_type],
+                                        resource->dev_type)) {
+        goto out;
+    }
 
     /* Find the enabled UCTs */
-    *rsc_flags = 0;
-    tl_enabled = ucp_is_resource_in_transports_list(resource->tl_name,
-                                                    &config->tls, aux_tls,
-                                                    rsc_flags, tl_cfg_mask);
+    rsc_flags |= ucp_tl_resource_check_transports_list(
+            resource->tl_name, &config->tls, aux_tls, ucp_tl_aliases,
+            UCP_TL_RSC_FLAG_COMM | UCP_TL_RSC_FLAG_AUX, tl_cfg_mask);
 
-    ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is %sabled",
+    /* Find the enabled memory transports */
+    rsc_flags |= ucp_tl_resource_check_transports_list(
+            resource->tl_name, &config->mem_tls, aux_tls, empty_tl_aliases,
+            UCP_TL_RSC_FLAG_MEM, tl_cfg_mask);
+
+out:
+    if (rsc_flags == 0) {
+        ucs_string_buffer_appendf(&rsc_flags_strb, "disabled");
+    } else {
+        ucs_string_buffer_appendf(&rsc_flags_strb, "enabled for ");
+        ucs_string_buffer_append_flags(&rsc_flags_strb, rsc_flags,
+                                       ucp_tl_rsc_flag_names);
+    }
+    ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is %s",
               UCT_TL_RESOURCE_DESC_ARG(resource),
-              (device_enabled && tl_enabled) ? "en" : "dis");
-    return device_enabled && tl_enabled;
+              ucs_string_buffer_cstr(&rsc_flags_strb));
+    return rsc_flags;
 }
 
 static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource1,
@@ -1195,18 +1228,21 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
            (resource1->sys_device == resource2->sys_device));
 }
 
-static void ucp_add_tl_resource_if_enabled(
-        ucp_context_h context, ucp_md_index_t md_index,
-        const ucp_config_t *config, const ucs_string_set_t *aux_tls,
-        const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
-        uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
+static void
+ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_md_index_t md_index,
+                               const ucp_config_t *config,
+                               const ucs_string_set_t *aux_tls,
+                               const uct_tl_resource_desc_t *resource,
+                               uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask,
+                               uint8_t *tl_rsc_flags)
 {
     ucp_tl_md_t *md = &context->tl_mds[md_index];
     uint8_t rsc_flags;
     ucp_rsc_index_t dev_index, i;
 
-    if (ucp_is_resource_enabled(resource, config, aux_tls, &rsc_flags,
-                                dev_cfg_masks, tl_cfg_mask)) {
+    rsc_flags = ucp_tl_resource_usage_flags(resource, config, aux_tls,
+                                            dev_cfg_masks, tl_cfg_mask);
+    if (rsc_flags != 0) {
         if ((resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
             (resource->sys_device >= UCP_MAX_SYS_DEVICES)) {
             ucs_diag(UCT_TL_RESOURCE_DESC_FMT
@@ -1220,6 +1256,7 @@ static void ucp_add_tl_resource_if_enabled(
         context->tl_rscs[context->num_tls].tl_name_csum =
                                   ucs_crc16_string(resource->tl_name);
         context->tl_rscs[context->num_tls].flags        = rsc_flags;
+        *tl_rsc_flags                                  |= rsc_flags;
 
         dev_index = 0;
         for (i = 0; i < context->num_tls; ++i) {
@@ -1237,17 +1274,16 @@ static void ucp_add_tl_resource_if_enabled(
         }
 
         ++context->num_tls;
-        ++(*num_resources_p);
     }
 }
 
 static ucs_status_t
 ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      const ucp_config_t *config,
-                     const ucs_string_set_t *aux_tls, unsigned *num_resources_p,
+                     const ucs_string_set_t *aux_tls,
                      ucs_string_set_t avail_devices[],
                      ucs_string_set_t *avail_tls, uint64_t dev_cfg_masks[],
-                     uint64_t *tl_cfg_mask)
+                     uint64_t *tl_cfg_mask, uint8_t *tl_rsc_flags)
 {
     ucp_tl_md_t *md = &context->tl_mds[md_index];
     uct_tl_resource_desc_t *tl_resources;
@@ -1255,8 +1291,6 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     unsigned num_tl_resources;
     ucs_status_t status;
     ucp_rsc_index_t i;
-
-    *num_resources_p = 0;
 
     /* check what are the available uct resources */
     status = uct_md_query_tl_resources(md->md, &tl_resources, &num_tl_resources);
@@ -1293,8 +1327,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                             context->tl_cmpts[md->cmpt_index].attr.name);
         ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
         ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
-                                       &tl_resources[i], num_resources_p,
-                                       dev_cfg_masks, tl_cfg_mask);
+                                       &tl_resources[i], dev_cfg_masks,
+                                       tl_cfg_mask, tl_rsc_flags);
     }
 
     status = UCS_OK;
@@ -1480,59 +1514,52 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
 }
 
 static void ucp_resource_config_array_str(const ucs_config_names_array_t *array,
-                                          const char *title, char *buf, size_t max)
+                                          const char *title,
+                                          ucs_string_buffer_t *strb)
 {
-    char *p, *endp;
-    unsigned i;
-
     if (ucp_str_array_search((const char**)array->names, array->count,
                              UCP_RSC_CONFIG_ALL, NULL)) {
-        strncpy(buf, "", max);
         return;
     }
 
-    p    = buf;
-    endp = buf + max;
+    ucs_string_buffer_appendf(strb, "%s:", title);
+    ucs_string_buffer_append_array(strb, ",", "%s", array->names, array->count);
+}
 
-    if (strlen(title)) {
-        snprintf(p, endp - p, "%s:", title);
-        p += strlen(p);
-    }
+static void
+ucp_resource_allow_list_str(const ucs_config_allow_list_t *allow_list,
+                            ucs_string_buffer_t *strb)
+{
+    if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        ucs_string_buffer_appendf(strb, "all transports");
+    } else {
+        if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_NEGATE) {
+            ucs_string_buffer_appendf(strb, "not ");
+        }
 
-    for (i = 0; i < array->count; ++i) {
-        snprintf(p, endp - p, "%s%c", array->names[i],
-                  (i == array->count - 1) ? ' ' : ',');
-        p += strlen(p);
+        ucs_string_buffer_append_array(strb, ",", "%s", allow_list->array.names,
+                                       allow_list->array.count);
     }
 }
 
-static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
-                                    size_t max)
+static void
+ucp_resource_config_str(const ucp_config_t *config, ucs_string_buffer_t *strb)
 {
+    size_t length_before;
     int dev_type_idx;
-    char *p, *endp, *devs_p;
 
-    p    = buf;
-    endp = buf + max;
+    ucp_resource_allow_list_str(&config->tls, strb);
+    ucs_string_buffer_appendf(strb, " on ");
 
-    ucp_resource_config_array_str(&config->tls.array, "", p, endp - p);
-
-    if (strlen(p)) {
-        p += strlen(p);
-        snprintf(p, endp - p, "on ");
-        p += strlen(p);
-    }
-
-    devs_p = p;
+    length_before = ucs_string_buffer_length(strb);
     for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; ++dev_type_idx) {
         ucp_resource_config_array_str(&config->devices[dev_type_idx],
-                                      uct_device_type_names[dev_type_idx], p,
-                                      endp - p);
-        p += strlen(p);
+                                      uct_device_type_names[dev_type_idx],
+                                      strb);
     }
 
-    if (devs_p == p) {
-        snprintf(p, endp - p, "all devices");
+    if (length_before == ucs_string_buffer_length(strb)) {
+        ucs_string_buffer_appendf(strb, "all devices");
     }
 }
 
@@ -1585,25 +1612,27 @@ ucp_fill_sockaddr_prio_list(ucp_context_h context, const ucp_config_t *config)
 static ucs_status_t ucp_check_resources(ucp_context_h context,
                                         const ucp_config_t *config)
 {
-    char info_str[128];
+    UCS_STRING_BUFFER_ONSTACK(info_strb, 128);
     ucp_rsc_index_t tl_id;
     ucp_tl_resource_desc_t *resource;
-    unsigned num_usable_tls;
+    int have_comm_tl;
 
     /* Error check: Make sure there is at least one transport that is not
      * auxiliary */
-    num_usable_tls = 0;
+    have_comm_tl = 0;
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         ucs_assert(context->tl_rscs != NULL);
         resource = &context->tl_rscs[tl_id];
-        if (!(resource->flags & UCP_TL_RSC_FLAG_AUX)) {
-            num_usable_tls++;
+        if (resource->flags & UCP_TL_RSC_FLAG_COMM) {
+            have_comm_tl = 1;
+            break;
         }
     }
 
-    if (num_usable_tls == 0) {
-        ucp_resource_config_str(config, info_str, sizeof(info_str));
-        ucs_error("no usable transports/devices (asked %s)", info_str);
+    if (!have_comm_tl) {
+        ucp_resource_config_str(config, &info_strb);
+        ucs_error("no usable transports/devices (asked %s)",
+                  ucs_string_buffer_cstr(&info_strb));
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -1629,14 +1658,13 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
     const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
     size_t avail_mds             = config->max_component_mds;
     uct_component_attr_t uct_component_attr;
-    unsigned num_tl_resources;
+    uint8_t tl_rsc_flags;
     ucs_status_t status;
     ucp_rsc_index_t i;
     unsigned md_index;
     uint64_t mem_type_mask;
-    uint64_t mem_type_bitmap;
     ucs_memory_type_t mem_type;
-    const uct_md_attr_v2_t *md_attr;
+    ucp_tl_md_t *tl_md;
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
@@ -1661,48 +1689,50 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
         }
 
         md_index = context->num_mds;
-        md_attr  = &context->tl_mds[md_index].attr;
+        tl_md    = &context->tl_mds[md_index];
 
         status = ucp_fill_tl_md(context, cmpt_index,
-                                &uct_component_attr.md_resources[i],
-                                &context->tl_mds[md_index]);
+                                &uct_component_attr.md_resources[i], tl_md);
         if (status != UCS_OK) {
             continue;
         }
 
         /* Add communication resources of each MD */
-        status = ucp_add_tl_resources(context, md_index, config, aux_tls,
-                                      &num_tl_resources, avail_devices,
-                                      avail_tls, dev_cfg_masks, tl_cfg_mask);
+        tl_rsc_flags = 0;
+        status       = ucp_add_tl_resources(context, md_index, config, aux_tls,
+                                            avail_devices, avail_tls, dev_cfg_masks,
+                                            tl_cfg_mask, &tl_rsc_flags);
         if (status != UCS_OK) {
-            uct_md_close(context->tl_mds[md_index].md);
+            uct_md_close(tl_md->md);
             goto out;
         }
 
-        if (num_tl_resources == 0) {
-            /* If the MD does not have transport resources (device or sockaddr),
-             * don't use it */
-            ucs_debug("closing md %s because it has no selected transport resources",
-                      context->tl_mds[md_index].rsc.md_name);
-            uct_md_close(context->tl_mds[md_index].md);
+        if (tl_rsc_flags == 0) {
+            /* If the MD does not have transport resources, don't use it */
+            ucs_debug("closing md %s/%s because it has no selected transport "
+                      "resources",
+                      tl_cmpt->attr.name, tl_md->rsc.md_name);
+            uct_md_close(tl_md->md);
             continue;
         }
 
         avail_mds--;
 
-        /* List of memory type MDs */
-        mem_type_bitmap = md_attr->detect_mem_types;
-        if (~mem_type_mask & mem_type_bitmap) {
-            context->mem_type_detect_mds[context->num_mem_type_detect_mds] = md_index;
+        if (tl_rsc_flags & UCP_TL_RSC_FLAG_MEM) {
+            ucs_debug("adding md %s/%s to memory detection list",
+                      tl_cmpt->attr.name, tl_md->rsc.md_name);
+            context->mem_type_detect_mds[context->num_mem_type_detect_mds] =
+                    md_index;
             ++context->num_mem_type_detect_mds;
-            mem_type_mask |= mem_type_bitmap;
+            mem_type_mask |= tl_md->attr.detect_mem_types;
         }
 
         ucs_memory_type_for_each(mem_type) {
-            if (md_attr->flags & UCT_MD_FLAG_REG) {
-                if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
-                    !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
-                    if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
+            if (tl_md->attr.flags & UCT_MD_FLAG_REG) {
+                if ((context->config.ext.reg_nb_mem_types &
+                     UCS_BIT(mem_type)) &&
+                    !(tl_md->attr.reg_nonblock_mem_types & UCS_BIT(mem_type))) {
+                    if (tl_md->attr.reg_mem_types & UCS_BIT(mem_type)) {
                         /* Keep map of MDs supporting blocking registration
                          * if non-blocking registration is requested for the
                          * given memory type. In some cases blocking
@@ -1713,30 +1743,30 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
                     continue;
                 }
 
-                if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
+                if (tl_md->attr.reg_mem_types & UCS_BIT(mem_type)) {
                     context->reg_md_map[mem_type] |= UCS_BIT(md_index);
                 }
 
-                if (md_attr->cache_mem_types & UCS_BIT(mem_type)) {
+                if (tl_md->attr.cache_mem_types & UCS_BIT(mem_type)) {
                     context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                 }
 
                 if ((context->config.ext.gva_enable != UCS_CONFIG_OFF) &&
-                    (md_attr->gva_mem_types & UCS_BIT(mem_type))) {
+                    (tl_md->attr.gva_mem_types & UCS_BIT(mem_type))) {
                     context->gva_md_map[mem_type] |= UCS_BIT(md_index);
                 }
             }
         }
 
-        if (md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY) {
+        if (tl_md->attr.flags & UCT_MD_FLAG_EXPORTED_MKEY) {
             context->export_md_map |= UCS_BIT(md_index);
         }
 
-        if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
+        if (tl_md->attr.flags & UCT_MD_FLAG_REG_DMABUF) {
             context->dmabuf_reg_md_map |= UCS_BIT(md_index);
         }
 
-        ucs_for_each_bit(mem_type, md_attr->dmabuf_mem_types) {
+        ucs_for_each_bit(mem_type, tl_md->attr.dmabuf_mem_types) {
             /* In case of multiple providers, take the first one */
             if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
                 context->dmabuf_mds[mem_type] = md_index;

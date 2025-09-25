@@ -437,6 +437,9 @@ public:
     }
 
     void init() {
+        // Disable GPU memory support
+        modify_config("MEM_TLS", "");
+
         /* TODO: Currently all the tests are for intra-node communication only.
          * Find a way to create inter-node endpoint on a single node */
         test_ucp_tag::init();
