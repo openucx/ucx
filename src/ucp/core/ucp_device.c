@@ -14,6 +14,7 @@
 #include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_types.h>
 #include <ucs/type/param.h>
+#include <ucp/wireup/wireup_ep.h>
 
 #include "ucp_worker.inl"
 #include "ucp_ep.inl"
@@ -253,6 +254,11 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     for (i = 0;
          (i < UCP_DEVICE_MEM_LIST_MAX_EPS) && (lanes[i] != UCP_NULL_LANE);
          i++) {
+        if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lanes[i]))) {
+            /* TODO support proxy mem_element_pack() on wireup_ep */
+            return UCS_ERR_NOT_CONNECTED;
+        }
+
         /* Query per transport UCT memory list element size */
         wiface          = ucp_worker_iface(ep->worker,
                                            ucp_ep_get_rsc_index(ep, lanes[i]));

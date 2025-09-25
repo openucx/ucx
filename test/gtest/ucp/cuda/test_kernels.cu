@@ -51,18 +51,17 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
     case TEST_UCP_DEVICE_KERNEL_COUNTER_WRITE:
         ucp_device_counter_write(params.local_counter.address,
                                  params.local_counter.value);
-        status = UCS_OK;
-        break;
+        /* req_ptr is not used in this case */
+        return UCS_OK;
     case TEST_UCP_DEVICE_KERNEL_COUNTER_READ:
         uint64_t value = ucp_device_counter_read(params.local_counter.address);
         if (value != params.local_counter.value) {
             ucs_device_error("counter value mismatch: expected %lu, got %lu",
                              params.local_counter.value, value);
-            status = UCS_ERR_IO_ERROR;
-        } else {
-            status = UCS_OK;
+            return UCS_ERR_IO_ERROR;
         }
-        break;
+        /* req_ptr is not used in this case */
+        return UCS_OK;
     }
 
     if ((status != UCS_OK) || !(flags & UCT_DEVICE_FLAG_NODELAY) ||
