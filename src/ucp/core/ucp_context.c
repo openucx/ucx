@@ -511,6 +511,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
+  {"REG_NONBLOCK_FALLBACK", "y",
+   "Allow fallback to blocking memory registration if no MDs supporting non-blocking\n"
+   "registration.",
+   ucs_offsetof(ucp_context_config_t, reg_nb_fallback), UCS_CONFIG_TYPE_BOOL},
+
   {"PREFER_OFFLOAD", "y",
    "Prefer transports capable of remote memory access for RMA and AMO operations.\n"
    "The value is interpreted as follows:\n"
@@ -1632,11 +1637,10 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
     unsigned num_tl_resources;
     ucs_status_t status;
     ucp_rsc_index_t i;
+    const uct_md_attr_v2_t *md_attr;
     unsigned md_index;
     uint64_t mem_type_mask;
     uint64_t mem_type_bitmap;
-    ucs_memory_type_t mem_type;
-    const uct_md_attr_v2_t *md_attr;
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
@@ -1698,51 +1702,6 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
             mem_type_mask |= mem_type_bitmap;
         }
 
-        ucs_memory_type_for_each(mem_type) {
-            if (md_attr->flags & UCT_MD_FLAG_REG) {
-                if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
-                    !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
-                    if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
-                        /* Keep map of MDs supporting blocking registration
-                         * if non-blocking registration is requested for the
-                         * given memory type. In some cases blocking
-                         * registration maybe required anyway (e.g. internal
-                         * staging buffers for rndv pipeline protocols). */
-                        context->reg_block_md_map[mem_type] |= UCS_BIT(md_index);
-                    }
-                    continue;
-                }
-
-                if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
-                    context->reg_md_map[mem_type] |= UCS_BIT(md_index);
-                }
-
-                if (md_attr->cache_mem_types & UCS_BIT(mem_type)) {
-                    context->cache_md_map[mem_type] |= UCS_BIT(md_index);
-                }
-
-                if ((context->config.ext.gva_enable != UCS_CONFIG_OFF) &&
-                    (md_attr->gva_mem_types & UCS_BIT(mem_type))) {
-                    context->gva_md_map[mem_type] |= UCS_BIT(md_index);
-                }
-            }
-        }
-
-        if (md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY) {
-            context->export_md_map |= UCS_BIT(md_index);
-        }
-
-        if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
-            context->dmabuf_reg_md_map |= UCS_BIT(md_index);
-        }
-
-        ucs_for_each_bit(mem_type, md_attr->dmabuf_mem_types) {
-            /* In case of multiple providers, take the first one */
-            if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
-                context->dmabuf_mds[mem_type] = md_index;
-            }
-        }
-
         ++context->num_mds;
     }
 
@@ -1779,15 +1738,86 @@ static ucs_status_t ucp_fill_aux_tls(ucs_string_set_t *aux_tls)
     return UCS_OK;
 }
 
+static void
+ucp_update_memtype_md_map(uint64_t mem_types_map, ucs_memory_type_t mem_type,
+                          ucp_md_index_t md_index, ucp_md_map_t *md_map_p)
+{
+    if (mem_types_map & UCS_BIT(mem_type)) {
+        *md_map_p |= UCS_BIT(md_index);
+    }
+}
+
 static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    ucp_md_map_t reg_block_md_map;
+    ucp_md_map_t reg_nonblock_md_map;
     ucs_memory_type_t mem_type;
     ucp_md_index_t md_index;
+    const uct_md_attr_v2_t *md_attr;
 
-    /* If we have a dmabuf provider for a memory type, it means we can register
-     * memory of this type with any md that supports dmabuf registration. */
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        md_attr = &context->tl_mds[md_index].attr;
+        if (md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY) {
+            context->export_md_map |= UCS_BIT(md_index);
+        }
+
+        if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
+            context->dmabuf_reg_md_map |= UCS_BIT(md_index);
+        }
+    }
+
     ucs_memory_type_for_each(mem_type) {
+        reg_block_md_map    = 0;
+        reg_nonblock_md_map = 0;
+        for (md_index = 0; md_index < context->num_mds; ++md_index) {
+            md_attr = &context->tl_mds[md_index].attr;
+            if (md_attr->dmabuf_mem_types & UCS_BIT(mem_type)) {
+                /* In case of multiple providers, take the first one */
+                if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
+                    context->dmabuf_mds[mem_type] = md_index;
+                }
+            }
+
+            if (!(md_attr->flags & UCT_MD_FLAG_REG)) {
+                continue;
+            }
+
+            ucp_update_memtype_md_map(
+                    md_attr->reg_nonblock_mem_types, mem_type,
+                    md_index, &reg_nonblock_md_map);
+            ucp_update_memtype_md_map(
+                    md_attr->reg_mem_types, mem_type, md_index,
+                    &reg_block_md_map);
+            ucp_update_memtype_md_map(
+                    md_attr->cache_mem_types, mem_type, md_index,
+                    &context->cache_md_map[mem_type]);
+
+            if (context->config.ext.gva_enable != UCS_CONFIG_OFF) {
+                ucp_update_memtype_md_map(
+                        md_attr->gva_mem_types, mem_type, md_index,
+                        &context->gva_md_map[mem_type]);
+            }
+        }
+
+        if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+            ((reg_nonblock_md_map != 0) || !context->config.ext.reg_nb_fallback)) {
+                /* Keep map of MDs supporting blocking registration
+                 * if non-blocking registration is requested for the
+                 * given memory type. In some cases blocking
+                 * registration maybe required anyway (e.g. internal
+                 * staging buffers for rndv pipeline protocols). */
+                context->reg_block_md_map[mem_type] =
+                    reg_block_md_map & ~reg_nonblock_md_map;
+                context->reg_md_map[mem_type]       = reg_nonblock_md_map;
+        } else {
+            context->reg_block_md_map[mem_type] = reg_block_md_map;
+            context->reg_md_map[mem_type]       = reg_block_md_map;
+        }
+
+        /* If we have a dmabuf provider for a memory type, it means we can
+         * register memory of this type with any md that supports dmabuf
+         * registration. */
         if (context->dmabuf_mds[mem_type] != UCP_NULL_RESOURCE) {
             context->reg_md_map[mem_type] |= context->dmabuf_reg_md_map;
         }
