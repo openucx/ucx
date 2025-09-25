@@ -34,8 +34,10 @@ BEGIN_C_DECLS
  * It is used to enable backward compatibility support.
  */
 enum ucp_device_mem_list_elem_field {
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH = UCS_BIT(0), /**< Source memory handle */
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY = UCS_BIT(1)  /**< Unpacked remote memory key */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH        = UCS_BIT(0), /**< Source memory handle */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY        = UCS_BIT(1), /**< Unpacked remote memory key */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR  = UCS_BIT(2), /**< Local address */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(3)  /**< Remote address */
 };
 
 
@@ -59,6 +61,16 @@ typedef struct ucp_device_mem_list_elem {
      * Local memory registration handle.
      */
     ucp_mem_h  memh;
+
+    /**
+     * Local memory address for the device transfer operations.
+     */
+    void*     local_addr;
+
+    /**
+     * Remote memory address for the device transfer operations.
+     */
+    uint64_t   remote_addr;
 
     /**
      * Unpacked memory key for the remote memory endpoint.
