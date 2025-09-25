@@ -867,7 +867,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     ucs_sys_dev_distance_t *lanes_distance;
     ucp_rkey_config_key_t rkey_config_key;
     khiter_t khiter;
-    ucs_sys_device_t packed_sys_dev;
 
     /* Avoid calling ucp_ep_resolve_remote_id() from rkey_unpack, and let
      * the APIs which are not yet using new protocols resolve the remote key
@@ -875,18 +874,21 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
      */
     rkey->cache.ep_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
 
-    packed_sys_dev = ucp_rkey_extract_sys_dev(ep_config, rkey, &p, buffer_end);
-
     /* Look up remote key's configuration */
     rkey_config_key.ep_cfg_index       = ep->cfg_index;
     rkey_config_key.md_map             = rkey->md_map;
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
-    rkey_config_key.sys_dev            = packed_sys_dev &
-                                         ~UCP_SYS_DEVICE_FLUSH_BIT;
-    rkey_config_key.flags              =
-        ((packed_sys_dev & UCP_SYS_DEVICE_FLUSH_BIT) ?
-         UCP_RKEY_CONFIG_FLAG_FLUSH : 0);
+    rkey_config_key.sys_dev = ucp_rkey_extract_sys_dev(ep_config, rkey, &p,
+                                                       buffer_end);
+
+    if ((rkey_config_key.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (rkey_config_key.sys_dev & UCP_SYS_DEVICE_FLUSH_BIT)) {
+        rkey_config_key.flags    = UCP_RKEY_CONFIG_FLAG_FLUSH;
+        rkey_config_key.sys_dev &= ~UCP_SYS_DEVICE_FLUSH_BIT;
+    } else {
+        rkey_config_key.flags = 0;
+    }
 
     /* Starting with UCX v1.20, lane distances are always packed if sys_dev is
      * not UNKNOWN. Even if the rkey length is not explicitly passed to the API,
