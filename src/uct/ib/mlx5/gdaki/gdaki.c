@@ -24,15 +24,15 @@ typedef struct {
 } uct_rc_gdaki_iface_config_t;
 
 ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
-  {UCT_IB_CONFIG_PREFIX, "", NULL,
-   ucs_offsetof(uct_rc_gdaki_iface_config_t, super),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
+    {UCT_IB_CONFIG_PREFIX, "", NULL,
+     ucs_offsetof(uct_rc_gdaki_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
 
-  {UCT_IB_CONFIG_PREFIX, "", NULL,
-   ucs_offsetof(uct_rc_gdaki_iface_config_t, mlx5),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
+    {UCT_IB_CONFIG_PREFIX, "", NULL,
+     ucs_offsetof(uct_rc_gdaki_iface_config_t, mlx5),
+     UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
-  {NULL}
+    {NULL}
 };
 
 
@@ -657,7 +657,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         }
 
         /* TODO this logic should be done in UCP */
-        if (dist.latency > 300.0 / UCS_NSEC_PER_SEC) {
+        if (dist.latency > md->super.config.gpu_ib_distance_latency_thresh) {
             continue;
         }
 

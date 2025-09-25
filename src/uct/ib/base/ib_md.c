@@ -119,6 +119,11 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
+    {"GPU_IB_DISTANCE_LATENCY_THRESH", "300ns",
+     "Skip GPU device if the distance latency to the IB device is greater than this value.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gpu_ib_distance_latency_thresh),
+     UCS_CONFIG_TYPE_TIME},
+
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
      ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
