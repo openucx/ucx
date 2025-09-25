@@ -279,12 +279,12 @@ NVCC_EXTRA_FLAGS = \
 include $(top_srcdir)/config/cuda.am
 
 gtest_SOURCES += \
-	uct/cuda/test_kernels.cu \
-	uct/test_device.cc \
-	ucp/cuda/test_kernels.cu \
-	ucp/test_ucp_device.cc \
 	uct/cuda/test_kernels_uct.cu \
-	uct/cuda/test_cuda_ipc_device.cc
+	uct/cuda/test_cuda_ipc_device.cc \
+	uct/test_device.cc \
+	ucp/test_ucp_device.cc \
+	uct/cuda/test_kernels.cu \
+	ucp/cuda/test_kernels.cu
 
 endif
 endif

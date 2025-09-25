@@ -73,6 +73,11 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
     {"OVERHEAD", "4.0us",
      "Estimated CPU overhead for transferring GPU memory",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.overhead), UCS_CONFIG_TYPE_TIME},
+
+    {"ENABLE_SAME_PROCESS", "n",
+     "Enable same process same device communication for cuda_ipc",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_same_process), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -141,7 +146,8 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     dev_addr     = (const uct_cuda_ipc_device_addr_t *)params->device_addr;
     same_uuid    = (ucs_get_system_id() == dev_addr->system_uuid);
 
-    if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid) {
+    if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid &&
+        !iface->config.enable_same_process) {
         uct_iface_fill_info_str_buf(params, "same process");
         return 0;
     }
@@ -431,7 +437,7 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
-    cuda_ipc_mem_element.mapped_offset = (ptrdiff_t)mapped_addr - (ptrdiff_t)key->super.d_bptr;
+    cuda_ipc_mem_element.mapped_offset = UCS_PTR_BYTE_DIFF(key->super.d_bptr, mapped_addr);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
