@@ -72,7 +72,7 @@ struct ucp_rkey_config_key {
     /* MDs for which rkey is not reachable */
     ucp_md_map_t           unreachable_md_map;
 
-    /* Rkey specific flags, e.g.  */
+    /* Rkey specific flags, like @a UCP_RKEY_CONFIG_FLAG_FLUSH */
     uint8_t                flags;
 };
 

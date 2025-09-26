@@ -844,15 +844,24 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
     }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_sys_device_t
+static UCS_F_ALWAYS_INLINE void
 ucp_rkey_extract_sys_dev(const ucp_ep_config_t *ep_config, ucp_rkey_h rkey,
-                         const void **buffer_p, const void *buffer_end)
+                         const void **buffer_p, const void *buffer_end,
+                         ucp_rkey_config_key_t *rkey_config_key)
 {
     if ((*buffer_p < buffer_end) ||
         ((ep_config->key.dst_version > 19) && (rkey->md_map != 0))) {
-        return *ucs_serialize_next(buffer_p, const uint8_t);
+        rkey_config_key->sys_dev = *ucs_serialize_next(buffer_p, const uint8_t);
     } else {
-        return UCS_SYS_DEVICE_ID_UNKNOWN;
+        rkey_config_key->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    if ((rkey_config_key->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (rkey_config_key->sys_dev & UCP_SYS_DEVICE_FLUSH_BIT)) {
+        rkey_config_key->flags    = UCP_RKEY_CONFIG_FLAG_FLUSH;
+        rkey_config_key->sys_dev &= ~UCP_SYS_DEVICE_FLUSH_BIT;
+    } else {
+        rkey_config_key->flags = 0;
     }
 }
 
@@ -879,16 +888,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.md_map             = rkey->md_map;
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
-    rkey_config_key.sys_dev = ucp_rkey_extract_sys_dev(ep_config, rkey, &p,
-                                                       buffer_end);
 
-    if ((rkey_config_key.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-        (rkey_config_key.sys_dev & UCP_SYS_DEVICE_FLUSH_BIT)) {
-        rkey_config_key.flags    = UCP_RKEY_CONFIG_FLAG_FLUSH;
-        rkey_config_key.sys_dev &= ~UCP_SYS_DEVICE_FLUSH_BIT;
-    } else {
-        rkey_config_key.flags = 0;
-    }
+    ucp_rkey_extract_sys_dev(ep_config, rkey, &p, buffer_end, &rkey_config_key);
 
     /* Starting with UCX v1.20, lane distances are always packed if sys_dev is
      * not UNKNOWN. Even if the rkey length is not explicitly passed to the API,

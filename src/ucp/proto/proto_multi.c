@@ -151,6 +151,9 @@ static ucp_sys_dev_map_t ucp_proto_multi_init_flush_sys_dev_mask(
         return 0;
     }
 
+    ucs_assert(ucp_proto_common_get_iface_attr(&params->super.super, lane)
+                       ->cap.flags &
+               UCT_IFACE_FLAG_GET_BCOPY);
     return UCS_BIT(key->sys_dev);
 }
 
