@@ -40,7 +40,6 @@ ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
         .parent         = &ucp_mem_dummy_handle.memh,
         .mem_type       = UCS_MEMORY_TYPE_HOST,
         .sys_dev        = UCS_SYS_DEVICE_ID_UNKNOWN,
-        .packed_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
         .md_map         = 0,
         .inv_md_map     = 0,
         .reg_id         = 0,
@@ -727,13 +726,6 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
     memh->alloc_method   = method;
     memh->mem_type       = mem_type;
     memh->sys_dev        = sys_dev;
-
-    /* Cache sys_dev in a format packed to rkey to minimize overhead during
-     * rndv protocols. TODO remove if using another method to mark rkey with
-     * remote flush requirement. */
-    memh->packed_sys_dev = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
-                                   UCS_SYS_DEVICE_ID_UNKNOWN :
-                                   ucp_rkey_pack_sys_dev(memh);
 }
 
 static ucs_status_t
