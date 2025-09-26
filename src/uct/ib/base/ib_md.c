@@ -177,7 +177,7 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      ucs_offsetof(uct_ib_md_config_t, ext.odp.mem_types),
      UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
-    {"DIRECT_NIC", "n", "Use Direct NIC functionality for GPU memory access",
+    {"DIRECT_NIC", "y", "Use Direct NIC functionality for GPU memory access",
      ucs_offsetof(uct_ib_md_config_t, ext.direct_nic), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
