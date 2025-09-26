@@ -214,13 +214,18 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
     ucp_worker_remote_flush_key_t key;
     khiter_t khiter;
 
-    if (ep->ext->flush_sys_dev_map == 0) {
+    if (!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID)) {
+        return UCS_OK;
+    }
+
+    if (ep->ext->flush_state.flush_sys_dev_map == 0) {
         /* No other potentially related flushes on this EP */
         ucp_trace_req(req, "flush mem: no work to do");
         return UCS_OK;
     }
 
-    count                       = ucs_popcount(ep->ext->flush_sys_dev_map);
+    count                       =
+        ucs_popcount(ep->ext->flush_state.flush_sys_dev_map);
     req->send.flush.mem.entries = ucs_malloc(count * sizeof(*entry),
                                              "flush_mem_entries");
     if (req->send.flush.mem.entries == NULL) {
@@ -229,7 +234,7 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
 
     entry  = req->send.flush.mem.entries;
     key.ep = ep;
-    ucs_for_each_bit(key.sys_dev, ep->ext->flush_sys_dev_map) {
+    ucs_for_each_bit(key.sys_dev, ep->ext->flush_state.flush_sys_dev_map) {
         khiter = kh_get(ucp_worker_remote_flush, &ep->worker->remote_flush_hash,
                         key);
         ucs_assert(khiter != kh_end(&ep->worker->remote_flush_hash));
@@ -238,7 +243,7 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
         ++entry;
     }
 
-    ep->ext->flush_sys_dev_map = 0;
+    ep->ext->flush_state.flush_sys_dev_map = 0;
 
     req->send.flush.mem.started         = 0;
     req->send.uct.func                  = ucp_ep_flush_mem_progress;

@@ -570,6 +570,24 @@ UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup) {
     flush_worker(sender());
 }
 
+UCS_TEST_P(test_ucp_wireup_1sided, connect_then_flush)
+{
+    sender().connect(&receiver(), get_ep_params());
+    ucp_request_param_t param;
+    void *req;
+
+    auto completion = [](void *req, ucs_status_t status,
+                         void *user_data) -> void {};
+
+    param.op_attr_mask  = UCP_OP_ATTR_FIELD_CALLBACK |
+                          UCP_OP_ATTR_FIELD_USER_DATA;
+    param.cb.send       = completion;
+    param.user_data     = this;
+    req                 = ucp_ep_flush_nbx(sender().ep(), &param);
+    ucs_status_t status = request_wait(req);
+    ASSERT_UCS_OK(status);
+}
+
 UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), BUFFER_LENGTH, 1);

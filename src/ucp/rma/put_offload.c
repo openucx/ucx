@@ -121,14 +121,15 @@ ucp_proto_put_offload_update_remote_flush(ucp_ep_h ep,
                                           uct_rkey_t tl_rkey, uct_ep_h uct_ep,
                                           uint64_t address)
 {
-    if (ucs_test_all_flags(ep->ext->flush_sys_dev_map, flush_sys_dev_mask)) {
+    if (ucs_test_all_flags(ep->ext->flush_state.flush_sys_dev_map,
+                           flush_sys_dev_mask)) {
         return;
     }
 
     ucp_worker_remote_flush_hash_put(&ep->worker->remote_flush_hash, ep,
                                      ucs_ffs64_safe(flush_sys_dev_mask),
                                      tl_rkey, uct_ep, address);
-    ep->ext->flush_sys_dev_map |= flush_sys_dev_mask;
+    ep->ext->flush_state.flush_sys_dev_map |= flush_sys_dev_mask;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
