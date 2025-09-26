@@ -42,12 +42,13 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t                   *req = ucs_container_of(self, ucp_request_t,
                                                             send.uct);
+    ucp_ep_h                          ep = req->send.ep;
     ucp_worker_h                  worker = req->send.ep->worker;
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_ep_resolve_remote_id(req->send.ep, spriv->super.lane);
+        status = ucp_ep_resolve_remote_id(ep, spriv->super.lane);
         if (status != UCS_OK) {
             return status;
         }
@@ -58,6 +59,12 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
         req->send.length = req->send.state.dt_iter.length;
         req->flags      |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
         ucp_send_request_id_alloc(req);
+
+        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
     }
 
     ucp_worker_flush_ops_count_add(worker, +1);
@@ -71,14 +78,14 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
     return status;
 }
 
-static ucs_status_t
-ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_get_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                 = init_params->worker->context;
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 40e-9,
+        .super.overhead      = context->config.ext.proto_overhead_sw,
         .super.cfg_thresh    = ucp_proto_sw_rma_cfg_thresh(
                                    context, context->config.ext.bcopy_thresh),
         .super.cfg_priority  = 20,
@@ -95,22 +102,23 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_single_init(&params);
+    ucp_proto_single_probe(&params);
 }
 
 ucp_proto_t ucp_get_am_bcopy_proto = {
     .name     = "get/am/bcopy",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
-    .init     = ucp_proto_get_am_bcopy_init,
+    .probe    = ucp_proto_get_am_bcopy_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_get_am_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_id_abort,

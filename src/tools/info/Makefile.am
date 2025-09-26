@@ -18,6 +18,7 @@ build_config.h: $(top_builddir)/config.h Makefile
 
 ucx_info_CPPFLAGS  = $(BASE_CPPFLAGS)
 ucx_info_CFLAGS    = $(BASE_CFLAGS)
+ucx_info_LDFLAGS   = -lpthread $(BASE_LDFLAGS)
 if HAVE_IB
 ucx_info_CPPFLAGS += $(IBVERBS_CPPFLAGS)
 endif

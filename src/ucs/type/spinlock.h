@@ -20,7 +20,7 @@ BEGIN_C_DECLS
 
 /* Spinlock creation modifiers */
 enum {
-    UCS_SPINLOCK_FLAG_SHARED = UCS_BIT(0) /**< Make spinlock sharable in memory */
+    UCS_SPINLOCK_FLAG_SHARED = UCS_BIT(0) /**< Make spinlock shareable in memory */
 };
 
 /**

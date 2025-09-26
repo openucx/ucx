@@ -83,6 +83,7 @@ public class UcpConstants {
     static long UCP_EP_PARAM_FIELD_USER_DATA;
     static long UCP_EP_PARAM_FIELD_SOCK_ADDR;
     static long UCP_EP_PARAM_FIELD_FLAGS;
+    static long UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR;
     static long UCP_EP_PARAM_FIELD_CONN_REQUEST;
     static long UCP_EP_PARAM_FIELD_NAME;
 

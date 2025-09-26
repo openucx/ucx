@@ -3,7 +3,7 @@
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
-# Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2025. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 #
@@ -26,6 +26,16 @@ SUBDIRS = ucs/test_module ucm/test_dlopen common/googletest
 export UCX_HANDLE_ERRORS
 export UCX_LOG_LEVEL
 export UCX_LOG_PRINT_ENABLE
+
+if HAVE_ASAN
+export LSAN_OPTIONS=suppressions=$(abs_top_srcdir)/contrib/lsan.supp
+export ASAN_OPTIONS=protect_shadow_gap=0
+
+# LD_PRELOAD puts ASAN first in initial library list which is required for
+# correct ASAN work.
+ASAN_LIB=$(shell ldd $(abs_builddir)/gtest | grep libasan.so | cut -d' ' -f3)
+TEST_ENV=LD_PRELOAD=$(ASAN_LIB):$(LD_PRELOAD)
+endif
 
 GTEST_ARGS = \
 	--gtest_filter=$(GTEST_FILTER) \
@@ -72,6 +82,11 @@ gtest_CPPFLAGS = \
 	$(OPENMP_CFLAGS)
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install $(LDFLAGS_DYNAMIC_LIST_DATA)
+
+# disable-new-dtags to force using RPATH instead of RUNPATH to avoid loading of
+# wrong shared libraries accessible by LD_LIBRARY_PATH
+gtest_LDFLAGS += -Wl,--disable-new-dtags
+
 gtest_CFLAGS   = $(BASE_CFLAGS)
 gtest_CXXFLAGS = \
 	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++11 \
@@ -90,6 +105,7 @@ gtest_SOURCES = \
 	ucm/malloc_hook.cc \
 	\
 	uct/test_amo.cc \
+	uct/test_atomic_key_reg_rdma_mem_type.cc \
 	uct/test_amo_add_xor.cc \
 	uct/test_amo_and_or.cc \
 	uct/test_amo_cswap.cc \
@@ -102,6 +118,7 @@ gtest_SOURCES = \
 	uct/test_many2one_am.cc \
 	uct/test_md.cc \
 	uct/test_mm.cc \
+	uct/sm/mm/test_mm_fifo_room.cc \
 	uct/test_mem.cc \
 	uct/test_p2p_am.cc \
 	uct/test_p2p_err.cc \
@@ -110,6 +127,7 @@ gtest_SOURCES = \
 	uct/test_pending.cc \
 	uct/test_progress.cc \
 	uct/test_uct_ep.cc \
+	uct/test_uct_iface.cc \
 	uct/test_uct_perf.cc \
 	uct/v2/test_uct_query.cc \
 	uct/test_zcopy_comp.cc \
@@ -135,6 +153,8 @@ gtest_SOURCES = \
 	ucp/test_ucp_mem_type.cc \
 	ucp/test_ucp_perf.cc \
 	ucp/test_ucp_proto.cc \
+	ucp/test_ucp_proto_mock.cc \
+	ucp/test_ucp_ep_reconfig.cc \
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_rma_mt.cc \
 	ucp/test_ucp_tag_cancel.cc \
@@ -207,6 +227,11 @@ gtest_CPPFLAGS += \
 gtest_LDADD += \
 	$(IBVERBS_LDFLAGS) \
 	$(top_builddir)/src/uct/ib/libuct_ib.la
+if HAVE_MLX5_DV
+gtest_LDADD += \
+	$(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la
+endif
+
 if HAVE_DEVX
 gtest_SOURCES += \
 	uct/ib/test_devx.cc
@@ -231,11 +256,39 @@ if HAVE_MLX5_DV
 gtest_SOURCES += \
 	uct/ib/test_cqe_zipping.cc
 endif
+if HAVE_EFA
+gtest_SOURCES += \
+    uct/ib/test_srd.cc
+endif
 endif # HAVE_IB
 
 if HAVE_CUDA
 gtest_SOURCES += \
-	ucm/cuda_hooks.cc
+	ucm/cuda_hooks.cc \
+	uct/cuda/test_switch_cuda_device.cc \
+	uct/cuda/test_cuda_ipc_md.cc \
+	uct/cuda/test_cuda_nvml.cc
+
+if HAVE_NVCC
+if HAVE_GPUNETIO # temporarily all device code depends on doca
+NVCC_EXTRA_FLAGS = \
+	$(CUDA_CPPFLAGS) \
+	$(GPUNETIO_CFLAGS) \
+	-I$(top_srcdir)/test \
+	-I$(top_srcdir)/test/gtest
+include $(top_srcdir)/config/cuda.am
+
+gtest_SOURCES += \
+	uct/cuda/test_kernels_uct.cu \
+	uct/cuda/test_cuda_ipc_device.cc \
+	uct/test_device.cc \
+	ucp/test_ucp_device.cc \
+	uct/cuda/test_kernels.cu \
+	ucp/cuda/test_kernels.cu
+
+endif
+endif
+
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
 gtest_LDFLAGS += \
@@ -317,14 +370,14 @@ list: gtest
 #
 test: ucx gtest
 	@rm -f core.*
-	$(LAUNCHER) stdbuf -e0 -o0 $(abs_builddir)/gtest $(GTEST_ARGS)
+	$(LAUNCHER) env $(TEST_ENV) stdbuf -e0 -o0 $(abs_builddir)/gtest $(GTEST_ARGS)
 
 #
 # Run unit tests with GDB
 #
 test_gdb: ucx gtest
 	echo -e 'r\ninit-if-undefined $$_exitcode=-1\nif $$_exitcode>=0\n\tq\nend' > .gdbcommands
-	$(LAUNCHER) env UCX_HANDLE_ERRORS=none \
+	$(LAUNCHER) env $(TEST_ENV) UCX_HANDLE_ERRORS=none \
 		gdb -x .gdbcommands --args $(GDB_ARGS) \
 			$(abs_builddir)/gtest $(GTEST_ARGS)
 
@@ -332,6 +385,6 @@ test_gdb: ucx gtest
 # Run unit tests with valgrind
 #
 test_valgrind: ucx gtest
-	$(LAUNCHER) env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
+	$(LAUNCHER) env $(TEST_ENV) LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
 	stdbuf -e0 -o0 valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)
 endif

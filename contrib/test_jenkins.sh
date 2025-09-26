@@ -9,60 +9,49 @@
 #
 #
 # Environment variables set by Jenkins CI:
-#  - WORKSPACE           : path to work dir
-#  - BUILD_NUMBER        : jenkins build number
-#  - JOB_URL             : jenkins job url
-#  - EXECUTOR_NUMBER     : number of executor within the test machine
-#  - JENKINS_RUN_TESTS   : whether to run unit tests
-#  - RUN_TESTS           : same as JENKINS_RUN_TESTS, but for Azure
-#  - JENKINS_TEST_PERF   : whether to validate performance
-#  - JENKINS_NO_VALGRIND : set this to disable valgrind tests
+#  - WORKSPACE         : path to work dir
+#  - BUILD_NUMBER      : azure build number
+#  - JOB_URL           : azure job url
+#  - EXECUTOR_NUMBER   : number of executor within the test machine
+#  - RUN_TESTS         : whether to run unit tests
+#  - TEST_PERF         : whether to validate performance
+#  - ASAN_CHECK        : set to enable Address Sanitizer instrumentation build
+#  - VALGRIND_CHECK    : set to enable running tests with Valgrind
 #
 # Optional environment variables (could be set by job configuration):
 #  - nworkers : number of parallel executors
 #  - worker   : number of current parallel executor
 #
 
+source $(dirname $0)/../buildlib/az-helpers.sh
 source $(dirname $0)/../buildlib/tools/common.sh
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
-CUDA_MODULE="dev/cuda11.4"
-GDRCOPY_MODULE="dev/gdrcopy2.3_cuda11.4"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
 	BUILD_NUMBER=1
 	WS_URL=file://$WORKSPACE
-	JENKINS_RUN_TESTS=yes
-	JENKINS_TEST_PERF=1
+	RUN_TESTS=yes
+	TEST_PERF=1
 	TIMEOUT=""
-	TIMEOUT_VALGRIND=""
 else
-	echo "Running under jenkins"
+	echo "Running under azure"
 	WS_URL=$JOB_URL/ws
-	TIMEOUT="timeout 200m"
-	TIMEOUT_VALGRIND="timeout 240m"
+	if [[ "$VALGRIND_CHECK" == "yes" ]]; then
+		TIMEOUT="timeout 300m"
+	else
+		TIMEOUT="timeout 200m"
+	fi
 fi
 
-
-#
-# Set affinity to 2 cores according to Jenkins executor number.
-# Affinity is inherited from agent in Azure CI.
-# TODO: remove or rename after CI migration.
-#
-if [ -n "$EXECUTOR_NUMBER" ] && [ -n "$JENKINS_RUN_TESTS" ]
-then
-	AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
-else
-	AFFINITY=""
-fi
 
 have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
 have_strace=$(strace -V || true)
 
 #
-# Override maven repository path, to cache the downloaded packages accross tests
+# Override maven repository path, to cache the downloaded packages across tests
 #
 export maven_repo=${WORKSPACE}/.deps
 
@@ -164,7 +153,7 @@ slice_affinity() {
 	n=$1
 
 	# get affinity mask of the current process
-	compact_cpulist=$($AFFINITY bash -c 'taskset -cp $$' | cut -d: -f2)
+	compact_cpulist=$(bash -c 'taskset -cp $$' | cut -d: -f2)
 	cpulist=$(expand_cpulist ${compact_cpulist})
 
 	echo "${cpulist}" | head -n $((n + 1)) | tail -1
@@ -218,7 +207,7 @@ run_client_server_app() {
 
 	if [ $kill_server -eq 1 ]
 	then
-		kill -9 ${server_pid}
+		kill -9 ${server_pid} || true # ignore failure
 	fi
 	wait ${server_pid} || true
 }
@@ -226,11 +215,6 @@ run_client_server_app() {
 run_hello() {
 	api=$1
 	shift
-	if [[ $1 == "proto" ]]
-	then
-		export UCX_PROTO_ENABLE=y
-		shift
-	fi
 
 	test_args="$@"
 	test_name=${api}_hello_world
@@ -263,7 +247,6 @@ run_hello() {
 		unset UCX_RC_TIMEOUT
 		unset UCX_RC_RETRY_COUNT
 	fi
-	unset UCX_PROTO_ENABLE
 }
 
 #
@@ -277,7 +260,7 @@ run_ucp_hello() {
 
 	mem_types_list="host "
 
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		mem_types_list+="cuda cuda-managed "
 	fi
@@ -290,7 +273,7 @@ run_ucp_hello() {
 	for tls in all tcp,cuda shm,cuda
 	do
 		export UCX_TLS=${tls}
-		for test_mode in -w -f -b -erecv -esend -ekeepalive proto
+		for test_mode in -w -f -b -erecv -esend -ekeepalive
 		do
 			for mem_type in $mem_types_list
 			do
@@ -314,7 +297,7 @@ run_ucp_hello() {
 run_uct_hello() {
 	mem_types_list="host "
 
-	if [ "X$have_cuda" == "Xyes" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+	if [ "X$have_cuda" != "Xno" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
 	then
 		mem_types_list+="cuda-managed "
 		if [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
@@ -350,7 +333,7 @@ run_client_server() {
 	msg_size_list="1 16 256 4096 65534"
 	api_list="am tag stream"
 
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		mem_types_list+=" cuda cuda-managed "
 	fi
@@ -372,7 +355,7 @@ run_client_server() {
 		do
 			for msg_size in ${msg_size_list}
 			do
-				echo "==== Running UCP client-server with \"${mem_type}\" memory type using \"{$api}\" API with msg_size={$msg_size} ===="
+				echo "==== Running UCP client-server with \"${mem_type}\" memory type using \"${api}\" API with msg_size={$msg_size} ===="
 				run_client_server_app "./examples/${test_name}" "-m ${mem_type} -c ${api} -s ${msg_size}" "-a ${server_ip}" 1 0
 			done
 		done
@@ -391,7 +374,7 @@ run_io_demo() {
 	server_nonrdma_addr=$(get_non_rdma_ip_addr)
 	mem_types_list="host "
 
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		mem_types_list+="cuda cuda-managed "
 	fi
@@ -410,9 +393,6 @@ run_io_demo() {
 
 		for server_ip in $server_rdma_addr $server_nonrdma_addr
 		do
-			export UCX_PROTO_ENABLE=y
-			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
-			unset UCX_PROTO_ENABLE
 			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
 		done
 
@@ -469,7 +449,7 @@ run_ucx_perftest() {
 			opt_transports="-x posix"
 			tls="shm"
 			dev="all"
-		elif [[ " ${ip_ifaces[*]} " == *" ${ucx_dev} "* ]]; then
+		elif printf '%s\n' "$ip_ifaces" | grep -qxF "$ucx_dev"; then
 			opt_transports="-x tcp"
 			tls="tcp"
 			dev=$ucx_dev
@@ -483,10 +463,12 @@ run_ucx_perftest() {
 		if [ $with_mpi -eq 1 ]
 		then
 			# Run UCP performance test
-			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
+			which mpirun
+			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $ucx_perftest $ucp_test_args
 
 			# Run UCP loopback performance test
-			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args "-l"
+			which mpirun
+			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $ucx_perftest $ucp_test_args "-l"
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
@@ -514,12 +496,12 @@ run_ucx_perftest() {
 
 	# run cuda tests if cuda module was loaded and GPU is found, and only in
 	# client/server mode, to reduce testing time
-	if [ "X$have_cuda" == "Xyes" ] && [ $with_mpi -ne 1 ]
+	if [ "X$have_cuda" != "Xno" ] && [ $with_mpi -ne 1 ]
 	then
 		gdr_options="n "
-		if (lsmod | grep -q "nv_peer_mem")
+		if (lsmod | grep -q 'nv.*_peer.*mem')
 		then
-			echo "GPUDirectRDMA module (nv_peer_mem) is present.."
+			echo "GPUDirectRDMA module (nv_peer_mem/nvidia_peermem) is present"
 			gdr_options+="y "
 		fi
 
@@ -561,9 +543,7 @@ run_ucx_perftest() {
 			unset UCX_TLS
 		done
 
-		echo "==== Running ucx_perf with cuda memory and new protocols ===="
-
-		export UCX_PROTO_ENABLE=y
+		echo "==== Running ucx_perf one-sided with cuda memory ===="
 
 		# Add RMA tests to the list of tests
 		cat $ucx_inst_ptest/test_types_ucp_rma | grep cuda | sort -R >> $ucx_inst_ptest/test_types_short_ucp
@@ -576,9 +556,120 @@ run_ucx_perftest() {
 				      -n 1000 -w 1"
 		run_client_server_app "$ucx_perftest" "$ucp_test_args_atomic" "$(hostname)" 0 0
 
-		unset UCX_PROTO_ENABLE
 		unset CUDA_VISIBLE_DEVICES
 	fi
+}
+
+start_perftest_daemon() {
+	daemon_exe="$1"
+
+	# Find daemon port
+	dmn_port="$server_port"
+	step_server_port
+
+	# We explicitly disable cuda transport, because it's not p2p and therefore
+	# imposes INVALIDATE_RMA flag for all lanes (@see ucp_ep_config_init).
+	# However invalidating of imported rkeys is not supported by the daemon.
+	# TODO: Should we support invalidation of imported keys?
+	# Normally cuda_ipc cannot be used to communicate between host and DPU,
+	# unless we run both processes on host for testing purposes.
+
+	# Mandatory options to run the daemon
+	# - UCX_RNDV_THRESH=0 is needed to enforce RNDV protocol usage, as it's the
+	# only supported protocol between host and DPU
+	# - UCX_RNDV_SCHEME=put_zcopy. On low buffer dimensions (below ~8KB) UCX
+	# prefers bcopy over zero-copy, but bcopy workflow is not supported by DPU
+	# daemon. The workaround is to force rendezvous scheme to use zero-copy.
+	# get_zcopy option is not good enough, because bcopy is still selected for
+	# tiny messages (below 64 bytes)
+	dmn_env="UCX_TLS=^cuda UCX_TCP_CM_REUSEADDR=y UCX_RNDV_THRESH=0 UCX_RNDV_SCHEME=put_zcopy"
+
+	# Run the daemon
+	env $dmn_env $daemon_exe -p $dmn_port &
+
+	# Return the daemon pid and port
+	eval "$2=$!"
+	eval "$3=$dmn_port"
+}
+
+#
+# Run UCX performance daemon test
+#
+run_ucx_perftest_with_daemon() {
+	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+	ucx_perftest_daemon="$ucx_inst/bin/ucx_perftest_daemon"
+	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_daemon"
+
+	devices="$(get_ib_bf_devices $(get_active_ib_devices))"
+	for ucx_dev in $devices
+	do
+		echo "==== Running ucx_perftest over a daemon on $ucx_dev ===="
+		ip_addr=$(get_rdma_device_ip_addr $ucx_dev)
+		if [ -z "$ip_addr" ]
+		then
+			echo "Cannot find IPv4 address for device $ucx_dev"
+			continue
+		fi
+
+		export UCX_NET_DEVICES=$ucx_dev
+
+		# Start client and server daemons
+		start_perftest_daemon $ucx_perftest_daemon server_dmn_pid server_dmn_port
+		start_perftest_daemon $ucx_perftest_daemon client_dmn_pid client_dmn_port
+
+		ucp_client_args="-g $ip_addr:$client_dmn_port -G $ip_addr:$server_dmn_port $(hostname)"
+
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+
+		kill ${client_dmn_pid} || true # ignore failure
+		kill ${server_dmn_pid} || true # ignore failure
+		wait $client_dmn_pid || true
+		wait $server_dmn_pid || true
+
+		unset UCX_TLS
+		unset UCX_NET_DEVICES
+	done
+}
+
+#
+# Run UCX performance cuda device test
+#
+run_ucx_perftest_cuda_device() {
+	if [ "X$have_cuda" == "Xno" ]; then
+		echo "==== CUDA not available, skipping CUDA device tests ===="
+		return 0
+	fi
+
+	if ! has_gpunetio_devel; then
+		echo "==== DOCA not available, skipping CUDA device tests ===="
+		return 0
+	fi
+
+	if [ "$(get_num_gpus)" -eq 0 ]; then
+		echo "==== No NVIDIA GPUs found, skipping CUDA device tests ===="
+		return 0
+	fi
+
+    echo "==== Running ucx_perftest with cuda kernel ===="
+	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_device_cuda"
+
+	# TODO: Run on all GPUs & NICs combinations
+	# TODO: Run on all GPUs & NICs combinations
+	ucp_client_args="-a cuda:0 $(hostname)"
+	gda_tls="cuda_copy,rc,rc_gda"
+	cuda_ipc_tls="cuda_copy,rc,cuda_ipc"
+
+	# TODO: Run with cuda_ipc_tls
+	for tls in "$gda_tls"
+	do
+		export UCX_TLS=${tls}
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+	done
+	unset UCX_TLS
 }
 
 #
@@ -590,14 +681,16 @@ test_malloc_hooks_mpi() {
 		for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
 		do
 			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
-			$MPIRUN -np 1 $AFFINITY \
+			which mpirun
+			$MPIRUN -np 1 \
 				./test/mpi/test_memhooks -t $tname -m ${mode}
 		done
 
 		echo "==== Running memory hook (malloc_hooks mode ${mode}) on MPI with LD_PRELOAD ===="
 		ucm_lib=$PWD/src/ucm/.libs/libucm.so
 		ls -l $ucm_lib
-		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY \
+		which mpirun
+		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib \
 			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
 	done
 }
@@ -617,26 +710,42 @@ run_mpi_tests() {
 			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
 			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
-			build release --disable-gtest --with-mpi
+			build release-mt --with-mpi --enable-assertions
 
 			# check whether installation is valid (it compiles examples at least)
 			$MAKEP installcheck
 
-			MPIRUN="mpirun \
+			MPIRUN_COMMON="mpirun \
 					--allow-run-as-root \
 					--bind-to none \
 					-x UCX_ERROR_SIGNALS \
-					-x UCX_HANDLE_ERRORS \
+					-x UCX_HANDLE_ERRORS"
+
+			MPIRUN="${MPIRUN_COMMON} \
 					-mca pml ob1 \
 					-mca osc ^ucx \
 					-mca btl tcp,self \
 					-mca btl_tcp_if_include lo \
 					-mca orte_allowed_exit_without_sync 1 \
-					-mca coll ^hcoll,ml"
+					-mca coll ^hcoll,ml,ucc"
 
 			run_ucx_perftest 1
 
 			test_malloc_hooks_mpi
+
+			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_mpi_cuda ]
+			then
+				echo "==== Running MPI CUDA tests ===="
+				${MPIRUN_COMMON} -np 2 ./test/mpi/test_mpi_cuda
+
+				echo "==== Running MPI CUDA tests without cuda_ipc ===="
+				${MPIRUN_COMMON} -np 2  -x UCX_TLS=^cuda_ipc \
+						./test/mpi/test_mpi_cuda
+
+				echo "==== Running MPI CUDA tests with put_ppln ===="
+				${MPIRUN_COMMON} -np 2  -x UCX_RNDV_SCHEME=put_ppln \
+						./test/mpi/test_mpi_cuda
+			fi
 
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
 			# from installation directory
@@ -757,13 +866,13 @@ test_init_mt() {
 	$MAKEP
 	for ((i=0;i<10;++i))
 	do
-		OMP_NUM_THREADS=$num_threads $AFFINITY timeout 5m ./test/apps/test_init_mt
+		OMP_NUM_THREADS=$num_threads timeout 5m ./test/apps/test_init_mt
 	done
 }
 
 test_memtrack() {
 	echo "==== Running memtrack test ===="
-	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
+	UCX_MEMTRACK_DEST=stdout GTEST_FILTER=test_memtrack.sanity make -C ./test/gtest test
 
 	echo "==== Running memtrack limit test ===="
 	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
@@ -827,7 +936,7 @@ test_malloc_hook() {
 
 test_no_cuda_context() {
 	echo "==== Running no CUDA context test ===="
-	if [ -x ./test/apps/test_no_cuda_ctx ]
+	if [ "X$have_cuda" != "Xno" ] && [ -x ./test/apps/test_no_cuda_ctx ]
 	then
 		./test/apps/test_no_cuda_ctx
 	fi
@@ -846,7 +955,7 @@ run_gtest_watchdog_test() {
 	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
 		WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
 		GTEST_FILTER=test_watchdog.watchdog_timeout \
-		./test/gtest/gtest 2>&1 | tee watchdog_timeout_test &
+		make -C ./test/gtest test 2>&1 | tee watchdog_timeout_test &
 	pid=$!
 	wait $pid
 
@@ -876,7 +985,7 @@ run_malloc_hook_gtest() {
 	# GTEST_SHARD_INDEX/GTEST_TOTAL_SHARDS should NOT be set
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		UCX_IB_RCACHE=n \
 		MALLOC_TRIM_THRESHOLD_=-1 \
 		MALLOC_MMAP_THRESHOLD_=-1 \
@@ -884,21 +993,87 @@ run_malloc_hook_gtest() {
 			make -C test/gtest test
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		MALLOC_MMAP_THRESHOLD_=16384 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 			make -C test/gtest test
 
 	echo "==== Running cuda hooks, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
 
 	echo "==== Running cuda hooks with far jump, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
-		UCM_BISTRO_FORCE_FAR_JUMP=y \
+	$TIMEOUT env \
+		UCX_MEM_BISTRO_FORCE_FAR_JUMP=y \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
+}
+
+set_gtest_common_test_flags() {
+	export GTEST_RANDOM_SEED=0
+	export GTEST_SHUFFLE=1
+	# Run UCT tests for TCP over fastest device only
+	export GTEST_UCT_TCP_FASTEST_DEV=1
+	export OMP_NUM_THREADS=4
+}
+
+set_gtest_make_test_flags() {
+	set_gtest_common_test_flags
+
+	# Distribute the tests among the workers
+	export GTEST_SHARD_INDEX=$worker
+	export GTEST_TOTAL_SHARDS=$nworkers
+	# Report TOP-20 longest test at the end of testing
+	export GTEST_REPORT_LONGEST_TESTS=20
+
+	GTEST_EXTRA_ARGS=""
+	if [ "$TEST_PERF" == 1 ] && [[ "$VALGRIND_CHECK" != "yes" ]]
+	then
+		# Check performance with 10 retries and 2 seconds interval
+		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
+	fi
+	export GTEST_EXTRA_ARGS
+}
+
+unset_test_flags() {
+	unset OMP_NUM_THREADS
+
+	unset GTEST_EXTRA_ARGS
+	unset GTEST_REPORT_LONGEST_TESTS
+	unset GTEST_TOTAL_SHARDS
+	unset GTEST_SHARD_INDEX
+	unset GTEST_UCT_TCP_FASTEST_DEV
+	unset GTEST_SHUFFLE
+	unset GTEST_RANDOM_SEED
+}
+
+run_specific_tests() {
+	set_gtest_common_test_flags
+
+	# Run specific tests
+	do_distributed_task 1 4 run_malloc_hook_gtest
+	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
+	do_distributed_task 3 4 test_memtrack
+
+	unset_test_flags
+}
+
+#
+# Run the test suite (gtest)
+# Arguments: <compiler-name> <make-target> [configure-flags]
+#
+run_gtest_make() {
+	compiler_name=$1
+	make_target=$2
+
+	set_gtest_make_test_flags
+
+	# Run all tests
+	echo "==== Running make -C test/gtest $make_target, $compiler_name compiler ===="
+	$TIMEOUT make -C test/gtest $make_target
+
+	unset_test_flags
 }
 
 #
@@ -908,62 +1083,8 @@ run_malloc_hook_gtest() {
 run_gtest() {
 	compiler_name=$1
 
-	export GTEST_RANDOM_SEED=0
-	export GTEST_SHUFFLE=1
-	# Run UCT tests for TCP over fastest device only
-	export GTEST_UCT_TCP_FASTEST_DEV=1
-	export OMP_NUM_THREADS=4
-
-	# Run specific tests
-	do_distributed_task 1 4 run_malloc_hook_gtest
-	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
-	do_distributed_task 3 4 test_memtrack
-
-	# Distribute the tests among the workers
-	export GTEST_SHARD_INDEX=$worker
-	export GTEST_TOTAL_SHARDS=$nworkers
-	# Report TOP-20 longest test at the end of testing
-	export GTEST_REPORT_LONGEST_TESTS=20
-
-	GTEST_EXTRA_ARGS=""
-	if [ "$JENKINS_TEST_PERF" == 1 ]
-	then
-		# Check performance with 10 retries and 2 seconds interval
-		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
-	fi
-	export GTEST_EXTRA_ARGS
-
-	# Run all tests
-	echo "==== Running unit tests, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT make -C test/gtest test
-
-	unset GTEST_EXTRA_ARGS
-
-	# Run valgrind tests
-	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
-	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
-	then
-		echo "==== Running valgrind tests, $compiler_name compiler ===="
-
-		# Load newer valgrind if naative is older than 3.10
-		if ! (echo "valgrind-3.10.0"; valgrind --version) | sort -CV
-		then
-			module load tools/valgrind-3.12.0
-		fi
-
-		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
-		module unload tools/valgrind-3.12.0
-	else
-		echo "==== Not running valgrind tests with $compiler_name compiler ===="
-	fi
-
-	unset GTEST_REPORT_LONGEST_TESTS
-	unset GTEST_TOTAL_SHARDS
-	unset GTEST_SHARD_INDEX
-	unset OMP_NUM_THREADS
-	unset GTEST_UCT_TCP_FASTEST_DEV
-	unset GTEST_SHUFFLE
-	unset GTEST_RANDOM_SEED
+	run_specific_tests
+	run_gtest_make $compiler_name test
 }
 
 run_gtest_armclang() {
@@ -989,7 +1110,8 @@ run_gtest_armclang() {
 				CC=armclang \
 				CXX=armclang++ \
 				CFLAGS="${ARMCLANG_CFLAGS}" \
-				--without-go
+				--without-go \
+				--without-valgrind
 
 			run_gtest "armclang"
 		else
@@ -1019,7 +1141,7 @@ run_gtest_release() {
 	# - Unexpected RNDV test, to cover rkey handling in tag offload flow
 	#   (see GH #3827 for details)
 	env GTEST_FILTER=\*test_obj_size\*:\*test_ucp_tag_match.rndv_rts_unexp\* \
-		$AFFINITY $TIMEOUT make -C test/gtest test
+		$TIMEOUT make -C test/gtest test
 
 	unset OMP_NUM_THREADS
 	unset GTEST_SHARD_INDEX
@@ -1058,28 +1180,61 @@ run_release_mode_tests() {
 }
 
 #
-# Run all tests
+# Run nt_buffer_transfer tests
 #
-run_tests() {
+run_nt_buffer_transfer_tests() {
+    build release --enable-gtest --enable-optimizations
+    echo "==== Running test_arch tests with optimizations ===="
+    ./test/gtest/gtest --gtest_filter="test_arch.*"
+}
+
+set_ucx_common_test_env() {
 	export UCX_HANDLE_ERRORS=bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 1000))-$((33999 + EXECUTOR_NUMBER * 1000))"
 	export UCX_TCP_CM_REUSEADDR=y
 
 	# Don't cross-connect RoCE devices
-	export UCX_IB_ROCE_LOCAL_SUBNET=y
 	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 
-	export UCX_PROTO_REQUEST_RESET=y
+	export LSAN_OPTIONS=suppressions=${WORKSPACE}/contrib/lsan.supp
+	export ASAN_OPTIONS=protect_shadow_gap=0
+}
 
-	# load cuda env only if GPU available for remaining tests
-	try_load_cuda_env
+run_configure_tests() {
+	echo "==== Run configure tests ===="
+
+	../contrib/configure-release --with-verbs
+	grep 'build_modules=' config.log
+	if ! grep -qwE '^build_modules=.*:ib.*:rdmacm.*:mlx5' config.log
+	then
+		azure_log_error "missing modules configuring with verbs"
+		exit 1
+	fi
+
+	../contrib/configure-release --without-verbs
+	grep 'build_modules=' config.log
+	if grep -wE '^build_modules=.*:(ib|rdmacm|efa|mlx5)' config.log
+	then
+		azure_log_error "some modules were not disabled without verbs"
+		exit 1
+	fi
+}
+
+#
+# Run all tests
+#
+run_tests() {
+	export UCX_PROTO_REQUEST_RESET=y
 
 	# all are running mpi tests
 	run_mpi_tests
 
+	# configuration related tests
+	run_configure_tests
+
 	# build for devel tests and gtest
-	build devel --enable-gtest
+	build devel --enable-gtest --without-valgrind
 
 	# devel mode tests
 	do_distributed_task 0 4 test_unused_env_var
@@ -1091,6 +1246,8 @@ run_tests() {
 	do_distributed_task 2 4 test_init_mt
 	do_distributed_task 3 4 run_ucp_client_server
 	do_distributed_task 0 4 test_no_cuda_context
+	do_distributed_task 1 4 run_ucx_perftest_with_daemon
+	do_distributed_task 1 4 run_ucx_perftest_cuda_device
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello
@@ -1106,35 +1263,53 @@ run_tests() {
 
 	# release mode tests
 	do_distributed_task 0 4 run_release_mode_tests
+
+	# nt_buffer_transfer tests
+	do_distributed_task 0 4 run_nt_buffer_transfer_tests
 }
 
-run_test_proto_disable() {
-	export UCX_HANDLE_ERRORS=bt
-	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
-	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 1000))-$((33999 + EXECUTOR_NUMBER * 1000))"
-	export UCX_TCP_CM_REUSEADDR=y
+run_asan_check() {
+	build devel --enable-gtest --enable-asan --without-valgrind
 
-	# Don't cross-connect RoCE devices
-	export UCX_IB_ROCE_LOCAL_SUBNET=y
-	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
+	if ! ldd ${WORKSPACE}/build-test/test/gtest/gtest | grep -q "libasan.so"
+	then
+		azure_log_error "Error: ASan is not loaded."
+		exit 1
+	fi
 
-	# build for devel tests and gtest
-	build devel --enable-gtest
-
-	export UCX_PROTO_ENABLE=n
-
-	# all are running gtest
 	run_gtest "default"
+}
+
+run_valgrind_check() {
+	if [[ $(uname -m) =~ "aarch" ]] || [[ $(uname -m) =~ "ppc" ]]; then
+		echo "==== Skip valgrind tests on `uname -m` ===="
+		return
+	fi
+
+	# Load newer valgrind if native is older than 3.10
+	if ! (echo "valgrind-3.10.0"; valgrind --version) | sort -CV; then
+		echo "load new valgrind"
+		module load tools/valgrind-3.12.0
+	fi
+
+	echo "==== Run valgrind tests ===="
+	build devel --enable-gtest
+	run_gtest_make "default" test_valgrind
+	module unload tools/valgrind-3.12.0
 }
 
 prepare
 try_load_cuda_env
 
-if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
+if [ "$RUN_TESTS" == "yes" ]
 then
     check_machine
-    if [[ "$PROTO_ENABLE" == "no" ]]; then
-        run_test_proto_disable
+    set_ucx_common_test_env
+
+    if [[ "$ASAN_CHECK" == "yes" ]]; then
+        run_asan_check
+    elif [[ "$VALGRIND_CHECK" == "yes" ]]; then
+        run_valgrind_check
     else
         run_tests
     fi

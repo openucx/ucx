@@ -93,7 +93,7 @@ protected:
 
     virtual ucs_rcache_params_t rcache_params()
     {
-        static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb,
+        static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb, merge_cb,
                                              dump_region_cb};
         ucs_rcache_params_t params        = get_default_rcache_params(this, &ops);
         params.region_struct_size         = sizeof(region);
@@ -206,6 +206,11 @@ private:
     {
         reinterpret_cast<test_rcache*>(context)->mem_dereg(
                         ucs_derived_of(r, struct region));
+    }
+
+    static void merge_cb(void *context, ucs_rcache_t *rcache, void *arg,
+                         ucs_rcache_region_t *r)
+    {
     }
 
     static void dump_region_cb(void *context, ucs_rcache_t *rcache,
@@ -551,7 +556,7 @@ UCS_MT_TEST_F(test_rcache, merge_with_unwritable, 6) {
     munmap(mem, size1 + size2);
 }
 
-/* don't expand prot of our region if our pages cant support it */
+/* don't expand prot of our region if our pages can't support it */
 UCS_MT_TEST_F(test_rcache, merge_merge_unwritable, 6) {
     static const size_t size1 = 10 * ucs_get_page_size();
     static const size_t size2 =  8 * ucs_get_page_size();
@@ -967,9 +972,9 @@ UCS_TEST_F(test_rcache_stats, unmap_dereg_with_lock) {
      * We can have more unmap events if releasing the region structure triggers
      * releasing memory back to the OS.
      */
-    pthread_rwlock_wrlock(&m_rcache->pgt_lock);
+    ucs_rw_spinlock_write_lock(&m_rcache->pgt_lock);
     munmap(mem, size1);
-    pthread_rwlock_unlock(&m_rcache->pgt_lock);
+    ucs_rw_spinlock_write_unlock(&m_rcache->pgt_lock);
 
     EXPECT_GE(get_counter(UCS_RCACHE_UNMAPS), 1);
     EXPECT_EQ(0, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
@@ -1021,9 +1026,9 @@ UCS_TEST_F(test_rcache_stats, hits_slow) {
     r1 = get(mem2, size1);
 
     /* generate unmap event under lock, to roce using invalidation queue */
-    pthread_rwlock_rdlock(&m_rcache->pgt_lock);
+    ucs_rw_spinlock_read_lock(&m_rcache->pgt_lock);
     munmap(mem1, size1);
-    pthread_rwlock_unlock(&m_rcache->pgt_lock);
+    ucs_rw_spinlock_read_unlock(&m_rcache->pgt_lock);
 
     EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
 

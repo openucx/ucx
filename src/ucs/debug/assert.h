@@ -24,7 +24,7 @@ BEGIN_C_DECLS
 #define ucs_assert_always(_expression) \
     do { \
         if (!ucs_likely(_expression)) { \
-            ucs_fatal_error_format(__FILE__, __LINE__, __FUNCTION__, \
+            ucs_fatal_error_format(__FILE__, __LINE__, __func__, \
                                    "Assertion `%s' failed", #_expression); \
         } \
     } while (0)
@@ -36,7 +36,7 @@ BEGIN_C_DECLS
 #define ucs_assertv_always(_expression, _fmt, ...) \
     do { \
         if (!ucs_likely(_expression)) { \
-            ucs_fatal_error_format(__FILE__, __LINE__, __FUNCTION__, \
+            ucs_fatal_error_format(__FILE__, __LINE__, __func__, \
                                    "Assertion `%s' failed: " _fmt, \
                                    #_expression, ## __VA_ARGS__); \
         } \
@@ -47,7 +47,7 @@ BEGIN_C_DECLS
  * Generate a fatal error
  */
 #define ucs_fatal(_fmt, ...) \
-    ucs_fatal_error_format(__FILE__, __LINE__, __FUNCTION__, \
+    ucs_fatal_error_format(__FILE__, __LINE__, __func__, \
                            "Fatal: " _fmt, ## __VA_ARGS__)
 
 
@@ -59,7 +59,7 @@ BEGIN_C_DECLS
  * Generate a program bug report if assertions are enabled
  */
 #define ucs_bug(_fmt, ...) \
-    ucs_fatal_error_format(__FILE__, __LINE__, __FUNCTION__, \
+    ucs_fatal_error_format(__FILE__, __LINE__, __func__, \
                            "Bug: " _fmt, ## __VA_ARGS__)
 
 #define ucs_assert  ucs_assert_always
@@ -69,9 +69,9 @@ BEGIN_C_DECLS
 
 #define UCS_ENABLE_ASSERT 0
 
-#define ucs_bug(...)
-#define ucs_assert(...)
-#define ucs_assertv(...)
+#define ucs_bug(...)     do {} while(0)
+#define ucs_assert(...)  do {} while(0)
+#define ucs_assertv(...) do {} while(0)
 
 #endif
 

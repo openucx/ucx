@@ -7,23 +7,29 @@
 get_filename_component(prefix "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 set(exec_prefix "@exec_prefix@")
 
-add_library(ucx::ucs SHARED IMPORTED)
+if(NOT TARGET ucx::ucs)
+  add_library(ucx::ucs SHARED IMPORTED)
 
-set_target_properties(ucx::ucs PROPERTIES
-  IMPORTED_LOCATION "@libdir@/libucs.so"
-  INTERFACE_INCLUDE_DIRECTORIES "@includedir@"
-)
+  set_target_properties(ucx::ucs PROPERTIES
+    IMPORTED_LOCATION "@libdir@/libucs.so"
+    INTERFACE_INCLUDE_DIRECTORIES "@includedir@"
+  )
+endif()
 
-add_library(ucx::ucp SHARED IMPORTED)
+if(NOT TARGET ucx::ucp)
+  add_library(ucx::ucp SHARED IMPORTED)
 
-set_target_properties(ucx::ucp PROPERTIES
-  IMPORTED_LOCATION "@libdir@/libucp.so"
-  INTERFACE_INCLUDE_DIRECTORIES "@includedir@"
-)
+  set_target_properties(ucx::ucp PROPERTIES
+    IMPORTED_LOCATION "@libdir@/libucp.so"
+    INTERFACE_INCLUDE_DIRECTORIES "@includedir@"
+  )
+endif()
 
-add_library(ucx::uct SHARED IMPORTED)
+if(NOT TARGET ucx::uct)
+  add_library(ucx::uct SHARED IMPORTED)
 
-set_target_properties(ucx::uct PROPERTIES
-  IMPORTED_LOCATION "@libdir@/libuct.so"
-  INTERFACE_INCLUDE_DIRECTORIES "@includedir@"
-)
+  set_target_properties(ucx::uct PROPERTIES
+    IMPORTED_LOCATION "@libdir@/libuct.so"
+    INTERFACE_INCLUDE_DIRECTORIES "@includedir@"
+  )
+endif()

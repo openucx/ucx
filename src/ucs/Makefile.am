@@ -16,7 +16,7 @@ libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) $(BFD_CPPFLAGS) \
                      -DUCX_MODULE_DIR=\"$(moduledir)\" \
                      -DUCX_MODULE_EXT=\"$(shrext)\" \
                      -DUCX_CONFIG_DIR=\"$(ucx_config_dir)\"
-libucs_la_CFLAGS   = $(BASE_CFLAGS) $(BFD_CFLAGS)
+libucs_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libucs_la_LDFLAGS  = -ldl $(BFD_LDFLAGS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
 libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la $(BFD_LIBS)
@@ -36,7 +36,6 @@ nobase_dist_libucs_la_HEADERS = \
 	config/parser.h \
 	config/types.h \
 	datastruct/array.h \
-	datastruct/array.inl \
 	datastruct/callbackq.h \
 	datastruct/callbackq_compat.h \
 	datastruct/hlist.h \
@@ -46,6 +45,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/mpool.h \
 	datastruct/mpool_set.h \
 	datastruct/pgtable.h \
+	datastruct/piecewise_func.h \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
 	datastruct/string_buffer.h \
@@ -64,6 +64,7 @@ nobase_dist_libucs_la_HEADERS = \
 	stats/libstats.h \
 	sys/event_set.h \
 	sys/compiler_def.h\
+	sys/device_code.h \
 	sys/math.h \
 	sys/preprocessor.h \
 	sys/string.h \
@@ -100,6 +101,7 @@ noinst_HEADERS = \
 	config/ucm_opts.h \
 	datastruct/arbiter.h \
 	datastruct/bitmap.h \
+	datastruct/dynamic_bitmap.h \
 	datastruct/frag_list.h \
         datastruct/lru.h \
 	datastruct/mpmc.h \
@@ -112,6 +114,7 @@ noinst_HEADERS = \
 	datastruct/conn_match.h \
 	datastruct/ptr_map.h \
 	datastruct/ptr_map.inl \
+	datastruct/static_bitmap.h \
 	datastruct/usage_tracker.h \
 	debug/assert.h \
 	debug/debug_int.h \
@@ -129,10 +132,13 @@ noinst_HEADERS = \
 	sys/sys.h \
 	sys/iovec.h \
 	sys/iovec.inl \
+	sys/ptr_arith.h \
+	sys/netlink.h \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \
 	type/serialize.h \
+	type/rwlock.h \
 	type/float8.h \
 	async/async.h \
 	async/pipe.h \
@@ -165,6 +171,7 @@ libucs_la_SOURCES = \
 	config/parser.c \
 	datastruct/arbiter.c \
 	datastruct/array.c \
+	datastruct/bitmap.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
 	datastruct/lru.c \
@@ -172,6 +179,7 @@ libucs_la_SOURCES = \
 	datastruct/mpool.c \
 	datastruct/mpool_set.c \
 	datastruct/pgtable.c \
+	datastruct/piecewise_func.c \
 	datastruct/ptr_array.c \
 	datastruct/ptr_map.c \
 	datastruct/strided_alloc.c \
@@ -201,6 +209,7 @@ libucs_la_SOURCES = \
 	sys/sock.c \
 	sys/topo/base/topo.c \
 	sys/stubs.c \
+	sys/netlink.c \
 	sys/uid.c \
 	time/time.c \
 	time/timer_wheel.c \

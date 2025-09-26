@@ -1,6 +1,7 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2013. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -80,7 +81,9 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 }
 #endif
 
-static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
+static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
+                                       ucs_arch_memcpy_hint_t hint,
+                                       size_t total_len)
 {
     return memcpy(dst, src, len);
 }
@@ -94,6 +97,13 @@ ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
 static inline ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 {
     return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_ALWAYS_INLINE void ucs_cpu_relax()
+{
+    asm volatile ("or 1, 1, 1 \n");  /* hw threading low priority */
+    asm volatile ("or 2, 2, 2 \n");  /* hw threading normal priority */
+    asm volatile ("" ::: "memory");
 }
 
 END_C_DECLS

@@ -64,6 +64,13 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
         }
 
         ucp_proto_multi_request_init(req);
+
+        status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
+
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
@@ -73,14 +80,14 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
                                     UCP_DT_MASK_CONTIG_IOV);
 }
 
-static ucs_status_t
-ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 40e-9,
+        .super.overhead      = context->config.ext.proto_overhead_sw,
         .super.cfg_thresh    = ucp_proto_sw_rma_cfg_thresh(
                                    context, context->config.ext.bcopy_thresh),
         .super.cfg_priority  = 20,
@@ -94,9 +101,12 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = 1,
+        .min_chunk           = 0,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .first.lane_type     = UCP_LANE_TYPE_AM,
@@ -106,18 +116,17 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_multi_init(&params, init_params->priv,
-                                init_params->priv_size);
+    ucp_proto_multi_probe(&params);
 }
 
 ucp_proto_t ucp_put_am_bcopy_proto = {
     .name     = "put/am/bcopy",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
-    .init     = ucp_proto_put_am_bcopy_init,
+    .probe    = ucp_proto_put_am_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_am_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_abort,

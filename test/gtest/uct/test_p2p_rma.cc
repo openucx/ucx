@@ -78,8 +78,13 @@ void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
 
     mapped_buffer sendbuf(length, SEED1, sender(), 1, src_mem_type);
     mapped_buffer recvbuf(length, SEED2, receiver(), 3, mem_type);
-
     blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
+    check_buf(sendbuf, recvbuf, flags);
+}
+
+void uct_p2p_rma_test::check_buf(mapped_buffer &sendbuf, mapped_buffer &recvbuf,
+                                 unsigned flags)
+{
     if (flags & TEST_UCT_FLAG_SEND_ZCOPY) {
         sendbuf.memset(0);
         wait_for_remote();
@@ -108,7 +113,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, put_bcopy,
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, put_zcopy,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
-                    0ul, sender().iface_attr().cap.put.max_zcopy,
+                    sender().iface_attr().cap.put.min_zcopy,
+                    sender().iface_attr().cap.put.max_zcopy,
                     TEST_UCT_FLAG_SEND_ZCOPY);
 }
 

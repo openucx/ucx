@@ -252,7 +252,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
                 fail_close_ucm);
 
     /*
-     * Test shmat/shmdt before malloc() because shmat() add entires to an internal
+     * Test shmat/shmdt before malloc() because shmat() add entries to an internal
      * hash of pointers->size, which makes previous pointers un-releasable
      */
 

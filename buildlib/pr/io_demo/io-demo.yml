@@ -17,6 +17,7 @@ jobs:
         clean: true
         fetchDepth: 100
         displayName: Checkout
+        retryCountOnTaskFailure: 5
       - bash: |
           set -eEx
           ./autogen.sh
@@ -44,10 +45,6 @@ jobs:
       demands: "ucx_iodemo -equals yes"
       name: "with_interference"
       tests:
-        "tag match on CX4":
-          interface: $(roce_iface_cx4)
-          tls: "rc_x"
-          test_name: tag_cx4_rc
         "tag match on CX6/RC":
           interface: $(roce_iface_cx6)
           tls: "rc_x"
@@ -80,20 +77,11 @@ jobs:
       duration: 120
       interference: 'No'
       tests:
-        "tag match on CX4 with user memh":
-          args: "-z"
-          interface: $(roce_iface_cx4)
-          tls: "rc_x"
-          test_name: tag_umemh_cx4_rc
         "active messages on CX6/DC with user memh":
           args: "-A -z"
           interface: $(roce_iface_cx6)
           tls: "dc_x"
           test_name: am_umemh_cx6_dc
-        "Multi HCAs: tag match on CX4 and CX6 RC ":
-          interface: $(roce_iface_cx4) $(roce_iface_cx6)
-          tls: "rc_x"
-          test_name: multy_cx6_cx4_rc
         "different UCX_IB_NUM_PATH":
           args: "-A"
           interface: $(roce_iface_cx6)

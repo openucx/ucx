@@ -14,8 +14,8 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
-#include <ucs/sys/math.h>
 
 static ucs_pgt_dir_t *uct_rocm_ipc_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {

@@ -7,7 +7,7 @@
 
 lib_LTLIBRARIES     = libucp.la
 
-libucp_la_CFLAGS   = $(BASE_CFLAGS)
+libucp_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libucp_la_LIBS     =
 libucp_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libucp_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
@@ -18,7 +18,10 @@ nobase_dist_libucp_la_HEADERS = \
 	api/ucp_compat.h \
 	api/ucp_def.h \
 	api/ucp_version.h \
-	api/ucp.h
+	api/ucp.h \
+	api/device/ucp_device_impl.h \
+	api/device/ucp_device_types.h \
+	api/device/ucp_host.h
 
 noinst_HEADERS = \
 	am/eager.inl \
@@ -57,6 +60,7 @@ noinst_HEADERS = \
 	proto/proto_debug.h \
 	proto/proto_multi.h \
 	proto/proto_multi.inl \
+	proto/proto_perf.h \
 	proto/proto_select.h \
 	proto/proto_select.inl \
 	proto/proto_single.h \
@@ -113,6 +117,7 @@ libucp_la_SOURCES = \
 	core/ucp_version.c \
 	core/ucp_vfs.c \
 	core/ucp_worker.c \
+	core/ucp_device.c \
 	dt/datatype_iter.c \
 	dt/dt_iov.c \
 	dt/dt_generic.c \
@@ -122,6 +127,7 @@ libucp_la_SOURCES = \
 	proto/proto_init.c \
 	proto/proto_common.c \
 	proto/proto_debug.c \
+	proto/proto_perf.c \
 	proto/proto_reconfig.c \
 	proto/proto_multi.c \
 	proto/proto_select.c \

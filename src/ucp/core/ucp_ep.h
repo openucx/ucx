@@ -81,7 +81,6 @@ typedef uint16_t                   ucp_ep_flags_t;
 #define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
     ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
 
-
 #define UCP_SA_DATA_HEADER_VERSION_SHIFT 5
 
 
@@ -113,6 +112,8 @@ enum {
     UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
                                                         indirect endpoint id instead of pointer,
                                                         can be replaced with looking at local ID */
+    UCP_EP_FLAG_USER_DATA_PARAM        = UCS_BIT(15),/* EP's user_data was passed via
+                                                        @ref ucp_ep_params_t::user_data */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
@@ -370,6 +371,12 @@ typedef struct {
 KHASH_DECLARE(ucp_ep_peer_mem_hash, uint64_t, ucp_ep_peer_mem_data_t);
 
 
+typedef enum {
+    /* Protocol initialization was done */
+    UCP_EP_PROTO_INITIALIZED = UCS_BIT(0),
+} ucp_ep_init_flags_t;
+
+
 struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
@@ -473,6 +480,15 @@ struct ucp_ep_config {
 
     /* Bitmap of preregistration for am_bw lanes */
     ucp_md_map_t                  am_bw_prereg_md_map;
+
+    /* Bitmap of lanes selected by the protocols */
+    ucp_lane_map_t                proto_lane_map;
+
+    /* EP initialization flags from @ref ucp_ep_init_flags_t */
+    unsigned                      proto_init_flags;
+
+    /* Number of endpoints using this configuration */
+    unsigned                      ep_count;
 };
 
 
@@ -484,6 +500,7 @@ typedef struct {
                               are waiting for remote completion */
     uint32_t         send_sn; /* Sequence number of sent operations */
     uint32_t         cmpl_sn; /* Sequence number of completions */
+    uint32_t         mem_in_progress; /* Track ongoing memory flushes for this endpoint */
 } ucp_ep_flush_state_t;
 
 
@@ -528,11 +545,22 @@ typedef struct ucp_ep_ext {
                                                      arrived before the first one */
     } am;
 
+    ucp_lane_map_t                unflushed_lanes; /* Bitmap of lanes which have
+                                                      unflushed operations */
+    uint64_t                      fence_seq;       /* Sequence number for fence
+                                                      detection */
+
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
      * structure. TODO allocate this array dynamically.
      */
     uct_ep_h                     *uct_eps;
+
+
+    /**
+     * Map of system devices that require a flush operation
+     */
+    ucp_sys_dev_map_t             flush_sys_dev_map;
 } ucp_ep_ext_t;
 
 
@@ -680,9 +708,6 @@ ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode);
 
-ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
-                                       ucp_wireup_ep_t **wireup_ep);
-
 ucs_status_t
 ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                              const ucp_tl_bitmap_t *local_tl_bitmap,
@@ -698,7 +723,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const ucp_request_param_t *param,
                                        ucp_request_t *worker_req,
                                        ucp_request_callback_t flushed_cb,
-                                       const char *debug_name);
+                                       const char *debug_name,
+                                       unsigned uct_flags);
 
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
@@ -735,12 +761,30 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                      const ucp_ep_config_key_t *key2,
                                      ucp_lane_index_t lane2);
 
-void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_rsc_index_t *dst_rsc_indices1,
-                                   const ucp_ep_config_key_t *key2,
-                                   const ucp_rsc_index_t *dst_rsc_indices2,
+ucp_lane_index_t
+ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *old_key,
+                              ucp_lane_index_t old_lane,
+                              const ucp_ep_config_key_t *new_key);
+
+void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *old_key,
+                                   const ucp_ep_config_key_t *new_key,
+                                   const ucp_ep_h ep,
+                                   const ucp_unpacked_address_t *remote_address,
+                                   const unsigned *addr_indices,
                                    ucp_lane_index_t *lane_map);
 
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane);
+
+/**
+ * @brief Compare two endpoint configurations.
+ *
+ * @param [in] key1  First config key to compare.
+ * @param [in] key2  Second config key to compare.
+ *
+ * @return Whether the configurations are equal.
+ */
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
 
@@ -884,5 +928,30 @@ ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
+
+
+/**
+ * @brief Set configuration index to the endpoint.
+ * 
+ * Changing of the configuration index deactivates UCP worker interfaces
+ * corresponding to the previous endpoint configuration and activates interfaces
+ * of the new configuration.
+ *
+ * @param [in] ep         Endpoint object.
+ * @param [in] cfg_index  Endpoint configuration index.
+ */
+void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
+
+
+/**
+ * @brief Progress function for memory specific remote flushing.
+ *
+ * This call starts and progresses all memory specific remote flushes.
+ *
+ * @param[in] self        Pending request tracking the flush.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
 
 #endif

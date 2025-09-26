@@ -12,6 +12,7 @@ import org.junit.experimental.theories.Theory;
 import org.junit.runner.RunWith;
 import org.openucx.jucx.ucp.*;
 import org.openucx.jucx.ucs.UcsConstants;
+import ai.rapids.cudf.Cuda;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -27,19 +28,19 @@ public class UcpEndpointTest extends UcxTest {
 
     @DataPoints
     public static ArrayList<Integer> memTypes() {
-        ArrayList<Integer> resut = new ArrayList<>();
-        resut.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_HOST);
+        ArrayList<Integer> result = new ArrayList<>();
+        result.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_HOST);
         UcpContext testContext = new UcpContext(new UcpParams().requestTagFeature());
         long memTypeMask = testContext.getMemoryTypesMask();
         if (UcsConstants.MEMORY_TYPE.isMemTypeSupported(memTypeMask,
             UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA)) {
-            resut.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA);
+            result.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA);
         }
         if (UcsConstants.MEMORY_TYPE.isMemTypeSupported(memTypeMask,
             UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED)) {
-            resut.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED);
+            result.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED);
         }
-        return resut;
+        return result;
     }
 
     @Test
@@ -117,6 +118,8 @@ public class UcpEndpointTest extends UcxTest {
         UcpEndpointParams epParams = new UcpEndpointParams().setPeerErrorHandlingMode()
             .setName("testGetNB").setUcpAddress(worker2.getAddress());
         UcpEndpoint endpoint = worker1.newEndpoint(epParams);
+
+        cudaSetDevice(memType);
 
         // Allocate 2 source and 2 destination buffers, to perform 2 RDMA Read operations
         MemoryBlock src1 = allocateMemory(context2, worker2, memType, UcpMemoryTest.MEM_SIZE);
@@ -212,6 +215,8 @@ public class UcpEndpointTest extends UcxTest {
         UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
+        cudaSetDevice(memType);
+
         MemoryBlock src1 = allocateMemory(context1, worker1, memType, UcpMemoryTest.MEM_SIZE);
         MemoryBlock src2 = allocateMemory(context1, worker1, memType, UcpMemoryTest.MEM_SIZE);
 
@@ -241,10 +246,12 @@ public class UcpEndpointTest extends UcxTest {
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams().setName("testSendRecv")
             .setUcpAddress(worker2.getAddress()));
 
-        ep.sendTaggedNonBlocking(src1.getMemory().getAddress(), UcpMemoryTest.MEM_SIZE, 0, null,
-            new UcpRequestParams().setMemoryType(memType).setMemoryHandle(src1.getMemory()));
-        ep.sendTaggedNonBlocking(src2.getMemory().getAddress(), UcpMemoryTest.MEM_SIZE, 1, null,
-            new UcpRequestParams().setMemoryType(memType).setMemoryHandle(src2.getMemory()));
+        UcpRequest send1 = ep.sendTaggedNonBlocking(src1.getMemory().getAddress(),
+                UcpMemoryTest.MEM_SIZE, 0, null,
+                new UcpRequestParams().setMemoryType(memType).setMemoryHandle(src1.getMemory()));
+        UcpRequest send2 = ep.sendTaggedNonBlocking(src2.getMemory().getAddress(),
+                UcpMemoryTest.MEM_SIZE, 1, null,
+                new UcpRequestParams().setMemoryType(memType).setMemoryHandle(src2.getMemory()));
 
         while (receivedMessages.get() != 2) {
             worker1.progress();
@@ -254,13 +261,16 @@ public class UcpEndpointTest extends UcxTest {
         assertEquals(src1.getData().asCharBuffer(), dst1.getData().asCharBuffer());
         assertEquals(src2.getData().asCharBuffer(), dst2.getData().asCharBuffer());
 
+        worker1.progressRequest(send1);
+        worker1.progressRequest(send2);
+
         Collections.addAll(resources, context2, context1, worker2, worker1, ep,
             src1, src2, dst1, dst2);
         closeResources();
     }
 
     @Test
-    public void testRecvAfterSend() {
+    public void testRecvAfterSend() throws Exception {
         long sendTag = 4L;
         // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature().requestTagFeature()
@@ -280,7 +290,7 @@ public class UcpEndpointTest extends UcxTest {
         ByteBuffer src1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
         ByteBuffer dst1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
 
-        ep.sendTaggedNonBlocking(src1, sendTag, null);
+        UcpRequest send = ep.sendTaggedNonBlocking(src1, sendTag, null);
 
         Thread progressThread = new Thread() {
             @Override
@@ -320,6 +330,8 @@ public class UcpEndpointTest extends UcxTest {
 
         assertTrue(recv.isCompleted());
         assertEquals(sendTag, recv.getSenderTag());
+        worker1.progressRequest(send);
+
         UcpRequest closeRequest = ep.closeNonBlockingForce();
 
         while (!closeRequest.isCompleted()) {
@@ -566,10 +578,11 @@ public class UcpEndpointTest extends UcxTest {
             recvAddresses[i] = recvBuffers[i].getAddress();
         }
 
-        ep.sendTaggedNonBlocking(sendAddresses, sizes, 0L, null);
-        UcpRequest recv = worker2.recvTaggedNonBlocking(recvAddresses, sizes, 0L, 0L, null);
+        UcpRequest send = ep.sendTaggedNonBlocking(sendAddresses, sizes, 0L, null);
+        UcpRequest recv = worker2.recvTaggedNonBlocking(recvAddresses, sizes, 0L, 0L,
+                null);
 
-        while (!recv.isCompleted()) {
+        while (!recv.isCompleted() || !send.isCompleted()) {
             worker1.progress();
             worker2.progress();
         }
@@ -654,7 +667,7 @@ public class UcpEndpointTest extends UcxTest {
 
         AtomicBoolean errorCallabackCalled = new AtomicBoolean(false);
 
-        ep.sendTaggedNonBlocking(src, null);
+        send = ep.sendTaggedNonBlocking(src, null);
         worker1.progressRequest(ep.flushNonBlocking(new UcxCallback() {
             @Override
             public void onError(int ucsStatus, String errorMsg) {
@@ -662,6 +675,7 @@ public class UcpEndpointTest extends UcxTest {
             }
         }));
 
+        assertTrue(send.isCompleted());
         assertTrue(errorHandlerCalled.get());
         assertTrue(errorCallabackCalled.get());
 
@@ -690,6 +704,8 @@ public class UcpEndpointTest extends UcxTest {
         header.asCharBuffer().append(headerString);
 
         header.rewind();
+
+        cudaSetDevice(memType);
 
         MemoryBlock sendData = allocateMemory(context2, worker2, memType, dataSize);
         sendData.setData(dataString);
@@ -812,5 +828,12 @@ public class UcpEndpointTest extends UcxTest {
             cachedEp.iterator().next(), sendData, recvData, recvEagerData);
         closeResources();
         cachedEp.clear();
+    }
+
+    private void cudaSetDevice(int memType) {
+        if (memType == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
+            Cuda.setDevice(0);
+            Cuda.deviceSynchronize();
+        }
     }
 }

@@ -43,10 +43,15 @@ ucp_proto_bcopy_send_func_status(ssize_t packed_size)
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_msg_multi_request_init(ucp_request_t *req)
 {
+    if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
+        return UCS_OK;
+    }
+
     req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -71,9 +76,9 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
 
     ucp_proto_completion_init(&req->send.state.uct_comp, comp_func);
 
-    return ucp_datatype_iter_mem_reg(ep->worker->context,
-                                     &req->send.state.dt_iter,
-                                     md_map, uct_reg_flags, dt_mask);
+    return UCS_PROFILE_CALL(ucp_datatype_iter_mem_reg, ep->worker->context,
+                            &req->send.state.dt_iter, md_map, uct_reg_flags,
+                            dt_mask);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -170,7 +175,7 @@ ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
     req->send.proto_stage = proto_stage;
 
     /* Set pointer to progress function */
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+    if (req->send.ep->worker->context->config.progress_wrapper_enabled) {
         req->send.uct.func = ucp_request_progress_wrapper;
     } else {
         req->send.uct.func = proto->progress[proto_stage];
@@ -191,16 +196,6 @@ static void ucp_proto_request_set_proto(ucp_request_t *req,
     }
 
     ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_request_select_proto(ucp_request_t *req,
-                               const ucp_proto_select_elem_t *select_elem,
-                               size_t msg_length)
-{
-    const ucp_proto_threshold_elem_t *thresh_elem =
-            ucp_proto_select_thresholds_search(select_elem, msg_length);
-    ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
 }
 
 /* Select protocol for the request and initialize protocol-related fields */
@@ -276,7 +271,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_common(
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                           ucp_worker_cfg_index_t rkey_cfg_index,
-                          ucp_request_t *req, ucp_operation_id_t op_id,
+                          ucp_request_t *req, uint32_t req_flags,
+                          ucp_operation_id_t op_id,
                           const void *buffer, size_t count,
                           ucp_datatype_t datatype, size_t contig_length,
                           const ucp_request_param_t *param,
@@ -288,7 +284,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     size_t msg_length;
     uint8_t sg_count;
 
-    ucp_proto_request_send_init(req, ep, 0);
+    ucp_proto_request_send_init(req, ep, req_flags);
 
     status = UCS_PROFILE_CALL(ucp_datatype_iter_init, worker->context,
                               (void*)buffer, count, datatype, contig_length, 1,
@@ -311,8 +307,8 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_reply(
         ucp_ep_h ep, ucp_proto_select_t *proto_select,
         ucp_worker_cfg_index_t rkey_cfg_index, ucp_request_t *req,
-        ucp_operation_id_t op_id, const void *buffer, size_t count,
-        ucp_datatype_t datatype, size_t contig_length,
+        uint32_t req_flags, ucp_operation_id_t op_id, const void *buffer,
+        size_t count, ucp_datatype_t datatype, size_t contig_length,
         const ucp_request_param_t *param)
 {
     ucp_worker_h worker   = ep->worker;
@@ -322,7 +318,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_reply(
     ucs_status_t status;
     uint8_t sg_count;
 
-    ucp_proto_request_send_init(req, ep, 0);
+    ucp_proto_request_send_init(req, ep, req_flags);
 
     status = UCS_PROFILE_CALL(ucp_datatype_iter_init, context, (void*)buffer,
                               count, datatype, contig_length, 1,
@@ -353,6 +349,7 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
                             void *rkey_buffer)
 {
     const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
+    ucp_mem_h memh;
     ssize_t packed_rkey_size;
 
     /* For contiguous buffer, pack one rkey
@@ -360,14 +357,28 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
      */
     ucs_assertv(dt_iter->dt_class == UCP_DATATYPE_CONTIG, "dt_class=%s",
                 ucp_datatype_class_names[dt_iter->dt_class]);
-    ucs_assertv(ucs_test_all_flags(dt_iter->type.contig.memh->md_map, md_map),
-                "dt_iter_md_map=0x%"PRIx64" md_map=0x%"PRIx64,
-                dt_iter->type.contig.memh->md_map, md_map);
+
+    memh = dt_iter->type.contig.memh;
+
+    /* Since global VA registration doesn't support invalidation yet, and error
+     * handling is enabled on this EP, we replace GVA registrations with
+     * regular ones */
+    if (ucp_ep_config_err_mode_eq(req->send.ep,
+                                  UCP_ERR_HANDLING_MODE_PEER) &&
+        ucs_unlikely(memh->flags & UCP_MEMH_FLAG_HAS_AUTO_GVA)) {
+        ucp_memh_disable_gva(memh, md_map);
+    }
+
+    if (!ucs_test_all_flags(memh->md_map, md_map)) {
+        ucs_trace("dt_iter_md_map=0x%"PRIx64" md_map=0x%"PRIx64, memh->md_map,
+                  md_map);
+    }
 
     packed_rkey_size = ucp_rkey_pack_memh(
-            req->send.ep->worker->context, md_map, dt_iter->type.contig.memh,
-            &dt_iter->mem_info, distance_dev_map, dev_distance,
-            ucp_ep_config(req->send.ep)->uct_rkey_pack_flags, rkey_buffer);
+            req->send.ep->worker->context, md_map & memh->md_map, memh,
+            dt_iter->type.contig.buffer, dt_iter->length, &dt_iter->mem_info,
+            distance_dev_map, dev_distance,
+            ucp_ep_config(req->send.ep)->uct_rkey_pack_flags, 0, rkey_buffer);
 
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
@@ -378,6 +389,44 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     req->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
 
     return packed_rkey_size;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
+ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
+                               ucp_lane_index_t lane)
+{
+    ucs_assert(lane < UCP_MAX_LANES);
+    return params->ep_config_key->lanes[lane].rsc_index;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
+ucp_proto_common_get_dev_index(const ucp_proto_init_params_t *params,
+                               ucp_lane_index_t lane)
+{
+    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+    return params->worker->context->tl_rscs[rsc_index].dev_index;
+}
+
+static UCS_F_ALWAYS_INLINE const uct_tl_resource_desc_t *
+ucp_proto_common_get_tl_rsc(const ucp_proto_init_params_t *params,
+                            ucp_lane_index_t lane)
+{
+    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+    return &params->worker->context->tl_rscs[rsc_index].tl_rsc;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_is_net_dev(const ucp_proto_init_params_t *params,
+                            ucp_lane_index_t lane)
+{
+    return ucp_proto_common_get_tl_rsc(params, lane)->dev_type ==
+           UCT_DEVICE_TYPE_NET;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_bandwidth_equal(double bw1, double bw2)
+{
+    return fabs(bw1 - bw2) <= UCP_PROTO_PERF_EPSILON;
 }
 
 #endif

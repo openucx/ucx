@@ -10,6 +10,13 @@ extern "C" {
 }
 #include <list>
 
+#if HAVE_IB
+#include <uct/ib/base/ib_md.h>
+#if HAVE_MLX5_DV
+#include <uct/ib/mlx5/ib_mlx5.h>
+#endif
+#endif
+
 class uct_flush_test : public uct_test {
 public:
     static const uint64_t SEED1 = 0x1111111111111111lu;
@@ -148,11 +155,23 @@ public:
     }
 
     void check_skip_test_flush_remote() {
-        if ((GetParam()->tl_name != "dc_mlx5") &&
-            (GetParam()->tl_name != "rc_verbs") &&
-            (GetParam()->tl_name != "rc_mlx5")) {
-            UCS_TEST_SKIP_R("not supported");
+#if HAVE_IB
+        auto md = sender().md();
+        if (std::string(md->component->name) == "ib") {
+            auto ib_md = ucs_derived_of(md, uct_ib_md_t);
+            if (!(ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
+                UCS_TEST_SKIP_R("mlx5 PRM not supported");
+            }
+
+#if HAVE_MLX5_DV
+            auto mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
+            if (!(mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_KSM))
+#endif
+            {
+                UCS_TEST_SKIP_R("mlx5 KSM not supported");
+            }
         }
+#endif
 
         m_flush_flags = UCT_FLUSH_FLAG_REMOTE;
     }
@@ -232,7 +251,8 @@ public:
     }
 
     void test_flush_put_zcopy(flush_func_t flush) {
-        const size_t length  = 10 * UCS_MBYTE;
+        const size_t length = ucs_min(10 * UCS_MBYTE,
+                                      sender().iface_attr().cap.put.max_zcopy);
         mapped_buffer sendbuf(length, SEED1, sender());
         mapped_buffer recvbuf(length, SEED2, receiver());
 
@@ -492,8 +512,8 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_remote,
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, put_zcopy_flush_ep_remote,
-                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY) ||
-                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY) ||
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
     check_skip_test_flush_remote();
     test_flush_put_zcopy(&uct_flush_test::flush_ep_nb);
 }
@@ -835,7 +855,9 @@ protected:
     void check_skip_test_tl() {
         if ((GetParam()->tl_name != "dc_mlx5") &&
             (GetParam()->tl_name != "rc_verbs") &&
-            (GetParam()->tl_name != "rc_mlx5")) {
+            (GetParam()->tl_name != "rc_mlx5") &&
+            (GetParam()->tl_name != "srd")) {
+
             UCS_TEST_SKIP_R("not supported yet");
         }
 

@@ -45,12 +45,21 @@ unsigned uct_rocm_base_progress(ucs_queue_head_t *signal_queue)
     static const unsigned max_signals = 16;
     unsigned count                    = 0;
     uct_rocm_base_signal_desc_t *rocm_signal;
+    hsa_status_t status;
 
     ucs_queue_for_each_extract(rocm_signal, signal_queue, queue,
 			       (hsa_signal_load_scacquire(rocm_signal->signal) == 0) &&
 			       (count < max_signals)) {
         if (rocm_signal->comp != NULL) {
             uct_invoke_completion(rocm_signal->comp, UCS_OK);
+        }
+
+        if (rocm_signal->mapped_addr != NULL) {
+            status = hsa_amd_ipc_memory_detach(rocm_signal->mapped_addr);
+            if (status != HSA_STATUS_SUCCESS) {
+                ucs_warn("failed to detach ipc memory region");
+            }
+            rocm_signal->mapped_addr = NULL;
         }
 
         ucs_trace_poll("rocm signal done :%p", rocm_signal);

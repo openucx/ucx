@@ -55,10 +55,38 @@ void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
         goto err;
     }
 
+    status = ucs_topo_sys_device_set_user_value(*sys_dev_p, cuda_device);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = ucs_topo_sys_device_enable_aux_path(*sys_dev_p);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     return;
 
 err:
     *sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
+}
+
+ucs_status_t
+uct_cuda_base_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device)
+{
+    uintptr_t user_value;
+
+    user_value = ucs_topo_sys_device_get_user_value(sys_dev);
+    if (user_value == UINTPTR_MAX) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    *device = user_value;
+    if (*device == CU_DEVICE_INVALID) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t
@@ -71,26 +99,75 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     CUdevice cuda_device;
     ucs_status_t status;
     char device_name[10];
-    int num_gpus;
+    int i, num_gpus;
 
-    status = UCT_CUDA_CALL(UCS_LOG_LEVEL_DIAG, cudaGetDeviceCount, &num_gpus);
+    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
     if ((status != UCS_OK) || (num_gpus == 0)) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 
-    for (cuda_device = 0; cuda_device < num_gpus; ++cuda_device) {
-        uct_cuda_base_get_sys_dev(cuda_device, &sys_dev);
-        if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-            ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
-                              cuda_device);
-            status = ucs_topo_sys_device_set_name(sys_dev, device_name,
-                                                  sys_device_priority);
-            ucs_assert_always(status == UCS_OK);
+    for (i = 0; i < num_gpus; ++i) {
+        status = UCT_CUDADRV_FUNC(cuDeviceGet(&cuda_device, i),
+                                  UCS_LOG_LEVEL_DIAG);
+        if (status != UCS_OK) {
+            continue;
         }
+
+        uct_cuda_base_get_sys_dev(cuda_device, &sys_dev);
+        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            continue;
+        }
+
+        ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
+                          cuda_device);
+        status = ucs_topo_sys_device_set_name(sys_dev, device_name,
+                                              sys_device_priority);
+        ucs_assert_always(status == UCS_OK);
     }
 
     return uct_md_query_single_md_resource(component, resources_p,
                                            num_resources_p);
+}
+
+ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
+                                         CUcontext *cuda_ctx_p)
+{
+    unsigned int flags;
+    int active;
+    ucs_status_t status;
+    CUcontext cuda_ctx;
+
+    if (!force) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        if (!active) {
+            ucs_debug("cuda primary context is inactive on device %d",
+                      cuda_device);
+            return UCS_ERR_NO_DEVICE;
+        }
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_device));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *cuda_ctx_p = cuda_ctx;
+    return UCS_OK;
+}
+
+UCS_STATIC_INIT
+{
+    UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+}
+
+UCS_STATIC_CLEANUP
+{
 }
 
 UCS_MODULE_INIT() {

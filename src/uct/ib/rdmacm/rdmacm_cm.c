@@ -187,8 +187,8 @@ dummy_qp_ctx_init:
     /* Create a dummy completion queue */
     ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
     if (ctx->cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
-                                       "%s: ibv_create_cq()", dev_name);
+        uct_ib_check_memlock_limit_msg(verbs, UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq()");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -485,15 +485,15 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
         /* For local IB address, assume the remote subnet prefix is the same
          * and pack it to make reachability check pass */
         ret = ibv_query_gid(cm_id->verbs, cm_id->port_num,
-                            UCT_IB_MD_DEFAULT_GID_INDEX, &params.gid);
+                            UCT_IB_DEVICE_DEFAULT_GID_INDEX, &params.gid);
         if (ret) {
             ucs_error("ibv_query_gid(dev=%s port=%d index=%d) failed: %m",
                       ibv_get_device_name(cm_id->verbs->device),
-                      cm_id->port_num, UCT_IB_MD_DEFAULT_GID_INDEX);
+                      cm_id->port_num, UCT_IB_DEVICE_DEFAULT_GID_INDEX);
             return UCS_ERR_IO_ERROR;
         }
 
-        params.gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
+        params.gid_index = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
         params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
                            UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
     }
@@ -779,7 +779,7 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         break;
     case RDMA_CM_EVENT_TIMEWAIT_EXIT:
         /* This event is generated when the QP associated with the connection
-         * has exited its timewait state and is now ready to be re-used.
+         * has exited its timewait state and is now ready to be reused.
          * After a QP has been disconnected, it is maintained in a timewait
          * state to allow any in flight packets to exit the network.
          * After the timewait state has completed, the rdma_cm will report this event.*/
@@ -842,7 +842,7 @@ static uct_cm_ops_t uct_rdmacm_cm_ops = {
 };
 
 static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_connect               = uct_rdmacm_cm_ep_connect,
     .ep_disconnect            = uct_rdmacm_cm_ep_disconnect,
     .cm_ep_conn_notify        = uct_rdmacm_cm_ep_conn_notify,
@@ -866,12 +866,12 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .ep_create                = (uct_ep_create_func_t)ucs_empty_function_return_unsupported,
     .iface_flush              = (uct_iface_flush_func_t)ucs_empty_function_return_unsupported,
     .iface_fence              = (uct_iface_fence_func_t)ucs_empty_function_return_unsupported,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
     .iface_progress           = (uct_iface_progress_func_t)ucs_empty_function_return_zero,
     .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucs_empty_function_return_unsupported,
     .iface_event_arm          = (uct_iface_event_arm_func_t)ucs_empty_function_return_unsupported,
-    .iface_close              = ucs_empty_function,
+    .iface_close              = (uct_iface_close_func_t)ucs_empty_function,
     .iface_query              = (uct_iface_query_func_t)ucs_empty_function_return_unsupported,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_unsupported,
     .iface_get_address        = (uct_iface_get_address_func_t)ucs_empty_function_return_unsupported,
@@ -879,13 +879,16 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
 };
 
 static uct_iface_internal_ops_t uct_rdmacm_cm_iface_internal_ops = {
-    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = uct_rdmacm_ep_query,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
-    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
+    .iface_query_v2         = (uct_iface_query_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_estimate_perf    = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+    .ep_query               = uct_rdmacm_ep_query,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2  = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected        = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int,
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
 };
 
 static ucs_status_t

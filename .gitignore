@@ -40,6 +40,7 @@ depcomp
 contrib/rpmdef.sh
 contrib/ucx
 bindings/java/pom.xml
+bindings/java/src/main/native/tmp-settings.xml
 src/ucs/ucs_stats_parser
 test/gtest/gtest
 build-*
@@ -47,6 +48,7 @@ ucx*tar.gz
 src/tools/info/build_config.h
 src/tools/info/ucx_info
 src/tools/perf/ucx_perftest
+src/tools/perf/ucx_perftest_daemon
 src/tools/profile/ucx_read_profile
 test/apps/test_dlopen_cfg_print
 test/apps/test_link_map
@@ -75,6 +77,8 @@ test-driver
 src/ucp/api/ucp_version.h
 src/ucp/core/ucp_version.c
 test/mpi/run_mpi.sh
+test/mpi/shmem_pingpong
+test/mpi/test_memhooks
 *.tap
 valgrind.xml
 tags
@@ -104,8 +108,14 @@ test/apps/test_tcmalloc
 test/apps/profiling/ucx_profiling
 test/apps/uct_info/uct_info
 test/apps/uct_info/uct_info_static
+test/apps/uct_info/ucp_hello_world_static
+test/apps/test_cuda_get_symbol_address
 cmake/*.cmake
 *.gcno
 *.gcda
 lcov_data/
 .noinst/
+go.work
+go.work.sum
+bindings/go/pkg/
+bindings/go/go.sum

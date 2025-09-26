@@ -4,6 +4,12 @@
 ucp_iov_contig_tag_lat               -t tag_lat -D iov,contig
 ucp_iov_iov_tag_lat                  -t tag_lat -D iov,iov
 ucp_contig_tag_lat                   -t tag_lat -D contig,contig
+#
+# UCP with Multithreading
+#
+ucp_iov_contig_tag_lat               -t tag_lat -D iov,contig    -T 2
+ucp_iov_iov_tag_lat                  -t tag_lat -D iov,iov       -T 2
+ucp_contig_tag_lat                   -t tag_lat -D contig,contig -T 2
 #IOV with RNDV is not yet supported
 #ucp_contig_iov_tag_lat              -t tag_lat -D contig,iov
 ucp_iov_contig_tag_bw                -t tag_bw  -D iov,contig
@@ -47,3 +53,9 @@ ucp_contig_host_cuda_tag_lat_sleep   -I -E sleep  -t tag_lat -D contig,contig -m
 ucp_contig_cuda_tag_bw_sleep         -I -E sleep  -t tag_bw  -D contig,contig -m cuda,cuda
 ucp_contig_cuda_host_tag_bw_sleep    -I -E sleep  -t tag_bw  -D contig,contig -m cuda,host
 ucp_contig_host_cuda_tag_bw_sleep    -I -E sleep  -t tag_bw  -D contig,contig -m host,cuda
+#
+# CUDA with multithreading
+#
+ucp_contig_cuda_tag_lat              -t tag_lat -D contig,contig -m cuda,cuda -T 2
+ucp_contig_cuda_host_tag_lat         -t tag_lat -D contig,contig -m cuda,host -T 2 
+ucp_contig_host_cuda_tag_lat         -t tag_lat -D contig,contig -m host,cuda -T 2

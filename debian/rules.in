@@ -15,12 +15,15 @@ CUDA_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw cuda \
 XPMEM_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw xpmem \
 	&& echo --with-xpmem || echo --without-xpmem)
 
+CUDA_SUBSTVARS = debian/ucx-cuda.substvars
+
 %:
 	dh $@ 
 
 override_dh_auto_configure:
 	./contrib/configure-release-mt --prefix=/usr \
-		--enable-examples --with-java=no \
+		--with-rdmacm --with-verbs --with-mlx5 --enable-cma \
+		--enable-examples --without-java --without-go \
 		$(CUDA_OPT) $(XPMEM_OPT)
 	chmod +x debian/rules
 
@@ -32,9 +35,10 @@ override_dh_auto_install:
 
 override_dh_shlibdeps:
 	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info
-	if [ -e debian/ucx-cuda.substvars ]; then \
-	  sed -i -e 's/libnvidia-compute-\([0-9]\+\)/& | libnvidia-ml1/' \
-	    debian/ucx-cuda.substvars \
-	; fi
+	if [ -e $(CUDA_SUBSTVARS) ]; then \
+		sed -i -e 's/libnvidia-compute-\([0-9]\+\), //g' $(CUDA_SUBSTVARS); \
+		echo "shlibs:Recommends=libnvidia-compute | libnvidia-ml1" >> \
+			$(CUDA_SUBSTVARS); \
+	fi
 
 override_dh_auto_clean:

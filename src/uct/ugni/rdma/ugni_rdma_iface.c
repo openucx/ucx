@@ -64,7 +64,8 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_GET_ZCOPY      |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_ATOMIC_DEVICE |
-                                         UCT_IFACE_FLAG_PENDING;
+                                         UCT_IFACE_FLAG_PENDING |
+                                         UCT_IFACE_FLAG_INTER_NODE;
 
     iface_attr->cap.atomic64.op_flags  = UCS_BIT(UCT_ATOMIC_OP_ADD)|
                                          UCS_BIT(UCT_ATOMIC_OP_AND) |
@@ -202,8 +203,8 @@ static uct_iface_ops_t uct_ugni_aries_rdma_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
     .iface_flush              = uct_ugni_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
     .iface_progress           = (void*)uct_ugni_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_rdma_iface_t),
     .iface_query              = uct_ugni_rdma_iface_query,
@@ -229,8 +230,8 @@ static uct_iface_ops_t uct_ugni_gemini_rdma_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
     .iface_flush              = uct_ugni_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
     .iface_progress           = (void*)uct_ugni_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_rdma_iface_t),
     .iface_query              = uct_ugni_rdma_iface_query,

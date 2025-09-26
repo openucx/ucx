@@ -7,7 +7,7 @@ package goucxtests
 import (
 	"net"
 	"testing"
-	. "ucx"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 )
 
 var connReq *UcpConnectionRequest = nil
@@ -19,7 +19,7 @@ func TestUcpListener(t *testing.T) {
 
 	ucpParams := (&UcpParams{}).EnableTag()
 
-	ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_SINGLE)
+	ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
 
 	listenerParams := &UcpListenerParams{}
 	listenerParams.SetSocketAddress(addr)

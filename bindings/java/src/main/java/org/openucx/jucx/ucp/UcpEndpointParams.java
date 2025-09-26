@@ -29,6 +29,10 @@ public class UcpEndpointParams extends UcxParams {
             + ((errorHandlingMode == 0) ? "UCP_ERR_HANDLING_MODE_NONE," :
                                           "UCP_ERR_HANDLING_MODE_PEER,");
 
+        if (localSocketAddress != null) {
+            result += "localSocketAddress=" + localSocketAddress.toString() + ",";
+        }
+        
         if (socketAddress != null) {
             result += "socketAddress=" + socketAddress.toString() + ",";
         }
@@ -46,6 +50,7 @@ public class UcpEndpointParams extends UcxParams {
         ucpAddress = null;
         errorHandlingMode = 0;
         flags = 0;
+        localSocketAddress = null;
         socketAddress = null;
         connectionRequest = 0;
         clientAddress = null;
@@ -59,6 +64,8 @@ public class UcpEndpointParams extends UcxParams {
     private int errorHandlingMode;
 
     private long flags;
+
+    private InetSocketAddress localSocketAddress;
 
     private InetSocketAddress socketAddress;
 
@@ -87,6 +94,15 @@ public class UcpEndpointParams extends UcxParams {
     public UcpEndpointParams setPeerErrorHandlingMode() {
         this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
         this.errorHandlingMode = UcpConstants.UCP_ERR_HANDLING_MODE_PEER;
+        return this;
+    }
+
+    /**
+     * Local address in form of InetSocketAddress.
+     */
+    public UcpEndpointParams setLocalSocketAddress(InetSocketAddress localSocketAddress) {
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR;
+        this.localSocketAddress = localSocketAddress;
         return this;
     }
 

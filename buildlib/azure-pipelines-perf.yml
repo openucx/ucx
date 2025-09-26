@@ -21,7 +21,7 @@ resources:
     type: github
     name: Mellanox-lab/PerfX
     endpoint: Mellanox-lab
-    ref: master
+    ref: refs/tags/v1.0.2
 
 stages:
   - stage: Prepare
@@ -36,10 +36,12 @@ stages:
           - checkout: self
             clean: true
             fetchDepth: 10
+            retryCountOnTaskFailure: 5
 
           - checkout: PerfX
             clean: true
             fetchDepth: 1
+            retryCountOnTaskFailure: 5
 
           - bash: |
               set -xeE
@@ -87,6 +89,8 @@ stages:
       - job: Perf
         displayName: Performance testing
         timeoutInMinutes: 180
+        workspace:
+          clean: outputs
         pool:
           name: MLNX
           demands:
@@ -185,6 +189,6 @@ stages:
         steps:
           - checkout: none
           - bash: |
-              set -xeE
-              crontab -r
+              set -x
+              crontab -r || true
             displayName: remove warning

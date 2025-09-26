@@ -8,6 +8,8 @@
 
 #include <uct/uct_test.h>
 
+#include <vector>
+
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
@@ -236,7 +238,7 @@ UCS_TEST_SKIP_COND_P(test_ud, duplex_tx,
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
 }
 
-/* send full window, rcv ack after progreess, send some more */
+/* send full window, rcv ack after progress, send some more */
 UCS_TEST_SKIP_COND_P(test_ud, tx_window1,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     unsigned i, N = 13;
@@ -386,7 +388,7 @@ UCS_TEST_SKIP_COND_P(test_ud, crep_drop1,
 }
 
 /* check that creq is not left on tx window if
- * both sides connect simultaniously.
+ * both sides connect simultaneously.
  */
 UCS_TEST_SKIP_COND_P(test_ud, crep_drop2,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
@@ -534,10 +536,11 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_ai,
     /* check initial window */
     disable_async(m_e1);
     disable_async(m_e2);
-    /* only test up to 'small' window when on valgrind
-     * valgrind drops rx packets when window is too big and resends are disabled in this test
+    /* only test up to 'small' window when on valgrind or EFA interface, as they
+     * drop rx packets when window is too big and resends are disabled in this test
      */
-    max_window = RUNNING_ON_VALGRIND ? 128 : UCT_UD_CA_MAX_WINDOW;
+    max_window = (ucs::is_aws() || RUNNING_ON_VALGRIND) ? 128 :
+                                                          UCT_UD_CA_MAX_WINDOW;
     connect();
     EXPECT_EQ(UCT_UD_CA_MIN_WINDOW, ep(m_e1)->ca.cwnd);
     EXPECT_EQ(UCT_UD_CA_MIN_WINDOW, ep(m_e2)->ca.cwnd);
@@ -547,7 +550,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_ai,
     prev_cwnd = ep(m_e1)->ca.cwnd;
     rx_ack_count = 0;
 
-    /* window increase upto max window should
+    /* window increase up to max window should
      * happen when we receive acks */
     while (ep(m_e1)->ca.cwnd < max_window) {
        status = tx(m_e1);
@@ -716,21 +719,21 @@ UCS_TEST_SKIP_COND_P(test_ud, connect_iface_seq,
     m_e1->connect_to_iface(0, *m_e2);
     validate_connect(ep(m_e1), 0U);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
-    /* one becase of crep */
+    /* one because of crep */
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
 
     /* now side two connects. existing ep will be reused */
     m_e2->connect_to_iface(0, *m_e1);
     validate_connect(ep(m_e2), 0U);
     EXPECT_EQ(2, ep(m_e2)->tx.psn);
-    /* one becase creq sets initial psn */
+    /* one because creq sets initial psn */
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 
     check_connection();
 }
 
 UCS_TEST_P(test_ud, connect_iface_sim) {
-    /* simultanious connect from both sides */
+    /* simultaneous connect from both sides */
     connect_to_iface();
 
     validate_connect(ep(m_e1), 0U);
@@ -740,7 +743,7 @@ UCS_TEST_P(test_ud, connect_iface_sim) {
 }
 
 UCS_TEST_P(test_ud, connect_iface_sim2v2) {
-    /* simultanious connect from both sides */
+    /* simultaneous connect from both sides */
     connect_to_iface(0);
     connect_to_iface(1);
 
@@ -757,10 +760,9 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
  * - flush() will also progress pending CREQs
  */
 UCS_TEST_P(test_ud, connect_iface_2k) {
-
     unsigned i;
-    unsigned cids[2000];
     unsigned count = 2000 / ucs::test_time_multiplier();
+    std::vector<unsigned> cids(count, 0);
 
     /* create 2k connections */
     for (i = 0; i < count; i++) {

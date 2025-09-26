@@ -5,6 +5,7 @@ usr/lib/cmake
 usr/lib/pkgconfig
 usr/lib/ucx/libuct_cma.*
 usr/lib/ucx/libuct_ib.*
+usr/lib/ucx/libuct_ib_mlx5.*
 usr/lib/ucx/libuct_rdmacm.*
 # FIXME: this really should go under docs or examples:
 usr/share/*

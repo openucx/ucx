@@ -21,9 +21,10 @@
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/datastruct/ptr_map.h>
+#include <ucs/datastruct/usage_tracker.h>
 #include <ucs/arch/bitops.h>
 
-#include <ucs/datastruct/array.inl>
+#include <ucs/datastruct/array.h>
 
 
 /* The size of the private buffer in UCT descriptor headroom, which UCP may
@@ -46,6 +47,8 @@
     do { \
         if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
             UCS_ASYNC_BLOCK(&(_worker)->async); \
+        } else if (!((_worker)->flags & UCP_WORKER_FLAG_THREAD_SERIALIZED)) { \
+            ucs_assert(ucs_async_check_owner_thread(&(_worker)->async)); \
         } \
     } while (0)
 
@@ -121,10 +124,9 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2), /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
-    UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE       = UCS_BIT(3)  /**< Progress should be activated */
 };
 
 
@@ -147,8 +149,10 @@ enum {
     UCP_WORKER_STAT_RNDV_RX_UNEXP,
 
     UCP_WORKER_STAT_RNDV_PUT_ZCOPY,
+    UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
     UCP_WORKER_STAT_RNDV_GET_ZCOPY,
     UCP_WORKER_STAT_RNDV_RTR,
+    UCP_WORKER_STAT_RNDV_RTR_MTYPE,
     UCP_WORKER_STAT_RNDV_RKEY_PTR,
 
     UCP_WORKER_STAT_LAST
@@ -225,8 +229,31 @@ typedef struct ucp_worker_mpool_key {
 KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t);
 typedef khash_t(ucp_worker_mpool_hash) ucp_worker_mpool_hash_t;
 
+
+typedef struct {
+    ucp_ep_h         ep;
+    ucs_sys_device_t sys_dev;
+} ucp_worker_remote_flush_key_t;
+
+
+/**
+ * Remote memory to be used for device targeted remote flushing.
+ */
+typedef struct {
+    uct_rkey_t uct_rkey;
+    uct_ep_t   *uct_ep;
+    uint64_t   address;
+} ucp_mem_area_t;
+
+
+/* Hash map to find what remote devices ep needs to flush */
+KHASH_TYPE(ucp_worker_remote_flush, ucp_worker_remote_flush_key_t,
+           ucp_mem_area_t);
+
+
 /* EP configurations storage */
-UCS_ARRAY_DECLARE_TYPE(ep_config_arr, unsigned, ucp_ep_config_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_ep_config_arr_t, unsigned, ucp_ep_config_t);
+
 
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
@@ -286,6 +313,8 @@ typedef struct ucp_worker {
     char                             address_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     unsigned                         flush_ops_count;     /* Number of pending operations */
+    uint64_t                         fence_seq;           /* Sequence number of
+                                                             the last fence */
 
     int                              event_fd;            /* Allocated (on-demand) event fd for wakeup */
     ucs_sys_event_set_t              *event_set;          /* Allocated UCS event set for wakeup */
@@ -334,8 +363,9 @@ typedef struct ucp_worker {
                                                              mapping */
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
                                                              ptr mapping */
+    kh_ucp_worker_remote_flush_t     remote_flush_hash;
 
-    ucs_array_t(ep_config_arr)       ep_config;           /* EP configurations storage */
+    ucp_ep_config_arr_t              ep_config; /* EP configurations storage */
 
     unsigned                         rkey_config_count;   /* Current number of rkey configurations */
     ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
@@ -362,6 +392,18 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    struct {
+        /* Usage tracker handle */
+        ucs_usage_tracker_h          handle;
+        /* Number of progress iterations passed so far (used to minimize
+         * calls to ucs_get_time) */
+        unsigned                     iter_count;
+        /* Number of rounds passed so far */
+        unsigned                     rounds_count;
+        /* Last round timestamp */
+        ucs_time_t                   last_round;
+    } usage_tracker;
 } ucp_worker_t;
 
 
@@ -392,6 +434,8 @@ void ucp_worker_signal_internal(ucp_worker_h worker);
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
 
+int ucp_worker_iface_is_activated(const ucp_worker_iface_t *wiface);
+
 void ucp_worker_keepalive_add_ep(ucp_ep_h );
 
 /* EP should be removed from worker all_eps prior to call this function */
@@ -410,6 +454,8 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                        void *discarded_cb_arg);
 
 void ucp_worker_vfs_refresh(void *obj);
+
+void ucp_worker_track_ep_usage_always(ucp_request_t *req);
 
 ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self);
 
@@ -438,5 +484,20 @@ ucp_worker_flush_ops_count_add(ucp_worker_h worker, int count)
 
     worker->flush_ops_count = flush_ops_count;
 }
+
+
+/**
+ * @brief Process corresponding UCP worker interface for each lane in the map.
+ *
+ * @param [in] worker          Worker object containing interfaces.
+ * @param [in] ep_config       Endpoint configuration containing resources.
+ * @param [in] lane_map        Map of lanes to iterate through.
+ * @param [in] wiface_process  Process method to be invoked for each wiface.
+ */
+void
+ucp_wiface_process_for_each_lane(ucp_worker_h worker,
+                                 ucp_ep_config_t *ep_config,
+                                 ucp_lane_map_t lane_map,
+                                 void (*wiface_process)(ucp_worker_iface_t*));
 
 #endif

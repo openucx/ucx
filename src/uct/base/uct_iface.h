@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -9,6 +10,7 @@
 
 #include "uct_worker.h"
 
+#include <ucs/arch/cpu.h>
 #include <uct/api/uct.h>
 #include <uct/base/uct_component.h>
 #include <ucs/config/parser.h>
@@ -30,7 +32,6 @@
 /* UCT IFACE local address flag which packed to ID and indicates if an address
  * is extended by a system namespace information */
 #define UCT_IFACE_LOCAL_ADDR_FLAG_NS UCS_BIT(63)
-
 
 enum {
     UCT_EP_STAT_AM,
@@ -265,6 +266,11 @@ typedef struct uct_am_handler {
 } uct_am_handler_t;
 
 
+/* Query the attributes of the iface */
+typedef ucs_status_t (*uct_iface_query_v2_func_t)(
+        uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
+
 /* Performance estimation operation */
 typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
         uct_iface_h iface, uct_perf_attr_t *perf_attr);
@@ -300,15 +306,29 @@ typedef int (*uct_ep_is_connected_func_t)(
         uct_ep_h ep, const uct_ep_is_connected_params_t *params);
 
 
+/* Obtain a device endpoint */
+typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
+        uct_ep_h ep, uct_device_ep_h *device_ep_p);
+
+
+/* Pack memh and rkey into a device mem element */
+typedef ucs_status_t (*uct_iface_mem_element_pack_func_t)(
+        const uct_iface_h iface, uct_mem_h memh, uct_rkey_t rkey,
+        uct_device_mem_element_t *mem_element);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
+    uct_iface_query_v2_func_t        iface_query_v2;
     uct_iface_estimate_perf_func_t   iface_estimate_perf;
     uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
+    uct_iface_mem_element_pack_func_t iface_mem_element_pack;
     uct_ep_query_func_t              ep_query;
     uct_ep_invalidate_func_t         ep_invalidate;
     uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
     uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
     uct_ep_is_connected_func_t       ep_is_connected;
+    uct_ep_get_device_ep_func_t      ep_get_device_ep;
 } uct_iface_internal_ops_t;
 
 
@@ -887,6 +907,9 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
 void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 ucs_status_t
+uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
+ucs_status_t
 uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
 
 int uct_base_ep_is_connected(const uct_ep_h tl_ep,
@@ -908,7 +931,11 @@ void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
                                  ucs_sys_namespace_type_t sys_ns_type);
 
 int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
-                                 ucs_sys_namespace_type_t sys_ns_type);
+                                 ucs_sys_namespace_type_t sys_ns_type,
+                                 const uct_iface_is_reachable_params_t *params);
+
+void uct_iface_fill_info_str_buf(const uct_iface_is_reachable_params_t *params,
+                                 const char *fmt, ...);
 
 int uct_iface_is_reachable_params_valid(
         const uct_iface_is_reachable_params_t *params, uint64_t flags);
@@ -978,7 +1005,7 @@ void uct_invoke_completion(uct_completion_t *comp, ucs_status_t status)
  */
 static UCS_F_ALWAYS_INLINE
 void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
-                            size_t length)
+                            size_t length, ucs_arch_memcpy_hint_t hint)
 {
     /**
      * Helper structure to fill send buffer of short messages for
@@ -992,7 +1019,7 @@ void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
     packet->header = header;
     /* suppress false positive diagnostic from uct_mm_ep_am_common_send call */
     /* cppcheck-suppress ctunullpointer */
-    memcpy(packet->payload, payload, length);
+    ucs_memcpy_relaxed(packet->payload, payload, length, hint, length);
 }
 
 
@@ -1026,7 +1053,7 @@ void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 
 ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface);
 
-void uct_iface_vfs_refresh(void *obj);
+void uct_iface_vfs_set_dirty(uct_iface_h iface);
 
 ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags);
 
@@ -1071,6 +1098,13 @@ static UCS_F_ALWAYS_INLINE int uct_ep_op_is_fetch(uct_ep_operation_t op)
                           UCS_BIT(UCT_EP_OP_GET_BCOPY) |
                           UCS_BIT(UCT_EP_OP_GET_ZCOPY) |
                           UCS_BIT(UCT_EP_OP_ATOMIC_FETCH));
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_perf_attr_has_bandwidth(uint64_t perf_attr_mask)
+{
+    return (perf_attr_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) ||
+           (perf_attr_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH);
 }
 
 #endif

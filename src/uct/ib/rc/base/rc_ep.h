@@ -36,7 +36,7 @@ enum {
 };
 
 /*
- * Auxillary AM ID bits used by FC protocol.
+ * Auxiliary AM ID bits used by FC protocol.
  */
 enum {
     /* Keepalive Request scheduled: indicates that keepalive request
@@ -282,7 +282,7 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
 ucs_status_t
 uct_rc_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
-int uct_rc_ep_is_connected(struct ibv_ah_attr *ah_attr,
+int uct_rc_ep_is_connected(uct_rc_ep_t *ep, struct ibv_ah_attr *ah_attr,
                            const uct_ep_is_connected_params_t *params,
                            uint32_t qp_num, uint32_t addr_qp);
 
@@ -519,14 +519,14 @@ uct_rc_ep_fm(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
     return fence;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_ep_fence(uct_ep_h tl_ep, uct_ib_fence_info_t* fi, int fence)
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_ep_fence(uct_ep_h tl_ep,
+                                                        uct_ib_fence_info_t *fi)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
 
     /* in case if fence is requested and enabled by configuration
      * we need to schedule fence for next RDMA operation */
-    if (fence && (iface->config.fence_mode != UCT_RC_FENCE_MODE_NONE)) {
+    if (iface->config.fence_mode != UCT_RC_FENCE_MODE_NONE) {
         fi->fence_beat = iface->tx.fi.fence_beat - 1;
     }
 
@@ -549,6 +549,42 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_ep_enable_flush_remote(uct_rc_ep_t *ep)
 {
     ep->flags |= UCT_RC_EP_FLAG_FLUSH_REMOTE;
+}
+
+static UCS_F_NOINLINE void
+uct_rc_ep_send_op_completed_iov(uct_rc_iface_send_op_t *op)
+{
+#ifndef NVALGRIND
+    struct iovec *iov_entry = op->iov;
+    size_t length           = 0;
+
+    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IOV);
+
+    if (iov_entry == NULL) {
+        return;
+    }
+
+    while (length < op->length) {
+        /* The memory might not be HOST */
+        VALGRIND_MAKE_MEM_DEFINED_IF_ADDRESSABLE(iov_entry->iov_base,
+                                                 iov_entry->iov_len);
+        length += iov_entry->iov_len;
+        ++iov_entry;
+    }
+
+    ucs_free(op->iov);
+    op->iov = NULL;
+#endif
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_iov_get_zcopy(uct_rc_iface_send_op_t *op)
+{
+    if (RUNNING_ON_VALGRIND) {
+        uct_rc_ep_send_op_completed_iov(op);
+    }
+
+    op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_IOV;
 }
 
 #endif

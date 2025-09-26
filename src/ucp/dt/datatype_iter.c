@@ -213,6 +213,11 @@ size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
     next_iter->type.iov.iov_index  = dt_iter->type.iov.iov_index;
     next_iter->type.iov.iov_offset = dt_iter->type.iov.iov_offset;
 
+    if (max_length == 0) {
+        next_iter->offset = dt_iter->offset;
+        return 0;
+    }
+
     /* Limiting data length by max_iter_length prevents from going outside the
        iov list */
     ucs_assert(dt_iter->offset <= dt_iter->length);

@@ -111,11 +111,12 @@ unsigned ucs_netif_bond_ad_num_ports(const char *if_name);
  *
  * @param [in]   domain     Communication domain (AF_INET/AF_INET6/etc).
  * @param [in]   type       Communication semantics (SOCK_STREAM/SOCK_DGRAM/etc).
+ * @param [in]   protocol   Communication protocol (IPPROTO_TCP/NETLINK_ROUTE/etc).
  * @param [out]  fd_p       Pointer to created fd.
  *
  * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure.
  */
-ucs_status_t ucs_socket_create(int domain, int type, int *fd_p);
+ucs_status_t ucs_socket_create(int domain, int type, int protocol, int *fd_p);
 
 
 /**
@@ -253,7 +254,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
  * @return The queue length for completely established sockets
  * waiting to be accepted.
  */
-int ucs_socket_max_conn();
+int ucs_socket_max_conn(void);
 
 
 /**
@@ -279,13 +280,14 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p);
  * @param [in]      fd              Socket fd.
  * @param [in]      data            A pointer to a buffer to receive the incoming
  *                                  data.
+ * @param [in]      flags           recv flags.
  * @param [in/out]  length_p        The length, in bytes, of the data in buffer
  *                                  pointed to by the `data` parameter. The amount of
  *                                  data received is written to this argument.
  *
  * @return UCS_OK on success or an error code on failure.
  */
-ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p);
+ucs_status_t ucs_socket_recv_nb(int fd, void *data, int flags, size_t *length_p);
 
 
 /**
@@ -328,7 +330,7 @@ ucs_status_t ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt,
  * @param [in]      data            A pointer to a buffer to receive the incoming
  *                                  data.
  * @param [in/out]  length          The length, in bytes, of the data in buffer
- *                                  pointed to by the `data` paramete.
+ *                                  pointed to by the `data` parameter.
  *
  * @return UCS_OK on success or an error code on failure.
  */
@@ -436,6 +438,39 @@ ucs_status_t ucs_sock_ipstr_to_sockaddr(const char *ip_str,
 
 
 /**
+ * Extract the IP address and port from a given string and return it as a
+ * sockaddr storage. The supported formats are (as per RFCs 3986, 5952):
+ * IPv4:port,   e.g. 127.0.0.1:1338
+ * [IPv6]:port  e.g. [::1]:1339
+ *
+ * Port is optional parameter in string, if not set, default_port is used
+ *
+ * @param [in]  ip_port_str  A string to take IP address and port from.
+ * @param [in]  default_port Default port to use if string doesn't have it.
+ * @param [out] sa_storage   sockaddr storage filled with the IP address,
+ *                           address family and port.
+ *
+ * @return UCS_OK if @a ip_port_str has a valid IP address,
+ *         UCS_ERR_INVALID_ADDR otherwise.
+ */
+ucs_status_t ucs_sock_ipportstr_to_sockaddr(const char *ip_port_str,
+                                            uint16_t default_port,
+                                            struct sockaddr_storage *sa_storage);
+
+
+/**
+ * Extract port from a given string and validate it.
+ *
+ * @param [in]  port_str A string to take port from.
+ * @param [out] port     Variable to store parsed port.
+ *
+ * @return UCS_OK if @a port_str has a valid port,
+ *         UCS_ERR_INVALID_ADDR otherwise.
+ */
+ucs_status_t ucs_sock_port_from_string(const char *port_str, uint16_t *port);
+
+
+/**
  * Check if the address family of the given sockaddr is IPv4 or IPv6
  *
  * @param [in] sa       Pointer to sockaddr structure.
@@ -504,6 +539,21 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
  *         otherwise.
  */
 int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2);
+
+
+/**
+ * Checks if two IP addresses are in the same subnet
+ *
+ * @param [in]  sa1         Pointer to sockaddr structure #1.
+ * @param [in]  sa2         Pointer to sockaddr structure #2.
+ * @param [in]  prefix_len  Subnet prefix length in bits.
+ *
+ * @return 1 if both addresses are in the same subnet.
+ *         0 if not
+ */
+int ucs_sockaddr_is_same_subnet(const struct sockaddr *sa1,
+                                const struct sockaddr *sa2,
+                                unsigned prefix_len);
 
 
 /**

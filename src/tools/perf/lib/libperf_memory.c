@@ -88,9 +88,20 @@ static void ucp_perf_mem_free(const ucx_perf_context_t *perf, ucp_mem_h memh)
     }
 }
 
+static void ucp_perf_mem_buf_free(ucx_perf_exported_mem_t *exported_mem)
+{
+    ucp_memh_buffer_release_params_t memh_release_params = {};
+
+    if (NULL != exported_mem->address) {
+        ucp_memh_buffer_release(exported_mem->address, &memh_release_params);
+        exported_mem->address = NULL;
+    }
+}
+
 ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
 {
-    ucx_perf_params_t *params = &perf->params;
+    ucx_perf_params_t *params               = &perf->params;
+    ucp_memh_pack_params_t memh_pack_params = {};
     ucs_status_t status;
     size_t buffer_size;
 
@@ -101,19 +112,45 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     }
 
     /* Allocate send buffer memory */
-    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
+    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count +
+                                ONESIDED_SIGNAL_SIZE,
                                 params->send_mem_type, &perf->send_buffer,
                                 &perf->ucp.send_memh);
     if (status != UCS_OK) {
         goto err;
     }
 
+    perf->ucp.daemon_req.addr           = (uint64_t)perf->send_buffer;
+    perf->ucp.daemon_req.length         = buffer_size;
+    perf->ucp.send_exported_mem.address = NULL;
+    perf->ucp.recv_exported_mem.address = NULL;
+
     /* Allocate receive buffer memory */
-    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
+    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count +
+                                ONESIDED_SIGNAL_SIZE,
                                 params->recv_mem_type, &perf->recv_buffer,
                                 &perf->ucp.recv_memh);
     if (status != UCS_OK) {
         goto err_free_send_buffer;
+    }
+
+    if (perf->params.ucp.is_daemon_mode) {
+        memh_pack_params.field_mask = UCP_MEMH_PACK_PARAM_FIELD_FLAGS;
+        memh_pack_params.flags      = UCP_MEMH_PACK_FLAG_EXPORT;
+
+        status = ucp_memh_pack(perf->ucp.send_memh, &memh_pack_params,
+                               &perf->ucp.send_exported_mem.address,
+                               &perf->ucp.send_exported_mem.length);
+        if (status != UCS_OK) {
+            goto err_free_buffers;
+        }
+
+        status = ucp_memh_pack(perf->ucp.recv_memh, &memh_pack_params,
+                               &perf->ucp.recv_exported_mem.address,
+                               &perf->ucp.recv_exported_mem.length);
+        if (status != UCS_OK) {
+            goto err_free_buffers;
+        }
     }
 
     /* Allocate AM header */
@@ -153,6 +190,8 @@ err_free_am_hdr:
     free(perf->ucp.am_hdr);
 err_free_buffers:
     ucp_perf_mem_free(perf, perf->ucp.recv_memh);
+    ucp_perf_mem_buf_free(&perf->ucp.recv_exported_mem);
+    ucp_perf_mem_buf_free(&perf->ucp.send_exported_mem);
 err_free_send_buffer:
     ucp_perf_mem_free(perf, perf->ucp.send_memh);
 err:
@@ -166,6 +205,8 @@ void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
     free(perf->ucp.am_hdr);
     ucp_perf_mem_free(perf, perf->ucp.recv_memh);
     ucp_perf_mem_free(perf, perf->ucp.send_memh);
+    ucp_perf_mem_buf_free(&perf->ucp.recv_exported_mem);
+    ucp_perf_mem_buf_free(&perf->ucp.send_exported_mem);
 }
 
 static void
@@ -227,6 +268,11 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     switch (perf->params.command) {
     case UCX_PERF_CMD_PUT:
         flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT;
+        break;
+    case UCX_PERF_CMD_PUT_SINGLE:
+    case UCX_PERF_CMD_PUT_MULTI:
+    case UCX_PERF_CMD_PUT_PARTIAL:
+        flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT | UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
         break;
     case UCX_PERF_CMD_GET:
         flags |= UCT_MD_MEM_ACCESS_REMOTE_GET;
@@ -301,15 +347,25 @@ void ucx_perf_global_init()
 {
     static ucx_perf_allocator_t host_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_HOST,
-        .init      = ucs_empty_function_return_success,
+        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
         .uct_alloc = uct_perf_test_alloc_host,
         .uct_free  = uct_perf_test_free_host,
         .memcpy    = ucx_perf_test_memcpy_host,
         .memset    = memset
     };
+    static ucx_perf_allocator_t rdma_allocator = {
+        .mem_type  = UCS_MEMORY_TYPE_RDMA,
+        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
+        .uct_alloc = (ucx_perf_uct_alloc_func_t)ucs_empty_function_do_assert,
+        .uct_free  = (ucx_perf_uct_free_func_t)ucs_empty_function_do_assert,
+        .memcpy    = (ucx_perf_memcpy_func_t)ucs_empty_function_do_assert,
+        .memset    = (ucx_perf_memset_func_t)ucs_empty_function_do_assert
+    };
+
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_HOST] = &host_allocator;
+    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_RDMA] = &rdma_allocator;
 
     /* FIXME Memtype allocator modules must be loaded to global scope, otherwise
      * alloc hooks, which are using dlsym() to get pointer to original function,

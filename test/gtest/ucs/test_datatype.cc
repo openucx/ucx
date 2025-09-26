@@ -9,12 +9,13 @@
 
 extern "C" {
 #include <ucs/debug/memtrack.h>
-#include <ucs/datastruct/array.inl>
+#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/hlist.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/piecewise_func.h>
 #include <ucs/time/time.h>
 #include <ucs/type/init_once.h>
 #include <ucs/arch/cpu.h>
@@ -22,6 +23,8 @@ extern "C" {
 
 #include <vector>
 #include <queue>
+#include <random>
+#include <set>
 #include <map>
 
 class test_datatype : public ucs::test {
@@ -45,6 +48,12 @@ UCS_TEST_F(test_datatype, list_basic) {
     ASSERT_EQ((unsigned long)0, ucs_list_length(&head));
     ucs_list_insert_after(&head, &elem0.list);
     ucs_list_insert_before(&head, &elem1.list);
+
+    EXPECT_TRUE(ucs_list_is_first(&head, &elem0.list));
+    EXPECT_FALSE(ucs_list_is_last(&head, &elem0.list));
+
+    EXPECT_FALSE(ucs_list_is_first(&head, &elem1.list));
+    EXPECT_TRUE(ucs_list_is_last(&head, &elem1.list));
 
     std::vector<elem_t*> vec;
     ucs_list_for_each(iter, &head, list) {
@@ -275,7 +284,10 @@ UCS_TEST_F(test_datatype, hlist_foreach_safe) {
         /* Initialize list elements with random numbers */
         std::vector<elem_t> v_elems;
         for (int i = 0; i < length; ++i) {
-            v_elems.push_back({.i = ucs::rand()});
+            elem_t e = {
+                .i = ucs::rand()
+            };
+            v_elems.push_back(e);
         }
 
         /* Add elements to the list */
@@ -1052,6 +1064,27 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_locked_perf,
     }
 }
 
+UCS_TEST_F(test_datatype, is_unsigned_type) {
+    EXPECT_TRUE(ucs_is_unsigned_type(uint8_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(uint16_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(uint32_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(uint64_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned char));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned short));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned int));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned long));
+
+    EXPECT_FALSE(ucs_is_unsigned_type(int8_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(int16_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(int32_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(int64_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed char));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed short));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed int));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed long));
+}
+
 typedef struct {
     int  num1;
     int  num2;
@@ -1065,17 +1098,105 @@ static std::ostream& operator<<(std::ostream& os, const test_value_type_t &v) {
     return os << "<" << v.num1 << "," << v.num2 << ">";
 }
 
+typedef struct {
+    int             i;
+    ucs_list_link_t list;
+} simple_elem_t;
 
-UCS_ARRAY_DEFINE_INLINE(test_2num, unsigned, test_value_type_t);
-UCS_ARRAY_DEFINE_INLINE(test_1int, size_t, int);
+UCS_ARRAY_DECLARE_TYPE(test_2num_t, unsigned, test_value_type_t);
+UCS_ARRAY_DECLARE_TYPE(test_1int_t, size_t, int);
+UCS_ARRAY_DECLARE_TYPE(test_list_links_array_t, unsigned, simple_elem_t);
 
 class test_array : public test_datatype {
 protected:
-    void test_fixed(ucs_array_t(test_1int) *array, size_t capacity);
+    void test_fixed(test_1int_t *array, size_t capacity);
+    void generate_linked_list(int size, simple_elem_t *head);
+    void copy_array_of_linked_lists(void *dst, void *src, int size);
+    void cleanup_array_of_linked_lists(test_list_links_array_t *test_array);
 };
 
+/* generate a list of numbers in a certain size */
+void test_array::generate_linked_list(int size, simple_elem_t *head)
+{
+    ucs_list_head_init(&head->list);
+
+    for (int i = 0; i < size; i++) {
+        simple_elem_t *iter = new simple_elem_t;
+        iter->i             = i;
+        ucs_list_add_tail(&head->list, &iter->list);
+        /* coverity[leaked_storage] */
+    }
+}
+
+void test_array::copy_array_of_linked_lists(void *dst, void *src, int size)
+{
+    simple_elem_t *src_array_of_lists = static_cast<simple_elem_t*>(src);
+    simple_elem_t *dst_array_of_lists = static_cast<simple_elem_t*>(dst);
+
+    for (int i = 0; i < size; ++i) {
+        ucs_list_head_init(&dst_array_of_lists[i].list);
+        ucs_list_splice_tail(&dst_array_of_lists[i].list,
+                             &src_array_of_lists[i].list);
+    }
+}
+
+void test_array::cleanup_array_of_linked_lists(
+        test_list_links_array_t *test_array)
+{
+    simple_elem_t *tmp;
+    simple_elem_t *head;
+    simple_elem_t *elem;
+    simple_elem_t *list_elem;
+    ucs_array_for_each(head, test_array) {
+        ucs_list_for_each_safe(list_elem, tmp, &head->list, list) {
+            elem = (simple_elem_t*)list_elem;
+            ucs_list_del(&elem->list);
+            delete list_elem;
+        }
+    }
+
+    ucs_array_cleanup_dynamic(test_array);
+}
+
+UCS_TEST_F(test_array, dynamic_array_grow_of_list_link_elements) {
+    constexpr size_t NUM_ELEMENTS = 100;
+    constexpr size_t LIST_SIZE    = 200;
+    test_list_links_array_t test_array;
+
+    ucs_array_init_dynamic(&test_array);
+
+    /* create and fill array of linked lists */
+    for (size_t i = 0; i < NUM_ELEMENTS; ++i) {
+        void *old_buffer    = NULL;
+        simple_elem_t *elem = ucs_array_append_safe(&test_array, &old_buffer,
+                                                    FAIL());
+        generate_linked_list(LIST_SIZE, elem);
+
+        if (old_buffer != NULL) {
+            copy_array_of_linked_lists(test_array.buffer, old_buffer, i);
+            ucs_free(old_buffer);
+        }
+        EXPECT_EQ(i + 1, ucs_array_length(&test_array));
+    }
+
+    EXPECT_EQ(NUM_ELEMENTS, ucs_array_length(&test_array));
+
+    /* validate array integrity */
+    simple_elem_t *head, *elem;
+    ucs_array_for_each(head, &test_array) {
+        int expected_value = 0;
+        ucs_list_for_each(elem, &head->list, list) {
+            EXPECT_EQ(expected_value, elem->i);
+            expected_value++;
+        }
+        EXPECT_EQ(LIST_SIZE, expected_value);
+    }
+
+    cleanup_array_of_linked_lists(&test_array);
+}
+
 UCS_TEST_F(test_array, dynamic_array_2int_grow) {
-    ucs_array_t(test_2num) test_array;
+    test_2num_t test_array;
     test_value_type_t value;
     ucs_status_t status;
 
@@ -1084,7 +1205,7 @@ UCS_TEST_F(test_array, dynamic_array_2int_grow) {
 
     /* grow the array enough to contain 'value_index' */
     unsigned value_index = 9;
-    status = ucs_array_reserve(test_2num, &test_array, value_index + 1);
+    status               = ucs_array_reserve(&test_array, value_index + 1);
     ASSERT_UCS_OK(status);
 
     value.num1 = ucs::rand();
@@ -1095,12 +1216,12 @@ UCS_TEST_F(test_array, dynamic_array_2int_grow) {
     EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
 
     /* grow the array to larger size, check the value is not changed */
-    status = ucs_array_reserve(test_2num, &test_array, 40);
+    status = ucs_array_reserve(&test_array, 40);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
 
     /* grow the array with smaller size, check the value is not changed */
-    status = ucs_array_reserve(test_2num, &test_array, 30);
+    status = ucs_array_reserve(&test_array, 30);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
 
@@ -1110,7 +1231,7 @@ UCS_TEST_F(test_array, dynamic_array_2int_grow) {
 UCS_TEST_F(test_array, dynamic_array_int_append) {
     static const size_t NUM_ELEMS = 1000;
 
-    ucs_array_t(test_1int) test_array;
+    test_1int_t test_array;
     std::vector<int> vec;
 
     ucs_array_init_dynamic(&test_array);
@@ -1119,7 +1240,7 @@ UCS_TEST_F(test_array, dynamic_array_int_append) {
     /* push same elements to the array and the std::vector */
     for (size_t i = 0; i < NUM_ELEMS; ++i) {
         int value = ucs::rand();
-        int *elem = ucs_array_append(test_1int, &test_array, FAIL());
+        int *elem = ucs_array_append(&test_array, FAIL());
         EXPECT_EQ(i + 1, ucs_array_length(&test_array));
         *elem = value;
         vec.push_back(value);
@@ -1162,15 +1283,14 @@ UCS_TEST_F(test_array, dynamic_array_int_append) {
     ucs_array_cleanup_dynamic(&test_array);
 }
 
-void test_array::test_fixed(ucs_array_t(test_1int) *array, size_t capacity)
+void test_array::test_fixed(test_1int_t *array, size_t capacity)
 {
     /* check initial capacity */
     size_t initial_capacity = ucs_array_capacity(array);
-    EXPECT_LE(initial_capacity, capacity);
-    EXPECT_GE(initial_capacity, capacity - 1);
+    EXPECT_EQ(initial_capacity, capacity);
 
     /* append one element */
-    ucs_array_append(test_1int, array, FAIL());
+    ucs_array_append(array, FAIL());
 
     size_t idx = ucs_array_length(array) - 1;
     ucs_array_elem(array, idx) = 17;
@@ -1185,15 +1305,14 @@ void test_array::test_fixed(ucs_array_t(test_1int) *array, size_t capacity)
 UCS_TEST_F(test_array, fixed_static) {
     const size_t num_elems = 100;
     int buffer[num_elems];
-    ucs_array_t(test_1int) test_array =
-             UCS_ARRAY_FIXED_INITIALIZER(buffer, num_elems);
+    test_1int_t test_array = UCS_ARRAY_FIXED_INITIALIZER(buffer, num_elems);
     test_fixed(&test_array, num_elems);
 }
 
 UCS_TEST_F(test_array, fixed_init) {
     const size_t num_elems = 100;
     int buffer[num_elems];
-    ucs_array_t(test_1int) test_array;
+    test_1int_t test_array;
 
     ucs_array_init_fixed(&test_array, buffer, num_elems);
     test_fixed(&test_array, num_elems);
@@ -1201,8 +1320,60 @@ UCS_TEST_F(test_array, fixed_init) {
 
 UCS_TEST_F(test_array, fixed_onstack) {
     const size_t num_elems = 100;
-    UCS_ARRAY_DEFINE_ONSTACK(test_array, test_1int, num_elems);
+    UCS_ARRAY_DEFINE_ONSTACK(test_1int_t, test_array, num_elems);
     test_fixed(&test_array, num_elems);
+}
+
+UCS_TEST_F(test_array, fixed_runtime_onstack) {
+    for (size_t i = 1; i < 200; ++i) {
+        UCS_ARRAY_DEFINE_ONSTACK(test_1int_t, test_array, i);
+        test_fixed(&test_array, i);
+    }
+}
+
+UCS_TEST_F(test_array, resize) {
+    static const size_t NUM_ELEMS = 10;
+    static const int VALUE1       = 896;
+    static const int VALUE2       = 1234;
+    test_1int_t test_array;
+
+    ucs_array_init_dynamic(&test_array);
+    *ucs_array_append(&test_array, FAIL()) = VALUE1;
+    ucs_array_resize(&test_array, NUM_ELEMS, VALUE2, FAIL());
+
+    EXPECT_EQ(NUM_ELEMS, ucs_array_length(&test_array));
+    for (size_t i = 0; i < NUM_ELEMS; ++i) {
+        int expected_value = (i == 0) ? VALUE1 : VALUE2;
+        EXPECT_EQ(expected_value, ucs_array_elem(&test_array, i));
+    }
+
+    ucs_array_cleanup_dynamic(&test_array);
+}
+
+UCS_TEST_F(test_array, max_capacity) {
+    UCS_ARRAY_DECLARE_TYPE(test_array_uint8_t, uint8_t, int);
+    EXPECT_EQ(127, ucs_array_max_capacity((test_array_uint8_t *)NULL));
+
+    UCS_ARRAY_DECLARE_TYPE(test_array_uint16_t, uint16_t, int);
+    EXPECT_EQ(32767, ucs_array_max_capacity((test_array_uint16_t *)NULL));
+}
+
+UCS_TEST_F(test_array, add_above_max_capacity) {
+    UCS_ARRAY_DECLARE_TYPE(test_array_uint8_t, uint8_t, int);
+    test_array_uint8_t test_array;
+    size_t max_capacity = ucs_array_max_capacity(&test_array);
+
+    ucs_array_init_dynamic(&test_array);
+    ucs_array_resize(&test_array, max_capacity, 0, FAIL());
+    EXPECT_EQ(max_capacity, ucs_array_length(&test_array));
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        ucs_status_t status = ucs_array_reserve(&test_array, max_capacity + 1);
+        EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
+    }
+
+    ucs_array_cleanup_dynamic(&test_array);
 }
 
 class test_datatype_ptr_map : public test_datatype {
@@ -1337,4 +1508,225 @@ UCS_MT_TEST_F(test_datatype_ptr_map_safe, safe_put, num_threads)
             }
         }
     }
+}
+
+
+class test_piecewise_func : public test_datatype {
+protected:
+    /* Represents piecewise function segment which consists of the linear
+     * function and the range on which this function is applicable.
+     * Both `start` and `end` is included to the range.
+     */
+    struct segment {
+        size_t            start;
+        size_t            end;
+        ucs_linear_func_t func;
+    };
+
+    static std::string get_segment_string(const segment &seg)
+    {
+        std::stringstream ss;
+        ss << "segment [" << seg.start << ", " << seg.end << "] : ";
+        ss << "func f(x) = " << seg.func.c << " + x*" << seg.func.m;
+
+        return ss.str();
+    }
+
+    static void print_piecewise_func(const ucs_piecewise_func_t &pw_func)
+    {
+        size_t start = 0;
+        ucs_piecewise_segment_t *seg;
+
+        UCS_TEST_MESSAGE << "piecewise func:";
+        ucs_piecewise_func_seg_foreach(&pw_func, seg) {
+            segment test_segment = {start, seg->end, seg->func};
+            UCS_TEST_MESSAGE << "\t" << get_segment_string(test_segment);
+            start = seg->end + 1;
+        }
+    }
+
+    static void compare_point_value(const ucs_piecewise_func_t &pw_func,
+                                    const ucs_linear_func_t &l_func,
+                                    size_t x)
+    {
+        ASSERT_EQ(ucs_piecewise_func_apply(&pw_func, x),
+                  ucs_linear_func_apply(l_func, x)) << "X axis point is " << x;
+    }
+
+    static size_t get_num_segments(ucs_piecewise_func_t &func)
+    {
+        size_t seg_num = 0;
+        ucs_piecewise_segment_t *seg;
+
+        ucs_piecewise_func_seg_foreach(&func, seg) {
+            ++seg_num;
+        }
+
+        return seg_num;
+    }
+
+    static void check_single_segment_func(ucs_piecewise_func_t &pw_func,
+                                          const ucs_linear_func_t &segment_func)
+    {
+        ucs_piecewise_segment_t *seg;
+
+        ASSERT_EQ(get_num_segments(pw_func), 1);
+        ucs_piecewise_func_seg_foreach(&pw_func, seg) {
+            ASSERT_TRUE(ucs_linear_func_is_equal(seg->func, segment_func, 0));
+        }
+    }
+
+    static void check_funcs_sum(ucs_piecewise_func_t &result,
+                                std::vector<ucs_piecewise_func_t> &pw_funcs)
+    {
+        size_t seg_start = 0;
+        std::set<size_t> points;
+        ucs_piecewise_segment_t *seg;
+
+        for (auto &pw_func : pw_funcs) {
+            ucs_piecewise_func_seg_foreach(&pw_func, seg) {
+                /* Test start, end and middle of the each segment */
+                segment test_seg{seg_start, seg->end, seg->func};
+                auto seg_points = get_segment_points(test_seg);
+                points.insert(seg_points.begin(), seg_points.end());
+
+                seg_start = seg->end + 1;
+            }
+        }
+
+        for (size_t point : points) {
+            double expected = 0;
+            for (auto &pw_func : pw_funcs) {
+                expected += ucs_piecewise_func_apply(&pw_func, point);
+            }
+
+            double actual = ucs_piecewise_func_apply(&result, point);
+
+            if (actual != expected) {
+                for (const auto &pw_func : pw_funcs) {
+                    print_piecewise_func(pw_func);
+                }
+            }
+            ASSERT_EQ(actual, expected) << "point is " << point;
+        }
+    }
+
+    static std::vector<size_t> get_segment_points(const segment &seg)
+    {
+        return {seg.start, seg.end, seg.start + (seg.end - seg.start) / 2};
+    }
+};
+
+UCS_TEST_F(test_piecewise_func, init) {
+    ucs_piecewise_func_t zero_pw_func;
+    ucs_piecewise_func_init(&zero_pw_func);
+    check_single_segment_func(zero_pw_func, UCS_LINEAR_FUNC_ZERO);
+
+    ucs_piecewise_func_t pw_func;
+    ucs_piecewise_func_init(&pw_func);
+    ucs_linear_func_t seg_func = ucs_linear_func_make(1, 1);
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_func, 0, SIZE_MAX, seg_func));
+    check_single_segment_func(pw_func, seg_func);
+
+    for (size_t point = SIZE_MAX; point != 0; point /= 2) {
+        compare_point_value(zero_pw_func, UCS_LINEAR_FUNC_ZERO, point);
+        compare_point_value(pw_func, seg_func, point);
+    }
+
+    ucs_piecewise_func_cleanup(&zero_pw_func);
+    ucs_piecewise_func_cleanup(&pw_func);
+}
+
+UCS_TEST_F(test_piecewise_func, segment_add) {
+    std::vector<std::pair<size_t, size_t>> ranges_to_test =
+            {{0, 0}, {0, 5}, {0, SIZE_MAX}, {10, 20},
+             {20, 20}, {20, SIZE_MAX}, {SIZE_MAX, SIZE_MAX}};
+    ucs_linear_func_t new_seg_func = ucs_linear_func_make(2, 2);
+
+    for (const auto &range : ranges_to_test) {
+        segment seg = {range.first, range.second, new_seg_func};
+        UCS_TEST_MESSAGE << get_segment_string(seg);
+
+        ucs_piecewise_func_t pw_func;
+        ucs_piecewise_func_init(&pw_func);
+        ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_func, seg.start, seg.end,
+                                                   seg.func));
+
+        /* Check number of the segments in the result function */
+        size_t expected_num_segments = 3;
+        if (seg.start == 0) {
+            --expected_num_segments;
+        }
+        if (seg.end == SIZE_MAX) {
+            --expected_num_segments;
+        }
+        ASSERT_EQ(get_num_segments(pw_func), expected_num_segments);
+
+        /* Check points which should be affected by added segment */
+        for (auto point : get_segment_points(seg)) {
+            compare_point_value(pw_func, new_seg_func, point);
+        }
+
+        /* Check points which should not be affected by added segment */
+        std::vector<size_t> initial_segment_points;
+        if (seg.start > 0) {
+            initial_segment_points.emplace_back(seg.start - 1);
+        }
+        if (seg.end < SIZE_MAX) {
+            initial_segment_points.emplace_back(seg.end + 1);
+        }
+
+        for (auto point : initial_segment_points) {
+            compare_point_value(pw_func, UCS_LINEAR_FUNC_ZERO, point);
+        }
+
+        ucs_piecewise_func_cleanup(&pw_func);
+    }
+}
+
+UCS_TEST_F(test_piecewise_func, add_one_range_funcs) {
+    ucs_piecewise_func_t pw_func1, pw_func2, result_pw_func;
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&pw_func1));
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&pw_func2));
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&result_pw_func));
+
+    ucs_linear_func_t seg_func1 = ucs_linear_func_make(1, 1);
+    ucs_linear_func_t seg_func2 = ucs_linear_func_make(2, 2);
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_func1, 0, SIZE_MAX, seg_func1));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_func2, 0, SIZE_MAX, seg_func2));
+
+    ASSERT_UCS_OK(ucs_piecewise_func_add_inplace(&result_pw_func, &pw_func1));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_inplace(&result_pw_func, &pw_func2));
+
+    ucs_linear_func_t result_segment = ucs_linear_func_add(seg_func1, seg_func2);
+    check_single_segment_func(result_pw_func, result_segment);
+
+    ucs_piecewise_func_cleanup(&pw_func1);
+    ucs_piecewise_func_cleanup(&pw_func2);
+    ucs_piecewise_func_cleanup(&result_pw_func);
+}
+
+UCS_TEST_F(test_piecewise_func, add_multi_segment_funcs) {
+    std::vector<ucs_piecewise_func_t> pw_funcs(2);
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&pw_funcs[0]));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[0], 1,    10,       ucs_linear_func_make(1, 0.333)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[0], 20,   30,       ucs_linear_func_make(2, 2)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[0], 30,   40,       ucs_linear_func_make(3, 3)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[0], 1000, SIZE_MAX, ucs_linear_func_make(4, 4)));
+
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&pw_funcs[1]));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[1], 1,  10,     ucs_linear_func_make(5, 1)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[1], 15, 50,     ucs_linear_func_make(0, 3)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[1], 2000, 4000, ucs_linear_func_make(1.22, 2)));
+
+    ucs_piecewise_func_t result_pw_func;
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&result_pw_func));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_inplace(&result_pw_func, &pw_funcs[0]));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_inplace(&result_pw_func, &pw_funcs[1]));
+
+    check_funcs_sum(result_pw_func, pw_funcs);
+
+    ucs_piecewise_func_cleanup(&pw_funcs[0]);
+    ucs_piecewise_func_cleanup(&pw_funcs[1]);
+    ucs_piecewise_func_cleanup(&result_pw_func);
 }

@@ -18,6 +18,7 @@ jobs:
       clean: true
       fetchDepth: 100
       path: "we/need/to/go/deeper"
+      retryCountOnTaskFailure: 5
 
     - bash: ./autogen.sh
       displayName: Setup autotools

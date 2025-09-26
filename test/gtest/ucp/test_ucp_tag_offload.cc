@@ -419,7 +419,7 @@ UCS_TEST_P(test_ucp_tag_offload, eager_multi_probe,
     request_wait(rreq);
 }
 
-// Test that message is received correctly if the corresponging receive
+// Test that message is received correctly if the corresponding receive
 // operation was posted when the first (but not all) fragments arrived. This is
 // to ensure that the following sequence does not happen:
 // 1. First fragment arrives and is not added to the unexp queue
@@ -471,9 +471,9 @@ public:
 
     void init()
     {
-        // The test checks that increase of active ifaces is handled
-        // correctly. It needs to start with a single active iface, therefore
-        // disable multi-rail.
+        // The test also attempts to verify that an increase in active
+        // interfaces is managed correctly. To increase the probability of
+        // starting with a single active interface, multi-rail must be disabled.
         modify_config("MAX_EAGER_LANES", "1");
         modify_config("MAX_RNDV_LANES",  "1");
 
@@ -550,19 +550,20 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
 {
     ucp_tag_t tag = 0x11;
 
-    // Activate first offload iface. Tag hashing is not done yet, since we
-    // have only one active iface so far.
+    // Activate first offload iface. Tag hashing is performed only if there is
+    // more than one active interface.
     activate_offload_hashing(e(0), make_tag(e(0), tag));
-    EXPECT_EQ(0u, kh_size(&receiver().worker()->tm.offload.tag_hash));
+    int init_hash_size = receiver().worker()->num_active_ifaces > 1;
+    EXPECT_EQ(init_hash_size,
+              kh_size(&receiver().worker()->tm.offload.tag_hash));
 
-    // Activate second offload iface. The tag has been added to the hash.
-    // From now requests will be offloaded only for those tags which are
-    // in the hash.
+    // Activate second offload iface. The tag hash size should increase by 1.
     activate_offload_hashing(e(1), make_tag(e(1), tag));
-    EXPECT_EQ(1u, kh_size(&receiver().worker()->tm.offload.tag_hash));
+    EXPECT_EQ(init_hash_size + 1,
+              kh_size(&receiver().worker()->tm.offload.tag_hash));
 
     // Need to send a message on the first iface again, for its 'tag_sender'
-    // part of the tag to be added to the hash.
+    // part of the tag to be added to the hash (if it was not added initially).
     send_recv(e(0), make_tag(e(0), tag), 2048);
     EXPECT_EQ(2u, kh_size(&receiver().worker()->tm.offload.tag_hash));
 
@@ -592,6 +593,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all_rcdc, "rc,dc")
 class test_ucp_tag_offload_selection : public test_ucp_tag_offload {
 public:
     test_ucp_tag_offload_selection() {
+        if (ucs::skip_hw_tm_offload()) {
+            test_skip();
+        }
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
     }
 
@@ -681,7 +685,7 @@ UCS_TEST_P(test_ucp_tag_offload_gpu, sw_rndv_to_gpu_mem, "TM_SW_RNDV=y")
     wait_and_validate(sreq);
 }
 
-// Test that small buffers wich can be scattered to CQE are not posted to the
+// Test that small buffers which can be scattered to CQE are not posted to the
 // HW. Otherwise it may segfault, while copying data from CQE to the
 // (potentially) GPU buffer.
 UCS_TEST_P(test_ucp_tag_offload_gpu, rx_scatter_to_cqe, "TM_THRESH=1")
@@ -707,6 +711,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_tag_offload_gpu, rc_dc_gpu,
 class test_ucp_tag_offload_status : public test_ucp_tag {
 public:
     test_ucp_tag_offload_status() {
+        if (ucs::skip_hw_tm_offload()) {
+            test_skip();
+        }
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
     }
 

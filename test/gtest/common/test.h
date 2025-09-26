@@ -70,10 +70,17 @@ protected:
     };
 
     typedef enum {
-        NEW, RUNNING, SKIPPED, ABORTED, FINISHED
+        NEW,
+        INITIALIZING,
+        RUNNING,
+        SKIPPED,
+        ABORTED,
+        FINISHED
     } state_t;
 
     typedef std::vector<ucs_global_opts_t> config_stack_t;
+
+    static constexpr double DEFAULT_TIMEOUT_SEC = 10.0;
 
     void SetUpProxy();
     void TearDownProxy();
@@ -83,10 +90,35 @@ protected:
     virtual void cleanup();
     virtual void init();
     bool barrier();
+    void test_skip(const std::string &reason = "");
 
     virtual void check_skip_test() = 0;
 
     virtual void test_body() = 0;
+
+    template<typename Cond, typename Wait>
+    void wait_for_cond(Cond cond, Wait wait,
+                       double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        ucs_time_t deadline = get_deadline(timeout);
+        while ((ucs_get_time() < deadline) && (!cond())) {
+            wait();
+        }
+    }
+
+    template<typename T, typename Wait>
+    void wait_for_value(const volatile T *var, T value, Wait wait,
+                        double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        wait_for_cond([var, value]() { return *var == value; }, wait, timeout);
+    }
+
+    template<typename T>
+    void wait_for_value(const volatile T *var, T value,
+                        double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        wait_for_value(var, value, sched_yield, timeout);
+    }
 
     static ucs_log_func_rc_t
     common_logger(ucs_log_level_t log_level_to_handle, bool print,
@@ -148,6 +180,7 @@ protected:
     static std::vector<std::string> m_first_warns_and_errors;
 
 private:
+    void skipped(const std::string &reason);
     void skipped(const test_skip_exception& e);
     void run();
     static void push_debug_message_with_limit(std::vector<std::string>& vec,
@@ -261,11 +294,8 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public test_case_name 
   static ::testing::TestInfo* const test_info_;\
   GTEST_DISALLOW_COPY_AND_ASSIGN_(\
       GTEST_TEST_CLASS_NAME_(test_case_name, test_name));\
-}; \
-\
-::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)\
-  ::test_info_ = \
-    ::testing::internal::MakeAndRegisterTestInfo( \
+  static ::testing::TestInfo* GTEST_NO_INLINE_ create_test_info() { \
+    return ::testing::internal::MakeAndRegisterTestInfo( \
         #test_case_name, \
         (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
         "", "", \
@@ -275,6 +305,11 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public test_case_name 
 		test_case_name::TearDownTestCase, \
         new ::testing::internal::TestFactoryImpl< \
             GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>); \
+  } \
+}; \
+\
+::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(test_case_name, test_name) \
+    ::test_info_ = create_test_info(); \
 void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
 
 

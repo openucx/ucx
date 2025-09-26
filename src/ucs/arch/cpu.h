@@ -3,6 +3,7 @@
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -16,6 +17,7 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <stddef.h>
+#include <sched.h>
 
 BEGIN_C_DECLS
 
@@ -35,10 +37,12 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_AMD_ROME,
     UCS_CPU_MODEL_AMD_MILAN,
     UCS_CPU_MODEL_AMD_GENOA,
+    UCS_CPU_MODEL_AMD_TURIN,
     UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG,
     UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU,
     UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI,
     UCS_CPU_MODEL_RV64G,
+    UCS_CPU_MODEL_NVIDIA_GRACE,
     UCS_CPU_MODEL_LAST
 } ucs_cpu_model_t;
 
@@ -70,6 +74,7 @@ typedef enum ucs_cpu_vendor {
     UCS_CPU_VENDOR_FUJITSU_ARM,
     UCS_CPU_VENDOR_ZHAOXIN,
     UCS_CPU_VENDOR_GENERIC_RV64G,
+    UCS_CPU_VENDOR_NVIDIA,
     UCS_CPU_VENDOR_LAST
 } ucs_cpu_vendor_t;
 
@@ -150,31 +155,27 @@ static inline void ucs_clear_cache(void *start, void *end)
 #endif
 }
 
-/**
- * Get memory copy bandwidth.
- *
- * @return Memory copy bandwidth estimation based on CPU used.
- */
-double ucs_cpu_get_memcpy_bw();
-
 
 static inline int ucs_cpu_prefer_relaxed_order()
 {
     ucs_cpu_vendor_t cpu_vendor = ucs_arch_get_cpu_vendor();
     ucs_cpu_model_t cpu_model   = ucs_arch_get_cpu_model();
 
-    return (cpu_vendor == UCS_CPU_VENDOR_FUJITSU_ARM) ||
-           ((cpu_vendor == UCS_CPU_VENDOR_AMD) &&
+    return ((cpu_vendor == UCS_CPU_VENDOR_AMD) &&
             ((cpu_model == UCS_CPU_MODEL_AMD_NAPLES) ||
              (cpu_model == UCS_CPU_MODEL_AMD_ROME) ||
              (cpu_model == UCS_CPU_MODEL_AMD_MILAN) ||
-             (cpu_model == UCS_CPU_MODEL_AMD_GENOA)));
+             (cpu_model == UCS_CPU_MODEL_AMD_GENOA) ||
+             (cpu_model == UCS_CPU_MODEL_AMD_TURIN)));
 }
 
 
-#define UCS_CPU_EST_BCOPY_BW_AMD         (5008 * UCS_MBYTE)
-#define UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM (12000 * UCS_MBYTE)
+#define UCS_CPU_VENDOR_LABEL "CPU vendor"
+#define UCS_CPU_MODEL_LABEL  "CPU model"
 
+
+const char *ucs_cpu_vendor_name();
+const char *ucs_cpu_model_name();
 
 END_C_DECLS
 

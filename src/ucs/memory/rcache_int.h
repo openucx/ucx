@@ -11,13 +11,15 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/stats/stats.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/type/rwlock.h>
 
 
 #define ucs_rcache_region_log_lvl(_level, _message, ...) \
     do { \
         if (ucs_log_is_enabled(_level)) { \
-            ucs_rcache_region_log(__FILE__, __LINE__, __FUNCTION__, (_level), \
+            ucs_rcache_region_log(__FILE__, __LINE__, __func__, (_level), \
                                   _message, ## __VA_ARGS__); \
         } \
     } while (0)
@@ -54,8 +56,8 @@ enum {
 };
 
 
-/* The structure represents a group in regestration cache regions distribution.
-   Regions are distributed by thier size.
+/* The structure represents a group in registration cache regions distribution.
+   Regions are distributed by their size.
  */
 typedef struct ucs_rcache_distribution {
     size_t count; /**< Number of regions in the group */
@@ -65,7 +67,7 @@ typedef struct ucs_rcache_distribution {
 struct ucs_rcache {
     ucs_rcache_params_t params;          /**< rcache parameters (immutable) */
 
-    pthread_rwlock_t    pgt_lock;        /**< Protects the page table and all
+    ucs_rw_spinlock_t   pgt_lock;        /**< Protects the page table and all
                                               regions whose refcount is 0 */
     ucs_pgtable_t       pgtable;         /**< page table to hold the regions */
 

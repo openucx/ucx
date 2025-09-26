@@ -422,7 +422,7 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
     fh = fopen ("/proc/sys/kernel/pid_max", "r");
     if (NULL != fh) {
         if (fscanf (fh, "%d", &pid_max) != 1) {
-            ucs_debug("cound not read pid_max, using default");
+            ucs_debug("could not read pid_max, using default");
         }
         fclose (fh);
     }
@@ -459,7 +459,7 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
 
     status = uct_ugni_cdm_init_lock(cdm);
     if (UCS_OK != status) {
-        ucs_error("Couldn't initalize CDM lock.");
+        ucs_error("Couldn't initialize CDM lock.");
     }
 
     if (UCS_OK == status) {

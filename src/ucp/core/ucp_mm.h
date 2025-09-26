@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -10,6 +11,7 @@
 
 #include <ucp/api/ucp_def.h>
 #include <ucp/core/ucp_ep.h>
+#include <ucp/dt/dt.h>
 #include <uct/api/uct.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
@@ -19,7 +21,12 @@
 #include <inttypes.h>
 
 
-#define UCP_RCACHE_LOOKUP_FUNC ucs_linear_func_make(50.0e-9, 0)
+#define UCP_RCACHE_OVERHEAD_DEFAULT 50.0e-9
+
+
+/* Mask of UCT memory flags that need make sure are present when reusing an
+   existing region */
+#define UCP_MM_UCT_ACCESS_FLAGS(_flags) ((_flags) & UCT_MD_MEM_ACCESS_ALL)
 
 
 /**
@@ -29,7 +36,14 @@ enum {
     /*
      * Memory handle was imported and points to some peer's memory buffer.
      */
-    UCP_MEMH_FLAG_IMPORTED  = UCS_BIT(0)
+    UCP_MEMH_FLAG_IMPORTED     = UCS_BIT(0),
+    UCP_MEMH_FLAG_MLOCKED      = UCS_BIT(1),
+    UCP_MEMH_FLAG_HAS_AUTO_GVA = UCS_BIT(2),
+
+    /**
+     * Avoid using registration cache for the particular memory region.
+     */
+    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3)
 };
 
 
@@ -50,9 +64,11 @@ enum {
 typedef struct ucp_mem {
     ucs_rcache_region_t super;
     uint8_t             flags;          /* Memory handle flags */
+    unsigned            uct_flags;      /* UCT memory registration flags */
     ucp_context_h       context;        /* UCP context that owns a memory handle */
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_sys_device_t    sys_dev;        /* System device index */
+    ucs_sys_device_t    packed_sys_dev; /* System device index */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
@@ -93,6 +109,7 @@ typedef struct ucp_rndv_frag_mp_chunk_hdr {
 typedef struct ucp_rndv_mpool_priv {
     ucp_worker_h        worker;
     ucs_memory_type_t   mem_type;
+    ucs_sys_device_t    sys_dev;
 } ucp_rndv_mpool_priv_t;
 
 
@@ -102,7 +119,20 @@ typedef struct {
 } ucp_mem_dummy_handle_t;
 
 
+/**
+ * Memory type pack/unpack registration context
+ */
+typedef struct {
+    ucp_md_index_t    md_index; /* index of MD */
+    ucp_mem_h         ucp_memh; /* memh from rcache if MD is cacheable */
+    uct_mem_h         uct_memh; /* memh for specific MD */
+    uct_rkey_bundle_t rkey_bundle; /* rkey bundle from memh */
+} ucp_mtype_pack_context_t;
+
+
 extern ucp_mem_dummy_handle_t ucp_mem_dummy_handle;
+
+extern const ucp_memory_info_t ucp_mem_info_unknown;
 
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
@@ -150,11 +180,11 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,
-                                      ucp_md_index_t md_index, ucp_mem_h *memh_p,
-                                      uct_rkey_bundle_t *rkey_bundle);
+                                      ucp_md_index_t md_index,
+                                      ucp_mtype_pack_context_t *pack_context);
 
-void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucp_md_index_t md_index,
-                                ucp_mem_h memh, uct_rkey_bundle_t *rkey_bundle);
+void ucp_mem_type_unreg_buffers(ucp_worker_h worker,
+                                const ucp_mtype_pack_context_t *pack_context);
 
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                size_t length, ucs_memory_type_t mem_type,
@@ -176,18 +206,34 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
 
 void ucp_mem_rcache_cleanup(ucp_context_h context);
 
+void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
+
 /**
- * Get memory domain index that is used to allocate host memory type.
+ * Get memory domain index that is used to allocate certain memory type.
  *
- * @param [in]  context UCP context containing memory domain indexes to use for
- *                      the memory allocation.
- * @param [out] md_idx  Index of the memory domain that is used to allocate host
- *                      memory.
+ * @param [in]  context        UCP context containing memory domain indexes to
+ *                             use for the memory allocation.
+ * @param [in]  alloc_mem_type Memory type to get allocation index and memory
+ *                             information for.
+ * @param [in]  alloc_sys_dev  System device to get allocation index and memory
+ *                             information for.
+ * @param [out] md_idx_p       Index of the memory domain that is used to
+ *                             allocate memory.
+ * @param [out] mem_info_p     Information about the allocated memory.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t
-ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx);
+ucs_status_t ucp_mm_get_alloc_md_index(ucp_context_h context,
+                                       ucs_memory_type_t alloc_mem_type,
+                                       ucs_sys_device_t alloc_sys_dev,
+                                       ucp_md_index_t *md_idx_p,
+                                       ucp_memory_info_t *mem_info_p);
+
+ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
+                              size_t length, unsigned uct_flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, const char *name,
+                              uct_allocated_memory_t *mem);
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)
@@ -199,16 +245,6 @@ static UCS_F_ALWAYS_INLINE ucs_memory_type_t
 ucp_rkey_packed_mem_type(const void *rkey_buffer)
 {
     return (ucs_memory_type_t)(*(uint8_t *)((const ucp_md_map_t*)rkey_buffer + 1));
-}
-
-static UCS_F_ALWAYS_INLINE uct_mem_h
-ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
-{
-    if (!(md_map & UCS_BIT(md_idx))) {
-        return UCT_MEM_HANDLE_NULL;
-    }
-
-    return uct[ucs_bitmap2idx(md_map, md_idx)];
 }
 
 static UCS_F_ALWAYS_INLINE void *ucp_memh_address(const ucp_mem_h memh)
@@ -225,12 +261,18 @@ static UCS_F_ALWAYS_INLINE size_t ucp_memh_length(const ucp_mem_h memh)
 #define UCP_MEM_IS_HOST(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_HOST)
 #define UCP_MEM_IS_ROCM(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ROCM)
 #define UCP_MEM_IS_CUDA(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA)
+#define UCP_MEM_IS_ZE_HOST(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ZE_HOST)
+#define UCP_MEM_IS_ZE_DEVICE(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ZE_DEVICE)
 #define UCP_MEM_IS_CUDA_MANAGED(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA_MANAGED)
 #define UCP_MEM_IS_ROCM_MANAGED(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ROCM_MANAGED)
+#define UCP_MEM_IS_ZE_MANAGED(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ZE_MANAGED)
 #define UCP_MEM_IS_ACCESSIBLE_FROM_CPU(_mem_type) \
     (UCS_BIT(_mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)
-#define UCP_MEM_IS_GPU(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA || \
-                                   (_mem_type) == UCS_MEMORY_TYPE_CUDA_MANAGED || \
-                                   (_mem_type) == UCS_MEMORY_TYPE_ROCM)
+#define UCP_MEM_IS_GPU(_mem_type) (UCS_BIT(_mem_type) & \
+                                   (UCS_BIT(UCS_MEMORY_TYPE_CUDA) | \
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED) | \
+                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM) | \
+                                    UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) | \
+                                    UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED)))
 
 #endif

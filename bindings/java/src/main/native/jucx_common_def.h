@@ -98,7 +98,7 @@ jobject jucx_request_allocate(JNIEnv *env, jobject callback, ucp_request_param_t
 
 /**
  * @ingroup JUCX_REQ
- * @brief Utility to set iov verctor in jucx_request, to release it on completion.
+ * @brief Utility to set iov vector in jucx_request, to release it on completion.
  */
 void jucx_request_set_iov(JNIEnv *env, jobject request, ucp_dt_iov_t* iovec);
 
@@ -121,7 +121,7 @@ void jucx_request_update_recv_length(JNIEnv *env, jobject jucx_request, size_t r
 void jucx_request_update_sender_tag(JNIEnv *env, jobject jucx_request, ucp_tag_t sender_tag);
 
 /**
- * @brief Function to handle result of ucx function submition, to handle immidiate completion.
+ * @brief Function to handle result of ucx function submission, to handle immediate completion.
  */
 void process_request(JNIEnv *env, const ucp_request_param_t *request_params, ucs_status_ptr_t status);
 

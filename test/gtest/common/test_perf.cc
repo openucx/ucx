@@ -128,20 +128,24 @@ void test_perf::rte::exchange_vec(void *rte_group, void * req)
 {
 }
 
-void test_perf::rte::report(void *rte_group, const ucx_perf_result_t *result,
-                            void *arg, const char *extra_info, int is_final,
-                            int is_multi_thread)
+ucs_status_t test_perf::rte::setup(void *arg)
+{
+    return UCS_OK;
+}
+
+void test_perf::rte::cleanup(void *arg)
 {
 }
 
 ucx_perf_rte_t test_perf::rte::test_rte = {
+    rte::setup,
+    rte::cleanup,
     rte::group_size,
     rte::group_index,
     rte::barrier,
     rte::post_vec,
     rte::recv,
     rte::exchange_vec,
-    rte::report,
 };
 
 std::vector<int> test_perf::get_affinity() {
@@ -197,20 +201,25 @@ void test_perf::test_params_init(const test_spec &test,
                                  const std::string &tl_name,
                                  const std::string &dev_name)
 {
-    params.api             = test.api;
-    params.command         = test.command;
-    params.test_type       = test.test_type;
-    params.thread_mode     = UCS_THREAD_MODE_SINGLE;
-    params.async_mode      = UCS_ASYNC_THREAD_LOCK_TYPE;
-    params.thread_count    = 1;
-    params.wait_mode       = test.wait_mode;
-    params.flags           = test.test_flags | flags;
-    params.uct.am_hdr_size = 8;
-    params.alignment       = ucs_get_page_size();
-    params.max_outstanding = test.max_outstanding;
-    params.send_mem_type   = test.send_mem_type;
-    params.recv_mem_type   = test.recv_mem_type;
-    params.percentile_rank = 50.0;
+    params.api                 = test.api;
+    params.command             = test.command;
+    params.test_type           = test.test_type;
+    params.thread_mode         = UCS_THREAD_MODE_SINGLE;
+    params.async_mode          = UCS_ASYNC_THREAD_LOCK_TYPE;
+    params.thread_count        = 1;
+    params.wait_mode           = test.wait_mode;
+    params.flags               = test.test_flags | flags;
+    params.uct.am_hdr_size     = 8;
+    params.alignment           = ucs_get_page_size();
+    params.max_outstanding     = test.max_outstanding;
+    params.send_mem_type       = test.send_mem_type;
+    params.recv_mem_type       = test.recv_mem_type;
+    params.send_device         = {UCS_MEMORY_TYPE_LAST, UCX_PERF_MEM_DEV_DEFAULT};
+    params.recv_device         = {UCS_MEMORY_TYPE_LAST, UCX_PERF_MEM_DEV_DEFAULT};
+    params.device_thread_count = 1;
+    params.device_block_count  = 1;
+    params.device_level        = UCS_DEVICE_LEVEL_THREAD;
+    params.percentile_rank     = 50.0;
 
     memset(params.uct.md_name, 0, sizeof(params.uct.md_name));
 
@@ -229,6 +238,7 @@ void test_perf::test_params_init(const test_spec &test,
     params.report_interval = 1.0;
     params.rte_group       = NULL;
     params.rte             = &rte::test_rte;
+    params.report_func     = test_perf::print_progress;
     params.report_arg      = NULL;
 
     ucs_strncpy_zero(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
@@ -241,8 +251,10 @@ void test_perf::test_params_init(const test_spec &test,
     params.iov_stride           = test.msg_stride;
     params.ucp.send_datatype    = (ucp_perf_datatype_t)test.data_layout;
     params.ucp.recv_datatype    = (ucp_perf_datatype_t)test.data_layout;
-    params.ucp.nonblocking_mode = 0;
     params.ucp.am_hdr_size      = 0;
+    params.ucp.is_daemon_mode   = 0;
+    params.ucp.dmn_local_addr   = {};
+    params.ucp.dmn_remote_addr  = {};
 }
 
 test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsigned flags,

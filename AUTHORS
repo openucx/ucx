@@ -1,22 +1,31 @@
+Aboorva Devarajan <aboorvad@linux.ibm.com>
 Akshay Venkatesh <akvenkatesh@nvidia.com>
-Alexey Rivkin <arivkin@nvidia.com>
+Alastair McKinstry <mckinstry@debian.org>
+Aleksey Senin <alekseys@nvidia.com>
 Alex Margolin <alex.margolin@huawei.com>
 Alex Mikheev <alexm@mellanox.com>
+Alexey Rivkin <arivkin@nvidia.com>
 Alina Sklarevich <alinas@mellanox.com>
+Alma Mastbaum <amastbaum@nvidia.com>
 Anatoly Vildemanov <anatolyv@nvidia.com>
 Andrey Maslennikov <andreyma@mellanox.com>
+Arnaud Celermajer <acelermajer@nvidia.com>
 Artem Polyakov <artemp@nvidia.com>
 Artem Ryabov <artemry@nvidia.com>
 Artemy Kovalyov <artemyko@mellanox.com>
+Arun Chandran <Arun.Chandran@amd.com>
 Aurelien Bouteiller <bouteill@icl.utk.edu>
 Bin Lei <binl@mellanox.com>
 Boris Karasev <boriska@nvidia.com>
 Brad Benton <bradford.benton@gmail.com>
 Changcheng Liu <jerrliu@nvidia.com>
+Colin Hirsch <chirsch@nvidia.com>
 Corey J. Nolet <cjnolet@gmail.com>
 David Wootton <dwootton@us.ibm.com>
 Devendar Bureddy <devendar@mellanox.com>
 Devesh Sharma <devesh.sharma@broadcom.com>
+Dmitrii Chervov <dschervov1@yandex.ru>
+Dmitrii Gabor <dmitryg1709@gmail.com>
 Dmitry Gladkov <dmitrygla@mellanox.com>
 Doug Jacobsen <dmjacobsen@lbl.gov>
 Edgar Gabriel <edgar.gabriel@amd.com>
@@ -35,11 +44,14 @@ Howard Pritchard <howardp@lanl.gov>
 Huaxiang Fan <huaxiangf@nvidia.com>
 Hui Zhou <hzhou321@anl.gov>
 Igor Ivanov <igori@mellanox.com>
+Ilia Yastrebov <iyastrebov@nvidia.com>
 Ilya Nelkenbaum <ilyan@mellanox.com>
+Itay Alroy <ialroy@nvidia.com>
 Ivan Kochin <ikochin@nvidia.com>
 Jakir Kham <jakirkham@gmail.com>
 Jason Gunthorpe <jgg@mellanox.com>
 Jeff Daily <jeff.daily@amd.com>
+Jianxin Xiong <jianxin.xiong@intel.com>
 John Snyder <jms285@duke.edu>
 Jonas Zhou <JonasZhou@zhaoxin.com>
 Joseph Schuchart <schuchart@icl.utk.edu>
@@ -54,6 +66,8 @@ Manjunath Gorentla Venkata <manjugv@gmail.com>
 Marek Schimara <Marek.Schimara@bull.net>
 Mark Allen <markalle@us.ibm.com>
 Matthew Baker <bakermb@ornl.gov>
+Michael Braverman <michaelbr@nvidia.com>
+Michal Shalev <mshalev@nvidia.com>
 Mike Dubman <miked@mellanox.com>
 Mikhail Brinskii <mikhailb@nvidia.com>
 Min Fang <minf@nvidia.com>
@@ -61,15 +75,19 @@ Nathan Hjelm <hjelmn@lanl.gov>
 Netanel Yosephian <netanelyo@mellanox.com>
 Ofir Farjon <ofarjon@nvidia.com>
 Olly Perks <olly.perks@arm.com>
+Ovidiu Mara <ovidium@nvidia.com>
 Pak Lui <Pak.Lui@amd.com>
 Pavan Balaji <balaji@anl.gov>
 Pavel Shamis (Pasha) <pasharesearch@gmail.com>
 Peter Andreas Entschev <peter@entschev.com>
 Peter Rudenko <peterr@mellanox.com>
+Peter-Jan Gootzen <pgootzen@nvidia.com>
 Qiang Yu <Qiang.Yu@amd.com>
 Raul Akhmetshin <rakhmetshin@nvidia.com>
 Robert Dietrich <rdietrich@nvidia.com>
 Rohit Zambre <rzambre@uci.edu>
+Roie Danino <rdanino@nvidia.com>
+Romain Pereira <rpereira@anl.gov>
 Sam James <sam@gentoo.org>
 Sasha Kotchubievsky <sashakot@mellanox.com>
 Scott Saulters <ssaulters@nvidia.com>
@@ -85,15 +103,17 @@ Srinivasan Subramanian <srinivasan.subramanian@amd.com>
 Stephen Richmond <srichmond@dancer.icl.utk.edu>
 Swen Boehm <boehms@ornl.gov>
 Thomas Vegas <tvegas@nvidia.com>
-Tony Curtis <anthony.curtis@stonybrook.edu>
+Tony Curtis <tonycurtis32@gmail.com>
 Tzafrir Cohen <tzafrirc@nvidia.com>
 Valentin Petrov <valentinp@mellanox.com>
 Wenbin Lu <wenbin.lu@stonybrook.edu>
 Xin Zhao <xinz@mellanox.com>
 Xu Yifeng <yifeng.xyf@alibaba-inc.com>
+Yiltan Hassan Temucin <yiltan.temucin@amd.com>
 Yossi Itigin <yosefe@nvidia.com>
 Yuriy Shestakov <yuriis@mellanox.com>
 Zhu Yanjun <yanjunz@mellanox.com>
+Zihao Zhao <zizhao@nvidia.com>
 
 In addition we would like to acknowledge the following members of UCX community
 for their participation in annual face-to-face meeting, design discussions, and
@@ -108,9 +128,9 @@ Christophe Harle
 Christopher Lamb
 Craig Stunkel
 Cydney Ewald Stevens
-Davide Rossetti 
+Davide Rossetti
 Donald Becker
-Duncan Poole 
+Duncan Poole
 Edgar A. Leon
 Eric Van Hensbergen
 Geoffrey Blake
@@ -124,7 +144,7 @@ Liran Liss
 Nathaniel Graham
 Oscar Hernandez
 Pavan Balaji
-Richard Graham 
+Richard Graham
 Ron Brightwell
 Sameer Kumar
 Sameh Sharkawi

@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -20,7 +21,7 @@ static void ucp_proto_get_offload_bcopy_unpack(void *arg, const void *data,
                                                size_t length)
 {
     void *dest = arg;
-    ucs_memcpy_relaxed(dest, data, length);
+    ucs_memcpy_relaxed(dest, data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -55,10 +56,20 @@ static void ucp_proto_get_offload_bcopy_completion(uct_completion_t *self)
 
 static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
+                                                           send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
+
+        status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
+
         ucp_proto_completion_init(&req->send.state.uct_comp,
                                   ucp_proto_get_offload_bcopy_completion);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
@@ -71,8 +82,8 @@ static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self
                                     UCS_BIT(UCP_DATATYPE_CONTIG));
 }
 
-static ucs_status_t
-ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -93,9 +104,12 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
+        .min_chunk           = context->config.ext.min_rma_chunk_size,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_BCOPY,
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
@@ -106,22 +120,34 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_multi_init(&params, init_params->priv,
-                                init_params->priv_size);
+    ucp_proto_multi_probe(&params);
+}
+
+static void ucp_proto_get_offload_reset(ucp_request_t *req)
+{
+    /* get_am protocol will use this field after reset, so it must be
+     * initialized */
+    req->send.state.completed_size = 0;
+}
+
+static ucs_status_t ucp_proto_get_offload_bcopy_reset(ucp_request_t *req)
+{
+    ucp_proto_get_offload_reset(req);
+    return ucp_proto_request_bcopy_reset(req);
 }
 
 ucp_proto_t ucp_get_offload_bcopy_proto = {
     .name     = "get/bcopy",
     .desc     = UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
-    .init     = ucp_proto_get_offload_bcopy_init,
+    .probe    = ucp_proto_get_offload_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_bcopy_progress},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_request_bcopy_reset
+    .abort    = ucp_proto_request_bcopy_abort,
+    .reset    = ucp_proto_get_offload_bcopy_reset
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -155,15 +181,15 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, NULL,
+            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
             UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCP_DT_MASK_CONTIG_IOV,
             ucp_proto_get_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_proto_request_zcopy_completion);
 }
 
-static ucs_status_t
-ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -187,9 +213,13 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
-                               UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
+                               UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
+                                                     init_params->select_param),
         .max_lanes           = context->config.ext.max_rma_lanes,
+        .min_chunk           = context->config.ext.min_rma_chunk_size,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
@@ -199,20 +229,25 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_multi_init(&params, init_params->priv,
-                                init_params->priv_size);
+    ucp_proto_multi_probe(&params);
+}
+
+static ucs_status_t ucp_proto_get_offload_zcopy_reset(ucp_request_t *req)
+{
+    ucp_proto_get_offload_reset(req);
+    return ucp_proto_request_zcopy_reset(req);
 }
 
 ucp_proto_t ucp_get_offload_zcopy_proto = {
     .name     = "get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_proto_get_offload_zcopy_init,
+    .probe    = ucp_proto_get_offload_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_zcopy_progress},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_request_zcopy_reset
+    .abort    = ucp_proto_request_zcopy_abort,
+    .reset    = ucp_proto_get_offload_zcopy_reset
 };

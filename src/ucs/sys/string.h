@@ -37,6 +37,9 @@ BEGIN_C_DECLS
 #define UCS_HEXUNITS_AUTO   ((uint16_t)-2)
 
 
+#define UCS_VALUE_UNKNOWN_STR "unknown"
+
+
 /**
  * Expand a partial path to full path.
  *
@@ -51,6 +54,11 @@ void ucs_expand_path(const char *path, char *fullpath, size_t max);
  * Fill a filename template. The following values in the string are replaced:
  *  %p - replaced by process id
  *  %h - replaced by host name
+ *  %c - replaced by the first CPU we are bound to
+ *  %t - replaced by local time
+ *  %u - replaced by user name
+ *  %e - replaced by executable basename
+ *  %i - replaced by user id
  *
  * @param tmpl   File name template (possibly containing formatting sequences)
  * @param buf    Filled with resulting file name
@@ -350,6 +358,48 @@ static inline int ucs_string_is_empty(const char *str)
 {
     return *str == '\0';
 }
+
+/**
+ * Allocates a path buffer of size PATH_MAX.
+ *
+ * @param buffer_p Pointer to the buffer.
+ *                 The buffer is allocated and should be released by the caller.
+ * @param name     Name of the buffer for logging.
+ *
+ * @return UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ */
+ucs_status_t ucs_string_alloc_path_buffer(char **buffer_p, const char *name);
+
+/**
+ * Allocates a path buffer of size PATH_MAX and format a path string into it.
+ *
+ * @param buffer_p Pointer to the buffer.
+ *                 The buffer is allocated and should be released by the caller.
+ * @param name     Name of the buffer for logging.
+ * @param fmt      Format string for the path.
+ * @param ...      Arguments for the format string.
+ *
+ * @return UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ */
+ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
+                                             const char *fmt, ...);
+
+/**
+ * Allocates a path buffer of size PATH_MAX and gets the directory name of a
+ * given path.
+ *
+ * @param buffer_p Pointer to the buffer.
+ *                The buffer is allocated and should be released by the caller.
+ * @param name     Name of the buffer for logging.
+ * @param path     Path to get the directory name from.
+ * @param dir_p    Pointer to the directory name.
+ *
+ * @return UCS_OK on success, UCS_ERR_NO_MEMORY on failure.
+ */
+ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
+                                                          const char *name,
+                                                          const char *path,
+                                                          const char **dir_p);
 
 END_C_DECLS
 

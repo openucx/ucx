@@ -7,18 +7,32 @@
 #  include "config.h"
 #endif
 
+#include "cuda_ipc.inl"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc_ep.h"
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
+#include <uct/cuda/base/cuda_nvml.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/assert.h>
 #include <ucs/async/eventfd.h>
 #include <pthread.h>
-#include <nvml.h>
+
+
+typedef enum {
+    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL = UCS_BIT(0)
+} uct_cuda_ipc_device_addr_flags_t;
+
+
+typedef struct {
+    uint64_t     system_uuid;
+    uint8_t      flags; /* uct_cuda_ipc_device_addr_flags_t */
+} UCS_S_PACKED uct_cuda_ipc_device_addr_t;
+
 
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 
@@ -28,29 +42,41 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 
     {"MAX_POLL", "16",
      "Max number of event completions to pick during cuda events polling",
-      ucs_offsetof(uct_cuda_ipc_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_poll), UCS_CONFIG_TYPE_UINT},
 
-    {"MAX_STREAMS", "16",
+    {"MAX_STREAMS", UCS_PP_MAKE_STRING(UCT_CUDA_IPC_MAX_PEERS),
      "Max number of CUDA streams to make concurrent progress on",
-      ucs_offsetof(uct_cuda_ipc_iface_config_t, max_streams), UCS_CONFIG_TYPE_UINT},
+      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_streams), UCS_CONFIG_TYPE_UINT},
 
     {"CACHE", "y",
      "Enable remote endpoint IPC memhandle mapping cache",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_cache),
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_cache),
      UCS_CONFIG_TYPE_BOOL},
 
     {"ENABLE_GET_ZCOPY", "auto",
      "Enable get operations except for platforms known to have slower performance",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_get_zcopy),
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_get_zcopy),
      UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {"MAX_EVENTS", "inf",
      "Max number of cuda events. -1 is infinite",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, max_cuda_ipc_events), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_cuda_ipc_events), UCS_CONFIG_TYPE_UINT},
 
     {"BW", "auto",
      "Effective p2p memory bandwidth",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.bandwidth), UCS_CONFIG_TYPE_BW},
+
+    {"LAT", "1.8us",
+     "Estimated latency",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.latency), UCS_CONFIG_TYPE_TIME},
+
+    {"OVERHEAD", "4.0us",
+     "Estimated CPU overhead for transferring GPU memory",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.overhead), UCS_CONFIG_TYPE_TIME},
+
+    {"ENABLE_SAME_PROCESS", "n",
+     "Enable same process same device communication for cuda_ipc",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_same_process), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -63,7 +89,18 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t)(uct_iface_t*);
 ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
                                                    uct_device_addr_t *addr)
 {
-    *(uint64_t*)addr = ucs_get_system_id();
+    uct_cuda_ipc_device_addr_t *dev_addr = (uct_cuda_ipc_device_addr_t*)addr;
+    uct_cuda_ipc_iface_t *iface          = ucs_derived_of(tl_iface,
+                                                          uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_md_t *md                = ucs_derived_of(iface->super.super.md,
+                                                           uct_cuda_ipc_md_t);
+
+    if (md->enable_mnnvl) {
+        dev_addr->flags = UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL;
+    }
+
+    dev_addr->system_uuid = ucs_get_system_id();
+
     return UCS_OK;
 }
 
@@ -75,13 +112,53 @@ static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
 }
 
 static int
+uct_cuda_ipc_iface_mnnvl_supported(uct_cuda_ipc_md_t *md,
+                                   const uct_cuda_ipc_device_addr_t *dev_addr,
+                                   size_t dev_addr_len)
+{
+    if (md->enable_mnnvl && (dev_addr_len != sizeof(uint64_t))) {
+        ucs_assertv(dev_addr_len >= sizeof(uct_cuda_ipc_device_addr_t),
+                    "dev_addr_len=%zu", dev_addr_len);
+        return (dev_addr->flags & UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL);
+    }
+
+    return 0;
+}
+
+static int
 uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
-    return uct_iface_is_reachable_params_addrs_valid(params) &&
-           (ucs_get_system_id() == *((const uint64_t*)params->device_addr)) &&
-           (getpid() != *(pid_t*)params->iface_addr) &&
-           uct_iface_scope_is_reachable(tl_iface, params);
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
+                                                 uct_cuda_ipc_md_t);
+    const uct_cuda_ipc_device_addr_t *dev_addr;
+    size_t dev_addr_len;
+    int same_uuid;
+
+    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+        return 0;
+    }
+
+    dev_addr_len = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
+                                   device_addr_length, DEVICE_ADDR_LENGTH,
+                                   sizeof(dev_addr->system_uuid));
+    dev_addr     = (const uct_cuda_ipc_device_addr_t *)params->device_addr;
+    same_uuid    = (ucs_get_system_id() == dev_addr->system_uuid);
+
+    if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid &&
+        !iface->config.enable_same_process) {
+        uct_iface_fill_info_str_buf(params, "same process");
+        return 0;
+    }
+
+    if (same_uuid ||
+        uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
+        return uct_iface_scope_is_reachable(tl_iface, params);
+    }
+
+    uct_iface_fill_info_str_buf(params, "MNNVL is not supported");
+    return 0;
 }
 
 static double uct_cuda_ipc_iface_get_bw()
@@ -115,13 +192,13 @@ static double uct_cuda_ipc_iface_get_bw()
         return 300000.0 * UCS_MBYTE;
     case UCT_CUDA_BASE_GEN_H100:
         return 400000.0 * UCS_MBYTE;
+    case UCT_CUDA_BASE_GEN_B100:
+        return 800000.0 * UCS_MBYTE;
     default:
         return 6911.0  * UCS_MBYTE;
     }
 }
 
-/* calls nvmlInit_v2 and nvmlShutdown which are expensive but
- * get_device_nvlinks should be outside critical path */
 static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
 {
     static int num_nvlinks = -1;
@@ -135,19 +212,14 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
         return num_nvlinks;
     }
 
-    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(ordinal, &device));
-    if (status != UCS_OK) {
-        goto err_sd;
-    }
-
     value.fieldId = NVML_FI_DEV_NVLINK_LINK_COUNT;
 
-    UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetFieldValues(device, 1, &value));
+    UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 1, &value);
 
     num_nvlinks = ((value.nvmlReturn == NVML_SUCCESS) &&
                    (value.valueType == NVML_VALUE_TYPE_UNSIGNED_INT)) ?
@@ -156,20 +228,16 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
     /* not enough to check number of nvlinks; need to check if links are active
      * by seeing if remote info can be obtained */
     for (link = 0; link < num_nvlinks; ++link) {
-        status = UCT_NVML_FUNC(nvmlDeviceGetNvLinkRemotePciInfo(device, link,
-                                                                &pci),
-                               UCS_LOG_LEVEL_DEBUG);
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetNvLinkRemotePciInfo,
+                                         device, link, &pci);
         if (status != UCS_OK) {
             ucs_debug("could not find remote end info for link %u", link);
-            goto err_sd;
+            goto err;
         }
     }
 
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
     return num_nvlinks;
 
-err_sd:
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 err:
     return 0;
 }
@@ -193,19 +261,27 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                              uct_iface_attr_t *iface_attr)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
+                                                 uct_cuda_ipc_md_t);
 
     uct_base_iface_query(&iface->super.super, iface_attr);
 
     iface_attr->iface_addr_len          = sizeof(pid_t);
-    iface_attr->device_addr_len         = sizeof(uint64_t);
+    iface_attr->device_addr_len         = md->enable_mnnvl ?
+                                          sizeof(uct_cuda_ipc_device_addr_t) :
+                                          sizeof(uint64_t);
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
-                                          UCT_IFACE_FLAG_EP_CHECK               |
-                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
-                                          UCT_IFACE_FLAG_PENDING                |
-                                          UCT_IFACE_FLAG_GET_ZCOPY              |
-                                          UCT_IFACE_FLAG_PUT_ZCOPY;
+                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                          UCT_IFACE_FLAG_PENDING          |
+                                          UCT_IFACE_FLAG_GET_ZCOPY        |
+                                          UCT_IFACE_FLAG_PUT_ZCOPY        |
+                                          UCT_IFACE_FLAG_DEVICE_EP;
+    if (md->enable_mnnvl) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_INTER_NODE;
+    }
+
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                           UCT_IFACE_FLAG_EVENT_RECV      |
                                           UCT_IFACE_FLAG_EVENT_FD;
@@ -225,6 +301,8 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
 
+    /* Latency and overhead don't depend on config values for
+     * the sake of wire compatibility */
     iface_attr->latency                 = ucs_linear_func_make(1e-6, 0);
     iface_attr->bandwidth.dedicated     = 0;
     iface_attr->bandwidth.shared        = iface->config.bandwidth;
@@ -234,135 +312,42 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
-                         uct_completion_t *comp)
+static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
+                                        uct_cuda_event_desc_t *cuda_event)
 {
-    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    if (ucs_queue_is_empty(&iface->outstanding_d2d_event_q)) {
-        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
-        return UCS_OK;
-    }
-
-    UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
-    return UCS_INPROGRESS;
-}
-
-static UCS_F_ALWAYS_INLINE unsigned
-uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
-                              ucs_queue_head_t *event_q)
-{
-    unsigned count = 0;
-    uct_cuda_ipc_event_desc_t *cuda_ipc_event;
-    ucs_queue_iter_t iter;
-    ucs_status_t status;
-    unsigned max_events = iface->config.max_poll;
-
-    ucs_queue_for_each_safe(cuda_ipc_event, iter, event_q, queue) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventQuery(cuda_ipc_event->event));
-        if (UCS_INPROGRESS == status) {
-            continue;
-        } else if (UCS_OK != status) {
-            return status;
-        }
-
-        ucs_queue_del_iter(event_q, iter);
-        if (cuda_ipc_event->comp != NULL) {
-            uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
-        }
-
-        status = uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid,
-                                              cuda_ipc_event->d_bptr,
-                                              cuda_ipc_event->mapped_addr,
-                                              iface->config.enable_cache);
-        if (status != UCS_OK) {
-            ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
-        }
-
-        ucs_trace_poll("CUDA_IPC Event Done :%p", cuda_ipc_event);
-        iface->stream_refcount[cuda_ipc_event->stream_id]--;
-        ucs_mpool_put(cuda_ipc_event);
-        count++;
-
-        if (count >= max_events) {
-            break;
-        }
-    }
-
-    return count;
-}
-
-static unsigned uct_cuda_ipc_iface_progress(uct_iface_h tl_iface)
-{
-    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-
-    return uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q);
-}
-
-static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
-                                                    unsigned events)
-{
-    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-    int i;
+    uct_cuda_ipc_iface_t *iface               = ucs_derived_of(tl_iface,
+                                                               uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_event_desc_t *cuda_ipc_event = ucs_derived_of(cuda_event,
+                                                               uct_cuda_ipc_event_desc_t);
     ucs_status_t status;
 
-    if (uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q)) {
-        return UCS_ERR_BUSY;
+    status = uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid,
+                                          cuda_ipc_event->d_bptr,
+                                          cuda_ipc_event->mapped_addr,
+                                          cuda_ipc_event->cuda_device,
+                                          iface->config.enable_cache);
+    if (status != UCS_OK) {
+        ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
     }
-
-    status = ucs_async_eventfd_poll(iface->super.eventfd);
-    if (status == UCS_OK) {
-        return UCS_ERR_BUSY;
-    } else if (status == UCS_ERR_IO_ERROR) {
-        return status;
-    }
-
-    if (iface->streams_initialized) {
-        for (i = 0; i < iface->config.max_streams; i++) {
-            if (iface->stream_refcount[i]) {
-                status =
-#if (__CUDACC_VER_MAJOR__ >= 100000)
-                UCT_CUDADRV_FUNC_LOG_ERR(
-                        cuLaunchHostFunc(iface->stream_d2d[i],
-                                         uct_cuda_base_iface_stream_cb_fxn,
-                                         &iface->super));
-#else
-                UCT_CUDADRV_FUNC_LOG_ERR(
-                        cuStreamAddCallback(iface->stream_d2d[i],
-                                            uct_cuda_base_iface_stream_cb_fxn,
-                                            &iface->super, 0));
-#endif
-                if (UCS_OK != status) {
-                    return status;
-                }
-            }
-        }
-    }
-    return UCS_OK;
 }
 
 static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .ep_get_zcopy             = uct_cuda_ipc_ep_get_zcopy,
     .ep_put_zcopy             = uct_cuda_ipc_ep_put_zcopy,
-    .ep_pending_add           = ucs_empty_function_return_busy,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_check                 = uct_cuda_ipc_ep_check,
+    .ep_check                 = (uct_ep_check_func_t)ucs_empty_function_return_unsupported,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ipc_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_ep_t),
-    .iface_flush              = uct_cuda_ipc_iface_flush,
+    .iface_flush              = uct_cuda_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
-    .iface_progress           = uct_cuda_ipc_iface_progress,
+    .iface_progress           = uct_cuda_base_iface_progress,
     .iface_event_fd_get       = uct_cuda_base_iface_event_fd_get,
-    .iface_event_arm          = uct_cuda_ipc_iface_event_fd_arm,
+    .iface_event_arm          = uct_cuda_base_iface_event_fd_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t),
     .iface_query              = uct_cuda_ipc_iface_query,
     .iface_get_device_address = uct_cuda_ipc_iface_get_device_address,
@@ -370,53 +355,10 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .iface_is_reachable       = uct_base_iface_is_reachable,
 };
 
-static void uct_cuda_ipc_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
-{
-    uct_cuda_ipc_event_desc_t *base = (uct_cuda_ipc_event_desc_t *) obj;
-
-    memset(base, 0, sizeof(*base));
-    UCT_CUDADRV_FUNC_LOG_ERR(cuEventCreate(&base->event, CU_EVENT_DISABLE_TIMING));
-}
-
-static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
-{
-    uct_cuda_ipc_event_desc_t *base = (uct_cuda_ipc_event_desc_t *) obj;
-    uct_cuda_ipc_iface_t *iface     = ucs_container_of(mp,
-                                                       uct_cuda_ipc_iface_t,
-                                                       event_desc);
-    CUcontext cuda_context;
-
-    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
-    if (uct_cuda_base_context_match(cuda_context, iface->cuda_context)) {
-        UCT_CUDA_CALL_LOG_ERR(cudaEventDestroy, base->event);
-    }
-}
-
-ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
-{
-    ucs_status_t status;
-    int i;
-
-    for (i = 0; i < iface->config.max_streams; i++) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamCreate(&iface->stream_d2d[i],
-                                                         CU_STREAM_NON_BLOCKING));
-        if (UCS_OK != status) {
-            return status;
-        }
-
-        iface->stream_refcount[i] = 0;
-    }
-
-    iface->streams_initialized = 1;
-
-    return UCS_OK;
-}
-
 static ucs_status_t
 uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    static const double latency  = 1.8e-6;
-    static const double overhead = 4.0e-6;
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
 
     perf_attr->bandwidth.dedicated = 0;
 
@@ -435,8 +377,13 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
         perf_attr->bandwidth.shared = uct_cuda_ipc_iface_get_bw();
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+        perf_attr->path_bandwidth.dedicated = 0;
+        perf_attr->path_bandwidth.shared    = uct_cuda_ipc_iface_get_bw();
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
-        perf_attr->send_pre_overhead = overhead;
+        perf_attr->send_pre_overhead = iface->config.overhead;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
@@ -452,32 +399,115 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         /* In case of async mem copy, the latency is not part of the overhead
            and it's a standalone property */
-        perf_attr->latency = ucs_linear_func_make(latency, 0.0);
+        perf_attr->latency = ucs_linear_func_make(iface->config.latency, 0.0);
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
         perf_attr->max_inflight_eps = SIZE_MAX;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
+        perf_attr->flags = 0;
+    }
+
     return UCS_OK;
 }
 
-static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
-    .chunk_alloc   = ucs_mpool_chunk_malloc,
-    .chunk_release = ucs_mpool_chunk_free,
-    .obj_init      = uct_cuda_ipc_event_desc_init,
-    .obj_cleanup   = uct_cuda_ipc_event_desc_cleanup,
-    .obj_str       = NULL
-};
+static ucs_status_t
+uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
+                                    uct_mem_h memh,
+                                    uct_rkey_t rkey,
+                                    uct_device_mem_element_t *mem_element)
+{
+    uct_cuda_ipc_unpacked_rkey_t *key = (uct_cuda_ipc_unpacked_rkey_t *)rkey;
+    ucs_status_t status;
+    int is_ctx_pushed;
+    uct_cuda_ipc_device_mem_element_t cuda_ipc_mem_element;
+    CUdevice cuda_device;
+    void *mapped_addr;
+
+    status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)mem_element,
+                                             &cuda_device, &is_ctx_pushed);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device,
+                                        &mapped_addr, UCS_LOG_LEVEL_ERROR);
+    if (ucs_unlikely(status != UCS_OK)) {
+        goto out;
+    }
+    cuda_ipc_mem_element.mapped_offset = UCS_PTR_BYTE_DIFF(key->super.d_bptr, mapped_addr);
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
+                          sizeof(uct_cuda_ipc_device_mem_element_t)));
+
+out:
+    uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);
+    return status;
+}
+
+static ucs_status_t uct_cuda_ipc_iface_query_v2(uct_iface_h iface,
+                                                uct_iface_attr_v2_t *iface_attr)
+{
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE) {
+        iface_attr->device_mem_element_size = sizeof(uct_cuda_ipc_device_mem_element_t);
+    }
+
+    return UCS_OK;
+}
 
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
-    .iface_estimate_perf   = uct_cuda_ipc_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_cuda_ipc_iface_is_reachable_v2,
-    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
+    .iface_query_v2         = uct_cuda_ipc_iface_query_v2,
+    .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .iface_mem_element_pack = uct_cuda_ipc_iface_mem_element_pack,
+    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2  = uct_cuda_ipc_iface_is_reachable_v2,
+    .ep_is_connected        = uct_cuda_ipc_ep_is_connected,
+    .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep
+};
+
+static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)
+{
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_ctx_rsc_t *ctx_rsc;
+    unsigned i;
+
+    ctx_rsc = ucs_malloc(sizeof(*ctx_rsc), "uct_cuda_ipc_ctx_rsc_t");
+    if (ctx_rsc == NULL) {
+        ucs_error("failed to allocate cuda ipc context resource struct");
+        return NULL;
+    }
+
+    for (i = 0; i < iface->config.max_streams; i++) {
+        uct_cuda_base_queue_desc_init(&ctx_rsc->queue_desc[i]);
+    }
+
+    return &ctx_rsc->super;
+}
+
+static void uct_cuda_ipc_ctx_rsc_destroy(uct_iface_h tl_iface,
+                                         uct_cuda_ctx_rsc_t *cuda_ctx_rsc)
+{
+    uct_cuda_ipc_iface_t *iface     = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_ctx_rsc_t *ctx_rsc = ucs_derived_of(cuda_ctx_rsc, uct_cuda_ipc_ctx_rsc_t);
+    unsigned i;
+
+    for (i = 0; i < iface->config.max_streams; i++) {
+        uct_cuda_base_queue_desc_destroy(cuda_ctx_rsc, &ctx_rsc->queue_desc[i]);
+    }
+
+    ucs_free(ctx_rsc);
+}
+
+static uct_cuda_iface_ops_t uct_cuda_iface_ops = {
+    .create_rsc     = uct_cuda_ipc_ctx_rsc_create,
+    .destroy_rsc    = uct_cuda_ipc_ctx_rsc_destroy,
+    .complete_event = uct_cuda_ipc_complete_event
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,
@@ -486,7 +516,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 {
     uct_cuda_ipc_iface_config_t *config = NULL;
     ucs_status_t status;
-    ucs_mpool_params_t mp_params;
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_cuda_iface_t, &uct_cuda_ipc_iface_ops,
@@ -498,65 +527,38 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return status;
     }
 
-    self->config.max_poll            = config->max_poll;
-    self->config.max_streams         = config->max_streams;
-    self->config.enable_cache        = config->enable_cache;
-    self->config.enable_get_zcopy    = config->enable_get_zcopy;
-    self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
-    self->config.bandwidth           = UCS_CONFIG_DBL_IS_AUTO(config->bandwidth) ?
-                                       uct_cuda_ipc_iface_get_bw() : config->bandwidth;
-
-    ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = sizeof(uct_cuda_ipc_event_desc_t);
-    mp_params.elems_per_chunk = 128;
-    mp_params.max_elems       = self->config.max_cuda_ipc_events;
-    mp_params.ops             = &uct_cuda_ipc_event_desc_mpool_ops;
-    mp_params.name            = "CUDA_IPC EVENT objects";
-    status = ucs_mpool_init(&mp_params, &self->event_desc);
-    if (UCS_OK != status) {
-        ucs_error("mpool creation failed");
-        return UCS_ERR_IO_ERROR;
+    if (config->params.max_streams > UCT_CUDA_IPC_MAX_PEERS) {
+        ucs_error("invalid max streams value (%u > %u)",
+                  config->params.max_streams, UCT_CUDA_IPC_MAX_PEERS);
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    self->streams_initialized = 0;
-    self->cuda_context        = 0;
-    ucs_queue_head_init(&self->outstanding_d2d_event_q);
+    self->config = config->params;
+    if (UCS_CONFIG_DBL_IS_AUTO(config->params.bandwidth)) {
+        self->config.bandwidth = uct_cuda_ipc_iface_get_bw() ;
+    }
 
+    self->super.ops                    = &uct_cuda_iface_ops;
+    self->super.config.max_events      = self->config.max_cuda_ipc_events;
+    self->super.config.max_poll        = self->config.max_poll;
+    self->super.config.event_desc_size = sizeof(uct_cuda_ipc_event_desc_t);
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
 {
-    ucs_status_t status;
-    int i;
-    CUcontext cuda_context;
-
-    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
-
-    if (self->streams_initialized &&
-        uct_cuda_base_context_match(cuda_context, self->cuda_context)) {
-        for (i = 0; i < self->config.max_streams; i++) {
-            status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(self->stream_d2d[i]));
-            if (UCS_OK != status) {
-                continue;
-            }
-
-            ucs_assert(self->stream_refcount[i] == 0);
-        }
-        self->streams_initialized = 0;
-    }
-
-    uct_base_iface_progress_disable(&self->super.super.super,
-                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    ucs_mpool_cleanup(&self->event_desc, 1);
 }
 
 ucs_status_t
 uct_cuda_ipc_query_devices(
-        uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+        uct_md_h uct_md, uct_tl_device_resource_t **tl_devices_p,
         unsigned *num_tl_devices_p)
 {
-    return uct_cuda_base_query_devices_common(md, UCT_DEVICE_TYPE_SHM,
+    /* Declare cuda-ipc as shm device even if MNNVL is supported. In this case
+     * UCX_NET_DEVICES doesn't affect cuda-ipc (which is well established
+     * interface). When MNNVL is supported cuda-ipc iface sets
+     * UCT_IFACE_FLAG_INTER_NODE flag instead. */
+    return uct_cuda_base_query_devices_common(uct_md, UCT_DEVICE_TYPE_SHM,
                                               tl_devices_p, num_tl_devices_p);
 }
 

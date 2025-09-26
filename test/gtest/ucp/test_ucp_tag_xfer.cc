@@ -14,6 +14,7 @@ extern "C" {
 #include <ucp/core/ucp_resource.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/queue.h>
+#include <ucs/sys/ptr_arith.h>
 #include <uct/base/uct_iface.h>
 }
 
@@ -30,7 +31,8 @@ public:
         VARIANT_RNDV_AM_BCOPY,
         VARIANT_RNDV_AM_ZCOPY,
         VARIANT_SEND_NBR,
-        VARIANT_PROTO_V1
+        VARIANT_PROTO_V1,
+        VARIANT_CONNECT_ALL_TO_ALL
     };
 
     test_ucp_tag_xfer() {
@@ -38,7 +40,7 @@ public:
         enable_tag_mp_offload();
 
         if (RUNNING_ON_VALGRIND) {
-            // Alow using TM MP offload for messages with a size of at least
+            // Allow using TM MP offload for messages with a size of at least
             // 10000 bytes by setting HW TM segment size to 10 kB, since each
             // packet in TM MP offload is MTU-size buffer (i.e., in most cases
             // it is 4 kB segments)
@@ -60,6 +62,8 @@ public:
             modify_config("ZCOPY_THRESH", "0");
         } else if (get_variant_value() == VARIANT_PROTO_V1) {
             modify_config("PROTO_ENABLE", "n");
+        } else if (get_variant_value() == VARIANT_CONNECT_ALL_TO_ALL) {
+            modify_config("CONNECT_ALL_TO_ALL", "y");
         }
 
         /* Init number of lanes according to test requirement
@@ -97,6 +101,8 @@ public:
             add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO_V1,
                                    "proto_v1");
         }
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_CONNECT_ALL_TO_ALL, "connect_all_to_all");
     }
 
     virtual ucp_ep_params_t get_ep_params() {
@@ -142,7 +148,7 @@ protected:
                          bool expected, bool sync);
 
     void test_xfer_len_offset();
-    size_t get_msg_size();
+    virtual size_t get_msg_size();
 
     /* Init number of lanes which will be used */
     virtual unsigned num_lanes()
@@ -246,9 +252,8 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
 
 size_t test_ucp_tag_xfer::get_msg_size()
 {
-    size_t raw_size   = 1148544 / ucs::test_time_multiplier();
-    size_t chunk_size = num_lanes() * UCS_SYS_PCI_MAX_PAYLOAD;
-    return ucs_div_round_up(raw_size, chunk_size) * chunk_size;
+    size_t raw_size = 1148544 / ucs::test_time_multiplier();
+    return ucs_align_up(raw_size, ucs_get_page_size() * num_lanes());
 }
 
 void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
@@ -1094,7 +1099,7 @@ public:
 
     bool has_rma_zcopy() {
         return has_transport("rc_v") || has_transport("rc_x") ||
-               has_transport("dc_x") ||
+               has_transport("dc_x") || has_transport("srd") ||
                (ucp_context_find_tl_md(receiver().ucph(), "cma")  != NULL) ||
                (ucp_context_find_tl_md(receiver().ucph(), "knem") != NULL);
     }
@@ -1110,7 +1115,7 @@ public:
         EXPECT_EQ(1, get_zcopy + rtr + rkey_ptr);
         EXPECT_LE(put_zcopy, rtr);
 
-        if (m_ucp_config->ctx.proto_enable) {
+        if (is_proto_enabled()) {
             if (has_xpmem() || is_self() || has_rma_zcopy()) {
                 /* Expect one of the bulk transfer protocols */
                 EXPECT_EQ(1u, rkey_ptr + get_zcopy + put_zcopy);
@@ -1211,6 +1216,11 @@ public:
         test_ucp_tag_xfer::init();
     }
 
+    size_t get_msg_size() override
+    {
+        return ucs_align_up(10 * UCS_MBYTE, ucs_get_page_size() * num_lanes());
+    }
+
     void cleanup() override
     {
         test_ucp_tag_xfer::cleanup();
@@ -1229,44 +1239,44 @@ public:
 
     unsigned num_lanes() override
     {
-        return max_lanes;
+        return UCP_MAX_LANES;
     }
 
-    const uint32_t max_lanes = 16;
 };
 
-UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
+UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
            "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
-    if (m_ucp_config->ctx.proto_enable) {
-        UCS_TEST_SKIP_R("TM_SW_RNDV has no effect with proto v2");
-    }
-
     receiver().connect(&sender(), get_ep_params());
     test_run_xfer(true, true, true, true, false);
 
-    ucp_lane_index_t num_lanes = ucp_ep_num_lanes(sender().ep());
-    ASSERT_EQ(ucp_ep_num_lanes(receiver().ep()), num_lanes);
-    ASSERT_EQ(num_lanes, max_lanes);
+    auto ep_num_lanes = ucp_ep_num_lanes(sender().ep());
+    ASSERT_EQ(ep_num_lanes, ucp_ep_num_lanes(receiver().ep()));
 
-    size_t chunk_size = get_msg_size() / num_lanes;
+    if (is_proto_enabled()) {
+        EXPECT_EQ(num_lanes(), ep_num_lanes);
+    }
 
-    for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
+    size_t bytes_sent = 0;
+    unsigned num_used_lanes = 0;
+    for (ucp_lane_index_t lane = 0; lane < ep_num_lanes; ++lane) {
         size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
         size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
         UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
                          << "sender " << sender_tx << " receiver " << receiver_tx;
-
-        /* Verify that each lane sent something, except the active message lane
-           that could be used only for control messages */
-        if (lane == num_lanes - 1) {
-            EXPECT_GT(sender_tx + receiver_tx, 0); // last lane sends the rest
-        } else if (lane != ucp_ep_get_am_lane(sender().ep())) {
-            EXPECT_GE(sender_tx + receiver_tx, chunk_size);
+        if ((sender_tx > 0) || (receiver_tx > 0)) {
+            ++num_used_lanes;
         }
+        bytes_sent += sender_tx + receiver_tx;
     }
+
+    /* One lane could be reserved for tag offload and not selected for AM/RMA
+       bandwidth lane */
+    EXPECT_GE(num_used_lanes, ep_num_lanes - 1);
+
+    EXPECT_GE(bytes_sent, get_msg_size());
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rc, "rc")
 
 #endif

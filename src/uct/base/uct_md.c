@@ -171,8 +171,9 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
 }
 
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
-                                     const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                     void **handle_p)
+                                     const void *rkey_buffer,
+                                     const uct_rkey_unpack_params_t *params,
+                                     uct_rkey_t *rkey_p, void **handle_p)
 {
     *rkey_p   = 0xdeadbeef;
     *handle_p = NULL;
@@ -254,7 +255,7 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
 
     ucs_vfs_obj_add_dir(worker, *iface_p, "iface/%p", *iface_p);
     ucs_vfs_obj_add_sym_link(*iface_p, md, "memory_domain");
-    ucs_vfs_obj_set_dirty(*iface_p, uct_iface_vfs_refresh);
+    uct_iface_vfs_set_dirty(*iface_p);
 
     return UCS_OK;
 }
@@ -297,7 +298,8 @@ ucs_status_t uct_config_get(void *config, const char *name, char *value,
 ucs_status_t uct_config_modify(void *config, const char *name, const char *value)
 {
     uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
-    return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
+    return ucs_config_parser_set_value(bundle->data, bundle->table,
+                                       bundle->table_prefix, name, value);
 }
 
 static ucs_status_t
@@ -312,6 +314,7 @@ uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *mkey_buffer)
 }
 
 ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
+                                 void *address, size_t length,
                                  const uct_md_mkey_pack_params_t *params,
                                  void *mkey_buffer)
 {
@@ -322,7 +325,7 @@ ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
         return status;
     }
 
-    return md->ops->mkey_pack(md, memh, params, mkey_buffer);
+    return md->ops->mkey_pack(md, memh, address, length, params, mkey_buffer);
 }
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
@@ -331,7 +334,7 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
         .field_mask = 0
     };
 
-    return uct_md_mkey_pack_v2(md, memh, &params, rkey_buffer);
+    return uct_md_mkey_pack_v2(md, memh, NULL, SIZE_MAX, &params, rkey_buffer);
 }
 
 ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
@@ -341,11 +344,24 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
     return md->ops->mem_attach(md, mkey_buffer, params, memh_p);
 }
 
+ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
+                                const void *rkey_buffer,
+                                const uct_rkey_unpack_params_t *params,
+                                uct_rkey_bundle_t *rkey_ob)
+{
+
+    return component->rkey_unpack(component, rkey_buffer, params,
+                                  &rkey_ob->rkey, &rkey_ob->handle);
+}
+
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
                              uct_rkey_bundle_t *rkey_ob)
 {
-    return component->rkey_unpack(component, rkey_buffer, &rkey_ob->rkey,
-                                  &rkey_ob->handle);
+    uct_rkey_unpack_params_t params = {
+        .field_mask = 0
+    };
+
+    return uct_rkey_unpack_v2(component, rkey_buffer, &params, rkey_ob);
 }
 
 ucs_status_t uct_rkey_ptr(uct_component_h component, uct_rkey_bundle_t *rkey_ob,
@@ -416,6 +432,8 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
                               UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, access_mem_types,
                               UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, gva_mem_types,
+                              UCT_MD_ATTR_FIELD_GVA_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, dmabuf_mem_types,
                               UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_cost, UCT_MD_ATTR_FIELD_REG_COST);
@@ -484,6 +502,26 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
+void uct_md_base_md_query(uct_md_attr_v2_t *md_attr)
+{
+    md_attr->flags                     = 0;
+    md_attr->reg_mem_types             = 0;
+    md_attr->reg_nonblock_mem_types    = 0;
+    md_attr->cache_mem_types           = 0;
+    md_attr->detect_mem_types          = 0;
+    md_attr->alloc_mem_types           = 0;
+    md_attr->access_mem_types          = 0;
+    md_attr->dmabuf_mem_types          = 0;
+    md_attr->gva_mem_types             = 0;
+    md_attr->max_alloc                 = 0;
+    md_attr->max_reg                   = ULONG_MAX;
+    md_attr->reg_cost                  = UCS_LINEAR_FUNC_ZERO;
+    md_attr->rkey_packed_size          = 0;
+    md_attr->exported_mkey_packed_size = 0;
+    md_attr->reg_alignment             = 1;
+    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+}
+
 ucs_status_t uct_mem_alloc_check_params(size_t length,
                                         const uct_alloc_method_t *methods,
                                         unsigned num_methods,
@@ -515,10 +553,11 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
 }
 
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              ucs_memory_type_t mem_type, unsigned flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, unsigned flags,
                               const char *alloc_name, uct_mem_h *memh_p)
 {
-    return md->ops->mem_alloc(md, length_p, address_p, mem_type, flags,
+    return md->ops->mem_alloc(md, length_p, address_p, mem_type, sys_dev, flags,
                               alloc_name, memh_p);
 }
 
@@ -555,7 +594,7 @@ ucs_status_t uct_md_mem_reg_v2(uct_md_h md, void *address, size_t length,
 {
     uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
 
-    if ((length == 0) || (address == NULL)) {
+    if (length == 0) {
         uct_md_log_mem_reg_error(flags,
                                  "uct_md_mem_reg(address=%p length=%zu): "
                                  "invalid parameters", address, length);
@@ -616,17 +655,4 @@ ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
     ucs_assert(params->memh == (void*)0xdeadbeef);
 
     return UCS_OK;
-}
-
-double uct_md_rcache_overhead(const ucs_rcache_config_t *rcache_config)
-{
-    if (rcache_config->overhead == UCS_TIME_AUTO) {
-        if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {
-            return 360e-9;
-        } else {
-            return 180e-9;
-        }
-    } else {
-        return ucs_time_to_sec(rcache_config->overhead);
-    }
 }

@@ -1,10 +1,13 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+ * Copyright (c) Google, LLC, 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
 
 #include "ib_mlx5.h"
+
+#include <ucs/sys/ptr_arith.h>
 
 typedef struct uct_ib_mlx5_wqe_ctrl_seg {
     __be32      opmod_idx_opcode;
@@ -86,6 +89,35 @@ uct_ib_mlx5_cqe_is_grh_present(struct mlx5_cqe64* cqe)
                                    UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE);
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+uct_ib_mlx5_cqe_roce_gid_len(struct mlx5_cqe64* cqe)
+{
+    /*
+     * Take the packet type from CQE, because:
+     * 1. According to Annex17_RoCEv2 (A17.4.5.1):
+     * For UD, the Completion Queue Entry (CQE) includes remote address
+     * information (InfiniBand Specification Vol. 1 Rev 1.2.1 Section 11.4.2.1).
+     * For RoCEv2, the remote address information comprises the source L2
+     * Address and a flag that indicates if the received frame is an IPv4,
+     * IPv6 or RoCE packet.
+     *
+     * 2. According to PRM, for responder UD/DC over RoCE sl represents RoCE
+     * packet type as:
+     * bit 3    : when set R-RoCE frame contains an UDP header otherwise not
+     * Bits[2:0]: L3_Header_Type, as defined below
+     *     - 0x0 : GRH - (RoCE v1.0)
+     *     - 0x1 : IPv6 - (RoCE v1.5/v2.0)
+     *     - 0x2 : IPv4 - (RoCE v1.5/v2.0)
+     *
+     * The service level is the most significant byte of cqe->flags_rqpn.
+     *
+     * Alternatively, this could be detected by examining the packet contents
+     * as is done for non-mlx5 transports.
+     */
+    return (cqe->flags_rqpn & htonl(UCT_IB_MLX5_RQPN_ROCE_FLAG_IPV4)) ?
+        UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN;
+}
+
 static UCS_F_ALWAYS_INLINE void*
 uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
 {
@@ -152,7 +184,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
     }
 
     cq->cq_ci = idx + 1;
-    return cqe; /* TODO optimize - let complier know cqe is not null */
+    return cqe; /* TODO optimize - let compiler know cqe is not null */
 }
 
 
@@ -504,12 +536,23 @@ size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
 static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
                                                        void * restrict src)
 {
-#if defined( __SSE4_2__)
-    UCS_WORD_COPY(__m128i, dst, __m128i, src, MLX5_SEND_WQE_BB);
-#elif defined(__ARM_NEON)
-    UCS_WORD_COPY(int16x8_t, dst, int16x8_t, src, MLX5_SEND_WQE_BB);
-#else /* NO SIMD support */
-    UCS_WORD_COPY(uint64_t, dst, uint64_t, src, MLX5_SEND_WQE_BB);
+#if defined(__ARM_NEON)
+    vst4q_u64(dst, vld4q_u64(src));
+#else
+#if defined(__SSE4_2__)
+    typedef __m128i uct_ib_mlx5_send_wqe_bb_block_t;
+#else
+    typedef uint8_t uct_ib_mlx5_send_wqe_bb_block_t;
+#endif
+    /* Prevent compiler to replace by memmove() */
+    typedef struct {
+        uct_ib_mlx5_send_wqe_bb_block_t
+                data[MLX5_SEND_WQE_BB / sizeof(uct_ib_mlx5_send_wqe_bb_block_t)];
+    } UCS_S_PACKED uct_ib_mlx5_send_wqe_bb_t;
+
+    UCS_WORD_COPY(uct_ib_mlx5_send_wqe_bb_t, dst,
+                  uct_ib_mlx5_send_wqe_bb_t, src,
+                  MLX5_SEND_WQE_BB);
 #endif
 }
 
@@ -637,4 +680,12 @@ uct_ib_mlx5_update_cqe_zipping_stats(uct_ib_iface_t *iface,
         UCS_STATS_UPDATE_COUNTER(iface->stats,
                                  UCT_IB_IFACE_STAT_RX_COMPLETION_ZIPPED, 1);
     }
+}
+
+
+static int UCS_F_ALWAYS_INLINE
+uct_ib_mlx5_get_atomic_mode(uct_ib_iface_t *iface)
+{
+    return uct_ib_iface_device(iface)->ext_atomic_arg_sizes ?
+        UCT_IB_MLX5_ATOMIC_MODE_EXT : UCT_IB_MLX5_ATOMIC_MODE_COMP;
 }

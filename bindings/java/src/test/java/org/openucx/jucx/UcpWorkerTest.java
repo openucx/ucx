@@ -201,7 +201,7 @@ public class UcpWorkerTest extends UcxTest {
         UcpEndpoint endpoint = worker2.newEndpoint(
             new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
 
-        endpoint.sendTaggedNonBlocking(
+        UcpRequest send = endpoint.sendTaggedNonBlocking(
             ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), null);
 
         do {
@@ -215,7 +215,10 @@ public class UcpWorkerTest extends UcxTest {
 
         UcpRequest recv = worker1.recvTaggedMessageNonBlocking(recvBuffer, message, null);
 
-        worker1.progressRequest(recv);
+        while (!send.isCompleted() || !recv.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
 
         Collections.addAll(resources, context1, context2, worker1, worker2, endpoint);
     }

@@ -443,6 +443,12 @@ ucs_arbiter_cb_result_t
 uct_rc_ep_process_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                           ucs_arbiter_elem_t *elem, void *arg);
 
+void
+uct_rc_iface_adjust_max_get_zcopy(uct_rc_iface_t *iface,
+                                  const uct_rc_iface_common_config_t *config,
+                                  size_t max_tl_get_zcopy, const char *tl_name,
+                                  const char *dev_name);
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_arbiter_dispatch(uct_rc_iface_t *iface)
 {

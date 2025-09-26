@@ -83,16 +83,33 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (!uct_sm_iface_is_reachable(tl_iface, params->device_addr)) {
+    if (params->device_addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "device address is empty");
+        return 0;
+    }
+
+    if (params->iface_addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "iface address is empty");
+        return 0;
+    }
+
+    if (!uct_sm_iface_is_reachable(tl_iface, params)) {
         return 0;
     }
 
     iface_addr = (ucs_cma_iface_ext_device_addr_t*)params->iface_addr;
     if (iface_addr->super.id & UCT_CMA_IFACE_ADDR_FLAG_PID_NS) {
         if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != iface_addr->pid_ns) {
+            uct_iface_fill_info_str_buf(params,
+                                        "pid namespaces differ (%lu vs %lu)",
+                                        ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID),
+                                        iface_addr->pid_ns);
             return 0;
         }
     } else if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+        uct_iface_fill_info_str_buf(
+                params, "namespace %lu is not the host's default namespace",
+                ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID));
         return 0;
     }
 
@@ -102,6 +119,8 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     peer_pid = iface_addr->super.id & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
     if ((process_vm_readv(peer_pid, &iov, 1, &iov, 1, 0) == -1) &&
         (errno == EPERM)) {
+        uct_iface_fill_info_str_buf(params,
+                                    "no permissions to read from remote peer");
         return 0;
     }
 
@@ -113,8 +132,8 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_cma_iface_t, uct_iface_t);
 static uct_iface_ops_t uct_cma_iface_tl_ops = {
     .ep_put_zcopy             = uct_scopy_ep_put_zcopy,
     .ep_get_zcopy             = uct_scopy_ep_get_zcopy,
-    .ep_pending_add           = ucs_empty_function_return_busy,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_flush                 = uct_scopy_ep_flush,
     .ep_fence                 = uct_sm_ep_fence,
     .ep_check                 = uct_cma_ep_check,
@@ -122,10 +141,10 @@ static uct_iface_ops_t uct_cma_iface_tl_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_ep_t),
     .iface_flush              = uct_scopy_iface_flush,
     .iface_fence              = uct_sm_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
     .iface_progress           = uct_scopy_iface_progress,
-    .iface_event_fd_get       = ucs_empty_function_return_unsupported,
+    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucs_empty_function_return_unsupported,
     .iface_event_arm          = uct_scopy_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_iface_t),
     .iface_query              = uct_cma_iface_query,
@@ -136,13 +155,16 @@ static uct_iface_ops_t uct_cma_iface_tl_ops = {
 
 static uct_scopy_iface_ops_t uct_cma_iface_ops = {
     .super = {
-        .iface_estimate_perf   = uct_scopy_iface_estimate_perf,
-        .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-        .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-        .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-        .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-        .iface_is_reachable_v2 = uct_cma_iface_is_reachable_v2,
-        .ep_is_connected       = uct_cma_ep_is_connected
+        .iface_query_v2         = uct_iface_base_query_v2,
+        .iface_estimate_perf    = uct_scopy_iface_estimate_perf,
+        .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+        .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+        .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+        .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+        .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+        .iface_is_reachable_v2  = uct_cma_iface_is_reachable_v2,
+        .ep_is_connected        = uct_cma_ep_is_connected,
+        .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
     },
     .ep_tx = uct_cma_ep_tx,
 };

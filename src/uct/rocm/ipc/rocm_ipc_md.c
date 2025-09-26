@@ -24,28 +24,21 @@ static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {
 
 static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->rkey_packed_size       = sizeof(uct_rocm_ipc_key_t);
-    md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
-    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->reg_nonblock_mem_types = 0;
-    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->alloc_mem_types        = 0;
-    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->detect_mem_types       = 0;
-    md_attr->dmabuf_mem_types       = 0;
-    md_attr->max_alloc              = 0;
-    md_attr->max_reg                = ULONG_MAX;
+    uct_md_base_md_query(md_attr);
+    md_attr->rkey_packed_size = sizeof(uct_rocm_ipc_key_t);
+    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
+    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
 
     /* TODO: get accurate number */
-    md_attr->reg_cost             = ucs_linear_func_make(9e-9, 0);
-
-    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+    md_attr->reg_cost         = ucs_linear_func_make(9e-9, 0);
     return UCS_OK;
 }
 
 static ucs_status_t
-uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh,
-                       const uct_md_mkey_pack_params_t *params,
+uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
+                       size_t length, const uct_md_mkey_pack_params_t *params,
                        void *mkey_buffer)
 {
     uct_rocm_ipc_key_t *packed = mkey_buffer;
@@ -131,12 +124,15 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
     static uct_md_ops_t md_ops = {
         .close              = (uct_md_close_func_t)ucs_empty_function,
         .query              = uct_rocm_ipc_md_query,
-        .mkey_pack          = uct_rocm_ipc_mkey_pack,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg            = uct_rocm_ipc_mem_reg,
         .mem_dereg          = uct_rocm_ipc_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
-        .mem_query          = ucs_empty_function_return_unsupported,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+        .mkey_pack          = uct_rocm_ipc_mkey_pack,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
     };
     static uct_md_t md = {
         .ops       = &md_ops,
@@ -147,9 +143,10 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_ipc_rkey_unpack(uct_component_t *component,
-                                             const void *rkey_buffer,
-                                             uct_rkey_t *rkey_p, void **handle_p)
+static ucs_status_t
+uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                         const uct_rkey_unpack_params_t *params,
+                         uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_rocm_ipc_key_t *packed = (uct_rocm_ipc_key_t *)rkey_buffer;
     uct_rocm_ipc_key_t *key;
@@ -178,9 +175,9 @@ static ucs_status_t uct_rocm_ipc_rkey_release(uct_component_t *component,
 uct_component_t uct_rocm_ipc_component = {
     .query_md_resources = uct_rocm_base_query_md_resources,
     .md_open            = uct_rocm_ipc_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_rocm_ipc_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
     .rkey_release       = uct_rocm_ipc_rkey_release,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = "rocm_ipc",

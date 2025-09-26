@@ -1,7 +1,7 @@
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
-  DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/
-  DOCKER_OPT_GPU: --gpus all $(DOCKER_OPT_IB)
+  DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/ --net=host
+  DOCKER_OPT_GPU: --gpus all --device=/dev/gdrdrv --ipc=host $(DOCKER_OPT_IB)
   DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
 
 resources:
@@ -11,15 +11,15 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: centos7_ib
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:5
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB) --net host
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.4-cuda11:1
-      options: $(DOCKER_OPT_ARGS) --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: fedora
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:2
       options: $(DOCKER_OPT_ARGS)
-    - container: fedora34
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
+    - container: fedora41
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/fedora41/builder:inbox
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
@@ -27,20 +27,20 @@ resources:
     - container: rhel76
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel76_mofed47
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel74
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel72
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.2/builder:mofed-5.0-1.0.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel82
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel90
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rhel90_ib
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
+    - container: rhel100
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rhel10.0/builder:mofed-25.07-0.9.7.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rhel100_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/rhel10.0/builder:mofed-25.07-0.9.7.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2004
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
@@ -48,24 +48,42 @@ resources:
     - container: ubuntu2204
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu2204_ib
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
     - container: ubuntu2210
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.10/builder:mofed-5.8-0.2.1.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu1804
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu2404
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu2404_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu2404_doca31_gpunetio
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: debian113
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: debian109
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian10.9/builder:mofed-5.8-3.0.7.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles15sp2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
+    - container: debian125
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian12.5/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles12sp5
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
+    - container: debian130
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian13.0/builder:doca-3.2.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: sles15sp6
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles15sp6/builder:doca-2.9.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rhel90_doca31
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rhel9.0/builder:doca-3.1.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-centos7
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
@@ -153,8 +171,17 @@ resources:
     - container: ubuntu22_cuda_12_1
       image: nvidia/cuda:12.1.0-devel-ubuntu22.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
+    - container: ubuntu22_cuda_13_0
+      image: nvidia/cuda:13.0.0-devel-ubuntu22.04
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
+    - container: ubuntu24_cuda_13_0
+      image: nvidia/cuda:13.0.0-devel-ubuntu24.04
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: centos8_cuda11_asan
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed23-cuda11_asan:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu16_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
@@ -167,6 +194,27 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu2004_rocm_5_4_0
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu2004:rocm_5_4_0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu22_cuda12
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda12:3
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: ubuntu22_cuda13
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda13:1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: ubuntu24_cuda13
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu24.04-mofed24.10-cuda13:1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: ubuntu2204_rocm_6_0_0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu2204:rocm-6.0.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: kylin10sp3
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/kylin10sp3/builder:doca-2.9.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: euleros2sp12
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/euleros2.0sp12/builder:doca-2.9.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: centos10stream
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/centos10stream/builder:inbox
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
 
 stages:
@@ -182,66 +230,28 @@ stages:
   - stage: Build
     dependsOn: [Static_check]
     jobs:
-      - job: build_source
-        pool:
-          name: MLNX
+      - template: build_job.yml
+        parameters:
+          name: build_x86_64
           demands:
-            - ucx_docker -equals yes
-        strategy:
-          matrix:
-            rhel72:
-              CONTAINER: rhel72
-            rhel74:
-              CONTAINER: rhel74
-            rhel76:
-              CONTAINER: rhel76
-              long_test: yes
-            rhel76_mofed47:
-              CONTAINER: rhel76_mofed47
-              long_test: yes
-            ubuntu2004:
-              CONTAINER: ubuntu2004
-              long_test: yes
-              extra_modules: ""
-            ubuntu1804:
-              CONTAINER: ubuntu1804
-              extra_modules: ""
-            ubuntu2204:
-              CONTAINER: ubuntu2204
-            ubuntu2210:
-              CONTAINER: ubuntu2210
-            debian113:
-              CONTAINER: debian113
-            debian109:
-              CONTAINER: debian109
-            sles15sp2:
-              CONTAINER: sles15sp2
-            rhel82:
-              CONTAINER: rhel82
-            rhel90:
-              CONTAINER: rhel90
-            fedora34:
-              CONTAINER: fedora34
-              long_test: yes
-            centos7:
-              CONTAINER: centos7_ib
-            ubuntu2004_rocm:
-              CONTAINER: ubuntu2004_rocm_5_4_0
-        container: $[ variables['CONTAINER'] ]
-        timeoutInMinutes: 340
+            - ucx_docker
+          displayName: Build on x86_64
 
-        steps:
-          - checkout: self
-            clean: true
-            fetchDepth: 100
+      - template: build_job.yml
+        parameters:
+          name: build_aarch64
+          demands:
+            - ucx_arm64
+          displayName: Build on aarch64
 
-          - bash: |
-              ./buildlib/tools/builds.sh
-            displayName: Build
-            env:
-              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
-              long_test: $(long_test)
-              test_static: $(test_static)
+  - stage: ucx_perftest_mad_rte
+    dependsOn: [Static_check]
+    displayName: ucx_perftest over MAD RTE
+    lockBehavior: sequential
+    variables:
+      - group: concurrency_lock
+    jobs:
+    - template: mad_tests.yml
 
   - stage: WireCompat
     dependsOn: [Static_check]
@@ -260,14 +270,19 @@ stages:
             ucx_tag: v1.15.x
           ucx_1_16:
             ucx_tag: v1.16.x
+          ucx_1_17:
+            ucx_tag: v1.17.x
+          ucx_1_18:
+            ucx_tag: v1.18.x
     - template: wire_compat.yml
       parameters:
         name: new
         demands: ucx_new -equals yes
-    - template: wire_compat.yml
-      parameters:
-        name: bond
-        demands: ucx_iodemo -equals yes
+    # Temporarily disable wire-compat tests on rain machines
+    #- template: wire_compat.yml
+    #  parameters:
+    #    name: bond
+    #    demands: ucx_iodemo -equals yes
 
   - stage: Coverity
     dependsOn: [Static_check]
@@ -290,7 +305,7 @@ stages:
         name: gpu
         demands: ucx_gpu -equals yes
         test_perf: 1
-        container: centos7_cuda11
+        container: ubuntu2404_doca31_gpunetio
     - template: tests.yml
       parameters:
         name: new
@@ -303,15 +318,18 @@ stages:
         test_perf: 0
     - template: tests.yml
       parameters:
-        name: roce_proto_disable
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        proto_enable: no
-    - template: tests.yml
-      parameters:
         name: BlueField
         demands: ucx_bf -equals yes
+        run_tests: yes
         test_perf: 0
+
+  - stage: EFA_Tests
+    dependsOn: [Static_check]
+    jobs:
+    - template: efa.yml
+      parameters:
+        name: EFA
+        demands: ucx_new -equals yes
 
   - stage: Namespace_Tests
     dependsOn: [Static_check]
@@ -323,6 +341,7 @@ stages:
 
   - stage: io_demo
     dependsOn: [Static_check]
+    condition: false
     jobs:
     - template: io_demo/io-demo.yml
 
@@ -331,12 +350,14 @@ stages:
     jobs:
       - template: ../jucx/jucx-test.yml
         parameters:
-          name: new
-          demands: ucx_new -equals yes
+          arch: amd64
+          name: gpu
+          demands: ucx_gpu
+
       - template: ../jucx/jucx-test.yml
         parameters:
-          name: gpu
-          demands: ucx_gpu -equals yes
+          arch: aarch64
+          demands: ucx-arm64
 
   - stage: go
     dependsOn: [Static_check]
@@ -362,7 +383,7 @@ stages:
           matrix:
             centos7:
               CONTAINER: centos7_ib
-              extra_modules: ucx-ib ucx-cma ucx-rdmacm
+              extra_modules: ucx-ib ucx-cma ucx-rdmacm ucx-ib-mlx5
               extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
               run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
             ubuntu2004:
@@ -382,6 +403,7 @@ stages:
           - checkout: self
             clean: true
             fetchDepth: 100
+            retryCountOnTaskFailure: 5
 
           - bash: |
               ./buildlib/tools/build_static.sh
@@ -397,6 +419,39 @@ stages:
     dependsOn: [Static_check]
     jobs:
       - template: cuda/cuda.yml
+
+
+  - stage: AddressSanitizer
+    dependsOn: [Static_check]
+    jobs:
+    - template: tests.yml
+      parameters:
+        name: gpu
+        demands: ucx_gpu -equals yes
+        test_perf: 0
+        container: centos8_cuda11_asan
+        asan_check: yes
+    - template: tests.yml
+      parameters:
+        name: new
+        demands: ucx_new -equals yes
+        test_perf: 0
+        container: ubuntu2204_ib
+        asan_check: yes
+    - template: tests.yml
+      parameters:
+        name: roce
+        demands: ucx_roce -equals yes
+        test_perf: 0
+        container: ubuntu2204_ib
+        asan_check: yes
+    - template: tests.yml
+      parameters:
+        name: BlueField
+        demands: ucx_bf -equals yes
+        test_perf: 0
+        asan_check: yes
+
 
 #  - stage: Cuda_compatible
 #    dependsOn: [Static_check]

@@ -28,10 +28,12 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <unordered_map>
 #include <sys/socket.h>
 #include <dirent.h>
 #include <stdint.h>
 #include <ifaddrs.h>
+#include <sys/resource.h>
 
 
 #ifndef UINT16_MAX
@@ -337,6 +339,7 @@ std::string get_rdmacm_netdev(const char *ifa_name);
  */
 bool is_rdmacm_netdev(const char *ifa_name);
 
+bool is_aws();
 
 /**
  * Get an available port on the host.
@@ -347,7 +350,17 @@ uint16_t get_port();
 /**
  * Address to use for mmap(FIXED)
  */
-void *mmap_fixed_address(size_t length);
+class mmap_fixed_address {
+public:
+    mmap_fixed_address(size_t length);
+    ~mmap_fixed_address();
+    void* operator*() const { return m_ptr; }
+    void detach() { m_ptr = NULL; }
+
+private:
+    void *m_ptr;
+    size_t m_length;
+};
 
 
 /*
@@ -411,6 +424,8 @@ public:
     ucs_sock_addr_t to_ucs_sock_addr() const;
 
     std::string to_str() const;
+
+    std::string to_ip_str() const;
 
     const struct sockaddr* get_sock_addr_ptr() const;
 
@@ -867,10 +882,31 @@ static inline O& operator<<(O& os, const size_value& sz)
 class auto_buffer {
 public:
     auto_buffer(size_t size);
-    ~auto_buffer();
-    void* operator*() const;
+    void* operator*();
+    template <typename T> T* as();
 private:
-    void *m_ptr;
+    std::vector<uint8_t> m_buf;
+};
+
+
+template <typename T>
+T* auto_buffer::as()
+{
+    return reinterpret_cast<T*>(m_buf.data());
+}
+
+
+template <typename T>
+class typed_auto_buffer : private auto_buffer {
+public:
+    typed_auto_buffer(size_t size) : auto_buffer(size)
+    {
+    }
+
+    T* operator*()
+    {
+        return as<T>();
+    }
 };
 
 
@@ -1019,6 +1055,134 @@ const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs();
  * Skip test if address sanitizer is enabled
  */
 void skip_on_address_sanitizer();
+
+
+/**
+ * Returns whether to skip HW TM offload tests
+ */
+bool skip_hw_tm_offload();
+
+
+/**
+ * Class for mocking C function pointers
+ * The class is used to mock C function pointers, by replacing the original
+ * function pointer with a mock function pointer. The original function pointer
+ * is restored when the object is destroyed.
+ */
+class mock {
+public:
+    using func = void (*)();
+
+    ~mock()
+    {
+        cleanup();
+    }
+
+    void cleanup()
+    {
+        m_mock_map.clear();
+    }
+
+    template<typename Fn> void setup(Fn *orig_ptr, Fn mock)
+    {
+        func *ptr = reinterpret_cast<func*>(orig_ptr);
+        auto it   = m_mock_map.find(ptr);
+        if (it == m_mock_map.end()) {
+            m_mock_map[ptr] = std::unique_ptr<mock_func>(
+                                                new mock_func(ptr, (func)mock));
+        } else {
+            *orig_ptr = mock;
+        }
+    }
+
+    template<typename Fn, typename... Args>
+    ucs_status_t orig_func(Fn *orig_ptr, Args &&...args) const
+    {
+        auto it    = m_mock_map.find((func*)orig_ptr);
+        Fn orig_fn = (it == m_mock_map.end()) ? *orig_ptr :
+                                                (Fn)it->second->m_orig;
+        return orig_fn(std::forward<Args>(args)...);
+    }
+
+private:
+    struct mock_func {
+        mock_func(func *orig_ptr, func mock) :
+            m_orig_ptr(orig_ptr), m_orig(*orig_ptr)
+        {
+            *m_orig_ptr = mock;
+        }
+
+        ~mock_func()
+        {
+            /* Reset value for mocked function pointer.
+             * Due to this side effect we make the class non-copyable, to avoid
+             * implementing copy/move semantics */
+            *m_orig_ptr = m_orig;
+        }
+
+        /* Non-copyable, non-moveable */
+        mock_func(const mock_func&) = delete;
+        mock_func(mock_func&&) = delete;
+        mock_func &operator=(const mock_func&) = delete;
+        mock_func &operator=(mock_func&&) = delete;
+
+        func *m_orig_ptr;
+        func m_orig;
+    };
+
+    std::unordered_map<func*, std::unique_ptr<mock_func>> m_mock_map;
+};
+
+#define UCS_MOCK_ORIG_FUNC(_mock, _orig_ptr, ...) \
+{ \
+    ucs_status_t _status = _mock.orig_func(_orig_ptr, ##__VA_ARGS__); \
+    if (_status != UCS_OK) { \
+        return _status; \
+    } \
+}
+
+// Used to manipulate and restore rlimits
+class rlimit_setter {
+public:
+    rlimit_setter(int resource, rlim_t new_limit) :
+        m_resource(resource), m_limit(0), m_orig_limit({})
+    {
+        if (getrlimit(m_resource, &m_orig_limit)) {
+            UCS_TEST_MESSAGE << "could not get rlimit " << resource
+                             << ", err: " << strerror(errno);
+            return;
+        }
+
+        struct rlimit limit = {
+            .rlim_cur = std::min(new_limit, m_orig_limit.rlim_max),
+            .rlim_max = m_orig_limit.rlim_max
+        };
+        if (setrlimit(m_resource, &limit) == 0) {
+            m_limit = limit.rlim_cur;
+        } else {
+            m_limit = m_orig_limit.rlim_cur;
+            UCS_TEST_MESSAGE << "could not set rlimit " << resource << " to "
+                             << limit.rlim_cur << ", err: " << strerror(errno);
+        }
+    }
+
+    ~rlimit_setter()
+    {
+        if (m_orig_limit.rlim_cur != m_limit) {
+            (void)setrlimit(m_resource, &m_orig_limit);
+        }
+    }
+
+    rlim_t limit() const
+    {
+        return m_limit;
+    }
+
+private:
+    const int     m_resource;
+    rlim_t        m_limit;
+    struct rlimit m_orig_limit;
+};
 
 } // ucs
 

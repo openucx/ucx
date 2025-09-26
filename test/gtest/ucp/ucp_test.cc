@@ -409,6 +409,11 @@ void ucp_test::configure_peer_failure_settings()
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
 }
 
+bool ucp_test::is_proto_enabled() const
+{
+    return m_ucp_config->ctx.proto_enable;
+}
+
 void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
 {
     ucs_status_t status;
@@ -614,7 +619,13 @@ unsigned ucp_test::mt_num_threads()
 #if _OPENMP && ENABLE_MT
     /* Assume each thread can create two workers (sender and receiver entity),
        and each worker can open up to 64 files */
-    return std::min(omp_get_max_threads(), ucs_sys_max_open_files() / (64 * 2));
+    unsigned num = std::min(omp_get_max_threads(),
+                            ucs_sys_max_open_files() / (64 * 2));
+    if (ucs::is_aws()) {
+        num = std::min(num, 64u);
+    }
+
+    return num;
 #else
     return 1;
 #endif
@@ -767,6 +778,7 @@ void ucp_test_base::entity::accept(int worker_index,
 
     status = ucp_ep_create(ucp_worker, &ep_params, &ep);
     if (status == UCS_ERR_UNREACHABLE) {
+        ++m_err_cntr;
         UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
                         "feature or no supported transport to send partial "
                         "worker address)");
@@ -1088,6 +1100,11 @@ const size_t &ucp_test_base::entity::get_err_num() const {
     return m_err_cntr;
 }
 
+void ucp_test_base::entity::reset_err_num() {
+    m_err_cntr = 0;
+    m_rejected_cntr = 0;
+}
+
 const size_t &ucp_test_base::entity::get_accept_err_num() const {
     return m_accept_err_cntr;
 }
@@ -1171,6 +1188,38 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
     return false;
 }
 
+bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
+{
+    const auto config = ucp_ep_config(ep());
+    ucs_memory_type_t mem_type;
+
+    mem_type = (ucs_memory_type_t)ucs_ffs64(
+                                        ucph()->config.ext.rndv_frag_mem_types);
+
+    for (auto i = 0; i < config->key.num_lanes; ++i) {
+        const auto lane = config->key.rma_bw_lanes[i];
+        if (lane == UCP_NULL_LANE) {
+            break;
+        }
+        if (ucp_ep_md_attr(ep(), lane)->reg_mem_types & UCS_BIT(mem_type)) {
+            const auto iface_attr =
+                ucp_worker_iface_get_attr(worker(), ucp_ep_get_rsc_index(ep(),
+                                          lane));
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool ucp_test_base::entity::is_rndv_supported() const
+{
+    const auto config = ucp_ep_config(ep());
+    return config->key.rma_bw_lanes[0] != UCP_NULL_LANE;
+}
+
 bool ucp_test_base::entity::is_conn_reqs_queue_empty() const
 {
     return m_conn_reqs.empty();
@@ -1249,6 +1298,11 @@ ucp_mem_h ucp_test::mapped_buffer::memh() const
     return m_memh;
 }
 
+ucp_worker_h ucp_test::mapped_buffer::worker() const
+{
+    return m_entity.worker();
+}
+
 void test_ucp_context::get_test_variants(std::vector<ucp_test_variant> &variants)
 {
     add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP);
@@ -1267,4 +1321,20 @@ bool ucp_test::check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type) 
     }
 
     return false;
+}
+
+size_t ucp_test::count_resources(const ucp_test_base::entity &e,
+                                 const std::string &tl_name) const
+{
+    return std::count_if(e.ucph()->tl_rscs,
+                         e.ucph()->tl_rscs + e.ucph()->num_tls,
+                         [&](const ucp_tl_resource_desc_t &rsc) {
+                             return tl_name == rsc.tl_rsc.tl_name;
+                         });
+}
+
+bool ucp_test::has_resource(const ucp_test_base::entity &e,
+                            const std::string &tl_name) const
+{
+    return count_resources(e, tl_name) != 0;
 }

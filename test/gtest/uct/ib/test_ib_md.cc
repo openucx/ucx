@@ -23,17 +23,31 @@ protected:
                          size_t size = 8192, bool aligned = false);
     bool has_ksm() const;
 
+    bool has_devx() const
+    {
+#if HAVE_DEVX
+        return ((ib_md().dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) &&
+                (ucs_derived_of(md(), uct_ib_mlx5_md_t)->flags &
+                 UCT_IB_MLX5_MD_FLAG_DEVX));
+#else
+        return 0;
+#endif
+    }
+
     ucs_status_t reg_smkey_pack(void *buffer, size_t size, uct_ib_mem_t **memh,
                                 uct_rkey_t *rkey_p = NULL);
     void check_smkeys(uct_rkey_t rkey1, uct_rkey_t rkey2);
 
+    void test_mkey_pack_mt(bool invalidate);
+    void test_mkey_pack_mt_internal(unsigned access_mask, bool invalidate);
     void test_smkey_reg_atomic(void);
 
 private:
 #ifdef HAVE_MLX5_DV
     uint32_t m_mlx5_flags = 0;
 #endif
-    void check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected);
+    void check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected_to_have_atomic,
+                       bool is_expected_to_have_auxiliary_key);
 };
 
 void test_ib_md::init() {
@@ -51,16 +65,26 @@ const uct_ib_md_t &test_ib_md::ib_md() const {
     return *ucs_derived_of(md(), uct_ib_md_t);
 }
 
-void test_ib_md::check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected)
+void test_ib_md::check_mlx5_mr(uct_ib_mem_t *ib_memh,
+                               bool is_expected_to_have_atomic,
+                               bool is_expected_to_have_auxiliary_key)
 {
 #if HAVE_DEVX
+    if (!has_devx()) {
+        return;
+    }
+
     uct_ib_mlx5_devx_mem_t *memh = ucs_derived_of(ib_memh,
                                                   uct_ib_mlx5_devx_mem_t);
-    if (is_expected) {
+    if (is_expected_to_have_atomic) {
         EXPECT_NE(nullptr, memh->atomic_dvmr);
-        EXPECT_NE(UCT_IB_INVALID_MKEY, memh->atomic_rkey);
     } else {
         EXPECT_EQ(nullptr, memh->atomic_dvmr);
+    }
+
+    if (is_expected_to_have_atomic || is_expected_to_have_auxiliary_key) {
+        EXPECT_NE(UCT_IB_INVALID_MKEY, memh->atomic_rkey);
+    } else {
         EXPECT_EQ(UCT_IB_INVALID_MKEY, memh->atomic_rkey);
     }
 
@@ -117,14 +141,15 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
     }
 
-    check_mlx5_mr(ib_memh, false);
+    check_mlx5_mr(ib_memh, false, ib_md().relaxed_order);
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
-    check_mlx5_mr(ib_memh, (amo_access && has_ksm()) || ib_md().relaxed_order);
+    check_mlx5_mr(ib_memh, (amo_access && has_ksm()) || ib_md().relaxed_order,
+                  ib_md().relaxed_order);
 
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);
@@ -149,7 +174,7 @@ UCS_TEST_P(test_ib_md, ib_md_umr_ksm) {
     ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
 }
 
-UCS_TEST_P(test_ib_md, relaxed_order, "PCI_RELAXED_ORDERING=try") {
+UCS_TEST_P(test_ib_md, relaxed_order, "IB_PCI_RELAXED_ORDERING=try") {
     std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
 
     ib_md_umr_check(&rkey_buffer[0], false);
@@ -224,15 +249,156 @@ void test_ib_md::test_smkey_reg_atomic(void)
     ucs_mmap_free(buffer, size);
 }
 
+void test_ib_md::test_mkey_pack_mt_internal(unsigned access_mask,
+                                            bool invalidate)
+{
+    constexpr size_t size = UCS_MBYTE;
+    unsigned pack_flags, dereg_flags;
+    void *buffer;
+    uct_mem_h memh;
+
+    if (!check_invalidate_support(access_mask)) {
+        UCS_TEST_SKIP_R("mkey invalidation isn't supported");
+    }
+
+    if (!has_ksm()) {
+        UCS_TEST_SKIP_R("KSM is required for MT registration");
+    }
+
+    buffer = ucs_malloc(size, "mkey_pack_mt");
+    ASSERT_NE(buffer, nullptr) << "Allocation failed";
+
+    if (invalidate) {
+        pack_flags  = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA;
+        dereg_flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
+    } else {
+        pack_flags = dereg_flags = 0;
+    }
+
+    ASSERT_UCS_OK(reg_mem(access_mask, buffer, size, &memh));
+
+    uct_ib_mem_t *ib_memh = (uct_ib_mem_t*)memh;
+    EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_MULTITHREADED);
+
+    std::vector<uint8_t> rkey(md_attr().rkey_packed_size);
+    uct_md_mkey_pack_params_t pack_params;
+    pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
+    pack_params.flags      = pack_flags;
+    ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, buffer, size,
+                                      &pack_params, rkey.data()));
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask  = UCT_MD_MEM_DEREG_FIELD_MEMH |
+                         UCT_MD_MEM_DEREG_FIELD_COMPLETION |
+                         UCT_MD_MEM_DEREG_FIELD_FLAGS;
+    params.memh        = memh;
+    params.flags       = dereg_flags;
+    comp().comp.func   = dereg_cb;
+    comp().comp.count  = 1;
+    comp().comp.status = UCS_OK;
+    comp().self        = this;
+    params.comp        = &comp().comp;
+    ASSERT_UCS_OK(uct_md_mem_dereg_v2(md(), &params));
+
+    ucs_free(buffer);
+}
+
+void test_ib_md::test_mkey_pack_mt(bool invalidate)
+{
+    test_mkey_pack_mt_internal(UCT_MD_MEM_ACCESS_REMOTE_ATOMIC, invalidate);
+    test_mkey_pack_mt_internal(UCT_MD_MEM_ACCESS_RMA, invalidate);
+    test_mkey_pack_mt_internal(UCT_MD_MEM_ACCESS_ALL, invalidate);
+}
+
+UCS_TEST_P(test_ib_md, pack_mkey_mt, "IB_REG_MT_THRESH=128K",
+           "IB_REG_MT_CHUNK=128K")
+{
+    test_mkey_pack_mt(false);
+}
+
+UCS_TEST_P(test_ib_md, pack_mkey_mt_invalidate, "IB_REG_MT_THRESH=128K",
+           "IB_REG_MT_CHUNK=128K")
+{
+    test_mkey_pack_mt(true);
+}
+
 UCS_TEST_P(test_ib_md, smkey_reg_atomic)
 {
     test_smkey_reg_atomic();
 }
 
-UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "REG_MT_THRESH=1k",
-           "REG_MT_CHUNK=1k")
+UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
+           "IB_REG_MT_CHUNK=1k")
 {
     test_smkey_reg_atomic();
 }
 
+UCS_TEST_P(test_ib_md, mt_fail, "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
+{
+    size_t size             = UCS_MBYTE;
+    const size_t align_mask = (8 * UCS_KBYTE) - 1;
+    size_t lower_size       = ((size / 3)) & ~align_mask;
+    size_t upper_size       = (size / 2) & ~align_mask;
+    void *start, *mid, *last;
+    uct_mem_h memh;
+
+    if (!has_ksm()) {
+        UCS_TEST_SKIP_R("KSM is required for MT registration");
+    }
+
+    auto mmap_anon = [](void *ptr, size_t size) {
+        ptr = mmap(ptr, size, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS |
+                           ((ptr != nullptr) ? MAP_FIXED : 0),
+                   -1, 0);
+        return (ptr != MAP_FAILED) ? ptr : nullptr;
+    };
+
+    /* Find an available VMA */
+    start = mmap_anon(nullptr, size);
+    ASSERT_NE(nullptr, start);
+    mid  = UCS_PTR_BYTE_OFFSET(start, lower_size);
+    last = UCS_PTR_BYTE_OFFSET(start, size - upper_size);
+    munmap(mid, size - upper_size - lower_size);
+
+    /* Trigger MT registration failure */
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    EXPECT_NE(UCS_OK, reg_mem(UCT_MD_MEM_ACCESS_RMA, start, size, &memh));
+
+    /* Fill the hole with the middle VMA */
+    /* coverity[pass_freed_arg] */
+    mid = mmap_anon(mid, size - upper_size - lower_size);
+    EXPECT_NE(nullptr, mid);
+
+    /* Trigger a successful MT registration */
+    EXPECT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_RMA, start, size, &memh));
+    EXPECT_TRUE(((uct_ib_mem_t*)memh)->flags & UCT_IB_MEM_MULTITHREADED);
+
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
+
+    if (mid != nullptr) {
+        /* coverity[incorrect_free] */
+        munmap(mid, size - upper_size - lower_size);
+    }
+    if (start != nullptr) {
+        munmap(start, lower_size);
+        munmap(last, upper_size);
+    }
+}
+
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)
+
+class test_ib_md_non_blocking : public test_md_non_blocking {
+};
+
+UCS_TEST_P(test_ib_md_non_blocking, reg_advise_odp_no_devx, "IB_MLX5_DEVX=no")
+{
+    test_nb_reg_advise();
+}
+
+UCS_TEST_P(test_ib_md_non_blocking, reg_odp_no_devx, "IB_MLX5_DEVX=no")
+{
+    test_nb_reg();
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md_non_blocking, ib)

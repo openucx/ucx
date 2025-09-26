@@ -31,15 +31,13 @@ Launch configuration:
 ## Check what tags are provided by script for start/stop/status operations
 
 ``` bash
-%./iodemo_commands_node1.sh -show-tags
-Showing tags
-==== Servers:
+%./iodemo_commands_node1.sh -list-tags
+all
 server_0
 server_1
 server_2
 server_3
 server_4
-==== Clients:
 client_0
 client_1
 client_2
@@ -47,14 +45,13 @@ client_3
 client_4
 ```
 
-## Running individual processes by tag (start/stop/status)
-
-
+## Running individual processes by tag (status/start/stop/kill)
 
 ``` bash
-%./iodemo_commands_node1.sh -tag server_0 -status
-%./iodemo_commands_node1.sh -tag server_0 -stop
-%./iodemo_commands_node1.sh -tag server_0 -start
+%./iodemo_commands_node1.sh -status server_0
+%./iodemo_commands_node1.sh -start server_0
+%./iodemo_commands_node1.sh -stop server_0
+%./iodemo_commands_node1.sh -kill server_0
 
 ```
 
@@ -63,4 +60,3 @@ client_4
 ``` bash
 %./iodemo_commands_node1.sh
 ```
-

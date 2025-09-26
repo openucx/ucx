@@ -24,7 +24,7 @@ namespace ucs {
 
 typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
 
-const double test_timeout_in_sec = 60.;
+const double test_timeout_in_sec = 180.;
 
 double watchdog_timeout = 900.; // 15 minutes
 
@@ -324,12 +324,16 @@ void analyze_test_results()
 int test_time_multiplier()
 {
     int factor = 1;
-#if _BullseyeCoverage
-    factor *= 10;
-#endif
     if (RUNNING_ON_VALGRIND) {
         factor *= 20;
     }
+#if _BullseyeCoverage
+    factor *= 10;
+#endif
+#ifdef __SANITIZE_ADDRESS__
+    factor *= 20;
+#endif
+
     return factor;
 }
 
@@ -452,12 +456,13 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
 
 static bool netif_has_sysfs_file(const char *ifa_name, const char *file_name)
 {
-    char path[PATH_MAX];
-    ucs_snprintf_safe(path, sizeof(path), "/sys/class/net/%s/%s", ifa_name,
+    std::string path(PATH_MAX, '\0');
+
+    ucs_snprintf_safe(&path[0], path.size(), "/sys/class/net/%s/%s", ifa_name,
                       file_name);
 
     struct stat st;
-    return stat(path, &st) >= 0;
+    return stat(path.c_str(), &st) >= 0;
 }
 
 bool is_interface_usable(struct ifaddrs *ifa)
@@ -525,6 +530,10 @@ static std::map<std::string, std::string> get_all_rdmacm_net_devices()
     ssize_t nread;
     int port_num;
 
+    if (ucs::is_aws()) {
+        return devices;
+    }
+
     std::vector<std::string> ndevs = read_dir(sysfs_net_dir);
 
     /* Enumerate IPoIB and RoCE devices which have direct mapping to an RDMA
@@ -537,6 +546,11 @@ static std::map<std::string, std::string> get_all_rdmacm_net_devices()
 
         if (!ib_devices.empty()) {
             std::string ib_device = ib_devices.front();
+            if (ib_device.rfind("smi", 0) == 0) {
+                /* Skip SMI device */
+                continue;
+            }
+
             std::string ports_dir = infiniband_dir + "/" + ib_device +
                                     "/ports";
             std::string ib_port   = read_dir(ports_dir).front();
@@ -597,6 +611,19 @@ bool is_rdmacm_netdev(const char *ifa_name)
     return !get_rdmacm_netdev(ifa_name).empty();
 }
 
+bool is_aws()
+{
+    static bool result, initialized = false;
+
+    if (!initialized) {
+        const char *str = getenv("CLOUD_TYPE");
+        result          = (str != NULL) && !strcmp(str, "aws");
+        initialized     = true;
+    }
+
+    return result;
+}
+
 uint16_t get_port() {
     int sock_fd, ret;
     ucs_status_t status;
@@ -604,7 +631,7 @@ uint16_t get_port() {
     socklen_t len = sizeof(ret_addr);
     uint16_t port;
 
-    status = ucs_socket_create(AF_INET, SOCK_STREAM, &sock_fd);
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, 0, &sock_fd);
     EXPECT_EQ(status, UCS_OK);
 
     memset(&addr_in, 0, sizeof(struct sockaddr_in));
@@ -628,17 +655,18 @@ uint16_t get_port() {
     return port;
 }
 
-void *mmap_fixed_address(size_t length) {
-    void *ptr = mmap(NULL, length, PROT_READ | PROT_WRITE,
-                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (ptr == MAP_FAILED) {
-        return nullptr;
+mmap_fixed_address::mmap_fixed_address(size_t length) : m_length(length) {
+    m_ptr = mmap(NULL, m_length, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (m_ptr == MAP_FAILED) {
+        UCS_TEST_ABORT("mmap failed to allocate memory region");
     }
+}
 
-    munmap(ptr, length);
-
-    /* coverity[use_after_free] */
-    return ptr;
+mmap_fixed_address::~mmap_fixed_address() {
+    if (m_ptr != NULL) {
+        munmap(m_ptr, m_length);
+    }
 }
 
 std::string compact_string(const std::string &str, size_t length)
@@ -791,6 +819,15 @@ std::string sock_addr_storage::to_str() const {
     return ucs_sockaddr_str(get_sock_addr_ptr(), str, sizeof(str));
 }
 
+std::string sock_addr_storage::to_ip_str() const {
+    char str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+
+    status = ucs_sockaddr_get_ipstr(get_sock_addr_ptr(), str, sizeof(str));
+    ASSERT_UCS_OK(status);
+    return str;
+}
+
 const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
     return m_is_valid ? (struct sockaddr *)(&m_storage) : NULL;
 }
@@ -812,19 +849,11 @@ std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage)
     return os << ucs::sockaddr_to_str(sa_storage.get_sock_addr_ptr());
 }
 
-auto_buffer::auto_buffer(size_t size) : m_ptr(malloc(size)) {
-    if (!m_ptr) {
-        UCS_TEST_ABORT("Failed to allocate memory");
-    }
+auto_buffer::auto_buffer(size_t size) : m_buf(size) {
 }
 
-auto_buffer::~auto_buffer()
-{
-    free(m_ptr);
-}
-
-void* auto_buffer::operator*() const {
-    return m_ptr;
+void* auto_buffer::operator*() {
+    return as<void>();
 };
 
 scoped_log_level::scoped_log_level(ucs_log_level_t level)
@@ -893,6 +922,12 @@ void skip_on_address_sanitizer()
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Address sanitizer");
 #endif
+}
+
+bool skip_hw_tm_offload()
+{
+    // Skip HW TM offload tests due to issue RM4602065
+    return true;
 }
 
 } // ucs

@@ -21,6 +21,10 @@
 #include <ucs/debug/log.h>
 #include <string.h>
 
+
+#define UCT_RC_VERBS_IFACE_OVERHEAD 75e-9
+
+
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
 static uct_iface_ops_t uct_rc_verbs_iface_tl_ops;
 
@@ -32,7 +36,7 @@ static const char *uct_rc_verbs_flush_mode_names[] = {
 };
 
 static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
-  {"RC_", "", NULL,
+  {"RC_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_VERBS_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
@@ -127,26 +131,6 @@ out:
     uct_rc_iface_arbiter_dispatch(iface);
 }
 
-static ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
-{
-    switch (status)
-    {
-    case IBV_WC_SUCCESS:
-        return UCS_OK;
-    case IBV_WC_REM_ACCESS_ERR:
-    case IBV_WC_REM_OP_ERR:
-        return UCS_ERR_CONNECTION_RESET;
-    case IBV_WC_RETRY_EXC_ERR:
-    case IBV_WC_RNR_RETRY_EXC_ERR:
-    case IBV_WC_REM_ABORT_ERR:
-        return UCS_ERR_ENDPOINT_TIMEOUT;
-    case IBV_WC_WR_FLUSH_ERR:
-        return UCS_ERR_CANCELED;
-    default:
-        return UCS_ERR_IO_ERROR;
-    }
-}
-
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
@@ -161,7 +145,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
-            status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
+            status = uct_ib_wc_to_ucs_status(wc[i].status);
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
                                                    status);
             continue;
@@ -230,7 +214,9 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->cap.flags |= UCT_IFACE_FLAG_EP_CHECK;
     iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
-    iface_attr->overhead   = 75e-9; /* Software overhead */
+
+    /* Software overhead */
+    iface_attr->overhead = UCT_RC_VERBS_IFACE_OVERHEAD;
 
     iface_attr->ep_addr_len = uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
                                       sizeof(uct_rc_verbs_ep_flush_addr_t) :
@@ -286,6 +272,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.seg_size              = ib_config->seg_size;
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
+    init_attr.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.dev_name              = params->mode.device.dev_name;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
@@ -293,11 +281,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 
     self->config.tx_max_wr               = ucs_min(config->tx_max_wr,
                                                    self->super.config.tx_qp_len);
-    self->super.config.tx_moderation     = ucs_min(config->super.tx_cq_moderation,
+    self->super.config.tx_moderation     = ucs_min(self->super.config.tx_moderation,
                                                    self->config.tx_max_wr / 4);
     self->super.config.fence_mode        = (uct_rc_fence_mode_t)config->super.super.fence_mode;
     self->super.progress                 = uct_rc_verbs_iface_progress;
     self->super.super.config.sl          = uct_ib_iface_config_select_sl(ib_config);
+    uct_ib_iface_set_reverse_sl(&self->super.super, ib_config);
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {
@@ -497,7 +486,7 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
     .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
     .iface_query              = uct_rc_verbs_iface_query,
-    .iface_get_address        = ucs_empty_function_return_success,
+    .iface_get_address        = (uct_iface_get_address_func_t)ucs_empty_function_return_success,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
 };
@@ -505,13 +494,16 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf   = uct_rc_iface_estimate_perf,
-            .iface_vfs_refresh     = uct_rc_iface_vfs_refresh,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-            .ep_connect_to_ep_v2   = uct_rc_verbs_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
-            .ep_is_connected       = uct_rc_verbs_ep_is_connected
+            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_estimate_perf    = uct_rc_iface_estimate_perf,
+            .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
+            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+            .ep_connect_to_ep_v2    = uct_rc_verbs_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
+            .ep_is_connected        = uct_rc_verbs_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,
@@ -527,8 +519,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_vfs_populate = uct_rc_verbs_ep_vfs_populate
 };
 
-static ucs_status_t
-uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
+static ucs_status_t uct_rc_verbs_can_create_qp(struct ibv_pd *pd)
 {
     struct ibv_qp_init_attr qp_init_attr = {
         .qp_type             = IBV_QPT_RC,
@@ -543,9 +534,10 @@ uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
     struct ibv_qp *qp;
     ucs_status_t status;
 
-    cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
+    cq = ibv_create_cq(pd->context, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG, "ibv_create_cq()");
+        uct_ib_check_memlock_limit_msg(pd->context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
@@ -555,7 +547,8 @@ uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
 
     qp = ibv_create_qp(pd, &qp_init_attr);
     if (qp == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG, "ibv_create_qp()");
+        uct_ib_check_memlock_limit_msg(pd->context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_qp(RC)");
         status = UCS_ERR_UNSUPPORTED;
         goto err_destroy_cq;
     }
@@ -578,13 +571,13 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
     ucs_status_t status;
 
     /* device does not support RC if we cannot create an RC QP */
-    status = uct_rc_verbs_can_create_qp(ib_md->dev.ibv_context, ib_md->pd);
+    status = uct_rc_verbs_can_create_qp(ib_md->pd);
     if (status != UCS_OK) {
         return status;
     }
 
-    return uct_ib_device_query_ports(&ib_md->dev, 0, tl_devices_p,
-                                     num_tl_devices_p);
+    return uct_ib_device_query_ports(&ib_md->dev, UCT_IB_DEVICE_FLAG_SRQ,
+                                     tl_devices_p, num_tl_devices_p);
 }
 
 UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_verbs, uct_rc_verbs_query_tl_devices,

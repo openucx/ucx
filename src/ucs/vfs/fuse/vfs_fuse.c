@@ -242,22 +242,34 @@ out_unlock:
 static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
 {
 #ifdef HAVE_INOTIFY
+    const char *watch_dirname;
+    char *dir_buf;
     char event_buf[sizeof(struct inotify_event) + NAME_MAX];
     const struct inotify_event *event;
     char watch_filename[NAME_MAX];
-    const char *watch_dirname;
-    char dir_buf[PATH_MAX];
     ucs_status_t status;
     ssize_t nread;
     size_t offset;
+    int ret;
 
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 
-    /* copy path components to 'dir_buf' and 'watch_filename' */
-    ucs_strncpy_safe(dir_buf, path, sizeof(dir_buf));
-    ucs_strncpy_safe(watch_filename, ucs_basename(path),
-                     sizeof(watch_filename));
-    watch_dirname = dirname(dir_buf);
+    /* Check 'stop' flag before entering the loop. If the main thread sets
+     * 'stop' flag before this thread created 'inotify_fd' fd, the execution
+     * of the thread has to be stopped, otherwise - the thread hangs waiting
+     * for the data on 'inotify_fd' fd.
+     */
+    if (ucs_vfs_fuse_context.stop) {
+        status = UCS_ERR_CANCELED;
+        goto out_unlock;
+    }
+
+    /* Create directory path */
+    ret = ucs_vfs_sock_mkdir(path, UCS_LOG_LEVEL_DIAG);
+    if (ret != 0) {
+        status = UCS_ERR_IO_ERROR;
+        goto out_unlock;
+    }
 
     /* Create inotify channel */
     ucs_vfs_fuse_context.inotify_fd = inotify_init();
@@ -271,26 +283,28 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             ucs_error("inotify_init() failed: %m");
         }
         status = UCS_ERR_IO_ERROR;
-        goto out;
+        goto out_unlock;
     }
 
-    /* Watch for new files in 'watch_dirname' */
+    status = ucs_string_alloc_path_buffer_and_get_dirname(&dir_buf, "dir_buf",
+                                                          path, &watch_dirname);
+    if (status != UCS_OK) {
+        goto out_unlock;
+    }
+
+    /* copy path components to 'watch_filename' */
+    ucs_strncpy_safe(watch_filename, ucs_basename(path),
+                     sizeof(watch_filename));
+
+    /* Watch for new files in 'watch_dirname' and monitor if this watch gets
+     * deleted explicitly or implicitly */
     ucs_vfs_fuse_context.watch_desc = inotify_add_watch(
-            ucs_vfs_fuse_context.inotify_fd, watch_dirname, IN_CREATE);
+            ucs_vfs_fuse_context.inotify_fd, watch_dirname,
+            IN_CREATE | IN_IGNORED);
     if (ucs_vfs_fuse_context.watch_desc < 0) {
         ucs_error("inotify_add_watch(%s) failed: %m", watch_dirname);
         status = UCS_ERR_IO_ERROR;
         goto out_close_inotify_fd;
-    }
-
-    /* Check 'stop' flag before entering the loop. If the main thread sets
-     * 'stop' flag before this thread created 'inotify_fd' fd, the execution
-     * of the thread has to be stopped, otherwise - the thread hangs waiting
-     * for the data on 'inotify_fd' fd.
-     */
-    if (ucs_vfs_fuse_context.stop) {
-        status = UCS_ERR_CANCELED;
-        goto out_close_watch_id;
     }
 
     /* Read events from inotify channel and exit when either the main thread set
@@ -322,14 +336,24 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
         for (offset  = 0; offset < nread;
              offset += (sizeof(*event) + event->len)) {
             event = UCS_PTR_BYTE_OFFSET(event_buf, offset);
+
+            /* Watch was removed explicitly (inotify_rm_watch) or automatically
+             * (file was deleted, or file system was unmounted). */
+            if (event->mask & IN_IGNORED) {
+                ucs_debug("inotify watch on '%s' was removed", watch_dirname);
+                status = UCS_ERR_IO_ERROR;
+                goto out_close_watch_id;
+            }
+
             if (!(event->mask & IN_CREATE)) {
                 ucs_trace("ignoring inotify event with mask 0x%x", event->mask);
                 continue;
             }
 
             ucs_trace("file '%s' created", event->name);
+            /* event->len is a multiple of 16, not the string length */
             /* coverity[tainted_data] */
-            if ((event->len != (strlen(watch_filename) + 1)) ||
+            if ((event->len < (strlen(watch_filename) + 1)) ||
                 (strncmp(event->name, watch_filename, event->len) != 0)) {
                 ucs_trace("ignoring inotify create event of '%s'", event->name);
                 continue;
@@ -346,7 +370,8 @@ out_close_watch_id:
 out_close_inotify_fd:
     close(ucs_vfs_fuse_context.inotify_fd);
     ucs_vfs_fuse_context.inotify_fd = -1;
-out:
+    ucs_free(dir_buf);
+out_unlock:
     pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
     return status;
 #else
@@ -470,7 +495,7 @@ static void ucs_fuse_thread_stop()
     sighandler_t orig_handler;
     int ret;
 
-    orig_handler = signal(SIGUSR1, ucs_empty_function);
+    orig_handler = signal(SIGUSR1, (sighandler_t)ucs_empty_function);
 
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 

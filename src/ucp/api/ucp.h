@@ -125,7 +125,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5), /**< mt_workers_shared */
     UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
     UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7), /**< estimated_num_ppn */
-    UCP_PARAM_FIELD_NAME              = UCS_BIT(8)  /**< name */
+    UCP_PARAM_FIELD_NAME              = UCS_BIT(8), /**< name */
+    UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9)
 };
 
 
@@ -164,7 +165,10 @@ enum ucp_feature {
      * @ref ucp_mem_map and packed by @ref ucp_memh_pack with the flag
      * @ref UCP_MEMH_PACK_FLAG_EXPORT and use it for local operations
      */
-    UCP_FEATURE_EXPORTED_MEMH = UCS_BIT(7)
+    UCP_FEATURE_EXPORTED_MEMH = UCS_BIT(7),
+
+    /** Request device-based communication features */
+    UCP_FEATURE_DEVICE        = UCS_BIT(8)
 };
 
 
@@ -430,10 +434,11 @@ enum ucp_lib_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_context_attr_field {
-    UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
-    UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1), /**< UCP context thread flag */
-    UCP_ATTR_FIELD_MEMORY_TYPES = UCS_BIT(2), /**< UCP supported memory types */
-    UCP_ATTR_FIELD_NAME         = UCS_BIT(3)  /**< UCP context name */
+    UCP_ATTR_FIELD_REQUEST_SIZE        = UCS_BIT(0), /**< UCP request size */
+    UCP_ATTR_FIELD_THREAD_MODE         = UCS_BIT(1), /**< UCP context thread flag */
+    UCP_ATTR_FIELD_MEMORY_TYPES        = UCS_BIT(2), /**< UCP supported memory types */
+    UCP_ATTR_FIELD_NAME                = UCS_BIT(3), /**< UCP context name */
+    UCP_ATTR_FIELD_DEVICE_COUNTER_SIZE = UCS_BIT(4)  /**< UCP Device API counter size */
 };
 
 
@@ -567,7 +572,13 @@ enum {
      * received from different peers are compared equal, they can be used
      * interchangeably, avoiding the need to keep all of them in memory.
      */
-    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3)
+    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3),
+
+    /**
+     * Enforce pinning of the memory pages in the mapping and populate them up-front.
+     * This flag is mutually exclusive with UCP_MEM_MAP_NONBLOCK.
+     */
+    UCP_MEM_MAP_LOCK           = UCS_BIT(4)
 };
 
 
@@ -1134,6 +1145,16 @@ typedef struct ucp_params {
      * unique name will be created for you.
      */
     const char                         *name;
+
+    /**
+     * An optimization hint for a single node. For example, when used from MPI or
+     * OpenSHMEM libraries, this number will specify the local identificator on
+     * a single node in the job. Does not affect semantics, only transport
+     * selection criteria and the resulting performance.
+     * The value can be also set by the UCX_LOCAL_NODE_ID environment variable,
+     * which will override the id set by @e node_local_id
+     */
+    size_t                             node_local_id;
 } ucp_params_t;
 
 
@@ -1202,6 +1223,11 @@ typedef struct ucp_context_attr {
      * Tracing and analysis tools can use name to identify this UCX context.
      */
     char                  name[UCP_ENTITY_NAME_MAX];
+
+    /**
+     * Size usable to allocate a counter memory for UCP Device API usage.
+     */
+    size_t                device_counter_size;
 } ucp_context_attr_t;
 
 
@@ -1875,6 +1901,7 @@ typedef struct ucp_am_handler_param {
 
     /**
      * Active Message id.
+     * @warning Value must be between 0 and UINT16_MAX.
      */
     unsigned                 id;
 
@@ -2424,7 +2451,7 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  * is over, as part of the wake-up mechanism.
  *
  * The worker must be armed before waiting on an event (must be re-armed after
- * it has been signaled for re-use) with @ref ucp_worker_arm.
+ * it has been signaled for reuse) with @ref ucp_worker_arm.
  * The events triggering a signal of the file descriptor from
  * @ref ucp_worker_get_efd depend on the interfaces used by the worker and
  * defined in the transport layer, and typically represent a request completion
@@ -2892,7 +2919,7 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr);
  *                          The format of the string is: "<size>[,<type>]".
  *                          For example:
  *                           - "32768"   : allocate 32 kilobytes of host memory.
- *                           - "1m,cuda" : allocate 1 megabayte of cuda memory.
+ *                           - "1m,cuda" : allocate 1 megabyte of cuda memory.
  * @param [in] context      The context on which the memory is mapped.
  * @param [in] stream       Output stream on which to print the information.
  */
@@ -3638,24 +3665,27 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  *
  * This routine initiates a storage of contiguous block of data that is
  * described by the local address @a buffer in the remote contiguous memory
- * region described by @a remote_addr address and the @ref ucp_rkey_h "memory
- * handle" @a rkey.  The routine returns immediately and @b does @b not
- * guarantee re-usability of the source address @e buffer. If the operation is
- * completed immediately the routine return UCS_OK, otherwise UCS_INPROGRESS
- * or an error is returned to user. If the put operation completes immediately,
- * the routine returns UCS_OK and the call-back routine @a param.cb.send is
- * @b not invoked. If the operation is @b not completed immediately and no
- * error is reported, then the UCP library will schedule invocation of the
- * call-back routine @a param.cb.send upon completion of the put operation.
- * In other words, the completion of a put operation can be signaled by the
- * return code or execution of the call-back.
+ * region described by @a remote_addr address and the
+ * @ref ucp_rkey_h "memory handle" rkey.  The routine returns immediately and
+ * @b does @b not guarantee re-usability of the source address @e buffer. If
+ * the operation is completed immediately the routine return UCS_OK, otherwise
+ * UCS_INPROGRESS or an error is returned to user. If the put operation
+ * completes immediately, the routine returns UCS_OK and the call-back routine
+ * @a param.cb.send is @b not invoked. If the operation is @b not completed
+ * immediately and no error is reported, then the UCP library will schedule
+ * invocation of the call-back routine @a param.cb.send upon completion of
+ * the put operation. In other words, the completion of a put operation can be
+ * signaled by the return code or execution of the call-back.
  * Immediate completion signals can be fine-tuned via the
  * @ref ucp_request_param_t.op_attr_mask field in the
  * @ref ucp_request_param_t structure. The values of this field
  * are a bit-wise OR of the @ref ucp_op_attr_t enumeration.
  *
- * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
- * in order to guarantee re-usability of the source address @e buffer.
+ * @note The completion of a put operation signals the local @e buffer can be
+ * reused. The completion of the operation on the remote address requires use
+ * of @ref ucp_worker_flush_nbx "ucp_worker_flush_nbx()" or
+ * @ref ucp_ep_flush_nbx "ucp_ep_flush_nbx()", after completion of which the
+ * data in @e remote_addr is guaranteed to be available.
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local source address.
@@ -3707,6 +3737,12 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  *
  * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
  * in order to guarantee re-usability of the source address @e buffer.
+ * @note The completion of a get operation signals the local @e buffer holds the
+ * the expected data and that both local @e buffer and remote @e remote_addr are
+ * safe to be reused, unlike with @ref ucp_put_nbx "ucp_put_nbx" where the use
+ * of @ref ucp_worker_flush_nbx "ucp_worker_flush_nbx()" or
+ * @ref ucp_ep_flush_nbx "ucp_ep_flush_nbx()" is required before the remote data
+ * is available.
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local destination address.
@@ -3916,22 +3952,6 @@ void ucp_request_free(void *request);
 
 
 /**
- * @ingroup UCP_COMM
- * @brief Create an empty communications request.
- *
- * @param [in]  worker       UCP worker.
- *
- * @return Error code as defined by @ref ucs_status_t
- *
- * This routine creates request which may be used in functions
- * @ref ucp_tag_send_nbx, @ref ucp_tag_recv_nbx, etc. The application
- * is responsible for releasing the handle using the @ref ucp_request_free
- * routine
- */
-void *ucp_request_alloc(ucp_worker_h worker);
-
-
-/**
  * @ingroup UCP_DATATYPE
  * @brief Create a generic datatype.
  *
@@ -4056,7 +4076,8 @@ enum ucp_ep_attr_field {
     UCP_EP_ATTR_FIELD_NAME            = UCS_BIT(0), /**< UCP endpoint name */
     UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(1), /**< Sockaddr used by the endpoint */
     UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2), /**< Sockaddr the endpoint is connected to */
-    UCP_EP_ATTR_FIELD_TRANSPORTS      = UCS_BIT(3)  /**< Transport and device used by endpoint */
+    UCP_EP_ATTR_FIELD_TRANSPORTS      = UCS_BIT(3), /**< Transport and device used by endpoint */
+    UCP_EP_ATTR_FIELD_USER_DATA       = UCS_BIT(4)  /**< User data associated with the endpoint */
 };
 
 
@@ -4105,6 +4126,11 @@ typedef struct ucp_ep_attr {
      */
     ucp_transports_t        transports;
 
+    /**
+     * User data associated with an endpoint passed in
+     * @ref ucp_ep_params_t::user_data.
+     */
+    void                   *user_data;
 } ucp_ep_attr_t;
 
 

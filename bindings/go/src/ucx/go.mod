@@ -1,3 +1,3 @@
-module ucx
+module github.com/openucx/ucx/bindings/go/src/ucx
 
-go 1.16
+go 1.18

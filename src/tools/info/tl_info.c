@@ -138,6 +138,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     };
     uct_iface_config_t *iface_config;
     uct_iface_attr_t iface_attr;
+    uct_iface_attr_v2_t iface_attr_v2;
     char max_eps_str[32];
     ucs_status_t status;
     uct_iface_h iface;
@@ -343,6 +344,15 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         printf("#       error handling:%s\n", buf);
     }
 
+    iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE;
+    status                   = uct_iface_query_v2(iface, &iface_attr_v2);
+    if (status != UCS_OK) {
+        printf("#   < failed to query interface >\n");
+    } else {
+        printf("#   device mem_element: %zu bytes\n",
+               iface_attr_v2.device_mem_element_size);
+    }
+
     uct_iface_close(iface);
     printf("#\n");
 }
@@ -409,13 +419,16 @@ static void print_md_info(uct_component_h component,
     status = uct_md_open(component, md_name, md_config, &md);
     uct_config_release(md_config);
     if (status != UCS_OK) {
-        printf("# < failed to open memory domain %s >\n", md_name);
+        printf("# < failed to open memory domain %s for component %s >\n",
+               md_name, component_attr->name);
         goto out;
     }
 
     status = uct_md_query_tl_resources(md, &resources, &num_resources);
     if (status != UCS_OK) {
-        printf("#   < failed to query memory domain resources >\n");
+        printf("#   < failed to query memory domain %s resources for component "
+               "%s >\n",
+               md_name, component_attr->name);
         goto out_close_md;
     }
 
@@ -472,7 +485,7 @@ static void print_md_info(uct_component_h component,
             printf("#           memory invalidation is supported\n");
         }
 
-        if (md_attr.reg_alignment != 0) {
+        if (md_attr.reg_alignment != 1) {
             printf("#            alignment: %zx\n", md_attr.reg_alignment);
         }
 
@@ -501,6 +514,7 @@ static void print_md_info(uct_component_h component,
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, cache);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, detect);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, dmabuf);
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, gva);
             ucs_string_buffer_rtrim(&strb, ",");
 
             ucs_string_buffer_appendf(&strb, "), ");

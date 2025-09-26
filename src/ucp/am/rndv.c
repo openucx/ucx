@@ -56,24 +56,24 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_rndv_proto_progress, (self),
                               UCP_AM_ID_RNDV_RTS, rpriv->lane,
                               ucp_am_rndv_rts_pack, req, max_rts_size,
                               ucp_am_rndv_rts_complete, 0);
-    return ucp_proto_am_handle_user_header_send_status(req, status);
+    return ucp_am_handle_user_header_send_status_or_abort(req, status);
 }
 
-ucs_status_t ucp_am_rndv_rts_init(const ucp_proto_init_params_t *init_params)
+static void ucp_am_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
 {
     if (!ucp_am_check_init_params(init_params, UCP_PROTO_AM_OP_ID_MASK,
                                   UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_rndv_rts_init(init_params);
+    ucp_proto_rndv_rts_probe(init_params);
 }
 
 ucp_proto_t ucp_am_rndv_proto = {
     .name     = "am/rndv",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_am_rndv_rts_init,
+    .probe    = ucp_am_rndv_rts_probe,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_am_rndv_proto_progress},
     .abort    = ucp_proto_rndv_rts_abort,

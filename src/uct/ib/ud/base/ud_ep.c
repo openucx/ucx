@@ -216,13 +216,31 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ud_ctl_desc_t *cdesc;
     ucs_queue_iter_t iter;
+    khint_t khiter;
 
     ucs_trace_func("ep=%p", ep);
 
-    ucs_queue_for_each_safe(cdesc, iter, &iface->tx.outstanding_q, queue) {
-        if (cdesc->ep == ep) {
-            ucs_queue_del_iter(&iface->tx.outstanding_q, iter);
-            uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
+    if (uct_ib_iface_device(&iface->super)->ordered_send_comp) {
+        ucs_queue_for_each_safe(cdesc, iter, &iface->tx.outstanding.queue,
+                                queue) {
+            if (cdesc->ep == ep) {
+                ucs_queue_del_iter(&iface->tx.outstanding.queue, iter);
+                uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
+            }
+        }
+    } else {
+        for (khiter = kh_begin(&iface->tx.outstanding.map);
+             khiter != kh_end(&iface->tx.outstanding.map); ++khiter) {
+            if (!kh_exist(&iface->tx.outstanding.map, khiter)) {
+                continue;
+            }
+
+            cdesc = kh_value(&iface->tx.outstanding.map, khiter);
+            if (cdesc->ep == ep) {
+                kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map,
+                       khiter);
+                uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
+            }
         }
     }
 
@@ -1259,9 +1277,8 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     ucs_assert_always(ep->dest_ep_id != UCT_UD_EP_NULL_ID);
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
 
-    /* Check that CREQ is neither scheduled nor waiting for CREP ack */
-    ucs_assertv_always(!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ) &&
-                       uct_ud_ep_is_last_ack_received(ep),
+    /* Check that CREQ is not scheduled */
+    ucs_assertv_always(!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ),
                        "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
                        "ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
                        iface, ep, ep->conn_sn, ep->ep_id, ep->dest_ep_id,

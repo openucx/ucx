@@ -343,7 +343,7 @@ typedef struct uct_tl_resource_desc {
  * uct_ep_atomic32_fetch and uct_ep_atomic64_fetch.
  *
  * This enumeration defines which atomic memory operation should be
- * performed by the uct_ep_atomic family of fuctions.
+ * performed by the uct_ep_atomic family of functions.
  */
 typedef enum uct_atomic_op {
     UCT_ATOMIC_OP_ADD,   /**< Atomic add  */
@@ -434,6 +434,10 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(52) /**< Hardware tag matching zcopy eager support */
 #define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(53) /**< Hardware tag matching rendezvous zcopy support */
+
+        /* Interface capability */
+#define UCT_IFACE_FLAG_INTER_NODE      UCS_BIT(54) /**< Interface is inter-node capable */
+#define UCT_IFACE_FLAG_DEVICE_EP       UCS_BIT(55) /**< Interface supports device endpoint */
 /**
  * @}
  */
@@ -795,8 +799,8 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_FLAG_LOCK            = UCS_BIT(2),
 
     /**
-     * Hide errors on memory registration. In some cases registration failure
-     * is not an error (e. g. for merged memory regions).
+     * Hide errors on memory registration and allocation. If this flag is set,
+     * no error messages will be printed.
      */
     UCT_MD_MEM_FLAG_HIDE_ERRORS     = UCS_BIT(3),
 
@@ -834,6 +838,11 @@ enum uct_md_mem_flags {
      * interchangeably, avoiding the need to keep all of them in memory.
      */
     UCT_MD_MEM_SYMMETRIC_RKEY       = UCS_BIT(10),
+
+    /**
+     * Register global VA to access all process virtual address space.
+     */
+    UCT_MD_MEM_GVA                  = UCS_BIT(11),
 
     /**
      * Enable local and remote access for all operations.
@@ -969,7 +978,13 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15),
 
     /** Enables @ref uct_ep_params::local_sockaddr */
-    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16)
+    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16),
+
+    /** Enables @ref uct_ep_params::dev_addr_length */
+    UCT_EP_PARAM_FIELD_DEV_ADDR_LENGTH            = UCS_BIT(17),
+
+    /** Enables @ref uct_ep_params::iface_addr_length */
+    UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH          = UCS_BIT(18)
 };
 
 
@@ -1419,7 +1434,19 @@ struct uct_ep_params {
      * @note The interface in this routine requires the
      * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
      */
-    const ucs_sock_addr_t             *local_sockaddr;
+    const ucs_sock_addr_t               *local_sockaddr;
+
+    /**
+     * Device address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                              dev_addr_length;
+
+    /**
+     * Iface address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                              iface_addr_length;
 };
 
 
@@ -1680,12 +1707,13 @@ ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
  * and the memory is allocated by memory allocation functions @ref uct_mem_alloc.
  */
 typedef struct uct_allocated_memory {
-    void                     *address; /**< Address of allocated memory */
-    size_t                   length;   /**< Real size of allocated memory */
-    uct_alloc_method_t       method;   /**< Method used to allocate the memory */
-    ucs_memory_type_t        mem_type; /**< type of allocated memory */
-    uct_md_h                 md;       /**< if method==MD: MD used to allocate the memory */
-    uct_mem_h                memh;     /**< if method==MD: MD memory handle */
+    void                     *address;   /**< Address of allocated memory */
+    size_t                   length;     /**< Real size of allocated memory */
+    uct_alloc_method_t       method;     /**< Method used to allocate the memory */
+    ucs_memory_type_t        mem_type;   /**< type of allocated memory */
+    uct_md_h                 md;         /**< if method==MD: MD used to allocate the memory */
+    uct_mem_h                memh;       /**< if method==MD: MD memory handle */
+    ucs_sys_device_t         sys_device; /**< System device for allocated memory */
 } uct_allocated_memory_t;
 
 
@@ -2331,7 +2359,7 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  *    remote endpoint, @ref uct_ep_connect_to_ep will need to be called. Use of
  *    this mode requires @ref uct_ep_params_t::iface has the
  *    @ref UCT_IFACE_FLAG_CONNECT_TO_EP capability flag. It may be obtained by
- *    @ref uct_iface_query .
+ *    @ref uct_iface_query.
  * -# Connect to a remote interface: If @ref uct_ep_params_t::dev_addr and
  *    @ref uct_ep_params_t::iface_addr are set, this will establish an endpoint
  *    that is connected to a remote interface. This requires that
@@ -2475,7 +2503,10 @@ typedef enum {
     UCT_MEM_ALLOC_PARAM_FIELD_MDS            = UCS_BIT(3),
 
     /** Enables @ref uct_mem_alloc_params_t::name */
-    UCT_MEM_ALLOC_PARAM_FIELD_NAME           = UCS_BIT(4)
+    UCT_MEM_ALLOC_PARAM_FIELD_NAME           = UCS_BIT(4),
+
+    /** Enables @ref uct_mem_alloc_params_t::sys_device */
+    UCT_MEM_ALLOC_PARAM_FIELD_SYS_DEVICE     = UCS_BIT(5)
 } uct_mem_alloc_params_field_t;
 
 
@@ -2538,6 +2569,12 @@ typedef struct {
      * "anonymous-uct_mem_alloc" is used by default.
      */
     const char                   *name;
+
+    /**
+     * System device on which memory is to be allocated, or
+     * UCS_SYS_DEVICE_ID_UNKNOWN to allow allocating on any device.
+     */
+    ucs_sys_device_t             sys_device;
 } uct_mem_alloc_params_t;
 
 

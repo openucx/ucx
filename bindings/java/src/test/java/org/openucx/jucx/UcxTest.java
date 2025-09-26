@@ -39,9 +39,10 @@ abstract class UcxTest {
             if (memory.getMemType() == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
                 ByteBuffer srcBuffer = ByteBuffer.allocateDirect(data.length() * 2);
                 srcBuffer.asCharBuffer().put(data);
-                selfEp.sendTaggedNonBlocking(srcBuffer, 0, null);
+                UcpRequest send = selfEp.sendTaggedNonBlocking(srcBuffer, 0, null);
                 worker.progressRequest(worker.recvTaggedNonBlocking(memory.getAddress(),
-                    data.length() * 2L, 0, 0, null));
+                        data.length() * 2L, 0, 0, null));
+                worker.progressRequest(send);
             } else {
                 buffer.asCharBuffer().put(data);
             }
@@ -50,8 +51,10 @@ abstract class UcxTest {
         public ByteBuffer getData() throws Exception {
             if (memory.getMemType() == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
                 ByteBuffer dstBuffer = ByteBuffer.allocateDirect((int)memory.getLength());
-                selfEp.sendTaggedNonBlocking(memory.getAddress(), memory.getLength(), 0, null);
+                UcpRequest send = selfEp.sendTaggedNonBlocking(memory.getAddress(),
+                     memory.getLength(), 0, null);
                 worker.progressRequest(worker.recvTaggedNonBlocking(dstBuffer, 0L, 0L, null));
+                worker.progressRequest(send);
                 return dstBuffer;
             } else {
                 return buffer;

@@ -22,7 +22,7 @@
 #include <ucp/core/ucp_request.inl>
 
 
-UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h, const ucp_rsc_index_t*);
+UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h);
 
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(ucp_wireup_ep_t, uct_ep_t);
@@ -52,11 +52,35 @@ static ssize_t ucp_wireup_ep_bcopy_send_func(uct_ep_h uct_ep)
     return UCS_ERR_NO_RESOURCE;
 }
 
+int ucp_wireup_ep_is_next_ep_active(ucp_wireup_ep_t *wireup_ep)
+{
+    ucs_assert(wireup_ep->super.uct_ep != NULL);
+    return wireup_ep->aux_ep == NULL;
+}
+
+uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep)
+{
+    uct_ep_h msg_ep;
+
+    ucs_assertv(ucs_queue_is_empty(&wireup_ep->pending_q), "queue_length=%zu",
+                ucs_queue_length(&wireup_ep->pending_q));
+    uct_ep_pending_purge(&wireup_ep->super.super, NULL, NULL);
+
+    if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
+        return ucp_wireup_ep_extract_next_ep(&wireup_ep->super.super);
+    }
+
+    msg_ep                   = wireup_ep->aux_ep;
+    wireup_ep->aux_ep        = NULL;
+    wireup_ep->aux_rsc_index = UCP_NULL_RESOURCE;
+    return msg_ep;
+}
+
 uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
 {
     uct_ep_h wireup_msg_ep;
 
-    if ((wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) || (wireup_ep->aux_ep == NULL)) {
+    if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
         wireup_msg_ep = wireup_ep->super.uct_ep;
     } else {
         wireup_msg_ep = wireup_ep->aux_ep;
@@ -68,6 +92,23 @@ uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
                 (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY)           ? 'r' : '-',
                 wireup_ep->super.uct_ep, wireup_ep->aux_ep);
     return wireup_msg_ep;
+}
+
+
+ucp_rsc_index_t ucp_wireup_ep_get_msg_rsc_index(ucp_wireup_ep_t *wireup_ep)
+{
+    ucp_rsc_index_t rsc_index;
+
+    if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
+        rsc_index = wireup_ep->super.rsc_index;
+    } else {
+        rsc_index = wireup_ep->aux_rsc_index;
+    }
+
+    ucs_assertv(rsc_index != UCP_NULL_RESOURCE,
+                "ucp_ep=%p wireup_ep=%p aux_ep=%p",
+                wireup_ep->super.ucp_ep, wireup_ep, wireup_ep->aux_ep);
+    return rsc_index;
 }
 
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
@@ -199,11 +240,14 @@ static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
 
 
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
-                                ucp_ep_h, const ucp_rsc_index_t*);
+                                ucp_ep_h);
 
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
                            ucp_rsc_index_t rsc_index, int is_p2p)
 {
+    ucp_worker_iface_t *wiface =
+        ucp_worker_iface(wireup_ep->super.ucp_ep->worker, rsc_index);
+
     ucs_assert(!ucp_wireup_ep_test(uct_ep));
     wireup_ep->aux_ep        = uct_ep;
     wireup_ep->aux_rsc_index = rsc_index;
@@ -211,6 +255,8 @@ void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
     if (is_p2p) {
         wireup_ep->flags |= UCP_WIREUP_EP_FLAG_AUX_P2P;
     }
+
+    ucp_worker_iface_progress_ep(wiface);
 }
 
 static ucs_status_t
@@ -254,8 +300,6 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
 
     ucp_wireup_ep_set_aux(wireup_ep, uct_ep, select_info.rsc_index, 0);
 
-    ucp_worker_iface_progress_ep(wiface);
-
     ucs_debug("ep %p: wireup_ep %p created aux_ep %p to %s using "
               UCT_TL_RESOURCE_DESC_FMT, ucp_ep, wireup_ep, wireup_ep->aux_ep,
               ucp_ep_peer_name(ucp_ep),
@@ -271,16 +315,22 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
 {
     ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
     uct_ep_h aux_ep     = wireup_ep->aux_ep;
+    ucp_worker_h worker = ucp_ep->worker;
+    ucp_rsc_index_t rsc_index;
 
     if (aux_ep == NULL) {
         return;
     }
 
     ucp_wireup_ep_disown(&wireup_ep->super.super, aux_ep);
-    ucp_worker_discard_uct_ep(ucp_ep, aux_ep, wireup_ep->aux_rsc_index,
-                              ep_flush_flags, purge_cb, purge_arg,
+    rsc_index = wireup_ep->aux_rsc_index;
+    ucp_worker_discard_uct_ep(ucp_ep, aux_ep, rsc_index, ep_flush_flags,
+                              purge_cb, purge_arg,
                               (ucp_send_nbx_callback_t)ucs_empty_function,
                               NULL);
+    if (worker->context->config.ext.proto_enable) {
+        ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker, rsc_index));
+    }
 }
 
 static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
@@ -346,8 +396,7 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
 }
 
 
-UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
-                    const ucp_rsc_index_t *dst_rsc_indices)
+UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 {
     static uct_iface_ops_t ops = {
         .ep_connect_to_ep    = ucp_wireup_ep_connect_to_ep,
@@ -378,7 +427,6 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
         .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_no_resource,
         .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_no_resource
     };
-    ucp_lane_index_t lane;
 
     UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
 
@@ -387,13 +435,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
     self->pending_count = 0;
     self->flags         = 0;
     ucs_queue_head_init(&self->pending_q);
-    UCS_BITMAP_CLEAR(&self->cm_resolve_tl_bitmap);
-
-    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
-        self->dst_rsc_indices[lane] = (dst_rsc_indices != NULL) ?
-                                      dst_rsc_indices[lane] :
-                                      UCP_NULL_RESOURCE;
-    }
+    UCS_STATIC_BITMAP_RESET_ALL(&self->cm_resolve_tl_bitmap);
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
     ucp_worker_flush_ops_count_add(ucp_ep->worker, +1);
@@ -487,8 +529,9 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
               UCT_TL_RESOURCE_DESC_ARG(
                       &worker->context->tl_rscs[rsc_index].tl_rsc));
 
-    /* we need to create an auxiliary transport only for active messages */
-    if (connect_aux) {
+    /* We need to create an auxiliary transport only for active messages.
+       Skip this step if auxiliary already exists. */
+    if (connect_aux && (wireup_ep->aux_ep == NULL)) {
         status = ucp_wireup_ep_connect_aux(wireup_ep, ep_init_flags,
                                            remote_address);
         if (status != UCS_OK) {

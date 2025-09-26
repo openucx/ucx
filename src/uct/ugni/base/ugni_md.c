@@ -36,20 +36,14 @@ uct_ugni_query_md_resources(uct_component_h component,
 
 static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->rkey_packed_size       = 3 * sizeof(uint64_t);
-    md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_MEMH |
-                                      UCT_MD_FLAG_NEED_RKEY;
-    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->reg_nonblock_mem_types = 0;
-    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->alloc_mem_types        = 0;
-    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->detect_mem_types       = 0;
-    md_attr->dmabuf_mem_types       = 0;
-    md_attr->max_alloc              = 0;
-    md_attr->max_reg                = ULONG_MAX;
-    md_attr->reg_cost               = ucs_linear_func_make(1000.0e-9, 0.007e-9);
-    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+    uct_md_base_md_query(md_attr);
+    md_attr->rkey_packed_size = 3 * sizeof(uint64_t);
+    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_MEMH |
+                                UCT_MD_FLAG_NEED_RKEY;
+    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->reg_cost         = ucs_linear_func_make(1000.0e-9, 0.007e-9);
     return UCS_OK;
 }
 
@@ -117,7 +111,7 @@ static ucs_status_t uct_ugni_mem_dereg(uct_md_h md,
 }
 
 static ucs_status_t
-uct_ugni_mkey_pack(uct_md_h md, uct_mem_h memh,
+uct_ugni_mkey_pack(uct_md_h md, uct_mem_h memh, void *address, size_t length,
                    const uct_md_mkey_pack_params_t *params,
                    void *mkey_buffer)
 {
@@ -141,6 +135,7 @@ static ucs_status_t uct_ugni_rkey_release(uct_component_t *component,
 
 static ucs_status_t uct_ugni_rkey_unpack(uct_component_t *component,
                                          const void *rkey_buffer,
+                                         const uct_rkey_unpack_params_t *params,
                                          uct_rkey_t *rkey_p, void **handle_p)
 {
     const uint64_t *ptr = rkey_buffer;
@@ -196,9 +191,9 @@ uct_ugni_md_open(uct_component_h component,const char *md_name,
     md_ops.mem_free           = (void*)ucs_empty_function;
     md_ops.mem_reg            = uct_ugni_mem_reg;
     md_ops.mem_dereg          = uct_ugni_mem_dereg;
-    md_ops.mem_attach         = ucs_empty_function_return_unsupported;
+    md_ops.mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported;
     md_ops.mkey_pack          = uct_ugni_mkey_pack;
-    md_ops.detect_memory_type = ucs_empty_function_return_unsupported;
+    md_ops.detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported;
 
     md.super.ops              = &md_ops;
     md.super.component        = &uct_ugni_component;
@@ -229,9 +224,9 @@ error:
 uct_component_t uct_ugni_component = {
     .query_md_resources = uct_ugni_query_md_resources,
     .md_open            = uct_ugni_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_ugni_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
     .rkey_release       = uct_ugni_rkey_release,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = UCT_UGNI_MD_NAME,

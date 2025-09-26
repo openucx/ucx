@@ -2,6 +2,7 @@
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Arm, Ltd. 2021. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -77,7 +78,10 @@
 #define UCS_BIT(i)               (1ul << (i))
 
 /* Mask of bits 0..i-1 */
-#define UCS_MASK(i)              (UCS_BIT(i) - 1)
+#define UCS_MASK(_i)             (((_i) >= 64) ? ~0 : (UCS_BIT(_i) - 1))
+
+/* The i-th bit */
+#define UCS_BIT_GET(_value, _i)  (!!((_value) & UCS_BIT(_i)))
 
 /*
  * Enable compiler checks for printf-like formatting.
@@ -92,6 +96,13 @@
 
 /* Aligned variable */
 #define UCS_V_ALIGNED(_align) __attribute__((aligned(_align)))
+
+/* Disable address sanitizer */
+#ifdef __SANITIZE_ADDRESS__
+#  define UCS_F_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
+#else
+#  define UCS_F_NO_SANITIZE_ADDRESS
+#endif
 
 /* Used for labels */
 #define UCS_EMPTY_STATEMENT {}
@@ -138,9 +149,9 @@
 
 /**
  * Get the type of a structure or variable.
- * 
+ *
  * @param _type  Return the type of this argument.
- * 
+ *
  * @return The type of the given argument.
  */
 #define ucs_typeof(_type) \
@@ -177,6 +188,14 @@
     ucs_typeof(((_type*)0)->_field)
 
 /**
+ * @param _type   Integer type.
+ *
+ * @return Whether integer type is unsigned.
+ */
+#define ucs_is_unsigned_type(_type) \
+    ((_type)(-1) > (_type)(0))
+
+/**
  * Prevent compiler from reordering instructions
  */
 #define ucs_compiler_fence()       asm volatile(""::: "memory")
@@ -184,7 +203,11 @@
 /**
  * Prefetch cache line
  */
-#define ucs_prefetch(p)            __builtin_prefetch(p)
+#define ucs_read_prefetch(p)       __builtin_prefetch(p, 0, 3)
+#define ucs_write_prefetch(p)      __builtin_prefetch(p, 1, 3)
+
+#define ucs_nt_read_prefetch(p)    __builtin_prefetch(p, 0, 0)
+#define ucs_nt_write_prefetch(p)   __builtin_prefetch(p, 1, 0)
 
 /* Branch prediction */
 #define ucs_likely(x)              __builtin_expect(x, 1)

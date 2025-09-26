@@ -17,6 +17,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <ucs/vfs/sock/vfs_sock.h>
 #include <sys/signal.h>
 
 
@@ -73,6 +74,22 @@ static const char *ucs_handle_error_modes[] = {
 static UCS_CONFIG_DEFINE_ARRAY(signo,
                                sizeof(int),
                                UCS_CONFIG_TYPE_SIGNO);
+
+
+#define UCS_DISTANCE_KEYS_DESCRIPTION(_field) \
+    {"phb", \
+     "connection traversing PCIe as well as a PCIe Host Bridge (typically " \
+     "the CPU)", \
+     ucs_offsetof(ucs_global_opts_t, dist.phb._field)}, \
+    {"node", \
+     "connection traversing PCIe as well as the interconnect between PCIe " \
+     "Host Bridges within a NUMA node", \
+     ucs_offsetof(ucs_global_opts_t, dist.node._field)}, \
+    {"sys", \
+     "connection traversing PCIe as well as the SMP interconnect between " \
+     "NUMA nodes", \
+     ucs_offsetof(ucs_global_opts_t, dist.sys._field)}, \
+    {NULL}
 
 
 static ucs_config_field_t ucs_global_opts_table[] = {
@@ -176,11 +193,13 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Directory to search for loadable modules",
   ucs_offsetof(ucs_global_opts_t, module_dir), UCS_CONFIG_TYPE_STRING},
 
+
  {"MODULE_EXT", UCX_MODULE_EXT,
   "File extension to be applied for searching loadable modules.",
   ucs_offsetof(ucs_global_opts_t, module_ext), UCS_CONFIG_TYPE_STRING},
 
- {"MODULE_LOG_LEVEL", "trace",
+
+ {"MODULE_LOG_LEVEL", "debug",
   "Logging level for module loader",
   ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
@@ -195,6 +214,16 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Comma-separated list of providers for detecting system topology.\n"
   "The list order decides the priority of the providers.",
   ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+ {"DISTANCE_LAT", "phb:300ns,node:300ns,sys:500ns",
+  "Estimated latency between system devices", 0,
+  UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
+                            UCS_DISTANCE_KEYS_DESCRIPTION(latency))},
+
+ {"DISTANCE_BW", "auto",
+  "Estimated bandwidth between system devices", 0,
+  UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
+                            UCS_DISTANCE_KEYS_DESCRIPTION(bandwidth))},
 
  {NULL}
 };
@@ -229,6 +258,10 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
  {"VFS_ENABLE", "y",
   "Enable virtual monitoring filesystem",
   ucs_offsetof(ucs_global_opts_t, vfs_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"VFS_SOCK_PATH", UCX_VFS_SOCK_DEFAULT_PATH,
+   "Listening UNIX socket path of the VFS daemon.",
+   ucs_offsetof(ucs_global_opts_t, vfs_sock_path), UCS_CONFIG_TYPE_STRING},
 
  {"VFS_THREAD_AFFINITY", "n",
   "Enable inheriting main process affinity for virtual monitoring filesystem\n"
@@ -331,16 +364,15 @@ ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
     }
 
     return ucs_config_parser_set_value(&ucs_global_opts,
-                                       ucs_global_opts_read_only_table,
+                                       ucs_global_opts_read_only_table, NULL,
                                        name, value);
 }
 
 ucs_status_t ucs_global_opts_set_value_modifiable(const char *name,
                                                   const char *value)
 {
-    return ucs_config_parser_set_value(&ucs_global_opts,
-                                       ucs_global_opts_table, name,
-                                       value);
+    return ucs_config_parser_set_value(&ucs_global_opts, ucs_global_opts_table,
+                                       NULL, name, value);
 }
 
 ucs_status_t ucs_global_opts_get_value(const char *name, char *value,
@@ -388,12 +420,12 @@ void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags)
 {
     ucs_config_parser_print_opts(stream, "Global configuration",
                                  &ucs_global_opts, ucs_global_opts_table, NULL,
-                                 UCS_DEFAULT_ENV_PREFIX, print_flags);
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags, NULL);
     ucs_config_parser_print_opts(stream,
                                  "Global configuration (runtime read-only)",
                                  &ucs_global_opts,
                                  ucs_global_opts_read_only_table, NULL,
-                                 UCS_DEFAULT_ENV_PREFIX, print_flags);
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags, NULL);
 }
 
 static void ucs_vfs_read_log_level(void *obj, ucs_string_buffer_t *strb,

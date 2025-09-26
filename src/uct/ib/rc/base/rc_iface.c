@@ -190,7 +190,8 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_GET_ZCOPY       |
                                   UCT_IFACE_FLAG_PENDING         |
                                   UCT_IFACE_FLAG_CONNECT_TO_EP   |
-                                  UCT_IFACE_FLAG_CB_SYNC;
+                                  UCT_IFACE_FLAG_CB_SYNC         |
+                                  UCT_IFACE_FLAG_INTER_NODE;
     iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                   UCT_IFACE_FLAG_EVENT_RECV      |
                                   UCT_IFACE_FLAG_EVENT_FD;
@@ -443,6 +444,10 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
 
+    if (count == 0) {
+        return UCS_OK;
+    }
+
     iface->tx.ops_buffer = ucs_calloc(count, sizeof(*iface->tx.ops_buffer),
                                       "rc_tx_ops");
     if (iface->tx.ops_buffer == NULL) {
@@ -475,6 +480,10 @@ static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
     const unsigned total_count = iface->config.tx_cq_len;
     uct_rc_iface_send_op_t *op;
     unsigned free_count;
+
+    if (total_count == 0) {
+        return;
+    }
 
     free_count = 0;
     for (op = iface->tx.free_ops; op != NULL; op = op->next) {
@@ -510,7 +519,8 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     srq_init_attr.srq_context    = iface;
     srq                          = ibv_create_srq(pd, &srq_init_attr);
     if (srq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR, "ibv_create_srq()");
+        uct_ib_check_memlock_limit_msg(pd->context, UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_srq()");
         return UCS_ERR_IO_ERROR;
     }
     iface->rx.srq.quota          = srq_init_attr.attr.max_wr;
@@ -585,6 +595,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
+    self->config.tx_moderation  = init_attr->tx_moderation;
     self->config.tx_poll_always = config->tx.poll_always;
     self->config.tx_cq_len      = tx_cq_size;
     self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
@@ -622,16 +633,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
         goto err;
     }
 
-    if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
-        self->config.max_get_zcopy = max_ib_msg_size;
-    } else if (config->tx.max_get_zcopy <= max_ib_msg_size) {
-        self->config.max_get_zcopy = config->tx.max_get_zcopy;
-    } else {
-        ucs_warn("rc_iface on %s:%d: reduced max_get_zcopy to %u",
-                 uct_ib_device_name(dev), self->super.config.port_num,
-                 max_ib_msg_size);
-        self->config.max_get_zcopy = max_ib_msg_size;
-    }
+    uct_rc_iface_adjust_max_get_zcopy(self, config, max_ib_msg_size,
+                                      uct_ib_device_name(dev), "rc");
 
     if ((config->tx.max_get_bytes == UCS_MEMUNITS_INF) ||
         (config->tx.max_get_bytes == UCS_MEMUNITS_AUTO)) {
@@ -707,9 +710,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     }
 
     /* Create mempool for pending requests */
-    ucs_assert(init_attr->fc_req_size >= sizeof(uct_rc_pending_req_t));
     ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = init_attr->fc_req_size;
+    mp_params.elem_size       = ucs_max(init_attr->fc_req_size,
+                                        sizeof(uct_rc_pending_req_t));
     mp_params.alignment       = 1;
     mp_params.elems_per_chunk = 128;
     mp_params.ops             = &uct_rc_pending_mpool_ops;
@@ -1050,6 +1053,24 @@ void uct_rc_iface_vfs_refresh(uct_iface_h iface)
     /* Add objects for EPs */
     ucs_list_for_each(ep, &rc_iface->ep_list, list) {
         rc_iface_ops->ep_vfs_populate(ep);
+    }
+}
+
+void
+uct_rc_iface_adjust_max_get_zcopy(uct_rc_iface_t *iface,
+                                  const uct_rc_iface_common_config_t *config,
+                                  size_t max_tl_get_zcopy, const char *tl_name,
+                                  const char *dev_name)
+{
+    if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
+        iface->config.max_get_zcopy = max_tl_get_zcopy;
+    } else if (config->tx.max_get_zcopy <= max_tl_get_zcopy) {
+        iface->config.max_get_zcopy = config->tx.max_get_zcopy;
+    } else {
+        ucs_warn("%s_iface on %s:%d: reduced max_get_zcopy to %zu",
+                 tl_name, dev_name, iface->super.config.port_num,
+                 max_tl_get_zcopy);
+        iface->config.max_get_zcopy = max_tl_get_zcopy;
     }
 }
 

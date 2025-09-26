@@ -23,7 +23,7 @@ size_t ucs_string_distance(const char *str1, const char *str2)
     size_t i, j;
 
     /* We explicitly init distances[len1] to prevent static
-     * analysis false positive (unintialized return value) */
+     * analysis false positive (uninitialized return value) */
     distances[len1] = len1;
     for (j = 1; j <= len1; ++j) {
         distances[j] = j;

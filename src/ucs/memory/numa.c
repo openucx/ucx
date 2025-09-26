@@ -123,18 +123,28 @@ unsigned ucs_numa_num_configured_cpus()
 
 ucs_numa_node_t ucs_numa_node_of_cpu(int cpu)
 {
-    /* Used for caching to improve perfromance */
+    /* Used for caching to improve performance */
     static ucs_numa_node_t cpu_numa_node[__CPU_SETSIZE] = {0};
+    char *core_dir_path;
     ucs_numa_node_t node;
-    char core_dir_path[PATH_MAX];
+    ucs_status_t status;
 
     ucs_assert(cpu < __CPU_SETSIZE);
 
     if (cpu_numa_node[cpu] == 0) {
-        ucs_snprintf_safe(core_dir_path, PATH_MAX, UCS_NUMA_CORE_DIR_PATH, cpu);
-        node               = ucs_numa_get_max_dirent(core_dir_path, "node",
-                                                     ucs_numa_num_configured_nodes(),
-                                                     UCS_NUMA_NODE_DEFAULT);
+        status = ucs_string_alloc_formatted_path(&core_dir_path,
+                                                 "core_dir_path",
+                                                 UCS_NUMA_CORE_DIR_PATH, cpu);
+        if (status != UCS_OK) {
+            return UCS_NUMA_NODE_UNDEFINED;
+        }
+
+        node = ucs_numa_get_max_dirent(core_dir_path, "node",
+                                       ucs_numa_num_configured_nodes(),
+                                       UCS_NUMA_NODE_DEFAULT);
+
+        ucs_free(core_dir_path);
+
         cpu_numa_node[cpu] = node + 1;
     }
 
@@ -175,7 +185,7 @@ ucs_numa_node_parse_distances(ucs_numa_node_t source, ucs_numa_node_t dest)
     ucs_numa_distance_t distance_to_dest = UCS_NUMA_MIN_DISTANCE;
     ucs_numa_node_t node                 = 0;
     ucs_numa_distance_t distance;
-    ucs_kh_put_t kh_put_status;
+    int kh_put_status;
     khiter_t hash_it;
     FILE *distance_fp;
 

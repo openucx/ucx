@@ -10,6 +10,7 @@
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_types.h>
 #include <ucs/sys/math.h>
 
 
@@ -109,7 +110,7 @@ enum {
  *
  * Bitmap type for representing which TL addresses are in use.
  */
-typedef ucs_bitmap_t(UCP_MAX_RESOURCES) ucp_tl_addr_bitmap_t;
+typedef ucs_static_bitmap_s(UCP_MAX_RESOURCES) ucp_tl_addr_bitmap_t;
 
 
 /**
@@ -123,7 +124,6 @@ struct ucp_address_iface_attr {
     int                         priority;     /* Priority of device */
     double                      lat_ovh;      /* Address v1: latency overhead
                                                * address v2: latency */
-    ucp_rsc_index_t             dst_rsc_index;/* Destination resource index */
     ucp_tl_iface_atomic_flags_t atomic;       /* Atomic operations */
     size_t                      seg_size;     /* Maximal fragment size which can
                                                  be received on the particular
@@ -293,5 +293,24 @@ uint8_t ucp_address_is_am_only(const void *address);
  * @return Maximal AM fragment size.
  */
 size_t ucp_address_iface_seg_size(const uct_iface_attr_t *iface_attr);
+
+/**
+ * @brief Get current API version in packed address format.
+ *
+ * @return Packed release version.
+ */
+uint8_t ucp_address_pack_release_version();
+
+/**
+ * @brief Unpack release version from packed address format.
+ *
+ * Release version is packed into 4 bits. Unpack it assuming that we do not
+ * support wire compatibility for more than 8 versions (therefore we take the
+ * value which is closest to our release version).
+ *
+ * @param [in] packed_version Packed release version.
+ * @return Unpacked release version.
+ */
+unsigned ucp_address_unpack_release_version(uint8_t packed_version);
 
 #endif

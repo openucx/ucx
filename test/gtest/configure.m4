@@ -16,11 +16,17 @@ CHECK_COMPILER_FLAG([--diag_suppress 186], [--diag_suppress 186],
                     [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                     [GTEST_CXXFLAGS="$GTEST_CXXFLAGS --diag_suppress 186"],
                     [])
-                    
+
 # error #236: controlling expression is constant
 CHECK_COMPILER_FLAG([--diag_suppress 236], [--diag_suppress 236],
                     [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                     [GTEST_CXXFLAGS="$GTEST_CXXFLAGS --diag_suppress 236"],
+                    [])
+
+# Avoid warnings about C++17 mangling compatibility
+CHECK_COMPILER_FLAG([-Wno-noexcept-type], [-Wno-noexcept-type],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
+                    [GTEST_CXXFLAGS="$GTEST_CXXFLAGS -Wno-noexcept-type "],
                     [])
 
 AC_LANG_POP([C++])

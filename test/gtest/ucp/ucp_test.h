@@ -81,10 +81,11 @@ public:
                const ucp_worker_params_t& worker_params,
                const ucp_test_base* test_owner);
 
-        ~entity();
+        virtual ~entity();
 
-        void connect(const entity* other, const ucp_ep_params_t& ep_params,
-                     int ep_idx = 0, int do_set_ep = 1);
+        virtual void connect(const entity *other,
+                             const ucp_ep_params_t &ep_params, int ep_idx = 0,
+                             int do_set_ep = 1);
 
         bool verify_client_address(struct sockaddr_storage *client_address);
 
@@ -141,6 +142,8 @@ public:
 
         const size_t &get_err_num() const;
 
+        void reset_err_num();
+
         const size_t &get_accept_err_num() const;
 
         void warn_existing_eps() const;
@@ -152,6 +155,10 @@ public:
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
         bool has_lane_with_caps(uint64_t caps) const;
+
+        bool is_rndv_put_ppln_supported() const;
+
+        bool is_rndv_supported() const;
 
         bool is_conn_reqs_queue_empty() const;
 
@@ -237,6 +244,10 @@ protected:
     virtual bool has_transport(const std::string& tl_name) const;
     bool has_any_transport(const std::vector<std::string>& tl_names) const;
     bool has_any_transport(const std::string *tls, size_t tl_size) const;
+    size_t count_resources(const ucp_test_base::entity &e,
+                           const std::string &tl_name) const;
+    bool has_resource(const ucp_test_base::entity &e,
+                      const std::string &tl_name) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
     unsigned progress(const std::vector<entity*> &entities,
@@ -268,6 +279,7 @@ protected:
                         int poll_timeout = -1, int worker_index = 0);
     int max_connections();
     void configure_peer_failure_settings();
+    bool is_proto_enabled() const;
 
     static bool check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type);
 
@@ -345,14 +357,12 @@ protected:
         }
     }
 
-    template <typename T>
-    void wait_for_value(volatile T *var, T value, double timeout = 10.0) const
+    template<typename T>
+    void wait_for_value(const volatile T *var, T value,
+                        double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
-        while ((ucs_get_time() < deadline) && (*var != value)) {
-            short_progress_loop();
-        }
+        test_base::wait_for_value(
+                var, value, [this]() { short_progress_loop(); }, timeout);
     }
 
     static const ucp_datatype_t DATATYPE;
@@ -369,6 +379,8 @@ protected:
         void rkey(const entity& entity, ucs::handle<ucp_rkey_h> &rkey) const;
 
         ucp_mem_h memh() const;
+
+        ucp_worker_h worker() const;
 
     private:
         const entity& m_entity;
@@ -430,15 +442,17 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
  * @param _test_case  Test case class, derived from ucp_test.
  */
 #define UCP_INSTANTIATE_TEST_CASE(_test_case) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,    "dc_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,     "ud_v") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,    "ud_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,     "rc_v") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,    "rc_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib, "shm,ib") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,   "ugni") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,   "self") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,    "tcp")
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,     "dc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,      "ud_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,     "ud_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,      "rc_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,     "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, srd,     "srd") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib,  "shm,ib") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,    "ugni") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,    "self") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,     "tcp") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_gga, "shm,gga")
 
 
 /**
@@ -464,6 +478,8 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
                                             "rc_v") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rcx, \
                                             "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, srd, \
+                                            "srd") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib, \
                                             "shm,ib,gdr_copy") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib_ipc, \

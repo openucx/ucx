@@ -66,7 +66,7 @@ improvements.
 
 1. Get latest-and-greatest OpenMPI version:
   ```
-  $ git clone https://github.com/open-mpi/ompi.git
+  $ git clone --recurse-submodules  https://github.com/open-mpi/ompi.git
   $ cd ompi
   $ ./autogen.pl
   ```
@@ -115,7 +115,7 @@ $ mpirun -np 2 -mca pml ucx -x UCX_NET_DEVICES=mlx5_0:1 ./app
 <br/>
 
 ### Runtime tunings
-By default OpenMPI enables build-in transports (BTLs), which may result in additional
+By default OpenMPI enables built-in transports (BTLs), which may result in additional
 software overheads in the OpenMPI progress function. In order to workaround this issue
 you may try to disable certain BTLs.
 ```

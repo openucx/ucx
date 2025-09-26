@@ -42,19 +42,19 @@ void uct_ib_mlx5_av_dump(char *buf, size_t max,
 
 #define uct_ib_mlx5_log_tx(_iface, _wqe, _qstart, _qend, _max_sge, _log_sge, _dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_mlx5_log_tx(__FILE__, __LINE__, __FUNCTION__, \
+        __uct_ib_mlx5_log_tx(__FILE__, __LINE__, __func__, \
                              _iface, _wqe, _qstart, _qend, _max_sge, _log_sge, _dump_cb); \
     }
 
 #define uct_ib_mlx5_log_rx(_iface, _cqe, _data, _dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_mlx5_log_rx(__FILE__, __LINE__, __FUNCTION__, \
+        __uct_ib_mlx5_log_rx(__FILE__, __LINE__, __func__, \
                              _iface, _cqe, _data, _dump_cb); \
     }
 
 #define uct_ib_mlx5_log_cqe(_cqe) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        uct_ib_mlx5_cqe_dump(__FILE__, __LINE__, __FUNCTION__, \
+        uct_ib_mlx5_cqe_dump(__FILE__, __LINE__, __func__, \
                              cqe); \
     }
 

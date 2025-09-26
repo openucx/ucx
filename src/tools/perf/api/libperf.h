@@ -11,6 +11,7 @@
 #define UCX_LIBPERF_H
 
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/device_code.h>
 
 BEGIN_C_DECLS
 
@@ -30,6 +31,9 @@ typedef enum {
 typedef enum {
     UCX_PERF_CMD_AM,
     UCX_PERF_CMD_PUT,
+    UCX_PERF_CMD_PUT_SINGLE,
+    UCX_PERF_CMD_PUT_MULTI,
+    UCX_PERF_CMD_PUT_PARTIAL,
     UCX_PERF_CMD_GET,
     UCX_PERF_CMD_ADD,
     UCX_PERF_CMD_FADD,
@@ -98,9 +102,69 @@ enum {
 };
 
 
+/*
+ * Active message ID used for performance tests.
+ */
+#define UCP_PERF_AM_ID 1
+
+
+/*
+ *   +------+                                                        +------+
+ *   |HOST 0|-------------------UCP_PERF_AM_ID(AM)------------------>|HOST 1|
+ *   +------+        +---------+                  +---------+        +------+
+ *      |            |DPU DMN 0|                  |DPU DMN 1|            |
+ *      |            +---------+                  +---------+            |
+ *      |                 |                            |                 |
+ *      |------INIT------>|                            |<------INIT------|
+ *      |                 |----------PEER_INIT-------->|                 |
+ *      |                 |                            |                 |
+ *      |----SEND_REQ---->|                            |<--RECV_REQ(TM)--|
+ *      |                 |---------PEER_TX(AM)------->|                 |
+ *      |                 |----------(TM msg)--------->|                 |
+ *      |<---SEND_CMPL----|                            |---RECV_CMPL---->|
+ *
+ * (AM) used only when AM communication is configured
+ * (TM) used only when tag matching communication is configured
+ */
+#define UCP_FOREACH_PERF_DAEMON_AM_ID(_macro) \
+    /* 1) No DPU offloading case: this message is used to transfer data \
+     *    between hosts \
+     * 2) DPU offloading case: Sender DPU->Receiver DPU, (optional) AM message \
+     *    to transfer data between DPU peers when AM communication is used. \
+     *    For tag matching this message isn't used */ \
+    _macro(UCP_PERF_DAEMON_AM_ID_PEER_TX,   UCP_PERF_AM_ID) \
+    /* Host->DPU daemon initialization message */ \
+    _macro(UCP_PERF_DAEMON_AM_ID_INIT,      UCP_PERF_AM_ID + 1) \
+    /* Host->DPU daemon, initiate data transfer to the remote peer */ \
+    _macro(UCP_PERF_DAEMON_AM_ID_SEND_REQ,  UCP_PERF_AM_ID + 2) \
+    /* DPU daemon->Host, ack the data tx operation initiated by SEND_REQ */ \
+    _macro(UCP_PERF_DAEMON_AM_ID_SEND_CMPL, UCP_PERF_AM_ID + 3) \
+    /* Host->DPU daemon, (optional) initiate data receive. Not used when \
+     * DPU peers communicate by AM. Will be used by tag matching */ \
+    _macro(UCP_PERF_DAEMON_AM_ID_RECV_REQ,  UCP_PERF_AM_ID + 4) \
+    /* DPU daemon->Host, ack the receive completion. This message is sent \
+     * unsolicited in case of AM communication. For tag matching transport it \
+     * confirms the completion of RECV_REQ request */ \
+    _macro(UCP_PERF_DAEMON_AM_ID_RECV_CMPL, UCP_PERF_AM_ID + 5) \
+    /* Sender DPU->Receiver DPU, message to establish communication between \
+     * DPU peers */ \
+    _macro(UCP_PERF_DAEMON_AM_ID_PEER_INIT, UCP_PERF_AM_ID + 6)
+
+
+#define UCP_PERF_DAEMON_ENUMIFY(ID, VALUE) ID = VALUE,
+
+
+typedef enum {
+    UCP_FOREACH_PERF_DAEMON_AM_ID(UCP_PERF_DAEMON_ENUMIFY)
+} ucp_perf_daemon_am_id_t;
+
+
 #define UCT_PERF_TEST_PARAMS_FMT             "%s/%s"
 #define UCT_PERF_TEST_PARAMS_ARG(_params)    (_params)->uct.tl_name, \
                                              (_params)->uct.dev_name
+
+
+#define UCX_PERF_MEM_DEV_DEFAULT -1
 
 
 /**
@@ -128,8 +192,16 @@ typedef struct ucx_perf_result {
 } ucx_perf_result_t;
 
 
+typedef struct {
+    ucs_memory_type_t mem_type;
+    int               device_id;
+} ucx_perf_accel_dev_t;
+
+
 typedef void (*ucx_perf_rte_progress_cb_t)(void *arg);
 
+typedef ucs_status_t (*ucx_perf_rte_setup_func_t)(void *arg);
+typedef void (*ucx_perf_rte_cleanup_func_t)(void *arg);
 typedef unsigned (*ucx_perf_rte_group_size_func_t)(void *rte_group);
 typedef unsigned (*ucx_perf_rte_group_index_func_t)(void *rte_group);
 typedef void (*ucx_perf_rte_barrier_func_t)(void *rte_group,
@@ -141,15 +213,18 @@ typedef void (*ucx_perf_rte_post_vec_func_t)(void *rte_group,
 typedef void (*ucx_perf_rte_recv_func_t)(void *rte_group, unsigned src,
                                          void *buffer, size_t max, void *req);
 typedef void (*ucx_perf_rte_exchange_vec_func_t)(void *rte_group, void *req);
-typedef void (*ucx_perf_rte_report_func_t)(void *rte_group,
-                                           const ucx_perf_result_t *result,
-                                           void *arg, const char *extra_info,
-                                           int is_final, int is_multi_thread);
+
 
 /**
  * RTE used to bring-up the test
  */
 typedef struct ucx_perf_rte {
+    /* @return UCS_OK, UCS_ERR_UNSUPPORTED or actual error */
+    ucx_perf_rte_setup_func_t        setup;
+
+    /* Cleanup on successfully setup RTE */
+    ucx_perf_rte_cleanup_func_t      cleanup;
+
     /* @return Group size */
     ucx_perf_rte_group_size_func_t   group_size;
 
@@ -164,11 +239,19 @@ typedef struct ucx_perf_rte {
     ucx_perf_rte_recv_func_t         recv;
     ucx_perf_rte_exchange_vec_func_t exchange_vec;
 
-    /* Handle results */
-    ucx_perf_rte_report_func_t       report;
+    /* List of supported RTE */
+    ucs_list_link_t                  list;
 
 } ucx_perf_rte_t;
 
+
+/**
+ * Common report function
+ */
+typedef void (*ucx_perf_report_func_t)(void *rte_group,
+                                       const ucx_perf_result_t *result,
+                                       void *arg, const char *extra_info,
+                                       int is_final, int is_multi_thread);
 
 /**
  * Describes a performance test.
@@ -183,6 +266,9 @@ typedef struct ucx_perf_params {
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     ucs_memory_type_t      send_mem_type;   /* Send memory type */
     ucs_memory_type_t      recv_mem_type;   /* Recv memory type */
+    ucx_perf_accel_dev_t   send_device;     /* Send memory device for gdaki */
+    ucx_perf_accel_dev_t   recv_device;     /* Recv memory device for gdaki */
+    ucs_device_level_t     device_level;    /* Device level for gdaki */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size
@@ -201,9 +287,13 @@ typedef struct ucx_perf_params {
     double                 report_interval; /* Interval at which to call the report callback */
     double                 percentile_rank; /* The percentile rank of the percentile reported
                                                in latency tests */
+    unsigned               device_thread_count; /* Number of device threads */
+    unsigned               device_block_count; /* Number of device blocks */
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
+
+    ucx_perf_report_func_t report_func;     /* Report function callback */
     void                   *report_arg;     /* Custom argument for report function */
 
     struct {
@@ -217,19 +307,37 @@ typedef struct ucx_perf_params {
     } uct;
 
     struct {
-        unsigned               nonblocking_mode; /* TBD */
-        ucp_perf_datatype_t    send_datatype;
-        ucp_perf_datatype_t    recv_datatype;
-        size_t                 am_hdr_size; /* UCP Active Message header size
-                                               (not included in message size) */
+        ucp_perf_datatype_t     send_datatype;
+        ucp_perf_datatype_t     recv_datatype;
+        size_t                  am_hdr_size; /* UCP Active Message header size
+                                                (not included in message size) */
+        int                     is_daemon_mode;  /* Whether DPU offloading daemon
+                                                    is configured */
+        struct sockaddr_storage dmn_local_addr;  /* IP and port of local daemon,
+                                                    used to offload communication */
+        struct sockaddr_storage dmn_remote_addr; /* IP and port of remote daemon,
+                                                    used to offload communication */
     } ucp;
 
 } ucx_perf_params_t;
 
 
+typedef struct {
+    uint64_t addr;
+    uint64_t length;
+} ucp_perf_daemon_req_t;
+
+
 /* Allocators for each memory type */
 typedef struct ucx_perf_allocator ucx_perf_allocator_t;
 extern const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[];
+
+/* Device test dispatchers for each memory type */
+typedef struct ucx_perf_device_dispatcher ucx_perf_device_dispatcher_t;
+extern const ucx_perf_device_dispatcher_t* ucx_perf_mem_type_device_dispatchers[];
+
+
+const char *ucp_perf_daemon_am_id_name(ucp_perf_daemon_am_id_t id);
 
 
 /**

@@ -9,6 +9,7 @@
 
 #include "proto.h"
 #include "proto_select.h"
+#include <ucp/dt/dt.h>
 
 #include <uct/api/v2/uct_v2.h>
 
@@ -23,6 +24,20 @@
 #define UCP_PROTO_COPY_OUT_DESC   "copy-out"
 #define UCP_PROTO_ZCOPY_DESC      "zero-copy"
 #define UCP_PROTO_MULTI_FRAG_DESC "multi-frag"
+
+
+#define UCP_PROTO_LANE_FMT \
+    "lane[%d] " UCT_TL_RESOURCE_DESC_FMT " bw " UCP_PROTO_PERF_FUNC_BW_FMT \
+    UCP_PROTO_TIME_FMT(latency)
+
+
+#define UCP_PROTO_LANE_ARG(_params, _lane, _lane_perf) \
+    (_lane), \
+    UCT_TL_RESOURCE_DESC_ARG( \
+        &(_params)->worker->context->tl_rscs[ \
+            ucp_proto_common_get_rsc_index(_params, _lane)].tl_rsc), \
+    (_lane_perf)->bandwidth / UCS_MBYTE, \
+    UCP_PROTO_TIME_ARG((_lane_perf)->latency)
 
 
 typedef enum {
@@ -57,7 +72,11 @@ typedef enum {
     UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE  = UCS_BIT(8),
 
     /* Supports error handling */
-    UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9)
+    UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9),
+
+    /* Supports starting the request when its datatype iterator offset is > 0 */
+    UCP_PROTO_COMMON_INIT_FLAG_RESUME        = UCS_BIT(10),
+    UCP_PROTO_COMMON_KEEP_MD_MAP             = UCS_BIT(11)
 } ucp_proto_common_init_flags_t;
 
 
@@ -117,6 +136,13 @@ typedef struct {
 
     /* Map of unsuitable lanes */
     ucp_lane_map_t          exclude_map;
+
+    /* Memory info of the buffer used for data transfer on the transport level.
+     * If UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY flag is set, it is expected to
+     * be the user buffer memory info. Alternatively, it refers to the type of
+     * memory used for bounce buffers (either in the UCP or UCT layer) where
+     * data needs to be copied as part of the protocol. */
+    ucp_memory_info_t       reg_mem_info;
 } ucp_proto_common_init_params_t;
 
 
@@ -136,6 +162,9 @@ typedef struct {
     /* Transport bandwidth (without protocol memory copies) */
     double bandwidth;
 
+    /* Single path ratio of the full bandwidth */
+    double path_ratio;
+
     /* Network latency */
     double latency;
 
@@ -148,6 +177,14 @@ typedef struct {
     /* Maximum single message length */
     size_t max_frag;
 } ucp_proto_common_tl_perf_t;
+
+
+typedef struct {
+    ucp_lane_map_t   lane_map;
+    ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t num_lanes;
+    uint8_t          dev_count[UCP_MAX_RESOURCES];
+} ucp_proto_lane_selection_t;
 
 
 /* Private data per lane */
@@ -164,8 +201,10 @@ typedef struct {
  * per request.
  *
  * @param [in] req   Request which started to send.
+ *
+ * @return Status code to be returned from the init function.
  */
-typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
+typedef ucs_status_t (*ucp_proto_init_cb_t)(ucp_request_t *req);
 
 
 /**
@@ -179,6 +218,14 @@ typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
 typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
 
 
+ucp_proto_common_init_params_t
+ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params);
+
+
+ucp_memory_info_t ucp_proto_common_select_param_mem_info(
+                                  const ucp_proto_select_param_t *select_param);
+
+
 /**
  * Check if protocol can be used according to error handling requirements.
  *
@@ -188,11 +235,6 @@ typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
  */
 int ucp_proto_common_init_check_err_handling(
         const ucp_proto_common_init_params_t *init_params);
-
-
-ucp_rsc_index_t
-ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
-                               ucp_lane_index_t lane);
 
 void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
                                      ucp_md_map_t md_map, ucp_lane_index_t lane,
@@ -212,6 +254,15 @@ ucp_proto_common_get_md_index(const ucp_proto_init_params_t *params,
 ucs_sys_device_t
 ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
                              ucp_lane_index_t lane);
+
+int ucp_proto_common_add_unique_sys_dev(ucs_sys_device_t sys_dev,
+                                        ucs_sys_device_t *sys_devs,
+                                        ucp_lane_index_t *num_sys_devs,
+                                        ucp_lane_index_t max_sys_devs);
+
+ucp_lane_index_t
+ucp_proto_common_select_sys_dev_by_node_id(const ucp_proto_init_params_t *params,
+                                           ucp_lane_index_t num_sys_devs);
 
 
 void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
@@ -241,22 +292,28 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_proto_perf_node_t **perf_node_p);
 
 
-/* @return number of lanes found */
+typedef int (*ucp_proto_common_filter_lane_cb_t)(
+                                const ucp_proto_init_params_t *params,
+                                ucp_lane_index_t lane, const char *lane_desc);
+
+
+int
+ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
+                                 ucp_lane_index_t lane, const char *lane_desc);
+
+
 ucp_lane_index_t
-ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
-                            ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-                            ucp_lane_index_t max_lanes,
+ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
+                            unsigned flags, ucp_lane_type_t lane_type,
+                            uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,
+                            ucp_proto_common_filter_lane_cb_t filter,
                             ucp_lane_index_t *lanes);
 
 
 ucp_md_map_t
 ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
                             ucp_lane_map_t lane_map);
-
-
-ucp_lane_index_t
-ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
 
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
@@ -284,7 +341,9 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
-ucs_status_t ucp_proto_request_init(ucp_request_t *req);
+ucs_status_t
+ucp_proto_request_init(ucp_request_t *req,
+                       const ucp_proto_select_param_t *select_param);
 
 void ucp_proto_request_check_reset_state(const ucp_request_t *req);
 

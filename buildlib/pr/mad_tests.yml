@@ -1,0 +1,113 @@
+jobs:
+  - job: SetupServer
+    displayName: Setup Server
+    pool:
+      name: MLNX
+      demands: mad_server
+    workspace:
+      clean: outputs
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+      - task: Bash@3
+        name: Set_Vars
+        inputs:
+          targetType: "inline"
+          script: |
+            source ./buildlib/tools/test_mad.sh
+            set_vars
+        displayName: Set Vars
+      - bash: |
+          source ./buildlib/tools/test_mad.sh
+          build_ucx_in_docker
+          docker_run_srv LID
+        displayName: Setup Server
+
+  - job: SetupClient
+    displayName: Setup Client
+    pool:
+      name: MLNX
+      demands: mad_client
+    workspace:
+      clean: outputs
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+      - bash: |
+          source ./buildlib/tools/test_mad.sh
+          build_ucx
+        displayName: Setup Client
+
+  - job: TestLid
+    dependsOn:
+      - SetupServer
+      - SetupClient
+    displayName: Test Lid
+    timeoutInMinutes: 10
+    pool:
+      name: MLNX
+      demands: mad_client
+    variables:
+      LID: $[ dependencies.SetupServer.outputs['Set_Vars.LID'] ]
+      HCA: $[ dependencies.SetupServer.outputs['Set_Vars.HCA'] ]
+    steps:
+      - checkout: none
+      - bash: |
+          source ./buildlib/tools/test_mad.sh
+          run_mad_test lid:$(LID)
+        env:
+          HCA: $(HCA)
+        displayName: Test LID
+
+  - job: ServerRestartAndPrintLogs
+    dependsOn: TestLid
+    displayName: Server Restart And Print Logs
+    pool:
+      name: MLNX
+      demands: mad_server
+    steps:
+      - checkout: none
+      - bash: |
+          source ./buildlib/tools/test_mad.sh
+          docker_stop_srv LID
+          docker_run_srv GUID
+        displayName: Server Restart
+
+  - job: TestGuid
+    dependsOn:
+      - SetupServer
+      - ServerRestartAndPrintLogs
+    displayName: Test Guid
+    timeoutInMinutes: 10
+    pool:
+      name: MLNX
+      demands: mad_client
+    variables:
+      GUID: $[ dependencies.SetupServer.outputs['Set_Vars.GUID'] ]
+      HCA: $[ dependencies.SetupServer.outputs['Set_Vars.HCA'] ]
+    steps:
+      - checkout: none
+      - bash: |
+          source ./buildlib/tools/test_mad.sh
+          run_mad_test guid:$(GUID)
+        env:
+          HCA: $(HCA)
+        displayName: Test GUID
+
+  - job: ServerStopAndPrintLogs
+    dependsOn: TestGuid
+    displayName: Server Stop And Print Logs
+    condition: always()
+    pool:
+      name: MLNX
+      demands: mad_server
+    steps:
+      - checkout: none
+      - bash: |
+          source ./buildlib/tools/test_mad.sh
+          docker_stop_srv GUID
+        displayName: Server Stop

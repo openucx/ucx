@@ -22,10 +22,6 @@
 #define UCP_PROTO_MAX_PERF_RANGES 24
 
 
-/* Maximal size of protocol private data */
-#define UCP_PROTO_PRIV_MAX          1024
-
-
 /* Maximal number of protocols in total */
 #define UCP_PROTO_MAX_COUNT         64
 
@@ -39,7 +35,7 @@
 
 
 /* Maximal length of protocol description string */
-#define UCP_PROTO_DESC_STR_MAX      64
+#define UCP_PROTO_DESC_STR_MAX      128
 
 
 /* Maximal length of protocol configuration string */
@@ -60,6 +56,10 @@ typedef struct ucp_proto_perf_node ucp_proto_perf_node_t;
 
 /* Key for selecting a protocol */
 typedef struct ucp_proto_select_param ucp_proto_select_param_t;
+
+
+/* Context for probing a protocol for a specific selection key */
+typedef struct ucp_proto_probe_ctx ucp_proto_probe_ctx_t;
 
 
 /* Protocol stage ID */
@@ -84,81 +84,6 @@ enum {
 };
 
 
-/*
- * Some protocols can be pipelined, so the time they consume when multiple
- * such operations are issued is less than their cumulative time. Therefore we
- * define two metrics: "single" operation time and "multi" operation time.
- *
- * -------time---------->
- *
- *        +-------------------------+
- * op1:   |   "single" time         |
- *        +---------------+---------+---------------+
- *                op2:    | overlap | "multi" time  |
- *                        +---------+-----+---------+---------------+
- *                                op3:    | overlap | "multi" time  |
- *                                        +---------+---------------+
- */
-typedef enum {
-    UCP_PROTO_PERF_TYPE_FIRST,
-
-    /* Time to complete this operation assuming it's the only one. */
-    UCP_PROTO_PERF_TYPE_SINGLE = UCP_PROTO_PERF_TYPE_FIRST,
-
-    /* Time to complete this operation after all previous ones complete. */
-    UCP_PROTO_PERF_TYPE_MULTI,
-
-    /* CPU time the operation consumes (it would be less than or equal to the
-     * SINGLE and MULTI times).
-     */
-    UCP_PROTO_PERF_TYPE_CPU,
-
-    UCP_PROTO_PERF_TYPE_LAST
-} ucp_proto_perf_type_t;
-
-
-/*
- * Iterate over performance types.
- *
- * @param _perf_type  Performance type iterator variable.
- */
-#define UCP_PROTO_PERF_TYPE_FOREACH(_perf_type) \
-    for (_perf_type = UCP_PROTO_PERF_TYPE_FIRST; \
-         _perf_type < UCP_PROTO_PERF_TYPE_LAST; ++(_perf_type))
-
-
-/*
- * Performance estimation for a range of message sizes.
- */
-typedef struct {
-    /* Maximal payload size for this range */
-    size_t                max_length;
-
-    /* Estimated time in seconds, as a function of message size in bytes, to
-     * complete the operation. See @ref ucp_proto_perf_type_t for details
-     */
-    ucs_linear_func_t     perf[UCP_PROTO_PERF_TYPE_LAST];
-
-    /* Performance data tree */
-    ucp_proto_perf_node_t *node;
-} ucp_proto_perf_range_t;
-
-
-/**
- * UCP protocol capabilities (per operation parameters)
- */
-typedef struct {
-    size_t                  cfg_thresh;   /* Configured protocol threshold */
-    unsigned                cfg_priority; /* Priority of configuration */
-    size_t                  min_length;   /* Minimal message size */
-    unsigned                num_ranges;   /* Number of entries in 'ranges' */
-
-    /* Performance estimation function for different message sizes */
-    ucp_proto_perf_range_t  ranges[UCP_PROTO_MAX_PERF_RANGES];
-
-} ucp_proto_caps_t;
-
-
 /**
  * Parameters for protocol initialization function
  */
@@ -172,27 +97,9 @@ typedef struct {
     const ucp_ep_config_key_t      *ep_config_key;   /* Endpoint configuration */
     const ucp_rkey_config_key_t    *rkey_config_key; /* Remote key configuration,
                                                         may be NULL */
-    const char                     *proto_name;      /* Name of the initialized
-                                                        protocol, for debugging */
-
-    /* Output parameters */
-    void                           *priv;       /* Pointer to priv buffer */
-    size_t                         *priv_size;  /* Occupied size in priv buffer */
-    ucp_proto_caps_t               *caps;       /* Protocol capabilities */
+    ucp_proto_id_t                 proto_id;         /* Initial protocol ID */
+    ucp_proto_probe_ctx_t          *ctx;             /* Context for adding caps */
 } ucp_proto_init_params_t;
-
-
-/**
- * Initialize protocol-specific configuration and estimate protocol performance
- * as function of message size.
- *
- * @param [in]  params   Protocol initialization parameters.
- *
- * @return UCS_OK              - if successful.
- *         UCS_ERR_UNSUPPORTED - if the protocol is not supported on the key.
- */
-typedef ucs_status_t
-(*ucp_proto_init_func_t)(const ucp_proto_init_params_t *params);
 
 
 typedef struct {
@@ -235,6 +142,15 @@ typedef struct {
     /* Map of used lanes */
     ucp_lane_map_t lane_map;
 } ucp_proto_query_attr_t;
+
+
+/**
+ * Initialize protocol-specific configuration and estimate protocol performance
+ * as function of message size.
+ *
+ * @param [in]  params  Protocol initialization parameters.
+ */
+typedef void (*ucp_proto_probe_func_t)(const ucp_proto_init_params_t *params);
 
 
 /**
@@ -281,8 +197,12 @@ struct ucp_proto {
     const char               *name; /* Protocol name */
     const char               *desc; /* Protocol description */
     unsigned                 flags; /* Protocol flags for special handling */
-    ucp_proto_init_func_t    init;  /* Initialization function */
-    ucp_proto_query_func_t   query; /* Query protocol information */
+
+    /* Probe and add protocol instances */
+    ucp_proto_probe_func_t   probe;
+
+    /* Query protocol information */
+    ucp_proto_query_func_t   query;
 
     /* Initial UCT progress function, can be changed during the protocol
      * request lifetime to implement different stages
@@ -340,17 +260,5 @@ unsigned ucp_protocols_count(void);
    description from proto->desc, and set config to an empty string. */
 void ucp_proto_default_query(const ucp_proto_query_params_t *params,
                              ucp_proto_query_attr_t *attr);
-
-
-void ucp_proto_perf_set(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
-                        ucs_linear_func_t func);
-
-
-void ucp_proto_perf_copy(ucs_linear_func_t dest[UCP_PROTO_PERF_TYPE_LAST],
-                         const ucs_linear_func_t src[UCP_PROTO_PERF_TYPE_LAST]);
-
-
-void ucp_proto_perf_add(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
-                        ucs_linear_func_t func);
 
 #endif

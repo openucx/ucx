@@ -17,14 +17,11 @@
 
 UCS_PTR_MAP_IMPL(ep, 1);
 
-
 KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t,
            ucp_worker_cfg_index_t, 1, ucp_rkey_config_hash_func,
            ucp_rkey_config_is_equal);
 
-/* EP configurations storage */
-UCS_ARRAY_IMPL(ep_config_arr, unsigned, ucp_ep_config_t,
-               static UCS_F_ALWAYS_INLINE);
+#define UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT 32
 
 /**
  * Resolve remote key configuration key to a remote key configuration index.
@@ -65,6 +62,47 @@ ucp_worker_mpool_key_is_equal(ucp_worker_mpool_key_t mpool_key1,
 KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t,
            1, ucp_worker_mpool_hash_func, ucp_worker_mpool_key_is_equal);
 
+static UCS_F_ALWAYS_INLINE khint_t
+ucp_worker_remote_flush_hash_func(ucp_worker_remote_flush_key_t key)
+{
+    return kh_int64_hash_func((uint64_t)key.ep ^ (key.sys_dev << 8));
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_remote_flush_key_is_equal(ucp_worker_remote_flush_key_t key1,
+                                     ucp_worker_remote_flush_key_t key2)
+{
+    return (key1.ep == key2.ep) && (key1.sys_dev == key2.sys_dev);
+}
+
+KHASH_IMPL(ucp_worker_remote_flush, ucp_worker_remote_flush_key_t,
+           ucp_mem_area_t, 1, ucp_worker_remote_flush_hash_func,
+           ucp_worker_remote_flush_key_is_equal);
+
+
+static UCS_F_ALWAYS_INLINE void
+ucp_worker_remote_flush_hash_put(kh_ucp_worker_remote_flush_t *hash,
+                                 ucp_ep_h ep, ucs_sys_device_t sys_dev,
+                                 uct_rkey_t tl_rkey, uct_ep_h uct_ep,
+                                 uint64_t address)
+{
+    const ucp_worker_remote_flush_key_t key = {
+        .ep = ep,
+        .sys_dev = sys_dev
+    };
+    int ret;
+    khiter_t hash_it;
+    ucp_mem_area_t *value;
+
+    hash_it = kh_put(ucp_worker_remote_flush, hash, key, &ret);
+    ucs_assert(ret != UCS_KH_PUT_FAILED);
+
+    value           = &kh_value(hash, hash_it);
+    value->uct_rkey = tl_rkey;
+    value->uct_ep   = uct_ep;
+    value->address  = address;
+}
+
 
 /**
  * @return Worker name
@@ -88,7 +126,7 @@ ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
     ucs_assert(id != UCS_PTR_MAP_KEY_INVALID);
     status = UCS_PTR_MAP_GET(ep, &worker->ep_map, id, 0, &ptr);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
-        *ep_p = NULL; /* To supress compiler warning */
+        *ep_p = NULL; /* To suppress compiler warning */
         return status;
     }
 
@@ -118,8 +156,9 @@ ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
     }
 
     tl_bitmap = worker->context->tl_bitmap;
-    ucs_assert(UCS_BITMAP_GET(tl_bitmap, rsc_index));
-    return worker->ifaces[UCS_BITMAP_POPCOUNT_UPTO_INDEX(tl_bitmap, rsc_index)];
+    ucs_assert(UCS_STATIC_BITMAP_GET(tl_bitmap, rsc_index));
+    return worker->ifaces[UCS_STATIC_BITMAP_POPCOUNT_UPTO_INDEX(tl_bitmap,
+                                                                rsc_index)];
 }
 
 /**
@@ -189,6 +228,35 @@ ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 }
 
 /**
+ * Check if interface with @a iface_attr supports device-operated
+ * communications.
+ *
+ * @param [in]  iface_attr   iface attributes.
+ *
+ * @return 1 if iface supports device operations connections, otherwise 0.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_iface_is_tl_device(const uct_iface_attr_t *iface_attr)
+{
+    return !!(iface_attr->cap.flags & UCT_IFACE_FLAG_DEVICE_EP);
+}
+
+/**
+ * Check if TL supports device-operated communications.
+ *
+ * @param [in]  worker       UCP worker.
+ * @param [in]  rsc_index    resource index.
+ *
+ * @return 1 if TL supports device-operated connections, otherwise 0.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_is_tl_device(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return ucp_worker_iface_is_tl_device(
+            ucp_worker_iface_get_attr(worker, rsc_index));
+}
+
+/**
  * Check if TL supports connection to interface.
  *
  * @param [in]  worker       UCP worker.
@@ -242,6 +310,25 @@ ucp_worker_default_address_pack_flags(ucp_worker_h worker)
            UCP_ADDRESS_PACK_FLAG_IFACE_ADDR | UCP_ADDRESS_PACK_FLAG_EP_ADDR;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_should_track_usage(ucp_worker_h worker)
+{
+    return ucp_context_usage_tracker_enabled(worker->context) &&
+           ((worker->usage_tracker.iter_count++ %
+             UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) == 0);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_worker_track_ep_usage(ucp_request_t *req)
+{
+    ucp_worker_h worker = req->send.ep->worker;
+
+    if (ucs_likely(!ucp_worker_should_track_usage(worker))) {
+        return;
+    }
+
+    ucp_worker_track_ep_usage_always(req);
+}
+
 #define UCP_WORKER_GET_EP_BY_ID(_ep_p, _worker, _ep_id, _action, _fmt_str, ...) \
     { \
         ucs_status_t __status; \
@@ -267,5 +354,16 @@ ucp_worker_default_address_pack_flags(ucp_worker_h worker)
             _action; \
         } \
     }
+
+
+/**
+ * @return endpoint configuration by configuration index
+ */
+static inline ucp_ep_config_t
+*ucp_worker_ep_config(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
+{
+    ucs_assert(cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    return &ucs_array_elem(&worker->ep_config, cfg_index);
+}
 
 #endif

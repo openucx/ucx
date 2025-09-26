@@ -11,46 +11,37 @@
 #include "proto_rndv.inl"
 
 
-static ucs_status_t
-ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
+static void ucp_proto_rndv_ats_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_perf_range_t *range0;
-    ucp_proto_caps_t caps;
+    ucp_proto_common_init_params_t params;
+    ucp_proto_rndv_ack_priv_t priv;
+    ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    *init_params->priv_size = sizeof(ucp_proto_rndv_ack_priv_t);
-
-    caps.cfg_thresh   = 0;
-    caps.cfg_priority = 1;
-    caps.min_length   = 0;
-    caps.num_ranges   = 1;
-    range0            = &caps.ranges[0];
-    range0->node      = NULL;
-    ucp_proto_perf_set(range0->perf, UCS_LINEAR_FUNC_ZERO);
+    params              = ucp_proto_common_init_params(init_params);
+    params.cfg_priority = 80;
 
     /* This protocols supports either a regular rendezvous receive but without
      * data, or a rendezvous receive which should ignore the data.
      * In either case, we just need to send an ATS.
      */
     if (ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
-        range0->max_length = 0;
+        params.max_length = 0;
     } else if (ucp_proto_init_check_op(init_params,
                                        UCS_BIT(UCP_OP_ID_RNDV_RECV_DROP))) {
-        range0->max_length = SIZE_MAX;
+        params.max_length = SIZE_MAX;
     } else {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
-                                     &caps, UCS_LINEAR_FUNC_ZERO,
-                                     init_params->priv, 0);
-    ucp_proto_select_caps_cleanup(&caps);
+    status = ucp_proto_rndv_ack_init(&params, UCP_PROTO_RNDV_ATS_NAME, 0, &perf,
+                                     &priv);
+    if ((status != UCS_OK) || (perf == NULL)) {
+        return;
+    }
 
-    return status;
+    ucp_proto_select_add_proto(&params.super, params.cfg_thresh,
+                               params.cfg_priority, perf, &priv, sizeof(priv));
 }
 
 static void
@@ -73,7 +64,7 @@ ucp_proto_t ucp_rndv_ats_proto = {
     .name     = "rndv/ats",
     .desc     = "no data fetch",
     .flags    = 0,
-    .init     = ucp_proto_rndv_ats_init,
+    .probe    = ucp_proto_rndv_ats_probe,
     .query    = ucp_proto_rndv_ats_query,
     .progress = {ucp_proto_rndv_ats_progress},
     .abort    = ucp_proto_rndv_ats_abort,

@@ -20,9 +20,6 @@ type UcpAmData struct {
 	flags   UcpAmRecvAttrs
 }
 
-// To connect callback id with worker, to use in AmData.Receive()
-var idToWorker = make(map[uint64]*UcpWorker)
-
 // Whether actual data is received or need to call UcpAmData.Receive()
 func (d *UcpAmData) IsDataValid() bool {
 	return (d.flags & UCP_AM_RECV_ATTR_FLAG_RNDV) == 0
@@ -31,7 +28,7 @@ func (d *UcpAmData) IsDataValid() bool {
 // Whether this amData descriptor can be persisted outside UcpAmRecvCallback
 // callback by returning UCS_INPROGRESS
 func (d *UcpAmData) CanPersist() bool {
-	return (d.flags & UCP_AM_RECV_ATTR_FLAG_DATA) != 0
+	return (d.flags & (UCP_AM_RECV_ATTR_FLAG_DATA | UCP_AM_RECV_ATTR_FLAG_RNDV)) != 0
 }
 
 // Pointer to a received data

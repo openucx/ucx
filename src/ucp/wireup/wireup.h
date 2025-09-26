@@ -47,6 +47,7 @@ enum {
     UCP_WIREUP_MSG_ACK,
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
+    UCP_WIREUP_MSG_REPLY_RECONFIG,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -79,20 +80,19 @@ typedef struct {
     /* Mandatory memory types for allocation */
     uint64_t                    alloc_mem_types;
 
-    /* Mandatory memory types for registration */
-    uint64_t                    reg_mem_types;
-
     /* Required support of keepalive mechanism */
     int                         is_keepalive;
 
     /**
      * Calculates score of a potential transport.
      *
-     * @param [in]  wiface        UCP worker iface.
-     * @param [in]  md_attr       Local MD attributes.
-     * @param [in]  unpacked_addr The whole remote address unpacked.
-     * @param [in]  remote_addr   Remote transport address info and attributes.
-     * @param [in]  arg           Custom argument.
+     * @param [in]  wiface            UCP worker iface.
+     * @param [in]  md_attr           Local MD attributes.
+     * @param [in]  unpacked_addr     The whole remote address unpacked.
+     * @param [in]  remote_addr       Remote transport address info and
+     *                                attributes.
+     * @param [in]  is_prioritized_ep Endpoint is prioritized.
+     * @param [in]  arg               Custom argument.
      *
      * @return Transport score, the higher the better.
      */
@@ -100,6 +100,7 @@ typedef struct {
                                               const uct_md_attr_v2_t *md_attr,
                                               const ucp_unpacked_address_t *unpacked_addr,
                                               const ucp_address_entry_t *remote_addr,
+                                              int is_prioritized_ep,
                                               void *arg);
 
     /* Custom argument of @a calc_score function */
@@ -155,7 +156,7 @@ double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  const uct_md_attr_v2_t *md_attr,
                                  const ucp_unpacked_address_t *unpacked_address,
                                  const ucp_address_entry_t *remote_addr,
-                                 void *arg);
+                                 int is_prioritized_ep, void *arg);
 
 size_t ucp_wireup_msg_pack(void *dest, void *arg);
 
@@ -174,17 +175,14 @@ int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 
 int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
                             ucp_rsc_index_t rsc_index,
-                            const ucp_address_entry_t *ae);
-void
-ucp_wireup_get_dst_rsc_indices(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
-                               const ucp_unpacked_address_t *remote_address,
-                               const unsigned *addr_indices,
-                               ucp_rsc_index_t *dst_rsc_indices);
+                            const ucp_address_entry_t *ae,
+                            char *info_str, size_t info_str_size);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_tl_bitmap_t *local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
-                                   unsigned *addr_indices);
+                                   unsigned *addr_indices,
+                                   int *am_need_flush_p);
 
 ucs_status_t
 ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
@@ -218,9 +216,13 @@ unsigned ucp_wireup_eps_progress(void *arg);
 
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 
-double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface);
+double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface,
+                                        int is_prioritized_ep);
 
 double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
+
+int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
+                                 const ucp_address_entry_t *addr_entry);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {
@@ -233,6 +235,12 @@ static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 static inline int ucp_wireup_lane_type_is_fast_path(ucp_lane_type_t lane_type)
 {
     return ucp_wireup_lane_types_has_fast_path(UCS_BIT(lane_type));
+}
+
+static inline double ucp_wireup_fp8_pack_unpack_latency(double latency)
+{
+    return UCS_FP8_PACK_UNPACK(LATENCY, latency * UCS_NSEC_PER_SEC) /
+           UCS_NSEC_PER_SEC;
 }
 
 #endif

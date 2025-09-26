@@ -53,10 +53,12 @@ enum {
     UCP_REQUEST_FLAG_RECV_TAG              = UCS_BIT(17),
     UCP_REQUEST_FLAG_RKEY_INUSE            = UCS_BIT(18),
     UCP_REQUEST_FLAG_USER_HEADER_COPIED    = UCS_BIT(19),
+    UCP_REQUEST_FLAG_USAGE_TRACKED         = UCS_BIT(20),
+    UCP_REQUEST_FLAG_FENCE_REQUIRED        = UCS_BIT(21),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(20),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(21),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(22),
+    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(22),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(23),
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(24),
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
@@ -120,6 +122,24 @@ enum {
 
 
 /**
+ * Memory flush related structure
+ */
+typedef struct {
+    /* Number of 0-read flush to complete overall */
+    int              count;
+
+    /* Number of 0-read flush started */
+    int              started;
+
+    /* Shared completion to track remaining */
+    uct_completion_t uct_comp;
+
+    /* List of memory areas to track 0-read flush operations */
+    ucp_mem_area_t   *entries;
+} ucp_mem_flush_t;
+
+
+/**
  * Request in progress.
  */
 struct ucp_request {
@@ -171,7 +191,7 @@ struct ucp_request {
                      * Used by rndv/ppln to track completed fragments
                      * Used by rkey_ptr to track copied data size
                      */
-                    size_t           completed_size;
+                    ssize_t          completed_size;
                 };
             } state;
 
@@ -204,7 +224,11 @@ struct ucp_request {
                             } header UCS_S_PACKED; /* packed to avoid 32-bit
                                                       padding */
                             uint16_t       am_id;
+                            /* API flags from @ref ucp_send_am_flags enum */
                             uint16_t       flags;
+                            /* Internal implementation flags from @ref
+                             * ucp_request_am_internal_flags enum */
+                            uint8_t        internal_flags;
                         } am;
                     };
                 } msg_proto;
@@ -259,9 +283,6 @@ struct ucp_request {
                                 struct {
                                     /* Actual lanes map */
                                     ucp_lane_map_t lanes_map_all;
-
-                                    /* Actual lanes count */
-                                    uint8_t        lanes_count;
                                 } zcopy;
 
                                 struct {
@@ -282,17 +303,22 @@ struct ucp_request {
                             union {
                                 /* Used by rndv/put and rndv/put/frag */
                                 struct {
-                                    /* Which lanes need to flush (0 in fence mode) */
-                                    ucp_lane_map_t flush_map;
+                                    /* Next lane to flush is the first set bit
+                                       in rpriv->flush_map that's >= flush_lane */
+                                    ucp_lane_index_t flush_lane;
 
-                                    /* Which lanes need to send atp */
-                                    ucp_lane_map_t atp_map;
+                                    /* Next lane to send ATP is the first set bit
+                                       in rpriv->atp_map that's >= atp_lane */
+                                    ucp_lane_index_t atp_lane;
+
+                                    /* Number of ATP messages sent so far */
+                                    ucp_lane_index_t atp_count;
                                 } put;
 
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
                                 struct {
                                     /* Size to send in ack message */
-                                    size_t ack_data_size;
+                                    ssize_t ack_data_size;
                                 } ppln;
 
                                 /* Used by rndv/rkey_ptr */
@@ -327,6 +353,7 @@ struct ucp_request {
                     uint8_t            sw_done;
                     uint8_t            num_lanes; /* How many lanes are being flushed */
                     ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
+                    ucp_mem_flush_t    mem; /* Memory specific flushes */
                 } flush;
 
                 struct {
@@ -374,7 +401,6 @@ struct ucp_request {
             union {
                 ucp_lane_index_t  am_bw_index;     /* AM BW lane index */
                 ucp_lane_index_t  multi_lane_idx;  /* Index of the lane with multi-send */
-                ucp_lane_map_t    lanes_map_avail; /* Used lanes map */
             };
             uint8_t               mem_type;        /* Memory type, values are
                                                     * ucs_memory_type_t */
@@ -407,6 +433,8 @@ struct ucp_request {
             /* For rendezvous receive with new protocols: selected protocol for
                fetching remote data */
             const ucp_proto_config_t *proto_rndv_config;
+            /* Internal rndv request for rendezvous receive */
+            const ucp_request_t      *proto_rndv_request;
 #endif
 
             union {

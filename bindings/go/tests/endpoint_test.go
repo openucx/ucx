@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-	. "ucx"
+	"time"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"unsafe"
+	. "github.com/openucx/ucx/bindings/go/src/cuda"
 )
 
 type TestEntity struct {
@@ -74,6 +76,9 @@ func get_mem_types() []memTypePair {
 	memTypePairs := []memTypePair{memTypePair{UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST}}
 
 	if IsMemTypeSupported(UCS_MEMORY_TYPE_CUDA, memTypeMask) {
+		if err := CudaSetDevice(); err != nil {
+			fmt.Errorf("%v", err)
+		}
 		memTypePairs = append(memTypePairs, memTypePair{UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA})
 		memTypePairs = append(memTypePairs, memTypePair{UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_HOST})
 		memTypePairs = append(memTypePairs, memTypePair{UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_CUDA})
@@ -108,7 +113,7 @@ func TestUcpEpTag(t *testing.T) {
 		receiver := prepareContext(t, nil)
 		t.Logf("Testing tag %v -> %v", memType.senderMemType, memType.recvMemType)
 
-		ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_SINGLE)
+		ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
 		ucpWorkerParams.WakeupTagSend().WakeupTagRecv()
 
 		receiver.worker, _ = receiver.context.NewWorker(ucpWorkerParams)
@@ -120,8 +125,11 @@ func TestUcpEpTag(t *testing.T) {
 
 		receiveMem := memoryAllocate(receiver, 4096, memType.recvMemType)
 
-		recvRequest, _ := receiver.worker.RecvTagNonBlocking(receiveMem, 4096, 1, 1, &UcpRequestParams{
-			Cb: func(request *UcpRequest, status UcsStatus, tagInfo *UcpTagRecvInfo) {
+		requestsWaiting := 2
+		requests := make(chan *UcpRequest, requestsWaiting)
+
+		receiver.worker.RecvTagNonBlocking(receiveMem, 4096, 1, 1, (&UcpRequestParams{}).SetCallback(
+			func(request *UcpRequest, status UcsStatus, tagInfo *UcpTagRecvInfo) {
 
 				if status != UCS_OK {
 					t.Fatalf("Request failed with status: %d", status)
@@ -131,21 +139,30 @@ func TestUcpEpTag(t *testing.T) {
 					t.Fatalf("Data length %d != received length %d", len(sendData), tagInfo.Length)
 				}
 
-				request.Close()
-			}})
+				requests <- request
+			}).SetMemType(memType.recvMemType))
 
-		sendRequest, _ := sender.ep.SendTagNonBlocking(1, sendMem, uint64(len(sendData)), &UcpRequestParams{
-			Cb: func(request *UcpRequest, status UcsStatus) {
+		sender.ep.SendTagNonBlocking(1, sendMem, uint64(len(sendData)), (&UcpRequestParams{}).SetCallback(
+			func(request *UcpRequest, status UcsStatus) {
 				if status != UCS_OK {
 					t.Fatalf("Request failed with status: %d", status)
 				}
 
-				request.Close()
-			}})
+				requests <- request
+			}).SetMemType(memType.senderMemType))
 
-		for (sendRequest.GetStatus() == UCS_INPROGRESS) || (recvRequest.GetStatus() == UCS_INPROGRESS) {
-			sender.worker.Progress()
-			receiver.worker.Progress()
+		timeout := time.After(time.Second)
+		for requestsWaiting > 0 {
+			select {
+			case request := <-requests:
+				request.Close()
+				requestsWaiting--
+			case <-timeout:
+				t.Fatalf("Timeout: No requests received")
+			default:
+				sender.worker.Progress()
+				receiver.worker.Progress()
+			}
 		}
 
 		if recvString := string(memoryGet(receiver)[:len(sendData)]); recvString != sendData {
@@ -192,7 +209,7 @@ func TestUcpEpAm(t *testing.T) {
 		// t.Fatalf can't be called from non main thread need to pass an error
 		threadErr := make(chan error)
 
-		// Test eager handler with data persistance
+		// Test eager handler with data persistence
 		receiver.worker.SetAmRecvHandler(1, UCP_AM_FLAG_WHOLE_MSG|UCP_AM_FLAG_PERSISTENT_DATA, func(header unsafe.Pointer, headerSize uint64,
 			data *UcpAmData, replyEp *UcpEp) UcsStatus {
 			if !data.IsDataValid() {
@@ -227,10 +244,6 @@ func TestUcpEpAm(t *testing.T) {
 			return UCS_OK
 		})
 
-		// To notify progress thread to exit
-		quit := make(chan bool)
-		go progressThread(quit, receiver.worker)
-
 		headerMem := CBytes([]byte(sendData))
 		sendChan := make(chan bool, 1)
 		sender.worker.SetAmRecvHandler(3, UCP_AM_FLAG_WHOLE_MSG, func(header unsafe.Pointer, headerSize uint64,
@@ -258,6 +271,7 @@ func TestUcpEpAm(t *testing.T) {
 				break senderProgress
 			default:
 				sender.worker.Progress()
+				receiver.worker.Progress()
 			}
 		}
 
@@ -267,6 +281,7 @@ func TestUcpEpAm(t *testing.T) {
 		for req := range requests {
 			for req.GetStatus() == UCS_INPROGRESS {
 				sender.worker.Progress()
+				receiver.worker.Progress()
 			}
 			req.Close()
 		}
@@ -285,7 +300,6 @@ func TestUcpEpAm(t *testing.T) {
 		}
 
 		amData.Close()
-		quit <- true
 
 		sender.Close()
 		receiver.Close()

@@ -82,17 +82,12 @@ const ucp_proto_t *ucp_protocols[] = {
     UCP_PROTO_FOR_EACH(UCP_PROTO_ENTRY)
 };
 
-const char *ucp_proto_perf_type_names[] = {
-    [UCP_PROTO_PERF_TYPE_SINGLE] = "single",
-    [UCP_PROTO_PERF_TYPE_MULTI]  = "multi",
-    [UCP_PROTO_PERF_TYPE_CPU]    = "cpu"
-};
-
 const char *ucp_operation_names[] = {
     [UCP_OP_ID_TAG_SEND]       = "tag_send",
     [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
     [UCP_OP_ID_AM_SEND]        = "am_send",
     [UCP_OP_ID_AM_SEND_REPLY]  = "am_send_reply",
+    [UCP_OP_ID_STREAM_SEND]    = "stream",
     [UCP_OP_ID_PUT]            = "put",
     [UCP_OP_ID_GET]            = "get",
     [UCP_OP_ID_AMO_POST]       = "amo_post",
@@ -110,6 +105,7 @@ const char *ucp_operation_descs[] = {
     [UCP_OP_ID_AM_SEND]        = "active message by ucp_am_send*",
     [UCP_OP_ID_AM_SEND_REPLY]  = "active message by ucp_am_send* with reply "
                                  "flag",
+    [UCP_OP_ID_STREAM_SEND]    = "stream message by ucp_stream_send*",
     [UCP_OP_ID_PUT]            = "remote memory write by ucp_put*",
     [UCP_OP_ID_GET]            = "remote memory read by ucp_get*",
     [UCP_OP_ID_AMO_POST]       = "posted atomic by ucp_atomic_op*",
@@ -138,34 +134,4 @@ void ucp_proto_default_query(const ucp_proto_query_params_t *params,
     attr->lane_map       = 0;
     ucs_strncpy_safe(attr->desc, params->proto->desc, sizeof(attr->desc));
     ucs_strncpy_safe(attr->config, "", sizeof(attr->config));
-}
-
-void ucp_proto_perf_set(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
-                        ucs_linear_func_t func)
-{
-    ucp_proto_perf_type_t perf_type;
-
-    UCP_PROTO_PERF_TYPE_FOREACH(perf_type) {
-        perf[perf_type] = func;
-    }
-}
-
-void ucp_proto_perf_copy(ucs_linear_func_t dest[UCP_PROTO_PERF_TYPE_LAST],
-                         const ucs_linear_func_t src[UCP_PROTO_PERF_TYPE_LAST])
-{
-    ucp_proto_perf_type_t perf_type;
-
-    UCP_PROTO_PERF_TYPE_FOREACH(perf_type) {
-        dest[perf_type] = src[perf_type];
-    }
-}
-
-void ucp_proto_perf_add(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
-                        ucs_linear_func_t func)
-{
-    ucp_proto_perf_type_t perf_type;
-
-    UCP_PROTO_PERF_TYPE_FOREACH(perf_type) {
-        ucs_linear_func_add_inplace(&perf[perf_type], func);
-    }
 }

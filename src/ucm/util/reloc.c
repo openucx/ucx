@@ -14,6 +14,7 @@
 #include <ucm/util/sys.h>
 
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 

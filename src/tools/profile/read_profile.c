@@ -663,7 +663,7 @@ static int redirect_output(const profile_data_t *data, options_t *opts)
     if (data->header->mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
         for (t = opts->thread_list; *t != -1; ++t) {
             num_lines += 3; /* thread header */
-            /* Suppressing a false positive for null value derefrence */
+            /* Suppressing a false positive for null value dereference */
             if (data->threads[*t - 1].header != NULL) {
                 num_lines += data->threads[*t - 1]
                                      .header->num_records; /* thread records */

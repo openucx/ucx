@@ -19,9 +19,9 @@
 #include <ucs/config/parser.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/sys.h>
+#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/string.h>
-#include <ucs/datastruct/array.inl>
 
 #include <sys/ioctl.h>
 #ifdef HAVE_LINUX_FUTEX_H
@@ -55,42 +55,37 @@ enum {
 
 KHASH_MAP_INIT_STR(ucs_stats_cls, ucs_stats_class_t*)
 
-UCS_ARRAY_DEFINE_INLINE(aggrt_class_offsets, unsigned, size_t);
-
-UCS_ARRAY_DEFINE_INLINE(aggrgt_counter_names, unsigned,
-                        ucs_stats_aggrgt_counter_name_t);
-
 typedef struct {
-    volatile unsigned    flags;
+    volatile unsigned                flags;
 
-    ucs_time_t           start_time;
-    ucs_stats_filter_node_t  root_filter_node;
-    ucs_stats_node_t     root_node;
-    ucs_stats_counter_t  root_counters[UCS_ROOT_STATS_LAST];
+    ucs_time_t                       start_time;
+    ucs_stats_filter_node_t          root_filter_node;
+    ucs_stats_node_t                 root_node;
+    ucs_stats_counter_t              root_counters[UCS_ROOT_STATS_LAST];
 
     /* Offset of each stats class in the aggregate counters array */
-    ucs_array_t(aggrt_class_offsets) aggrt_class_offsets;
+    ucs_array_s(unsigned, size_t)    aggrt_class_offsets;
 
     /* Statistics counters names database */
-    ucs_array_t(aggrgt_counter_names) aggrgt_counter_names;
+    ucs_array_s(unsigned, ucs_stats_aggrgt_counter_name_t) aggrgt_counter_names;
 
     union {
-        FILE             *stream;         /* Output stream */
-        ucs_stats_client_h client;       /* UDP client */
+        FILE                         *stream;         /* Output stream */
+        ucs_stats_client_h           client;       /* UDP client */
     };
 
     union {
-        int              signo;
-        double           interval;
+        int                          signo;
+        double                       interval;
     };
 
-    khash_t(ucs_stats_cls) cls;
+    khash_t(ucs_stats_cls)           cls;
 
-    pthread_mutex_t      lock;
+    pthread_mutex_t                  lock;
 #ifndef HAVE_LINUX_FUTEX_H
-    pthread_cond_t       cv;
+    pthread_cond_t                   cv;
 #endif
-    pthread_t            thread;
+    pthread_t                        thread;
 } ucs_stats_context_t;
 
 static ucs_stats_context_t ucs_stats_context = {
@@ -485,8 +480,7 @@ static size_t ucs_stats_agrgt_sum_clsid_alloc(ucs_stats_node_t *node)
     /* Get current array length and update it in the node structure */
     node->cls->class_id = ucs_array_length(&ucs_stats_context.aggrt_class_offsets);
 
-    offset = ucs_array_append(aggrt_class_offsets,
-                              &ucs_stats_context.aggrt_class_offsets,
+    offset = ucs_array_append(&ucs_stats_context.aggrt_class_offsets,
                               return UCS_ERR_NO_MEMORY);
 
     /* Initialize entry */
@@ -496,8 +490,7 @@ static size_t ucs_stats_agrgt_sum_clsid_alloc(ucs_stats_node_t *node)
         ucs_list_for_each(temp_node, &filter_node->type_list_head,
                           type_list) {
             counter_name =
-                    ucs_array_append(aggrgt_counter_names,
-                                     &ucs_stats_context.aggrgt_counter_names,
+                    ucs_array_append(&ucs_stats_context.aggrgt_counter_names,
                                      return UCS_ERR_NO_MEMORY);
             counter_name->counter_name = node->cls->counter_names[counter_index];
             counter_name->class_name   = node->cls->name;

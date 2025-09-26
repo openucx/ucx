@@ -1,6 +1,7 @@
 /**
  * Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -233,7 +234,6 @@ exit_no_res:
 ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                        const void *payload, unsigned length)
 {
-
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t);
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_ugni_smsg_header_t *smsg_header;
@@ -253,7 +253,8 @@ ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t head
     smsg_header = (uct_ugni_smsg_header_t *)(desc+1);
     smsg_header->length = length + sizeof(header);
 
-    uct_am_short_fill_data(smsg_header + 1, header, payload, length);
+    uct_am_short_fill_data(smsg_header + 1, header, payload, length,
+                           UCS_ARCH_MEMCPY_NT_NONE);
 
     uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND,
                        id, smsg_header + 1, length, "TX: AM_SHORT");

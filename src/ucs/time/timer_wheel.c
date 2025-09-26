@@ -13,7 +13,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 
 
 ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution,

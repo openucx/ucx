@@ -2,6 +2,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2025. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -22,17 +23,6 @@ typedef enum {
     UCT_MM_SEND_AM_SHORT,
     UCT_MM_SEND_AM_SHORT_IOV
 } uct_mm_send_op_t;
-
-
-/* Check if the resources on the remote peer are available for sending to it.
- * i.e. check if the remote receive FIFO has room in it.
- * return 1 if can send.
- * return 0 if can't send.
- * We compare after casting to int32 in order to ignore the event arm bit.
- */
-#define UCT_MM_EP_IS_ABLE_TO_SEND(_head, _tail, _fifo_size) \
-    ucs_likely((int32_t)((_head) - (_tail)) < (int32_t)(_fifo_size))
-
 
 static UCS_F_NOINLINE ucs_status_t
 uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
@@ -320,7 +310,8 @@ retry:
     switch (send_op) {
     case UCT_MM_SEND_AM_SHORT:
         /* write to the remote FIFO */
-        uct_am_short_fill_data(elem + 1, header, payload, length);
+        uct_am_short_fill_data(elem + 1, header, payload, length,
+                               UCS_ARCH_MEMCPY_NT_DEST);
 
         elem_flags   = UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);

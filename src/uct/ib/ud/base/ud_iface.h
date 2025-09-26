@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+* Copyright (c) Google, LLC, 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -155,6 +156,7 @@ uct_ud_iface_kh_gid_hash_equal(union ibv_gid a, union ibv_gid b)
 KHASH_IMPL(uct_ud_iface_gid, union ibv_gid, char, 0,
            uct_ud_iface_kh_gid_hash_func, uct_ud_iface_kh_gid_hash_equal)
 
+KHASH_MAP_INIT_INT(uct_ud_iface_ctl_desc_hash, uct_ud_ctl_desc_t*);
 
 struct uct_ud_iface {
     uct_ib_iface_t           super;
@@ -174,7 +176,10 @@ struct uct_ud_iface {
         uint8_t                async_before_pending;
         int16_t                available;
         unsigned               unsignaled;
-        ucs_queue_head_t       outstanding_q;
+        union {
+            ucs_queue_head_t                    queue;
+            khash_t(uct_ud_iface_ctl_desc_hash) map;
+        } outstanding;
         ucs_arbiter_t          pending_q;
         ucs_queue_head_t       async_comp_q;
         ucs_twheel_t           timer;
@@ -275,9 +280,9 @@ uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface);
 /*
 management of connecting endpoints (cep)
 
-Such endpoint are created either by explicitely calling ep_create_connected()
-or implicitely as a result of UD connection protocol. Calling
-ep_create_connected() may reuse already existing endpoint that was implicitely
+Such endpoint are created either by explicitly calling ep_create_connected()
+or implicitly as a result of UD connection protocol. Calling
+ep_create_connected() may reuse already existing endpoint that was implicitly
 created.
 
 UD connection protocol
@@ -314,7 +319,7 @@ Ack on connection reply. It may be send as part of the data packet.
 
 Implicit endpoints reuse
 
-Endpoints created upon receive of CREP request can be re-used when
+Endpoints created upon receive of CREP request can be reused when
 application calls ep_create_connected(). */
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
@@ -355,8 +360,11 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
 
 void uct_ud_iface_vfs_refresh(uct_iface_h iface);
 
-void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
-                                  int is_async);
+void uct_ud_iface_send_completion_ordered(uct_ud_iface_t *iface, uint16_t sn,
+                                          int is_async);
+
+void uct_ud_iface_send_completion_unordered(uct_ud_iface_t *iface, uint16_t sn,
+                                            int is_async);
 
 unsigned
 uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
@@ -395,10 +403,9 @@ static UCS_F_ALWAYS_INLINE void uct_ud_leave(uct_ud_iface_t *iface)
 
 static UCS_F_ALWAYS_INLINE int
 uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present,
-                       uint8_t roce_pkt_type)
+                       size_t gid_len)
 {
     struct ibv_grh *grh = (struct ibv_grh *)packet;
-    size_t gid_len;
     union ibv_gid *gid;
     khiter_t khiter;
     char gid_str[128] UCS_V_UNUSED;
@@ -411,25 +418,6 @@ uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present,
         ucs_warn("RoCE packet does not contain GRH");
         return 1;
     }
-
-    /*
-     * Take the packet type from CQE, because:
-     * 1. According to Annex17_RoCEv2 (A17.4.5.1):
-     * For UD, the Completion Queue Entry (CQE) includes remote address
-     * information (InfiniBand Specification Vol. 1 Rev 1.2.1 Section 11.4.2.1).
-     * For RoCEv2, the remote address information comprises the source L2
-     * Address and a flag that indicates if the received frame is an IPv4,
-     * IPv6 or RoCE packet.
-     * 2. According to PRM, for responder UD/DC over RoCE sl represents RoCE
-     * packet type as:
-     * bit 3    : when set R-RoCE frame contains an UDP header otherwise not
-     * Bits[2:0]: L3_Header_Type, as defined below
-     *     - 0x0 : GRH - (RoCE v1.0)
-     *     - 0x1 : IPv6 - (RoCE v1.5/v2.0)
-     *     - 0x2 : IPv4 - (RoCE v1.5/v2.0)
-     */
-    gid_len = ((roce_pkt_type & UCT_IB_CQE_SL_PKTYPE_MASK) == 0x2) ?
-              UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN;
 
     if (ucs_likely((gid_len == iface->gid_table.last_len) &&
                     uct_ud_gid_equal(&grh->dgid, &iface->gid_table.last,
@@ -540,7 +528,24 @@ uct_ud_iface_send_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_send_skb_t 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
 {
-    ucs_queue_push(&iface->tx.outstanding_q, &cdesc->queue);
+    khiter_t it;
+    int ret;
+
+    if (uct_ib_iface_device(&iface->super)->ordered_send_comp) {
+        ucs_queue_push(&iface->tx.outstanding.queue, &cdesc->queue);
+    } else {
+        it = kh_put(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map,
+                    cdesc->sn, &ret);
+        if (ucs_unlikely((ret == UCS_KH_PUT_FAILED) ||
+                         (ret == UCS_KH_PUT_KEY_PRESENT))) {
+            ucs_fatal("failed to add cdesc ep=%p sn=%u self_skb=%p "
+                      "resent_skb=%p to tx outstanding map (err=%d)",
+                      cdesc->ep, cdesc->sn, cdesc->self_skb, cdesc->resent_skb,
+                      ret);
+        }
+
+        kh_value(&iface->tx.outstanding.map, it) = cdesc;
+    }
 }
 
 

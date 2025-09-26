@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -147,14 +148,25 @@ uct_self_iface_is_reachable_v2(const uct_iface_h tl_iface,
     const uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
     const uct_self_iface_addr_t *addr;
 
-    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+    if (!uct_iface_is_reachable_params_valid(
+                params, UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR)) {
         return 0;
     }
 
     addr = (const uct_self_iface_addr_t*)params->iface_addr;
+    if (addr == NULL) {
+        uct_iface_fill_info_str_buf(params, "iface address is empty");
+        return 0;
+    }
 
-    return (addr != NULL) && (iface->id == *addr) &&
-           uct_iface_scope_is_reachable(tl_iface, params);
+    if (iface->id != *addr) {
+        uct_iface_fill_info_str_buf(
+                params, "iface id and iface address differ (%lu vs %lu)",
+                iface->id, *addr);
+        return 0;
+    }
+
+    return 1;
 }
 
 static void uct_self_iface_sendrecv_am(uct_self_iface_t *iface, uint8_t am_id,
@@ -313,7 +325,8 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     UCT_CHECK_LENGTH(total_length, 0, iface->send_size, "am_short");
 
     send_buffer = UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
-    uct_am_short_fill_data(send_buffer, header, payload, length);
+    uct_am_short_fill_data(send_buffer, header, payload, length,
+                           UCS_ARCH_MEMCPY_NT_NONE);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, total_length);
     uct_self_iface_sendrecv_am(iface, id, send_buffer, total_length, "SHORT");
@@ -367,12 +380,16 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 }
 
 static uct_iface_internal_ops_t uct_self_iface_internal_ops = {
-    .iface_estimate_perf   = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_self_iface_is_reachable_v2
+    .iface_query_v2         = uct_iface_base_query_v2,
+    .iface_estimate_perf    = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2  = uct_self_iface_is_reachable_v2,
+    .ep_is_connected        = uct_base_ep_is_connected,
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
 };
 
 static uct_iface_ops_t uct_self_iface_ops = {
@@ -390,40 +407,33 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_atomic32_fetch        = uct_sm_ep_atomic32_fetch,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_check                 = ucs_empty_function_return_success,
-    .ep_pending_add           = ucs_empty_function_return_busy,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_check                 = (uct_ep_check_func_t)ucs_empty_function_return_success,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_self_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_self_ep_t),
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = ucs_empty_function_return_zero,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
+    .iface_progress           = (uct_iface_progress_func_t)ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_self_iface_t),
     .iface_query              = uct_self_iface_query,
-    .iface_get_device_address = ucs_empty_function_return_success,
+    .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
     .iface_get_address        = uct_self_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
+    uct_md_base_md_query(attr);
     /* Dummy memory registration provided. No real memory handling exists */
     attr->flags                  = UCT_MD_FLAG_REG |
                                    UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
     attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->alloc_mem_types        = 0;
-    attr->detect_mem_types       = 0;
     attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->dmabuf_mem_types       = 0;
-    attr->max_alloc              = 0;
-    attr->max_reg                = ULONG_MAX;
-    attr->rkey_packed_size       = 0;
-    attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
-    memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
 
@@ -433,13 +443,17 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
     uct_self_md_config_t *md_config = ucs_derived_of(config,
                                                      uct_self_md_config_t);
     static uct_md_ops_t md_ops = {
-        .close              = ucs_empty_function,
+        .close              = (uct_md_close_func_t)ucs_empty_function,
         .query              = uct_self_md_query,
-        .mkey_pack          = ucs_empty_function_return_success,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg            = uct_md_dummy_mem_reg,
         .mem_dereg          = uct_md_dummy_mem_dereg,
-        .mem_attach         = ucs_empty_function_return_unsupported,
-        .detect_memory_type = ucs_empty_function_return_unsupported
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+        .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     };
 
     static uct_self_md_t md;
@@ -452,9 +466,10 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
     return UCS_OK;
 }
 
-static ucs_status_t uct_self_md_rkey_unpack(uct_component_t *component,
-                                            const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                            void **handle_p)
+static ucs_status_t
+uct_self_md_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                        const uct_rkey_unpack_params_t *params,
+                        uct_rkey_t *rkey_p, void **handle_p)
 {
     /**
      * Pseudo stub function for the key unpacking
@@ -468,10 +483,10 @@ static ucs_status_t uct_self_md_rkey_unpack(uct_component_t *component,
 static uct_component_t uct_self_component = {
     .query_md_resources = uct_md_query_single_md_resource,
     .md_open            = uct_self_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_self_md_rkey_unpack,
     .rkey_ptr           = uct_sm_rkey_ptr,
-    .rkey_release       = ucs_empty_function_return_success,
+    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = UCT_SELF_NAME,
     .md_config          = {

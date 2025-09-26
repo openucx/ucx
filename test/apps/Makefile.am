@@ -10,10 +10,7 @@ SUBDIRS = profiling
 
 SUBDIRS += iodemo
 
-if HAVE_CXX11
-SUBDIRS += sockaddr
-endif
-
+if HAVE_TEST_APPS
 noinst_PROGRAMS = \
 	test_ucp_dlopen \
 	test_ucp_config \
@@ -24,23 +21,23 @@ noinst_PROGRAMS = \
 	test_memtrack_limit \
 	test_hooks
 
-objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
+objdir_apps = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
 
 test_hooks_SOURCES  = test_hooks.c
 test_hooks_CPPFLAGS = $(BASE_CPPFLAGS) \
-                      -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so
+                      -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir_apps)/libucs.so
 test_hooks_CFLAGS   = $(BASE_CFLAGS)
 test_hooks_LDADD    = -ldl
 
 test_ucs_dlopen_SOURCES  = test_ucs_dlopen.c
 test_ucs_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) \
-                           -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so
+                           -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir_apps)/libucs.so
 test_ucs_dlopen_CFLAGS   = $(BASE_CFLAGS)
 test_ucs_dlopen_LDADD    = -ldl
 
 test_ucp_dlopen_SOURCES  = test_ucp_dlopen.c
 test_ucp_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) \
-                           -DLIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
+                           -DLIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir_apps)/libucp.so
 test_ucp_dlopen_CFLAGS   = $(BASE_CFLAGS)
 test_ucp_dlopen_LDADD    = -ldl
 
@@ -61,8 +58,8 @@ test_link_map_LDADD    = -ldl $(top_builddir)/src/ucp/libucp.la
 
 test_dlopen_cfg_print_SOURCES  = test_dlopen_cfg_print.c
 test_dlopen_cfg_print_CPPFLAGS = $(BASE_CPPFLAGS) -g \
-	-DUCS_LIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so \
-	-DUCT_LIB_PATH=$(abs_top_builddir)/src/uct/$(objdir)/libuct.so
+	-DUCS_LIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir_apps)/libucs.so \
+	-DUCT_LIB_PATH=$(abs_top_builddir)/src/uct/$(objdir_apps)/libuct.so
 test_dlopen_cfg_print_CFLAGS   = $(BASE_CFLAGS)
 test_dlopen_cfg_print_LDADD    = -ldl
 
@@ -101,6 +98,23 @@ test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
                                   $(CUDART_STATIC_LIBS) $(CUDA_LIBS)
 endif
 
+if HAVE_NVCC
+
+include $(top_srcdir)/config/cuda.am
+
+# Could be simply added as .cu to _SOURCES if there was no specific CPPFLAGS
+$(eval $(call nvcc-source, custom-test_cuda_get_symbol_address.o, \
+	test_cuda_get_symbol_address.cu,CUDA_CPPFLAGS))
+
+noinst_PROGRAMS                      += test_cuda_get_symbol_address
+test_cuda_get_symbol_address_SOURCES  =
+test_cuda_get_symbol_address_LDFLAGS  = $(CUDA_LDFLAGS)
+test_cuda_get_symbol_address_LDADD    = $(CUDART_LIBS) custom-test_cuda_get_symbol_address.o \
+                                        $(top_builddir)/src/ucp/libucp.la \
+                                        $(top_builddir)/src/ucm/libucm.la
+
+endif
+
 endif
 
 if HAVE_TCMALLOC
@@ -110,4 +124,6 @@ test_tcmalloc_CPPFLAGS = $(BASE_CPPFLAGS)
 test_tcmalloc_CFLAGS   = $(BASE_CFLAGS)
 test_tcmalloc_LDADD    = -ldl $(TCMALLOC_LIB) \
                           $(top_builddir)/src/ucp/libucp.la
+endif
+
 endif

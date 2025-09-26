@@ -20,7 +20,7 @@ libgtest_la_CPPFLAGS = \
 	$(OPENMP_CFLAGS)
 
 libgtest_la_LDFLAGS  = $(GTEST_LDFLAGS) -no-install $(LDFLAGS_DYNAMIC_LIST_DATA)
-libgtest_la_CFLAGS   = $(BASE_CFLAGS)
+libgtest_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libgtest_la_CXXFLAGS = \
 	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++11
 

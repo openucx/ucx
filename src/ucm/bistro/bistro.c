@@ -17,7 +17,7 @@
 #include <ucm/bistro/bistro.h>
 #include <ucm/bistro/bistro_int.h>
 #include <ucs/type/serialize.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/time/time.h>
 #include <ucs/arch/atomic.h>
 
@@ -55,12 +55,13 @@ void ucm_bistro_modify_code(void *dst, const ucm_bistro_lock_t *bytes)
     uint32_t value32;
 
     UCS_STATIC_ASSERT((sizeof(*bytes) == sizeof(value16)) ||
-                      (sizeof(*bytes) == sizeof(value32)));
+                      (sizeof(*bytes) == sizeof(value32)) ||
+                      (sizeof(*bytes) == 0));
 
     if (sizeof(*bytes) == sizeof(value16)) {
         memcpy(&value16, bytes, sizeof(value16));
         (void)ucs_atomic_swap16(dst, value16);
-    } else {
+    } else if (sizeof(*bytes) == sizeof(value32)) {
         memcpy(&value32, bytes, sizeof(value32));
         (void)ucs_atomic_swap32(dst, value32);
     }

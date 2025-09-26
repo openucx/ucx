@@ -9,6 +9,7 @@ extern "C" {
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 }
 
@@ -63,9 +64,10 @@ UCS_TEST_F(test_string, common_prefix_len) {
 }
 
 UCS_TEST_F(test_string, path) {
-    char path[PATH_MAX];
-    ucs_path_get_common_parent("/sys/dev/one", "/sys/dev/two", path);
-    EXPECT_STREQ("/sys/dev", path);
+    std::string path(PATH_MAX, '\0');
+
+    ucs_path_get_common_parent("/sys/dev/one", "/sys/dev/two", &path[0]);
+    EXPECT_STREQ("/sys/dev", path.c_str());
 
     EXPECT_EQ(4, ucs_path_calc_distance("/root/foo/bar", "/root/charlie/fox"));
     EXPECT_EQ(2, ucs_path_calc_distance("/a/b/c/d", "/a/b/c/e"));
@@ -152,6 +154,76 @@ UCS_TEST_F(test_string, split) {
         EXPECT_EQ(std::string("bar"), p3);
         EXPECT_EQ(NULL, p4);
         EXPECT_EQ(NULL, ret);
+    }
+}
+
+UCS_TEST_F(test_string, to_memunits) {
+    size_t value;
+
+    // Just a number
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("123", &value));
+        EXPECT_EQ(123, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("0", &value));
+        EXPECT_EQ(0, value);
+    }
+    // Invalid values
+    {
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("abc", &value));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("", &value));
+    }
+
+    // Number and 'b'
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("123B", &value));
+        EXPECT_EQ(123, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("123b", &value));
+        EXPECT_EQ(123, value);
+    }
+    // Invalid values
+    {
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("123!", &value));
+    }
+
+    // Number and multiplier
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2k", &value));
+        EXPECT_EQ(2 * UCS_KBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2M", &value));
+        EXPECT_EQ(2 * UCS_MBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("1G", &value));
+        EXPECT_EQ(1 * UCS_GBYTE, value);
+    }
+
+    // Number and multiplier and 'b'
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2kb", &value));
+        EXPECT_EQ(2 * UCS_KBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2KB", &value));
+        EXPECT_EQ(2 * UCS_KBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2kB", &value));
+        EXPECT_EQ(2 * UCS_KBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2MB", &value));
+        EXPECT_EQ(2 * UCS_MBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("1GB", &value));
+        EXPECT_EQ(1 * UCS_GBYTE, value);
+    }
+
+    // Special values
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("inf", &value));
+        EXPECT_EQ(UCS_MEMUNITS_INF, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("auto", &value));
+        EXPECT_EQ(UCS_MEMUNITS_AUTO, value);
     }
 }
 
@@ -257,8 +329,8 @@ void test_string_buffer::test_fixed(ucs_string_buffer_t *strb, size_t capacity)
     ucs_string_buffer_appendf(strb, "%s", "mrmeeseeks");
     ucs_string_buffer_appendf(strb, "%s", "lookatme");
 
-    EXPECT_LE(ucs_string_buffer_length(strb), capacity - 1);
-    EXPECT_EQ(std::string("immrmeeseeksloo"), ucs_string_buffer_cstr(strb));
+    EXPECT_EQ(ucs_string_buffer_length(strb), capacity - 1);
+    EXPECT_EQ(std::string("immrmeeseekslook"), ucs_string_buffer_cstr(strb));
 }
 
 UCS_TEST_F(test_string_buffer, fixed_static) {
@@ -307,6 +379,20 @@ UCS_TEST_F(test_string_buffer, flags) {
     /* coverity[overrun-buffer-val] */
     ucs_string_buffer_append_flags(&strb, UCS_BIT(1) | UCS_BIT(3), flag_names);
     EXPECT_EQ(std::string("one|three"), ucs_string_buffer_cstr(&strb));
+}
+
+UCS_TEST_F(test_string_buffer, array) {
+    static const char *str_array[] = {"once", "upon", "a", "time"};
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_append_array(&strb, " ", "%s", str_array,
+                                   ucs_static_array_size(str_array));
+    EXPECT_EQ(std::string("once upon a time"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_reset(&strb);
+    static int num_array[] = {1, 2, 3, 4};
+    ucs_string_buffer_append_array(&strb, ",", "%d", num_array,
+                                   ucs_static_array_size(num_array));
+    EXPECT_EQ(std::string("1,2,3,4"), ucs_string_buffer_cstr(&strb));
 }
 
 UCS_TEST_F(test_string_buffer, dump) {

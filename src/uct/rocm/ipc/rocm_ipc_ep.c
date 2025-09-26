@@ -94,11 +94,22 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    ret = uct_rocm_ipc_cache_map_memhandle((void *)ep->remote_memh_cache, key,
+    if (iface->config.enable_ipc_handle_cache) {
+        ret = uct_rocm_ipc_cache_map_memhandle((void*)ep->remote_memh_cache,
+                                               key, &remote_base_addr);
+        if (ucs_unlikely(ret != UCS_OK)) {
+            ucs_error("fail to attach ipc mem %p %d\n", (void*)key->address,
+                      ret);
+            return ret;
+        }
+    } else {
+        status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
                                            &remote_base_addr);
-    if (ret != UCS_OK) {
-        ucs_error("fail to attach ipc mem %p %d\n", (void *)key->address, ret);
-        return ret;
+        if (ucs_unlikely(status != HSA_STATUS_SUCCESS)) {
+            ucs_error("failed to open ipc mem handle. addr:%p len:%lu",
+                      (void*)key->address, key->length);
+            return UCS_ERR_INVALID_ADDR;
+        }
     }
 
     remote_copy_addr = UCS_PTR_BYTE_OFFSET(remote_base_addr,
@@ -116,7 +127,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     if (remote_agent.handle == 0) {
-        /* No access to remote agent, e.g. because of limited visability of devices to
+        /* No access to remote agent, e.g. because of limited visibility of devices to
          * this process. Using local_agent as a backup plan. */
         remote_agent = local_agent;
     } else {
@@ -143,6 +154,12 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     rocm_ipc_signal = ucs_mpool_get(&iface->signal_pool);
+    if (rocm_ipc_signal == NULL) {
+        ucs_error("increase the maximum number of signal pool elements with "
+                  "UCX_ROCM_IPC_SIGPOOL_MAX_ELEMS");
+        return UCS_ERR_IO_ERROR;
+    }
+
     hsa_signal_store_screlease(rocm_ipc_signal->signal, 1);
 
     status = UCS_PROFILE_CALL_ALWAYS(hsa_amd_memory_async_copy, dst_addr,
@@ -156,7 +173,11 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     rocm_ipc_signal->comp = comp;
-    rocm_ipc_signal->mapped_addr = remote_base_addr;
+    if (iface->config.enable_ipc_handle_cache) {
+        rocm_ipc_signal->mapped_addr = NULL;
+    } else {
+        rocm_ipc_signal->mapped_addr = remote_base_addr;
+    }
     ucs_queue_push(&iface->signal_queue, &rocm_ipc_signal->queue);
 
     ucs_trace("rocm async copy issued :%p remote:%p, local:%p  len:%ld",

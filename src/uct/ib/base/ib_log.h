@@ -18,7 +18,8 @@
 enum {
     UCT_IB_OPCODE_FLAG_HAS_RADDR       = UCS_BIT(0),
     UCT_IB_OPCODE_FLAG_HAS_ATOMIC      = UCS_BIT(1),
-    UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC  = UCS_BIT(2)
+    UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC  = UCS_BIT(2),
+    UCT_IB_OPCODE_FLAG_HAS_DMA         = UCS_BIT(3)
 };
 
 
@@ -34,8 +35,8 @@ void uct_ib_log_dump_opcode(uct_ib_opcode_t *op, int signal, int fence, int se,
                             char *buf, size_t max);
 
 void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
-                             struct ibv_sge *sg_list, int num_sge,
-                             uint64_t inline_bitmap,
+                             const char *sg_prefixes, struct ibv_sge *sg_list,
+                             int num_sge, uint64_t inline_bitmap,
                              uct_log_data_dump_func_t data_dump,
                              int data_dump_sge, char *buf, size_t max);
 
@@ -70,32 +71,47 @@ void __uct_ib_log_post_send(const char *file, int line, const char *function,
                             struct ibv_send_wr *wr, int max_sge,
                             uct_log_data_dump_func_t packet_dump_cb);
 
+void __uct_ib_log_post_send_one(const char *file, int line,
+                                const char *function, uct_ib_iface_t *iface,
+                                struct ibv_qp *qp, struct ibv_send_wr *wr,
+                                struct ibv_ah *ah, uint32_t remote_qn,
+                                int max_sge,
+                                uct_log_data_dump_func_t data_dump_cb);
+
 void __uct_ib_log_recv_completion(const char *file, int line, const char *function,
                                   uct_ib_iface_t *iface, uint32_t l_qp,
                                   uint32_t r_qp, uint16_t slid, void *data,
                                   size_t length,
                                   uct_log_data_dump_func_t packet_dump_cb);
 
-#define uct_ib_check_memlock_limit_msg(level, _fmt, ...) \
+#define uct_ib_check_memlock_limit_msg(_ibv_context, _level, _fmt, ...) \
     ({ \
         UCS_STRING_BUFFER_ONSTACK(_msg, 256); \
         int _tmp_errno = errno; \
-        ucs_string_buffer_appendf(&_msg, _fmt, ## __VA_ARGS__); \
+        ucs_string_buffer_appendf(&_msg, _fmt, ##__VA_ARGS__); \
         ucs_string_buffer_appendf(&_msg, " failed: %s", strerror(_tmp_errno)); \
         uct_ib_memlock_limit_msg(&_msg, _tmp_errno); \
-        ucs_log(level, "%s", ucs_string_buffer_cstr(&_msg)); \
+        ucs_log(_level, "%s: %s", ibv_get_device_name((_ibv_context)->device), \
+                ucs_string_buffer_cstr(&_msg)); \
     })
+
+#define uct_ib_log_post_send_one(_iface, _qp, _wr, _ah, _remote_qpn, _max_sge, \
+                                 _dump_cb) \
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
+        __uct_ib_log_post_send_one(__FILE__, __LINE__, __func__, _iface, _qp, \
+                                   _wr, _ah, _remote_qpn, _max_sge, _dump_cb); \
+    }
 
 #define uct_ib_log_post_send(_iface, _qp, _wr, _max_sge, _dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_log_post_send(__FILE__, __LINE__, __FUNCTION__, \
+        __uct_ib_log_post_send(__FILE__, __LINE__, __func__, \
                                 _iface, _qp, _wr, _max_sge, _dump_cb); \
     }
 
 /* Suitable for both: regular and exp wcs */
 #define uct_ib_log_recv_completion(_iface, _wc, _data, _length, _dump_cb, ...) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_log_recv_completion(__FILE__, __LINE__, __FUNCTION__, \
+        __uct_ib_log_recv_completion(__FILE__, __LINE__, __func__, \
                                      _iface, (_wc)->qp_num, (_wc)->src_qp, (_wc)->slid, \
                                      _data, _length, _dump_cb, ## __VA_ARGS__); \
     }

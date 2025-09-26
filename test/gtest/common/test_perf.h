@@ -76,6 +76,9 @@ private:
 
         unsigned gsize() const;
 
+        static ucs_status_t setup(void *arg);
+        static void cleanup(void *arg);
+
         static unsigned group_size(void *rte_group);
 
         static unsigned group_index(void *rte_group);
@@ -90,10 +93,6 @@ private:
                          size_t max, void *req);
 
         static void exchange_vec(void *rte_group, void * req);
-
-        static void report(void *rte_group, const ucx_perf_result_t *result,
-                           void *arg, const char *extra_info, int is_final,
-                           int is_multi_thread);
 
         static ucx_perf_rte_t test_rte;
 
@@ -124,6 +123,12 @@ private:
                           unsigned flags,
                           const std::string &tl_name,
                           const std::string &dev_name);
+
+    static void print_progress(void *rte_group, const ucx_perf_result_t *result,
+                               void *arg, const char *extra_info, int final,
+                               int is_multi_thread)
+    {
+    }
 
     test_result run_multi_threaded(const test_spec &test, unsigned flags,
                                    const std::string &tl_name,

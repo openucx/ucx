@@ -11,10 +11,11 @@
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/module.h>
+#include <ucs/memory/memtype_cache.h>
 #include <sys/utsname.h>
 #include <pthread.h>
 
-#define MAX_AGENTS 63
+#define MAX_AGENTS 127
 static struct agents {
     int num;
     hsa_agent_t agents[MAX_AGENTS];
@@ -366,16 +367,19 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     size_t dmabuf_offset       = 0;
     int is_exported            = 0;
     ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST;
+    ucs_sys_device_t sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
     int dmabuf_fd;
     hsa_status_t status;
     hsa_device_type_t dev_type;
     hsa_amd_pointer_type_t hsa_mem_type;
     hsa_agent_t agent;
-    ucs_sys_device_t sys_dev;
     ucs_status_t ucs_status;
+    void *base_addr;
+    size_t base_size;
 
-    status = uct_rocm_base_get_ptr_info((void*)addr, length, NULL, NULL,
-                                        &hsa_mem_type, &agent, &dev_type);
+    status = uct_rocm_base_get_ptr_info((void*)addr, length, &base_addr,
+                                        &base_size, &hsa_mem_type, &agent,
+                                        &dev_type);
     if (status != HSA_STATUS_SUCCESS) {
         return status;
     }
@@ -383,6 +387,11 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     if ((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
         (dev_type == HSA_DEVICE_TYPE_GPU)) {
         mem_type = UCS_MEMORY_TYPE_ROCM;
+
+        ucs_status = uct_rocm_base_get_sys_dev(agent, &sys_dev);
+        if (ucs_status != UCS_OK) {
+            sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
@@ -390,13 +399,7 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
-        mem_attr_p->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        if (mem_type == UCS_MEMORY_TYPE_ROCM) {
-            ucs_status = uct_rocm_base_get_sys_dev(agent, &sys_dev);
-            if (ucs_status == UCS_OK) {
-                mem_attr_p->sys_dev = sys_dev;
-            }
-        }
+        mem_attr_p->sys_dev = sys_dev;
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
@@ -420,6 +423,10 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                         &dmabuf_offset);
         }
         mem_attr_p->dmabuf_offset = dmabuf_offset;
+    }
+
+    if (mem_type == UCS_MEMORY_TYPE_ROCM) {
+        ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev);
     }
 
     return UCS_OK;
@@ -499,6 +506,36 @@ ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *link_type)
 
     *link_type = link_info.link_type;
     return UCS_OK;
+}
+
+uct_rocm_amd_gpu_product_t uct_rocm_base_get_gpu_product(void)
+{
+    uct_rocm_amd_gpu_product_t gpu_product = UCT_ROCM_AMD_GPU_MI200;
+    char gfx_name[64];
+    hsa_status_t status;
+
+    /* Query the gfx architecture name */
+    status = hsa_agent_get_info(uct_rocm_base_agents.gpu_agents[0],
+                                (hsa_agent_info_t)HSA_AGENT_INFO_NAME,
+                                gfx_name);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_debug("hsa_agent_get_info failed: %d", status);
+        return gpu_product;
+    }
+
+    if (NULL != strstr(gfx_name, "gfx94")) {
+        /* This is an MI300/325 GPU */
+        gpu_product = UCT_ROCM_AMD_GPU_MI300;
+        ucs_trace("found gfx94* GPU");
+    } else if (NULL != strstr(gfx_name, "gfx95")) {
+        /* This is an MI35x GPU */
+        gpu_product = UCT_ROCM_AMD_GPU_MI350;
+        ucs_trace("found gfx950 GPU");
+    } else {
+        ucs_trace("assuming MI100/MI200 GPU");
+    }
+
+    return gpu_product;
 }
 
 UCS_MODULE_INIT() {

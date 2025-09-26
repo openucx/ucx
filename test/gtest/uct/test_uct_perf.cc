@@ -50,7 +50,8 @@ void test_uct_perf::test_execute(unsigned flags = 0,
         }
     }
 
-    if (has_transport("tcp") || has_transport("cuda_copy")) {
+    if (has_transport("tcp") || has_transport("cuda_copy") ||
+        has_transport("gdr_copy")) {
         check_perf = false; /* TODO calibrate expected performance based on transport */
         max_iter   = 1000lu;
     }
@@ -183,6 +184,13 @@ const test_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_WAIT_MODE_POLL,
     UCT_PERF_DATA_LAYOUT_ZCOPY, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 3.5,
+    0 },
+
+  { "get zcopy bw", "MB/sec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCT_PERF_DATA_LAYOUT_ZCOPY, 0, 1, { 2048 }, 32, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 620.0, 50000.0,
     0 },
 
   { "atomic add latency", "usec",

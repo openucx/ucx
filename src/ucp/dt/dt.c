@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -14,7 +15,7 @@
 
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.h>
-#include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_mm.inl>
 #include <ucs/profile/profile.h>
 
 
@@ -25,17 +26,17 @@ const char * ucp_datatype_class_names[] = {
     [UCP_DATATYPE_GENERIC]  = "generic"
 };
 
+
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
                       (worker, buffer, recv_data, recv_length, mem_type),
                       ucp_worker_h worker, void *buffer, const void *recv_data,
                       size_t recv_length, ucs_memory_type_t mem_type)
 {
-    ucp_ep_h ep         = worker->mem_type_ep[mem_type];
+    ucp_ep_h ep = worker->mem_type_ep[mem_type];
     ucp_lane_index_t lane;
     unsigned md_index;
-    ucp_mem_h memh;
     ucs_status_t status;
-    uct_rkey_bundle_t rkey_bundle;
+    ucp_mtype_pack_context_t pack_context;
 
     if (recv_length == 0) {
         return;
@@ -45,20 +46,20 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, buffer, recv_length, mem_type,
-                                      md_index, &memh, &rkey_bundle);
+                                      md_index, &pack_context);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);
     }
 
     status = uct_ep_put_short(ucp_ep_get_lane(ep, lane), recv_data, recv_length,
-                              (uint64_t)buffer, rkey_bundle.rkey);
+                              (uint64_t)buffer, pack_context.rkey_bundle.rkey);
     if (status != UCS_OK) {
         ucs_fatal("mem type unpack failed to uct_ep_put_short() %s",
                   ucs_status_string(status));
     }
 
-    ucp_mem_type_unreg_buffers(worker, md_index, memh, &rkey_bundle);
+    ucp_mem_type_unreg_buffers(worker, &pack_context);
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
@@ -66,12 +67,11 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
                       ucp_worker_h worker, void *dest, const void *src,
                       size_t length, ucs_memory_type_t mem_type)
 {
-    ucp_ep_h ep         = worker->mem_type_ep[mem_type];
+    ucp_ep_h ep = worker->mem_type_ep[mem_type];
     ucp_lane_index_t lane;
     ucp_md_index_t md_index;
     ucs_status_t status;
-    ucp_mem_h memh;
-    uct_rkey_bundle_t rkey_bundle;
+    ucp_mtype_pack_context_t pack_context;
 
     if (length == 0) {
         return;
@@ -81,20 +81,20 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,
-                                      md_index, &memh, &rkey_bundle);
+                                      md_index, &pack_context);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);
     }
 
     status = uct_ep_get_short(ucp_ep_get_lane(ep, lane), dest, length,
-                              (uint64_t)src, rkey_bundle.rkey);
+                              (uint64_t)src, pack_context.rkey_bundle.rkey);
     if (status != UCS_OK) {
         ucs_fatal("mem type pack failed to uct_ep_get_short() %s",
                   ucs_status_string(status));
     }
 
-    ucp_mem_type_unreg_buffers(worker, md_index, memh, &rkey_bundle);
+    ucp_mem_type_unreg_buffers(worker, &pack_context);
 }
 
 size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
@@ -112,14 +112,14 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
     case UCP_DATATYPE_CONTIG:
         ucp_dt_contig_pack(worker, dest,
                            UCS_PTR_BYTE_OFFSET(src, state->offset),
-                           length, mem_type);
+                           length, mem_type, length);
         result_len = length;
         break;
 
     case UCP_DATATYPE_IOV:
         UCS_PROFILE_CALL_VOID(ucp_dt_iov_gather, worker, dest, src, length,
                               &state->dt.iov.iov_offset,
-                              &state->dt.iov.iovcnt_offset, mem_type);
+                              &state->dt.iov.iovcnt_offset, mem_type, length);
         result_len = length;
         break;
 

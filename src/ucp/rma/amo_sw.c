@@ -1,6 +1,7 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
  * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -16,7 +17,7 @@
 #include <ucs/profile/profile.h>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
-#include <ucp/proto/proto_single.h>
+#include <ucp/proto/proto_single.inl>
 
 
 static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
@@ -38,10 +39,10 @@ static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
 
     if (worker->context->config.ext.proto_enable) {
         ucp_dt_contig_pack(worker, atomich + 1, &req->send.amo.value, size,
-                           UCS_MEMORY_TYPE_HOST);
+                           UCS_MEMORY_TYPE_HOST, size);
         if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
             ucp_dt_contig_pack(worker, cswaph, req->send.amo.reply_buffer, size,
-                               ucp_amo_request_reply_mem_type(req));
+                               ucp_amo_request_reply_mem_type(req), size);
             length += size;
         }
     } else {
@@ -83,7 +84,7 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 
     status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_ATOMIC_REQ,
                                     req->send.lane, pack_cb, req, NULL);
-    if ((status != UCS_OK) || ((status == UCS_OK) && !fetch)) {
+    if ((status != UCS_OK) || !fetch) {
         if (fetch) {
             ucp_send_request_id_release(req);
         }
@@ -222,7 +223,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
-    ucp_rsc_index_t amo_rsc_idx      = UCS_BITMAP_FFS(worker->atomic_tls);
+    ucp_rsc_index_t amo_rsc_idx      = UCS_STATIC_BITMAP_FFS(worker->atomic_tls);
     ucp_request_t *req;
     ucp_ep_h ep;
 
@@ -303,7 +304,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_fl
 
     if (worker->context->config.ext.proto_enable) {
         ucp_dt_contig_unpack(worker, req->send.amo.reply_buffer, hdr + 1,
-                             frag_length, ucp_amo_request_reply_mem_type(req));
+                             frag_length, ucp_amo_request_reply_mem_type(req),
+                             frag_length);
     } else {
         memcpy(req->send.buffer, hdr + 1, frag_length);
     }
@@ -374,6 +376,7 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
                                                             send.uct);
+    ucp_ep_h ep                          = req->send.ep;
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucp_datatype_iter_t next_iter;
     ucs_status_t status;
@@ -381,14 +384,20 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         if (!(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
             ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
-                                        req->send.ep->worker, SIZE_MAX,
+                                        ep->worker, SIZE_MAX,
                                         &next_iter, &req->send.amo.value);
             req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
         }
 
-        status = ucp_ep_resolve_remote_id(req->send.ep, spriv->super.lane);
+        status = ucp_ep_resolve_remote_id(ep, spriv->super.lane);
         if (status != UCS_OK) {
             return status;
+        }
+
+        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
@@ -399,15 +408,15 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
     return ucp_amo_sw_progress(self, pack_cb, fetch);
 }
 
-static ucs_status_t
-ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags)
+static void ucp_proto_amo_sw_probe(const ucp_proto_init_params_t *init_params,
+                                   unsigned flags)
 {
     const ucp_ep_config_key_t *ep_config_key = init_params->ep_config_key;
     ucp_worker_h worker                      = init_params->worker;
     ucp_proto_single_init_params_t params    = {
         .super.super         = *init_params,
         .super.latency       = 1.2e-6,
-        .super.overhead      = 40e-9,
+        .super.overhead      = worker->context->config.ext.proto_overhead_sw,
         .super.cfg_thresh    = ucp_proto_sw_rma_cfg_thresh(worker->context, 0),
         .super.cfg_priority  = 20,
         .super.min_length    = sizeof(uint32_t),
@@ -422,6 +431,7 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = 0
     };
@@ -437,11 +447,11 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
             (iface_attr->cap.flags & UCT_IFACE_FLAG_ATOMIC_DEVICE)) {
             ucs_trace("software atomics not supported because device atomics "
                       "are selected");
-            return UCS_ERR_UNSUPPORTED;
+            return;
         }
     }
 
-    return ucp_proto_single_init(&params);
+    ucp_proto_single_probe(&params);
 }
 
 static ucs_status_t ucp_proto_amo_sw_progress_post(uct_pending_req_t *self)
@@ -449,22 +459,22 @@ static ucs_status_t ucp_proto_amo_sw_progress_post(uct_pending_req_t *self)
     return ucp_proto_amo_sw_progress(self, ucp_proto_amo_sw_post_pack_cb, 0);
 }
 
-static ucs_status_t
-ucp_proto_amo_sw_init_post(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_amo_sw_post_probe(const ucp_proto_init_params_t *init_params)
 {
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_AMO_POST)) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_amo_sw_init(init_params, 0);
+    ucp_proto_amo_sw_probe(init_params, 0);
 }
 
 ucp_proto_t ucp_get_amo_post_proto = {
     .name     = "amo/post/sw",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
-    .init     = ucp_proto_amo_sw_init_post,
+    .probe    = ucp_proto_amo_sw_post_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_post},
     .abort    = ucp_proto_abort_fatal_not_implemented,
@@ -476,25 +486,24 @@ static ucs_status_t ucp_proto_amo_sw_progress_fetch(uct_pending_req_t *self)
     return ucp_proto_amo_sw_progress(self, ucp_proto_amo_sw_fetch_pack_cb, 1);
 }
 
-static ucs_status_t
-ucp_proto_amo_sw_init_fetch(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_amo_sw_fetch_probe(const ucp_proto_init_params_t *init_params)
 {
     if (!ucp_proto_init_check_op(init_params,
                                  UCS_BIT(UCP_OP_ID_AMO_FETCH) |
                                  UCS_BIT(UCP_OP_ID_AMO_CSWAP)) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_amo_sw_init(init_params,
-                                 UCP_PROTO_COMMON_INIT_FLAG_RESPONSE);
+    ucp_proto_amo_sw_probe(init_params, UCP_PROTO_COMMON_INIT_FLAG_RESPONSE);
 }
 
 ucp_proto_t ucp_get_amo_fetch_proto = {
     .name     = "amo/fetch/sw",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
-    .init     = ucp_proto_amo_sw_init_fetch,
+    .probe    = ucp_proto_amo_sw_fetch_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_fetch},
     .abort    = ucp_proto_abort_fatal_not_implemented,

@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) Google, LLC, 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -29,6 +30,10 @@
 
 #include <uct/ib/ud/base/ud_inl.h>
 
+
+#define UCT_UD_VERBS_IFACE_OVERHEAD 105e-9
+
+
 static UCS_F_NOINLINE void
 uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max);
 
@@ -36,7 +41,7 @@ static inline void
 uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface);
 
 static ucs_config_field_t uct_ud_verbs_iface_config_table[] = {
-  {"UD_", "", NULL,
+  {"UD_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_UD_VERBS_IFACE_OVERHEAD), NULL,
    0, UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
   {NULL}
@@ -69,11 +74,15 @@ uct_ud_verbs_post_send(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
                        struct ibv_send_wr *wr, unsigned send_flags,
                        unsigned max_log_sge)
 {
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
     struct ibv_send_wr *bad_wr;
     int UCS_V_UNUSED ret;
 
-    if ((send_flags & IBV_SEND_SIGNALED) ||
-        (iface->super.tx.unsignaled >= (UCT_UD_TX_MODERATION - 1))) {
+    if (!dev->ordered_send_comp) {
+        wr->send_flags             = send_flags | IBV_SEND_SIGNALED;
+        wr->wr_id                  = iface->tx.send_sn;
+    } else if ((send_flags & IBV_SEND_SIGNALED) ||
+               (iface->super.tx.unsignaled >= (UCT_UD_TX_MODERATION - 1))) {
         wr->send_flags             = send_flags | IBV_SEND_SIGNALED;
         wr->wr_id                  = iface->super.tx.unsignaled;
         iface->super.tx.unsignaled = 0;
@@ -126,6 +135,7 @@ uct_ud_verbs_ep_send_ctl(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_ep->super.super.iface,
                                                  uct_ud_verbs_iface_t);
+    uct_ib_device_t *dev  = uct_ib_iface_device(&iface->super.super);
     uct_ud_verbs_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_verbs_ep_t);
     unsigned send_flags;
     uint16_t iov_index;
@@ -137,7 +147,8 @@ uct_ud_verbs_ep_send_ctl(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
     } else {
         ucs_assert(!(flags & UCT_UD_IFACE_SEND_CTL_FLAG_INLINE));
     }
-    if (flags & UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED) {
+    if ((flags & UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED) &&
+        dev->req_notify_cq_support) {
         send_flags |= IBV_SEND_SOLICITED;
     }
     if (flags & UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED) {
@@ -355,11 +366,15 @@ ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
 static UCS_F_ALWAYS_INLINE unsigned
 uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface, int is_async)
 {
+    unsigned num_wcs =
+            uct_ib_iface_device(&iface->super.super)->ordered_send_comp ?
+                    1 :
+                    iface->super.super.config.tx_max_poll;
+    struct ibv_wc wc[num_wcs];
     unsigned num_completed;
-    struct ibv_wc wc;
-    int ret;
+    int i, ret;
 
-    ret = ibv_poll_cq(iface->super.super.cq[UCT_IB_DIR_TX], 1, &wc);
+    ret = ibv_poll_cq(iface->super.super.cq[UCT_IB_DIR_TX], num_wcs, wc);
     if (ucs_unlikely(ret < 0)) {
         ucs_fatal("Failed to poll send CQ");
         return 0;
@@ -369,24 +384,50 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface, int is_async)
         return 0;
     }
 
-    if (ucs_unlikely(wc.status != IBV_WC_SUCCESS)) {
-        ucs_fatal("Send completion (wr_id=0x%0X with error: %s ",
-                  (unsigned)wc.wr_id, ibv_wc_status_str(wc.status));
-        return 0;
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_TX_COMPLETION, ret);
+
+    for (i = 0; i < ret; i++) {
+        if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
+            ucs_fatal("Send completion (wr_id=0x%0X with error: %s ",
+                      (unsigned)wc[i].wr_id, ibv_wc_status_str(wc[i].status));
+            continue;
+        }
+
+        if (uct_ib_iface_device(&iface->super.super)->ordered_send_comp) {
+            num_completed              = wc[i].wr_id + 1;
+            iface->tx.comp_sn         += num_completed;
+            iface->super.tx.available += num_completed;
+
+            ucs_assertv(num_completed <= UCT_UD_TX_MODERATION,
+                        "num_completed=%u", num_completed);
+
+            uct_ud_iface_send_completion_ordered(&iface->super,
+                                                 iface->tx.comp_sn, is_async);
+        } else {
+            iface->tx.comp_sn = wc[i].wr_id + 1;
+            iface->super.tx.available++;
+
+            uct_ud_iface_send_completion_unordered(&iface->super,
+                                                   iface->tx.comp_sn, is_async);
+        }
     }
 
-    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
-                             UCT_IB_IFACE_STAT_TX_COMPLETION, 1);
-
-    num_completed = wc.wr_id + 1;
-    ucs_assertv(num_completed <= UCT_UD_TX_MODERATION, "num_completed=%u",
-                num_completed);
-
-    iface->super.tx.available += num_completed;
-    iface->tx.comp_sn         += num_completed;
-
-    uct_ud_iface_send_completion(&iface->super, iface->tx.comp_sn, is_async);
     return 1;
+}
+
+static UCS_F_ALWAYS_INLINE size_t uct_ud_verbs_iface_get_gid_len(void *packet)
+{
+  /* The GRH will contain either an IPv4 or IPv6 header. If the former is
+   * present the header will start at offset 20 in the buffer otherwise it
+   * will start at offset 0. Since the two headers are of fixed size (20 or
+   * 40 bytes) this means we will either see 0x6? at offset 0 (IPv6) or 0x45
+   * at offset 20. The detection is a little tricky for IPv6 given that the
+   * first 20B are undefined for IPv4. To overcome this the first byte of
+   * the posted receive buffer is set to 0xff.
+   */
+  return ((((uint8_t*)packet)[0] & 0xf0) == 0x60) ? UCS_IPV6_ADDR_LEN :
+                                                    UCS_IPV4_ADDR_LEN;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
@@ -409,7 +450,8 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, packet, wc, num_wcs) {
         if (!uct_ud_iface_check_grh(&iface->super, packet,
-                                    wc[i].wc_flags & IBV_WC_GRH, wc[i].sl)) {
+                                    wc[i].wc_flags & IBV_WC_GRH,
+                                    uct_ud_verbs_iface_get_gid_len(packet))) {
             ucs_mpool_put_inline((void*)wc[i].wr_id);
             continue;
         }
@@ -535,7 +577,7 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->overhead = 105e-9; /* Software overhead */
+    iface_attr->overhead = UCT_UD_VERBS_IFACE_OVERHEAD; /* Software overhead */
 
     return UCS_OK;
 }
@@ -555,8 +597,12 @@ uct_ud_verbs_iface_unpack_peer_address(uct_ud_iface_t *iface,
 
     memset(peer_address, 0, sizeof(*peer_address));
 
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
-                                        &ah_attr, &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
+                                                 &ah_attr, &path_mtu);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "UD verbs connect",
                                     &peer_address->ah);
     if (status != UCS_OK) {
@@ -577,30 +623,17 @@ static void *uct_ud_verbs_ep_get_peer_address(uct_ud_ep_t *ud_ep)
 int uct_ud_verbs_ep_is_connected(const uct_ep_h tl_ep,
                                  const uct_ep_is_connected_params_t *params)
 {
-    uct_ud_verbs_ep_t *ep    = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
-    uct_ib_iface_t *ib_iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_ib_address_t *ib_addr;
-    struct ibv_ah *ah;
-    struct ibv_ah_attr ah_attr;
-    enum ibv_mtu path_mtu;
-    ucs_status_t status;
+    uct_ud_verbs_ep_t *ep     = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
+    uct_ib_iface_t *ib_iface  = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
+    uct_ib_address_t *ib_addr = (uct_ib_address_t*)params->device_addr;
 
     if (!uct_ud_ep_is_connected_to_addr(&ep->super, params,
                                         ep->peer_address.dest_qpn)) {
         return 0;
     }
 
-    ib_addr = (uct_ib_address_t*)params->device_addr;
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ep->super.path_index,
-                                        &ah_attr, &path_mtu);
-
-    status = uct_ib_device_get_ah_cached(uct_ib_iface_device(ib_iface),
-                                         &ah_attr, &ah);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    return ah == ep->peer_address.ah;
+    return uct_ib_iface_is_connected(ib_iface, ib_addr, ep->super.path_index,
+                                     ep->peer_address.ah);
 }
 
 static size_t uct_ud_verbs_get_peer_address_length()
@@ -631,13 +664,16 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf   = uct_ib_iface_estimate_perf,
-            .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = uct_ud_ep_invalidate,
-            .ep_connect_to_ep_v2   = uct_ud_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
-            .ep_is_connected       = uct_ud_verbs_ep_is_connected
+            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_estimate_perf    = uct_ib_iface_estimate_perf,
+            .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
+            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate          = uct_ud_ep_invalidate,
+            .ep_connect_to_ep_v2    = uct_ud_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
+            .ep_is_connected        = uct_ud_verbs_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,
@@ -692,7 +728,7 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
     struct ibv_recv_wr *bad_wr;
     uct_ib_recv_wr_t *wrs;
     unsigned count;
-    int ret;
+    int ret, i;
 
     wrs  = ucs_alloca(sizeof *wrs  * max);
 
@@ -700,6 +736,14 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
                                         wrs, max);
     if (count == 0) {
         return;
+    }
+
+    /* Set the first byte in the receive buffer grh to a known value not equal to
+     * 0x6?. This should aid in the detection of IPv6 vs IPv4 because the first
+     * byte is undefined in the later and 0x6? in the former. It is unlikely
+     * this byte is touched with IPv4. */
+    for (i = 0; i < count; ++i) {
+        ((uint8_t*)wrs[i].sg.addr)[0] = 0xff;
     }
 
     ret = ibv_post_recv(iface->super.qp, &wrs[0].ibwr, &bad_wr);
@@ -740,6 +784,25 @@ ucs_status_t uct_ud_verbs_qp_max_send_sge(uct_ud_verbs_iface_t *iface,
     return UCS_OK;
 }
 
+void uct_ud_send_wr_init(struct ibv_send_wr *wr, struct ibv_sge *sge,
+                         int is_inline)
+{
+    memset(wr, 0, sizeof(*wr));
+
+    wr->opcode            = IBV_WR_SEND;
+    wr->wr.ud.remote_qkey = UCT_IB_KEY;
+    wr->imm_data          = 0;
+    wr->next              = 0;
+    wr->sg_list           = sge;
+
+    if (is_inline) {
+        wr->wr_id   = 0xBEEBBEEB;
+    } else {
+        wr->wr_id   = 0xFAAFFAAF;
+        wr->num_sge = 1;
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -757,24 +820,11 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, &uct_ud_verbs_iface_tl_ops, md,
                               worker, params, config, &init_attr);
 
-    self->super.super.config.sl       = uct_ib_iface_config_select_sl(&config->super);
+    self->super.super.config.sl = uct_ib_iface_config_select_sl(&config->super);
+    uct_ib_iface_set_reverse_sl(&self->super.super, &config->super);
 
-    memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
-    self->tx.wr_inl.opcode            = IBV_WR_SEND;
-    self->tx.wr_inl.wr_id             = 0xBEEBBEEB;
-    self->tx.wr_inl.wr.ud.remote_qkey = UCT_IB_KEY;
-    self->tx.wr_inl.imm_data          = 0;
-    self->tx.wr_inl.next              = 0;
-    self->tx.wr_inl.sg_list           = self->tx.sge;
-
-    memset(&self->tx.wr_skb, 0, sizeof(self->tx.wr_skb));
-    self->tx.wr_skb.opcode            = IBV_WR_SEND;
-    self->tx.wr_skb.wr_id             = 0xFAAFFAAF;
-    self->tx.wr_skb.wr.ud.remote_qkey = UCT_IB_KEY;
-    self->tx.wr_skb.imm_data          = 0;
-    self->tx.wr_skb.next              = 0;
-    self->tx.wr_skb.sg_list           = self->tx.sge;
-    self->tx.wr_skb.num_sge           = 1;
+    uct_ud_send_wr_init(&self->tx.wr_inl, self->tx.sge, 1);
+    uct_ud_send_wr_init(&self->tx.wr_skb, self->tx.sge, 0);
 
     self->tx.send_sn                  = 0;
     self->tx.comp_sn                  = 0;
@@ -799,7 +849,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
         return status;
     }
 
-    if (self->super.async.event_cb != NULL) {
+    if ((self->super.async.event_cb != NULL) &&
+        uct_ib_iface_device(&self->super.super)->req_notify_cq_support) {
         status = uct_ud_iface_set_event_cb(&self->super,
                                            uct_ud_verbs_iface_async_handler);
         if (status != UCS_OK) {

@@ -13,6 +13,7 @@
 #include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/sys.h>
@@ -141,8 +142,12 @@ uct_posix_md_query(uct_md_h tl_md, uct_md_attr_v2_t *md_attr)
     }
 
     shm_size = shm_statvfs.f_bsize * shm_statvfs.f_bavail;
-    uct_mm_md_query(&md->super, md_attr,
-                    (shm_size < posix_config->shm_min_size) ? 0 : shm_size);
+    if (shm_size < posix_config->shm_min_size) {
+        ucs_debug("md alloc disabled: only %zu bytes left in shm", shm_size);
+        shm_size = 0;
+    }
+
+    uct_mm_md_query(&md->super, md_attr, shm_size);
 
     md_attr->rkey_packed_size = sizeof(uct_posix_packed_rkey_t) +
                                 uct_posix_iface_addr_length(md);
@@ -250,52 +255,88 @@ static ucs_status_t uct_posix_shm_open(uint64_t mmid, int open_flags, int *fd_p)
 static ucs_status_t uct_posix_file_open(const char *dir, uint64_t mmid,
                                         int open_flags, int* fd_p)
 {
-    char file_path[PATH_MAX];
+    char *file_path;
     int ret;
+    ucs_status_t status;
 
-    ucs_snprintf_safe(file_path, sizeof(file_path), "%s" UCT_POSIX_FILE_FMT,
-                      dir, mmid);
+    status = ucs_string_alloc_formatted_path(&file_path, "file_path",
+                                             "%s" UCT_POSIX_FILE_FMT, dir,
+                                             mmid);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     ret = open(file_path, open_flags | O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
-    return uct_posix_open_check_result("open", file_path, open_flags, ret, fd_p);
+    status = uct_posix_open_check_result("open", file_path, open_flags, ret,
+                                         fd_p);
+    ucs_free(file_path);
+out:
+    return status;
 }
 
 static ucs_status_t uct_posix_procfs_open(int pid, int peer_fd, int* fd_p)
 {
-    char file_path[PATH_MAX];
+    char *file_path;
     int ret;
+    ucs_status_t status;
 
-    ucs_snprintf_safe(file_path, sizeof(file_path), UCT_POSIX_PROCFS_FILE_FMT,
-                      pid, peer_fd);
-    ret = open(file_path, O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
-    return uct_posix_open_check_result("open", file_path, 0, ret, fd_p);
+    status = ucs_string_alloc_formatted_path(&file_path, "file_path",
+                                             UCT_POSIX_PROCFS_FILE_FMT, pid,
+                                             peer_fd);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    ret    = open(file_path, O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
+    status = uct_posix_open_check_result("open", file_path, 0, ret, fd_p);
+    ucs_free(file_path);
+out:
+    return status;
 }
 
-static ucs_status_t uct_posix_unlink(uct_mm_md_t *md, uint64_t seg_id)
+static ucs_status_t
+uct_posix_unlink(uct_mm_md_t *md, uint64_t seg_id, ucs_log_level_t err_level)
 {
     uct_posix_md_config_t *posix_config = ucs_derived_of(md->config,
                                                          uct_posix_md_config_t);
-    char file_path[PATH_MAX];
+    char *file_path;
     int ret;
+    ucs_status_t status;
 
     if (seg_id & UCT_POSIX_SEG_FLAG_SHM_OPEN) {
-        ucs_snprintf_safe(file_path, sizeof(file_path), UCT_POSIX_FILE_FMT,
-                          seg_id & UCT_POSIX_SEG_MMID_MASK);
+        status = ucs_string_alloc_formatted_path(
+                &file_path, "file_path", UCT_POSIX_FILE_FMT,
+                seg_id & UCT_POSIX_SEG_MMID_MASK);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
         ret = shm_unlink(file_path);
         if (ret < 0) {
-            ucs_error("shm_unlink(%s) failed: %m", file_path);
-            return UCS_ERR_SHMEM_SEGMENT;
+            ucs_log(err_level, "shm_unlink(%s) failed: %m", file_path);
+            status = UCS_ERR_SHMEM_SEGMENT;
+            goto out_free_file_path;
         }
     } else {
-        ucs_snprintf_safe(file_path, sizeof(file_path), "%s" UCT_POSIX_FILE_FMT,
-                          posix_config->dir, seg_id & UCT_POSIX_SEG_MMID_MASK);
+        status = ucs_string_alloc_formatted_path(
+                &file_path, "file_path", "%s" UCT_POSIX_FILE_FMT,
+                posix_config->dir, seg_id & UCT_POSIX_SEG_MMID_MASK);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
         ret = unlink(file_path);
         if (ret < 0) {
             ucs_error("unlink(%s) failed: %m", file_path);
-            return UCS_ERR_SHMEM_SEGMENT;
+            status = UCS_ERR_SHMEM_SEGMENT;
+            goto out_free_file_path;
         }
     }
 
-    return UCS_OK;
+out_free_file_path:
+    ucs_free(file_path);
+out:
+    return status;
 }
 
 static ucs_status_t
@@ -474,8 +515,8 @@ uct_posix_segment_open(uct_mm_md_t *md, uct_mm_seg_id_t *seg_id_p, int *fd_p)
 
 static ucs_status_t
 uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                    ucs_memory_type_t mem_type, unsigned flags,
-                    const char *alloc_name, uct_mem_h *memh_p)
+                    ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
+                    unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
     uct_mm_md_t                     *md = ucs_derived_of(tl_md, uct_mm_md_t);
     uct_posix_md_config_t *posix_config = ucs_derived_of(md->config,
@@ -511,10 +552,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     /* If using procfs link instead of mmid, remove the original file and update
      * seg->seg_id */
     if (posix_config->use_proc_link) {
-        status = uct_posix_unlink(md, seg->seg_id);
-        if (status != UCS_OK) {
-            goto err_close;
-        }
+        uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_DIAG);
 
         /* Replace mmid by pid+fd. Keep previous SHM_OPEN flag for mkey_pack() */
         seg->seg_id = uct_posix_mmid_procfs_pack(fd) |
@@ -582,7 +620,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
 err_close:
     close(fd);
     if (!(seg->seg_id & UCT_POSIX_SEG_FLAG_PROCFS)) {
-        uct_posix_unlink(md, seg->seg_id);
+        uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_WARN);
     }
 err_free_seg:
     ucs_free(seg);
@@ -608,7 +646,7 @@ static ucs_status_t uct_posix_mem_free(uct_md_h tl_md, uct_mem_h memh)
         ucs_assert(dummy_pid == getpid());
         close(fd);
     } else {
-        status = uct_posix_unlink(md, seg->seg_id);
+        status = uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_ERROR);
         if (status != UCS_OK) {
             return status;
         }
@@ -646,8 +684,8 @@ static ucs_status_t uct_posix_iface_addr_pack(uct_mm_md_t *md, void *buffer)
 }
 
 static ucs_status_t
-uct_posix_md_mkey_pack(uct_md_h tl_md, uct_mem_h memh,
-                       const uct_md_mkey_pack_params_t *params,
+uct_posix_md_mkey_pack(uct_md_h tl_md, uct_mem_h memh, void *address,
+                       size_t length, const uct_md_mkey_pack_params_t *params,
                        void *mkey_buffer)
 {
     uct_mm_md_t *md                      = ucs_derived_of(tl_md, uct_mm_md_t);
@@ -678,8 +716,9 @@ static void uct_posix_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rse
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_posix_rkey_unpack,
-                 (component, rkey_buffer, rkey_p, handle_p),
+                 (component, rkey_buffer, params, rkey_p, handle_p),
                  uct_component_t *component, const void *rkey_buffer,
+                 const uct_rkey_unpack_params_t *params,
                  uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_posix_packed_rkey_t *packed_rkey = rkey_buffer;
@@ -726,12 +765,13 @@ static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
         .query              = uct_posix_md_query,
         .mem_alloc          = uct_posix_mem_alloc,
         .mem_free           = uct_posix_mem_free,
-        .mem_advise         = ucs_empty_function_return_unsupported,
-        .mem_reg            = ucs_empty_function_return_unsupported,
-        .mem_dereg          = ucs_empty_function_return_unsupported,
-        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_reg            = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
+        .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_posix_md_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported
+        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     },
     .query             = uct_posix_query,
     .iface_addr_length = uct_posix_iface_addr_length,

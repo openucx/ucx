@@ -13,7 +13,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
-#include <ucs/datastruct/array.inl>
+#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/hlist.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/assert.h>
@@ -49,36 +49,33 @@ typedef struct ucs_callbackq_oneshot_elem {
 KHASH_INIT(ucs_callbackq_oneshot_elems, ucs_callbackq_key_t, ucs_hlist_head_t,
            1, ucs_callbackq_oneshot_key_hash, kh_int64_hash_equal);
 
-UCS_ARRAY_DEFINE_INLINE(ucs_callbackq_idx, int, unsigned);
-UCS_ARRAY_DEFINE_INLINE(ucs_callbackq_spill_elems, unsigned,
-                        ucs_callbackq_spill_elem_t);
-
 struct ucs_callbackq_priv {
     /* Protects adding / removing */
-    ucs_recursive_spinlock_t               lock;
+    ucs_recursive_spinlock_t                          lock;
 
     /* IDs of fast-path callbacks */
-    int                                    fast_ids[UCS_CALLBACKQ_FAST_COUNT];
+    int                                               fast_ids[UCS_CALLBACKQ_FAST_COUNT];
 
     /* Number of fast-path elements */
-    unsigned                               num_fast_elems;
+    unsigned                                          num_fast_elems;
 
     /* Mask of which fast-path elements should be removed */
-    uint64_t                               fast_remove_mask;
+    uint64_t                                          fast_remove_mask;
 
     /* Callback ID to index mapping */
-    ucs_array_t(ucs_callbackq_idx)         idxs;
+    ucs_array_s(unsigned, unsigned)                   idxs;
 
     /* Index of first free item in the freelist */
-    int                                    free_idx_id;
+    int                                               free_idx_id;
 
-    ucs_array_t(ucs_callbackq_spill_elems) spill_elems;
+    /* Array of slow path elements */
+    ucs_array_s(unsigned, ucs_callbackq_spill_elem_t) spill_elems;
 
     /* Hash map of oneshot path elements, by key */
-    khash_t(ucs_callbackq_oneshot_elems)   oneshot_elems;
+    khash_t(ucs_callbackq_oneshot_elems)              oneshot_elems;
 
     /* ID of oneshot-path proxy in fast-path array */
-    int                                    proxy_cb_id;
+    int                                               proxy_cb_id;
 };
 
 
@@ -150,7 +147,7 @@ static int ucs_callbackq_get_id(ucs_callbackq_t *cbq, unsigned idx)
     if (priv->free_idx_id == UCS_CALLBACKQ_ID_NULL) {
         id = ucs_array_length(&priv->idxs);
         ucs_array_append(
-                ucs_callbackq_idx, &priv->idxs,
+                &priv->idxs,
                 ucs_fatal("callback queue %p: could not grow indexes array",
                           cbq));
     } else {
@@ -257,7 +254,7 @@ ucs_callbackq_spill_elem_add(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg)
 
     idx  = ucs_array_length(&priv->spill_elems);
     elem = ucs_array_append(
-            ucs_callbackq_spill_elems, &priv->spill_elems,
+            &priv->spill_elems,
             ucs_fatal("callbackq %p: failed to allocate spill array", cbq));
     id   = ucs_callbackq_get_id(cbq, idx + UCS_CALLBACKQ_FAST_COUNT);
 
@@ -479,7 +476,7 @@ static unsigned ucs_callbackq_proxy_callback(void *arg)
     count = ucs_callbackq_spill_elems_dispatch(cbq) +
             ucs_callbackq_oneshot_elems_dispatch(cbq);
 
-    /* Remove remaning callbacks */
+    /* Remove remaining callbacks */
     ucs_callbackq_fast_elems_purge(cbq);
     ucs_callbackq_spill_elems_purge(cbq);
 

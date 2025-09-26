@@ -15,8 +15,8 @@ class test_uct_tcp : public uct_test {
 public:
     void init() {
         if (RUNNING_ON_VALGRIND) {
-            modify_config("TX_SEG_SIZE", "1kb");
-            modify_config("RX_SEG_SIZE", "1kb");
+            modify_config("TCP_TX_SEG_SIZE", "1kb");
+            modify_config("TCP_RX_SEG_SIZE", "1kb");
         }
 
         uct_test::init();
@@ -48,7 +48,7 @@ public:
 
         scoped_log_handler slh(wrap_errors_logger);
         if (nb) {
-            status = ucs_socket_recv_nb(fd, &msg, &msg_size);
+            status = ucs_socket_recv_nb(fd, &msg, 0, &msg_size);
         } else {
             status = ucs_socket_recv(fd, &msg, msg_size);
         }
@@ -186,7 +186,7 @@ private:
         int fd;
         EXPECT_TRUE((dest_addr.ss_family == AF_INET) ||
                     (dest_addr.ss_family == AF_INET6));
-        status = ucs_socket_create(dest_addr.ss_family, SOCK_STREAM, &fd);
+        status = ucs_socket_create(dest_addr.ss_family, SOCK_STREAM, 0, &fd);
         ASSERT_UCS_OK(status);
 
         status = ucs_socket_connect(fd, (struct sockaddr*)&dest_addr);

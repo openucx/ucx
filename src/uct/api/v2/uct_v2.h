@@ -89,13 +89,29 @@ enum uct_perf_attr_field {
     /** Enables @ref uct_perf_attr_t::bandwidth */
     UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(8),
 
+    /** Enables @ref uct_perf_attr_t::path_bandwidth */
+    UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH     = UCS_BIT(9),
+
     /** Enables @ref uct_perf_attr_t::latency */
-    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
+    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(10),
 
     /** Enable @ref uct_perf_attr_t::max_inflight_eps */
-    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10)
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(11),
+
+    /** Enable @ref uct_perf_attr_t::flags */
+    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(12)
 };
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Flags of supported performance attributes functionalities
+ *
+ * This is used in @ref uct_perf_attr_t::flags.
+ */
+typedef enum {
+    /** TX operations can depend on unrelated RX operation completion */
+    UCT_PERF_ATTR_FLAGS_TX_RX_SHARED = UCS_BIT(0)
+} uct_perf_attr_flags_t;
 
 /**
  * @ingroup UCT_RESOURCE
@@ -173,6 +189,13 @@ typedef struct {
     uct_ppn_bandwidth_t bandwidth;
 
     /**
+     * Bandwidth of a single interface path. It is smaller than or equal to
+     * @ref bandwidth.
+     * This field is set by the UCT layer.
+     */
+    uct_ppn_bandwidth_t path_bandwidth;
+
+    /**
      * Latency as a function of number of endpoints.
      * This field is set by the UCT layer.
      */
@@ -183,10 +206,15 @@ typedef struct {
      * operations simultaneously.
      * Protocols that require sending to multiple destinations at the same time
      * (such as keepalive) could benefit from using a transport that has a
-     * large number of maximum inflight endpoints.
+     * large number of maximum in-flight endpoints.
      * This field is set by the UCT layer.
      */
     size_t              max_inflight_eps;
+
+    /**
+     * Performance characteristics of the network interface.
+     */
+    uint64_t            flags;
 } uct_perf_attr_t;
 
 
@@ -227,7 +255,9 @@ typedef enum {
  */
 typedef enum {
     /** Enables @ref uct_md_mem_attach_params_t.flags field */
-    UCT_MD_MEM_ATTACH_FIELD_FLAGS = UCS_BIT(0)
+    UCT_MD_MEM_ATTACH_FIELD_FLAGS     = UCS_BIT(0),
+    /** Enables @ref uct_md_mem_attach_params_t.mkey_size field */
+    UCT_MD_MEM_ATTACH_FIELD_MKEY_SIZE = UCS_BIT(1)
 } uct_md_mem_attach_field_mask_t;
 
 
@@ -255,7 +285,9 @@ typedef enum {
     UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR         = UCS_BIT(1), /**< iface_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING        = UCS_BIT(2), /**< info_string field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3), /**< info_string_length field */
-    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4) /**<  scope field */
+    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4), /**< scope field */
+    UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(5), /**< device_addr_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH  = UCS_BIT(6)  /**< iface_addr_length field */
 } uct_iface_is_reachable_field_mask_t;
 
 
@@ -327,7 +359,7 @@ typedef enum {
 /**
  * @ingroup UCT_RESOURCE
  * @brief uct_ep_connect_to_ep_v2 operation fields and flags
- * 
+ *
  * The enumeration allows specifying which fields in @ref
  * uct_ep_connect_to_ep_params_t are present and operation flags are used. It is
  * used to enable backward compatibility support.
@@ -526,6 +558,11 @@ typedef struct uct_md_mem_attach_params {
      * @ref uct_md_mem_attach_flags_t.
      */
     uint64_t                     flags;
+
+    /**
+     * Size of the memory key.
+     */
+    size_t                       mkey_size;
 } uct_md_mem_attach_params_t;
 
 
@@ -593,6 +630,18 @@ typedef struct uct_iface_is_reachable_params {
      * Reachability scope.
      */
     uct_iface_reachability_scope_t scope;
+
+    /**
+     * Device address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                        device_addr_length;
+
+    /**
+     * Iface address length. If not provided, the transport will assume a
+     * default minimum length according to the address buffer contents.
+     */
+    size_t                        iface_addr_length;
 } uct_iface_is_reachable_params_t;
 
 
@@ -675,6 +724,36 @@ typedef struct uct_rkey_compare_params {
      */
     uint64_t                      field_mask;
 } uct_rkey_compare_params_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Rkey unpack parameters field mask.
+ */
+typedef enum {
+    UCT_RKEY_UNPACK_FIELD_SYS_DEVICE = UCS_BIT(0)  /**< sys_device field */
+} uct_rkey_unpack_field_mask_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Parameters for unpacking remote key using @ref uct_rkey_unpack_v2.
+ */
+typedef struct uct_rkey_unpack_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_rkey_unpack_field_mask_t. Fields not specified in this mask will
+     * be ignored. Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t             field_mask;
+
+    /**
+     * System device to unpack rkey on. Can be UCS_SYS_DEVICE_ID_UNKNOWN
+     * (default behavior).
+     */
+    ucs_sys_device_t     sys_device;
+} uct_rkey_unpack_params_t;
+
 
 /**
  * @ingroup UCT_RESOURCE
@@ -787,7 +866,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
 
     /** Indicate registration alignment. */
-    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16)
+    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16),
+
+    /** Indicate memory types that the MD can register using global VA MR. */
+    UCT_MD_ATTR_FIELD_GVA_MEM_TYPES             = UCS_BIT(17)
 } uct_md_attr_field_t;
 
 
@@ -838,6 +920,11 @@ typedef struct {
      * Bitmap of memory types that can be cached for this memory domain.
      */
     uint64_t          cache_mem_types;
+
+    /**
+     * Bitmap of memory types that can create global memory handle.
+     */
+    uint64_t          gva_mem_types;
 
     /**
      * Bitmap of memory types that Memory Domain can detect if address belongs
@@ -912,7 +999,7 @@ typedef enum {
      * Memory domain supports invalidation of memory handle registered by
      * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_RMA flag and packed
      * key by @ref uct_md_mkey_pack_v2 with
-     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA flag.
      */
     UCT_MD_FLAG_INVALIDATE_RMA = UCT_MD_FLAG_V2_FIRST,
 
@@ -920,10 +1007,45 @@ typedef enum {
      * Memory domain supports invalidation of memory handle registered by
      * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_REMOTE_ATOMIC flag and
      * packed key by @ref uct_md_mkey_pack_v2 with
-     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
-    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12)
+    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12),
+
+    /**
+     * Memory domain performs memory type related copy operations.
+     */
+    UCT_MD_FLAG_MEMTYPE_COPY   = UCS_BIT(13)
 } uct_md_flags_v2_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface attribute fields.
+ */
+enum uct_iface_attr_field {
+    /**
+     * Enables @ref uct_iface_attr_v2_t::device_mem_element_size.
+     */
+    UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface attributes.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_attr_field_t.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Size of a packed device memory element.
+     */
+    size_t   device_mem_element_size;
+} uct_iface_attr_v2_t;
 
 
 /**
@@ -948,6 +1070,9 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
  *
  * @param [in]  md          Handle to memory domain.
  * @param [in]  memh        Pack a remote key for this memory handle.
+ * @param [in]  address     Memory address to expose for remote access.
+ * @param [in]  length      The size (in bytes) of memory that will be exposed
+ *                          for remote access.
  * @param [in]  params      Operation parameters, see @ref
  *                          uct_md_mkey_pack_params_t.
  * @param [out] mkey_buffer Pointer to a buffer to hold the packed memory key.
@@ -958,6 +1083,7 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
  * @return                  Error code.
  */
 ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
+                                 void *address, size_t length,
                                  const uct_md_mkey_pack_params_t *params,
                                  void *mkey_buffer);
 
@@ -1002,6 +1128,21 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Query interface attributes.
+ *
+ * This routine fetches information about the interface.
+ *
+ * @param [in]  iface       Interface to query.
+ * @param [out] iface_attr  Filled with interface attributes.
+ *
+ * @return Error code.
+ */
+ucs_status_t
+uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Check if remote iface address is reachable.
  *
  * This function checks if a remote address can be reached from a local
@@ -1028,8 +1169,6 @@ int uct_iface_is_reachable_v2(uct_iface_h iface,
  *
  * @param [in] ep           Endpoint to connect.
  * @param [in] device_addr  Remote device address.
- * @param [in] iface_addr   Remote interface address or NULL if such address is
- *                          not available.
  * @param [in] ep_addr      Remote endpoint address.
  * @param [in] params       Parameters as defined in @ref
  *                          uct_ep_connect_to_ep_params_t.
@@ -1057,6 +1196,20 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
 int uct_ep_is_connected(uct_ep_h ep,
                         const uct_ep_is_connected_params_t *params);
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Return the device endpoint associated with the given endpoint.
+ *
+ * @param [in]  ep          Endpoint to create a device endpoint from.
+ * @param [out] device_ep_p Filled with the handle to the device endpoint.
+ *
+ * @return UCS_OK           Device endpoint obtained successfully.
+ *         Other            Error codes as defined by @ref ucs_status_t.
+ */
+ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
+
+
 /**
  * @ingroup UCT_MD
  *
@@ -1078,6 +1231,49 @@ int uct_ep_is_connected(uct_ep_h ep,
 ucs_status_t
 uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
                  const uct_rkey_compare_params_t *params, int *result);
+
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief Unpack a remote key.
+ *
+ * @param [in]  component    Component on which to unpack the remote key.
+ * @param [in]  rkey_buffer  Packed remote key buffer.
+ * @param [in]  params       Operation parameters, see @ref
+ *                           uct_rkey_unpack_params_t.
+ * @param [out] rkey_ob      Filled with the unpacked remote key and its type.
+ *
+ * @note The remote key must be unpacked with the same component that was used
+ *       to pack it. For example, if a remote device address on the remote
+ *       memory domain which was used to pack the key is reachable by a
+ *       transport on a local component, then that component is eligible to
+ *       unpack the key.
+ *       If the remote key buffer cannot be unpacked with the given component,
+ *       UCS_ERR_INVALID_PARAM will be returned.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
+                                const void *rkey_buffer,
+                                const uct_rkey_unpack_params_t *params,
+                                uct_rkey_bundle_t *rkey_ob);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Pack a memh and rkey into a single memory element structure.
+ *
+ * @param [in] iface         Interface to pack the memh and rkey into.
+ * @param [in] memh          Memory handle to pack.
+ * @param [in] rkey          Remote key to pack.
+ * @param [out] mem_element   Filled with the packed memh and rkey.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+ucs_status_t uct_iface_mem_element_pack(uct_iface_h iface, uct_mem_h memh,
+                                        uct_rkey_t rkey,
+                                        uct_device_mem_element_t *mem_element);
 
 END_C_DECLS
 

@@ -216,7 +216,7 @@ unsigned ucs_profile_calc_num_threads(size_t total_num_records,
         static ucs_profile_loc_id_t loc_id = UCS_PROFILE_LOC_ID_UNKNOWN; \
         if (loc_id != UCS_PROFILE_LOC_ID_DISABLED) { \
             ucs_profile_record(_ctx, _type, _name, _param32, _param64, \
-                               __FILE__, __LINE__, __FUNCTION__, &loc_id); \
+                               __FILE__, __LINE__, __func__, &loc_id); \
         } \
     }
 

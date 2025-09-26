@@ -18,8 +18,6 @@
 #define UCT_IB_MD_PACKED_RKEY_SIZE   sizeof(uint64_t)
 #define UCT_IB_MD_INVALID_FLUSH_RKEY 0xff
 
-#define UCT_IB_MD_DEFAULT_GID_INDEX 0   /**< The gid index used by default for an IB/RoCE port */
-
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
                                   IBV_ACCESS_REMOTE_WRITE | \
                                   IBV_ACCESS_REMOTE_READ | \
@@ -35,6 +33,15 @@
 #define uct_ib_md_log_mem_reg_error(_md, _flags, _fmt, ...) \
     uct_md_log_mem_reg_error(_flags, "md %p (%s): " _fmt, _md, \
                              uct_ib_device_name(&(_md)->dev), ## __VA_ARGS__)
+
+
+/**
+ * Callback function to check and filter out not applicable devices.
+ *
+ * @param [in]      device      IB device.
+ * @return 1 for acceptable device, otherwise 0.
+ */
+typedef int (*uct_ib_check_device_cb_t)(struct ibv_device *device);
 
 
 /**
@@ -59,11 +66,13 @@ enum {
     UCT_IB_MEM_IMPORTED              = UCS_BIT(3), /**< The memory handle was
                                                         created by mem_attach */
 #if ENABLE_PARAMS_CHECK
-    UCT_IB_MEM_ACCESS_REMOTE_RMA     = UCS_BIT(4) /**< RMA access was requested
+    UCT_IB_MEM_ACCESS_REMOTE_RMA     = UCS_BIT(4), /**< RMA access was requested
                                                         for the memory region */
 #else
-    UCT_IB_MEM_ACCESS_REMOTE_RMA     = 0
+    UCT_IB_MEM_ACCESS_REMOTE_RMA     = 0,
 #endif
+    UCT_IB_MEM_FLAG_GVA              = UCS_BIT(5), /**< The memory handle is a
+                                                        GVA region */
 };
 
 enum {
@@ -85,6 +94,7 @@ typedef struct uct_ib_md_ext_config {
     struct {
         int                  prefetch;     /**< Auto-prefetch non-blocking memory
                                                 registrations / allocations */
+        uint64_t             mem_types;    /**< Supported mem types for ODP */
     } odp;
 
     unsigned long            gid_index;    /**< IB GID index to use */
@@ -96,8 +106,9 @@ typedef struct uct_ib_md_ext_config {
                                                        invalidated memory keys
                                                        that are kept idle before
                                                        reuse*/
-    unsigned                 reg_retry_cnt; /**< Memory registration retry count */
+    unsigned long            reg_retry_cnt; /**< Memory registration retry count */
     unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
+    int                      direct_nic; /**< Direct NIC with GPU functionality */
 } uct_ib_md_ext_config_t;
 
 
@@ -144,6 +155,7 @@ typedef struct uct_ib_md {
     int                      relaxed_order;
     int                      fork_init;
     uint64_t                 reg_mem_types;
+    uint64_t                 gva_mem_types;
     uint64_t                 reg_nonblock_mem_types;
     uint64_t                 cap_flags;
     char                     *name;
@@ -154,6 +166,7 @@ typedef struct uct_ib_md {
      * be initiated.  */
     uint32_t                 flush_rkey;
     uint16_t                 vhca_id;
+    uint64_t                 uuid;
     struct {
         uint32_t             base;
         uint32_t             size;
@@ -161,9 +174,10 @@ typedef struct uct_ib_md {
 } uct_ib_md_t;
 
 
-typedef struct uct_ib_md_packed_mkey {
+typedef struct {
     uint32_t lkey;
     uint16_t vhca_id;
+    uint64_t md_uuid;
 } UCS_S_PACKED uct_ib_md_packed_mkey_t;
 
 
@@ -187,9 +201,10 @@ typedef struct uct_ib_md_config {
 
     int                      mlx5dv; /**< mlx5 support */
     int                      devx; /**< DEVX support */
-    unsigned                 devx_objs;    /**< Objects to be created by DevX */
+    uint64_t                 devx_objs;    /**< Objects to be created by DevX */
     ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
+    int                      xgvmi_umr_enable; /**< Enable UMR workflow for XGVMI */
 } uct_ib_md_config_t;
 
 /**
@@ -222,6 +237,7 @@ typedef struct uct_ib_md_ops {
  * - determine device attributes and flags
  */
 typedef struct uct_ib_md_ops_entry {
+    ucs_list_link_t             list;
     const char                  *name;
     uct_ib_md_ops_t             *ops;
 } uct_ib_md_ops_entry_t;
@@ -235,7 +251,9 @@ typedef struct uct_ib_md_ops_entry {
         .ops  = &_md_ops, \
     }
 
+/* Used by IB module and IB sub-modules */
 extern uct_component_t uct_ib_component;
+extern ucs_list_link_t uct_ib_ops;
 
 
 static UCS_F_ALWAYS_INLINE uint32_t uct_ib_md_direct_rkey(uct_rkey_t uct_rkey)
@@ -267,6 +285,7 @@ uct_ib_md_pack_exported_mkey(uct_ib_md_t *md, uint32_t lkey, void *buffer)
 
     mkey->lkey    = lkey;
     mkey->vhca_id = md->vhca_id;
+    mkey->md_uuid = md->uuid;
 
     ucs_trace("packed exported mkey on %s: lkey 0x%x",
               uct_ib_device_name(&md->dev), lkey);
@@ -327,9 +346,6 @@ static UCS_F_ALWAYS_INLINE uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
     return md->flush_rkey >> 8;
 }
 
-ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
-                            const uct_md_config_t *uct_md_config, uct_md_h *md_p);
-
 void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
                                    const uct_ib_md_config_t *md_config,
                                    int is_supported);
@@ -371,12 +387,17 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
  */
 void uct_ib_md_ece_check(uct_ib_md_t *md);
 
+/* Check if IB MD supports nonblocking registration */
+int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr);
+
 ucs_status_t
 uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             const uct_md_mem_reg_params_t *params,
-                            uint64_t access_flags, struct ibv_mr **mrs);
+                            uint64_t access_flags, size_t mr_num,
+                            struct ibv_mr **mrs);
 
-uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh);
+uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
+                                  uint64_t access_flags);
 
 ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,
@@ -386,11 +407,33 @@ ucs_status_t uct_ib_verbs_mem_dereg(uct_md_h uct_md,
                                     const uct_md_mem_dereg_params_t *params);
 
 ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                                    void *address, size_t length,
                                     const uct_md_mkey_pack_params_t *params,
                                     void *mkey_buffer);
+
+ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
+                                const void *rkey_buffer,
+                                const uct_rkey_unpack_params_t *params,
+                                uct_rkey_t *rkey_p, void **handle_p);
+
+ucs_status_t
+uct_ib_base_query_md_resources(uct_md_resource_desc_t **resources_p,
+                               unsigned *num_resources_p,
+                               uct_ib_check_device_cb_t check_device_cb);
+
+ucs_status_t uct_ib_get_device_by_name(struct ibv_device **ib_device_list,
+                                       int num_devices, const char *md_name,
+                                       struct ibv_device** ibv_device_p);
+
+ucs_status_t uct_ib_fork_init(const uct_ib_md_config_t *md_config,
+                              int *fork_init_p);
 
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
                                unsigned mem_flags, size_t memh_base_size,
                                size_t mr_size, uct_ib_mem_t **memh_p);
+
+void uct_ib_check_gpudirect_driver(uct_ib_md_t *md,
+                                   const char *file,
+                                   ucs_memory_type_t mem_type);
 
 #endif

@@ -17,8 +17,10 @@
 #include "ucp_test.h"
 
 extern "C" {
+#include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_resource.h>
 #include <ucs/datastruct/mpool.inl>
 }
 
@@ -33,7 +35,7 @@ class test_ucp_am_base : public ucp_test {
 public:
     test_ucp_am_base()
     {
-        if (is_proto_disabled()) {
+        if (get_variant_value()) {
             modify_config("PROTO_ENABLE", "n");
         }
     }
@@ -53,12 +55,6 @@ public:
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
         receiver().connect(&sender(), get_ep_params());
-    }
-
-protected:
-    bool is_proto_disabled() const
-    {
-        return get_variant_value();
     }
 };
 
@@ -324,6 +320,17 @@ UCS_TEST_P(test_ucp_am, set_am_handler_realloc)
     do_set_am_handler_realloc_test();
 }
 
+UCS_TEST_P(test_ucp_am, set_am_handler_out_of_order)
+{
+    set_handlers(UCP_SEND_ID + 20);
+    set_handlers(UCP_SEND_ID);
+    set_handlers(UCP_SEND_ID + 10);
+
+    do_send_process_data_test(0, UCP_SEND_ID, 0);
+    do_send_process_data_test(0, UCP_SEND_ID + 10, 0);
+    do_send_process_data_test(0, UCP_SEND_ID + 20, 0);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
 
 
@@ -357,6 +364,16 @@ protected:
     virtual ucs_memory_type_t rx_memtype() const
     {
         return UCS_MEMORY_TYPE_HOST;
+    }
+
+    virtual bool tx_memtype_async() const
+    {
+        return false;
+    }
+
+    virtual bool rx_memtype_async() const
+    {
+        return false;
     }
 
     void reset_counters()
@@ -412,9 +429,9 @@ protected:
         }
     }
 
-    void set_am_data_handler(entity &e, uint16_t am_id,
-                             ucp_am_recv_callback_t cb, void *arg,
-                             unsigned flags = 0)
+    ucs_status_t set_am_data_handler_internal(entity &e, unsigned am_id,
+                                              ucp_am_recv_callback_t cb, void *arg,
+                                              unsigned flags = 0)
     {
         ucp_am_handler_param_t param;
 
@@ -431,7 +448,14 @@ protected:
             param.flags       = flags;
         }
 
-        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
+        return ucp_worker_set_am_recv_handler(e.worker(), &param);
+    }
+
+    void set_am_data_handler(entity &e, uint16_t am_id,
+                             ucp_am_recv_callback_t cb, void *arg,
+                             unsigned flags = 0)
+    {
+        ASSERT_UCS_OK(set_am_data_handler_internal(e, am_id, cb, arg, flags));
     }
 
     void check_header(const void *header, size_t header_length)
@@ -442,11 +466,11 @@ protected:
 
     ucs_status_ptr_t
     update_counter_and_send_am(const void *header, size_t header_length,
-                               const void *buffer, size_t count,
+                               const void *buffer, size_t count, unsigned am_id,
                                const ucp_request_param_t *param)
     {
         m_send_counter++;
-        return ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, header,
+        return ucp_am_send_nbx(sender().ep(), am_id, header,
                                header_length, buffer, count, param);
     }
 
@@ -472,6 +496,7 @@ protected:
         ucs_status_ptr_t sptr = update_counter_and_send_am(hdr, hdr_length,
                                                            dt_desc.buf(),
                                                            dt_desc.count(),
+                                                           TEST_AM_NBX_ID,
                                                            &param);
         return sptr;
     }
@@ -480,8 +505,9 @@ protected:
                            unsigned flags = 0, unsigned data_cb_flags = 0,
                            uint32_t op_attr_mask = 0)
     {
-        mem_buffer sbuf(size, tx_memtype());
-        sbuf.pattern_fill(SEED);
+        auto sbuf = mem_buffer::allocate(size, tx_memtype(),
+                                         tx_memtype_async());
+        mem_buffer::pattern_fill(sbuf, size, SEED, tx_memtype());
         m_hdr.resize(header_size);
         ucs::fill_random(m_hdr);
         reset_counters();
@@ -490,10 +516,10 @@ protected:
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this,
                             data_cb_flags);
 
-        ucp::data_type_desc_t sdt_desc(m_dt, sbuf.ptr(), size);
+        ucp::data_type_desc_t sdt_desc(m_dt, sbuf, size);
 
         if (prereg()) {
-            memh = sender().mem_map(sbuf.ptr(), size);
+            memh = sender().mem_map(sbuf, size);
         }
 
         ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag() | flags,
@@ -507,6 +533,7 @@ protected:
             sender().mem_unmap(memh);
         }
 
+        mem_buffer::release(sbuf, tx_memtype(), tx_memtype_async());
         EXPECT_EQ(m_recv_counter, m_send_counter);
     }
 
@@ -514,7 +541,7 @@ protected:
     {
         std::vector<ucp_dt_type> dts = {UCP_DATATYPE_CONTIG};
 
-        if (!is_proto_disabled()) {
+        if (is_proto_enabled()) {
             dts.push_back(UCP_DATATYPE_IOV);
         }
 
@@ -547,7 +574,8 @@ protected:
     {
         ucs_status_t status;
 
-        m_rx_buf = mem_buffer::allocate(length, rx_memtype());
+        m_rx_buf = mem_buffer::allocate(length, rx_memtype(),
+                                        rx_memtype_async());
         mem_buffer::pattern_fill(m_rx_buf, length, 0ul, rx_memtype());
 
         m_rx_dt_desc.make(m_rx_dt, m_rx_buf, length);
@@ -597,7 +625,7 @@ protected:
         EXPECT_LT(m_recv_counter, m_send_counter);
         check_header(header, header_length);
 
-        bool has_reply_ep = get_send_flag();
+        bool has_reply_ep = get_send_flag() & UCP_AM_SEND_FLAG_REPLY;
 
         EXPECT_EQ(has_reply_ep,
                   !!(rx_param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP));
@@ -623,7 +651,7 @@ protected:
         if (m_rx_memh != NULL) {
             receiver().mem_unmap(m_rx_memh);
         }
-        mem_buffer::release(m_rx_buf, rx_memtype());
+        mem_buffer::release(m_rx_buf, rx_memtype(), rx_memtype_async());
     }
 
     static ucs_status_t am_data_cb(void *arg, const void *header,
@@ -684,6 +712,46 @@ protected:
     ucp::data_type_desc_t           m_rx_dt_desc;
     void                            *m_rx_buf;
     ucp_mem_h                       m_rx_memh;
+};
+
+class test_ucp_am_id : public test_ucp_am_nbx {
+protected:
+    void reset_counters()
+    {
+        test_ucp_am_nbx::reset_counters();
+        m_recv_counter_cb = 0;
+    }
+
+    void test_am_id_handler()
+    {
+        reset_counters();
+
+        ucs_status_t status = set_am_data_handler_internal(
+                                            receiver(), 0xffff0001,
+                                            am_id_overflow_data_cb, this);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+        ucp_request_param_t param;
+        param.op_attr_mask = 0;
+
+        ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul, NULL, 0,
+                                                           0xffff0001, &param);
+        EXPECT_EQ(UCS_PTR_STATUS(sptr), UCS_ERR_INVALID_PARAM);
+        EXPECT_EQ(0, m_recv_counter_cb);
+    }
+
+    static ucs_status_t am_id_overflow_data_cb(void *arg, const void *header,
+                                               size_t header_length,
+                                               void *data, size_t length,
+                                               const ucp_am_recv_param_t *param)
+    {
+        test_ucp_am_id *self = reinterpret_cast<test_ucp_am_id*>(arg);
+        self->m_recv_counter_cb++;
+        return self->am_data_handler(header, header_length,
+                                     data, length, param);
+    }
+
+    volatile size_t m_recv_counter_cb;
 };
 
 void test_ucp_am_nbx::test_datatypes(std::function<void()> test_f,
@@ -791,6 +859,14 @@ UCS_TEST_P(test_ucp_am_nbx, am_header_error)
 }
 #endif
 
+UCS_TEST_P(test_ucp_am_id, am_id_overflow)
+{
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    test_am_id_handler();
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_id)
+
 UCS_TEST_P(test_ucp_am_nbx, zero_send)
 {
     test_am_send_recv(0, max_am_hdr());
@@ -858,8 +934,8 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
     set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_hold_cb, &rx_data,
                         UCP_AM_FLAG_PERSISTENT_DATA);
 
-    static const std::string ib_tls[] = { "dc_x", "rc_v", "rc_x", "ud_v",
-                                          "ud_x", "ib" };
+    static const std::string ib_tls[] = {"dc_x", "rc_v", "rc_x", "ud_v",
+                                         "ud_x", "srd", "ib"};
 
     // UCP takes desc from mpool only for data arrived as inlined from UCT.
     // Typically, with IB, data is inlined up to 32 bytes, so use smaller range
@@ -1088,7 +1164,7 @@ private:
 };
 
 /**
- * Self transport always has resources to perform the send operation, 
+ * Self transport always has resources to perform the send operation,
  * so its not returning pending request. For this reason with
  * self tl the test can't verify the copy header functionality.
  * The test is still used as a stress test for the Self transport,
@@ -1295,10 +1371,7 @@ public:
 private:
     static void base_test_generator(variant_vec_t &variants)
     {
-        // 1. Do not instantiate test case if no GPU memtypes supported.
-        // 2. Do not exclude host memory type, because this generator is used by
-        //    test_ucp_am_nbx_rndv_memtype class to generate combinations like
-        //    host<->cuda, cuda-managed<->host, etc.
+        // Do not instantiate test case if no GPU memtypes supported.
         if (!mem_buffer::is_gpu_supported()) {
             return;
         }
@@ -1519,12 +1592,8 @@ private:
     }
 };
 
-/* Skip tests for ud_v and ud_x because of unstable reproducible failures during
- * roce on worker CI jobs. The test fails with invalid am_bcopy length. */
-UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
-                     !is_proto_disabled() &&
-                             has_any_transport({"ud_v", "ud_x"}),
-                     "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, short_bcopy_send, "ZCOPY_THRESH=-1",
+           "RNDV_THRESH=-1")
 {
     test_datatypes([&]() {
         test_am(1);
@@ -1533,10 +1602,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
     });
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, zcopy_send,
-                     !is_proto_disabled() &&
-                             has_any_transport({"ud_v", "ud_x"}),
-                     "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, zcopy_send, "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
 {
     skip_no_am_lane_caps(UCT_IFACE_FLAG_AM_ZCOPY, "am_zcopy is not supported");
     test_datatypes([&]() {
@@ -1566,14 +1632,18 @@ public:
                                  void *data, size_t length,
                                  const ucp_am_recv_param_t *rx_param)
     {
-        EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
-        EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
-
         ucs_status_t status = test_ucp_am_nbx::am_data_handler(header,
                                                                header_length,
                                                                data, length,
                                                                rx_param);
         EXPECT_FALSE(UCS_STATUS_IS_ERR(status));
+
+        if (!m_check_recv_rndv_flags) {
+            return status;
+        }
+
+        EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
+        EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
 
         return UCS_INPROGRESS;
     }
@@ -1664,8 +1734,23 @@ public:
         }
     }
 
+    size_t get_rndv_frag_size(ucs_memory_type_t mem_type)
+    {
+        const auto *cfg = &sender().worker()->context->config.ext;
+
+        return cfg->rndv_frag_size[mem_type];
+    }
+
+    void check_rma_support()
+    {
+        if (!sender().is_rndv_supported()) {
+            UCS_TEST_SKIP_R("RNDV is not supported");
+        }
+    }
+
 protected:
     static constexpr unsigned RNDV_THRESH = 128;
+    bool m_check_recv_rndv_flags          = true;
     ucs_status_t m_status;
     bool m_am_recv_cb_invoked;
 };
@@ -1677,11 +1762,13 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_get, "RNDV_SCHEME=get_zcopy")
 {
+    check_rma_support();
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_put, "RNDV_SCHEME=put_zcopy")
 {
+    check_rma_support();
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
@@ -1728,7 +1815,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_rndv, invalid_recv_desc,
 
     param.op_attr_mask = 0ul;
     ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul, &data,
-                                                       sizeof(data), &param);
+                                                       sizeof(data),
+                                                       TEST_AM_NBX_ID, &param);
 
     wait_receives();
 
@@ -1765,7 +1853,9 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, reject_rndv)
 
         ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul,
                                                            sbuf.data(),
-                                                           sbuf.size(), &param);
+                                                           sbuf.size(),
+                                                           TEST_AM_NBX_ID,
+                                                           &param);
 
         EXPECT_EQ(m_status, request_wait(sptr));
         EXPECT_EQ(m_recv_counter, m_send_counter);
@@ -1819,33 +1909,93 @@ class test_ucp_am_nbx_rndv_memtype : public test_ucp_am_nbx_rndv {
 public:
     static void get_test_variants(variant_vec_t &variants)
     {
-        // Test will not be instantiated if no GPU memtypes supported, because
-        // of the check for supported memory types in
-        // test_ucp_am_nbx_eager_memtype::get_test_variants
-        return test_ucp_am_nbx_eager_memtype::get_test_variants(variants);
+        add_variant_memtypes(variants, base_test_generator);
     }
 
-    void init()
+    void init() override
     {
-        modify_config("RNDV_THRESH", "128");
         test_ucp_am_nbx::init();
     }
 
 private:
-    virtual ucs_memory_type_t tx_memtype() const
+    static void base_test_generator(variant_vec_t &variants)
     {
-        return static_cast<ucs_memory_type_t>(get_variant_value(2));
+        // Do not instantiate test case if no GPU memtypes supported.
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        add_variant_memtypes(variants,
+                             test_ucp_am_nbx_prereg::get_test_variants);
     }
 
-    virtual ucs_memory_type_t rx_memtype() const
+    static void
+    add_variant_memtypes(variant_vec_t &variants, get_variants_func_t generator)
     {
-        return static_cast<ucs_memory_type_t>(get_variant_value(3));
+        ucp_test::add_variant_memtypes(variants, generator);
+
+        if (mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA) &&
+            mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+            add_variant_values(variants, generator, MEMORY_TYPE_CUDA_ASYNC,
+                               "cuda-async");
+        }
     }
+
+    unsigned get_send_flag() const override
+    {
+        return test_ucp_am_nbx_rndv::get_send_flag() | UCP_AM_SEND_FLAG_RNDV;
+    }
+
+    ucs_memory_type_t tx_memtype() const override
+    {
+        return variant_index_to_mem_type(2);
+    }
+
+    ucs_memory_type_t rx_memtype() const override
+    {
+        return variant_index_to_mem_type(3);
+    }
+
+    bool tx_memtype_async() const override
+    {
+        return get_variant_value(2) == MEMORY_TYPE_CUDA_ASYNC;
+    }
+
+    bool rx_memtype_async() const override
+    {
+        return get_variant_value(3) == MEMORY_TYPE_CUDA_ASYNC;
+    }
+
+    ucs_memory_type_t variant_index_to_mem_type(unsigned index) const
+    {
+        auto variant_value = get_variant_value(index);
+        switch (variant_value) {
+        case UCS_MEMORY_TYPE_HOST:
+        case UCS_MEMORY_TYPE_CUDA:
+        case UCS_MEMORY_TYPE_CUDA_MANAGED:
+        case UCS_MEMORY_TYPE_ROCM:
+        case UCS_MEMORY_TYPE_ROCM_MANAGED:
+            return static_cast<ucs_memory_type_t>(variant_value);
+        case MEMORY_TYPE_CUDA_ASYNC:
+            return UCS_MEMORY_TYPE_CUDA;
+        default:
+            UCS_TEST_ABORT("invalid memory type: " << variant_value);
+            return UCS_MEMORY_TYPE_HOST;
+        }
+    }
+
+    static const int MEMORY_TYPE_CUDA_ASYNC = UCS_MEMORY_TYPE_LAST + 1;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
-    test_am_send_recv_memtype(64 * UCS_KBYTE);
+    const size_t rndv_frag_size     = get_rndv_frag_size(UCS_MEMORY_TYPE_HOST);
+    const std::vector<size_t> sizes = {1, 64 * UCS_KBYTE, rndv_frag_size - 1,
+                                       rndv_frag_size + 1};
+
+    for (size_t size : sizes) {
+        test_am_send_recv_memtype(size);
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype);
@@ -1895,3 +2045,146 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_memtype_disable_zcopy,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
+
+
+#ifdef ENABLE_STATS
+class test_ucp_am_nbx_rndv_ppln : public test_ucp_am_nbx_rndv {
+public:
+    test_ucp_am_nbx_rndv_ppln() : m_mem_type(UCS_MEMORY_TYPE_HOST) {}
+
+    void init() override
+    {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+        stats_activate();
+        modify_config("RNDV_THRESH", "128");
+        modify_config("RNDV_SCHEME", "put_ppln");
+        modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
+        /* FIXME: Advertise error handling support for RNDV PPLN protocol.
+         * Remove this once invalidation workflow is implemented. */
+        modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
+        test_ucp_am_nbx::init();
+    }
+
+    void cleanup() override
+    {
+        test_ucp_am_nbx::cleanup();
+        stats_restore();
+    }
+
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           UCP_ERR_HANDLING_MODE_NONE);
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           UCP_ERR_HANDLING_MODE_PEER, "errh");
+    }
+
+protected:
+    virtual ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t ep_params = test_ucp_am_nbx_rndv::get_ep_params();
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.err_mode        = get_err_mode();
+        return ep_params;
+    }
+
+    void test_ppln_send(ucs_memory_type_t mem_type, size_t num_frags,
+                        uint64_t stats_cntr_value)
+    {
+        if (!sender().is_rndv_put_ppln_supported()) {
+            UCS_TEST_SKIP_R("RNDV pipeline is not supported");
+        }
+
+        const size_t rndv_frag_size = get_rndv_frag_size(mem_type);
+        test_am_send_recv(rndv_frag_size * num_frags);
+
+        check_stats(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
+                    stats_cntr_value);
+        check_stats(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, stats_cntr_value);
+    }
+
+    void set_mem_type(ucs_memory_type_t mem_type) {
+        m_mem_type = mem_type;
+    }
+
+private:
+    ucs_memory_type_t tx_memtype() const override
+    {
+        return m_mem_type;
+    }
+
+    ucs_memory_type_t rx_memtype() const override
+    {
+        return m_mem_type;
+    }
+
+    void check_stats(entity &e, uint64_t cntr, uint64_t exp_value)
+    {
+        auto stats_node = e.worker()->stats;
+        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
+
+        EXPECT_EQ(exp_value, value) << "counter is "
+                                    << stats_node->cls->counter_names[cntr];
+    }
+
+    ucp_err_handling_mode_t get_err_mode() const
+    {
+        return static_cast<ucp_err_handling_mode_t>(get_variant_value(1));
+    }
+
+    ucs_memory_type_t m_mem_type;
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_cuda_frag,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_host_frag,
+           "RNDV_FRAG_MEM_TYPE=host")
+{
+    // Host memory should not be pipelined thru host staging buffers
+    m_check_recv_rndv_flags = false;
+
+    test_ppln_send(UCS_MEMORY_TYPE_HOST, 2, 0);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_buff_cuda_frag,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    set_mem_type(UCS_MEMORY_TYPE_CUDA);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, empty_rndv_frag_mem_type,
+           "RNDV_FRAG_MEM_TYPE=")
+{
+    m_check_recv_rndv_flags = false;
+
+    set_mem_type(UCS_MEMORY_TYPE_CUDA);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, 2, 0);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_managed_buff,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    set_mem_type(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
+
+#endif

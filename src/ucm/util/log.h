@@ -18,7 +18,7 @@
 #define ucm_log(_level, _message, ...) \
     if (((_level) <= UCS_MAX_LOG_LEVEL) && \
         ((_level) <= (int)ucm_global_opts.log_level)) { \
-        __ucm_log(__FILE__, __LINE__, __FUNCTION__, (_level), _message, \
+        __ucm_log(__FILE__, __LINE__, __func__, (_level), _message, \
                   ## __VA_ARGS__); \
     }
 

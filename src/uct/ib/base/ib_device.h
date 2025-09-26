@@ -52,6 +52,11 @@
 #define UCT_IB_LINK_LOCAL_PREFIX          be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
 #define UCT_IB_SITE_LOCAL_PREFIX          be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_SITE_LOCAL_MASK            be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_SITE_LOCAL_FLID_MASK       be64toh(0xffffffff00000000ul) /* site-local + flid */
+#define UCT_IB_GUID_OPENIB_OUI            0x001405 /* An OUI is a 24 bit globally unique assigned
+                                                      number referenced by various standards.
+                                                      IB_OPENIB_OUI is part of the routable alias
+                                                      GUID built by SM. */
 #define UCT_IB_DEFAULT_ROCEV2_DSCP        106  /* Default DSCP for RoCE v2 */
 #define UCT_IB_ROCE_UDP_SRC_PORT_BASE     0xC000
 #define UCT_IB_CQE_SL_PKTYPE_MASK         0x7 /* SL for IB or packet type
@@ -64,6 +69,9 @@
 #define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
 #define UCT_IB_DEVICE_ECE_DEFAULT         0x0         /* default ECE */
 #define UCT_IB_DEVICE_ECE_MAX             0xffffffffU /* max ECE */
+#define UCT_IB_DEVICE_DEFAULT_GID_INDEX 0   /* The gid index used by default for an IB/RoCE port */
+#define UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX 1 /* The gid index used by default
+                                                   with FLID based IB routing */
 
 
 enum {
@@ -84,6 +92,7 @@ enum {
     UCT_IB_DEVICE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
     UCT_IB_DEVICE_FLAG_MLX5_PRM = UCS_BIT(2),   /* Device supports mlx5 PRM */
     UCT_IB_DEVICE_FLAG_MELLANOX = UCS_BIT(3),   /* Mellanox device */
+    UCT_IB_DEVICE_FLAG_SRQ      = UCS_BIT(4),   /* Supports SRQ */
     UCT_IB_DEVICE_FLAG_LINK_IB  = UCS_BIT(5),   /* Require only IB */
     UCT_IB_DEVICE_FLAG_DC_V1    = UCS_BIT(6),   /* Device supports DC ver 1 */
     UCT_IB_DEVICE_FLAG_DC_V2    = UCS_BIT(7),   /* Device supports DC ver 2 */
@@ -228,6 +237,13 @@ typedef struct uct_ib_device {
     uint8_t                     pci_cswap_arg_sizes;
     uint8_t                     atomic_align;
     uint8_t                     lag_level;
+    uint8_t                     req_notify_cq_support; /* Also indicates
+                                                          IBV_SEND_SOLICITED
+                                                          support */
+    uint8_t                     ordered_send_comp;
+    uint64_t                    mr_access_flags;
+    uint32_t                    max_inline_data;
+
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
@@ -312,12 +328,15 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev);
  *
  * @param [in]  dev             IB device.
  * @param [in]  port_num        Port number.
+ * @param [in]  subnet_strs     List of allowed/restricted subnets to select
+ *                              from.
  * @param [out] gid_info        Filled with the selected gid index and the
  *                              port's RoCE version and address family.
  */
-ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev,
-                                      uint8_t port_num,
-                                      uct_ib_device_gid_info_t *gid_info);
+ucs_status_t
+uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
+                         const ucs_config_allow_list_t *subnets_array,
+                         uct_ib_device_gid_info_t *gid_info);
 
 
 /**
@@ -339,9 +358,9 @@ int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num);
 
 
 /**
- * @return 1 if the gid_raw is 0, 0 otherwise.
+ * @return whether the gid is valid
  */
-int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw);
+int uct_ib_device_is_gid_valid(const union ibv_gid *gid);
 
 
 /**
@@ -389,6 +408,12 @@ ucs_status_t uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev,
                                               uint8_t port_num,
                                               uint8_t gid_index,
                                               char *ndev_name, size_t max);
+
+ucs_status_t uct_ib_iface_get_loopback_ndev_index(unsigned *ndev_index_p);
+
+ucs_status_t
+uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
+                                  uint8_t gid_index, unsigned *ndev_index_p);
 
 unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev,
                                           uint8_t port_num,
@@ -453,6 +478,10 @@ int uct_ib_get_cqe_size(int cqe_size_min);
 const char* uct_ib_ah_attr_str(char *buf, size_t max,
                                const struct ibv_ah_attr *ah_attr);
 
+ucs_status_t
+uct_ib_device_roce_gid_to_sockaddr(sa_family_t af, const void *gid,
+                                   struct sockaddr_storage *sock_storage);
+
 static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, struct ibv_wc *wcs)
 {
     int ret;
@@ -469,6 +498,16 @@ static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, st
     return UCS_OK;
 }
 
+static inline void uct_ib_destroy_cq(struct ibv_cq *cq, const char *desc)
+{
+    int ret = ibv_destroy_cq(cq);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_cq(%s) failed with error %d: %m", desc, ret);
+    }
+}
+
 void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event);
+
+int uct_ib_device_is_smi(struct ibv_device *ibv_device);
 
 #endif

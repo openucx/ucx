@@ -13,6 +13,7 @@
 
 #include <ucs/algorithm/crc.h>
 #include <ucs/sys/checker.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
@@ -48,6 +49,7 @@
 #define UCS_PROCCESS_STAT_FMT      "/proc/%d/stat"
 #define UCS_PROCESS_NS_FIRST       0xF0000000U
 #define UCS_PROCESS_NS_NET_DFLT    0xF0000080U
+#define UCS_DMI_PRODUCT_NAME_FILE  "/sys/devices/virtual/dmi/id/product_name"
 
 #define UCS_NS_INFO_ITEM(_id, _name, _dflt) \
     [_id] = {.name = (_name), .dflt = (_dflt), .value = (_dflt), \
@@ -161,6 +163,18 @@ uint32_t ucs_file_checksum(const char *filename)
     close(fd);
 
     return crc;
+}
+
+ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p)
+{
+    unsigned ndev_index = if_nametoindex(ndev_name);
+    if (ndev_index == 0) {
+        ucs_error("failed to get interface index for %s: %m", ndev_name);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *ndev_index_p = ndev_index;
+    return UCS_OK;
 }
 
 static uint64_t ucs_get_mac_address()
@@ -314,22 +328,29 @@ uint64_t ucs_generate_uuid(uint64_t seed)
            __sumup_host_name(5);
 }
 
-int ucs_sys_max_open_files()
+static ucs_status_t
+ucs_get_rlimit(int resource, rlim_t *rlimit_value, const char *name)
 {
-    static int file_limit = 0;
     struct rlimit rlim;
-    int ret;
 
-    if (file_limit == 0) {
-        ret = getrlimit(RLIMIT_NOFILE, &rlim);
-        if (ret == 0) {
-            file_limit = (int)rlim.rlim_cur;
-        } else {
-            file_limit = 1024;
-        }
+    if (getrlimit(resource, &rlim) != 0) {
+        ucs_debug("unable to get %s limit: %m", name);
+        return UCS_ERR_IO_ERROR;
     }
 
-    return file_limit;
+    *rlimit_value = rlim.rlim_cur;
+    return UCS_OK;
+}
+
+int ucs_sys_max_open_files()
+{
+    rlim_t value = 0;
+
+    if (ucs_get_rlimit(RLIMIT_NOFILE, &value, "max opened file") != UCS_OK) {
+        return -1;
+    }
+
+    return (int)value;
 }
 
 ucs_status_t
@@ -439,9 +460,7 @@ static ssize_t ucs_read_file_vararg(char *buffer, size_t max, int silent,
         goto out_close;
     }
 
-    if (read_bytes < max) {
-        buffer[read_bytes] = '\0';
-    }
+    buffer[read_bytes] = '\0';
 
 out_close:
     close(fd);
@@ -1460,31 +1479,19 @@ ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ct
     ucs_status_t res = UCS_OK;
     DIR *dir;
     struct dirent *entry;
-    struct dirent *entry_out;
-    size_t entry_len;
 
     dir = opendir(path);
     if (dir == NULL) {
-        return UCS_ERR_NO_ELEM; /* failed to open directory */
+        return UCS_ERR_NO_ELEM;
     }
 
-    entry_len = ucs_offsetof(struct dirent, d_name) +
-                fpathconf(dirfd(dir), _PC_NAME_MAX) + 1;
-    entry     = (struct dirent*)malloc(entry_len);
-    if (entry == NULL) {
-        res = UCS_ERR_NO_MEMORY;
-        goto failed_no_mem;
-    }
-
-    while (!readdir_r(dir, entry, &entry_out) && (entry_out != NULL)) {
+    while ((entry = readdir(dir)) != NULL) {
         res = cb(entry, ctx);
         if (res != UCS_OK) {
             break;
         }
     }
 
-    free(entry);
-failed_no_mem:
     closedir(dir);
     return res;
 }
@@ -1588,15 +1595,15 @@ unsigned long ucs_sys_get_proc_create_time(pid_t pid)
     }
 
 scan_err:
-    ucs_error("failed to scan "UCS_PROCCESS_STAT_FMT, pid);
+    ucs_debug("failed to scan "UCS_PROCCESS_STAT_FMT, pid);
 err:
     return 0ul;
 }
 
 ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value)
 {
-    struct rlimit limit_info;
-    int res;
+    rlim_t value = 0;
+    ucs_status_t status;
 
     /* Privileged users have no lock limit */
     if (ucs_sys_get_mlock_cap()) {
@@ -1606,15 +1613,12 @@ ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value)
 
     /* Check the value of the max locked memory which is set on the system
      * (ulimit -l) */
-    res = getrlimit(RLIMIT_MEMLOCK, &limit_info);
-    if (res != 0) {
-        ucs_debug("unable to get the max locked memory limit: %m");
+    status = ucs_get_rlimit(RLIMIT_MEMLOCK, &value, "max locked memory");
+    if (status != UCS_OK) {
         return UCS_ERR_IO_ERROR;
     }
 
-    *rlimit_value = (limit_info.rlim_cur == RLIM_INFINITY) ?
-                            SIZE_MAX :
-                            limit_info.rlim_cur;
+    *rlimit_value = (value == RLIM_INFINITY) ? SIZE_MAX : value;
     return UCS_OK;
 }
 
@@ -1647,4 +1651,24 @@ ucs_status_t ucs_sys_read_sysfs_file(const char *dev_name,
     }
 
     return UCS_OK;
+}
+
+const char *ucs_sys_dmi_product_name()
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static char product_name[128];
+    ssize_t nread;
+
+    UCS_INIT_ONCE(&init_once) {
+        nread = ucs_read_file_str(product_name, sizeof(product_name), 1,
+                                  UCS_DMI_PRODUCT_NAME_FILE);
+        if (nread >= 0) {
+            ucs_strtrim(product_name);
+        } else {
+            ucs_strncpy_zero(product_name, UCS_VALUE_UNKNOWN_STR,
+                             sizeof(product_name));
+        }
+    }
+
+    return product_name;
 }

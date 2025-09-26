@@ -7,12 +7,16 @@
 #ifndef UCS_VFS_SOCK_H_
 #define UCS_VFS_SOCK_H_
 
+#include <ucs/config/types.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <stdint.h>
 
 /* This header file defines socket operations for communicating between UCS
  * library and VFS daemon */
+
+#define UCX_VFS_SOCK_DEFAULT_PATH "/run/user/%i/ucx/vfs.sock"
+
 
 /**
  * VFS socket message type
@@ -50,6 +54,16 @@ typedef struct {
  * @param [out] un_addr  Filled with socket address.
  */
 void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr);
+
+
+/**
+ * Find directory in the given path, and create it if it does not exist.
+ *
+ * @param [in]   sock_path Path to the socket file.
+ * @param [in]   log_level Log level to use in case of failure.
+ * @return 0 on success, or the negative value of errno in case of failure.
+ */
+int ucs_vfs_sock_mkdir(const char *sock_path, ucs_log_level_t log_level);
 
 
 /**

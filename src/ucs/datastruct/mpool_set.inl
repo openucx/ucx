@@ -12,7 +12,7 @@
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/assert.h>
 #include <ucs/arch/bitops.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 
 
 /**
