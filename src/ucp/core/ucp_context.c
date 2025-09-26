@@ -1800,19 +1800,22 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
             }
         }
 
-        if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
-            ((reg_nonblock_md_map != 0) || !context->config.ext.reg_nb_fallback)) {
-                /* Keep map of MDs supporting blocking registration
-                 * if non-blocking registration is requested for the
-                 * given memory type. In some cases blocking
-                 * registration maybe required anyway (e.g. internal
-                 * staging buffers for rndv pipeline protocols). */
-                context->reg_block_md_map[mem_type] =
-                    reg_block_md_map & ~reg_nonblock_md_map;
-                context->reg_md_map[mem_type]       = reg_nonblock_md_map;
+        /* Keep map of MDs supporting blocking registration if non-blocking
+         * registration is requested for the given memory type. In some cases
+         * blocking registration maybe required anyway (e.g. internal staging
+         * buffers for rndv pipeline protocols). */
+        context->reg_block_md_map[mem_type] = reg_block_md_map;
+
+        if ((reg_nonblock_md_map == 0) && context->config.ext.reg_nb_fallback) {
+            /* Fallback to blocking registration if no MD supports non-blocking
+             * registration */
+            reg_nonblock_md_map = reg_block_md_map;
+        }
+
+        if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
+            context->reg_md_map[mem_type] = reg_nonblock_md_map;
         } else {
-            context->reg_block_md_map[mem_type] = reg_block_md_map;
-            context->reg_md_map[mem_type]       = reg_block_md_map;
+            context->reg_md_map[mem_type] = reg_block_md_map;
         }
 
         /* If we have a dmabuf provider for a memory type, it means we can
