@@ -496,11 +496,18 @@ struct ucp_ep_config {
  * Status of protocol-level remote completions
  */
 typedef struct {
-    ucs_hlist_head_t reqs; /* Queue of flush requests which
-                              are waiting for remote completion */
-    uint32_t         send_sn; /* Sequence number of sent operations */
-    uint32_t         cmpl_sn; /* Sequence number of completions */
-    uint32_t         mem_in_progress; /* Track ongoing memory flushes for this endpoint */
+    ucs_hlist_head_t  reqs;    /* Queue of flush requests which
+                                  are waiting for remote completion */
+    uint32_t          send_sn; /* Sequence number of sent operations */
+    uint32_t          cmpl_sn; /* Sequence number of completions */
+
+    /**
+     * Map of system devices that require a flush operation
+     */
+    ucp_sys_dev_map_t flush_sys_dev_map;
+
+    /* Track ongoing memory flushes for this endpoint */
+    uint32_t          mem_in_progress;
 } ucp_ep_flush_state_t;
 
 
@@ -555,12 +562,6 @@ typedef struct ucp_ep_ext {
      * structure. TODO allocate this array dynamically.
      */
     uct_ep_h                     *uct_eps;
-
-
-    /**
-     * Map of system devices that require a flush operation
-     */
-    ucp_sys_dev_map_t             flush_sys_dev_map;
 } ucp_ep_ext_t;
 
 
