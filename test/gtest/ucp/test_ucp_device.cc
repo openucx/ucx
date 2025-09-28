@@ -70,7 +70,7 @@ void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
 void test_ucp_device::init()
 {
     m_env.push_back(new ucs::scoped_setenv("UCX_CUDA_IPC_ENABLE_SAME_PROCESS", "y"));
-    m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_IB_DISTANCE_LATENCY_THRESH", "1000ns"));
+    m_env.push_back(new ucs::scoped_setenv("UCX_IB_GDA_MAX_SYS_LATENCY", "1us"));
     ucp_test::init();
     sender().connect(&receiver(), get_ep_params());
     if (!is_loopback()) {
