@@ -125,7 +125,8 @@ private:
             elems[i].rkey        = perf.ucp.rkey;
             elems[i].local_addr  = (char*)perf.send_buffer + offset;
             elems[i].remote_addr = perf.ucp.remote_addr + offset;
-            elems[i].length      = perf.params.msg_size_list[i];
+            elems[i].length      = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
+                                                          perf.params.msg_size_list[i];
             offset              += perf.params.msg_size_list[i];
         }
 
