@@ -58,35 +58,15 @@ template<ucs_device_level_t level> UCS_F_DEVICE void uct_rc_mlx5_gda_sync(void)
 UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
         struct doca_gpu_dev_verbs_qp *qp, unsigned count)
 {
+    cuda::atomic_ref<uint64_t, cuda::thread_scope_device> pi_ref(qp->sq_wqe_pi);
+
     uint64_t wqe_base = atomicAdd(reinterpret_cast<unsigned long long*>(
                                           &qp->sq_rsvd_index),
                                   static_cast<unsigned long long>(count));
 
-    /*
-     *  Attempt to reserve 'count' WQEs by atomically incrementing the reserved
-     *  index. If the reservation exceeds the available space in the work queue,
-     *  enter a rollback loop.
-     *
-     *  Rollback Logic:
-     *  - Calculate the next potential index (wqe_next) after attempting the
-     *    reservation.
-     *  - Use atomic CAS to check if the current reserved index matches wqe_next.
-     *    If it does, revert the reservation by resetting the reserved index to
-     *    wqe_base.
-     *  - A successful CAS indicates no other thread has modified the reserved
-     *    index, allowing the rollback to complete, and the function returns
-     *    -1ULL to signal insufficient resources.
-     *  - If CAS fails, it means another thread has modified the reserved index.
-     *    The loop continues to reevaluate resource availability to determine if
-     *    the reservation can now be satisfied, possibly due to other operations
-     *    freeing up resources.
-     */
-    while (wqe_base + count > qp->sq_wqe_pi + qp->sq_wqe_num) {
-        uint64_t wqe_next = wqe_base + count;
-        if (atomicCAS(reinterpret_cast<unsigned long long*>(&qp->sq_rsvd_index),
-                      wqe_next, wqe_base) == wqe_next) {
-            return -1ULL;
-        }
+    /* Avoid atomic load on good path */
+    if (wqe_base + count > qp->sq_wqe_pi + qp->sq_wqe_num) {
+        while (wqe_base + count > pi_ref.load() + qp->sq_wqe_num);
     }
 
     return wqe_base;
