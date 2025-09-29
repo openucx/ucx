@@ -170,7 +170,8 @@ static int ucp_memh_send_flush_is_needed(ucp_mem_h memh)
             ucs_for_each_bit(sys_dev, sys_dev_map) {
                 if (ucs_topo_is_sibling(sys_dev, memh->sys_dev)) {
                     /*
-                     * PUT operation on such rkey requires remote flush.
+                     * PUT operation on such device will require remote flush
+                     * when using network devices.
                      * Set a flag for the peer to recognize it.
                      */
                     memh->flags |= UCP_MEMH_FLAG_SEND_FLUSH_NEEDED;
