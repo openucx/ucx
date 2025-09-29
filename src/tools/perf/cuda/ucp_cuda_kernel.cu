@@ -194,13 +194,13 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
     case UCX_PERF_CMD_PUT_SINGLE:
         /* TODO: Change to ucp_device_counter_write */
         *params.counter_send = idx + 1;
-        return ucp_device_put_single<level>(params.mem_list, params.indices[0],
+        return ucp_device_put_single<level>(params.mem_list, 0, params.indices[0],
                                             (size_t)params.addresses[0],
                                             (size_t)params.remote_addresses[0],
                                             params.length + ONESIDED_SIGNAL_SIZE,
                                             params.flags, &req);
     case UCX_PERF_CMD_PUT_MULTI:
-        return ucp_device_put_multi<level>(params.mem_list, (size_t*)params.addresses,
+        return ucp_device_put_multi<level>(params.mem_list, 0,(size_t*)params.addresses,
                                            (size_t*)params.remote_addresses,
                                            params.lengths, 1,
                                            params.counter_remote, params.flags,
@@ -208,6 +208,7 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
     case UCX_PERF_CMD_PUT_PARTIAL:{
         unsigned counter_index = params.mem_list->mem_list_length - 1;
         return ucp_device_put_multi_partial<level>(params.mem_list,
+                                                   0,
                                                    params.indices,
                                                    counter_index,
                                                    (size_t*)params.addresses,

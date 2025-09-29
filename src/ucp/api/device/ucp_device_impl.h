@@ -122,6 +122,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
  *
  * @tparam      level           Level of cooperation of the transfer.
  * @param [in]  mem_list_h      Memory descriptor list handle to use.
+ * @param [in]  channel_id      Channel ID to use for the transfer.
  * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
  * @param [in]  local_offset    Local offset to send data from.
  * @param [in]  remote_offset   Remote offset to send data to.
@@ -135,9 +136,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_put_single(
-        ucp_device_mem_list_handle_h mem_list_h, unsigned mem_list_index,
-        size_t local_offset, size_t remote_offset, size_t length,
-        uint64_t flags, ucp_device_request_t *req)
+        ucp_device_mem_list_handle_h mem_list_h, unsigned channel_id,
+        unsigned mem_list_index, size_t local_offset, size_t remote_offset,
+        size_t length, uint64_t flags, ucp_device_request_t *req)
 {
     const void *address = UCS_PTR_BYTE_OFFSET(
             mem_list_h->ucp_mem_list.local_addr[mem_list_index], local_offset);
@@ -180,6 +181,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  *
  * @tparam      level           Level of cooperation of the transfer.
  * @param [in]  mem_list_h      Memory descriptor list handle to use.
+ * @param [in]  channel_id      Channel ID to use for the transfer.
  * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
  *                              remote key to use for the increment operation.
  * @param [in]  inc_value       Value used to increment the remote address.
@@ -191,9 +193,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
-        ucp_device_mem_list_handle_h mem_list_h, unsigned mem_list_index,
-        uint64_t inc_value, size_t remote_offset, uint64_t flags,
-        ucp_device_request_t *req)
+        ucp_device_mem_list_handle_h mem_list_h, unsigned channel_id,
+        unsigned mem_list_index, uint64_t inc_value, size_t remote_offset,
+        uint64_t flags, ucp_device_request_t *req)
 {
     uint64_t remote_address =
             mem_list_h->ucp_mem_list.remote_addr[mem_list_index] +
@@ -245,6 +247,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  *
  * @tparam      level                  Level of cooperation of the transfer.
  * @param [in]  mem_list_h             Memory descriptor list handle to use.
+ * @param [in]  channel_id             Channel ID to use for the transfer.
  * @param [in]  local_offsets          Array of local offsets to send from.
  * @param [in]  remote_offsets         Array of remote offsets to send to.
  * @param [in]  lengths                Array of lengths in bytes for each send.
@@ -256,11 +259,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
-UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
-        ucp_device_mem_list_handle_h mem_list_h, const size_t *local_offsets,
-        const size_t *remote_offsets, const size_t *lengths,
-        uint64_t counter_inc_value, uint64_t counter_remote_offset,
-        uint64_t flags, ucp_device_request_t *req)
+UCS_F_DEVICE ucs_status_t
+ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list_h,
+                     unsigned channel_id, const size_t *local_offsets,
+                     const size_t *remote_offsets, const size_t *lengths,
+                     uint64_t counter_inc_value, uint64_t counter_remote_offset,
+                     uint64_t flags, ucp_device_request_t *req)
 {
     void *const *addresses           = mem_list_h->ucp_mem_list.local_addr;
     const uint64_t *remote_addresses = mem_list_h->ucp_mem_list.remote_addr;
@@ -319,6 +323,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  *
  * @tparam      level                  Level of cooperation of the transfer.
  * @param [in]  mem_list_h             Memory descriptor list handle to use.
+ * @param [in]  channel_id             Channel ID to use for the transfer.
  * @param [in]  mem_list_indices       Array of indices, to use in descriptor
  *                                     list of entries from handle.
  * @param [in]  mem_list_count         Number of indices in the array @ref
@@ -336,7 +341,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
-        ucp_device_mem_list_handle_h mem_list_h,
+        ucp_device_mem_list_handle_h mem_list_h, unsigned channel_id,
         const unsigned *mem_list_indices, unsigned mem_list_count,
         const size_t *local_offsets, const size_t *remote_offsets,
         const size_t *lengths, unsigned counter_index,

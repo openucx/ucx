@@ -21,21 +21,21 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
     switch (params.operation) {
     case TEST_UCP_DEVICE_KERNEL_PUT_SINGLE:
         status = ucp_device_put_single<level>(
-                params.mem_list, params.single.mem_list_index,
+                params.mem_list, 0, params.single.mem_list_index,
                 (size_t)params.single.address,
                 (size_t)params.single.remote_address, params.single.length,
                 flags, req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_PUT_MULTI:
         status = ucp_device_put_multi<level>(
-                params.mem_list, (size_t*)params.multi.addresses,
+                params.mem_list, 0, (size_t*)params.multi.addresses,
                 (size_t*)params.multi.remote_addresses, params.multi.lengths,
                 params.multi.counter_inc_value,
                 params.multi.counter_remote_address, flags, req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL:
         status = ucp_device_put_multi_partial<level>(
-                params.mem_list, params.partial.mem_list_indices,
+                params.mem_list, 0, params.partial.mem_list_indices,
                 params.partial.mem_list_count,
                 (size_t*)params.partial.addresses,
                 (size_t*)params.partial.remote_addresses,
@@ -45,7 +45,7 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
         break;
     case TEST_UCP_DEVICE_KERNEL_COUNTER_INC:
         status = ucp_device_counter_inc<level>(
-                params.mem_list, params.counter_inc.mem_list_index,
+                params.mem_list, 0, params.counter_inc.mem_list_index,
                 params.counter_inc.inc_value,
                 (size_t)params.counter_inc.remote_address, flags, req_ptr);
         break;
