@@ -107,15 +107,17 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
  *
  * This device routine posts one put operation using descriptor list handle.
  * The @a mem_list_index is used to point at the @a mem_list entry to be used
- * for the memory transfer. The addresses and length must be valid for the used
- * @a mem_list entry.
+ * for the memory transfer. The @a local_offset and @a remote_offset parameters
+ * specify byte offsets within the selected memory list entry.The @a length,
+ * @a local_offset and @a remote_offset parameters must be valid
+ * for the used @a mem_list entry.
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
  * The routine returns only after the message has been posted or an error has occurred.
  *
  * This routine can be called repeatedly with the same handle and different
- * addresses and length. The flags parameter can be used to modify the behavior
+ * offsets and length. The flags parameter can be used to modify the behavior
  * of the routine with bit from @ref ucp_device_flags_t.
  *
  * @tparam      level           Level of cooperation of the transfer.
@@ -124,9 +126,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
  * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
  * @param [in]  local_offset    Local offset to send data from.
  * @param [in]  remote_offset   Remote offset to send data to.
- * @param [in]  remote_address  Remote virtual address to send data to.
  * @param [in]  length          Length in bytes of the data to send.
- *                              registration keys to use for the transfer.
  * @param [in]  flags           Flags usable to modify the function behavior.
  * @param [out] req             Request populated by the call.
  *
@@ -168,14 +168,14 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  *
  * This device routine posts one increment operation using memory descriptor
  * list handle. The @ref mem_list_index is used to point at the @a mem_list
- * entry to be used for the increment operation. The remote address must be
+ * entry to be used for the increment operation. The remote offset must be
  * valid for the used @a mem_list entry.
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
  *
  * This routine can be called repeatedly with the same handle and different
- * address. The flags parameter can be used to modify the behavior of the
+ * counter offset. The flags parameter can be used to modify the behavior of the
  * routine.
  *
  * @tparam      level           Level of cooperation of the transfer.
@@ -225,22 +225,15 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * operation can be polled on the receiver to detect completion of all the
  * operations of the batch, started during the same routine call.
  *
- * The content of each entries in the arrays @a addresses, @a remote_addresses
- * and @a lengths must be valid for each corresponding entry in the descriptor
- * list from the input handle. The last entry in the descriptor list contains
+ * The last entry in the descriptor list contains
  * the remote memory registration descriptors to be used for the increment
  * operation.
- *
- * The size of the arrays @a addresses, @a remote_addresses, and @a lengths
- * are all equal to the size of the descriptor list array from the handle,
- * minus one.
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
  * The routine returns only after all the messages have been posted or an error has occurred.
  *
- * This routine can be called repeatedly with the same handle and different
- * @a addresses, @a lengths and counter related parameters. The @a flags
+ * This routine can be called repeatedly. The @a flags
  * parameter can be used to modify the behavior of the routine with bit from
  * @ref ucp_device_flags_t.
  *
@@ -293,15 +286,14 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  * of all operations of the batch, started during the same routine call.
  *
  * The set of indices from the descriptor list entries to use are to be passed
- * in the array @ref mem_list_indices. The last entry of the descriptor list is to
- * be used for the final increment operation.
+ * in the array @ref mem_list_indices.
  *
- * The content of each entries in the arrays addresses, remote_addresses and
- * lengths must be valid for each corresponding descriptor list entry whose
+ * The content of each entries in the arrays @a local_offsets, @a remote_offsets
+ * and @a lengths must be valid for each corresponding descriptor list entry whose
  * index is referenced in @ref mem_list_indices.
  *
- * The size of the arrays mem_list_indices, addresses, remote_addresses, and
- * lengths are all equal. They are lower than the size of the descriptor list
+ * The size of the arrays @a mem_list_indices, @a local_offsets, @a remote_offsets, and
+ * @a lengths are all equal. They are lower than the size of the descriptor list
  * array from the handle.
  *
  * The routine returns a request that can be progressed and checked for
@@ -309,8 +301,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  * The routine returns only after all the messages have been posted or an error has occurred.
  *
  * This routine can be called repeatedly with the same handle and different
- * mem_list_indices, addresses, lengths and increment related parameters. The
- * flags parameter can be used to modify the behavior of the routine with bit
+ * mem_list_indices, local_offsets, remote_offsets, lengths and increment related parameters.
+ * The @a flags parameter can be used to modify the behavior of the routine with bit
  * from @ref ucp_device_flags_t.
  *
  * @tparam      level                  Level of cooperation of the transfer.
@@ -337,7 +329,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
         const unsigned *mem_list_indices, unsigned mem_list_count,
         const size_t *local_offsets, const size_t *remote_offsets,
         const size_t *lengths, unsigned counter_index,
-        uint64_t counter_inc_value, uint64_t counter_remote_offset,
+        uint64_t counter_inc_value, size_t counter_remote_offset,
         uint64_t flags, ucp_device_request_t *req)
 {
     void *const *addresses           = mem_list_h->ucp_mem_elements.local_addr;
