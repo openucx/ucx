@@ -336,6 +336,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
 
     if ((level != UCS_DEVICE_LEVEL_THREAD) &&
         (level != UCS_DEVICE_LEVEL_WARP)) {
+        ucs_device_error("unsupported level: %s", ucs_device_level_name(level));
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -426,6 +427,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
 
     if ((level != UCS_DEVICE_LEVEL_THREAD) &&
         (level != UCS_DEVICE_LEVEL_WARP)) {
+        ucs_device_error("unsupported level: %s", ucs_device_level_name(level));
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -600,6 +602,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_progress(uct_device_ep_h tl_ep)
     } else if (level == UCS_DEVICE_LEVEL_THREAD) {
         return uct_rc_mlx5_gda_progress_thread(ep);
     } else {
+        ucs_device_error("unsupported level: %s", ucs_device_level_name(level));
         return UCS_ERR_UNSUPPORTED;
     }
 }

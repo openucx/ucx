@@ -88,6 +88,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
 
     if ((mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
         (first_mem_elem_index >= mem_list_h->mem_list_length)) {
+        ucs_device_error("invalid parameters: mem_list version=%u (expected %u), "
+                         "first_mem_elem_index=%u, mem_list_length=%u",
+                         mem_list_h->version, UCP_DEVICE_MEM_LIST_VERSION_V1,
+                         first_mem_elem_index, mem_list_h->mem_list_length);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -144,6 +148,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
     status = ucp_device_prepare_send(mem_list_h, mem_list_index, req, device_ep,
                                      uct_elem, comp);
     if (status != UCS_OK) {
+        ucs_device_error("send prepare failed with %s, mem_list_index=%u",
+                         ucs_device_status_string(status), mem_list_index);
         return status;
     }
 
@@ -195,6 +201,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
     status = ucp_device_prepare_send(mem_list_h, mem_list_index, req, device_ep,
                                      uct_elem, comp);
     if (status != UCS_OK) {
+        ucs_device_error("send prepare failed with %s, mem_list_index=%u",
+                         ucs_device_status_string(status), mem_list_index);
         return status;
     }
 
@@ -259,6 +267,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
     status = ucp_device_prepare_send(mem_list_h, 0, req, device_ep,
                                      uct_mem_list, comp);
     if (status != UCS_OK) {
+        ucs_device_error("send prepare failed with %s, mem_list_length=%u",
+                         ucs_device_status_string(status), mem_list_h->mem_list_length);
         return status;
     }
 
@@ -334,6 +344,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
     status = ucp_device_prepare_send(mem_list_h, 0, req, device_ep,
                                      uct_mem_list, comp);
     if (status != UCS_OK) {
+        ucs_device_error("send prepare failed with %s, mem_list_count=%u",
+                         ucs_device_status_string(status), mem_list_count);
         return status;
     }
 

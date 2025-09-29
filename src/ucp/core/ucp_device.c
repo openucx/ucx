@@ -380,6 +380,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     uct_allocated_memory_t mem;
 
     if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+        ucs_error("ep=%p didn't complete wireup", ep);
         return UCS_ERR_NOT_CONNECTED;
     }
 
@@ -388,6 +389,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
                                               &local_sys_dev, &local_md_map,
                                               &mem_type);
     if (status != UCS_OK) {
+        ucs_error("ep=%p check parameters failed: %s", ep,
+                  ucs_status_string(status));
         return status;
     }
 
@@ -426,6 +429,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     /* Track memory allocator for later release */
     status = ucp_device_mem_handle_hash_insert(&mem);
     if (status != UCS_OK) {
+        ucs_error("failed to insert handle: %s", ucs_status_string(status));
         uct_mem_free(&mem);
     } else {
         *handle_p = mem.address;
