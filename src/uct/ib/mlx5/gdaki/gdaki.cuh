@@ -337,7 +337,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (counter_remote_address == 0) {
+    if (counter_inc_value == 0) {
         count--;
     }
 
@@ -428,7 +428,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (counter_remote_address != 0) {
+    if (counter_inc_value != 0) {
         count++;
     }
 
