@@ -220,6 +220,9 @@ static ucs_status_t ucp_ep_flush_mem_start(ucp_request_t *req)
         return UCS_OK;
     }
 
+    ucs_assertv(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID,
+                "ep=%p ep->flags=0x%x", ep, ep->flags);
+
     count                       = ucs_popcount(ep->ext->flush_sys_dev_map);
     req->send.flush.mem.entries = ucs_malloc(count * sizeof(*entry),
                                              "flush_mem_entries");
