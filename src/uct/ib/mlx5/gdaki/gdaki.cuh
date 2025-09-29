@@ -452,9 +452,9 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
             opcode         = MLX5_OPCODE_ATOMIC_FA;
         } else if (i < mem_list_count) {
             idx     = mem_list_indices[i];
-            address = UCS_PTR_BYTE_OFFSET(addresses[i], local_offsets[i]);
+            address = UCS_PTR_BYTE_OFFSET(addresses[idx], local_offsets[i]);
             lkey    = mem_list[idx].lkey;
-            remote_address = remote_addresses[i] + remote_offsets[i];
+            remote_address = remote_addresses[idx] + remote_offsets[i];
             length         = lengths[i];
             opcode         = MLX5_OPCODE_RDMA_WRITE;
         } else {
