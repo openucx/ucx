@@ -208,6 +208,10 @@ launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucx_cuda::synchronize();
+    ucs_status_t sync_status = ucx_cuda::synchronize();
+    if (sync_status != UCS_OK) {
+        return sync_status;
+    }
+
     return *status;
 }
