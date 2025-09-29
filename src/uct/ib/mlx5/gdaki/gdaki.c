@@ -657,7 +657,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         }
 
         /* TODO this logic should be done in UCP */
-        if (dist.latency > md->super.config.gpu_ib_distance_latency_thresh) {
+        if (dist.latency > md->super.config.gda_max_sys_latency) {
             continue;
         }
 
