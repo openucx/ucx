@@ -95,7 +95,7 @@ template<typename T> class device_result_ptr {
         return true;
     }
     return false;
- }
+}
 
  template<ucs_device_level_t level>
  static __global__ void
@@ -228,18 +228,20 @@ static __global__ void
 uct_put_multi_kernel(uct_device_ep_h ep,
                      const uct_device_mem_element_t *mem_list,
                      size_t mem_list_count, void *const *addresses,
-                     const uint64_t *remote_addresses, const size_t *offsets,
-                     const size_t *lengths, uint64_t counter_inc_value,
+                     const uint64_t *remote_addresses, const size_t *lengths,
+                     uint64_t counter_inc_value,
                      uint64_t counter_remote_address, ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
 
     if (is_op_enabled(level)) {
         uct_device_completion_init(&comp);
-        *status_p = uct_device_ep_put_multi<level>(
-                ep, mem_list, mem_list_count, addresses, remote_addresses,
-                offsets, offsets, lengths, counter_inc_value,
-                counter_remote_address, UCT_DEVICE_FLAG_NODELAY, &comp);
+        *status_p = uct_device_ep_put_multi<level>(ep, mem_list, mem_list_count,
+                                                   addresses, remote_addresses,
+                                                   lengths, counter_inc_value,
+                                                   counter_remote_address,
+                                                   UCT_DEVICE_FLAG_NODELAY,
+                                                   &comp);
     }
 }
 
@@ -247,8 +249,8 @@ ucs_status_t
 launch_uct_put_multi(uct_device_ep_h device_ep,
                      const uct_device_mem_element_t *mem_list,
                      size_t mem_list_count, void *const *addresses,
-                     const uint64_t *remote_addresses, const size_t *offsets,
-                     const size_t *lengths, uint64_t counter_inc_value,
+                     const uint64_t *remote_addresses, const size_t *lengths,
+                     uint64_t counter_inc_value,
                      uint64_t counter_remote_address, ucs_device_level_t level,
                      unsigned num_threads, unsigned num_blocks)
 {
@@ -260,8 +262,8 @@ launch_uct_put_multi(uct_device_ep_h device_ep,
         uct_put_multi_kernel<UCS_DEVICE_LEVEL_THREAD>
                 <<<num_blocks, num_threads>>>(device_ep, mem_list,
                                               mem_list_count, addresses,
-                                              remote_addresses, offsets,
-                                              lengths, counter_inc_value,
+                                              remote_addresses, lengths,
+                                              counter_inc_value,
                                               counter_remote_address,
                                               status.device_ptr());
         break;
@@ -269,8 +271,8 @@ launch_uct_put_multi(uct_device_ep_h device_ep,
         uct_put_multi_kernel<UCS_DEVICE_LEVEL_WARP>
                 <<<num_blocks, num_threads>>>(device_ep, mem_list,
                                               mem_list_count, addresses,
-                                              remote_addresses, offsets,
-                                              lengths, counter_inc_value,
+                                              remote_addresses, lengths,
+                                              counter_inc_value,
                                               counter_remote_address,
                                               status.device_ptr());
         break;
@@ -278,8 +280,8 @@ launch_uct_put_multi(uct_device_ep_h device_ep,
         uct_put_multi_kernel<UCS_DEVICE_LEVEL_BLOCK>
                 <<<num_blocks, num_threads>>>(device_ep, mem_list,
                                               mem_list_count, addresses,
-                                              remote_addresses, offsets,
-                                              lengths, counter_inc_value,
+                                              remote_addresses, lengths,
+                                              counter_inc_value,
                                               counter_remote_address,
                                               status.device_ptr());
         break;
@@ -287,8 +289,8 @@ launch_uct_put_multi(uct_device_ep_h device_ep,
         uct_put_multi_kernel<UCS_DEVICE_LEVEL_GRID>
                 <<<num_blocks, num_threads>>>(device_ep, mem_list,
                                               mem_list_count, addresses,
-                                              remote_addresses, offsets,
-                                              lengths, counter_inc_value,
+                                              remote_addresses, lengths,
+                                              counter_inc_value,
                                               counter_remote_address,
                                               status.device_ptr());
         break;

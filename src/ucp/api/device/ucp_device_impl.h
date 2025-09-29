@@ -93,10 +93,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
 
     device_ep   = mem_list_h->uct_device_eps[lane];
     elem_offset = first_mem_elem_index * mem_list_h->uct_mem_element_size[lane];
-    uct_elem    = (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(
-            mem_list_h + 1, mem_list_h->ucp_mem_list.remote_addr_size +
-                                    mem_list_h->ucp_mem_list.local_addr_size +
-                                    elem_offset);
+    uct_elem    = (uct_device_mem_element_t*)
+            UCS_PTR_BYTE_OFFSET(mem_list_h->uct_mem_elements, elem_offset);
     ucp_device_request_init(device_ep, req, comp);
 
     return UCS_OK;
@@ -141,9 +139,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         size_t length, uint64_t flags, ucp_device_request_t *req)
 {
     const void *address = UCS_PTR_BYTE_OFFSET(
-            mem_list_h->ucp_mem_list.local_addr[mem_list_index], local_offset);
+            mem_list_h->ucp_mem_elements.local_addr[mem_list_index],
+            local_offset);
     const uint64_t remote_address =
-            mem_list_h->ucp_mem_list.remote_addr[mem_list_index] +
+            mem_list_h->ucp_mem_elements.remote_addr[mem_list_index] +
             remote_offset;
     const uct_device_mem_element_t *uct_elem;
     uct_device_completion_t *comp;
@@ -198,7 +197,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
         uint64_t flags, ucp_device_request_t *req)
 {
     uint64_t remote_address =
-            mem_list_h->ucp_mem_list.remote_addr[mem_list_index] +
+            mem_list_h->ucp_mem_elements.remote_addr[mem_list_index] +
             remote_offset;
     const uct_device_mem_element_t *uct_elem;
     uct_device_completion_t *comp;
@@ -248,30 +247,23 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * @tparam      level                  Level of cooperation of the transfer.
  * @param [in]  mem_list_h             Memory descriptor list handle to use.
  * @param [in]  channel_id             Channel ID to use for the transfer.
- * @param [in]  local_offsets          Array of local offsets to send from.
- * @param [in]  remote_offsets         Array of remote offsets to send to.
- * @param [in]  lengths                Array of lengths in bytes for each send.
  * @param [in]  counter_inc_value      Value of the remote increment.
- * @param [in]  counter_remote_offset  Remote offset to increment to.
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [out] req                    Request populated by the call.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
-UCS_F_DEVICE ucs_status_t
-ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list_h,
-                     unsigned channel_id, const size_t *local_offsets,
-                     const size_t *remote_offsets, const size_t *lengths,
-                     uint64_t counter_inc_value, uint64_t counter_remote_offset,
-                     uint64_t flags, ucp_device_request_t *req)
+UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
+        ucp_device_mem_list_handle_h mem_list_h, unsigned channel_id,
+        uint64_t counter_inc_value, uint64_t flags, ucp_device_request_t *req)
 {
-    void *const *addresses           = mem_list_h->ucp_mem_list.local_addr;
-    const uint64_t *remote_addresses = mem_list_h->ucp_mem_list.remote_addr;
+    void *const *addresses           = mem_list_h->ucp_mem_elements.local_addr;
+    const uint64_t *remote_addresses = mem_list_h->ucp_mem_elements.remote_addr;
+    const size_t *lengths            = mem_list_h->ucp_mem_elements.length;
     uint64_t counter_remote_address =
-            mem_list_h->ucp_mem_list.remote_addr[mem_list_h->mem_list_length -
-                                                 1] +
-            counter_remote_offset;
+            mem_list_h->ucp_mem_elements
+                    .remote_addr[mem_list_h->mem_list_length - 1];
     const uct_device_mem_element_t *uct_mem_list;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
@@ -285,9 +277,9 @@ ucp_device_put_multi(ucp_device_mem_list_handle_h mem_list_h,
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_multi, device_ep,
                                     uct_mem_list, mem_list_h->mem_list_length,
-                                    addresses, remote_addresses, local_offsets,
-                                    remote_offsets, lengths, counter_inc_value,
-                                    counter_remote_address, flags, comp);
+                                    addresses, remote_addresses, lengths,
+                                    counter_inc_value, counter_remote_address,
+                                    flags, comp);
 }
 
 
@@ -348,10 +340,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
         uint64_t counter_inc_value, uint64_t counter_remote_offset,
         uint64_t flags, ucp_device_request_t *req)
 {
-    void *const *addresses           = mem_list_h->ucp_mem_list.local_addr;
-    const uint64_t *remote_addresses = mem_list_h->ucp_mem_list.remote_addr;
+    void *const *addresses           = mem_list_h->ucp_mem_elements.local_addr;
+    const uint64_t *remote_addresses = mem_list_h->ucp_mem_elements.remote_addr;
     uint64_t counter_remote_address =
-            mem_list_h->ucp_mem_list.remote_addr[counter_index] +
+            mem_list_h->ucp_mem_elements.remote_addr[counter_index] +
             counter_remote_offset;
     const uct_device_mem_element_t *uct_mem_list;
     uct_device_completion_t *comp;
@@ -413,8 +405,8 @@ UCS_F_DEVICE uint64_t ucp_device_counter_read(const void *counter_ptr)
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE void ucp_device_counter_write(void *counter_ptr, uint64_t value)
 {
-    return ucs_device_atomic64_write(
-            reinterpret_cast<uint64_t*>(counter_ptr), value);
+    return ucs_device_atomic64_write(reinterpret_cast<uint64_t*>(counter_ptr),
+                                     value);
 }
 
 

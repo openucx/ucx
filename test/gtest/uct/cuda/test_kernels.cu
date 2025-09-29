@@ -94,24 +94,21 @@ uct_put_multi_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
     __shared__ size_t sizes[iovcnt];
     __shared__ void *src[iovcnt];
     __shared__ uint64_t dst[iovcnt];
-    __shared__ size_t offsets[iovcnt];
     int lane_id = threadIdx.x;
     ucs_status_t status;
 
     if (lane_id < iovcnt) {
         /* TODO: what if iovcnt > num_lanes? */
-        sizes[lane_id]   = length / iovcnt;
-        src[lane_id]     = (void*)((uintptr_t)va + length / iovcnt * lane_id);
-        dst[lane_id]     = rva + length / iovcnt * lane_id;
-        offsets[lane_id] = 0;
+        sizes[lane_id] = length / iovcnt;
+        src[lane_id]   = (void*)((uintptr_t)va + length / iovcnt * lane_id);
+        dst[lane_id]   = rva + length / iovcnt * lane_id;
     }
 
     __syncwarp();
     comp.count  = 1;
     comp.status = UCS_OK;
     status      = uct_device_ep_put_multi<UCS_DEVICE_LEVEL_WARP>(
-            ep, mem_list, iovcnt + 1, src, dst, (const size_t*)offsets,
-            (const size_t*)offsets, sizes, 4, atomic_rva,
+            ep, mem_list, iovcnt + 1, src, dst, sizes, 4, atomic_rva,
             UCT_DEVICE_FLAG_NODELAY, &comp);
     if (status != UCS_OK) {
         *status_p = status;

@@ -33,7 +33,7 @@ ucs_status_t
 launch_uct_put_multi(uct_device_ep_h device_ep,
                      const uct_device_mem_element_t *mem_list,
                      size_t mem_list_count, void *const *addresses,
-                     const uint64_t *remote_addresses, const size_t *offsets,
+                     const uint64_t *remote_addresses,
                      const size_t *lengths, uint64_t counter_inc_value,
                      uint64_t counter_remote_address, ucs_device_level_t level,
                      unsigned num_threads, unsigned num_blocks);

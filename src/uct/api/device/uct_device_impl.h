@@ -129,8 +129,6 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
  *                                     mem_list.
  * @param [in]  addresses              Array of local addresses to send from.
  * @param [in]  remote_addresses       Array of remote addresses to send to.
- * @param [in]  local_offsets          Array of local offsets to send from.
- * @param [in]  remote_offsets         Array of remote offsets to send to.
  * @param [in]  lengths                Array of lengths in bytes for each send.
  * @param [in]  counter_inc_value      Value of the remote increment.
  * @param [in]  counter_remote_address Remote address to increment to.
@@ -143,20 +141,20 @@ template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
         unsigned mem_list_count, void *const *addresses,
-        const uint64_t *remote_addresses, const size_t *local_offsets,
-        const size_t *remote_offsets, const size_t *lengths,
+        const uint64_t *remote_addresses,
+        const size_t *lengths,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
         uint64_t flags, uct_device_completion_t *comp)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_put_multi<level>(
                 device_ep, mem_list, mem_list_count, addresses,
-                remote_addresses, local_offsets, remote_offsets, lengths,
+                remote_addresses, lengths,
                 counter_inc_value, counter_remote_address, flags, comp);
     } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_put_multi<level>(
                 device_ep, mem_list, mem_list_count, addresses,
-                remote_addresses, local_offsets, remote_offsets, lengths,
+                remote_addresses, lengths,
                 counter_inc_value, counter_remote_address, flags, comp);
     }
 
