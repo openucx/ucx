@@ -156,14 +156,14 @@ static int ucp_memh_send_flush_is_needed(ucp_mem_h memh)
     ucp_sys_dev_map_t sys_dev_map;
     ucs_sys_device_t sys_dev;
 
-    if (memh->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return 0;
+    if (memh->flags & UCP_MEMH_FLAG_SEND_FLUSH_CHECKED) {
+        return !!(memh->flags & UCP_MEMH_FLAG_SEND_FLUSH_NEEDED);
     }
 
-    ucs_assert(memh->sys_dev <= UCP_SYS_DEVICE_MAX_PACKED);
+    memh->flags |= UCP_MEMH_FLAG_SEND_FLUSH_CHECKED;
 
-    if (!(memh->flags & UCP_MEMH_FLAG_SEND_FLUSH_CHECKED)) {
-        memh->flags |= UCP_MEMH_FLAG_SEND_FLUSH_CHECKED;
+    if (memh->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_assert(memh->sys_dev <= UCP_SYS_DEVICE_MAX_PACKED);
 
         ucs_for_each_bit(md_index, memh->md_map) {
             sys_dev_map = memh->context->tl_mds[md_index].sys_dev_map;
@@ -174,14 +174,13 @@ static int ucp_memh_send_flush_is_needed(ucp_mem_h memh)
                      * Set a flag for the peer to recognize it.
                      */
                     memh->flags |= UCP_MEMH_FLAG_SEND_FLUSH_NEEDED;
-                    goto out;
+                    return 1;
                 }
             }
         }
     }
 
-out:
-    return (memh->flags & UCP_MEMH_FLAG_SEND_FLUSH_NEEDED);
+    return 0;
 }
 
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,

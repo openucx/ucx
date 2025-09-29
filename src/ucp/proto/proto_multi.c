@@ -144,16 +144,16 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
 static ucp_sys_dev_map_t ucp_proto_multi_init_flush_sys_dev_mask(
         const ucp_proto_multi_init_params_t *params, ucp_lane_index_t lane)
 {
-    const ucp_rkey_config_key_t *key = params->super.super.rkey_config_key;
+    const ucp_rkey_config_key_t *key   = params->super.super.rkey_config_key;
+    const uct_iface_attr_t *iface_attr =
+        ucp_proto_common_get_iface_attr(&params->super.super, lane);
 
     if ((key == NULL) || !ucp_rkey_need_remote_flush(key) ||
+        !(iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) ||
         !ucp_proto_common_is_net_dev(&params->super.super, lane)) {
         return 0;
     }
 
-    ucs_assert(ucp_proto_common_get_iface_attr(&params->super.super, lane)
-                       ->cap.flags &
-               UCT_IFACE_FLAG_GET_BCOPY);
     return UCS_BIT(key->sys_dev);
 }
 

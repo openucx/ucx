@@ -66,18 +66,18 @@ struct ucp_rkey_config_key {
     /* Remote system device id */
     ucs_sys_device_t       sys_dev;
 
+    /* Rkey specific flags, like @a UCP_RKEY_CONFIG_FLAG_FLUSH */
+    uint8_t                flags;
+
     /* Remote memory type */
     ucs_memory_type_t      mem_type;
 
     /* MDs for which rkey is not reachable */
     ucp_md_map_t           unreachable_md_map;
-
-    /* Rkey specific flags, like @a UCP_RKEY_CONFIG_FLAG_FLUSH */
-    uint8_t                flags;
 };
 
 
-#define UCP_SYS_DEVICE_FLUSH_BIT UCS_BIT(7)
+#define UCP_SYS_DEVICE_FLUSH_BIT  UCS_BIT(7)
 #define UCP_SYS_DEVICE_MAX_PACKED (UCP_SYS_DEVICE_FLUSH_BIT - 1)
 
 
