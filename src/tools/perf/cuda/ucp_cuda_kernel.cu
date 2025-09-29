@@ -83,7 +83,6 @@ struct ucp_perf_cuda_params {
     size_t                       *local_offsets;
     size_t                       *remote_offsets;
     size_t                       *lengths;
-    uint64_t                     counter_remote;
     uint64_t                     *counter_send;
     uint64_t                     *counter_recv;
     ucp_device_flags_t           flags;
@@ -172,8 +171,6 @@ private:
     void init_counters(const ucx_perf_context_t &perf)
     {
         m_params.length         = ucx_perf_get_message_size(&perf.params);
-        m_params.counter_remote = (uint64_t)ucx_perf_cuda_get_sn(
-                (void*)perf.ucp.remote_addr, m_params.length);
         m_params.counter_send   = ucx_perf_cuda_get_sn(perf.send_buffer,
                                                        m_params.length);
         m_params.counter_recv   = ucx_perf_cuda_get_sn(perf.recv_buffer,
