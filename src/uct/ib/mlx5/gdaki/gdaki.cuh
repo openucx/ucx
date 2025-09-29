@@ -309,7 +309,8 @@ template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_list,
         unsigned mem_list_count, void *const *addresses,
-        const uint64_t *remote_addresses, const size_t *lengths,
+        const uint64_t *remote_addresses, const size_t *local_offsets,
+        const size_t *remote_offsets, const size_t *lengths,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
         uint64_t flags, uct_device_completion_t *comp)
 {
@@ -358,9 +359,9 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
             length         = 8;
             opcode         = MLX5_OPCODE_ATOMIC_FA;
         } else if (i < counter_index) {
-            address        = addresses[i];
-            lkey           = mem_list[i].lkey;
-            remote_address = remote_addresses[i];
+            address = UCS_PTR_BYTE_OFFSET(addresses[i], local_offsets[i]);
+            lkey    = mem_list[i].lkey;
+            remote_address = remote_addresses[i] + remote_offsets[i];
             length         = lengths[i];
             opcode         = MLX5_OPCODE_RDMA_WRITE;
         } else {
@@ -399,6 +400,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
         void *const *addresses, const uint64_t *remote_addresses,
+        const size_t *local_offsets, const size_t *remote_offsets,
         const size_t *lengths, unsigned counter_index,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
         uint64_t flags, uct_device_completion_t *comp)
@@ -449,10 +451,10 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
             length         = 8;
             opcode         = MLX5_OPCODE_ATOMIC_FA;
         } else if (i < mem_list_count) {
-            idx            = mem_list_indices[i];
-            address        = addresses[i];
-            lkey           = mem_list[idx].lkey;
-            remote_address = remote_addresses[i];
+            idx     = mem_list_indices[i];
+            address = UCS_PTR_BYTE_OFFSET(addresses[i], local_offsets[i]);
+            lkey    = mem_list[idx].lkey;
+            remote_address = remote_addresses[i] + remote_offsets[i];
             length         = lengths[i];
             opcode         = MLX5_OPCODE_RDMA_WRITE;
         } else {

@@ -93,8 +93,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
 
     device_ep   = mem_list_h->uct_device_eps[lane];
     elem_offset = first_mem_elem_index * mem_list_h->uct_mem_element_size[lane];
-    uct_elem    = (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(mem_list_h + 1,
-                                                                 elem_offset);
+    uct_elem    = (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(
+            mem_list_h + 1, mem_list_h->ucp_mem_list.remote_addr_size +
+                                    mem_list_h->ucp_mem_list.local_addr_size +
+                                    elem_offset);
     ucp_device_request_init(device_ep, req, comp);
 
     return UCS_OK;
@@ -121,7 +123,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
  * @tparam      level           Level of cooperation of the transfer.
  * @param [in]  mem_list_h      Memory descriptor list handle to use.
  * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
- * @param [in]  address         Local virtual address to send data from.
+ * @param [in]  local_offset    Local offset to send data from.
+ * @param [in]  remote_offset   Remote offset to send data to.
  * @param [in]  remote_address  Remote virtual address to send data to.
  * @param [in]  length          Length in bytes of the data to send.
  *                              registration keys to use for the transfer.
@@ -133,9 +136,14 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         ucp_device_mem_list_handle_h mem_list_h, unsigned mem_list_index,
-        const void *address, uint64_t remote_address, size_t length,
+        size_t local_offset, size_t remote_offset, size_t length,
         uint64_t flags, ucp_device_request_t *req)
 {
+    const void *address = UCS_PTR_BYTE_OFFSET(
+            mem_list_h->ucp_mem_list.local_addr[mem_list_index], local_offset);
+    const uint64_t remote_address =
+            mem_list_h->ucp_mem_list.remote_addr[mem_list_index] +
+            remote_offset;
     const uct_device_mem_element_t *uct_elem;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
@@ -147,9 +155,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         return status;
     }
 
-    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_single, device_ep,
-                                    uct_elem, address, remote_address, length,
-                                    flags, comp);
+    status = UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_single,
+                                      device_ep, uct_elem, address,
+                                      remote_address, length, flags, comp);
+    return status;
 }
 
 
@@ -174,8 +183,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  * @param [in]  mem_list_index  Index in descriptor list pointing to the memory
  *                              remote key to use for the increment operation.
  * @param [in]  inc_value       Value used to increment the remote address.
- * @param [in]  remote_address  Remote virtual address to perform the increment
- *                              to.
+ * @param [in]  remote_offset   Remote offset to perform the increment to.
  * @param [in]  flags           Flags usable to modify the function behavior.
  * @param [out] req             Request populated by the call.
  *
@@ -184,9 +192,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
         ucp_device_mem_list_handle_h mem_list_h, unsigned mem_list_index,
-        uint64_t inc_value, uint64_t remote_address, uint64_t flags,
+        uint64_t inc_value, size_t remote_offset, uint64_t flags,
         ucp_device_request_t *req)
 {
+    uint64_t remote_address =
+            mem_list_h->ucp_mem_list.remote_addr[mem_list_index] +
+            remote_offset;
     const uct_device_mem_element_t *uct_elem;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
@@ -234,11 +245,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  *
  * @tparam      level                  Level of cooperation of the transfer.
  * @param [in]  mem_list_h             Memory descriptor list handle to use.
- * @param [in]  addresses              Array of local addresses to send from.
- * @param [in]  remote_addresses       Array of remote addresses to send to.
+ * @param [in]  local_offsets          Array of local offsets to send from.
+ * @param [in]  remote_offsets         Array of remote offsets to send to.
  * @param [in]  lengths                Array of lengths in bytes for each send.
  * @param [in]  counter_inc_value      Value of the remote increment.
- * @param [in]  counter_remote_address Remote address to increment to.
+ * @param [in]  counter_remote_offset  Remote offset to increment to.
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [out] req                    Request populated by the call.
  *
@@ -246,11 +257,17 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
-        ucp_device_mem_list_handle_h mem_list_h, void *const *addresses,
-        const uint64_t *remote_addresses, const size_t *lengths,
-        uint64_t counter_inc_value, uint64_t counter_remote_address,
+        ucp_device_mem_list_handle_h mem_list_h, const size_t *local_offsets,
+        const size_t *remote_offsets, const size_t *lengths,
+        uint64_t counter_inc_value, uint64_t counter_remote_offset,
         uint64_t flags, ucp_device_request_t *req)
 {
+    void *const *addresses           = mem_list_h->ucp_mem_list.local_addr;
+    const uint64_t *remote_addresses = mem_list_h->ucp_mem_list.remote_addr;
+    uint64_t counter_remote_address =
+            mem_list_h->ucp_mem_list.remote_addr[mem_list_h->mem_list_length -
+                                                 1] +
+            counter_remote_offset;
     const uct_device_mem_element_t *uct_mem_list;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
@@ -264,9 +281,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_multi, device_ep,
                                     uct_mem_list, mem_list_h->mem_list_length,
-                                    addresses, remote_addresses, lengths,
-                                    counter_inc_value, counter_remote_address,
-                                    flags, comp);
+                                    addresses, remote_addresses, local_offsets,
+                                    remote_offsets, lengths, counter_inc_value,
+                                    counter_remote_address, flags, comp);
 }
 
 
@@ -306,12 +323,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  *                                     list of entries from handle.
  * @param [in]  mem_list_count         Number of indices in the array @ref
  *                                     mem_list_indices.
- * @param [in]  addresses              Array of local addresses to send from.
- * @param [in]  remote_addresses       Array of remote addresses to send to.
+ * @param [in]  local_offsets          Array of local offsets to send from.
+ * @param [in]  remote_offsets         Array of remote offsets to send to.
  * @param [in]  lengths                Array of lengths in bytes for each send.
  * @param [in]  counter_index          Index of remote increment descriptor.
  * @param [in]  counter_inc_value      Value of the remote increment.
- * @param [in]  counter_remote_address Remote address to increment to.
+ * @param [in]  counter_remote_offset  Remote offset to increment to.
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [out] req                    Request populated by the call.
  *
@@ -321,11 +338,16 @@ template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
         ucp_device_mem_list_handle_h mem_list_h,
         const unsigned *mem_list_indices, unsigned mem_list_count,
-        void *const *addresses, const uint64_t *remote_addresses,
+        const size_t *local_offsets, const size_t *remote_offsets,
         const size_t *lengths, unsigned counter_index,
-        uint64_t counter_inc_value, uint64_t counter_remote_address,
+        uint64_t counter_inc_value, uint64_t counter_remote_offset,
         uint64_t flags, ucp_device_request_t *req)
 {
+    void *const *addresses           = mem_list_h->ucp_mem_list.local_addr;
+    const uint64_t *remote_addresses = mem_list_h->ucp_mem_list.remote_addr;
+    uint64_t counter_remote_address =
+            mem_list_h->ucp_mem_list.remote_addr[counter_index] +
+            counter_remote_offset;
     const uct_device_mem_element_t *uct_mem_list;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
@@ -340,7 +362,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_multi_partial,
                                     device_ep, uct_mem_list, mem_list_indices,
                                     mem_list_count, addresses, remote_addresses,
-                                    lengths, counter_index, counter_inc_value,
+                                    local_offsets, remote_offsets, lengths,
+                                    counter_index, counter_inc_value,
                                     counter_remote_address, flags, comp);
 }
 

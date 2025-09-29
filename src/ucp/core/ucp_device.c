@@ -249,7 +249,13 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_md_index_t local_md_index;
     uint8_t rkey_index;
+    void** local_addr;
+    uint64_t* remote_addr;
 
+    handle.ucp_mem_list.local_addr_size =
+            params->num_elements * sizeof(*handle.ucp_mem_list.local_addr);
+    handle.ucp_mem_list.remote_addr_size =
+            params->num_elements * sizeof(*handle.ucp_mem_list.remote_addr);
     /* For each available lane */
     for (i = 0;
          (i < UCP_DEVICE_MEM_LIST_MAX_EPS) && (lanes[i] != UCP_NULL_LANE);
@@ -302,6 +308,8 @@ static ucs_status_t ucp_device_mem_list_create_handle(
 
     /* Allocate handle on the same device memory */
     handle_size *= params->num_elements;
+    handle_size += handle.ucp_mem_list.local_addr_size;
+    handle_size += handle.ucp_mem_list.remote_addr_size;
     handle_size += sizeof(handle);
     status       = ucp_mem_do_alloc(ep->worker->context, NULL, handle_size,
                                     UCT_MD_MEM_ACCESS_LOCAL_READ |
@@ -314,8 +322,25 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         return status;
     }
 
+    /* populate elements common parameters */
+    local_addr  = (void**)UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
+    remote_addr = (uint64_t*)UCS_PTR_BYTE_OFFSET(
+            local_addr, handle.ucp_mem_list.local_addr_size);
+    for (i = 0; i < params->num_elements; i++) {
+        ucp_mem_type_unpack(ep->worker, &local_addr[i],
+                            &params->elements[i].local_addr,
+                            sizeof(local_addr[i]), mem_type);
+        ucp_mem_type_unpack(ep->worker, &remote_addr[i],
+                            &params->elements[i].remote_addr,
+                            sizeof(remote_addr[i]), mem_type);
+    }
+
+    handle.ucp_mem_list.local_addr  = local_addr;
+    handle.ucp_mem_list.remote_addr = remote_addr;
+
     /* Populate element specific parameters */
-    uct_element = UCS_PTR_TYPE_OFFSET(mem->address, ucs_typeof(handle));
+    uct_element = UCS_PTR_BYTE_OFFSET(remote_addr,
+                                      handle.ucp_mem_list.remote_addr_size);
     for (i = 0; i < num_uct_eps; i++) {
         local_md_index = ep_config->md_index[lanes[i]];
         wiface         = ucp_worker_iface(ep->worker,

@@ -60,6 +60,28 @@ typedef struct ucp_device_mem_list_handle {
      */
     uint16_t        uct_mem_element_size[UCP_DEVICE_MEM_LIST_MAX_EPS];
 
+    struct {
+        /**
+         * Array of local addresses for the device transfer operations.
+         */
+        void     **local_addr;
+
+        /**
+         * Array of remote addresses for the device transfer operations.
+         */
+        uint64_t *remote_addr;
+
+        /**
+         * Size of the local address list.
+         */
+        size_t   local_addr_size;
+
+        /**
+         * Size of the remote address list.
+         */
+        size_t   remote_addr_size;
+    } ucp_mem_list;
+
     /**
      * For each @ref num_uct_eps UCT endpoints, a list of @ref
      * uct_device_mem_element objects.

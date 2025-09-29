@@ -195,13 +195,13 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
         /* TODO: Change to ucp_device_counter_write */
         *params.counter_send = idx + 1;
         return ucp_device_put_single<level>(params.mem_list, params.indices[0],
-                                            params.addresses[0],
-                                            params.remote_addresses[0],
+                                            (size_t)params.addresses[0],
+                                            (size_t)params.remote_addresses[0],
                                             params.length + ONESIDED_SIGNAL_SIZE,
                                             params.flags, &req);
     case UCX_PERF_CMD_PUT_MULTI:
-        return ucp_device_put_multi<level>(params.mem_list, params.addresses,
-                                           params.remote_addresses,
+        return ucp_device_put_multi<level>(params.mem_list, (size_t*)params.addresses,
+                                           (size_t*)params.remote_addresses,
                                            params.lengths, 1,
                                            params.counter_remote, params.flags,
                                            &req);
@@ -210,8 +210,8 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
         return ucp_device_put_multi_partial<level>(params.mem_list,
                                                    params.indices,
                                                    counter_index,
-                                                   params.addresses,
-                                                   params.remote_addresses,
+                                                   (size_t*)params.addresses,
+                                                   (size_t*)params.remote_addresses,
                                                    params.lengths,
                                                    counter_index, 1,
                                                    params.counter_remote,
