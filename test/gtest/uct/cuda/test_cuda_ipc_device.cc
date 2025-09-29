@@ -363,25 +363,23 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr *)&addresses_dev, iovcnt * sizeof(void *)));
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr *)&mem_list_indices_dev, iovcnt * sizeof(unsigned)));
 
-    for (int k = 0; k < iovcnt; k++) {
-        mem_list_indices[k] = (k < counter_index) ? k : (k + 1);
-    }
-
-    /* Pack PUT entries at indices specified by mem_list_indices */
+    /* Fill indices and pack PUT entries */
     for (int i = 0; i < iovcnt; i++) {
+        unsigned idx = (i < counter_index) ? i : (i + 1);
+        mem_list_indices[i] = idx;
         uct_device_mem_element_t *mem_elem_iov =
             (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(mem_elem,
-                                                           mem_elem_size * mem_list_indices[i]);
+                                                           mem_elem_size * idx);
         ASSERT_UCS_OK(uct_iface_mem_element_pack(m_sender->iface(), sendbuf.memh(),
                                                  recvbuf.rkey(), mem_elem_iov));
     }
 
     /* Pack counter entry directly at mem_list[counter_index] */
-    uct_device_mem_element_t *mem_elem_ctr =
+    uct_device_mem_element_t *mem_elem_counter =
         (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(mem_elem,
                                                         mem_elem_size * counter_index);
     ASSERT_UCS_OK(uct_iface_mem_element_pack(m_sender->iface(), nullptr,
-                                                signal.rkey(), mem_elem_ctr));
+                                                signal.rkey(), mem_elem_counter));
 
     for (int i = 0; i < iovcnt; i++) {
         size_t iov_offset = (base_length + offset) * i;
