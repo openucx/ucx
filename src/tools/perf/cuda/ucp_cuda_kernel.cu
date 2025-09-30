@@ -37,7 +37,7 @@ public:
 
         for (size_t i = 0; i < m_size; i++) {
             if (UCX_BIT_GET(m_pending, i)) {
-                status = ucp_device_progress_req<level>(&m_requests[i]);
+                status = ucp_device_progress_req<level>(&m_requests[i], 0);
                 if (status == UCS_INPROGRESS) {
                     continue;
                 }
@@ -230,7 +230,7 @@ ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
     }
 
     do {
-        status = ucp_device_progress_req<level>(&req);
+        status = ucp_device_progress_req<level>(&req, 0);
     } while (status == UCS_INPROGRESS);
 
     return status;

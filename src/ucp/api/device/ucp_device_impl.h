@@ -412,7 +412,8 @@ UCS_F_DEVICE void ucp_device_counter_write(void *counter_ptr, uint64_t value)
  *
  * @tparam      level  Level of cooperation of the transfer.
  * @param [in]  req    Request containing operations in progress.
- *
+ * @param [in]  channel_id Channel ID to progress.
+ * 
  * @return UCS_OK           - The request has completed, no more operations are
  *                            in progress.
  * @return UCS_INPROGRESS   - One or more operations in the request batch
@@ -420,7 +421,8 @@ UCS_F_DEVICE void ucp_device_counter_write(void *counter_ptr, uint64_t value)
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
-UCS_F_DEVICE ucs_status_t ucp_device_progress_req(ucp_device_request_t *req)
+UCS_F_DEVICE ucs_status_t ucp_device_progress_req(ucp_device_request_t *req,
+                                                  unsigned channel_id)
 {
     ucs_status_t status;
 

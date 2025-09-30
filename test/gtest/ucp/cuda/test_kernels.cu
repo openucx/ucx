@@ -66,7 +66,7 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
     }
 
     do {
-        status = ucp_device_progress_req<level>(req_ptr);
+        status = ucp_device_progress_req<level>(req_ptr, 0);
     } while (status == UCS_INPROGRESS);
     return status;
 }
