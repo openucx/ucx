@@ -32,22 +32,41 @@ UCS_F_DEVICE ucx_perf_cuda_time_t ucx_perf_cuda_get_time_ns()
     return globaltimer;
 }
 
-UCS_F_DEVICE void
-ucx_perf_cuda_update_report(ucx_perf_cuda_context &ctx,
-                            ucx_perf_counter_t completed,
-                            ucx_perf_counter_t max_iters,
-                            ucx_perf_cuda_time_t &last_report_time)
-{
-    if (threadIdx.x == 0) {
-        ucx_perf_cuda_time_t current_time = ucx_perf_cuda_get_time_ns();
-        if (((current_time - last_report_time) >= ctx.report_interval_ns) ||
-            (completed >= max_iters)) {
-            ctx.completed_iters = completed;
-            last_report_time    = current_time;
+class ucx_perf_cuda_reporter {
+public:
+    __device__
+    ucx_perf_cuda_reporter(ucx_perf_cuda_context &ctx) :
+        m_ctx(ctx),
+        m_max_iters(ctx.max_iters),
+        m_next_report_iter(1),
+        m_last_report_time(ucx_perf_cuda_get_time_ns()),
+        m_report_interval_ns(ctx.report_interval_ns / 5)
+    {
+    }
+
+    __device__ inline void
+    update_report(ucx_perf_counter_t completed)
+    {
+        if ((threadIdx.x == 0) && ucs_unlikely(completed >= m_next_report_iter)) {
+            ucx_perf_cuda_time_t cur_time  = ucx_perf_cuda_get_time_ns();
+            ucx_perf_cuda_time_t iter_time = (cur_time - m_last_report_time) /
+                                             (completed - m_ctx.completed_iters);
+            m_last_report_time             = cur_time;
+            m_ctx.completed_iters          = completed;
             __threadfence();
+
+            m_next_report_iter = ucs_min(completed + (m_report_interval_ns / iter_time),
+                                         m_max_iters);
         }
     }
-}
+
+private:
+    ucx_perf_cuda_context &m_ctx;
+    ucx_perf_counter_t    m_max_iters;
+    ucx_perf_counter_t    m_next_report_iter;
+    ucx_perf_cuda_time_t  m_last_report_time;
+    ucx_perf_cuda_time_t  m_report_interval_ns;
+};
 
 static UCS_F_ALWAYS_INLINE uint64_t *
 ucx_perf_cuda_get_sn(const void *address, size_t length)
@@ -156,7 +175,7 @@ public:
         m_cpu_ctx->completed_iters    = 0;
         m_cpu_ctx->report_interval_ns = (perf.report_interval == ULONG_MAX) ?
                                         ULONG_MAX :
-                                        ucs_time_to_nsec(perf.report_interval) / 100;
+                                        ucs_time_to_nsec(perf.report_interval);
         m_cpu_ctx->status             = UCS_ERR_NOT_IMPLEMENTED;
     }
 

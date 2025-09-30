@@ -251,13 +251,13 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
 {
     // TODO: use thread-local memory once we support it
     extern __shared__ ucp_device_request_t shared_requests[];
-    ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
-    ucx_perf_counter_t max_iters          = ctx.max_iters;
-    ucs_status_t status                   = UCS_OK;
-    ucp_device_request_t *requests        =
-        &shared_requests[ctx.max_outstanding *
-                         ucx_perf_cuda_thread_index<level>(threadIdx.x)];
+    ucx_perf_counter_t max_iters   = ctx.max_iters;
+    ucs_status_t status            = UCS_OK;
+    unsigned thread_index          = ucx_perf_cuda_thread_index<level>(threadIdx.x);
+    ucp_device_request_t *requests = &shared_requests[ctx.max_outstanding *
+                                                      thread_index];
     ucp_perf_cuda_request_manager request_mgr(ctx.max_outstanding, requests);
+    ucx_perf_cuda_reporter reporter(ctx);
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         while (request_mgr.get_pending_count() >= ctx.max_outstanding) {
@@ -275,7 +275,7 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
             goto out;
         }
 
-        ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
+        reporter.update_report(idx + 1);
         __syncthreads();
     }
 
@@ -299,13 +299,12 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
 {
     // TODO: use thread-local memory once we support it
     extern __shared__ ucp_device_request_t shared_requests[];
-    ucx_perf_cuda_time_t last_report_time = ucx_perf_cuda_get_time_ns();
-    ucx_perf_counter_t max_iters          = ctx.max_iters;
-    ucs_status_t status                   = UCS_OK;
-    ucp_device_request_t *req             =
-        &shared_requests[ucx_perf_cuda_thread_index<level>(threadIdx.x)];
+    ucs_status_t status       = UCS_OK;
+    unsigned thread_index     = ucx_perf_cuda_thread_index<level>(threadIdx.x);
+    ucp_device_request_t *req = &shared_requests[thread_index];
+    ucx_perf_cuda_reporter reporter(ctx);
 
-    for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
+    for (ucx_perf_counter_t idx = 0; idx < ctx.max_iters; idx++) {
         if (is_sender) {
             status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, *req);
             if (status != UCS_OK) {
@@ -322,7 +321,7 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
             }
         }
 
-        ucx_perf_cuda_update_report(ctx, idx + 1, max_iters, last_report_time);
+        reporter.update_report(idx + 1);
     }
 
     ctx.status = status;
