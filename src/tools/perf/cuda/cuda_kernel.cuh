@@ -99,7 +99,7 @@ __host__ UCS_F_DEVICE unsigned ucx_perf_cuda_thread_index(size_t tid)
 /* Simple bitset */
 #define UCX_BIT_TYPE            uint64_t
 #define UCX_BIT_SIZE            (sizeof(UCX_BIT_TYPE) * CHAR_BIT)
-#define UCX_BIT_MASK(bit)       (1 << ((bit) & (UCX_BIT_SIZE - 1)))
+#define UCX_BIT_MASK(bit)       (1ULL << ((bit) & (UCX_BIT_SIZE - 1)))
 #define UCX_BIT_SET(set, bit)   (set[(bit)/UCX_BIT_SIZE] |= UCX_BIT_MASK(bit))
 #define UCX_BIT_RESET(set, bit) (set[(bit)/UCX_BIT_SIZE] &= ~UCX_BIT_MASK(bit))
 #define UCX_BIT_GET(set, bit)   (set[(bit)/UCX_BIT_SIZE] &  UCX_BIT_MASK(bit))
