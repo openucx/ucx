@@ -91,8 +91,9 @@ struct {
     { \
         int khret; \
         khiter_t khiter = kh_put(_name, _h, _k, &khret); \
-        ucs_assert((khret == UCS_KH_PUT_BUCKET_EMPTY) || \
-                   (khret == UCS_KH_PUT_BUCKET_CLEAR)); \
+        ucs_assertv((khret == UCS_KH_PUT_BUCKET_EMPTY) || \
+                    (khret == UCS_KH_PUT_BUCKET_CLEAR), \
+                    "khret=%d path=%s", khret, (_node)->path); \
         kh_val(_h, khiter) = _node; \
     }
 
@@ -169,23 +170,27 @@ static ucs_vfs_node_t *ucs_vfs_node_create(ucs_vfs_node_t *parent_node,
                                            const char *path,
                                            ucs_vfs_node_type_t type, void *obj)
 {
-    ucs_vfs_node_t *node;
+    ucs_vfs_node_t *node, *existing_node;
 
     node = ucs_malloc(sizeof(*node) + strlen(path) + 1, "vfs_node");
     if (node == NULL) {
-        ucs_error("Failed to allocate vfs_node");
-        return NULL;
+        ucs_error("failed to allocate vfs_node");
+        goto err;
     }
 
-    /* initialize node */
+    /* Initialize node */
     ucs_vfs_node_init(node, type, obj, parent_node);
     strcpy(node->path, path);
 
-    /* add to parent */
-    ucs_list_add_head(&parent_node->children, &node->list);
-
-    /* add to obj hash */
+    /* Add to object hash */
     if (node->obj != NULL) {
+        existing_node = ucs_vfs_node_find_by_obj(node->obj);
+        if (existing_node != NULL) {
+            ucs_error("cannot add vfs node '%s', object %p (%s) already exists",
+                      node->path, node->obj, existing_node->path);
+            goto err_free;
+        }
+
         ucs_vfs_kh_put(vfs_obj, &ucs_vfs_obj_context.obj_hash,
                        (uintptr_t)node->obj, node);
     }
@@ -193,7 +198,15 @@ static ucs_vfs_node_t *ucs_vfs_node_create(ucs_vfs_node_t *parent_node,
     /* add to path hash */
     ucs_vfs_kh_put(vfs_path, &ucs_vfs_obj_context.path_hash, node->path, node);
 
+    /* add to parent */
+    ucs_list_add_head(&parent_node->children, &node->list);
+
     return node;
+
+err_free:
+    ucs_free(node);
+err:
+    return NULL;
 }
 
 /* must be called with lock held */
@@ -512,18 +525,22 @@ static void ucs_vfs_path_list_dir_cb(ucs_vfs_node_t *node,
 static void
 ucs_vfs_get_link_path(ucs_vfs_node_t *node, ucs_string_buffer_t *strb)
 {
-    size_t i, n;
+    size_t i, n, common_length;
 
     ucs_assert(ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_SYM_LINK));
+    ucs_assertv(node->target != NULL, "node=%p node->path=%s", node,
+                node->path);
 
-    n = ucs_string_count_char(node->path, '/');
+    common_length = ucs_path_common_parent_length(node->path,
+                                                  node->target->path);
+
+    n = ucs_string_count_char(&node->path[common_length], '/');
     for (i = 1; i < n; ++i) {
         ucs_string_buffer_appendf(strb, "../");
     }
 
-    if (node->target != NULL) {
-        ucs_string_buffer_appendf(strb, "%s", &node->target->path[1]);
-    }
+    ucs_string_buffer_appendf(strb, "%s",
+                              &node->target->path[common_length + 1]);
 }
 
 ucs_status_t
@@ -635,7 +652,6 @@ ucs_vfs_obj_add_sym_link(void *obj, void *target_obj, const char *rel_path, ...)
 
 out:
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
-
     return status;
 }
 
