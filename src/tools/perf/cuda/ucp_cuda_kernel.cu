@@ -37,7 +37,7 @@ public:
 
         for (size_t i = 0; i < m_size; i++) {
             if (UCX_BIT_GET(m_pending, i)) {
-                status = ucp_device_progress_req<level>(&m_requests[i], 0);
+                status = ucp_device_progress_req<level>(&m_requests[i]);
                 if (status == UCS_INPROGRESS) {
                     continue;
                 }
@@ -123,7 +123,7 @@ private:
                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
             elems[i].memh        = perf.ucp.send_memh;
             elems[i].rkey        = perf.ucp.rkey;
-            elems[i].local_addr  = (char*)perf.send_buffer + offset;
+            elems[i].local_addr  = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
             elems[i].remote_addr = perf.ucp.remote_addr + offset;
             elems[i].length      = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
                                                           perf.params.msg_size_list[i];
@@ -199,20 +199,20 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
     case UCX_PERF_CMD_PUT_SINGLE:
         /* TODO: Change to ucp_device_counter_write */
         *params.counter_send = idx + 1;
-        return ucp_device_put_single<level>(params.mem_list, 0,
+        return ucp_device_put_single<level>(params.mem_list,
                                             params.indices[0], 0, 0,
                                             params.length +
                                                     ONESIDED_SIGNAL_SIZE,
-                                            params.flags, &req);
+                                            0, params.flags, &req);
     case UCX_PERF_CMD_PUT_MULTI:
-        return ucp_device_put_multi<level>(params.mem_list, 0, 1, params.flags,
+        return ucp_device_put_multi<level>(params.mem_list, 1, params.flags, 0,
                                            &req);
     case UCX_PERF_CMD_PUT_PARTIAL: {
         unsigned counter_index = params.mem_list->mem_list_length - 1;
         return ucp_device_put_multi_partial<level>(
-                params.mem_list, 0, params.indices, counter_index,
+                params.mem_list, params.indices, counter_index,
                 params.local_offsets, params.remote_offsets, params.lengths,
-                counter_index, 1, 0, params.flags, &req);
+                counter_index, 1, 0, 0, params.flags, &req);
     }
     }
 
@@ -230,7 +230,7 @@ ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
     }
 
     do {
-        status = ucp_device_progress_req<level>(&req, 0);
+        status = ucp_device_progress_req<level>(&req);
     } while (status == UCS_INPROGRESS);
 
     return status;

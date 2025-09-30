@@ -20,29 +20,29 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
 
     switch (params.operation) {
     case TEST_UCP_DEVICE_KERNEL_PUT_SINGLE:
-        status = ucp_device_put_single<level>(params.mem_list, 0,
+        status = ucp_device_put_single<level>(params.mem_list,
                                               params.single.mem_list_index, 0,
-                                              0, params.single.length, flags,
+                                              0, params.single.length, 0, flags,
                                               req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_PUT_MULTI:
-        status = ucp_device_put_multi<level>(params.mem_list, 0,
+        status = ucp_device_put_multi<level>(params.mem_list,
                                              params.multi.counter_inc_value,
-                                             flags, req_ptr);
+                                             0, flags, req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL:
         status = ucp_device_put_multi_partial<level>(
-                params.mem_list, 0, params.partial.mem_list_indices,
+                params.mem_list, params.partial.mem_list_indices,
                 params.partial.mem_list_count,
                 (size_t*)params.partial.local_offsets,
                 (size_t*)params.partial.remote_offsets, params.partial.lengths,
                 params.partial.counter_index, params.partial.counter_inc_value,
-                params.partial.counter_remote_offset, flags, req_ptr);
+                params.partial.counter_remote_offset, 0, flags, req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_COUNTER_INC:
         status = ucp_device_counter_inc<level>(
-                params.mem_list, 0, params.counter_inc.mem_list_index,
-                params.counter_inc.inc_value, 0, flags, req_ptr);
+                params.mem_list, params.counter_inc.mem_list_index,
+                params.counter_inc.inc_value, 0, 0, flags, req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_COUNTER_WRITE:
         ucp_device_counter_write(params.local_counter.address,
@@ -66,7 +66,7 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
     }
 
     do {
-        status = ucp_device_progress_req<level>(req_ptr, 0);
+        status = ucp_device_progress_req<level>(req_ptr);
     } while (status == UCS_INPROGRESS);
     return status;
 }
