@@ -13,7 +13,7 @@ OBJS       := $(SRCS:.cu=.o)
 # NOTE: The following include of /home/snordmann/ucx/src/ is required for uct/ib/mlx5/gdaki/gdaki.cuh,
 #       but this is not a typical usage and may indicate a non-standard include dependency.
 INC_FLAGS  := -I$(UCX_PREFIX)/include -I/home/snordmann/ucx/src/ -I/opt/mellanox/doca/include -I$(CUDA_HOME)/include
-LIB_FLAGS  := -L$(UCX_PREFIX)/lib -L$(CUDA_HOME)/lib64 -lucp -luct -lucs -lcudart
+LIB_FLAGS  := -L$(UCX_PREFIX)/lib -L$(CUDA_HOME)/lib64 -lucp -luct -lucs -lcudart -lcuda
 
 # Add rpath so the runtime linker can find UCX shared libs
 RPATH_FLAGS := -Wl,-rpath,$(UCX_PREFIX)/lib -Wl,-rpath,$(CUDA_HOME)/lib64

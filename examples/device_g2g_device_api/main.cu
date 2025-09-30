@@ -6,6 +6,8 @@
 
 #include <mpi.h>
 #include <cuda_runtime.h>
+#include <cuda.h>
+// #include <sm_60_atomic_functions.h>
 
 #include <ucp/api/ucp.h>
 #include <ucp/api/ucp_def.h>
@@ -62,8 +64,8 @@ typedef struct {
 template <ucs_device_level_t level>
 __global__ void do_put_kernel(kernel_params_t params, ucs_status_t *status_out)
 {
-    __shared__ ucp_device_request_t req_shared;
-    ucp_device_request_t *req = params.with_request ? &req_shared : nullptr;
+    ucp_device_request_t req_obj;
+    ucp_device_request_t *req = &req_obj;
 
     if (threadIdx.x == 0) {
         *status_out = ucp_device_put_single<level>(params.mem_list,
@@ -75,39 +77,6 @@ __global__ void do_put_kernel(kernel_params_t params, ucs_status_t *status_out)
                                                    req);
     }
     __syncthreads();
-    if (params.with_request) {
-        ucs_status_t st;
-        do {
-            st = ucp_device_progress_req<level>(req);
-        } while (st == UCS_INPROGRESS);
-        if (threadIdx.x == 0) {
-            *status_out = st;
-        }
-    }
-}
-
-static void select_cuda_device_by_local_rank()
-{
-    int world_rank = 0, local_rank = 0, ndev = 0;
-    char hostname[MPI_MAX_PROCESSOR_NAME];
-    int name_len = 0;
-
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-    MPI_Get_processor_name(hostname, &name_len);
-
-    // Create a local communicator to compute local rank
-    MPI_Comm local_comm;
-    MPI_CHECK(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &local_comm));
-    MPI_CHECK(MPI_Comm_rank(local_comm, &local_rank));
-    MPI_CHECK(MPI_Comm_free(&local_comm));
-
-    CUDA_CHECK(cudaGetDeviceCount(&ndev));
-    if (ndev == 0) {
-        fprintf(stderr, "No CUDA devices available on rank %d (%s)\n", world_rank, hostname);
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-    int dev = local_rank % ndev;
-    CUDA_CHECK(cudaSetDevice(dev));
 }
 
 static void init_ucp(ucp_context_h &ucp_ctx, ucp_worker_h &worker)
@@ -136,11 +105,14 @@ static void create_endpoint_ring(ucp_worker_h worker, int rank, int size, ucp_ep
 
     std::vector<size_t> addr_lens(size);
     MPI_CHECK(MPI_Allgather(&my_addr_len, 1, MPI_UNSIGNED_LONG, addr_lens.data(), 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD));
+    // Convert counts to int as required by MPI_Allgatherv
+    std::vector<int> addr_lens_i(size);
+    for (int i = 0; i < size; ++i) addr_lens_i[i] = (int)addr_lens[i];
     std::vector<uint8_t> all_addr;
     size_t total = 0; for (auto l : addr_lens) total += l; all_addr.resize(total);
     std::vector<int> displs(size, 0);
-    for (int i = 1; i < size; ++i) displs[i] = displs[i-1] + (int)addr_lens[i-1];
-    MPI_CHECK(MPI_Allgatherv(my_addr, (int)my_addr_len, MPI_BYTE, all_addr.data(), (int*)addr_lens.data(), displs.data(), MPI_BYTE, MPI_COMM_WORLD));
+    for (int i = 1; i < size; ++i) displs[i] = displs[i-1] + addr_lens_i[i-1];
+    MPI_CHECK(MPI_Allgatherv(my_addr, (int)my_addr_len, MPI_BYTE, all_addr.data(), addr_lens_i.data(), displs.data(), MPI_BYTE, MPI_COMM_WORLD));
 
     const uint8_t *dest_addr_ptr = all_addr.data() + displs[dest];
     size_t dest_addr_len = addr_lens[dest];
@@ -155,16 +127,55 @@ static void create_endpoint_ring(ucp_worker_h worker, int rank, int size, ucp_ep
 
 int main(int argc, char **argv)
 {
+    // MPI Init
     MPI_CHECK(MPI_Init(&argc, &argv));
-    int world_rank = 0, world_size = 0;
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    int rank = 0, world_size = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     if (world_size < 2) {
-        if (world_rank == 0) fprintf(stderr, "Run with at least 2 ranks.\n");
+        if (rank == 0) fprintf(stderr, "Run with at least 2 ranks.\n");
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    select_cuda_device_by_local_rank();
+    // Get local rank
+    int local_rank = 0, local_size = 0;
+    MPI_Comm local_comm;
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, &local_comm);
+    MPI_Comm_rank(local_comm, &local_rank);
+    MPI_Comm_size(local_comm, &local_size);
+    MPI_Comm_free(&local_comm);
+
+    // CUDA Init (use Driver API first to control primary context flags)
+    CUresult cu_st = cuInit(0);
+    if (cu_st != CUDA_SUCCESS) {
+        fprintf(stderr, "CUDA driver init failed on rank %d: %d\n", rank, (int)cu_st);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    int ndev = 0;
+    cu_st = cuDeviceGetCount(&ndev);
+    if (cu_st != CUDA_SUCCESS || ndev == 0) {
+        fprintf(stderr, "No CUDA devices available on rank %d\n", rank);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    if (ndev < local_size) {
+        fprintf(stderr, "Not enough CUDA devices available on rank %d\n", rank);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    int dev = local_rank;
+    CUdevice cu_dev;
+    cu_st = cuDeviceGet(&cu_dev, dev);
+    if (cu_st != CUDA_SUCCESS) {
+        fprintf(stderr, "cuDeviceGet failed on rank %d: %d\n", rank, (int)cu_st);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    // Set primary context flags before runtime attaches
+    unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC; // conservative
+    cu_st = cuDevicePrimaryCtxSetFlags(cu_dev, ctx_flags);
+    if (cu_st != CUDA_SUCCESS) {
+        fprintf(stderr, "cuDevicePrimaryCtxSetFlags failed on rank %d: %d\n", rank, (int)cu_st);
+        // Not fatal; continue
+    }
+    CUDA_CHECK(cudaSetDevice(dev));
 
     size_t length = 1 << 20; // 1 MB
     if (const char *env = getenv("MSG_LEN")) {
@@ -175,8 +186,10 @@ int main(int argc, char **argv)
     void *send_buf = nullptr; void *recv_buf = nullptr;
     CUDA_CHECK(cudaMalloc(&send_buf, length));
     CUDA_CHECK(cudaMalloc(&recv_buf, length));
-    CUDA_CHECK(cudaMemset(send_buf, 0xA5, length));
-    CUDA_CHECK(cudaMemset(recv_buf, 0x5A, length));
+    // Fill send buffer with rank-specific byte, recv with distinct byte
+    unsigned char send_byte = (unsigned char)(0x10 + (rank & 0xEF));
+    CUDA_CHECK(cudaMemset(send_buf, send_byte, length));
+    CUDA_CHECK(cudaMemset(recv_buf, 0x00, length));
 
     // Init UCP
     ucp_context_h ucp_ctx = nullptr; ucp_worker_h worker = nullptr;
@@ -184,21 +197,20 @@ int main(int argc, char **argv)
 
     // Create EP ring
     ucp_ep_h ep = nullptr;
-    create_endpoint_ring(worker, world_rank, world_size, ep);
+    create_endpoint_ring(worker, rank, world_size, ep);
 
-    // Register memory and pack rkey
+    // Register memory we want others to PUT into (recv_buf) and pack rkey
     ucp_mem_map_params_t mmap_params; memset(&mmap_params, 0, sizeof(mmap_params));
     mmap_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS | UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
-    mmap_params.address    = recv_buf; // expose receiver buffer for remote PUT
+    mmap_params.address    = recv_buf;
     mmap_params.length     = length;
     mmap_params.memory_type= UCS_MEMORY_TYPE_CUDA;
 
-    ucp_mem_h memh = nullptr;
-    UCP_CHECK(ucp_mem_map(ucp_ctx, &mmap_params, &memh), "ucp_mem_map");
+    ucp_mem_h recv_memh = nullptr;
+    UCP_CHECK(ucp_mem_map(ucp_ctx, &mmap_params, &recv_memh), "ucp_mem_map");
 
-    ucp_rkey_h rkey = nullptr;
     void *rkey_buf = nullptr; size_t rkey_size = 0;
-    UCP_CHECK(ucp_rkey_pack(ucp_ctx, memh, &rkey_buf, &rkey_size), "ucp_rkey_pack");
+    UCP_CHECK(ucp_rkey_pack(ucp_ctx, recv_memh, &rkey_buf, &rkey_size), "ucp_rkey_pack");
 
     // Exchange remote address and rkey with peer
     uint64_t my_remote_addr = (uint64_t)recv_buf;
@@ -217,7 +229,8 @@ int main(int argc, char **argv)
     MPI_CHECK(MPI_Allgatherv(my_blob.data(), (int)my_blob.size(), MPI_BYTE,
                              all_blob.data(), sizes.data(), displs.data(), MPI_BYTE, MPI_COMM_WORLD));
 
-    int peer = (world_rank + world_size - 1) % world_size; // receive from previous, send to next
+    // We send to next rank, so we need next's rkey/addr
+    int peer = (rank + 1) % world_size;
     const uint8_t *p = all_blob.data() + displs[peer];
     struct { uint64_t addr; uint32_t size; } peer_header;
     memcpy(&peer_header, p, sizeof(peer_header));
@@ -226,11 +239,21 @@ int main(int argc, char **argv)
     ucp_rkey_h peer_rkey = nullptr;
     UCP_CHECK(ucp_ep_rkey_unpack(ep, peer_rkey_buf, &peer_rkey), "ucp_ep_rkey_unpack");
 
-    // Create device mem list: single element for the receiver memh/rkey
+    // Create device mem list for our local source memory handle used on device
+    // For single PUT, mem_list element binds the request's memory registration
+    // We map our local send buffer for device-side API usage
+    ucp_mem_h send_memh = nullptr;
+    ucp_mem_map_params_t mmap_send; memset(&mmap_send, 0, sizeof(mmap_send));
+    mmap_send.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS | UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+    mmap_send.address    = send_buf;
+    mmap_send.length     = length;
+    mmap_send.memory_type= UCS_MEMORY_TYPE_CUDA;
+    UCP_CHECK(ucp_mem_map(ucp_ctx, &mmap_send, &send_memh), "ucp_mem_map(send)");
+
     ucp_device_mem_list_elem_t elem;
     elem.field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH | UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
-    elem.memh       = memh;
-    elem.rkey       = peer_rkey; // Note: rkey corresponds to peer's mapped memory
+    elem.memh       = send_memh;
+    elem.rkey       = peer_rkey;
 
     ucp_device_mem_list_params_t ml_params;
     memset(&ml_params, 0, sizeof(ml_params));
@@ -252,12 +275,12 @@ int main(int argc, char **argv)
     } while (st == UCS_ERR_NOT_CONNECTED);
     UCP_CHECK(st, "ucp_device_mem_list_create");
 
-    // Prepare kernel params for PUT: send from our send_buf into peer remote addr
+    // Prepare kernel params for PUT: send from our send_buf into next's remote addr
     kernel_params_t kparams = {};
-    kparams.num_threads                 = 128;
+    kparams.num_threads                 = 1;
     kparams.num_blocks                  = 1;
-    kparams.level                       = UCS_DEVICE_LEVEL_WARP;
-    kparams.with_request                = true;
+    kparams.level                       = UCS_DEVICE_LEVEL_THREAD;
+    kparams.with_request                = false;
     kparams.mem_list                    = mem_list;
     kparams.single.mem_list_index       = 0;
     kparams.single.address              = send_buf;
@@ -269,26 +292,24 @@ int main(int argc, char **argv)
     CUDA_CHECK(cudaMalloc(&d_status, sizeof(*d_status)));
     CUDA_CHECK(cudaMemcpy(d_status, &h_status, sizeof(h_status), cudaMemcpyHostToDevice));
 
-    // Thread-level also works; use warp-level to mirror UCX tests
-    do_put_kernel<UCS_DEVICE_LEVEL_WARP><<<kparams.num_blocks, kparams.num_threads>>>(kparams, d_status);
+    // Use THREAD level to avoid requiring warp-wide participation
+    do_put_kernel<UCS_DEVICE_LEVEL_THREAD><<<kparams.num_blocks, kparams.num_threads>>>(kparams, d_status);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK(cudaMemcpy(&h_status, d_status, sizeof(h_status), cudaMemcpyDeviceToHost));
     if (h_status != UCS_OK) {
-        fprintf(stderr, "Rank %d kernel failed: %d\n", world_rank, (int)h_status);
+        fprintf(stderr, "Rank %d kernel failed: %d\n", rank, (int)h_status);
         MPI_Abort(MPI_COMM_WORLD, (int)h_status);
     }
 
-    // Validate: each rank checks its recv_buf pattern equals sender's pattern (0xA5)
+    // Validate: recv_buf should contain previous rank's byte
+    unsigned char expected = (unsigned char)(0x10 + (((rank + world_size - 1) % world_size) & 0xEF));
     std::vector<uint8_t> host_check(4096, 0);
     CUDA_CHECK(cudaMemcpy(host_check.data(), recv_buf, host_check.size(), cudaMemcpyDeviceToHost));
-    bool ok = true; for (auto b : host_check) if (b != 0xA5) { ok = false; break; }
-    if (!ok) {
-        fprintf(stderr, "Rank %d validation failed.\n", world_rank);
+    bool is_correct = true; for (auto b : host_check) if (b != expected) { is_correct = false; break; }
+    if (!is_correct) {
+        fprintf(stderr, "Rank %d validation failed (expected 0x%02x).\n", rank, expected);
         MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-    if (world_rank == 0) {
-        printf("Validation passed on rank %d.\n", world_rank);
     }
 
     // Cleanup
@@ -296,7 +317,8 @@ int main(int argc, char **argv)
     ucp_device_mem_list_release(mem_list);
     ucp_rkey_destroy(peer_rkey);
     ucp_rkey_buffer_release(rkey_buf);
-    ucp_mem_unmap(ucp_ctx, memh);
+    ucp_mem_unmap(ucp_ctx, send_memh);
+    ucp_mem_unmap(ucp_ctx, recv_memh);
     ucp_ep_destroy(ep);
     ucp_worker_destroy(worker);
     ucp_cleanup(ucp_ctx);
