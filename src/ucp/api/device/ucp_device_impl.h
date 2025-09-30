@@ -221,7 +221,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * @brief Posts multiple put operations followed by one increment operation.
  *
  * This device routine posts a batch of put operations using the descriptor list
- * entries in the input handle, followed by an increment operation if @counter_inc_value != 0.
+ * entries in the input handle, followed by an increment operation if @a counter_inc_value != 0.
  * This operation can be polled on the receiver to detect completion of all the
  * operations of the batch, started during the same routine call.
  *
@@ -282,7 +282,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  *
  * This device routine posts a batch of put operations using only some of the
  * descriptor list entries in the input handle, followed by
- * an increment operation if @counter_inc_value != 0.
+ * an increment operation if @a counter_inc_value != 0.
  * This increment operation can be polled on the receiver to detect completion
  * of all operations of the batch, started during the same routine call.
  *

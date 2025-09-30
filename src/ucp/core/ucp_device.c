@@ -250,9 +250,12 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_md_index_t local_md_index;
     uint8_t rkey_index;
-    void** local_addr;
-    uint64_t* remote_addr;
-    size_t *length;
+    void** local_addresses;
+    uint64_t* remote_addresses;
+    size_t *lengths;
+    size_t length;
+    void *local_addr;
+    uint64_t remote_addr;
 
     handle_size += sizeof(*handle.ucp_mem_elements.local_addr);
     handle_size += sizeof(*handle.ucp_mem_elements.remote_addr);
@@ -322,31 +325,36 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     }
 
     /* populate elements common parameters */
-    local_addr  = (void**)UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
-    remote_addr = (uint64_t*)UCS_PTR_BYTE_OFFSET(
-            local_addr,
+    local_addresses = (void**)UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
+    remote_addresses = (uint64_t*)UCS_PTR_BYTE_OFFSET(
+            local_addresses,
             sizeof(*handle.ucp_mem_elements.local_addr) * params->num_elements);
-    length      = (size_t*)UCS_PTR_BYTE_OFFSET(
-            remote_addr, sizeof(*handle.ucp_mem_elements.remote_addr) *
-                                 params->num_elements);
+    lengths          = (size_t*)UCS_PTR_BYTE_OFFSET(
+            remote_addresses, sizeof(*handle.ucp_mem_elements.remote_addr) *
+                                      params->num_elements);
     for (i = 0; i < params->num_elements; i++) {
-        ucp_mem_type_unpack(ep->worker, &local_addr[i],
-                            &params->elements[i].local_addr,
-                            sizeof(local_addr[i]), mem_type);
-        ucp_mem_type_unpack(ep->worker, &remote_addr[i],
-                            &params->elements[i].remote_addr,
-                            sizeof(remote_addr[i]), mem_type);
-        ucp_mem_type_unpack(ep->worker, &length[i], &params->elements[i].length,
-                            sizeof(length[i]), mem_type);
+        ucp_element = &params->elements[i];
+        local_addr  = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
+                                      ucp_element, local_addr, LOCAL_ADDR, NULL);
+        remote_addr = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
+                                      ucp_element, remote_addr, REMOTE_ADDR, 0);
+        length = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, ucp_element,
+                                 length, LENGTH, 0);
+        ucp_mem_type_unpack(ep->worker, &local_addresses[i], &local_addr,
+                            sizeof(local_addresses[i]), mem_type);
+        ucp_mem_type_unpack(ep->worker, &remote_addresses[i], &remote_addr,
+                            sizeof(remote_addresses[i]), mem_type);
+        ucp_mem_type_unpack(ep->worker, &lengths[i], &length,
+                            sizeof(lengths[i]), mem_type);
     }
 
-    handle.ucp_mem_elements.local_addr  = local_addr;
-    handle.ucp_mem_elements.remote_addr = remote_addr;
-    handle.ucp_mem_elements.length      = length;
+    handle.ucp_mem_elements.local_addr  = local_addresses;
+    handle.ucp_mem_elements.remote_addr = remote_addresses;
+    handle.ucp_mem_elements.length      = lengths;
 
     /* Populate element specific parameters */
     handle.uct_mem_elements = uct_element = UCS_PTR_BYTE_OFFSET(
-            length,
+            lengths,
             sizeof(*handle.ucp_mem_elements.length) * params->num_elements);
     for (i = 0; i < num_uct_eps; i++) {
         local_md_index = ep_config->md_index[lanes[i]];
