@@ -266,7 +266,7 @@ out:
     *device_ep_p = ep->device_ep;
     return UCS_OK;
 err_free_mem:
-    cuMemFree((CUdeviceptr)&ep->device_ep);
+    cuMemFree((CUdeviceptr)ep->device_ep);
     ep->device_ep = NULL;
 err:
     return status;

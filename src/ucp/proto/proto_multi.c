@@ -181,16 +181,22 @@ static ucp_lane_index_t ucp_proto_multi_filter_net_devices(
         }
 
         sys_dev = ucp_proto_common_get_sys_dev(params, lane);
-        ucp_proto_common_add_unique_sys_dev(sys_dev, sys_devs, &num_max_bw_devs,
-                                            UCP_PROTO_MAX_LANES);
+        for (i = 0; i < num_max_bw_devs; ++i) {
+            if (sys_dev == sys_devs[i]) {
+                break;
+            }
+        }
+
+        if (i == num_max_bw_devs) {
+            sys_devs[num_max_bw_devs++] = sys_dev;
+        }
     }
 
     if (num_max_bw_devs == 0) {
         return num_lanes;
     }
 
-    seed = ucp_proto_common_select_sys_dev_by_node_id(params, num_max_bw_devs);
-
+    seed = params->worker->context->config.node_local_id % num_max_bw_devs;
     for (i = !!fixed_first_lane, num_filtered_lanes = i; i < num_lanes; ++i) {
         lane   = lanes[i];
         tl_rsc = ucp_proto_common_get_tl_rsc(params, lane);

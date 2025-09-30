@@ -914,8 +914,7 @@ static ucs_status_t uct_dc_mlx5_iface_estimate_perf(uct_iface_h tl_iface,
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
-        if (uct_ib_iface_port_attr(ib_iface)->active_speed ==
-            UCT_IB_SPEED_NDR) {
+        if (uct_ib_iface_port_is_ndr(ib_iface)) {
             perf_attr->flags |= UCT_PERF_ATTR_FLAGS_TX_RX_SHARED;
         }
     }

@@ -372,6 +372,7 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi_partial(
     if ((counter_inc_value != 0) && (lane_id == 0)) {
         auto cuda_ipc_mem_element = reinterpret_cast<const uct_cuda_ipc_device_mem_element_t *>(
                 UCS_PTR_BYTE_OFFSET(mem_list, sizeof(uct_cuda_ipc_device_mem_element_t) * counter_index));
+                UCS_PTR_BYTE_OFFSET(mem_list, sizeof(uct_cuda_ipc_device_mem_element_t) * counter_index));
         auto mapped_counter_rem_addr = reinterpret_cast<uint64_t *>(uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
                                                                                             counter_remote_address));
         uct_cuda_ipc_atomic_inc(mapped_counter_rem_addr, counter_inc_value);
