@@ -95,9 +95,6 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
 {
     ucp_rkey_h rkey;
     ucp_mem_h memh;
-    void *local_addr;
-    uint64_t remote_addr;
-    size_t length;
     size_t i, num_elements, element_size;
     const ucp_device_mem_list_elem_t *elements, *element;
 
@@ -122,20 +119,10 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
                                MEMH, NULL);
         rkey = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, rkey,
                                RKEY, NULL);
-        local_addr  = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
-                                      local_addr, LOCAL_ADDR, NULL);
-        remote_addr = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
-                                      remote_addr, REMOTE_ADDR, 0);
-        length      = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
-                                      length, LENGTH, 0);
 
         /* TODO: Delegate most of checks below to proto selection */
-        if ((rkey == NULL) || (memh == NULL) || (local_addr == NULL) ||
-            (remote_addr == 0) || (length == 0)) {
-            ucs_error("element[%lu] rkey=%p, memh=%p, local_addr=%p, "
-                      "remote_addr=%lu, "
-                      "length=%zu",
-                      i, rkey, memh, local_addr, remote_addr, length);
+        if ((rkey == NULL) || (memh == NULL)) {
+            ucs_error("element[%lu] rkey=%p, memh=%p", i, rkey, memh);
             return UCS_ERR_INVALID_PARAM;
         }
 
