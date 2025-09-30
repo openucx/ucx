@@ -97,18 +97,21 @@ __host__ UCS_F_DEVICE unsigned ucx_perf_cuda_thread_index(size_t tid)
     (_outval) = ucx_perf_cuda_thread_index<_level>(_tid)
 
 /* Simple bitset */
-#define UCX_BIT_MASK(bit)       (1 << ((bit) & (CHAR_BIT - 1)))
-#define UCX_BIT_SET(set, bit)   (set[(bit)/CHAR_BIT] |= UCX_BIT_MASK(bit))
-#define UCX_BIT_RESET(set, bit) (set[(bit)/CHAR_BIT] &= ~UCX_BIT_MASK(bit))
-#define UCX_BIT_GET(set, bit)   (set[(bit)/CHAR_BIT] &  UCX_BIT_MASK(bit))
-#define UCX_BITSET_SIZE(bits)   ((bits + CHAR_BIT - 1) / CHAR_BIT)
+#define UCX_BIT_TYPE            uint64_t
+#define UCX_BIT_SIZE            (sizeof(UCX_BIT_TYPE) * CHAR_BIT)
+#define UCX_BIT_MASK(bit)       (1 << ((bit) & (UCX_BIT_SIZE - 1)))
+#define UCX_BIT_SET(set, bit)   (set[(bit)/UCX_BIT_SIZE] |= UCX_BIT_MASK(bit))
+#define UCX_BIT_RESET(set, bit) (set[(bit)/UCX_BIT_SIZE] &= ~UCX_BIT_MASK(bit))
+#define UCX_BIT_GET(set, bit)   (set[(bit)/UCX_BIT_SIZE] &  UCX_BIT_MASK(bit))
+#define UCX_BITSET_SIZE(bits)   ((bits + UCX_BIT_SIZE - 1) / UCX_BIT_SIZE)
 
 UCS_F_DEVICE size_t
-ucx_bitset_ffns(const uint8_t *set, size_t bits, size_t from)
+ucx_bitset_ffns(const UCX_BIT_TYPE *set, size_t bits)
 {
-    for (size_t i = from; i < bits; i++) {
-        if (!UCX_BIT_GET(set, i)) {
-            return i;
+    for (size_t i = 0; i < UCX_BITSET_SIZE(bits); ++i) {
+        size_t bit = __ffsll(~set[i]);
+        if (bit) {
+            return i * UCX_BIT_SIZE + bit - 1;
         }
     }
     return bits;

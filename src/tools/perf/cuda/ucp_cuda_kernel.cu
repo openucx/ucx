@@ -29,42 +29,48 @@ public:
         }
     }
 
-    template<ucs_device_level_t level>
-    __device__ ucs_status_t progress(size_t max_completed)
+    template<ucs_device_level_t level, bool check>
+    __device__ inline ucs_status_t progress_one(size_t &index)
     {
-        ucs_status_t status = UCS_OK;
-        size_t completed    = 0;
-
         for (size_t i = 0; i < m_size; i++) {
-            if (UCX_BIT_GET(m_pending, i)) {
-                status = ucp_device_progress_req<level>(&m_requests[i]);
-                if (status == UCS_INPROGRESS) {
-                    continue;
-                }
-                UCX_BIT_RESET(m_pending, i);
+            if (check && !UCX_BIT_GET(m_pending, i)) {
+                continue;
+            }
+            ucs_status_t status = ucp_device_progress_req<level>(&m_requests[i]);
+            if (status == UCS_INPROGRESS) {
+                continue;
+            }
+            index = i;
+            if (check) {
+                UCX_BIT_RESET(m_pending, index);
                 --m_pending_count;
-                if (status != UCS_OK) {
-                    break;
-                }
-                if (++completed >= max_completed) {
-                    break;
+            }
+            return status;
+        }
+        return UCS_OK;
+    }
+
+    template<ucs_device_level_t level>
+    __device__ ucp_device_request_t *get_request()
+    {
+        size_t index = SIZE_MAX;
+        if (ucs_likely(get_pending_count() == m_size)) {
+            while (index == SIZE_MAX) {
+                ucs_status_t status = progress_one<level, false>(index);
+                if (ucs_unlikely(status != UCS_OK)) {
+                    ucs_device_error("progress failed: %d", status);
+                    return nullptr;
                 }
             }
+        } else {
+            index = ucx_bitset_ffns(m_pending, m_size);
+            UCX_BIT_SET(m_pending, index);
+            ++m_pending_count;
         }
-
-        return status;
+        return &m_requests[index];
     }
 
-    __device__ ucp_device_request_t &get_request()
-    {
-        assert(get_pending_count() < m_size);
-        size_t index = ucx_bitset_ffns(m_pending, m_size, 0);
-        UCX_BIT_SET(m_pending, index);
-        ++m_pending_count;
-        return m_requests[index];
-    }
-
-    __device__ size_t get_pending_count() const
+    __device__ inline size_t get_pending_count() const
     {
         return m_pending_count;
     }
@@ -76,7 +82,7 @@ private:
     size_t               m_size;
     size_t               m_pending_count;
     ucp_device_request_t *m_requests;
-    uint8_t              m_pending[UCX_BITSET_SIZE(CAPACITY)];
+    UCX_BIT_TYPE         m_pending[UCX_BITSET_SIZE(CAPACITY)];
 };
 
 struct ucp_perf_cuda_params {
@@ -260,17 +266,13 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
     ucx_perf_cuda_reporter reporter(ctx);
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
-        while (request_mgr.get_pending_count() >= ctx.max_outstanding) {
-            status = request_mgr.progress<level>(1);
-            if (UCS_STATUS_IS_ERR(status)) {
-                ucs_device_error("progress failed: %d", status);
-                goto out;
-            }
+        ucp_device_request_t *req = request_mgr.get_request<level>();
+        if (ucs_unlikely(req == nullptr)) {
+            goto out;
         }
 
-        ucp_device_request_t &req = request_mgr.get_request();
-        status = ucp_perf_cuda_send_async<level, cmd>(params, idx, req);
-        if (status != UCS_OK) {
+        status = ucp_perf_cuda_send_async<level, cmd>(params, idx, *req);
+        if (ucs_unlikely(status != UCS_OK)) {
             ucs_device_error("send failed: %d", status);
             goto out;
         }
@@ -280,7 +282,8 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
     }
 
     while (request_mgr.get_pending_count() > 0) {
-        status = request_mgr.progress<level>(max_iters);
+        size_t index = SIZE_MAX;
+        status       = request_mgr.progress_one<level, true>(index);
         if (UCS_STATUS_IS_ERR(status)) {
             ucs_device_error("final progress failed: %d", status);
             goto out;
