@@ -368,13 +368,19 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
 
     /* Fill indices and pack PUT entries */
     for (int i = 0; i < iovcnt; i++) {
-        unsigned idx = (i < counter_index) ? i : (i + 1);
+        unsigned idx        = (i < counter_index) ? i : (i + 1);
         mem_list_indices[i] = idx;
-        uct_device_mem_element_t *mem_elem_iov =
-            (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(mem_elem,
-                                                           mem_elem_size * idx);
-        ASSERT_UCS_OK(uct_iface_mem_element_pack(m_sender->iface(), sendbuf.memh(),
-                                                 recvbuf.rkey(), mem_elem_iov));
+        uct_device_mem_element_t *mem_elem_iov = (uct_device_mem_element_t*)
+                UCS_PTR_BYTE_OFFSET(mem_elem, mem_elem_size * idx);
+        ASSERT_UCS_OK(uct_iface_mem_element_pack(m_sender->iface(),
+                                                 sendbuf.memh(), recvbuf.rkey(),
+                                                 mem_elem_iov));
+        size_t iov_offset   = (base_length + offset) * i;
+        addresses[i]        = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), iov_offset);
+        remote_addresses[i] = (uint64_t)UCS_PTR_BYTE_OFFSET(recvbuf.ptr(),
+                                                            iov_offset);
+        lengths[i]          = base_length;
+        offsets[i]          = 0;
     }
 
     /* Pack counter entry directly at mem_list[counter_index] */
@@ -383,13 +389,6 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
                                                         mem_elem_size * counter_index);
     ASSERT_UCS_OK(uct_iface_mem_element_pack(m_sender->iface(), nullptr,
                                                 signal.rkey(), mem_elem_counter));
-
-    for (int i = 0; i < iovcnt; i++) {
-        size_t iov_offset = (base_length + offset) * i;
-        addresses[i] = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), iov_offset);
-        remote_addresses[i] = (uint64_t)UCS_PTR_BYTE_OFFSET(recvbuf.ptr(), iov_offset);
-        lengths[i] = base_length;
-    }
 
     ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)remote_addresses_dev, remote_addresses,
                                          iovcnt * sizeof(uint64_t)));
@@ -403,11 +402,13 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
         mem_buffer::pattern_fill(addresses[i], base_length, SEED1, UCS_MEMORY_TYPE_CUDA);
     }
 
-    cuda_uct::launch_uct_put_multi_partial(device_ep, mem_elem, mem_list_indices_dev,
-                                           iovcnt, addresses_dev,
-                                           remote_addresses_dev, lengths_dev,
-                                           counter_index, signal_val, (uint64_t)signal.ptr(),
-                                           device_level, num_threads, num_blocks);
+    cuda_uct::launch_uct_put_multi_partial(device_ep, mem_elem,
+                                           mem_list_indices_dev, iovcnt,
+                                           addresses_dev, remote_addresses_dev,
+                                           offsets, lengths_dev, counter_index,
+                                           signal_val, (uint64_t)signal.ptr(),
+                                           device_level, num_threads,
+                                           num_blocks);
 
     for (int i = 0; i < iovcnt; i++) {
         mem_buffer::pattern_check(UCS_PTR_BYTE_OFFSET(recvbuf.ptr(), (base_length + offset) * i),
