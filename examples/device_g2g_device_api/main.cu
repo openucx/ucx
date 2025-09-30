@@ -48,33 +48,50 @@
 
 // Kernel params similar to UCX tests
 typedef struct {
-    unsigned                     num_threads;
-    unsigned                     num_blocks;
-    ucs_device_level_t           level;
-    bool                         with_request;
-    ucp_device_mem_list_handle_h mem_list;
-    struct {
-        unsigned   mem_list_index;
-        const void *address;
-        uint64_t   remote_address;
-        size_t     length;
-    } single;
+    unsigned                              num_threads;
+    unsigned                              num_blocks;
+    ucs_device_level_t                    level;
+    bool                                  with_request;
+    const ucp_device_mem_list_handle_h   *mem_lists;  // device pointer to array of handles
+    unsigned                              num_lists;  // equals world_size
 } kernel_params_t;
 
+// A single PUT operation descriptor for device-side API
+typedef struct {
+    unsigned     list_handle_index; // index into params.mem_lists (per-destination)
+    unsigned     element_index;     // element inside that mem list (always 0 here)
+    const void  *address;           // local source address on device
+    uint64_t     remote_address;    // remote device address at peer
+    size_t       length;            // bytes to transfer
+} put_op_t;
+
 template <ucs_device_level_t level>
-__global__ void do_put_kernel(kernel_params_t params, ucs_status_t *status_out)
+__global__ void do_alltoallv_kernel(kernel_params_t params,
+                                     const put_op_t *ops,
+                                     unsigned num_ops,
+                                     ucs_status_t *status_out)
 {
     ucp_device_request_t req_obj;
     ucp_device_request_t *req = &req_obj;
 
     if (threadIdx.x == 0) {
-        *status_out = ucp_device_put_single<level>(params.mem_list,
-                                                   params.single.mem_list_index,
-                                                   params.single.address,
-                                                   params.single.remote_address,
-                                                   params.single.length,
-                                                   UCT_DEVICE_FLAG_NODELAY,
-                                                   req);
+        ucs_status_t status = UCS_OK;
+        for (unsigned i = 0; i < num_ops; ++i) {
+            const put_op_t &op = ops[i];
+            // Each peer has its own mem list with a single element
+            ucs_status_t st = ucp_device_put_single<level>(params.mem_lists[op.list_handle_index],
+                                                           op.element_index,
+                                                           op.address,
+                                                           op.remote_address,
+                                                           op.length,
+                                                           UCT_DEVICE_FLAG_NODELAY,
+                                                           req);
+            if (st != UCS_OK) {
+                status = st;
+                break;
+            }
+        }
+        *status_out = status;
     }
     __syncthreads();
 }
@@ -94,33 +111,37 @@ static void init_ucp(ucp_context_h &ucp_ctx, ucp_worker_h &worker)
     UCP_CHECK(ucp_worker_create(ucp_ctx, &worker_params, &worker), "ucp_worker_create");
 }
 
-static void create_endpoint_ring(ucp_worker_h worker, int rank, int size, ucp_ep_h &ep)
+static void create_all_endpoints(ucp_worker_h worker, int rank, int size, std::vector<ucp_ep_h> &eps)
 {
-    // Simple ring: each rank connects to (rank+1)%size and receives from (rank-1+size)%size
-    int dest = (rank + 1) % size;
-
-    // Exchange worker addresses
+    // Gather all worker addresses
     ucp_address_t *my_addr; size_t my_addr_len;
     UCP_CHECK(ucp_worker_get_address(worker, &my_addr, &my_addr_len), "ucp_worker_get_address");
 
-    std::vector<size_t> addr_lens(size);
+    std::vector<size_t> addr_lens((size_t)size);
     MPI_CHECK(MPI_Allgather(&my_addr_len, 1, MPI_UNSIGNED_LONG, addr_lens.data(), 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD));
-    // Convert counts to int as required by MPI_Allgatherv
-    std::vector<int> addr_lens_i(size);
+
+    std::vector<int> addr_lens_i((size_t)size);
     for (int i = 0; i < size; ++i) addr_lens_i[i] = (int)addr_lens[i];
-    std::vector<uint8_t> all_addr;
-    size_t total = 0; for (auto l : addr_lens) total += l; all_addr.resize(total);
-    std::vector<int> displs(size, 0);
+
+    size_t total = 0; for (auto l : addr_lens) total += l;
+    std::vector<uint8_t> all_addr(total);
+
+    std::vector<int> displs((size_t)size, 0);
     for (int i = 1; i < size; ++i) displs[i] = displs[i-1] + addr_lens_i[i-1];
-    MPI_CHECK(MPI_Allgatherv(my_addr, (int)my_addr_len, MPI_BYTE, all_addr.data(), addr_lens_i.data(), displs.data(), MPI_BYTE, MPI_COMM_WORLD));
 
-    const uint8_t *dest_addr_ptr = all_addr.data() + displs[dest];
-    size_t dest_addr_len = addr_lens[dest];
+    MPI_CHECK(MPI_Allgatherv(my_addr, (int)my_addr_len, MPI_BYTE,
+                             all_addr.data(), addr_lens_i.data(), displs.data(), MPI_BYTE, MPI_COMM_WORLD));
 
-    ucp_ep_params_t ep_params; memset(&ep_params, 0, sizeof(ep_params));
-    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-    ep_params.address    = (const ucp_address_t*)dest_addr_ptr;
-    UCP_CHECK(ucp_ep_create(worker, &ep_params, &ep), "ucp_ep_create");
+    eps.assign((size_t)size, nullptr);
+    for (int peer = 0; peer < size; ++peer) {
+        if (peer == rank) continue;
+        const uint8_t *peer_addr_ptr = all_addr.data() + displs[peer];
+        (void)addr_lens; // length not used, kept for completeness
+        ucp_ep_params_t ep_params; memset(&ep_params, 0, sizeof(ep_params));
+        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        ep_params.address    = (const ucp_address_t*)peer_addr_ptr;
+        UCP_CHECK(ucp_ep_create(worker, &ep_params, &eps[(size_t)peer]), "ucp_ep_create");
+    }
 
     ucp_worker_release_address(worker, my_addr);
 }
@@ -177,42 +198,65 @@ int main(int argc, char **argv)
     }
     CUDA_CHECK(cudaSetDevice(dev));
 
-    size_t length = 1 << 20; // 1 MB
+    // Per-destination base length (bytes); vary counts to exercise alltoallv
+    size_t base_len = 1 << 20; // default 1MB per-destination
     if (const char *env = getenv("MSG_LEN")) {
-        length = strtoull(env, nullptr, 0);
+        base_len = strtoull(env, nullptr, 0);
     }
-
-    // Allocate CUDA buffers
-    void *send_buf = nullptr; void *recv_buf = nullptr;
-    CUDA_CHECK(cudaMalloc(&send_buf, length));
-    CUDA_CHECK(cudaMalloc(&recv_buf, length));
-    // Fill send buffer with rank-specific byte, recv with distinct byte
-    unsigned char send_byte = (unsigned char)(0x10 + (rank & 0xEF));
-    CUDA_CHECK(cudaMemset(send_buf, send_byte, length));
-    CUDA_CHECK(cudaMemset(recv_buf, 0x00, length));
 
     // Init UCP
     ucp_context_h ucp_ctx = nullptr; ucp_worker_h worker = nullptr;
     init_ucp(ucp_ctx, worker);
 
-    // Create EP ring
-    ucp_ep_h ep = nullptr;
-    create_endpoint_ring(worker, rank, world_size, ep);
+    // Create endpoints to all peers
+    std::vector<ucp_ep_h> eps; eps.reserve((size_t)world_size);
+    create_all_endpoints(worker, rank, world_size, eps);
 
-    // Register memory we want others to PUT into (recv_buf) and pack rkey
+    // Build sendcounts/displs (variable sizes)
+    std::vector<int> sendcounts(world_size, 0), senddispls(world_size, 0);
+    for (int dst = 0; dst < world_size; ++dst) {
+        // small variability across peers
+        size_t len = base_len + (size_t)(((rank + dst) % 4) * 256);
+        if (len > INT_MAX) len = INT_MAX; // clamp for MPI int
+        sendcounts[dst] = (int)len;
+    }
+    for (int i = 1; i < world_size; ++i) senddispls[i] = senddispls[i-1] + sendcounts[i-1];
+    size_t total_send = (size_t)senddispls.back() + (size_t)sendcounts.back();
+
+    // Compute recvcounts via alltoall; then recvdispls and gather displs matrix
+    std::vector<int> recvcounts(world_size, 0), recvdispls(world_size, 0);
+    MPI_CHECK(MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT, MPI_COMM_WORLD));
+    for (int i = 1; i < world_size; ++i) recvdispls[i] = recvdispls[i-1] + recvcounts[i-1];
+    size_t total_recv = (size_t)recvdispls.back() + (size_t)recvcounts.back();
+
+    // Allocate CUDA send/recv buffers
+    void *send_buf = nullptr; void *recv_buf = nullptr;
+    CUDA_CHECK(cudaMalloc(&send_buf, total_send));
+    CUDA_CHECK(cudaMalloc(&recv_buf, total_recv));
+
+    // Fill send segments with a rank-unique byte; clear recv
+    unsigned char my_byte = (unsigned char)(0x10 + (rank & 0xEF));
+    for (int dst = 0; dst < world_size; ++dst) {
+        if (sendcounts[dst] == 0) continue;
+        void *seg = (void*)((uintptr_t)send_buf + (size_t)senddispls[dst]);
+        CUDA_CHECK(cudaMemset(seg, my_byte, (size_t)sendcounts[dst]));
+    }
+    CUDA_CHECK(cudaMemset(recv_buf, 0x00, total_recv));
+
+    // Register recv memory and pack rkey
     ucp_mem_map_params_t mmap_params; memset(&mmap_params, 0, sizeof(mmap_params));
     mmap_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS | UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
     mmap_params.address    = recv_buf;
-    mmap_params.length     = length;
+    mmap_params.length     = total_recv;
     mmap_params.memory_type= UCS_MEMORY_TYPE_CUDA;
 
     ucp_mem_h recv_memh = nullptr;
-    UCP_CHECK(ucp_mem_map(ucp_ctx, &mmap_params, &recv_memh), "ucp_mem_map");
+    UCP_CHECK(ucp_mem_map(ucp_ctx, &mmap_params, &recv_memh), "ucp_mem_map(recv)");
 
     void *rkey_buf = nullptr; size_t rkey_size = 0;
     UCP_CHECK(ucp_rkey_pack(ucp_ctx, recv_memh, &rkey_buf, &rkey_size), "ucp_rkey_pack");
 
-    // Exchange remote address and rkey with peer
+    // Share base remote address and rkey to all peers (variable sizes)
     uint64_t my_remote_addr = (uint64_t)recv_buf;
     struct { uint64_t addr; uint32_t size; } header { my_remote_addr, (uint32_t)rkey_size };
 
@@ -220,106 +264,169 @@ int main(int argc, char **argv)
     memcpy(my_blob.data(), &header, sizeof(header));
     memcpy(my_blob.data() + sizeof(header), rkey_buf, rkey_size);
 
-    std::vector<int> sizes(world_size, 0), displs(world_size, 0);
-    MPI_CHECK(MPI_Allgather(&(header.size), 1, MPI_INT, sizes.data(), 1, MPI_INT, MPI_COMM_WORLD));
-    for (int i = 0; i < world_size; ++i) sizes[i] += (int)sizeof(header);
-    for (int i = 1; i < world_size; ++i) displs[i] = displs[i-1] + sizes[i-1];
-    int total_blob = 0; for (int s : sizes) total_blob += s;
+    std::vector<int> blob_sizes(world_size, 0), blob_displs(world_size, 0);
+    MPI_CHECK(MPI_Allgather(&(header.size), 1, MPI_INT, blob_sizes.data(), 1, MPI_INT, MPI_COMM_WORLD));
+    for (int i = 0; i < world_size; ++i) blob_sizes[i] += (int)sizeof(header);
+    for (int i = 1; i < world_size; ++i) blob_displs[i] = blob_displs[i-1] + blob_sizes[i-1];
+    int total_blob = 0; for (int s : blob_sizes) total_blob += s;
     std::vector<uint8_t> all_blob(total_blob);
     MPI_CHECK(MPI_Allgatherv(my_blob.data(), (int)my_blob.size(), MPI_BYTE,
-                             all_blob.data(), sizes.data(), displs.data(), MPI_BYTE, MPI_COMM_WORLD));
+                             all_blob.data(), blob_sizes.data(), blob_displs.data(), MPI_BYTE, MPI_COMM_WORLD));
 
-    // We send to next rank, so we need next's rkey/addr
-    int peer = (rank + 1) % world_size;
-    const uint8_t *p = all_blob.data() + displs[peer];
-    struct { uint64_t addr; uint32_t size; } peer_header;
-    memcpy(&peer_header, p, sizeof(peer_header));
-    const void *peer_rkey_buf = p + sizeof(peer_header);
+    // Unpack each peer's rkey and record remote base address
+    std::vector<ucp_rkey_h> peer_rkeys((size_t)world_size, nullptr);
+    std::vector<uint64_t>   peer_bases((size_t)world_size, 0);
+    for (int p = 0; p < world_size; ++p) {
+        const uint8_t *ptr = all_blob.data() + blob_displs[p];
+        struct { uint64_t addr; uint32_t size; } ph;
+        memcpy(&ph, ptr, sizeof(ph));
+        peer_bases[(size_t)p] = ph.addr;
+        const void *prkey = ptr + sizeof(ph);
+        if (p != rank) {
+            UCP_CHECK(ucp_ep_rkey_unpack(eps[(size_t)p], prkey, &peer_rkeys[(size_t)p]), "ucp_ep_rkey_unpack");
+        }
+    }
 
-    ucp_rkey_h peer_rkey = nullptr;
-    UCP_CHECK(ucp_ep_rkey_unpack(ep, peer_rkey_buf, &peer_rkey), "ucp_ep_rkey_unpack");
+    // Gather each rank's recvdispls so senders can compute remote offsets
+    std::vector<int> all_recvdispls((size_t)world_size * (size_t)world_size, 0);
+    MPI_CHECK(MPI_Allgather(recvdispls.data(), world_size, MPI_INT,
+                            all_recvdispls.data(), world_size, MPI_INT, MPI_COMM_WORLD));
 
-    // Create device mem list for our local source memory handle used on device
-    // For single PUT, mem_list element binds the request's memory registration
-    // We map our local send buffer for device-side API usage
+    // Map local send buffer for device-side API
     ucp_mem_h send_memh = nullptr;
     ucp_mem_map_params_t mmap_send; memset(&mmap_send, 0, sizeof(mmap_send));
     mmap_send.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS | UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
     mmap_send.address    = send_buf;
-    mmap_send.length     = length;
+    mmap_send.length     = total_send;
     mmap_send.memory_type= UCS_MEMORY_TYPE_CUDA;
     UCP_CHECK(ucp_mem_map(ucp_ctx, &mmap_send, &send_memh), "ucp_mem_map(send)");
 
-    ucp_device_mem_list_elem_t elem;
-    elem.field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH | UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
-    elem.memh       = send_memh;
-    elem.rkey       = peer_rkey;
+    // Create one device mem list per peer (excluding self), each with a single element
+    std::vector<ucp_device_mem_list_handle_h> mem_lists((size_t)world_size, nullptr);
+    std::vector<unsigned> element_index((size_t)world_size, 0);
+    for (int p = 0; p < world_size; ++p) {
+        if (p == rank) continue;
+        ucp_device_mem_list_elem_t elem;
+        elem.field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH | UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
+        elem.memh       = send_memh;
+        elem.rkey       = peer_rkeys[(size_t)p];
 
-    ucp_device_mem_list_params_t ml_params;
-    memset(&ml_params, 0, sizeof(ml_params));
-    ml_params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
-                             UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
-                             UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
-    ml_params.element_size = sizeof(elem);
-    ml_params.num_elements = 1;
-    ml_params.elements     = &elem;
+        ucp_device_mem_list_params_t ml_params;
+        memset(&ml_params, 0, sizeof(ml_params));
+        ml_params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                                 UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
+                                 UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
+        ml_params.element_size = sizeof(elem);
+        ml_params.num_elements = 1;
+        ml_params.elements     = &elem;
 
-    ucp_device_mem_list_handle_h mem_list = nullptr;
-    // EP might not be connected immediately; retry if needed
-    ucs_status_t st;
-    do {
-        st = ucp_device_mem_list_create(ep, &ml_params, &mem_list);
-        if (st == UCS_ERR_NOT_CONNECTED) {
-            ucp_worker_progress(worker);
-        }
-    } while (st == UCS_ERR_NOT_CONNECTED);
-    UCP_CHECK(st, "ucp_device_mem_list_create");
+        ucs_status_t st;
+        do {
+            st = ucp_device_mem_list_create(eps[(size_t)p], &ml_params, &mem_lists[(size_t)p]);
+            if (st == UCS_ERR_NOT_CONNECTED) {
+                ucp_worker_progress(worker);
+            }
+        } while (st == UCS_ERR_NOT_CONNECTED);
+        UCP_CHECK(st, "ucp_device_mem_list_create(per-peer)");
+        element_index[(size_t)p] = 0; // single element
+    }
 
-    // Prepare kernel params for PUT: send from our send_buf into next's remote addr
+    // Build PUT operations: for each peer, compute local and remote offsets
+    std::vector<put_op_t> ops; ops.reserve((size_t)world_size);
+    for (int p = 0; p < world_size; ++p) {
+        if (p == rank) continue;
+        if (sendcounts[p] == 0) continue;
+        put_op_t op;
+        op.list_handle_index = (unsigned)p;
+        op.element_index     = element_index[(size_t)p];
+        op.address        = (const void*)((uintptr_t)send_buf + (size_t)senddispls[p]);
+        size_t remote_off = (size_t)all_recvdispls[(size_t)p * (size_t)world_size + (size_t)rank];
+        op.remote_address = peer_bases[(size_t)p] + (uint64_t)remote_off;
+        op.length         = (size_t)sendcounts[p];
+        ops.push_back(op);
+    }
+
+    // Upload ops to device
+    put_op_t *d_ops = nullptr;
+    if (!ops.empty()) {
+        CUDA_CHECK(cudaMalloc(&d_ops, ops.size() * sizeof(put_op_t)));
+        CUDA_CHECK(cudaMemcpy(d_ops, ops.data(), ops.size() * sizeof(put_op_t), cudaMemcpyHostToDevice));
+    }
+
+    // Prepare kernel params
     kernel_params_t kparams = {};
-    kparams.num_threads                 = 1;
-    kparams.num_blocks                  = 1;
-    kparams.level                       = UCS_DEVICE_LEVEL_THREAD;
-    kparams.with_request                = false;
-    kparams.mem_list                    = mem_list;
-    kparams.single.mem_list_index       = 0;
-    kparams.single.address              = send_buf;
-    kparams.single.remote_address       = peer_header.addr; // peer recv buffer
-    kparams.single.length               = length;
+    kparams.num_threads = 1;
+    kparams.num_blocks  = 1;
+    kparams.level       = UCS_DEVICE_LEVEL_THREAD;
+    kparams.with_request= false;
+    // Upload mem list handle array to device
+    ucp_device_mem_list_handle_h *d_mem_lists = nullptr;
+    if (world_size > 0) {
+        CUDA_CHECK(cudaMalloc(&d_mem_lists, sizeof(ucp_device_mem_list_handle_h) * (size_t)world_size));
+        CUDA_CHECK(cudaMemcpy(d_mem_lists, mem_lists.data(), sizeof(ucp_device_mem_list_handle_h) * (size_t)world_size, cudaMemcpyHostToDevice));
+    }
+    kparams.mem_lists  = d_mem_lists;
+    kparams.num_lists  = (unsigned)world_size;
 
     // Launch kernel
     ucs_status_t *d_status = nullptr; ucs_status_t h_status = UCS_OK;
     CUDA_CHECK(cudaMalloc(&d_status, sizeof(*d_status)));
     CUDA_CHECK(cudaMemcpy(d_status, &h_status, sizeof(h_status), cudaMemcpyHostToDevice));
 
-    // Use THREAD level to avoid requiring warp-wide participation
-    do_put_kernel<UCS_DEVICE_LEVEL_THREAD><<<kparams.num_blocks, kparams.num_threads>>>(kparams, d_status);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-    CUDA_CHECK(cudaMemcpy(&h_status, d_status, sizeof(h_status), cudaMemcpyDeviceToHost));
-    if (h_status != UCS_OK) {
-        fprintf(stderr, "Rank %d kernel failed: %d\n", rank, (int)h_status);
-        MPI_Abort(MPI_COMM_WORLD, (int)h_status);
+    if (!ops.empty()) {
+        do_alltoallv_kernel<UCS_DEVICE_LEVEL_THREAD><<<kparams.num_blocks, kparams.num_threads>>>(kparams, d_ops, (unsigned)ops.size(), d_status);
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaMemcpy(&h_status, d_status, sizeof(h_status), cudaMemcpyDeviceToHost));
+        if (h_status != UCS_OK) {
+            fprintf(stderr, "Rank %d kernel failed: %d\n", rank, (int)h_status);
+            MPI_Abort(MPI_COMM_WORLD, (int)h_status);
+        }
+        // TODO: Is call to flush necessary?
+        UCP_CHECK(ucp_worker_flush(worker), "ucp_worker_flush");
     }
 
-    // Validate: recv_buf should contain previous rank's byte
-    unsigned char expected = (unsigned char)(0x10 + (((rank + world_size - 1) % world_size) & 0xEF));
-    std::vector<uint8_t> host_check(4096, 0);
-    CUDA_CHECK(cudaMemcpy(host_check.data(), recv_buf, host_check.size(), cudaMemcpyDeviceToHost));
-    bool is_correct = true; for (auto b : host_check) if (b != expected) { is_correct = false; break; }
-    if (!is_correct) {
-        fprintf(stderr, "Rank %d validation failed (expected 0x%02x).\n", rank, expected);
-        MPI_Abort(MPI_COMM_WORLD, 1);
+    // Handle self-copy (if any) on host to emulate alltoallv semantics for self
+    if (sendcounts[rank] > 0) {
+        void *dst = (void*)((uintptr_t)recv_buf + (size_t)recvdispls[rank]);
+        const void *src = (const void*)((uintptr_t)send_buf + (size_t)senddispls[rank]);
+        CUDA_CHECK(cudaMemcpy(dst, src, (size_t)sendcounts[rank], cudaMemcpyDeviceToDevice));
+    }
+
+    // Validate received data: check up to 4096 bytes per segment against sender's byte
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+    const size_t sample = 4096;
+    std::vector<uint8_t> host_check; host_check.reserve(sample);
+    for (int s = 0; s < world_size; ++s) {
+        size_t len = (size_t)recvcounts[s];
+        if (len == 0) continue;
+        size_t to_check = len < sample ? len : sample;
+        host_check.assign(to_check, 0);
+        const void *seg = (const void*)((uintptr_t)recv_buf + (size_t)recvdispls[s]);
+        CUDA_CHECK(cudaMemcpy(host_check.data(), seg, to_check, cudaMemcpyDeviceToHost));
+        unsigned char expected = (unsigned char)(0x10 + (s & 0xEF));
+        bool ok = true; for (size_t i = 0; i < to_check; ++i) { if (host_check[i] != expected) { ok = false; break; } }
+        if (!ok) {
+            fprintf(stderr, "Rank %d validation failed for segment from %d (expected 0x%02x)\n", rank, s, expected);
+            MPI_Abort(MPI_COMM_WORLD, 1);
+        }
     }
 
     // Cleanup
+    if (d_ops) CUDA_CHECK(cudaFree(d_ops));
+    if (d_mem_lists) CUDA_CHECK(cudaFree(d_mem_lists));
     CUDA_CHECK(cudaFree(d_status));
-    ucp_device_mem_list_release(mem_list);
-    ucp_rkey_destroy(peer_rkey);
+    for (int p = 0; p < world_size; ++p) {
+        if (p == rank) continue;
+        if (mem_lists[(size_t)p]) ucp_device_mem_list_release(mem_lists[(size_t)p]);
+    }
+    for (int p = 0; p < world_size; ++p) {
+        if (peer_rkeys[(size_t)p]) ucp_rkey_destroy(peer_rkeys[(size_t)p]);
+        if (p != rank && eps[(size_t)p]) ucp_ep_destroy(eps[(size_t)p]);
+    }
     ucp_rkey_buffer_release(rkey_buf);
     ucp_mem_unmap(ucp_ctx, send_memh);
     ucp_mem_unmap(ucp_ctx, recv_memh);
-    ucp_ep_destroy(ep);
     ucp_worker_destroy(worker);
     ucp_cleanup(ucp_ctx);
 
