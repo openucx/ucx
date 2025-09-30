@@ -161,10 +161,10 @@ int main(int argc, char **argv)
     // Get local rank
     int local_rank = 0, local_size = 0;
     MPI_Comm local_comm;
-    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, &local_comm);
-    MPI_Comm_rank(local_comm, &local_rank);
-    MPI_Comm_size(local_comm, &local_size);
-    MPI_Comm_free(&local_comm);
+    MPI_CHECK(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, &local_comm));
+    MPI_CHECK(MPI_Comm_rank(local_comm, &local_rank));
+    MPI_CHECK(MPI_Comm_size(local_comm, &local_size));
+    MPI_CHECK(MPI_Comm_free(&local_comm));
 
     // CUDA Init (use Driver API first to control primary context flags)
     CUresult cu_st = cuInit(0);
@@ -425,8 +425,8 @@ int main(int argc, char **argv)
         if (p != rank && eps[(size_t)p]) ucp_ep_destroy(eps[(size_t)p]);
     }
     ucp_rkey_buffer_release(rkey_buf);
-    ucp_mem_unmap(ucp_ctx, send_memh);
-    ucp_mem_unmap(ucp_ctx, recv_memh);
+    UCP_CHECK(ucp_mem_unmap(ucp_ctx, send_memh), "ucp_mem_unmap(send)");
+    UCP_CHECK(ucp_mem_unmap(ucp_ctx, recv_memh), "ucp_mem_unmap(recv)");
     ucp_worker_destroy(worker);
     ucp_cleanup(ucp_ctx);
 
