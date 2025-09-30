@@ -414,14 +414,14 @@ ucp_device_mem_list_create(ucp_ep_h ep,
                            const ucp_device_mem_list_params_t *params,
                            ucp_device_mem_list_handle_h *handle_p)
 {
+    ucs_memory_type_t mem_type            = UCS_MEMORY_TYPE_UNKNOWN;
+    ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
     ucp_lane_index_t lanes[UCP_DEVICE_MEM_LIST_MAX_EPS];
-    ucp_worker_cfg_index_t rkey_cfg_index;
     ucs_status_t status;
     ucp_rkey_config_t *rkey_config;
     ucs_sys_device_t local_sys_dev, remote_sys_dev;
     ucp_md_map_t local_md_map, remote_md_map;
     ucp_ep_config_t *ep_config;
-    ucs_memory_type_t mem_type;
     uct_allocated_memory_t mem;
 
     if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
