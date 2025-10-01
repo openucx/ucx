@@ -109,7 +109,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
  * This device routine posts one put operation using descriptor list handle.
  * The @a mem_list_index is used to point at the @a mem_list entry to be used
  * for the memory transfer. The @a local_offset and @a remote_offset parameters
- * specify byte offsets within the selected memory list entry.The @a length,
+ * specify byte offsets within the selected memory list entry. The @a length,
  * @a local_offset and @a remote_offset parameters must be valid
  * for the used @a mem_list entry.
  *
