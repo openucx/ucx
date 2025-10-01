@@ -51,7 +51,7 @@ public:
     }
 
     template<ucs_device_level_t level>
-    __device__ ucp_device_request_t *get_request()
+    __device__ inline ucp_device_request_t *get_request()
     {
         size_t index = SIZE_MAX;
         if (ucs_likely(get_pending_count() == m_size)) {
@@ -199,7 +199,7 @@ private:
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 UCS_F_DEVICE ucs_status_t
 ucp_perf_cuda_send_async(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
-                         ucp_device_request_t &req)
+                         ucp_device_request_t *req)
 {
     switch (cmd) {
     case UCX_PERF_CMD_PUT_SINGLE:
@@ -209,13 +209,13 @@ ucp_perf_cuda_send_async(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                                             params.addresses[0],
                                             params.remote_addresses[0],
                                             params.length + ONESIDED_SIGNAL_SIZE,
-                                            params.flags, &req);
+                                            params.flags, req);
     case UCX_PERF_CMD_PUT_MULTI:
         return ucp_device_put_multi<level>(params.mem_list, params.addresses,
                                            params.remote_addresses,
                                            params.lengths, 1,
                                            params.counter_remote, params.flags,
-                                           &req);
+                                           req);
     case UCX_PERF_CMD_PUT_PARTIAL:{
         unsigned counter_index = params.mem_list->mem_list_length - 1;
         return ucp_device_put_multi_partial<level>(params.mem_list,
@@ -226,7 +226,7 @@ ucp_perf_cuda_send_async(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                                                    params.lengths,
                                                    counter_index, 1,
                                                    params.counter_remote,
-                                                   params.flags, &req);
+                                                   params.flags, req);
         }
     }
 
@@ -236,15 +236,15 @@ ucp_perf_cuda_send_async(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 UCS_F_DEVICE ucs_status_t
 ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
-                        ucp_device_request_t &req)
+                        ucp_device_request_t *req)
 {
     ucs_status_t status = ucp_perf_cuda_send_async<level, cmd>(params, idx, req);
-    if (status != UCS_OK) {
+    if ((status != UCS_OK) || (req == nullptr)) {
         return status;
     }
 
     do {
-        status = ucp_device_progress_req<level>(&req);
+        status = ucp_device_progress_req<level>(req);
     } while (status == UCS_INPROGRESS);
 
     return status;
@@ -271,7 +271,7 @@ ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
             goto out;
         }
 
-        status = ucp_perf_cuda_send_async<level, cmd>(params, idx, *req);
+        status = ucp_perf_cuda_send_async<level, cmd>(params, idx, req);
         if (ucs_unlikely(status != UCS_OK)) {
             ucs_device_error("send failed: %d", status);
             goto out;
@@ -309,7 +309,7 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
 
     for (ucx_perf_counter_t idx = 0; idx < ctx.max_iters; idx++) {
         if (is_sender) {
-            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, *req);
+            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req);
             if (status != UCS_OK) {
                 ucs_device_error("sender send failed: %d", status);
                 break;
@@ -317,7 +317,7 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
             ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
         } else {
             ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
-            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, *req);
+            status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req);
             if (status != UCS_OK) {
                 ucs_device_error("receiver send failed: %d", status);
                 break;
