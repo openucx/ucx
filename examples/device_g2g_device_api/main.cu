@@ -6,7 +6,6 @@
 
 #include <mpi.h>
 #include <cuda_runtime.h>
-#include <cuda.h>
 // #include <sm_60_atomic_functions.h>
 
 #include <ucp/api/ucp.h>
@@ -166,15 +165,10 @@ int main(int argc, char **argv)
     MPI_CHECK(MPI_Comm_size(local_comm, &local_size));
     MPI_CHECK(MPI_Comm_free(&local_comm));
 
-    // CUDA Init (use Driver API first to control primary context flags)
-    CUresult cu_st = cuInit(0);
-    if (cu_st != CUDA_SUCCESS) {
-        fprintf(stderr, "CUDA driver init failed on rank %d: %d\n", rank, (int)cu_st);
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
+    // CUDA Init
     int ndev = 0;
-    cu_st = cuDeviceGetCount(&ndev);
-    if (cu_st != CUDA_SUCCESS || ndev == 0) {
+    CUDA_CHECK(cudaGetDeviceCount(&ndev));
+    if (ndev == 0) {
         fprintf(stderr, "No CUDA devices available on rank %d\n", rank);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
@@ -183,18 +177,11 @@ int main(int argc, char **argv)
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
     int dev = local_rank;
-    CUdevice cu_dev;
-    cu_st = cuDeviceGet(&cu_dev, dev);
-    if (cu_st != CUDA_SUCCESS) {
-        fprintf(stderr, "cuDeviceGet failed on rank %d: %d\n", rank, (int)cu_st);
+    // Set scheduling flags before creating the context
+    cudaError_t rt_st = cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+    if (rt_st != cudaSuccess) {
+        fprintf(stderr, "cudaSetDeviceFlags failed on rank %d: %s\n", rank, cudaGetErrorString(rt_st));
         MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-    // Set primary context flags before runtime attaches
-    unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC; // conservative
-    cu_st = cuDevicePrimaryCtxSetFlags(cu_dev, ctx_flags);
-    if (cu_st != CUDA_SUCCESS) {
-        fprintf(stderr, "cuDevicePrimaryCtxSetFlags failed on rank %d: %d\n", rank, (int)cu_st);
-        // Not fatal; continue
     }
     CUDA_CHECK(cudaSetDevice(dev));
 
