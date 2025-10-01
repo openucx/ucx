@@ -257,9 +257,8 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     void *local_addr;
     uint64_t remote_addr;
 
-    handle_size += sizeof(*handle.ucp_mem_elements.local_addr);
-    handle_size += sizeof(*handle.ucp_mem_elements.remote_addr);
-    handle_size += sizeof(*handle.ucp_mem_elements.length);
+    handle_size += sizeof(*handle.local_addrs) + sizeof(*handle.remote_addrs) + sizeof(*handle.lengths);
+
     /* For each available lane */
     for (i = 0;
          (i < UCP_DEVICE_MEM_LIST_MAX_EPS) && (lanes[i] != UCP_NULL_LANE);
@@ -328,10 +327,9 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     local_addresses = (void**)UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
     remote_addresses = (uint64_t*)UCS_PTR_BYTE_OFFSET(
             local_addresses,
-            sizeof(*handle.ucp_mem_elements.local_addr) * params->num_elements);
+            sizeof(*handle.local_addrs) * params->num_elements);
     lengths          = (size_t*)UCS_PTR_BYTE_OFFSET(
-            remote_addresses, sizeof(*handle.ucp_mem_elements.remote_addr) *
-                                      params->num_elements);
+            remote_addresses, sizeof(*handle.remote_addrs) * params->num_elements);
     for (i = 0; i < params->num_elements; i++) {
         ucp_element = &params->elements[i];
         local_addr  = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
@@ -348,14 +346,14 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                             sizeof(lengths[i]), mem_type);
     }
 
-    handle.ucp_mem_elements.local_addr  = local_addresses;
-    handle.ucp_mem_elements.remote_addr = remote_addresses;
-    handle.ucp_mem_elements.length      = lengths;
+    handle.local_addrs  = local_addresses;
+    handle.remote_addrs = remote_addresses;
+    handle.lengths      = lengths;
 
     /* Populate element specific parameters */
     handle.uct_mem_elements = uct_element = UCS_PTR_BYTE_OFFSET(
             lengths,
-            sizeof(*handle.ucp_mem_elements.length) * params->num_elements);
+            sizeof(*handle.lengths) * params->num_elements);
     for (i = 0; i < num_uct_eps; i++) {
         local_md_index = ep_config->md_index[lanes[i]];
         wiface         = ucp_worker_iface(ep->worker,
