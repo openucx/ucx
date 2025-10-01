@@ -335,7 +335,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
     unsigned num_blocks             = get_num_blocks();
     size_t offset                   = get_offset();
     const int iovcnt                = 8;
-    size_t length                   = (iovcnt) * (base_length + offset);
+    size_t length                   = iovcnt * (base_length + offset);
     uint64_t signal_val             = 4;
     int counter_index               = 1;
     std::vector<size_t> offsets(iovcnt, 0);
@@ -365,10 +365,10 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
                                        mem_elem_size * (iovcnt + 1)));
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&remote_addresses_dev,
                                        (iovcnt + 1) * sizeof(uint64_t)));
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemAlloc((CUdeviceptr*)&lengths_dev, iovcnt * sizeof(size_t)));
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&addresses_dev,
                                        (iovcnt + 1) * sizeof(void*)));
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuMemAlloc((CUdeviceptr*)&lengths_dev, iovcnt * sizeof(size_t)));
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_list_indices_dev,
                                        iovcnt * sizeof(unsigned)));
 
@@ -404,10 +404,10 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
     ASSERT_EQ(CUDA_SUCCESS,
               cuMemcpyHtoD((CUdeviceptr)remote_addresses_dev, remote_addresses,
                            (iovcnt + 1) * sizeof(uint64_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)lengths_dev, lengths,
-                                         iovcnt * sizeof(size_t)));
     ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)addresses_dev, addresses,
                                          (iovcnt + 1) * sizeof(void*)));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)lengths_dev, lengths,
+                                         iovcnt * sizeof(size_t)));
     ASSERT_EQ(CUDA_SUCCESS,
               cuMemcpyHtoD((CUdeviceptr)mem_list_indices_dev, mem_list_indices,
                            iovcnt * sizeof(unsigned)));
