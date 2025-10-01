@@ -70,27 +70,22 @@ __global__ void do_alltoallv_kernel(kernel_params_t params,
                                      unsigned num_ops,
                                      ucs_status_t *status_out)
 {
+    unsigned tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= num_ops) return;
+
     ucp_device_request_t req_obj;
     ucp_device_request_t *req = &req_obj;
 
-    if (threadIdx.x == 0) {
-        ucs_status_t status = UCS_OK;
-        for (unsigned i = 0; i < num_ops; ++i) {
-            const put_op_t &op = ops[i];
-            // Each peer has its own mem list with a single element
-            ucs_status_t st = ucp_device_put_single<level>(params.mem_lists[op.list_handle_index],
-                                                           op.element_index,
-                                                           op.address,
-                                                           op.remote_address,
-                                                           op.length,
-                                                           UCT_DEVICE_FLAG_NODELAY,
-                                                           req);
-            if (st != UCS_OK) {
-                status = st;
-                break;
-            }
-        }
-        *status_out = status;
+    const put_op_t &op = ops[tid];
+    ucs_status_t st = ucp_device_put_single<level>(params.mem_lists[op.list_handle_index],
+                                                   op.element_index,
+                                                   op.address,
+                                                   op.remote_address,
+                                                   op.length,
+                                                   UCT_DEVICE_FLAG_NODELAY,
+                                                   req);
+    if (st != UCS_OK) {
+        (void)atomicCAS((int*)status_out, (int)UCS_OK, (int)st);
     }
 }
 
@@ -324,8 +319,11 @@ int main(int argc, char **argv)
 
     // Prepare kernel params
     kernel_params_t kparams = {};
-    kparams.num_threads  = 1;
-    kparams.num_blocks   = 1;
+    const unsigned threads_per_block = 128;
+    const unsigned num_ops = static_cast<unsigned>(ops.size());
+    const unsigned num_blocks = (num_ops + threads_per_block - 1) / threads_per_block;
+    kparams.num_threads  = threads_per_block;
+    kparams.num_blocks   = num_blocks;
     kparams.level        = UCS_DEVICE_LEVEL_THREAD;
     kparams.with_request = false;
     // Upload mem list handle array to device
@@ -340,7 +338,7 @@ int main(int argc, char **argv)
     CUDA_CHECK(cudaMalloc(&d_status, sizeof(*d_status)));
     CUDA_CHECK(cudaMemcpy(d_status, &h_status, sizeof(h_status), cudaMemcpyHostToDevice));
 
-    do_alltoallv_kernel<UCS_DEVICE_LEVEL_THREAD><<<kparams.num_blocks, kparams.num_threads>>>(kparams, d_ops, ops.size(), d_status);
+    do_alltoallv_kernel<UCS_DEVICE_LEVEL_THREAD><<<kparams.num_blocks, kparams.num_threads>>>(kparams, d_ops, num_ops, d_status);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK(cudaMemcpy(&h_status, d_status, sizeof(h_status), cudaMemcpyDeviceToHost));
