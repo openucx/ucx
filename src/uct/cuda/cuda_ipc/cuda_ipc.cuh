@@ -360,20 +360,30 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi_partial(
     uct_cuda_ipc_get_lane<level>(lane_id, num_lanes);
     for (int i = 0; i < mem_list_count; i++) {
         unsigned idx = mem_list_indices[i];
-        auto cuda_ipc_mem_element = reinterpret_cast<const uct_cuda_ipc_device_mem_element_t *>(
-                UCS_PTR_BYTE_OFFSET(mem_list, sizeof(uct_cuda_ipc_device_mem_element_t) * idx));
+        auto cuda_ipc_mem_element =
+                reinterpret_cast<const uct_cuda_ipc_device_mem_element_t*>(
+                        UCS_PTR_BYTE_OFFSET(
+                                mem_list,
+                                sizeof(uct_cuda_ipc_device_mem_element_t) *
+                                        idx));
         auto src_addr = UCS_PTR_BYTE_OFFSET(addresses[idx], local_offsets[i]);
         auto mapped_rem_addr = uct_cuda_ipc_map_remote(
-                cuda_ipc_mem_element, remote_addresses[idx] + remote_offsets[i]);
+                cuda_ipc_mem_element,
+                remote_addresses[idx] + remote_offsets[i]);
         uct_cuda_ipc_copy_level<level>(mapped_rem_addr, src_addr, lengths[i]);
     }
 
 
     if ((counter_inc_value != 0) && (lane_id == 0)) {
-        auto cuda_ipc_mem_element = reinterpret_cast<const uct_cuda_ipc_device_mem_element_t *>(
-                UCS_PTR_BYTE_OFFSET(mem_list, sizeof(uct_cuda_ipc_device_mem_element_t) * counter_index));
-        auto mapped_counter_rem_addr = reinterpret_cast<uint64_t *>(uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
-                                                                                            counter_remote_address));
+        auto cuda_ipc_mem_element =
+                reinterpret_cast<const uct_cuda_ipc_device_mem_element_t*>(
+                        UCS_PTR_BYTE_OFFSET(
+                                mem_list,
+                                sizeof(uct_cuda_ipc_device_mem_element_t) *
+                                        counter_index));
+        auto mapped_counter_rem_addr = reinterpret_cast<uint64_t*>(
+                uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
+                                        counter_remote_address));
         uct_cuda_ipc_atomic_inc(mapped_counter_rem_addr, counter_inc_value);
     }
 

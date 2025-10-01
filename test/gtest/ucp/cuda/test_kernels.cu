@@ -27,8 +27,8 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
         break;
     case TEST_UCP_DEVICE_KERNEL_PUT_MULTI:
         status = ucp_device_put_multi<level>(params.mem_list,
-                                             params.multi.counter_inc_value,
-                                             0, flags, req_ptr);
+                                             params.multi.counter_inc_value, 0,
+                                             flags, req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL:
         status = ucp_device_put_multi_partial<level>(

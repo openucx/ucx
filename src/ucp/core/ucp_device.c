@@ -250,14 +250,15 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_md_index_t local_md_index;
     uint8_t rkey_index;
-    void** local_addresses;
-    uint64_t* remote_addresses;
+    void **local_addresses;
+    uint64_t *remote_addresses;
     size_t *lengths;
     size_t length;
     void *local_addr;
     uint64_t remote_addr;
 
-    handle_size += sizeof(*handle.local_addrs) + sizeof(*handle.remote_addrs) + sizeof(*handle.lengths);
+    handle_size += sizeof(*handle.local_addrs) + sizeof(*handle.remote_addrs) +
+                   sizeof(*handle.lengths);
 
     /* For each available lane */
     for (i = 0;
@@ -325,11 +326,12 @@ static ucs_status_t ucp_device_mem_list_create_handle(
 
     /* populate elements common parameters */
     local_addresses = (void**)UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
-    remote_addresses = (uint64_t*)UCS_PTR_BYTE_OFFSET(
-            local_addresses,
-            sizeof(*handle.local_addrs) * params->num_elements);
-    lengths          = (size_t*)UCS_PTR_BYTE_OFFSET(
-            remote_addresses, sizeof(*handle.remote_addrs) * params->num_elements);
+    remote_addresses = (uint64_t*)
+            UCS_PTR_BYTE_OFFSET(local_addresses, sizeof(*handle.local_addrs) *
+                                                         params->num_elements);
+    lengths          = (size_t*)UCS_PTR_BYTE_OFFSET(remote_addresses,
+                                                    sizeof(*handle.remote_addrs) *
+                                                            params->num_elements);
     for (i = 0; i < params->num_elements; i++) {
         ucp_element = &params->elements[i];
         local_addr  = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
@@ -352,8 +354,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
 
     /* Populate element specific parameters */
     handle.uct_mem_elements = uct_element = UCS_PTR_BYTE_OFFSET(
-            lengths,
-            sizeof(*handle.lengths) * params->num_elements);
+            lengths, sizeof(*handle.lengths) * params->num_elements);
     for (i = 0; i < num_uct_eps; i++) {
         local_md_index = ep_config->md_index[lanes[i]];
         wiface         = ucp_worker_iface(ep->worker,
@@ -430,9 +431,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     }
 
     /* Perform pseudo lane selection without size */
-    rkey_config    = &ep->worker->rkey_config[rkey_cfg_index];
-    ep_config      = ucp_worker_ep_config(ep->worker,
-                                          rkey_config->key.ep_cfg_index);
+    rkey_config = &ep->worker->rkey_config[rkey_cfg_index];
+    ep_config = ucp_worker_ep_config(ep->worker, rkey_config->key.ep_cfg_index);
     remote_sys_dev = rkey_config->key.sys_dev;
     remote_md_map  = rkey_config->key.md_map;
 

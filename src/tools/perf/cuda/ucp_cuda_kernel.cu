@@ -116,17 +116,17 @@ private:
         ucp_device_mem_list_elem_t elems[count];
         size_t offset = 0;
         for (size_t i = 0; i < count; ++i) {
-            elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-            elems[i].memh        = perf.ucp.send_memh;
-            elems[i].rkey        = perf.ucp.rkey;
-            elems[i].local_addr  = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
+            elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
+                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
+                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
+            elems[i].memh       = perf.ucp.send_memh;
+            elems[i].rkey       = perf.ucp.rkey;
+            elems[i].local_addr = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
             elems[i].remote_addr = perf.ucp.remote_addr + offset;
             elems[i].length      = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
-                                                          perf.params.msg_size_list[i];
+                                                           perf.params.msg_size_list[i];
             offset              += perf.params.msg_size_list[i];
         }
 
@@ -199,8 +199,8 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
     case UCX_PERF_CMD_PUT_SINGLE:
         /* TODO: Change to ucp_device_counter_write */
         *params.counter_send = idx + 1;
-        return ucp_device_put_single<level>(params.mem_list,
-                                            params.indices[0], 0, 0,
+        return ucp_device_put_single<level>(params.mem_list, params.indices[0],
+                                            0, 0,
                                             params.length +
                                                     ONESIDED_SIGNAL_SIZE,
                                             0, params.flags, &req);

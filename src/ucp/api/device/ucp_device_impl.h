@@ -139,12 +139,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         size_t local_offset, size_t remote_offset, size_t length,
         unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
-    const void *address = UCS_PTR_BYTE_OFFSET(
-            mem_list_h->local_addrs[mem_list_index],
-            local_offset);
-    const uint64_t remote_address =
-            mem_list_h->remote_addrs[mem_list_index] +
-            remote_offset;
+    const void *address           = UCS_PTR_BYTE_OFFSET(
+            mem_list_h->local_addrs[mem_list_index], local_offset);
+    const uint64_t remote_address = mem_list_h->remote_addrs[mem_list_index] +
+                                    remote_offset;
     const uct_device_mem_element_t *uct_elem;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
@@ -197,9 +195,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
         uint64_t inc_value, size_t remote_offset, unsigned channel_id,
         uint64_t flags, ucp_device_request_t *req)
 {
-    uint64_t remote_address =
-            mem_list_h->remote_addrs[mem_list_index] +
-            remote_offset;
+    uint64_t remote_address = mem_list_h->remote_addrs[mem_list_index] +
+                              remote_offset;
     const uct_device_mem_element_t *uct_elem;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
@@ -335,9 +332,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
 {
     void *const *addresses           = mem_list_h->local_addrs;
     const uint64_t *remote_addresses = mem_list_h->remote_addrs;
-    uint64_t counter_remote_address =
-            mem_list_h->remote_addrs[counter_index] +
-            counter_remote_offset;
+    uint64_t counter_remote_address = mem_list_h->remote_addrs[counter_index] +
+                                      counter_remote_offset;
     const uct_device_mem_element_t *uct_mem_list;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
