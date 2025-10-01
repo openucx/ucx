@@ -177,12 +177,6 @@ int main(int argc, char **argv)
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
     int dev = local_rank;
-    // Set scheduling flags before creating the context
-    cudaError_t rt_st = cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
-    if (rt_st != cudaSuccess) {
-        fprintf(stderr, "cudaSetDeviceFlags failed on rank %d: %s\n", rank, cudaGetErrorString(rt_st));
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
     CUDA_CHECK(cudaSetDevice(dev));
 
     // Per-destination base length (bytes); vary counts to exercise alltoallv
