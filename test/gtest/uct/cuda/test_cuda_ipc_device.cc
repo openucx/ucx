@@ -394,6 +394,8 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
                                                               iov_offset);
         lengths[idx]          = base_length;
         mem_list_indices[idx] = i;
+        mem_buffer::pattern_fill(addresses[i], base_length, SEED1,
+                                 UCS_MEMORY_TYPE_CUDA);
         idx++;
     }
 
@@ -410,13 +412,6 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
               cuMemcpyHtoD((CUdeviceptr)mem_list_indices_dev, mem_list_indices,
                            iovcnt * sizeof(unsigned)));
     auto offsets_dev = ucx_cuda::make_device_vector(offsets).ptr();
-    for (int i = 0; i < iovcnt + 1; i++) {
-        if (i == counter_index) {
-            continue;
-        }
-        mem_buffer::pattern_fill(addresses[i], base_length, SEED1,
-                                 UCS_MEMORY_TYPE_CUDA);
-    }
 
     cuda_uct::launch_uct_put_multi_partial(device_ep, mem_elements,
                                            mem_list_indices_dev, iovcnt,
