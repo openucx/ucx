@@ -39,13 +39,13 @@
 
 #define UCP_CHECK(sts, msg) do { \
     if ((sts) != UCS_OK) { \
-        fprintf(stderr, "UCX error %s:%d: %s failed: %d\n", __FILE__, __LINE__, (msg), (int)(sts)); \
-        MPI_Abort(MPI_COMM_WORLD, (int)(sts)); \
+        fprintf(stderr, "UCX error %s:%d: %s failed: %d\n", __FILE__, __LINE__, (msg), (sts)); \
+        MPI_Abort(MPI_COMM_WORLD, (sts)); \
         exit(EXIT_FAILURE); \
     } \
 } while (0)
 
-// Kernel params similar to UCX tests
+// Kernel params
 typedef struct {
     unsigned                              num_threads;
     unsigned                              num_blocks;
@@ -92,7 +92,6 @@ __global__ void do_alltoallv_kernel(kernel_params_t params,
         }
         *status_out = status;
     }
-    __syncthreads();
 }
 
 static void init_ucp(ucp_context_h &ucp_ctx, ucp_worker_h &worker)
@@ -116,30 +115,29 @@ static void create_all_endpoints(ucp_worker_h worker, int rank, int size, std::v
     ucp_address_t *my_addr; size_t my_addr_len;
     UCP_CHECK(ucp_worker_get_address(worker, &my_addr, &my_addr_len), "ucp_worker_get_address");
 
-    std::vector<size_t> addr_lens((size_t)size);
+    std::vector<size_t> addr_lens(size);
     MPI_CHECK(MPI_Allgather(&my_addr_len, 1, MPI_UNSIGNED_LONG, addr_lens.data(), 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD));
 
-    std::vector<int> addr_lens_i((size_t)size);
-    for (int i = 0; i < size; ++i) addr_lens_i[i] = (int)addr_lens[i];
+    // Convert size_t to int for MPI_Allgatherv
+    std::vector<int> addr_lens_i(addr_lens.begin(), addr_lens.end());
 
     size_t total = 0; for (auto l : addr_lens) total += l;
     std::vector<uint8_t> all_addr(total);
 
-    std::vector<int> displs((size_t)size, 0);
+    std::vector<int> displs(size, 0);
     for (int i = 1; i < size; ++i) displs[i] = displs[i-1] + addr_lens_i[i-1];
 
-    MPI_CHECK(MPI_Allgatherv(my_addr, (int)my_addr_len, MPI_BYTE,
+    MPI_CHECK(MPI_Allgatherv(my_addr, my_addr_len, MPI_BYTE,
                              all_addr.data(), addr_lens_i.data(), displs.data(), MPI_BYTE, MPI_COMM_WORLD));
 
-    eps.assign((size_t)size, nullptr);
+    eps.assign(size, nullptr);
     for (int peer = 0; peer < size; ++peer) {
         if (peer == rank) continue;
         const uint8_t *peer_addr_ptr = all_addr.data() + displs[peer];
-        (void)addr_lens; // length not used, kept for completeness
         ucp_ep_params_t ep_params; memset(&ep_params, 0, sizeof(ep_params));
         ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address    = (const ucp_address_t*)peer_addr_ptr;
-        UCP_CHECK(ucp_ep_create(worker, &ep_params, &eps[(size_t)peer]), "ucp_ep_create");
+        UCP_CHECK(ucp_ep_create(worker, &ep_params, &eps[peer]), "ucp_ep_create");
     }
 
     ucp_worker_release_address(worker, my_addr);
@@ -179,48 +177,41 @@ int main(int argc, char **argv)
     int dev = local_rank;
     CUDA_CHECK(cudaSetDevice(dev));
 
-    // Per-destination base length (bytes); vary counts to exercise alltoallv
-    size_t base_len = 1 << 20; // default 1MB per-destination
-    if (const char *env = getenv("MSG_LEN")) {
-        base_len = strtoull(env, nullptr, 0);
-    }
-
     // Init UCP
     ucp_context_h ucp_ctx = nullptr; ucp_worker_h worker = nullptr;
     init_ucp(ucp_ctx, worker);
 
     // Create endpoints to all peers
-    std::vector<ucp_ep_h> eps; eps.reserve((size_t)world_size);
+    std::vector<ucp_ep_h> eps; eps.reserve(world_size);
     create_all_endpoints(worker, rank, world_size, eps);
 
-    // Build sendcounts/displs (variable sizes)
+    // Set sendcounts/displs (with variable sizes)
+    size_t base_len = 1 << 20;
     std::vector<int> sendcounts(world_size, 0), senddispls(world_size, 0);
     for (int dst = 0; dst < world_size; ++dst) {
-        // small variability across peers
-        size_t len = base_len + (size_t)(((rank + dst) % 4) * 256);
-        if (len > INT_MAX) len = INT_MAX; // clamp for MPI int
-        sendcounts[dst] = (int)len;
+        size_t len = base_len + (((rank * world_size + dst) % 4) * 256);
+        assert(len <= INT_MAX);
+        sendcounts[dst] = len;
     }
     for (int i = 1; i < world_size; ++i) senddispls[i] = senddispls[i-1] + sendcounts[i-1];
-    size_t total_send = (size_t)senddispls.back() + (size_t)sendcounts.back();
+    size_t total_send = senddispls.back() + sendcounts.back();
 
-    // Compute recvcounts via alltoall; then recvdispls and gather displs matrix
+    // Compute recvcounts via alltoall
     std::vector<int> recvcounts(world_size, 0), recvdispls(world_size, 0);
     MPI_CHECK(MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT, MPI_COMM_WORLD));
     for (int i = 1; i < world_size; ++i) recvdispls[i] = recvdispls[i-1] + recvcounts[i-1];
-    size_t total_recv = (size_t)recvdispls.back() + (size_t)recvcounts.back();
+    size_t total_recv = recvdispls.back() + recvcounts.back();
 
     // Allocate CUDA send/recv buffers
     void *send_buf = nullptr; void *recv_buf = nullptr;
     CUDA_CHECK(cudaMalloc(&send_buf, total_send));
     CUDA_CHECK(cudaMalloc(&recv_buf, total_recv));
 
-    // Fill send segments with a rank-unique byte; clear recv
-    unsigned char my_byte = (unsigned char)(0x10 + (rank & 0xEF));
+    // Fill send segments with a dst-varying byte; clear recv
     for (int dst = 0; dst < world_size; ++dst) {
-        if (sendcounts[dst] == 0) continue;
-        void *seg = (void*)((uintptr_t)send_buf + (size_t)senddispls[dst]);
-        CUDA_CHECK(cudaMemset(seg, my_byte, (size_t)sendcounts[dst]));
+        void *seg = (void*)((uintptr_t)send_buf + senddispls[dst]);
+        unsigned char dst_byte = (unsigned char)(0x10 + ((rank + dst) & 0xEF));
+        CUDA_CHECK(cudaMemset(seg, dst_byte, sendcounts[dst]));
     }
     CUDA_CHECK(cudaMemset(recv_buf, 0x00, total_recv));
 
@@ -247,29 +238,29 @@ int main(int argc, char **argv)
 
     std::vector<int> blob_sizes(world_size, 0), blob_displs(world_size, 0);
     MPI_CHECK(MPI_Allgather(&(header.size), 1, MPI_INT, blob_sizes.data(), 1, MPI_INT, MPI_COMM_WORLD));
-    for (int i = 0; i < world_size; ++i) blob_sizes[i] += (int)sizeof(header);
+    for (int i = 0; i < world_size; ++i) blob_sizes[i] += sizeof(header);
     for (int i = 1; i < world_size; ++i) blob_displs[i] = blob_displs[i-1] + blob_sizes[i-1];
     int total_blob = 0; for (int s : blob_sizes) total_blob += s;
     std::vector<uint8_t> all_blob(total_blob);
-    MPI_CHECK(MPI_Allgatherv(my_blob.data(), (int)my_blob.size(), MPI_BYTE,
+    MPI_CHECK(MPI_Allgatherv(my_blob.data(), my_blob.size(), MPI_BYTE,
                              all_blob.data(), blob_sizes.data(), blob_displs.data(), MPI_BYTE, MPI_COMM_WORLD));
 
     // Unpack each peer's rkey and record remote base address
-    std::vector<ucp_rkey_h> peer_rkeys((size_t)world_size, nullptr);
-    std::vector<uint64_t>   peer_bases((size_t)world_size, 0);
+    std::vector<ucp_rkey_h> peer_rkeys(world_size, nullptr);
+    std::vector<uint64_t>   peer_bases(world_size, 0);
     for (int p = 0; p < world_size; ++p) {
         const uint8_t *ptr = all_blob.data() + blob_displs[p];
         struct { uint64_t addr; uint32_t size; } ph;
         memcpy(&ph, ptr, sizeof(ph));
-        peer_bases[(size_t)p] = ph.addr;
+        peer_bases[p] = ph.addr;
         const void *prkey = ptr + sizeof(ph);
         if (p != rank) {
-            UCP_CHECK(ucp_ep_rkey_unpack(eps[(size_t)p], prkey, &peer_rkeys[(size_t)p]), "ucp_ep_rkey_unpack");
+            UCP_CHECK(ucp_ep_rkey_unpack(eps[p], prkey, &peer_rkeys[p]), "ucp_ep_rkey_unpack");
         }
     }
 
     // Gather each rank's recvdispls so senders can compute remote offsets
-    std::vector<int> all_recvdispls((size_t)world_size * (size_t)world_size, 0);
+    std::vector<int> all_recvdispls(world_size * world_size, 0);
     MPI_CHECK(MPI_Allgather(recvdispls.data(), world_size, MPI_INT,
                             all_recvdispls.data(), world_size, MPI_INT, MPI_COMM_WORLD));
 
@@ -283,14 +274,14 @@ int main(int argc, char **argv)
     UCP_CHECK(ucp_mem_map(ucp_ctx, &mmap_send, &send_memh), "ucp_mem_map(send)");
 
     // Create one device mem list per peer (excluding self), each with a single element
-    std::vector<ucp_device_mem_list_handle_h> mem_lists((size_t)world_size, nullptr);
-    std::vector<unsigned> element_index((size_t)world_size, 0);
+    std::vector<ucp_device_mem_list_handle_h> mem_lists(world_size, nullptr);
+    std::vector<unsigned> element_index(world_size, 0);
     for (int p = 0; p < world_size; ++p) {
         if (p == rank) continue;
         ucp_device_mem_list_elem_t elem;
         elem.field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH | UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
         elem.memh       = send_memh;
-        elem.rkey       = peer_rkeys[(size_t)p];
+        elem.rkey       = peer_rkeys[p];
 
         ucp_device_mem_list_params_t ml_params;
         memset(&ml_params, 0, sizeof(ml_params));
@@ -303,107 +294,95 @@ int main(int argc, char **argv)
 
         ucs_status_t st;
         do {
-            st = ucp_device_mem_list_create(eps[(size_t)p], &ml_params, &mem_lists[(size_t)p]);
+            st = ucp_device_mem_list_create(eps[p], &ml_params, &mem_lists[p]);
             if (st == UCS_ERR_NOT_CONNECTED) {
                 ucp_worker_progress(worker);
             }
         } while (st == UCS_ERR_NOT_CONNECTED);
         UCP_CHECK(st, "ucp_device_mem_list_create(per-peer)");
-        element_index[(size_t)p] = 0; // single element
+        element_index[p] = 0; // single element
     }
 
     // Build PUT operations: for each peer, compute local and remote offsets
-    std::vector<put_op_t> ops; ops.reserve((size_t)world_size);
+    std::vector<put_op_t> ops; ops.reserve(world_size);
     for (int p = 0; p < world_size; ++p) {
         if (p == rank) continue;
-        if (sendcounts[p] == 0) continue;
         put_op_t op;
-        op.list_handle_index = (unsigned)p;
-        op.element_index     = element_index[(size_t)p];
-        op.address        = (const void*)((uintptr_t)send_buf + (size_t)senddispls[p]);
-        size_t remote_off = (size_t)all_recvdispls[(size_t)p * (size_t)world_size + (size_t)rank];
-        op.remote_address = peer_bases[(size_t)p] + (uint64_t)remote_off;
-        op.length         = (size_t)sendcounts[p];
+        op.list_handle_index = p;
+        op.element_index     = element_index[p];
+        op.address        = (const void*)((uintptr_t)send_buf + senddispls[p]);
+        size_t remote_off = all_recvdispls[p * world_size + rank];
+        op.remote_address = peer_bases[p] + remote_off;
+        op.length         = sendcounts[p];
         ops.push_back(op);
     }
 
     // Upload ops to device
     put_op_t *d_ops = nullptr;
-    if (!ops.empty()) {
-        CUDA_CHECK(cudaMalloc(&d_ops, ops.size() * sizeof(put_op_t)));
-        CUDA_CHECK(cudaMemcpy(d_ops, ops.data(), ops.size() * sizeof(put_op_t), cudaMemcpyHostToDevice));
-    }
+    CUDA_CHECK(cudaMalloc(&d_ops, ops.size() * sizeof(put_op_t)));
+    CUDA_CHECK(cudaMemcpy(d_ops, ops.data(), ops.size() * sizeof(put_op_t), cudaMemcpyHostToDevice));
 
     // Prepare kernel params
     kernel_params_t kparams = {};
-    kparams.num_threads = 1;
-    kparams.num_blocks  = 1;
-    kparams.level       = UCS_DEVICE_LEVEL_THREAD;
-    kparams.with_request= false;
+    kparams.num_threads  = 1;
+    kparams.num_blocks   = 1;
+    kparams.level        = UCS_DEVICE_LEVEL_THREAD;
+    kparams.with_request = false;
     // Upload mem list handle array to device
     ucp_device_mem_list_handle_h *d_mem_lists = nullptr;
-    if (world_size > 0) {
-        CUDA_CHECK(cudaMalloc(&d_mem_lists, sizeof(ucp_device_mem_list_handle_h) * (size_t)world_size));
-        CUDA_CHECK(cudaMemcpy(d_mem_lists, mem_lists.data(), sizeof(ucp_device_mem_list_handle_h) * (size_t)world_size, cudaMemcpyHostToDevice));
-    }
+    CUDA_CHECK(cudaMalloc(&d_mem_lists, sizeof(ucp_device_mem_list_handle_h) * world_size));
+    CUDA_CHECK(cudaMemcpy(d_mem_lists, mem_lists.data(), sizeof(ucp_device_mem_list_handle_h) * world_size, cudaMemcpyHostToDevice));
     kparams.mem_lists  = d_mem_lists;
-    kparams.num_lists  = (unsigned)world_size;
+    kparams.num_lists  = world_size;
 
     // Launch kernel
     ucs_status_t *d_status = nullptr; ucs_status_t h_status = UCS_OK;
     CUDA_CHECK(cudaMalloc(&d_status, sizeof(*d_status)));
     CUDA_CHECK(cudaMemcpy(d_status, &h_status, sizeof(h_status), cudaMemcpyHostToDevice));
 
-    if (!ops.empty()) {
-        do_alltoallv_kernel<UCS_DEVICE_LEVEL_THREAD><<<kparams.num_blocks, kparams.num_threads>>>(kparams, d_ops, (unsigned)ops.size(), d_status);
-        CUDA_CHECK(cudaGetLastError());
-        CUDA_CHECK(cudaDeviceSynchronize());
-        CUDA_CHECK(cudaMemcpy(&h_status, d_status, sizeof(h_status), cudaMemcpyDeviceToHost));
-        if (h_status != UCS_OK) {
-            fprintf(stderr, "Rank %d kernel failed: %d\n", rank, (int)h_status);
-            MPI_Abort(MPI_COMM_WORLD, (int)h_status);
-        }
-        // TODO: Is call to flush necessary?
-        UCP_CHECK(ucp_worker_flush(worker), "ucp_worker_flush");
+    do_alltoallv_kernel<UCS_DEVICE_LEVEL_THREAD><<<kparams.num_blocks, kparams.num_threads>>>(kparams, d_ops, ops.size(), d_status);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaMemcpy(&h_status, d_status, sizeof(h_status), cudaMemcpyDeviceToHost));
+    if (h_status != UCS_OK) {
+        fprintf(stderr, "Rank %d kernel failed: %d\n", rank, h_status);
+        MPI_Abort(MPI_COMM_WORLD, h_status);
     }
+    // TODO: Is call to flush necessary?
+    UCP_CHECK(ucp_worker_flush(worker), "ucp_worker_flush");
 
-    // Handle self-copy (if any) on host to emulate alltoallv semantics for self
-    if (sendcounts[rank] > 0) {
-        void *dst = (void*)((uintptr_t)recv_buf + (size_t)recvdispls[rank]);
-        const void *src = (const void*)((uintptr_t)send_buf + (size_t)senddispls[rank]);
-        CUDA_CHECK(cudaMemcpy(dst, src, (size_t)sendcounts[rank], cudaMemcpyDeviceToDevice));
-    }
+    // Handle self-copy on host to emulate alltoallv semantics for self
+    void *dst = (void*)((uintptr_t)recv_buf + recvdispls[rank]);
+    const void *src = (const void*)((uintptr_t)send_buf + senddispls[rank]);
+    CUDA_CHECK(cudaMemcpy(dst, src, sendcounts[rank], cudaMemcpyDeviceToDevice));
 
-    // Validate received data: check up to 4096 bytes per segment against sender's byte
+    // Validate
     MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
-    const size_t sample = 4096;
-    std::vector<uint8_t> host_check; host_check.reserve(sample);
     for (int s = 0; s < world_size; ++s) {
-        size_t len = (size_t)recvcounts[s];
-        if (len == 0) continue;
-        size_t to_check = len < sample ? len : sample;
-        host_check.assign(to_check, 0);
-        const void *seg = (const void*)((uintptr_t)recv_buf + (size_t)recvdispls[s]);
-        CUDA_CHECK(cudaMemcpy(host_check.data(), seg, to_check, cudaMemcpyDeviceToHost));
-        unsigned char expected = (unsigned char)(0x10 + (s & 0xEF));
-        bool ok = true; for (size_t i = 0; i < to_check; ++i) { if (host_check[i] != expected) { ok = false; break; } }
-        if (!ok) {
-            fprintf(stderr, "Rank %d validation failed for segment from %d (expected 0x%02x)\n", rank, s, expected);
-            MPI_Abort(MPI_COMM_WORLD, 1);
+        size_t len = recvcounts[s];
+        std::vector<uint8_t> host_check(len, 0);
+        const void *seg = (const void*)((uintptr_t)recv_buf + recvdispls[s]);
+        CUDA_CHECK(cudaMemcpy(host_check.data(), seg, len, cudaMemcpyDeviceToHost));
+        unsigned char expected = (unsigned char)(0x10 + ((s + rank) & 0xEF));
+        for (size_t i = 0; i < len; ++i) {
+            if (host_check[i] != expected) {
+                fprintf(stderr, "Rank %d validation failed for segment from %d (expected 0x%02x)\n", rank, s, expected);
+                MPI_Abort(MPI_COMM_WORLD, 1);
+            }
         }
     }
 
     // Cleanup
-    if (d_ops) CUDA_CHECK(cudaFree(d_ops));
-    if (d_mem_lists) CUDA_CHECK(cudaFree(d_mem_lists));
+    CUDA_CHECK(cudaFree(d_ops));
+    CUDA_CHECK(cudaFree(d_mem_lists));
     CUDA_CHECK(cudaFree(d_status));
     for (int p = 0; p < world_size; ++p) {
         if (p == rank) continue;
-        if (mem_lists[(size_t)p]) ucp_device_mem_list_release(mem_lists[(size_t)p]);
+        if (mem_lists[p]) ucp_device_mem_list_release(mem_lists[p]);
     }
     for (int p = 0; p < world_size; ++p) {
-        if (peer_rkeys[(size_t)p]) ucp_rkey_destroy(peer_rkeys[(size_t)p]);
-        if (p != rank && eps[(size_t)p]) ucp_ep_destroy(eps[(size_t)p]);
+        if (peer_rkeys[p]) ucp_rkey_destroy(peer_rkeys[p]);
+        if (p != rank && eps[p]) ucp_ep_destroy(eps[p]);
     }
     ucp_rkey_buffer_release(rkey_buf);
     UCP_CHECK(ucp_mem_unmap(ucp_ctx, send_memh), "ucp_mem_unmap(send)");
@@ -416,6 +395,7 @@ int main(int argc, char **argv)
 
     MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
     MPI_Finalize();
+
     return 0;
 }
 
