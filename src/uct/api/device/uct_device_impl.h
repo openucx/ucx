@@ -16,7 +16,7 @@
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 
 union uct_device_completion {
-    uct_rc_gda_completion_t   rc;
+    uct_rc_gda_completion_t   rc_gda;
     uct_cuda_ipc_completion_t cuda_ipc;
 };
 

@@ -52,7 +52,6 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
     if (req != nullptr) {
         comp           = &req->comp;
         req->device_ep = device_ep;
-        /* TODO: Handle multiple device posts with same req? */
     } else {
         comp = nullptr;
     }

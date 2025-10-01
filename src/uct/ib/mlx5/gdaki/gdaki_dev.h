@@ -23,8 +23,6 @@ typedef struct {
     uint64_t                     cqe_ci;
     int                          sq_lock;
 
-    uint64_t                     wqe_error;
-
     uint8_t                      *sq_wqe_daddr;
     uint32_t                     *sq_dbrec;
     uint64_t                     *sq_db;
