@@ -642,6 +642,8 @@ ucs_status_t uct_md_dummy_mem_reg(uct_md_h md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,
                                   uct_mem_h *memh_p)
 {
+    UCT_CHECK_NOT_DERIVED_MEMH(params, "uct_md");
+
     /* We have to emulate memory registration. Return dummy pointer */
     *memh_p = (void*)0xdeadbeef;
     return UCS_OK;
