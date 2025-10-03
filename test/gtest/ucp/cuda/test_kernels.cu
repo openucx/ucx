@@ -64,9 +64,12 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
         return UCS_OK;
     }
 
-    if ((status != UCS_OK) || !(flags & UCT_DEVICE_FLAG_NODELAY) ||
-        (req_ptr == nullptr)) {
+    if (UCS_STATUS_IS_ERR(status)) {
         return status;
+    }
+
+    if (!(flags & UCT_DEVICE_FLAG_NODELAY) || (req_ptr == nullptr)) {
+        return UCS_OK;
     }
 
     do {

@@ -42,10 +42,7 @@ typedef struct uct_device_ep {
 
 
 /* Completion object for device operations */
-typedef struct uct_device_completion {
-    uint32_t     count;  /* How many operations are pending */
-    ucs_status_t status; /* Status of the operation */
-} uct_device_completion_t;
+typedef union uct_device_completion uct_device_completion_t;
 
 
 /* Base structure for all device memory elements */

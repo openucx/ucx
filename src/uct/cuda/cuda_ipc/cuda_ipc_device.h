@@ -12,4 +12,8 @@ typedef struct {
     ptrdiff_t mapped_offset;
 } uct_cuda_ipc_device_mem_element_t;
 
+
+typedef struct {
+} uct_cuda_ipc_completion_t;
+
 #endif
