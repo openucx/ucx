@@ -122,6 +122,7 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
 
         /* TODO: Delegate most of checks below to proto selection */
         if ((rkey == NULL) || (memh == NULL)) {
+            ucs_error("element[%lu] rkey=%p, memh=%p", i, rkey, memh);
             return UCS_ERR_INVALID_PARAM;
         }
 
@@ -249,6 +250,15 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_md_index_t local_md_index;
     uint8_t rkey_index;
+    void **local_addresses;
+    uint64_t *remote_addresses;
+    size_t *lengths;
+    size_t length;
+    void *local_addr;
+    uint64_t remote_addr;
+
+    handle_size += sizeof(*handle.local_addrs) + sizeof(*handle.remote_addrs) +
+                   sizeof(*handle.lengths);
 
     /* For each available lane */
     for (i = 0;
@@ -314,8 +324,37 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         return status;
     }
 
+    /* populate elements common parameters */
+    local_addresses = (void**)UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
+    remote_addresses = (uint64_t*)
+            UCS_PTR_BYTE_OFFSET(local_addresses, sizeof(*handle.local_addrs) *
+                                                         params->num_elements);
+    lengths          = (size_t*)UCS_PTR_BYTE_OFFSET(remote_addresses,
+                                                    sizeof(*handle.remote_addrs) *
+                                                            params->num_elements);
+    for (i = 0; i < params->num_elements; i++) {
+        ucp_element = &params->elements[i];
+        local_addr  = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
+                                      ucp_element, local_addr, LOCAL_ADDR, NULL);
+        remote_addr = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
+                                      ucp_element, remote_addr, REMOTE_ADDR, 0);
+        length = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, ucp_element,
+                                 length, LENGTH, 0);
+        ucp_mem_type_unpack(ep->worker, &local_addresses[i], &local_addr,
+                            sizeof(local_addresses[i]), mem_type);
+        ucp_mem_type_unpack(ep->worker, &remote_addresses[i], &remote_addr,
+                            sizeof(remote_addresses[i]), mem_type);
+        ucp_mem_type_unpack(ep->worker, &lengths[i], &length,
+                            sizeof(lengths[i]), mem_type);
+    }
+
+    handle.local_addrs  = local_addresses;
+    handle.remote_addrs = remote_addresses;
+    handle.lengths      = lengths;
+
     /* Populate element specific parameters */
-    uct_element = UCS_PTR_TYPE_OFFSET(mem->address, ucs_typeof(handle));
+    handle.uct_mem_elements = uct_element = UCS_PTR_BYTE_OFFSET(
+            lengths, sizeof(*handle.lengths) * params->num_elements);
     for (i = 0; i < num_uct_eps; i++) {
         local_md_index = ep_config->md_index[lanes[i]];
         wiface         = ucp_worker_iface(ep->worker,
@@ -369,14 +408,14 @@ ucp_device_mem_list_create(ucp_ep_h ep,
                            const ucp_device_mem_list_params_t *params,
                            ucp_device_mem_list_handle_h *handle_p)
 {
+    ucs_memory_type_t mem_type            = UCS_MEMORY_TYPE_UNKNOWN;
+    ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
     ucp_lane_index_t lanes[UCP_DEVICE_MEM_LIST_MAX_EPS];
-    ucp_worker_cfg_index_t rkey_cfg_index;
     ucs_status_t status;
     ucp_rkey_config_t *rkey_config;
     ucs_sys_device_t local_sys_dev, remote_sys_dev;
     ucp_md_map_t local_md_map, remote_md_map;
     ucp_ep_config_t *ep_config;
-    ucs_memory_type_t mem_type;
     uct_allocated_memory_t mem;
 
     if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
@@ -392,9 +431,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     }
 
     /* Perform pseudo lane selection without size */
-    rkey_config    = &ep->worker->rkey_config[rkey_cfg_index];
-    ep_config      = ucp_worker_ep_config(ep->worker,
-                                          rkey_config->key.ep_cfg_index);
+    rkey_config = &ep->worker->rkey_config[rkey_cfg_index];
+    ep_config = ucp_worker_ep_config(ep->worker, rkey_config->key.ep_cfg_index);
     remote_sys_dev = rkey_config->key.sys_dev;
     remote_md_map  = rkey_config->key.md_map;
 

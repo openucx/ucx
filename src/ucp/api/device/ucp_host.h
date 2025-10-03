@@ -37,7 +37,8 @@ enum ucp_device_mem_list_elem_field {
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH        = UCS_BIT(0), /**< Source memory handle */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY        = UCS_BIT(1), /**< Unpacked remote memory key */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR  = UCS_BIT(2), /**< Local address */
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(3)  /**< Remote address */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(3),  /**< Remote address */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH      = UCS_BIT(4)  /**< Length of the local buffer in bytes */
 };
 
 
@@ -66,6 +67,11 @@ typedef struct ucp_device_mem_list_elem {
      * Local memory address for the device transfer operations.
      */
     void*     local_addr;
+
+    /**
+     * Length of the local buffer in bytes.
+     */
+    size_t    length;
 
     /**
      * Remote memory address for the device transfer operations.
