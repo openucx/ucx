@@ -144,13 +144,14 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
 static ucp_sys_dev_map_t ucp_proto_multi_init_flush_sys_dev_mask(
         const ucp_proto_multi_init_params_t *params, ucp_lane_index_t lane)
 {
-    const ucp_rkey_config_key_t *key   = params->super.super.rkey_config_key;
-    const uct_iface_attr_t *iface_attr =
-        ucp_proto_common_get_iface_attr(&params->super.super, lane);
+    const ucp_rkey_config_key_t *key = params->super.super.rkey_config_key;
+    ucs_sys_device_t dst_sys_dev     =
+        params->super.super.ep_config_key->lanes[lane].dst_sys_dev;
 
+    /* Flush needed when remote lane sys_dev is not the final memory sys_dev */
     if ((key == NULL) || !ucp_rkey_need_remote_flush(key) ||
-        !(iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) ||
-        !ucp_proto_common_is_net_dev(&params->super.super, lane)) {
+        (dst_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (dst_sys_dev == key->sys_dev)) {
         return 0;
     }
 
