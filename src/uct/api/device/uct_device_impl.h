@@ -10,9 +10,8 @@
 #include "uct_device_types.h"
 
 #include <uct/api/uct_def.h>
+#include <ucs/device/device_common.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
-#include <ucs/sys/device_code.h>
-
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 
 

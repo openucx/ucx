@@ -9,7 +9,7 @@
 
 #include <uct/api/device/uct_device_types.h>
 #include <uct/api/uct.h>
-#include <ucs/sys/device_code.h>
+#include <ucs/device/device_common.h>
 
 namespace cuda_uct {
 

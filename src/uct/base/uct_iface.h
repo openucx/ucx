@@ -12,6 +12,7 @@
 
 #include <ucs/arch/cpu.h>
 #include <uct/api/uct.h>
+#include <uct/api/device/uct_device_types.h>
 #include <uct/base/uct_component.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/arbiter.h>
@@ -1056,6 +1057,8 @@ ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
 void uct_iface_vfs_set_dirty(uct_iface_h iface);
 
 ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags);
+
+void uct_device_ep_init(uct_device_ep_t *device_ep, uct_device_tl_id_t tl_id);
 
 void uct_tl_register(uct_component_t *component, uct_tl_t *tl);
 

@@ -457,7 +457,7 @@ static ucs_status_t parse_device_level(const char *opt_arg,
 {
     ucs_device_level_t level;
     for (level = UCS_DEVICE_LEVEL_THREAD; level <= UCS_DEVICE_LEVEL_GRID; ++level) {
-        if (!strcmp(opt_arg, ucs_device_level_name(level))) {
+        if (!strcasecmp(opt_arg, ucs_device_level_names[level])) {
             *device_level = level;
             return UCS_OK;
         }

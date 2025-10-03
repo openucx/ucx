@@ -11,8 +11,13 @@
 
 #include <doca_gpunetio_dev_verbs_qp.cuh>
 #include <cooperative_groups.h>
+#include <ucs/device/device_log_impl.h>
 
 #define UCT_RC_GDA_RESV_WQE_NO_RESOURCE -1ULL
+
+#define uct_rc_mlx5_gda_log(_level, _ep, _fmt, ...) \
+    ucs_device_log(_level, &(_ep)->super.log_config, "[qp 0x%x] " _fmt, \
+                   (_ep)->sq_num, ##__VA_ARGS__)
 
 
 UCS_F_DEVICE void *
@@ -197,6 +202,9 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
         doca_gpu_dev_verbs_store_wqe_seg(atseg_ptr, (uint64_t*)&(atseg));
     }
 
+    uct_rc_mlx5_gda_log(TRACE_DATA, ep, "WQE[%d] opcode %d clags %d", wqe_idx,
+                        opcode, ctrl_flags);
+
     doca_gpu_dev_verbs_store_wqe_seg(cseg_ptr, (uint64_t*)&(cseg));
     doca_gpu_dev_verbs_store_wqe_seg(rseg_ptr, (uint64_t*)&(rseg));
     doca_gpu_dev_verbs_store_wqe_seg(dseg_ptr, (uint64_t*)&(dseg));
@@ -223,6 +231,7 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
 
     doca_gpu_dev_verbs_lock<DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU>(
             &ep->sq_lock);
+    uct_rc_mlx5_gda_log(TRACE_DATA, ep, "DB index %lu", ep->sq_ready_index);
     uct_rc_mlx5_gda_ring_db(ep, ep->sq_ready_index);
     uct_rc_mlx5_gda_update_dbr(ep, ep->sq_ready_index);
     uct_rc_mlx5_gda_ring_db(ep, ep->sq_ready_index);
@@ -349,6 +358,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         return UCS_ERR_NO_RESOURCE;
     }
 
+    uct_rc_mlx5_gda_log(TRACE_DATA, ep, "RSV wqe_base %lu count %u", wqe_base,
+                        count);
     fc = doca_gpu_dev_verbs_wqe_idx_inc_mask(ep->sq_wqe_pi, ep->sq_wqe_num / 2);
     wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_base, lane_id);
     for (uint32_t i = lane_id; i < count; i += num_lanes) {
@@ -439,6 +450,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         return UCS_ERR_NO_RESOURCE;
     }
 
+    uct_rc_mlx5_gda_log(TRACE_DATA, ep, "RSV wqe_base %lu count %u", wqe_base,
+                        count);
     fc = doca_gpu_dev_verbs_wqe_idx_inc_mask(ep->sq_wqe_pi, ep->sq_wqe_num / 2);
     wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_base, lane_id);
     for (uint32_t i = lane_id; i < count; i += num_lanes) {
@@ -549,12 +562,11 @@ uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
     if (opcode == MLX5_CQE_REQ_ERR) {
         auto err_cqe = reinterpret_cast<mlx5_err_cqe_ex*>(cqe64);
         auto wqe_ptr = uct_rc_mlx5_gda_get_wqe_ptr(ep, wqe_idx);
-        ucs_device_error("CQE[%d] with syndrome:%x vendor:%x hw:%x "
-                         "wqe_idx:0x%x qp:0x%x",
-                         idx, err_cqe->syndrome, err_cqe->vendor_err_synd,
-                         err_cqe->hw_err_synd, wqe_idx,
-                         doca_gpu_dev_verbs_bswap32(err_cqe->s_wqe_opcode_qpn) &
-                                 0xffffff);
+        uct_rc_mlx5_gda_log(
+                ERROR, ep,
+                "CQE[%d] wqe_cnt %d synd 0x%x vend_err 0x%x hw_err 0x%x", idx,
+                wqe_cnt, err_cqe->syndrome, err_cqe->vendor_err_synd,
+                err_cqe->hw_err_synd);
         uct_rc_mlx5_gda_qedump("WQE", wqe_ptr, 64);
         uct_rc_mlx5_gda_qedump("CQE", cqe64, 64);
         return UCS_ERR_IO_ERROR;
@@ -567,6 +579,10 @@ uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> pi_ref(ep->sq_wqe_pi);
     uint64_t sq_wqe_pi = ep->sq_wqe_pi;
     pi_ref.fetch_max(((wqe_cnt - sq_wqe_pi) & 0xffff) + sq_wqe_pi + 1);
+
+    uct_rc_mlx5_gda_log(TRACE_DATA, ep,
+                        "CQE[%d] opcode %d wqe_cnt %d sq_wqe_pi %ld", idx,
+                        opcode, wqe_cnt, pi_ref.load());
 
     doca_gpu_dev_verbs_fence_release<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU>();
     return UCS_OK;

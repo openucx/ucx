@@ -8,7 +8,7 @@
 #define CUDA_TEST_KERNELS_H_
 
 #include <ucp/api/device/ucp_host.h>
-#include <ucs/sys/device_code.h>
+#include <ucs/device/device_common.h>
 
 typedef enum {
     TEST_UCP_DEVICE_KERNEL_PUT_SINGLE,
@@ -28,6 +28,7 @@ typedef struct {
     bool                         with_request;
     size_t                       num_iters;
     ucp_device_mem_list_handle_h mem_list;
+    ucs_device_log_config_t      log_config;
     union {
         struct {
             unsigned   mem_list_index;

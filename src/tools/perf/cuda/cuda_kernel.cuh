@@ -10,18 +10,19 @@
 #include "cuda_common.h"
 
 #include <tools/perf/lib/libperf_int.h>
-#include <ucs/sys/device_code.h>
+#include <ucs/device/device_log_impl.h>
 #include <cuda_runtime.h>
 
 
 typedef unsigned long long ucx_perf_cuda_time_t;
 
 struct ucx_perf_cuda_context {
-    unsigned             max_outstanding;
-    ucx_perf_counter_t   max_iters;
-    ucx_perf_cuda_time_t report_interval_ns;
-    ucx_perf_counter_t   completed_iters;
-    ucs_status_t         status;
+    unsigned                max_outstanding;
+    ucx_perf_counter_t      max_iters;
+    ucx_perf_cuda_time_t    report_interval_ns;
+    ucx_perf_counter_t      completed_iters;
+    ucs_status_t            status;
+    ucs_device_log_config_t log_config;
 };
 
 UCS_F_DEVICE ucx_perf_cuda_time_t ucx_perf_cuda_get_time_ns()
@@ -153,6 +154,7 @@ public:
                                         ULONG_MAX :
                                         ucs_time_to_nsec(perf.report_interval) / 100;
         m_cpu_ctx->status             = UCS_ERR_NOT_IMPLEMENTED;
+        ucs_device_log_config_init(&m_cpu_ctx->log_config);
     }
 
     ~ucx_perf_cuda_test_runner()

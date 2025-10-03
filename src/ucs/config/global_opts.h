@@ -46,6 +46,9 @@ typedef struct {
     /* Maximal amount of packet data to print per packet */
     size_t                     log_data_size;
 
+    /* Log level for device API */
+    ucs_log_level_t            device_log_level;
+
     /* Enable ucs_print() output */
     int                        log_print_enable;
 

@@ -11,7 +11,7 @@
 #define UCX_LIBPERF_H
 
 #include <ucs/sys/compiler.h>
-#include <ucs/sys/device_code.h>
+#include <ucs/device/device_common.h>
 
 BEGIN_C_DECLS
 

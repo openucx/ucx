@@ -34,6 +34,10 @@ nobase_dist_libucs_la_HEADERS = \
 	config/ini.h \
 	config/parser.h \
 	config/types.h \
+	device/cuda_device.cuh \
+	device/device_common.h \
+	device/device_log_impl.h \
+	device/stub_device.h \
 	datastruct/array.h \
 	datastruct/callbackq.h \
 	datastruct/callbackq_compat.h \
@@ -63,7 +67,6 @@ nobase_dist_libucs_la_HEADERS = \
 	stats/libstats.h \
 	sys/event_set.h \
 	sys/compiler_def.h\
-	sys/device_code.h \
 	sys/math.h \
 	sys/preprocessor.h \
 	sys/string.h \
@@ -190,6 +193,7 @@ libucs_la_SOURCES = \
 	debug/debug.c \
 	debug/log.c \
 	debug/memtrack.c \
+	device/device_common.c \
 	memory/memory_type.c \
 	memory/memtype_cache.c \
 	memory/numa.c \

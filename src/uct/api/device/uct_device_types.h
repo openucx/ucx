@@ -8,6 +8,7 @@
 #define UCT_DEVICE_TYPES_H
 
 #include <ucs/type/status.h>
+#include <ucs/device/device_common.h>
 #include <stdint.h>
 
 
@@ -37,7 +38,8 @@ typedef enum {
 
 /* Base class for all device endpoints */
 typedef struct uct_device_ep {
-    uint8_t uct_tl_id; /* Defined in uct_device_tl_id_t */
+    uint8_t                 uct_tl_id; /* Defined in uct_device_tl_id_t */
+    ucs_device_log_config_t log_config; /* Logging configuration */
 } uct_device_ep_t;
 
 
@@ -46,10 +48,5 @@ typedef struct uct_device_completion {
     uint32_t     count;  /* How many operations are pending */
     ucs_status_t status; /* Status of the operation */
 } uct_device_completion_t;
-
-
-/* Base structure for all device memory elements */
-struct uct_device_mem_element {
-};
 
 #endif
