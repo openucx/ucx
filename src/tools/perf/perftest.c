@@ -90,13 +90,13 @@ test_type_t tests[] = {
      "put multi bandwidth", "overhead", 32},
 
     {"ucp_put_multi_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_PINGPONG,
-     "put multi latency", "latency", 32},
+     "put multi latency", "latency", 1},
 
     {"ucp_put_partial_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_PARTIAL, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put partial bandwidth", "overhead", 32},
 
     {"ucp_put_partial_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_PARTIAL, UCX_PERF_TEST_TYPE_PINGPONG,
-     "put partial latency", "latency", 32},
+     "put partial latency", "latency", 1},
 
     {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "get latency / bandwidth / message rate", "latency", 1},
