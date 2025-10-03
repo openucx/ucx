@@ -8,6 +8,7 @@
 #define UCS_DEVICE_CODE_H
 
 #include <ucs/sys/compiler_def.h>
+#include <ucs/type/status.h>
 #include <stdint.h>
 
 /*
@@ -35,7 +36,7 @@ typedef enum {
 } ucs_device_level_t;
 
 
-static UCS_F_ALWAYS_INLINE const char*
+UCS_F_DEVICE const char*
 ucs_device_level_name(ucs_device_level_t level)
 {
     switch (level) {
@@ -87,10 +88,10 @@ UCS_F_DEVICE void ucs_device_atomic64_write(uint64_t *ptr, uint64_t value)
 
 
 /* Helper macro to print a message from a device function including the
- * thread and block indices */
+ * thread and block indices, file, line, and function */
 #define ucs_device_printf(_title, _fmt, ...) \
-    printf("(%d:%d) %6s " _fmt "\n", threadIdx.x, blockIdx.x, _title, \
-           ##__VA_ARGS__)
+    printf("(%d:%d) %6s %s:%d %s: " _fmt "\n", threadIdx.x, blockIdx.x, _title, \
+           __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 
 /* Print an error message from a device function */
 #define ucs_device_error(_fmt, ...) \
@@ -100,5 +101,80 @@ UCS_F_DEVICE void ucs_device_atomic64_write(uint64_t *ptr, uint64_t value)
 /* Print a debug message from a device function */
 #define ucs_device_debug(_fmt, ...) \
     ucs_device_printf("DEBUG", _fmt, ##__VA_ARGS__)
+
+
+/**
+ * @brief Device compatible status code to string conversion
+ *
+ * This function provides status code to string conversion that can be called
+ * from device code. Returns a short string representation of the status code.
+ *
+ * @param [in] status  Status code to convert
+ *
+ * @return Short string representation of the status code
+ */
+UCS_F_DEVICE const char* ucs_device_status_string(ucs_status_t status)
+{
+    switch (status) {
+    case UCS_OK:
+        return "Success";
+    case UCS_INPROGRESS:
+        return "Operation in progress";
+    case UCS_ERR_NO_MESSAGE:
+        return "No pending message";
+    case UCS_ERR_NO_RESOURCE:
+        return "No resources are available to initiate the operation";
+    case UCS_ERR_IO_ERROR:
+        return "Input/output error";
+    case UCS_ERR_NO_MEMORY:
+        return "Out of memory";
+    case UCS_ERR_INVALID_PARAM:
+        return "Invalid parameter";
+    case UCS_ERR_UNREACHABLE:
+        return "Destination is unreachable";
+    case UCS_ERR_INVALID_ADDR:
+        return "Address not valid";
+    case UCS_ERR_NOT_IMPLEMENTED:
+        return "Function not implemented";
+    case UCS_ERR_MESSAGE_TRUNCATED:
+        return "Message truncated";
+    case UCS_ERR_NO_PROGRESS:
+        return "No progress";
+    case UCS_ERR_BUFFER_TOO_SMALL:
+        return "Provided buffer is too small";
+    case UCS_ERR_NO_ELEM:
+        return "No such element";
+    case UCS_ERR_SOME_CONNECTS_FAILED:
+        return "Failed to connect some of the requested endpoints";
+    case UCS_ERR_NO_DEVICE:
+        return "No such device";
+    case UCS_ERR_BUSY:
+        return "Device is busy";
+    case UCS_ERR_CANCELED:
+        return "Request canceled";
+    case UCS_ERR_SHMEM_SEGMENT:
+        return "Shared memory error";
+    case UCS_ERR_ALREADY_EXISTS:
+        return "Element already exists";
+    case UCS_ERR_OUT_OF_RANGE:
+        return "Index out of range";
+    case UCS_ERR_TIMED_OUT:
+        return "Operation timed out";
+    case UCS_ERR_EXCEEDS_LIMIT:
+        return "User-defined limit was reached";
+    case UCS_ERR_UNSUPPORTED:
+        return "Unsupported operation";
+    case UCS_ERR_REJECTED:
+        return "Operation rejected by remote peer";
+    case UCS_ERR_NOT_CONNECTED:
+        return "Endpoint is not connected";
+    case UCS_ERR_CONNECTION_RESET:
+        return "Connection reset by remote peer";
+    case UCS_ERR_ENDPOINT_TIMEOUT:
+        return "Endpoint timeout";
+    default:
+        return "Unknown error";
+    };
+}
 
 #endif
