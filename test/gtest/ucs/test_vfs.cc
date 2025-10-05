@@ -285,25 +285,35 @@ UCS_TEST_F(test_vfs_obj, check_ret) {
 
 UCS_MT_TEST_F(test_vfs_obj, add_sym_link, 4)
 {
-    static const char path_to_target[] = "target";
+    static char parent_obj;
+    ucs_vfs_obj_add_dir(NULL, &parent_obj, "parent");
 
-    static char target;
-    ucs_vfs_obj_add_dir(NULL, &target, "target");
-    ucs_vfs_obj_add_sym_link(NULL, &target, "link");
+    // Add target directory and subdirectory
+    // NOTE: Currently links to files are not supported
+    static long target_obj = 0;
+    ucs_vfs_obj_add_dir(&parent_obj, &target_obj, "target");
+
+    // Add source directory and link
+    static char source_dir_obj;
+    ucs_vfs_obj_add_dir(&parent_obj, &source_dir_obj, "source_dir");
+    ucs_vfs_obj_add_sym_link(&source_dir_obj, &target_obj, "link");
+
+    const char *link_path = "/parent/source_dir/link";
+    const char *path_to_target = "../target";
 
     ucs_vfs_path_info_t path_info;
-    EXPECT_UCS_OK(ucs_vfs_path_get_info("/link", &path_info));
+    EXPECT_UCS_OK(ucs_vfs_path_get_info(link_path, &path_info));
     EXPECT_EQ(strlen(path_to_target), path_info.size);
     EXPECT_TRUE(path_info.mode & S_IFLNK);
 
     ucs_string_buffer_t strb;
     ucs_string_buffer_init(&strb);
-    EXPECT_UCS_OK(ucs_vfs_path_get_link("/link", &strb));
+    EXPECT_UCS_OK(ucs_vfs_path_get_link(link_path, &strb));
     EXPECT_STREQ(path_to_target, ucs_string_buffer_cstr(&strb));
     ucs_string_buffer_cleanup(&strb);
 
     barrier();
-    ucs_vfs_obj_remove(&target);
+    ucs_vfs_obj_remove(&parent_obj);
 }
 
 UCS_TEST_F(test_vfs_obj, add_rw_check_ret) {

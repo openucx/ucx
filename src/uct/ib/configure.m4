@@ -233,6 +233,9 @@ AS_IF([test "x$with_ib" = "xyes"],
                          struct ibv_device_attr_ex.odp_caps],
                         [], [], [[#include <infiniband/verbs.h>]])
 
+       AC_CHECK_MEMBERS([struct ibv_port_attr.active_speed_ex],
+                        [], [], [[#include <infiniband/verbs.h>]])
+
        AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,
                        IBV_ACCESS_ON_DEMAND,
                        IBV_QPF_GRH_REQUIRED],

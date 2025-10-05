@@ -604,7 +604,8 @@ void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
 ucs_status_t
 uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
                                  uct_rc_mlx5_iface_common_t *iface,
-                                 uct_ib_mlx5_dp_ordering_t dp_ordering_cap,
+                                 uct_ib_mlx5_dp_ordering_t dp_ordering_cap_devx,
+                                 int ddp_supported_dv,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name)
 {
@@ -613,10 +614,24 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
         [UCT_IB_MLX5_DP_ORDERING_OOO_RW]  = "OOO_RW",
         [UCT_IB_MLX5_DP_ORDERING_OOO_ALL] = "OOO_ALL"
     };
-    uct_ib_mlx5_dp_ordering_t max_dp_ordering = dp_ordering_cap;
+    uct_ib_mlx5_dp_ordering_t max_dp_ordering = dp_ordering_cap_devx;
     uct_ib_mlx5_dp_ordering_t min_dp_ordering = UCT_IB_MLX5_DP_ORDERING_IBTA;
     char ar_enable_str[16], ddp_enable_str[16];
     int force;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+        if ((config->ddp_enable == UCS_YES) && !ddp_supported_dv) {
+            ucs_error("%s/%s: ddp is not supported for DV",
+                      uct_ib_device_name(&md->super.dev), tl_name);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        iface->config.ddp_enabled_dv    = (config->ddp_enable != UCS_NO) &&
+                                          ddp_supported_dv;
+        iface->config.dp_ordering_devx  = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        iface->config.dp_ordering_force = 0;
+        return UCS_OK;
+    }
 
     /*
      * HCA has an mlxreg admin configuration to force enable adaptive routing
@@ -657,7 +672,7 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
      *   but can't force it
      */
     force = (min_dp_ordering > UCT_IB_MLX5_DP_ORDERING_IBTA) ||
-            (max_dp_ordering < dp_ordering_cap);
+            (max_dp_ordering < dp_ordering_cap_devx);
     if ((min_dp_ordering > max_dp_ordering) ||
         (force && !(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE))) {
         ucs_config_sprintf_ternary_auto(ar_enable_str, sizeof(ar_enable_str),
@@ -667,15 +682,16 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
         ucs_error("%s/%s: cannot set ar_enable=%s ddp_enable=%s cap=%s "
                   "supp_force=%d (min=%s max=%s force=%d)",
                   uct_ib_device_name(&md->super.dev), tl_name, ar_enable_str,
-                  ddp_enable_str, dp_ordering_names[dp_ordering_cap],
+                  ddp_enable_str, dp_ordering_names[dp_ordering_cap_devx],
                   !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
                   dp_ordering_names[min_dp_ordering],
                   dp_ordering_names[max_dp_ordering], force);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    iface->config.dp_ordering       = max_dp_ordering;
+    iface->config.dp_ordering_devx  = max_dp_ordering;
     iface->config.dp_ordering_force = force;
+    iface->config.ddp_enabled_dv    = 0;
     return UCS_OK;
 }
 
@@ -1107,7 +1123,7 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
     }
 
 #ifdef HAVE_OOO_RECV_WRS
-    if (iface->config.dp_ordering == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
+    if (iface->config.ddp_enabled_dv) {
         dv_attr->create_flags |= MLX5DV_QP_CREATE_OOO_DP;
         dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
     }
@@ -1293,9 +1309,9 @@ void uct_ib_mlx5_devx_set_qpc_dp_ordering(uct_ib_mlx5_md_t *md, void *qpc,
                                           uct_rc_mlx5_iface_common_t *iface)
 {
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
-                      UCS_BIT_GET(iface->config.dp_ordering, 0));
+                      UCS_BIT_GET(iface->config.dp_ordering_devx, 0));
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1,
-                      UCS_BIT_GET(iface->config.dp_ordering, 1));
+                      UCS_BIT_GET(iface->config.dp_ordering_devx, 1));
     UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
                       iface->config.dp_ordering_force);
 }

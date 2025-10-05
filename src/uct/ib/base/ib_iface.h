@@ -59,6 +59,7 @@ enum {
     UCT_IB_SPEED_EDR     = 32,
     UCT_IB_SPEED_HDR     = 64,
     UCT_IB_SPEED_NDR     = 128,
+    UCT_IB_SPEED_XDR     = 256,
     UCT_IB_SPEED_LAST
 };
 
@@ -802,6 +803,29 @@ uct_ib_wc_to_ucs_status(enum ibv_wc_status status)
     default:
         return UCS_ERR_IO_ERROR;
     }
+}
+
+static UCS_F_ALWAYS_INLINE uint32_t
+uct_ib_iface_port_active_speed(uct_ib_iface_t *iface)
+{
+#if HAVE_STRUCT_IBV_PORT_ATTR_ACTIVE_SPEED_EX
+    if (uct_ib_iface_port_attr(iface)->active_speed_ex != 0) {
+        return uct_ib_iface_port_attr(iface)->active_speed_ex;
+    }
+#endif
+    return uct_ib_iface_port_attr(iface)->active_speed;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_iface_port_is_ndr(uct_ib_iface_t *iface)
+{
+    return uct_ib_iface_port_active_speed(iface) == UCT_IB_SPEED_NDR;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_iface_port_is_xdr(uct_ib_iface_t *iface)
+{
+    return uct_ib_iface_port_active_speed(iface) == UCT_IB_SPEED_XDR;
 }
 
 #endif

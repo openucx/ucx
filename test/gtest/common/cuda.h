@@ -12,7 +12,7 @@
 #include <sstream>
 #include <memory>
 #include <vector>
-
+#include <ucs/debug/log.h>
 
 namespace ucx_cuda {
 
@@ -97,21 +97,21 @@ device_vector<T> make_device_vector(const std::vector<T> &vec)
     return device_vector<T>(vec);
 }
 
-static inline void synchronize()
+static inline ucs_status_t synchronize()
 {
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        std::stringstream ss;
-        ss << "kernel launch failure: " << cudaGetErrorString(err);
-        throw std::runtime_error(ss.str());
+        ucs_error("kernel launch failure: %s", cudaGetErrorString(err));
+        return UCS_ERR_IO_ERROR;
     }
 
     err = cudaDeviceSynchronize();
     if (err != cudaSuccess) {
-        std::stringstream ss;
-        ss << "cudaDeviceSynchronize(): " << cudaGetErrorString(err);
-        throw std::runtime_error(ss.str());
+        ucs_error("cudaDeviceSynchronize(): %s", cudaGetErrorString(err));
+        return UCS_ERR_IO_ERROR;
     }
+
+    return UCS_OK;
 }
 
 } // namespace ucx_cuda

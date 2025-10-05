@@ -353,8 +353,7 @@ size_t ucs_string_common_prefix_len(const char *str1, const char *str2)
     return (p1 - str1);
 }
 
-static size_t
-ucs_path_common_parent_length(const char *path1, const char *path2)
+size_t ucs_path_common_parent_length(const char *path1, const char *path2)
 {
     size_t offset, parent_length;
 

@@ -466,7 +466,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     int cuda_id;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
-                                              md->dp_ordering_cap.rc,
+                                              md->dp_ordering_cap_devx.rc,
+                                              md->ddp_support_dv.rc,
                                               &config->mlx5, "rc_gda");
     if (status != UCS_OK) {
         return status;
@@ -657,7 +658,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         }
 
         /* TODO this logic should be done in UCP */
-        if (dist.latency > md->super.config.gpu_ib_distance_latency_thresh) {
+        if (dist.latency > md->super.config.gda_max_sys_latency) {
             continue;
         }
 

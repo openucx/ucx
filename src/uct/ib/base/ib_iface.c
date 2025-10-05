@@ -34,7 +34,8 @@
 /**
  * Maximum bandwidth of NDR single path with PCIe Gen5 and RDMA_READ operation.
  */
-#define UCT_IB_NDR_PATH_BANDWIDTH 38e9
+#define UCT_IB_NDR_READ_PATH_BANDWIDTH 38e9
+#define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
 
 /**
  * Minimal NDR single path ratio.
@@ -43,7 +44,13 @@
  * single path still does not consume the full interface bandwidth for RDMA_READ
  * operations, but around 95% of it according to measurements.
  */
-#define UCT_IB_NDR_PATH_RATIO 0.95
+#define UCT_IB_NDR_READ_PATH_RATIO 0.95
+
+/**
+ * XDR single path ratio for RDMA_READ operations.
+ * 4 QPs are needed to achieve full bandwidth with PCIe Gen6.
+ */
+#define UCT_IB_XDR_READ_PATH_RATIO 0.25
 
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
@@ -1391,7 +1398,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         }
 
         if ((iface->num_paths == 1) &&
-            (uct_ib_iface_port_attr(iface)->active_speed == UCT_IB_SPEED_NDR)) {
+            (uct_ib_iface_port_active_speed(iface) >= UCT_IB_SPEED_NDR)) {
             iface->num_paths = 2;
         }
     } else {
@@ -1878,7 +1885,8 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
             {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
     uct_ib_device_t *dev                 = uct_ib_iface_device(iface);
     uct_ib_md_t *md                      = uct_ib_iface_md(iface);
-    uint8_t active_width, active_speed, active_mtu, width;
+    uint8_t active_width, active_mtu, width;
+    uint32_t active_speed;
     double encoding, signal_rate, wire_speed;
     size_t mtu, extra_pkt_len;
     unsigned num_path;
@@ -1886,8 +1894,8 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     uct_base_iface_query(&iface->super, iface_attr);
 
     active_width = uct_ib_iface_port_attr(iface)->active_width;
-    active_speed = uct_ib_iface_port_attr(iface)->active_speed;
     active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
+    active_speed = uct_ib_iface_port_active_speed(iface);
 
     /*
      * Parse active width.
@@ -1958,6 +1966,11 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         signal_rate           = 100e9;
         encoding              = 64.0/66.0;
         break;
+    case UCT_IB_SPEED_XDR:
+        iface_attr->latency.c = 600e-9;
+        signal_rate           = 200e9;
+        encoding              = 64.0/66.0;
+        break;
     }
 
     iface_attr->latency.m  = 0;
@@ -1990,6 +2003,32 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     return UCS_OK;
 }
 
+static double
+uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
+                              uct_iface_attr_t *iface_attr,
+                              uct_perf_attr_t *perf_attr)
+{
+    double max_path_bandwidth = DBL_MAX;
+    double path_ratio         = 1.0;
+    uct_ep_operation_t op     = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                               OPERATION, UCT_EP_OP_LAST);
+
+    if (uct_ib_iface_is_roce(iface) &&
+        (uct_ib_iface_roce_lag_level(iface) > 1)) {
+        path_ratio = 1.0 / iface_attr->dev_num_paths;
+    } else if (uct_ep_op_is_get(op)) {
+        if (uct_ib_iface_port_is_ndr(iface)) {
+            max_path_bandwidth = UCT_IB_NDR_READ_PATH_BANDWIDTH;
+            path_ratio         = UCT_IB_NDR_READ_PATH_RATIO;
+        } else if (uct_ib_iface_port_is_xdr(iface)) {
+            max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
+            path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
+        }
+    }
+
+    return ucs_min(iface_attr->bandwidth.shared * path_ratio, max_path_bandwidth);
+}
+
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
@@ -1998,9 +2037,8 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
                                               OPERATION, UCT_EP_OP_LAST);
     const uct_ib_iface_send_overhead_t *send_overhead =
             &ib_iface->config.send_overhead;
-    double max_path_bandwidth                         = DBL_MAX;
-    double path_ratio;
     uct_iface_attr_t iface_attr;
+    double max_bandwidth;
     ucs_status_t status;
 
     status = uct_iface_query(iface, &iface_attr);
@@ -2028,26 +2066,18 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth = iface_attr.bandwidth;
+        if (uct_ep_op_is_get(op) && uct_ib_iface_port_is_xdr(ib_iface)) {
+            max_bandwidth = perf_attr->bandwidth.shared *
+                            iface_attr.dev_num_paths * UCT_IB_XDR_READ_PATH_RATIO;
+            perf_attr->bandwidth.shared = ucs_min(perf_attr->bandwidth.shared,
+                                                  max_bandwidth);
+        }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
-        if (uct_ib_iface_is_roce(ib_iface) &&
-            (uct_ib_iface_roce_lag_level(ib_iface) > 1)) {
-            path_ratio = 1.0 / iface_attr.dev_num_paths;
-        } else if (((op == UCT_EP_OP_GET_BCOPY) ||
-                    (op == UCT_EP_OP_GET_ZCOPY)) &&
-                   (uct_ib_iface_port_attr(ib_iface)->active_speed ==
-                    UCT_IB_SPEED_NDR)) {
-            max_path_bandwidth = UCT_IB_NDR_PATH_BANDWIDTH;
-            path_ratio         = UCT_IB_NDR_PATH_RATIO;
-        } else {
-            path_ratio = 1.0;
-        }
-
         perf_attr->path_bandwidth.dedicated = 0;
-        perf_attr->path_bandwidth.shared    =
-            ucs_min(iface_attr.bandwidth.shared * path_ratio,
-                    max_path_bandwidth);
+        perf_attr->path_bandwidth.shared    = uct_ib_iface_estimate_path_bw(
+                                              ib_iface, &iface_attr, perf_attr);
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {

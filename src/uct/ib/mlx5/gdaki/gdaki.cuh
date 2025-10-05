@@ -97,7 +97,9 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_max_alloc_wqe_base(
 {
     /* TODO optimize by including sq_wqe_num in qp->sq_wqe_pi and updating it
        when processing a new completion */
-    return ep->sq_wqe_pi + ep->sq_wqe_num - count;
+    uint64_t pi = doca_gpu_dev_verbs_atomic_read<uint64_t,
+            DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU>(&ep->sq_wqe_pi);
+    return pi + ep->sq_wqe_num - count;
 }
 
 UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
