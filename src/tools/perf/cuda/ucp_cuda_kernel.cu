@@ -205,7 +205,7 @@ ucp_perf_cuda_send_nbx(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                                                     ONESIDED_SIGNAL_SIZE,
                                             0, params.flags, &req);
     case UCX_PERF_CMD_PUT_MULTI:
-        return ucp_device_put_multi<level>(params.mem_list, 1, params.flags, 0,
+        return ucp_device_put_multi<level>(params.mem_list, 1, 0, params.flags,
                                            &req);
     case UCX_PERF_CMD_PUT_PARTIAL: {
         unsigned counter_index = params.mem_list->mem_list_length - 1;
