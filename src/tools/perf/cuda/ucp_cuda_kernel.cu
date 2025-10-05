@@ -112,9 +112,10 @@ private:
     void init_mem_list(const ucx_perf_context_t &perf)
     {
         /* +1 for the counter */
-        size_t count = perf.params.msg_size_cnt + 1;
-        ucp_device_mem_list_elem_t elems[count];
+        size_t count  = perf.params.msg_size_cnt + 1;
         size_t offset = 0;
+        ucp_device_mem_list_elem_t elems[count];
+
         for (size_t i = 0; i < count; ++i) {
             elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
@@ -127,7 +128,7 @@ private:
             elems[i].remote_addr = perf.ucp.remote_addr + offset;
             elems[i].length      = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
                                                            perf.params.msg_size_list[i];
-            offset              += perf.params.msg_size_list[i];
+            offset              += elems[i].length;
         }
 
         ucp_device_mem_list_params_t params;
@@ -148,19 +149,19 @@ private:
     void init_elements(const ucx_perf_context_t &perf)
     {
         /* +1 for the counter */
-        size_t count = perf.params.msg_size_cnt + 1;
+        size_t count  = perf.params.msg_size_cnt + 1;
+        size_t offset = 0;
 
         std::vector<unsigned> indices(count);
-        std::vector<size_t> local_offsets(count);
-        std::vector<size_t> remote_offsets(count);
+        std::vector<size_t> local_offsets(count, 0);
+        std::vector<size_t> remote_offsets(count, 0);
         std::vector<size_t> lengths(count);
-        for (unsigned i = 0, offset = 0; i < count; ++i) {
-            indices[i]        = i;
-            local_offsets[i]  = 0;
-            remote_offsets[i] = 0;
-            lengths[i]        = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
-                                                          perf.params.msg_size_list[i];
-            offset           += lengths[i];
+
+        for (unsigned i = 0; i < count; ++i) {
+            indices[i] = i;
+            lengths[i] = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
+                                            perf.params.msg_size_list[i];
+            offset    += lengths[i];
         }
 
         device_clone(&m_params.indices, indices.data(), count);
