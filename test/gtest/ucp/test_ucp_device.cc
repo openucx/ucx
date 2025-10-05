@@ -403,7 +403,7 @@ protected:
 
     size_t get_num_iters() const
     {
-        return 10;
+        return 10000;
     }
 
     size_t get_num_ops_multiplier() const
