@@ -239,28 +239,30 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
 {
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
     unsigned cflag = 0;
+    uint64_t wqe_base;
     uint64_t wqe_idx;
     unsigned lane_id;
     unsigned num_lanes;
     uint32_t fc;
 
     uct_rc_mlx5_gda_exec_init<level>(lane_id, num_lanes);
-    uct_rc_mlx5_gda_reserv_wqe<level>(ep, 1, lane_id, wqe_idx);
-    if (wqe_idx == UCT_RC_GDA_RESV_WQE_NO_RESOURCE) {
+    uct_rc_mlx5_gda_reserv_wqe<level>(ep, 1, lane_id, wqe_base);
+    if (wqe_base == UCT_RC_GDA_RESV_WQE_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
     }
 
     fc = doca_gpu_dev_verbs_wqe_idx_inc_mask(ep->sq_wqe_pi, ep->sq_wqe_num / 2);
+    wqe_idx = wqe_base & 0xffff;
     if (lane_id == 0) {
         if ((comp != nullptr) || (wqe_idx == fc)) {
             cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
-                comp->wqe_idx = wqe_idx;
+                comp->wqe_idx = wqe_base;
             }
         }
 
         uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
-                ep, uct_rc_mlx5_gda_get_wqe_ptr(ep, wqe_idx), wqe_idx & 0xffff,
+                ep, uct_rc_mlx5_gda_get_wqe_ptr(ep, wqe_idx), wqe_idx,
                 opcode, cflag, remote_address, rkey,
                 reinterpret_cast<uint64_t>(address), lkey, length, is_atomic,
                 add);
@@ -269,7 +271,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
     uct_rc_mlx5_gda_sync<level>();
 
     if (lane_id == 0) {
-        uct_rc_mlx5_gda_db(ep, wqe_idx, 1, flags);
+        uct_rc_mlx5_gda_db(ep, wqe_base, 1, flags);
     }
 
     uct_rc_mlx5_gda_sync<level>();
@@ -378,7 +380,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
             ((comp == nullptr) && (wqe_idx == fc))) {
             cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
-                comp->wqe_idx = wqe_idx;
+                comp->wqe_idx = wqe_base;
             }
         }
 
@@ -473,7 +475,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
             ((comp == nullptr) && (wqe_idx == fc))) {
             cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
-                comp->wqe_idx = wqe_idx;
+                comp->wqe_idx = wqe_base;
             }
         }
 
