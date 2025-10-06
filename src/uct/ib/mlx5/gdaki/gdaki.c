@@ -12,6 +12,7 @@
 
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
+#include <ucs/sys/device_code.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 #include <uct/cuda/base/cuda_iface.h>
 
@@ -83,8 +84,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         return status;
     }
 
+    /* Add extra space for CQE to avoid override. This extra space is equal to
+     * the number of threads in a warp = maximum amount of threads that can
+     * read/write CQE simultaneously */
     init_attr.cq_len[UCT_IB_DIR_TX] = iface->super.super.config.tx_qp_len *
-                                      UCT_IB_MLX5_MAX_BB;
+                                      UCT_IB_MLX5_MAX_BB +
+                                      UCS_DEVICE_NUM_THREADS_IN_WARP;
     uct_ib_mlx5_cq_calc_sizes(&iface->super.super.super, UCT_IB_DIR_TX,
                               &init_attr, 0, &cq_attr);
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,

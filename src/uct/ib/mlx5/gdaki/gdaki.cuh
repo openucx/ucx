@@ -560,7 +560,12 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
 
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> pi_ref(ep->sq_wqe_pi);
     uint64_t sq_wqe_pi = ep->sq_wqe_pi;
-    sq_wqe_pi          = ((wqe_cnt - sq_wqe_pi) & 0xffff) + sq_wqe_pi + 1;
+    /* Skip CQE if it's older than current producer index, could be already
+     * processed by another thread */
+    if (wqe_cnt < (sq_wqe_pi & 0xffff)) {
+        return;
+    }
+    sq_wqe_pi = ((wqe_cnt - sq_wqe_pi) & 0xffff) + sq_wqe_pi + 1;
 
     if (opcode == MLX5_CQE_REQ) {
         pi_ref.fetch_max(sq_wqe_pi);
