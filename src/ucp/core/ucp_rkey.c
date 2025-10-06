@@ -150,29 +150,38 @@ ucp_sys_dev_map_t ucp_memh_sys_dev_map(ucp_mem_h memh)
     return 0;
 }
 
-ucs_sys_device_t ucp_rkey_pack_sys_dev(ucp_mem_h memh)
+static int ucp_memh_send_flush_is_needed(ucp_mem_h memh)
 {
-    ucs_sys_device_t sys_dev_packed = memh->sys_dev;
     ucp_md_index_t md_index;
     ucp_sys_dev_map_t sys_dev_map;
     ucs_sys_device_t sys_dev;
 
-    ucs_assert(sys_dev_packed <= UCP_SYS_DEVICE_MAX_PACKED);
+    if (memh->flags & UCP_MEMH_FLAG_SEND_FLUSH_CHECKED) {
+        return !!(memh->flags & UCP_MEMH_FLAG_SEND_FLUSH_NEEDED);
+    }
 
-    ucs_for_each_bit(md_index, memh->md_map) {
-        sys_dev_map = memh->context->tl_mds[md_index].sys_dev_map;
-        ucs_for_each_bit(sys_dev, sys_dev_map) {
-            if (ucs_topo_is_sibling(sys_dev, sys_dev_packed)) {
-                /* PUT operation on such rkey requires remote flush.
-                 * Set a flag for the peer to recognize it. */
-                sys_dev_packed |= UCP_SYS_DEVICE_FLUSH_BIT;
-                goto out;
+    memh->flags |= UCP_MEMH_FLAG_SEND_FLUSH_CHECKED;
+
+    if (memh->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_assert(memh->sys_dev <= UCP_SYS_DEVICE_MAX_PACKED);
+
+        ucs_for_each_bit(md_index, memh->md_map) {
+            sys_dev_map = memh->context->tl_mds[md_index].sys_dev_map;
+            ucs_for_each_bit(sys_dev, sys_dev_map) {
+                if (ucs_topo_is_sibling(sys_dev, memh->sys_dev)) {
+                    /*
+                     * PUT operation on such device will require remote flush
+                     * when using network devices.
+                     * Set a flag for the peer to recognize it.
+                     */
+                    memh->flags |= UCP_MEMH_FLAG_SEND_FLUSH_NEEDED;
+                    return 1;
+                }
             }
         }
     }
 
-out:
-    return sys_dev_packed;
+    return 0;
 }
 
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
@@ -231,8 +240,14 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
 
     if (md_map != 0) {
         /* Since UCX 1.20: always pack sys_dev for non-empty rkeys. */
-         ucs_assert(memh != NULL);
-         *ucs_serialize_next(&p, uint8_t) = memh->packed_sys_dev;
+        ucs_assert(memh != NULL);
+
+        sys_dev = memh->sys_dev;
+        if (ucp_memh_send_flush_is_needed(memh)) {
+            sys_dev |= UCP_SYS_DEVICE_FLUSH_BIT;
+        }
+
+        *ucs_serialize_next(&p, uint8_t) = sys_dev;
     }
 
     if ((mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) || (md_map == 0)) {
@@ -829,15 +844,24 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
     }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_sys_device_t
+static UCS_F_ALWAYS_INLINE void
 ucp_rkey_extract_sys_dev(const ucp_ep_config_t *ep_config, ucp_rkey_h rkey,
-                         const void **buffer_p, const void *buffer_end)
+                         const void **buffer_p, const void *buffer_end,
+                         ucp_rkey_config_key_t *rkey_config_key)
 {
     if ((*buffer_p < buffer_end) ||
         ((ep_config->key.dst_version > 19) && (rkey->md_map != 0))) {
-        return *ucs_serialize_next(buffer_p, const uint8_t);
+        rkey_config_key->sys_dev = *ucs_serialize_next(buffer_p, const uint8_t);
     } else {
-        return UCS_SYS_DEVICE_ID_UNKNOWN;
+        rkey_config_key->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    if ((rkey_config_key->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (rkey_config_key->sys_dev & UCP_SYS_DEVICE_FLUSH_BIT)) {
+        rkey_config_key->flags    = UCP_RKEY_CONFIG_FLAG_FLUSH;
+        rkey_config_key->sys_dev &= ~UCP_SYS_DEVICE_FLUSH_BIT;
+    } else {
+        rkey_config_key->flags = 0;
     }
 }
 
@@ -864,8 +888,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     rkey_config_key.md_map             = rkey->md_map;
     rkey_config_key.mem_type           = rkey->mem_type;
     rkey_config_key.unreachable_md_map = unreachable_md_map;
-    rkey_config_key.sys_dev            = ucp_rkey_extract_sys_dev(
-                                           ep_config, rkey, &p, buffer_end);
+
+    ucp_rkey_extract_sys_dev(ep_config, rkey, &p, buffer_end, &rkey_config_key);
 
     /* Starting with UCX v1.20, lane distances are always packed if sys_dev is
      * not UNKNOWN. Even if the rkey length is not explicitly passed to the API,

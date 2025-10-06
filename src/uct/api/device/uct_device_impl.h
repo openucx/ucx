@@ -15,6 +15,11 @@
 
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 
+union uct_device_completion {
+    uct_rc_gda_completion_t   rc_gda;
+    uct_cuda_ipc_completion_t cuda_ipc;
+};
+
 
 /**
  * @ingroup UCT_DEVICE
@@ -244,34 +249,37 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
  * @brief Progress all operations on device endpoint @a device_ep.
  *
  * @param [in]  device_ep       Device endpoint to be used for the operation.
+ */
+template<ucs_device_level_t level>
+UCS_F_DEVICE void uct_device_ep_progress(uct_device_ep_h device_ep)
+{
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
+        uct_rc_mlx5_gda_ep_progress<level>(device_ep);
+    }
+}
+
+
+/**
+ * @ingroup UCT_DEVICE
+ * @brief Check whether opetation executed on device endpoint @a device_ep was
+ * completed.
+ *
+ * @param [in]  device_ep       Device endpoint to be used for the operation.
+ * @param [in]  comp            Completion object tracking operation progress.
  *
  * @return UCS_OK           - Some operation was completed.
  * @return UCS_INPROGRESS   - No progress on the endpoint.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
-UCS_F_DEVICE ucs_status_t uct_device_ep_progress(uct_device_ep_h device_ep)
+UCS_F_DEVICE ucs_status_t uct_device_ep_check_completion(
+        uct_device_ep_h device_ep, uct_device_completion_t *comp)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
-        return uct_rc_mlx5_gda_ep_progress<level>(device_ep);
-    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
-        return UCS_OK;
+        return uct_rc_mlx5_gda_ep_check_completion<level>(device_ep, comp);
     }
 
     return UCS_ERR_UNSUPPORTED;
-}
-
-
-/**
- * @ingroup UCT_DEVICE
- * @brief Initialize a device completion object.
- *
- * @param [out] comp  Device completion object to initialize.
- */
-UCS_F_DEVICE void uct_device_completion_init(uct_device_completion_t *comp)
-{
-    comp->count  = 0;
-    comp->status = UCS_OK;
 }
 
 #endif

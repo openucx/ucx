@@ -60,9 +60,12 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
         return UCS_OK;
     }
 
-    if ((status != UCS_OK) || !(flags & UCT_DEVICE_FLAG_NODELAY) ||
-        (req_ptr == nullptr)) {
+    if (UCS_STATUS_IS_ERR(status)) {
         return status;
+    }
+
+    if (!(flags & UCT_DEVICE_FLAG_NODELAY) || (req_ptr == nullptr)) {
+        return UCS_OK;
     }
 
     do {
@@ -204,6 +207,10 @@ launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucx_cuda::synchronize();
+    ucs_status_t sync_status = ucx_cuda::synchronize();
+    if (sync_status != UCS_OK) {
+        return sync_status;
+    }
+
     return *status;
 }

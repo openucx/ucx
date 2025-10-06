@@ -271,6 +271,18 @@ size_t ucs_string_common_prefix_len(const char *str1, const char *str2);
 
 
 /*
+ * Return the length of the common parent directory, without the trailing slash.
+ * For example, for /sys/ab12 and /sys/ab23 return 4.
+ *
+ * @param  path1        String pointing to first path.
+ * @param  path2        String pointing to second path.
+ *
+ * @return length of the common parent directory
+ */
+size_t ucs_path_common_parent_length(const char *path1, const char *path2);
+
+
+/*
  * Return the common parent directory, without the trailing slash.
  * For example, for /sys/ab12 and /sys/ab23 return /sys
  *
@@ -279,7 +291,7 @@ size_t ucs_string_common_prefix_len(const char *str1, const char *str2);
  * @param  common_path  Buffer to hold the common parent path. The size of the
  *                      buffer must be large enough to hold the longest common
  *                      parent path, plus a '\0' terminator.
- * */
+ */
 void ucs_path_get_common_parent(const char *path1, const char *path2,
                                 char *common_path);
 
