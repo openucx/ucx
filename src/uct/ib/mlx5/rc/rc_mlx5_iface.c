@@ -933,12 +933,14 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
     init_attr.dev_name              = params->mode.device.dev_name;
 
-    if (md->dp_ordering_cap.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
+    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        md->ddp_support_dv.rc) {
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
-                                              md->dp_ordering_cap.rc,
+                                              md->dp_ordering_cap_devx.rc,
+                                              md->ddp_support_dv.rc,
                                               &config->rc_mlx5_common,
                                               "rc_mlx5");
     if (status != UCS_OK) {

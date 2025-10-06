@@ -92,10 +92,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
 
     cq_attr.flags      |= UCT_IB_MLX5_CQ_IGNORE_OVERRUN;
-    cq_attr.umem_offset = ucs_align_up_pow2(
-            sizeof(uct_rc_gdaki_dev_ep_t) +
-                    qp_attr.max_tx * sizeof(uct_rc_gdaki_op_t),
-            ucs_get_page_size());
+    cq_attr.umem_offset = ucs_align_up_pow2(sizeof(uct_rc_gdaki_dev_ep_t),
+                                            ucs_get_page_size());
 
     qp_attr.mmio_mode     = UCT_IB_MLX5_MMIO_MODE_DB;
     qp_attr.super.srq_num = 0;
@@ -109,9 +107,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     dev_ep_size = qp_attr.umem_offset + qp_attr.len;
     /*
      * dev_ep layout:
-     * +---------------------+-------+---------+---------+
-     * | counters, dbr       | ops   | cq buff | wq buff |
-     * +---------------------+-------+---------+---------+
+     * +---------------------+---------+---------+
+     * | counters, dbr       | cq buff | wq buff |
+     * +---------------------+---------+---------+
      */
     status      = uct_rc_gdaki_alloc(dev_ep_size, ucs_get_page_size(),
                                      (void**)&self->ep_gpu, &self->ep_raw);
@@ -466,7 +464,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     int cuda_id;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
-                                              md->dp_ordering_cap.rc,
+                                              md->dp_ordering_cap_devx.rc,
+                                              md->ddp_support_dv.rc,
                                               &config->mlx5, "rc_gda");
     if (status != UCS_OK) {
         return status;

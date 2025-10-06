@@ -1616,7 +1616,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
-    if (md->dp_ordering_cap.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
+    if ((md->dp_ordering_cap_devx.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        md->ddp_support_dv.dc) {
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
@@ -1628,7 +1629,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * self->tx.ndci;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
-                                              md->dp_ordering_cap.dc,
+                                              md->dp_ordering_cap_devx.dc,
+                                              md->ddp_support_dv.dc,
                                               &config->rc_mlx5_common, "dc");
     if (status != UCS_OK) {
         return status;
