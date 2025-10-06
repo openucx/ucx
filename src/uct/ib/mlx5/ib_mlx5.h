@@ -441,11 +441,16 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
     struct {
-        /* Max dp ordering level per transport,
+        /* Max dp ordering level per transport in DevX,
            as listed in uct_ib_mlx5_dp_ordering_t */
         uint8_t              rc;
         uint8_t              dc;
-    } dp_ordering_cap;
+    } dp_ordering_cap_devx;
+    struct {
+        /* DDP support per transport in DV API */
+        uint8_t              rc;
+        uint8_t              dc;
+    } ddp_support_dv;
 } uct_ib_mlx5_md_t;
 
 

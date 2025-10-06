@@ -24,6 +24,7 @@
  */
 typedef struct ucp_device_request {
     uct_device_completion_t comp;
+    ucs_status_t            status;
     uct_device_ep_h         device_ep;
 } ucp_device_request_t;
 
@@ -51,9 +52,6 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
     if (req != nullptr) {
         comp           = &req->comp;
         req->device_ep = device_ep;
-        uct_device_completion_init(comp);
-        /* TODO: Handle multiple device posts with same req? */
-        ++comp->count;
     } else {
         comp = nullptr;
     }
@@ -63,7 +61,8 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
 /**
  * Macro for device put operations with retry logic
  */
-#define UCP_DEVICE_SEND_BLOCKING(_level, _uct_device_ep_send, _device_ep, ...) \
+#define UCP_DEVICE_SEND_BLOCKING(_level, _uct_device_ep_send, _device_ep, \
+                                 _req, ...) \
     ({ \
         ucs_status_t _status; \
         do { \
@@ -71,8 +70,11 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
             if (_status != UCS_ERR_NO_RESOURCE) { \
                 break; \
             } \
-            _status = uct_device_ep_progress<_level>(_device_ep); \
-        } while (!UCS_STATUS_IS_ERR(_status)); \
+            uct_device_ep_progress<_level>(_device_ep); \
+        } while (1); \
+        if (_req != nullptr) { \
+            _req->status = _status; \
+        } \
         _status; \
     })
 
@@ -154,8 +156,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
     }
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_single, device_ep,
-                                    uct_elem, address, remote_address, length,
-                                    flags, comp);
+                                    req, uct_elem, address, remote_address,
+                                    length, flags, comp);
 }
 
 
@@ -207,8 +209,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
     }
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
-                                    uct_elem, inc_value, remote_address, flags,
-                                    comp);
+                                    req, uct_elem, inc_value, remote_address,
+                                    flags, comp);
 }
 
 
@@ -273,8 +275,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
     }
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_multi, device_ep,
-                                    uct_mem_list, mem_list_h->mem_list_length,
-                                    addresses, remote_addresses, lengths,
+                                    req, uct_mem_list,
+                                    mem_list_h->mem_list_length, addresses,
+                                    remote_addresses, lengths,
                                     counter_inc_value, counter_remote_address,
                                     flags, comp);
 }
@@ -350,10 +353,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
     }
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_multi_partial,
-                                    device_ep, uct_mem_list, mem_list_indices,
-                                    mem_list_count, addresses, remote_addresses,
-                                    lengths, counter_index, counter_inc_value,
-                                    counter_remote_address, flags, comp);
+                                    device_ep, req, uct_mem_list,
+                                    mem_list_indices, mem_list_count, addresses,
+                                    remote_addresses, lengths, counter_index,
+                                    counter_inc_value, counter_remote_address,
+                                    flags, comp);
 }
 
 
@@ -421,19 +425,14 @@ UCS_F_DEVICE void ucp_device_counter_write(void *counter_ptr, uint64_t value)
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_progress_req(ucp_device_request_t *req)
 {
-    ucs_status_t status;
-
-    if (ucs_likely(req->comp.count == 0)) {
-        return req->comp.status;
+    if (ucs_likely(req->status != UCS_INPROGRESS)) {
+        return req->status;
     }
 
-    status = uct_device_ep_progress<level>(req->device_ep);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return (ucs_likely(req->comp.count == 0)) ? req->comp.status :
-                                                UCS_INPROGRESS;
+    uct_device_ep_progress<level>(req->device_ep);
+    req->status = uct_device_ep_check_completion<level>(req->device_ep,
+                                                        &req->comp);
+    return req->status;
 }
 
 #endif /* UCP_DEVICE_IMPL_H */
