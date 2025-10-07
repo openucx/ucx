@@ -11,6 +11,7 @@
 #include "proto_init.h"
 #include "proto_debug.h"
 #include "proto_select.inl"
+#include "proto_common.inl"
 
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/array.h>
@@ -387,7 +388,7 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     perf_factors[buffer_copy_factor_id].c +=
             ucp_tl_iface_latency(context, &perf_attr.latency);
     perf_factors[buffer_copy_factor_id].m +=
-            1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
+            1.0 / ucp_proto_common_iface_bandwidth(context, &perf_attr.bandwidth);
 
     if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
         (memtype_op == UCT_EP_OP_GET_ZCOPY)) {
