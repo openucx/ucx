@@ -64,7 +64,13 @@ typedef struct {
     };
 } test_ucp_device_kernel_params_t;
 
-ucs_status_t
+struct test_ucp_device_kernel_result_t {
+    ucs_status_t status;
+    uint64_t     producer_index;
+    uint64_t     ready_index;
+};
+
+test_ucp_device_kernel_result_t
 launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params);
 
 #endif

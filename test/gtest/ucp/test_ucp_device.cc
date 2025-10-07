@@ -291,10 +291,12 @@ protected:
         }
     }
 
-    void launch_kernel(const test_ucp_device_kernel_params_t &params)
+    test_ucp_device_kernel_result_t
+    launch_kernel(const test_ucp_device_kernel_params_t &params)
     {
-        ucs_status_t status = launch_test_ucp_device_kernel(params);
-        ASSERT_UCS_OK(status);
+        auto result = launch_test_ucp_device_kernel(params);
+        ASSERT_UCS_OK(result.status);
+        return result;
     }
 };
 
@@ -454,6 +456,38 @@ UCS_TEST_P(test_ucp_device_xfer, put_single)
     list.dst_pattern_check(mem_list_index - 1, mem_list::SEED_DST);
     list.dst_pattern_check(mem_list_index, mem_list::SEED_SRC);
     list.dst_pattern_check(mem_list_index + 1, mem_list::SEED_DST);
+}
+
+UCS_TEST_P(test_ucp_device_xfer, concurrent_litmus_test)
+{
+    static constexpr size_t size             = 8;
+    static constexpr unsigned mem_list_index = 0;
+    static constexpr size_t MAX_THREADS      = 256;
+    mem_list list(sender(), receiver(), size, 1);
+
+    // Perform the transfer
+    auto params                  = init_params();
+    params.num_iters             = 1000;
+    params.num_blocks            = 1;
+    params.num_threads           = MAX_THREADS;
+    params.operation             = TEST_UCP_DEVICE_KERNEL_PUT_SINGLE;
+    params.mem_list              = list.handle();
+    params.single.mem_list_index = mem_list_index;
+    params.single.address        = list.src_ptr(mem_list_index);
+    params.single.remote_address = list.dst_ptr(mem_list_index);
+    params.single.length         = size;
+    auto result = launch_kernel(params);
+
+    // Check proper index received data
+    list.dst_pattern_check(mem_list_index, mem_list::SEED_SRC);
+
+    uint64_t expected = params.num_iters * params.num_threads;
+    if (params.level == UCS_DEVICE_LEVEL_WARP) {
+        expected /= UCS_DEVICE_NUM_THREADS_IN_WARP;
+    }
+
+    EXPECT_EQ(expected, result.producer_index);
+    EXPECT_EQ(expected, result.ready_index);
 }
 
 UCS_TEST_P(test_ucp_device_xfer, put_multi)
