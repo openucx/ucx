@@ -8,6 +8,7 @@
 #include <ucp/ucp_test.h>
 
 #include <ucp/api/device/ucp_device_types.h>
+#include <ucp/core/ucp_ep.h>
 
 #include <common/cuda.h>
 #include "cuda/test_kernels.h"
@@ -77,9 +78,8 @@ void test_ucp_device::init()
         receiver().connect(&sender(), get_ep_params());
     }
 
-    ucp_device_mem_list_handle_h handle;
-    while (ucp_device_mem_list_create(sender().ep(), NULL, &handle) ==
-           UCS_ERR_NOT_CONNECTED) {
+    /* Wait for endpoint to complete wireup by checking the REMOTE_CONNECTED flag */
+    while (!(sender().ep()->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
         progress();
     }
 }
