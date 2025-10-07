@@ -77,11 +77,8 @@ void test_ucp_device::init()
         receiver().connect(&sender(), get_ep_params());
     }
 
-    ucp_device_mem_list_handle_h handle;
-    while (ucp_device_mem_list_create(sender().ep(), NULL, &handle) ==
-           UCS_ERR_NOT_CONNECTED) {
-        progress();
-    }
+    /* Flush to ensure endpoint wireup is complete before device API usage */
+    flush_ep(sender());
 }
 
 test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
