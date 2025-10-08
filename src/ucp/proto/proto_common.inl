@@ -429,4 +429,12 @@ ucp_proto_common_bandwidth_equal(double bw1, double bw2)
     return fabs(bw1 - bw2) <= UCP_PROTO_PERF_EPSILON;
 }
 
+static UCS_F_ALWAYS_INLINE double
+ucp_proto_common_iface_bandwidth(ucp_context_h context,
+                                 const uct_ppn_bandwidth_t *bandwidth)
+{
+    return bandwidth->dedicated +
+           (bandwidth->shared / ucs_min(context->config.est_num_ppn, 8));
+}
+
 #endif
