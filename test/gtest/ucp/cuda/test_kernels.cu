@@ -109,28 +109,45 @@ private:
     ucp_device_request_t *m_ptr;
 };
 
-UCS_F_DEVICE void
+template <typename Func>
+class scope_guard {
+public:
+    __device__ scope_guard(Func& func) : m_func(func) {}
+    __device__ ~scope_guard() { m_func(); }
+
+private:
+    Func& m_func;
+};
+
+UCS_F_DEVICE ucs_status_t
 ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
                           test_ucp_device_kernel_result_t &result)
 {
     uct_device_ep_t *device_ep;
     const uct_device_mem_element_t *uct_elem;
     uct_device_completion_t *comp;
+    ucs_status_t status = UCS_OK;
+
+    if (nullptr == params.mem_list) {
+        return UCS_OK;
+    }
 
     __syncthreads();
     if (threadIdx.x == 0) {
-        result.status = ucp_device_prepare_send(params.mem_list, 0, nullptr,
-                                                 device_ep, uct_elem, comp);
-        if ((result.status == UCS_OK) &&
+        status = ucp_device_prepare_send(params.mem_list, 0, nullptr, device_ep,
+                                         uct_elem, comp);
+        if ((status == UCS_OK) &&
             (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA)) {
-            uct_rc_gdaki_dev_ep_t *ep  = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(device_ep);
+            uct_rc_gdaki_dev_ep_t *ep =
+                        reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(device_ep);
             result.producer_index     = ep->sq_wqe_pi - result.producer_index;
             result.ready_index        = ep->sq_ready_index - result.ready_index;
+            result.avail_count        = ep->avail_count - result.avail_count;
         }
     }
 
     __syncthreads();
-    __threadfence_system();
+    return status;
 }
 
 template<ucs_device_level_t level>
@@ -138,9 +155,12 @@ static __global__ void
 ucp_test_kernel(const test_ucp_device_kernel_params_t params,
                 test_ucp_device_kernel_result_t *result_ptr)
 {
+    scope_guard fence(__threadfence_system);
+    ucs_status_t &status = result_ptr->status;
+
     if (blockDim.x > device_request<level>::MAX_THREADS) {
         ucs_device_error("blockDim.x > MAX_THREADS");
-        result_ptr->status = UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
         return;
     }
 
@@ -148,23 +168,18 @@ ucp_test_kernel(const test_ucp_device_kernel_params_t params,
             shared_reqs[device_request<level>::num_shared_reqs()];
     device_request<level> req(shared_reqs);
 
-    ucp_test_kernel_get_state(params, *result_ptr);
-    if (result_ptr->status != UCS_OK) {
+    status = ucp_test_kernel_get_state(params, *result_ptr);
+    if (status != UCS_OK) {
         return;
     }
 
+    ucp_device_request_t *req_ptr = params.with_request ? req.ptr() : nullptr;
+    uint64_t flags                = params.with_no_delay ?
+                                                UCT_DEVICE_FLAG_NODELAY : 0;
+
     for (size_t i = 0; i < params.num_iters - 1; i++) {
-        uint64_t flags = 0;
-        if (params.with_no_delay) {
-            flags |= UCT_DEVICE_FLAG_NODELAY;
-        }
-
-        ucp_device_request_t *req_ptr = params.with_request ? req.ptr() :
-                                                              nullptr;
-
-        result_ptr->status = ucp_test_kernel_do_operation<level>(params, flags,
-                                                                 req_ptr);
-        if (result_ptr->status != UCS_OK) {
+        status = ucp_test_kernel_do_operation<level>(params, flags, req_ptr);
+        if (status != UCS_OK) {
             return;
         }
     }
@@ -172,12 +187,13 @@ ucp_test_kernel(const test_ucp_device_kernel_params_t params,
     // Last iteration must use no-delay flag and request, to be able to wait
     // properly for completion. Alternatively, we could add a device flush
     // function to the API.
-    result_ptr->status = ucp_test_kernel_do_operation<level>(
-                            params, UCT_DEVICE_FLAG_NODELAY, req.ptr());
-    if (result_ptr->status != UCS_OK) {
+    status = ucp_test_kernel_do_operation<level>(params, UCT_DEVICE_FLAG_NODELAY,
+                                                 req.ptr());
+    if (status != UCS_OK) {
         return;
     }
-    ucp_test_kernel_get_state(params, *result_ptr);
+
+    status = ucp_test_kernel_get_state(params, *result_ptr);
 }
 
 static ucs_status_t check_warp_size()

@@ -494,6 +494,7 @@ UCS_TEST_P(test_ucp_device_xfer, concurrent_litmus_test)
 
     EXPECT_EQ(expected, result.producer_index);
     EXPECT_EQ(expected, result.ready_index);
+    EXPECT_EQ(0, result.avail_count);
 }
 
 UCS_TEST_P(test_ucp_device_xfer, put_multi)
