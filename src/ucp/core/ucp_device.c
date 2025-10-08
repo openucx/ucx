@@ -380,7 +380,6 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     uct_allocated_memory_t mem;
 
     if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-        ucs_error("ep=%p didn't complete wireup", ep);
         return UCS_ERR_NOT_CONNECTED;
     }
 
