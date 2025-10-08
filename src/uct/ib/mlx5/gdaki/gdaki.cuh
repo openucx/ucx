@@ -93,61 +93,20 @@ template<ucs_device_level_t level> UCS_F_DEVICE void uct_rc_mlx5_gda_sync(void)
     }
 }
 
-UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_max_alloc_wqe_base(
-    uct_rc_gdaki_dev_ep_t *ep, unsigned count)
+UCS_F_DEVICE uint64_t
+uct_rc_mlx5_gda_reserv_wqe_thread(uct_rc_gdaki_dev_ep_t *ep, unsigned count)
 {
-    /* TODO optimize by including sq_wqe_num in qp->sq_wqe_pi and updating it
-       when processing a new completion */
-    uint64_t pi = doca_gpu_dev_verbs_atomic_read<uint64_t,
-            DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU>(&ep->sq_wqe_pi);
-    return pi + ep->sq_wqe_num - count;
-}
-
-UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
-    uct_rc_gdaki_dev_ep_t *ep, unsigned count)
-{
-    /* Do not attempt to reserve if the available space is less than the
-     * requested count, to avoid starvation of threads trying to rollback the
-     * reservation with atomicCAS. */
-    uint64_t max_wqe_base = uct_rc_mlx5_gda_max_alloc_wqe_base(ep, count);
-    if (ep->sq_rsvd_index > max_wqe_base) {
+    /* Try to reserve optimistically */
+    int32_t prev = atomicAdd(&ep->avail_count, -(int32_t)count);
+    if (prev < (int32_t)count) {
+        /* Rollback */
+        atomicAdd(&ep->avail_count, count);
         return UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
     }
 
-    uint64_t wqe_base = atomicAdd(reinterpret_cast<unsigned long long*>(
-                                          &ep->sq_rsvd_index),
-                                  static_cast<unsigned long long>(count));
-
-    /*
-     *  Attempt to reserve 'count' WQEs by atomically incrementing the reserved
-     *  index. If the reservation exceeds the available space in the work queue,
-     *  enter a rollback loop.
-     *
-     *  Rollback Logic:
-     *  - Calculate the next potential index (wqe_next) after attempting the
-     *    reservation.
-     *  - Use atomic CAS to check if the current reserved index matches wqe_next.
-     *    If it does, revert the reservation by resetting the reserved index to
-     *    wqe_base.
-     *  - A successful CAS indicates no other thread has modified the reserved
-     *    index, allowing the rollback to complete, and the function returns
-     *    UCT_RC_GDA_RESV_WQE_NO_RESOURCE to signal insufficient resources.
-     *  - If CAS fails, it means another thread has modified the reserved index.
-     *    The loop continues to reevaluate resource availability to determine if
-     *    the reservation can now be satisfied, possibly due to other operations
-     *    freeing up resources.
-     */
-    while (wqe_base > max_wqe_base) {
-        uint64_t wqe_next = wqe_base + count;
-        if (atomicCAS(reinterpret_cast<unsigned long long*>(&ep->sq_rsvd_index),
-                      wqe_next, wqe_base) == wqe_next) {
-            return UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
-        }
-
-        max_wqe_base = uct_rc_mlx5_gda_max_alloc_wqe_base(ep, count);
-    }
-
-    return wqe_base;
+    /* We own count elements, now can safely increment the reserved index */
+    return atomicAdd(reinterpret_cast<unsigned long long*>(&ep->sq_rsvd_index),
+                     count);
 }
 
 template<ucs_device_level_t level>
@@ -558,16 +517,22 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
     uint16_t wqe_idx = wqe_cnt & (ep->sq_wqe_num - 1);
 
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> pi_ref(ep->sq_wqe_pi);
-    uint64_t sq_wqe_pi = ep->sq_wqe_pi;
-    /* Skip CQE if it's older than current producer index, could be already
-     * processed by another thread */
-    if (wqe_cnt < (sq_wqe_pi & 0xffff)) {
-        return;
-    }
-    sq_wqe_pi = ((wqe_cnt - sq_wqe_pi) & 0xffff) + sq_wqe_pi + 1;
+    uint64_t sq_wqe_pi = pi_ref.load(cuda::std::memory_order_relaxed);
+    uint64_t new_pi;
+
+    do {
+        if ((int16_t)(wqe_cnt - (uint16_t)sq_wqe_pi) < 0) {
+            return;
+        }
+
+        uint16_t completed_delta = (wqe_cnt - (uint16_t)sq_wqe_pi) & 0xffff;
+        new_pi = sq_wqe_pi + completed_delta + 1;
+    } while (!pi_ref.compare_exchange_weak(sq_wqe_pi, new_pi,
+                                           cuda::std::memory_order_release,
+                                           cuda::std::memory_order_relaxed));
 
     if (opcode == MLX5_CQE_REQ) {
-        pi_ref.fetch_max(sq_wqe_pi);
+        atomicAdd(&ep->avail_count, (int32_t)(new_pi - sq_wqe_pi));
         return;
     }
 
