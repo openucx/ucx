@@ -231,6 +231,14 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
             &ep->sq_lock);
 }
 
+UCS_F_DEVICE bool
+uct_rc_mlx5_gda_fc(const uct_rc_gdaki_dev_ep_t *ep, uint16_t wqe_idx)
+{
+    uint16_t wqe_num = ep->sq_wqe_num;
+    /* Half or end of the work queue */
+    return ((wqe_idx == (wqe_num >> 1)) | (wqe_idx == (wqe_num - 1)));
+}
+
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_element_t *tl_mem_elem,
@@ -240,12 +248,10 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uint64_t add)
 {
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-    unsigned cflag = 0;
+    unsigned cflag                = 0;
     uint64_t wqe_base;
-    uint64_t wqe_idx;
     unsigned lane_id;
     unsigned num_lanes;
-    uint32_t fc;
 
     uct_rc_mlx5_gda_exec_init<level>(lane_id, num_lanes);
     uct_rc_mlx5_gda_reserv_wqe<level>(ep, 1, lane_id, wqe_base);
@@ -253,10 +259,9 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         return UCS_ERR_NO_RESOURCE;
     }
 
-    fc = doca_gpu_dev_verbs_wqe_idx_inc_mask(ep->sq_wqe_pi, ep->sq_wqe_num / 2);
-    wqe_idx = wqe_base & 0xffff;
     if (lane_id == 0) {
-        if ((comp != nullptr) || (wqe_idx == fc)) {
+        uint16_t wqe_idx = (uint16_t)wqe_base;
+        if ((comp != nullptr) || uct_rc_mlx5_gda_fc(ep, wqe_idx)) {
             cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
                 comp->wqe_idx = wqe_base;
@@ -325,15 +330,13 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-
-    int count                 = mem_list_count;
-    int counter_index         = count - 1;
-    bool atomic               = false;
+    int count                     = mem_list_count;
+    int counter_index             = count - 1;
+    bool atomic                   = false;
     uint64_t wqe_idx;
     unsigned cflag;
     unsigned lane_id;
     unsigned num_lanes;
-    uint32_t fc;
     uint64_t wqe_base;
     size_t length;
     void *address;
@@ -357,7 +360,6 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         return UCS_ERR_NO_RESOURCE;
     }
 
-    fc = doca_gpu_dev_verbs_wqe_idx_inc_mask(ep->sq_wqe_pi, ep->sq_wqe_num / 2);
     wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_base, lane_id);
     for (uint32_t i = lane_id; i < count; i += num_lanes) {
         if (i == counter_index) {
@@ -379,7 +381,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
 
         cflag = 0;
         if (((comp != nullptr) && (i == count - 1)) ||
-            ((comp == nullptr) && (wqe_idx == fc))) {
+            ((comp == nullptr) && uct_rc_mlx5_gda_fc(ep, wqe_idx))) {
             cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
                 comp->wqe_idx = wqe_base;
@@ -420,13 +422,12 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-    unsigned count            = mem_list_count;
-    bool atomic               = false;
+    unsigned count                = mem_list_count;
+    bool atomic                   = false;
     uint64_t wqe_idx;
     unsigned lane_id;
     unsigned num_lanes;
     unsigned cflag;
-    uint32_t fc;
     uint64_t wqe_base;
     size_t length;
     void *address;
@@ -451,7 +452,6 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         return UCS_ERR_NO_RESOURCE;
     }
 
-    fc = doca_gpu_dev_verbs_wqe_idx_inc_mask(ep->sq_wqe_pi, ep->sq_wqe_num / 2);
     wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_base, lane_id);
     for (uint32_t i = lane_id; i < count; i += num_lanes) {
         if (i == mem_list_count) {
@@ -475,7 +475,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
 
         cflag = 0;
         if (((comp != nullptr) && (i == count - 1)) ||
-            ((comp == nullptr) && (wqe_idx == fc))) {
+            ((comp == nullptr) && uct_rc_mlx5_gda_fc(ep, wqe_idx))) {
             cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
                 comp->wqe_idx = wqe_base;
