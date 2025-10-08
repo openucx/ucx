@@ -116,7 +116,11 @@ uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned count,
 {
     if (lane_id == 0) {
         wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(ep, count);
+    } else {
+        /* Initialize with 0, because __shfl_sync may set only 32 bits*/
+        wqe_base = 0;
     }
+
     if (level == UCS_DEVICE_LEVEL_WARP) {
         wqe_base = __shfl_sync(0xffffffff, wqe_base, 0);
     } else if (level == UCS_DEVICE_LEVEL_BLOCK) {
