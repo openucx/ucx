@@ -234,7 +234,7 @@ launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
 
     check_status = check_warp_size();
     if (check_status != UCS_OK) {
-        return {check_status, 0, 0};
+        return {check_status};
     }
 
     ucx_cuda::device_result_ptr<test_ucp_device_kernel_result_t> result;
@@ -254,12 +254,12 @@ launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
                         params, result.device_ptr());
         break;
     default:
-        return {UCS_ERR_INVALID_PARAM, 0, 0};
+        return {UCS_ERR_INVALID_PARAM};
     }
 
     ucs_status_t sync_status = ucx_cuda::synchronize();
     if (sync_status != UCS_OK) {
-        return {sync_status, 0, 0};
+        return {sync_status};
     }
 
     return *result;

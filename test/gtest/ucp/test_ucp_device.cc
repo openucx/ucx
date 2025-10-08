@@ -19,6 +19,8 @@ public:
     virtual void init() override;
 
 protected:
+    static constexpr size_t MAX_THREADS = 256;
+
     class mem_list {
     public:
         static constexpr uint64_t SEED_SRC = 0x1234;
@@ -464,11 +466,14 @@ UCS_TEST_P(test_ucp_device_xfer, put_single)
     list.dst_pattern_check(mem_list_index + 1, mem_list::SEED_DST);
 }
 
-UCS_TEST_P(test_ucp_device_xfer, concurrent_litmus_test)
+UCS_TEST_P(test_ucp_device_xfer, put_single_stress_test)
 {
+#ifdef __SANITIZE_ADDRESS__
+    UCS_TEST_SKIP_R("Skipping stress test under ASAN");
+#endif
+
     static constexpr size_t size             = 8;
     static constexpr unsigned mem_list_index = 0;
-    static constexpr size_t MAX_THREADS      = 256;
     mem_list list(sender(), receiver(), size, 1);
 
     // Perform the transfer
