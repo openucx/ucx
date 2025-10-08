@@ -30,6 +30,7 @@ typedef struct {
     uint32_t                     cqe_num;
     uint16_t                     sq_wqe_num;
     uint32_t                     sq_num;
+    uint16_t                     sq_fc_mask;
 } uct_rc_gdaki_dev_ep_t;
 
 

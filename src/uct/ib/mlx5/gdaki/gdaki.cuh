@@ -234,9 +234,7 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
 UCS_F_DEVICE bool
 uct_rc_mlx5_gda_fc(const uct_rc_gdaki_dev_ep_t *ep, uint16_t wqe_idx)
 {
-    uint16_t wqe_num = ep->sq_wqe_num;
-    /* Half or end of the work queue */
-    return ((wqe_idx == (wqe_num >> 1)) | (wqe_idx == (wqe_num - 1)));
+    return (wqe_idx & ep->sq_fc_mask) == 1;
 }
 
 template<ucs_device_level_t level>
