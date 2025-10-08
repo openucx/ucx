@@ -42,6 +42,10 @@ union uct_device_completion {
  * @param [in]  flags           Flags to modify the function behavior.
  * @param [in]  comp            Completion object to track the progress of operation.
  *
+ * @return UCS_INPROGRESS     - Operation successfully posted, use @ref
+ *                              uct_device_ep_progress and @ref
+ *                              uct_device_ep_check_completion to
+ *                              check for completion.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
@@ -83,6 +87,10 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  * @param [in]  flags           Flags to modify the function behavior.
  * @param [in]  comp            Completion object to track the progress of operation.
  *
+ * @return UCS_INPROGRESS      - Operation successfully posted, use @ref
+ *                               uct_device_ep_progress and @ref
+ *                               uct_device_ep_check_completion to check
+ *                               for completion.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
@@ -139,6 +147,10 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [out] req                    Request populated by the call.
  *
+ * @return UCS_INPROGRESS            - Operation successfully posted, use @ref
+ *                                     uct_device_ep_progress and @ref
+ *                                     uct_device_ep_check_completion to check
+ *                                     for completion.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
@@ -215,6 +227,10 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [in]  comp                   Completion object to track progress.
  *
+ * @return UCS_INPROGRESS            - Operation successfully posted, use @ref
+ *                                     uct_device_ep_progress and @ref
+ *                                     uct_device_ep_check_completion to check
+ *                                     for completion.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
