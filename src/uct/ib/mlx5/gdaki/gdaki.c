@@ -83,11 +83,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         return status;
     }
 
-    /* Overflow detection is disabled for CQE. CQE is being read/updated
-     * simultaneously by multiple threads. The maximum amount of pending
-     * requests is equal to the TX QP length. But we need some extra space to
-     * avoid race condition between threads that post WQEs and those that read/
-     * update CQE. This amount must be at least [max_tx + num_threads].
+    /* CQE is being read/updated simultaneously by multiple threads.
+     * Overflow detection is disabled for CQ, but overflow is handled in
+     * progress by validating the CQE after reading the content.
+     * We give CQ extra space (x2) to reduce the probability of CQ overflows.
      */
     init_attr.cq_len[UCT_IB_DIR_TX] = iface->super.super.config.tx_qp_len *
                                       UCT_IB_MLX5_MAX_BB * 2;

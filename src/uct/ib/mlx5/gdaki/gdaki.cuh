@@ -496,17 +496,28 @@ uct_rc_mlx5_gda_qedump(const char *pfx, void *buff, ssize_t len)
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
 {
-    void *cqe                = ep->cqe_daddr;
-    size_t cqe_num           = ep->cqe_num;
-    uint64_t cqe_idx         = ep->cqe_ci;
-    const size_t cqe_sz      = DOCA_GPUNETIO_VERBS_CQE_SIZE;
-    uint32_t idx             = cqe_idx & (cqe_num - 1);
-    void *curr_cqe           = (uint8_t*)cqe + idx * cqe_sz;
-    auto *cqe64              = reinterpret_cast<mlx5_cqe64*>(curr_cqe);
-    uint8_t op_owner;
+    void *cqe           = ep->cqe_daddr;
+    size_t cqe_num      = ep->cqe_num;
+    uint64_t cqe_idx    = ep->cqe_ci;
+    const size_t cqe_sz = DOCA_GPUNETIO_VERBS_CQE_SIZE;
+    uint32_t idx        = cqe_idx & (cqe_num - 1);
+    void *curr_cqe      = (uint8_t*)cqe + idx * cqe_sz;
+    auto *cqe64         = reinterpret_cast<mlx5_cqe64*>(curr_cqe);
 
-    op_owner = READ_ONCE(cqe64->op_own);
+    uint8_t op_owner = READ_ONCE(cqe64->op_own);
     if ((op_owner & MLX5_CQE_OWNER_MASK) ^ !!(cqe_idx & cqe_num)) {
+        return;
+    }
+    /* We use CQ without overrun detection, we need to ensure CQE is valid after
+     * reading the content */
+    __threadfence_block();
+    uint8_t opcode   = op_owner >> DOCA_GPUNETIO_VERBS_MLX5_CQE_OPCODE_SHIFT;
+    uint16_t wqe_cnt = uct_rc_mlx5_gda_bswap16(cqe64->wqe_counter);
+
+    /* Prevent reordering, validate that CQE is still valid */
+    __threadfence_block();
+    uint8_t op_owner_check = READ_ONCE(cqe64->op_own);
+    if (ucs_unlikely(op_owner_check != op_owner)) {
         return;
     }
 
@@ -516,8 +527,6 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
         return;
     }
 
-    uint8_t opcode   = op_owner >> DOCA_GPUNETIO_VERBS_MLX5_CQE_OPCODE_SHIFT;
-    uint16_t wqe_cnt = uct_rc_mlx5_gda_bswap16(cqe64->wqe_counter);
     uint16_t wqe_idx = wqe_cnt & (ep->sq_wqe_num - 1);
 
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> pi_ref(ep->sq_wqe_pi);
