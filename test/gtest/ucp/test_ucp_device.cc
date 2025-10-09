@@ -78,9 +78,12 @@ void test_ucp_device::init()
     }
 
     ucp_device_mem_list_handle_h handle;
-    while (ucp_device_mem_list_create(sender().ep(), NULL, &handle) ==
-           UCS_ERR_NOT_CONNECTED) {
-        progress();
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+        while (ucp_device_mem_list_create(sender().ep(), NULL, &handle) ==
+               UCS_ERR_NOT_CONNECTED) {
+            progress();
+        }
     }
 }
 

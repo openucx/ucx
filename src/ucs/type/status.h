@@ -33,6 +33,50 @@ BEGIN_C_DECLS
 
 /**
  * @ingroup UCS_RESOURCE
+ * @brief X-macro for defining status codes and their string representations
+ *
+ * This macro allows defining status codes and their associated messages in one
+ * place, avoiding duplication between enum definitions and string conversions.
+ *
+ * Usage: UCS_FOREACH_STATUS(_macro) where _macro(ID, VALUE, MSG) is expanded for each status.
+ */
+#define UCS_FOREACH_STATUS(_macro) \
+    _macro(UCS_OK,                        0, "Success") \
+    _macro(UCS_INPROGRESS,                1, "Operation in progress") \
+    _macro(UCS_ERR_NO_MESSAGE,           -1, "No pending message") \
+    _macro(UCS_ERR_NO_RESOURCE,          -2, "No resources are available to initiate the operation") \
+    _macro(UCS_ERR_IO_ERROR,             -3, "Input/output error") \
+    _macro(UCS_ERR_NO_MEMORY,            -4, "Out of memory") \
+    _macro(UCS_ERR_INVALID_PARAM,        -5, "Invalid parameter") \
+    _macro(UCS_ERR_UNREACHABLE,          -6, "Destination is unreachable") \
+    _macro(UCS_ERR_INVALID_ADDR,         -7, "Address not valid") \
+    _macro(UCS_ERR_NOT_IMPLEMENTED,      -8, "Function not implemented") \
+    _macro(UCS_ERR_MESSAGE_TRUNCATED,    -9, "Message truncated") \
+    _macro(UCS_ERR_NO_PROGRESS,         -10, "No progress") \
+    _macro(UCS_ERR_BUFFER_TOO_SMALL,    -11, "Provided buffer is too small") \
+    _macro(UCS_ERR_NO_ELEM,             -12, "No such element") \
+    _macro(UCS_ERR_SOME_CONNECTS_FAILED,-13, "Failed to connect some of the requested endpoints") \
+    _macro(UCS_ERR_NO_DEVICE,           -14, "No such device") \
+    _macro(UCS_ERR_BUSY,                -15, "Device is busy") \
+    _macro(UCS_ERR_CANCELED,            -16, "Request canceled") \
+    _macro(UCS_ERR_SHMEM_SEGMENT,       -17, "Shared memory error") \
+    _macro(UCS_ERR_ALREADY_EXISTS,      -18, "Element already exists") \
+    _macro(UCS_ERR_OUT_OF_RANGE,        -19, "Index out of range") \
+    _macro(UCS_ERR_TIMED_OUT,           -20, "Operation timed out") \
+    _macro(UCS_ERR_EXCEEDS_LIMIT,       -21, "User-defined limit was reached") \
+    _macro(UCS_ERR_UNSUPPORTED,         -22, "Unsupported operation") \
+    _macro(UCS_ERR_REJECTED,            -23, "Operation rejected by remote peer") \
+    _macro(UCS_ERR_NOT_CONNECTED,       -24, "Endpoint is not connected") \
+    _macro(UCS_ERR_CONNECTION_RESET,    -25, "Connection reset by remote peer") \
+    _macro(UCS_ERR_FIRST_LINK_FAILURE,  -40, "First link failure") \
+    _macro(UCS_ERR_LAST_LINK_FAILURE,   -59, "Last link failure") \
+    _macro(UCS_ERR_FIRST_ENDPOINT_FAILURE,-60, "First endpoint failure") \
+    _macro(UCS_ERR_ENDPOINT_TIMEOUT,    -80, "Endpoint timeout") \
+    _macro(UCS_ERR_LAST_ENDPOINT_FAILURE,-89, "Last endpoint failure") \
+    _macro(UCS_ERR_LAST,               -100, "Last error code")
+
+/**
+ * @ingroup UCS_RESOURCE
  * @brief Status codes
  *
  * @note In order to evaluate the necessary steps to recover from a certain
@@ -42,47 +86,10 @@ BEGIN_C_DECLS
  * For example, if a link fails it may be sufficient to destroy (and possibly
  * replace) it, in contrast to an endpoint-level error.
  */
+#define UCS_STATUS_ENUMIFY(ID, VALUE, _) ID = VALUE,
+
 typedef enum {
-    /* Operation completed successfully */
-    UCS_OK                         =   0,
-
-    /* Operation is queued and still in progress */
-    UCS_INPROGRESS                 =   1,
-
-    /* Failure codes */
-    UCS_ERR_NO_MESSAGE             =  -1,
-    UCS_ERR_NO_RESOURCE            =  -2,
-    UCS_ERR_IO_ERROR               =  -3,
-    UCS_ERR_NO_MEMORY              =  -4,
-    UCS_ERR_INVALID_PARAM          =  -5,
-    UCS_ERR_UNREACHABLE            =  -6,
-    UCS_ERR_INVALID_ADDR           =  -7,
-    UCS_ERR_NOT_IMPLEMENTED        =  -8,
-    UCS_ERR_MESSAGE_TRUNCATED      =  -9,
-    UCS_ERR_NO_PROGRESS            = -10,
-    UCS_ERR_BUFFER_TOO_SMALL       = -11,
-    UCS_ERR_NO_ELEM                = -12,
-    UCS_ERR_SOME_CONNECTS_FAILED   = -13,
-    UCS_ERR_NO_DEVICE              = -14,
-    UCS_ERR_BUSY                   = -15,
-    UCS_ERR_CANCELED               = -16,
-    UCS_ERR_SHMEM_SEGMENT          = -17,
-    UCS_ERR_ALREADY_EXISTS         = -18,
-    UCS_ERR_OUT_OF_RANGE           = -19,
-    UCS_ERR_TIMED_OUT              = -20,
-    UCS_ERR_EXCEEDS_LIMIT          = -21,
-    UCS_ERR_UNSUPPORTED            = -22,
-    UCS_ERR_REJECTED               = -23,
-    UCS_ERR_NOT_CONNECTED          = -24,
-    UCS_ERR_CONNECTION_RESET       = -25,
-
-    UCS_ERR_FIRST_LINK_FAILURE     = -40,
-    UCS_ERR_LAST_LINK_FAILURE      = -59,
-    UCS_ERR_FIRST_ENDPOINT_FAILURE = -60,
-    UCS_ERR_ENDPOINT_TIMEOUT       = -80,
-    UCS_ERR_LAST_ENDPOINT_FAILURE  = -89,
-
-    UCS_ERR_LAST                   = -100
+    UCS_FOREACH_STATUS(UCS_STATUS_ENUMIFY)
 } UCS_S_PACKED ucs_status_t;
 
 
@@ -112,6 +119,19 @@ typedef void *ucs_status_ptr_t;
 #define UCS_STATUS_PTR(_status)    ((void*)(intptr_t)(_status))
 #define UCS_STATUS_IS_ERR(_status) ((_status) < 0)
 
+/**
+ * @brief Helper macro to generate switch case for status to string conversion
+ */
+#define UCS_STATUS_STRINGIFY(ID, _, MSG) case ID: return MSG;
+
+/**
+ * @brief Common status code to string cases
+ *
+ * This macro defines the common switch cases for converting status codes to
+ * strings. It's used by both the host and device implementations to avoid
+ * code duplication.
+ */
+#define UCS_STATUS_STRING_CASES UCS_FOREACH_STATUS(UCS_STATUS_STRINGIFY)
 
 /**
  * @param  status UCS status code.
