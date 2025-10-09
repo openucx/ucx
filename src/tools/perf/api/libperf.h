@@ -266,9 +266,9 @@ typedef struct ucx_perf_params {
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     ucs_memory_type_t      send_mem_type;   /* Send memory type */
     ucs_memory_type_t      recv_mem_type;   /* Recv memory type */
-    ucx_perf_accel_dev_t   send_device;     /* Send memory device for gdaki */
-    ucx_perf_accel_dev_t   recv_device;     /* Recv memory device for gdaki */
-    ucs_device_level_t     device_level;    /* Device level for gdaki */
+    ucx_perf_accel_dev_t   send_device;     /* Send memory device */
+    ucx_perf_accel_dev_t   recv_device;     /* Recv memory device */
+    ucs_device_level_t     device_level;    /* Device level */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size
