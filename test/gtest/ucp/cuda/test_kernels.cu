@@ -155,6 +155,7 @@ static __global__ void
 ucp_test_kernel(const test_ucp_device_kernel_params_t params,
                 test_ucp_device_kernel_result_t *result_ptr)
 {
+    /* Execute fence on any return, to ensure result is visible to the host */
     scope_guard fence(__threadfence_system);
     ucs_status_t &status = result_ptr->status;
 
@@ -241,6 +242,7 @@ launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
     result->status         = UCS_ERR_NOT_IMPLEMENTED;
     result->producer_index = 0;
     result->ready_index    = 0;
+    result->avail_count    = 0;
 
     switch (params.level) {
     case UCS_DEVICE_LEVEL_THREAD:

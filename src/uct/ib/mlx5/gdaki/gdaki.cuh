@@ -117,7 +117,7 @@ uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned count,
     if (lane_id == 0) {
         wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(ep, count);
     } else {
-        /* Initialize with 0, because __shfl_sync may set only 32 bits*/
+        /* Initialize with 0, because __shfl_sync may set only 32 bits */
         wqe_base = 0;
     }
 
@@ -496,13 +496,12 @@ uct_rc_mlx5_gda_qedump(const char *pfx, void *buff, ssize_t len)
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
 {
-    void *cqe           = ep->cqe_daddr;
-    size_t cqe_num      = ep->cqe_num;
-    uint64_t cqe_idx    = ep->cqe_ci;
-    const size_t cqe_sz = DOCA_GPUNETIO_VERBS_CQE_SIZE;
-    uint32_t idx        = cqe_idx & (cqe_num - 1);
-    void *curr_cqe      = (uint8_t*)cqe + idx * cqe_sz;
-    auto *cqe64         = reinterpret_cast<mlx5_cqe64*>(curr_cqe);
+    void *cqe        = ep->cqe_daddr;
+    size_t cqe_num   = ep->cqe_num;
+    uint64_t cqe_idx = ep->cqe_ci;
+    uint32_t idx     = cqe_idx & (cqe_num - 1);
+    void *curr_cqe   = (uint8_t*)cqe + (idx * DOCA_GPUNETIO_VERBS_CQE_SIZE);
+    auto *cqe64      = reinterpret_cast<mlx5_cqe64*>(curr_cqe);
 
     uint8_t op_owner = READ_ONCE(cqe64->op_own);
     if ((op_owner & MLX5_CQE_OWNER_MASK) ^ !!(cqe_idx & cqe_num)) {
