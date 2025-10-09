@@ -95,7 +95,7 @@ template<typename T> class device_result_ptr {
         return true;
     }
     return false;
- }
+}
 
  template<ucs_device_level_t level>
  static __global__ void
@@ -224,56 +224,75 @@ ucs_status_t launch_uct_atomic(uct_device_ep_h device_ep,
 template<ucs_device_level_t level>
 static __global__ void
 uct_put_multi_kernel(uct_device_ep_h ep,
-                  const uct_device_mem_element_t *mem_list,
-                  size_t mem_list_count, void *const *addresses,
-                  const uint64_t *remote_addresses, const size_t *lengths,
-                  uint64_t counter_inc_value, uint64_t counter_remote_address,
-                  ucs_status_t *status_p)
+                     const uct_device_mem_element_t *mem_list,
+                     size_t mem_list_count, void *const *addresses,
+                     const uint64_t *remote_addresses, const size_t *lengths,
+                     uint64_t counter_inc_value,
+                     uint64_t counter_remote_address, ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
 
     if (is_op_enabled(level)) {
-        *status_p = uct_device_ep_put_multi<level>(ep, mem_list, mem_list_count, addresses,
-                                                   remote_addresses, lengths,
-                                                   counter_inc_value, counter_remote_address,
-                                                   UCT_DEVICE_FLAG_NODELAY, &comp);
+        *status_p = uct_device_ep_put_multi<level>(ep, mem_list, mem_list_count,
+                                                   addresses, remote_addresses,
+                                                   lengths, counter_inc_value,
+                                                   counter_remote_address,
+                                                   UCT_DEVICE_FLAG_NODELAY,
+                                                   &comp);
     }
 }
 
-ucs_status_t launch_uct_put_multi(uct_device_ep_h device_ep,
-                                  const uct_device_mem_element_t *mem_list,
-                                  size_t mem_list_count, void *const *addresses,
-                                  const uint64_t *remote_addresses, const size_t *lengths,
-                                  uint64_t counter_inc_value, uint64_t counter_remote_address,
-                                  ucs_device_level_t level,
-                                  unsigned num_threads, unsigned num_blocks)
+ucs_status_t
+launch_uct_put_multi(uct_device_ep_h device_ep,
+                     const uct_device_mem_element_t *mem_list,
+                     size_t mem_list_count, void *const *addresses,
+                     const uint64_t *remote_addresses, const size_t *lengths,
+                     uint64_t counter_inc_value,
+                     uint64_t counter_remote_address, ucs_device_level_t level,
+                     unsigned num_threads, unsigned num_blocks)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
     cudaError_t st;
 
     switch (level) {
-        case UCS_DEVICE_LEVEL_THREAD:
-            uct_put_multi_kernel<UCS_DEVICE_LEVEL_THREAD><<<num_blocks, num_threads>>>(
-                device_ep, mem_list, mem_list_count, addresses, remote_addresses, lengths,
-                counter_inc_value, counter_remote_address, status.device_ptr());
-            break;
-        case UCS_DEVICE_LEVEL_WARP:
-            uct_put_multi_kernel<UCS_DEVICE_LEVEL_WARP><<<num_blocks, num_threads>>>(
-                device_ep, mem_list, mem_list_count, addresses, remote_addresses, lengths,
-                counter_inc_value, counter_remote_address, status.device_ptr());
-            break;
-        case UCS_DEVICE_LEVEL_BLOCK:
-            uct_put_multi_kernel<UCS_DEVICE_LEVEL_BLOCK><<<num_blocks, num_threads>>>(
-                device_ep, mem_list, mem_list_count, addresses, remote_addresses, lengths,
-                counter_inc_value, counter_remote_address, status.device_ptr());
-            break;
-        case UCS_DEVICE_LEVEL_GRID:
-            uct_put_multi_kernel<UCS_DEVICE_LEVEL_GRID><<<num_blocks, num_threads>>>(
-                device_ep, mem_list, mem_list_count, addresses, remote_addresses, lengths,
-                counter_inc_value, counter_remote_address, status.device_ptr());
-            break;
-        default:
-            throw std::runtime_error("Unsupported level");
+    case UCS_DEVICE_LEVEL_THREAD:
+        uct_put_multi_kernel<UCS_DEVICE_LEVEL_THREAD>
+                <<<num_blocks, num_threads>>>(device_ep, mem_list,
+                                              mem_list_count, addresses,
+                                              remote_addresses, lengths,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_WARP:
+        uct_put_multi_kernel<UCS_DEVICE_LEVEL_WARP>
+                <<<num_blocks, num_threads>>>(device_ep, mem_list,
+                                              mem_list_count, addresses,
+                                              remote_addresses, lengths,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_BLOCK:
+        uct_put_multi_kernel<UCS_DEVICE_LEVEL_BLOCK>
+                <<<num_blocks, num_threads>>>(device_ep, mem_list,
+                                              mem_list_count, addresses,
+                                              remote_addresses, lengths,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_GRID:
+        uct_put_multi_kernel<UCS_DEVICE_LEVEL_GRID>
+                <<<num_blocks, num_threads>>>(device_ep, mem_list,
+                                              mem_list_count, addresses,
+                                              remote_addresses, lengths,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              status.device_ptr());
+        break;
+    default:
+        throw std::runtime_error("Unsupported level");
     }
 
     st = cudaGetLastError();
@@ -286,64 +305,79 @@ ucs_status_t launch_uct_put_multi(uct_device_ep_h device_ep,
 }
 
 template<ucs_device_level_t level>
-static __global__ void
-uct_put_multi_partial_kernel(uct_device_ep_h ep,
-                             const uct_device_mem_element_t *mem_list,
-                             const unsigned *mem_list_indices, unsigned mem_list_count,
-                             void *const *addresses, const uint64_t *remote_addresses,
-                             const size_t *lengths, unsigned counter_index,
-                             uint64_t counter_inc_value, uint64_t counter_remote_address,
-                             ucs_status_t *status_p)
+static __global__ void uct_put_multi_partial_kernel(
+        uct_device_ep_h ep, const uct_device_mem_element_t *mem_list,
+        const unsigned *mem_list_indices, unsigned mem_list_count,
+        void *const *addresses, const uint64_t *remote_addresses,
+        const size_t *offsets, const size_t *lengths, unsigned counter_index,
+        uint64_t counter_inc_value, uint64_t counter_remote_address,
+        ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
 
     if (is_op_enabled(level)) {
-        *status_p = uct_device_ep_put_multi_partial<level>(ep, mem_list, mem_list_indices, mem_list_count,
-                                                           addresses, remote_addresses, lengths, counter_index,
-                                                           counter_inc_value, counter_remote_address,
-                                                           UCT_DEVICE_FLAG_NODELAY, &comp);
+        *status_p = uct_device_ep_put_multi_partial<level>(
+                ep, mem_list, mem_list_indices, mem_list_count, addresses,
+                remote_addresses, offsets, offsets, lengths, counter_index,
+                counter_inc_value, counter_remote_address,
+                UCT_DEVICE_FLAG_NODELAY, &comp);
     }
 }
 
-ucs_status_t launch_uct_put_multi_partial(uct_device_ep_h device_ep,
-                                           const uct_device_mem_element_t *mem_list,
-                                           const unsigned *mem_list_indices, unsigned mem_list_count,
-                                           void *const *addresses, const uint64_t *remote_addresses,
-                                           const size_t *lengths, unsigned counter_index,
-                                           uint64_t counter_inc_value, uint64_t counter_remote_address,
-                                           ucs_device_level_t level,
-                                           unsigned num_threads, unsigned num_blocks)
+ucs_status_t launch_uct_put_multi_partial(
+        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
+        const unsigned *mem_list_indices, unsigned mem_list_count,
+        void *const *addresses, const uint64_t *remote_addresses,
+        const size_t *offsets, const size_t *lengths, unsigned counter_index,
+        uint64_t counter_inc_value, uint64_t counter_remote_address,
+        ucs_device_level_t level, unsigned num_threads, unsigned num_blocks)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
     cudaError_t st;
 
     switch (level) {
-        case UCS_DEVICE_LEVEL_THREAD:
-            uct_put_multi_partial_kernel<UCS_DEVICE_LEVEL_THREAD><<<num_blocks, num_threads>>>(
-                device_ep, mem_list, mem_list_indices, mem_list_count, addresses,
-                remote_addresses, lengths, counter_index,
-                counter_inc_value, counter_remote_address, status.device_ptr());
-            break;
-        case UCS_DEVICE_LEVEL_WARP:
-            uct_put_multi_partial_kernel<UCS_DEVICE_LEVEL_WARP><<<num_blocks, num_threads>>>(
-                device_ep, mem_list, mem_list_indices, mem_list_count, addresses,
-                remote_addresses, lengths, counter_index,
-                counter_inc_value, counter_remote_address, status.device_ptr());
-            break;
-        case UCS_DEVICE_LEVEL_BLOCK:
-            uct_put_multi_partial_kernel<UCS_DEVICE_LEVEL_BLOCK><<<num_blocks, num_threads>>>(
-                device_ep, mem_list, mem_list_indices, mem_list_count, addresses,
-                remote_addresses, lengths, counter_index,
-                counter_inc_value, counter_remote_address, status.device_ptr());
-            break;
-        case UCS_DEVICE_LEVEL_GRID:
-            uct_put_multi_partial_kernel<UCS_DEVICE_LEVEL_GRID><<<num_blocks, num_threads>>>(
-                device_ep, mem_list, mem_list_indices, mem_list_count, addresses,
-                remote_addresses, lengths, counter_index,
-                counter_inc_value, counter_remote_address, status.device_ptr());
-            break;
-        default:
-            throw std::runtime_error("Unsupported level");
+    case UCS_DEVICE_LEVEL_THREAD:
+        uct_put_multi_partial_kernel<UCS_DEVICE_LEVEL_THREAD>
+                <<<num_blocks, num_threads>>>(device_ep, mem_list,
+                                              mem_list_indices, mem_list_count,
+                                              addresses, remote_addresses,
+                                              offsets, lengths, counter_index,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_WARP:
+        uct_put_multi_partial_kernel<UCS_DEVICE_LEVEL_WARP>
+                <<<num_blocks, num_threads>>>(device_ep, mem_list,
+                                              mem_list_indices, mem_list_count,
+                                              addresses, remote_addresses,
+                                              offsets, lengths, counter_index,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_BLOCK:
+        uct_put_multi_partial_kernel<UCS_DEVICE_LEVEL_BLOCK>
+                <<<num_blocks, num_threads>>>(device_ep, mem_list,
+                                              mem_list_indices, mem_list_count,
+                                              addresses, remote_addresses,
+                                              offsets, lengths, counter_index,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_GRID:
+        uct_put_multi_partial_kernel<UCS_DEVICE_LEVEL_GRID>
+                <<<num_blocks, num_threads>>>(device_ep, mem_list,
+                                              mem_list_indices, mem_list_count,
+                                              addresses, remote_addresses,
+                                              offsets, lengths, counter_index,
+                                              counter_inc_value,
+                                              counter_remote_address,
+                                              status.device_ptr());
+        break;
+    default:
+        throw std::runtime_error("Unsupported level");
     }
 
     st = cudaGetLastError();

@@ -98,9 +98,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
                                                     inc_value, remote_address,
                                                     flags, comp);
     } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
-        return uct_cuda_ipc_ep_atomic_add<level>(device_ep, mem_elem,
-                                                 inc_value, remote_address,
-                                                 flags, comp);
+        return uct_cuda_ipc_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
+                                                 remote_address, flags, comp);
     }
 
     ucs_device_error("unsupported device_ep->uct_tl_id=%d",
@@ -166,8 +165,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
                                                 mem_list_count, addresses,
                                                 remote_addresses, lengths,
                                                 counter_inc_value,
-                                                counter_remote_address,
-                                                flags, comp);
+                                                counter_remote_address, flags,
+                                                comp);
     }
 
     ucs_device_error("unsupported device_ep->uct_tl_id=%d",
@@ -213,6 +212,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
  *                                     mem_list_indices.
  * @param [in]  addresses              Array of local addresses to send from.
  * @param [in]  remote_addresses       Array of remote addresses to send to.
+ * @param [in]  local_offsets          Array of local offsets to send from.
+ * @param [in]  remote_offsets         Array of remote offsets to send to.
  * @param [in]  lengths                Array of lengths in bytes for each send.
  * @param [in]  counter_index          Index of remote increment descriptor.
  * @param [in]  counter_inc_value      Value of the remote increment.
@@ -227,6 +228,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
         void *const *addresses, const uint64_t *remote_addresses,
+        const size_t *local_offsets, const size_t *remote_offsets,
         const size_t *lengths, unsigned counter_index,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
         uint64_t flags, uct_device_completion_t *comp)
@@ -234,15 +236,15 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_put_multi_partial<level>(
                 device_ep, mem_list, mem_list_indices, mem_list_count,
-                addresses, remote_addresses, lengths, counter_index,
-                counter_inc_value, counter_remote_address, flags, comp);
+                addresses, remote_addresses, local_offsets, remote_offsets,
+                lengths, counter_index, counter_inc_value,
+                counter_remote_address, flags, comp);
     } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
-        return uct_cuda_ipc_ep_put_multi_partial<level>(device_ep, mem_list,
-                                                        mem_list_indices, mem_list_count,
-                                                        addresses, remote_addresses,
-                                                        lengths, counter_index,
-                                                        counter_inc_value, counter_remote_address,
-                                                        flags, comp);
+        return uct_cuda_ipc_ep_put_multi_partial<level>(
+                device_ep, mem_list, mem_list_indices, mem_list_count,
+                addresses, remote_addresses, local_offsets, remote_offsets,
+                lengths, counter_index, counter_inc_value,
+                counter_remote_address, flags, comp);
     }
 
     ucs_device_error("unsupported device_ep->uct_tl_id=%d",

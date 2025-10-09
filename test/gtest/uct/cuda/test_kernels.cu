@@ -157,6 +157,7 @@ uct_put_partial_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
     __shared__ size_t sizes[iovcnt];
     __shared__ void *src[iovcnt];
     __shared__ uint64_t dst[iovcnt];
+    __shared__ size_t offsets[iovcnt];
     int lane_id = threadIdx.x;
     ucs_status_t status;
 
@@ -165,12 +166,14 @@ uct_put_partial_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
         sizes[lane_id]   = length / iovcnt;
         src[lane_id]     = (void*)((uintptr_t)va + length / iovcnt * lane_id);
         dst[lane_id]     = rva + length / iovcnt * lane_id;
+        offsets[lane_id] = 0;
     }
 
     __syncwarp();
     status = uct_device_ep_put_multi_partial<UCS_DEVICE_LEVEL_WARP>(
-            ep, mem_list, indices, iovcnt, src, dst, sizes, iovcnt, 4,
-            atomic_rva, UCT_DEVICE_FLAG_NODELAY, &comp);
+            ep, mem_list, indices, iovcnt, src, dst, (const size_t*)offsets,
+            (const size_t*)offsets, sizes, iovcnt, 4, atomic_rva,
+            UCT_DEVICE_FLAG_NODELAY, &comp);
     if (status != UCS_INPROGRESS) {
         *status_p = status;
         return;
