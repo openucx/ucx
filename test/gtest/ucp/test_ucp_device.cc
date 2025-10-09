@@ -101,11 +101,17 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
     // Initialize elements
     std::vector<ucp_device_mem_list_elem_t> elems(count);
     for (auto i = 0; i < count; ++i) {
-        auto &elem      = elems[i];
-        elem.field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                          UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
-        elem.memh       = m_src[i]->memh();
-        elem.rkey       = m_rkeys[i];
+        auto &elem       = elems[i];
+        elem.field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                           UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
+                           UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
+                           UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                           UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
+        elem.memh        = m_src[i]->memh();
+        elem.rkey        = m_rkeys[i];
+        elem.local_addr  = m_src[i]->ptr();
+        elem.remote_addr = reinterpret_cast<uint64_t>(m_dst[i]->ptr());
+        elem.length      = m_src[i]->size();
     }
 
     // Initialize parameters
@@ -465,18 +471,11 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi)
     const unsigned counter_index = count;
     list.dst_counter_init(counter_index);
 
-    auto addresses        = ucx_cuda::make_device_vector(list.src_ptrs());
-    auto remote_addresses = ucx_cuda::make_device_vector(list.dst_ptrs());
-    auto lengths          = ucx_cuda::make_device_vector(std::vector<size_t>(count, size));
-    auto params           = init_params();
-    params.operation      = TEST_UCP_DEVICE_KERNEL_PUT_MULTI;
+    auto params      = init_params();
+    params.operation = TEST_UCP_DEVICE_KERNEL_PUT_MULTI;
 
-    params.mem_list                     = list.handle();
-    params.multi.addresses              = addresses.ptr();
-    params.multi.remote_addresses       = remote_addresses.ptr();
-    params.multi.lengths                = lengths.ptr();
-    params.multi.counter_remote_address = list.dst_ptr(counter_index);
-    params.multi.counter_inc_value      = 1;
+    params.mem_list                = list.handle();
+    params.multi.counter_inc_value = 1;
     launch_kernel(params);
 
     // Check received data
@@ -504,30 +503,26 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi_partial)
         }
     }
 
-    std::vector<void*> addresses_vec;
-    std::vector<uint64_t> remote_addresses_vec;
-    for (auto index : indexes_vec) {
-        addresses_vec.push_back(list.src_ptr(index));
-        remote_addresses_vec.push_back(list.dst_ptr(index));
-    }
+    std::vector<size_t> local_offsets(indexes_vec.size(), 0);
+    std::vector<size_t> remote_offsets(indexes_vec.size(), 0);
 
-    auto indexes          = ucx_cuda::make_device_vector(indexes_vec);
-    auto addresses        = ucx_cuda::make_device_vector(addresses_vec);
-    auto remote_addresses = ucx_cuda::make_device_vector(remote_addresses_vec);
-    auto lengths          = ucx_cuda::make_device_vector(
+    auto indexes               = ucx_cuda::make_device_vector(indexes_vec);
+    auto device_local_offsets  = ucx_cuda::make_device_vector(local_offsets);
+    auto device_remote_offsets = ucx_cuda::make_device_vector(remote_offsets);
+    auto lengths               = ucx_cuda::make_device_vector(
             std::vector<size_t>(indexes_vec.size(), size));
-    auto params           = init_params();
-    params.operation      = TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL;
+    auto params                = init_params();
+    params.operation           = TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL;
 
-    params.mem_list                       = list.handle();
-    params.partial.addresses              = addresses.ptr();
-    params.partial.remote_addresses       = remote_addresses.ptr();
-    params.partial.lengths                = lengths.ptr();
-    params.partial.mem_list_indices       = indexes.ptr();
-    params.partial.mem_list_count         = indexes_vec.size();
-    params.partial.counter_index          = counter_index;
-    params.partial.counter_remote_address = list.dst_ptr(counter_index);
-    params.partial.counter_inc_value      = 1;
+    params.mem_list                      = list.handle();
+    params.partial.local_offsets         = device_local_offsets.ptr();
+    params.partial.remote_offsets        = device_remote_offsets.ptr();
+    params.partial.lengths               = lengths.ptr();
+    params.partial.mem_list_indices      = indexes.ptr();
+    params.partial.mem_list_count        = indexes_vec.size();
+    params.partial.counter_index         = counter_index;
+    params.partial.counter_remote_offset = 0;
+    params.partial.counter_inc_value     = 1;
     launch_kernel(params);
 
     // Check received data

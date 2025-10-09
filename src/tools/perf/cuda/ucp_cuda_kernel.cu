@@ -89,10 +89,9 @@ struct ucp_perf_cuda_params {
     ucp_device_mem_list_handle_h mem_list;
     size_t                       length;
     unsigned                     *indices;
-    void                         **addresses;
-    uint64_t                     *remote_addresses;
+    size_t                       *local_offsets;
+    size_t                       *remote_offsets;
     size_t                       *lengths;
-    uint64_t                     counter_remote;
     uint64_t                     *counter_send;
     uint64_t                     *counter_recv;
     ucp_device_flags_t           flags;
@@ -111,8 +110,8 @@ public:
     {
         ucp_device_mem_list_release(m_params.mem_list);
         CUDA_CALL_WARN(cudaFree, m_params.indices);
-        CUDA_CALL_WARN(cudaFree, m_params.addresses);
-        CUDA_CALL_WARN(cudaFree, m_params.remote_addresses);
+        CUDA_CALL_WARN(cudaFree, m_params.local_offsets);
+        CUDA_CALL_WARN(cudaFree, m_params.remote_offsets);
         CUDA_CALL_WARN(cudaFree, m_params.lengths);
     }
 
@@ -122,13 +121,23 @@ private:
     void init_mem_list(const ucx_perf_context_t &perf)
     {
         /* +1 for the counter */
-        size_t count = perf.params.msg_size_cnt + 1;
+        size_t count  = perf.params.msg_size_cnt + 1;
+        size_t offset = 0;
         ucp_device_mem_list_elem_t elems[count];
+
         for (size_t i = 0; i < count; ++i) {
             elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
+                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
+                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
+                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
             elems[i].memh       = perf.ucp.send_memh;
             elems[i].rkey       = perf.ucp.rkey;
+            elems[i].local_addr = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
+            elems[i].remote_addr = perf.ucp.remote_addr + offset;
+            elems[i].length      = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
+                                                           perf.params.msg_size_list[i];
+            offset              += elems[i].length;
         }
 
         ucp_device_mem_list_params_t params;
@@ -149,33 +158,30 @@ private:
     void init_elements(const ucx_perf_context_t &perf)
     {
         /* +1 for the counter */
-        size_t count = perf.params.msg_size_cnt + 1;
+        size_t count  = perf.params.msg_size_cnt + 1;
+        size_t offset = 0;
 
         std::vector<unsigned> indices(count);
-        std::vector<void*> addresses(count);
-        std::vector<uint64_t> remote_addresses(count);
+        std::vector<size_t> local_offsets(count, 0);
+        std::vector<size_t> remote_offsets(count, 0);
         std::vector<size_t> lengths(count);
-        for (unsigned i = 0, offset = 0; i < count; ++i) {
-            indices[i]          = i;
-            addresses[i]        = (char *)perf.send_buffer + offset;
-            remote_addresses[i] = perf.ucp.remote_addr + offset;
-            lengths[i]          = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
-                                                     perf.params.msg_size_list[i];
-            offset             += lengths[i];
+
+        for (unsigned i = 0; i < count; ++i) {
+            indices[i] = i;
+            lengths[i] = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
+                                            perf.params.msg_size_list[i];
+            offset    += lengths[i];
         }
 
         m_params.indices          = device_vector(indices);
-        m_params.addresses        = device_vector(addresses);
-        m_params.remote_addresses = device_vector(remote_addresses);
+        m_params.local_offsets    = device_vector(local_offsets);
+        m_params.remote_offsets   = device_vector(remote_offsets);
         m_params.lengths          = device_vector(lengths);
     }
 
     void init_counters(const ucx_perf_context_t &perf)
     {
         m_params.length         = ucx_perf_get_message_size(&perf.params);
-        m_params.counter_remote = (uint64_t)ucx_perf_cuda_get_sn(
-                                        (void*)perf.ucp.remote_addr,
-                                        m_params.length);
         m_params.counter_send   = ucx_perf_cuda_get_sn(perf.send_buffer,
                                                        m_params.length);
         m_params.counter_recv   = ucx_perf_cuda_get_sn(perf.recv_buffer,
@@ -206,26 +212,21 @@ ucp_perf_cuda_send_async(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
         /* TODO: Change to ucp_device_counter_write */
         *params.counter_send = idx + 1;
         return ucp_device_put_single<level>(params.mem_list, params.indices[0],
-                                            params.addresses[0],
-                                            params.remote_addresses[0],
+                                            0, 0,
                                             params.length + ONESIDED_SIGNAL_SIZE,
-                                            params.flags, req);
+                                            0, params.flags, req);
     case UCX_PERF_CMD_PUT_MULTI:
-        return ucp_device_put_multi<level>(params.mem_list, params.addresses,
-                                           params.remote_addresses,
-                                           params.lengths, 1,
-                                           params.counter_remote, params.flags,
+        return ucp_device_put_multi<level>(params.mem_list, 1, 0, params.flags,
                                            req);
-    case UCX_PERF_CMD_PUT_PARTIAL:{
+    case UCX_PERF_CMD_PUT_PARTIAL: {
         unsigned counter_index = params.mem_list->mem_list_length - 1;
         return ucp_device_put_multi_partial<level>(params.mem_list,
                                                    params.indices,
                                                    counter_index,
-                                                   params.addresses,
-                                                   params.remote_addresses,
+                                                   params.local_offsets,
+                                                   params.remote_offsets,
                                                    params.lengths,
-                                                   counter_index, 1,
-                                                   params.counter_remote,
+                                                   counter_index, 1, 0, 0,
                                                    params.flags, req);
         }
     }
