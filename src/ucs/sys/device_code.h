@@ -90,7 +90,7 @@ UCS_F_DEVICE void ucs_device_atomic64_write(uint64_t *ptr, uint64_t value)
 /* Helper macro to print a message from a device function including the
  * thread and block indices, file, line, and function */
 #define ucs_device_printf(_title, _fmt, ...) \
-    printf("(%d:%d) %6s %s:%d %s: " _fmt "\n", threadIdx.x, blockIdx.x, _title, \
+    printf("(%5d:%5d) %5s %-40.40s:%-4d %-30.30s: " _fmt "\n", threadIdx.x, blockIdx.x, _title, \
            __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 
 /* Print an error message from a device function */
