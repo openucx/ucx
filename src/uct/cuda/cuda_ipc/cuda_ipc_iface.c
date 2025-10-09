@@ -306,7 +306,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->latency                 = ucs_linear_func_make(1e-6, 0);
     iface_attr->bandwidth.dedicated     = 0;
     iface_attr->bandwidth.shared        = iface->config.bandwidth;
-    iface_attr->overhead                = 7.0e-6;
+    iface_attr->overhead                = 0.05e-6;
     iface_attr->priority                = 0;
 
     return UCS_OK;
