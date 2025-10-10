@@ -530,7 +530,7 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
 
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> pi_ref(ep->sq_wqe_pi);
     uint64_t sq_wqe_pi = pi_ref.load(cuda::std::memory_order_relaxed);
-    uint64_t new_qwe_pi;
+    uint64_t new_wqe_pi;
 
     do {
         /* Skip CQE if it's older than current producer index, could be already
@@ -540,13 +540,13 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
         }
 
         uint16_t completed_delta = wqe_cnt - (uint16_t)sq_wqe_pi;
-        new_qwe_pi               = sq_wqe_pi + completed_delta + 1;
-    } while (!pi_ref.compare_exchange_weak(sq_wqe_pi, new_qwe_pi,
+        new_wqe_pi               = sq_wqe_pi + completed_delta + 1;
+    } while (!pi_ref.compare_exchange_weak(sq_wqe_pi, new_wqe_pi,
                                            cuda::std::memory_order_release,
                                            cuda::std::memory_order_relaxed));
 
     if (opcode == MLX5_CQE_REQ) {
-        atomicAdd(&ep->avail_count, (int32_t)(new_qwe_pi - sq_wqe_pi));
+        atomicAdd(&ep->avail_count, (int32_t)(new_wqe_pi - sq_wqe_pi));
         return;
     }
 
