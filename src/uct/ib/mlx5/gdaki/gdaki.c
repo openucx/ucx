@@ -83,8 +83,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         return status;
     }
 
+    /* CQE is being read/updated simultaneously by multiple threads.
+     * Overflow detection is disabled for CQ, but overflow is handled in
+     * progress by validating the CQE after reading the content.
+     * We give CQ extra space (x2) to reduce the probability of CQ overflows.
+     */
     init_attr.cq_len[UCT_IB_DIR_TX] = iface->super.super.config.tx_qp_len *
-                                      UCT_IB_MLX5_MAX_BB;
+                                      UCT_IB_MLX5_MAX_BB * 2;
     uct_ib_mlx5_cq_calc_sizes(&iface->super.super.super, UCT_IB_DIR_TX,
                               &init_attr, 0, &cq_attr);
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
@@ -176,8 +181,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     dev_ep.sq_num       = self->qp.super.qp_num;
     dev_ep.sq_wqe_daddr = UCS_PTR_BYTE_OFFSET(self->ep_gpu,
                                               qp_attr.umem_offset);
-    dev_ep.sq_wqe_num   = qp_attr.max_tx;
-    dev_ep.sq_dbrec     = &self->ep_gpu->qp_dbrec[MLX5_SND_DBR];
+    dev_ep.sq_rsvd_index  = 0;
+    dev_ep.sq_ready_index = 0;
+    dev_ep.sq_wqe_pi      = 0;
+    dev_ep.sq_wqe_num     = qp_attr.max_tx;
+    /* FC mask is used to determine if WQE should be posted with completion.
+     * qp_attr.max_tx must be a power of 2. */
+    dev_ep.sq_fc_mask     = (qp_attr.max_tx >> 1) - 1;
+    dev_ep.avail_count    = qp_attr.max_tx;
+    dev_ep.sq_dbrec       = &self->ep_gpu->qp_dbrec[MLX5_SND_DBR];
+
     dev_ep.cqe_daddr = UCS_PTR_BYTE_OFFSET(self->ep_gpu, cq_attr.umem_offset);
     dev_ep.cqe_num   = cq_attr.cq_size;
     dev_ep.sq_db     = self->sq_db;
