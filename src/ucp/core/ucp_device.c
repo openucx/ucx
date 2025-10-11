@@ -32,6 +32,9 @@ KHASH_IMPL(ucp_device_handle_allocs, ucp_device_mem_list_handle_h,
 static khash_t(ucp_device_handle_allocs) ucp_device_handle_hash;
 static ucs_spinlock_t ucp_device_handle_hash_lock;
 
+/* Size of temporary allocation for local sys_dev detection */
+#define UCP_DEVICE_LOCAL_SYS_DEV_DETECT_SIZE 64
+
 
 void ucp_device_init(void)
 {
@@ -121,22 +124,26 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
                                RKEY, NULL);
 
         /* TODO: Delegate most of checks below to proto selection */
-        if ((rkey == NULL) || (memh == NULL)) {
-            ucs_error("element[%lu] rkey=%p, memh=%p", i, rkey, memh);
+        if (rkey == NULL) {
+            ucs_error("element[%lu] rkey is NULL", i);
             return UCS_ERR_INVALID_PARAM;
         }
 
         if (i == 0) {
-            *local_sys_dev  = memh->sys_dev;
-            *local_md_map   = memh->md_map;
-            *mem_type       = memh->mem_type;
+            if (memh != NULL) {
+                *local_sys_dev = memh->sys_dev;
+                *local_md_map  = memh->md_map;
+                *mem_type      = memh->mem_type;
+            } else {
+                *mem_type      = rkey->mem_type;
+                *local_md_map  = UINT64_MAX;
+            }
             *rkey_cfg_index = rkey->cfg_index;
             if (*rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
                 ucs_debug("invalid first rkey: cfg_index=%d", *rkey_cfg_index);
                 return UCS_ERR_INVALID_PARAM;
             }
         } else {
-            *local_md_map &= memh->md_map;
             if (rkey->cfg_index != *rkey_cfg_index) {
                 ucs_debug("mismatched rkey config index: "
                           "ucp_rkey[%lu]->cfg_index=%u cfg_index=%u",
@@ -144,11 +151,19 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
                 return UCS_ERR_UNSUPPORTED;
             }
 
-            if (memh->sys_dev != *local_sys_dev) {
-                ucs_debug("mismatched local sys_dev: ucp_memh[%zu].sys_dev=%u "
-                          "first_sys_dev=%u",
-                          i, memh->sys_dev, *local_sys_dev);
-                return UCS_ERR_UNSUPPORTED;
+            if (memh != NULL) {
+                if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+                    *local_sys_dev = memh->sys_dev;
+                    *local_md_map  = memh->md_map;
+                } else {
+                    *local_md_map &= memh->md_map;
+                    if (memh->sys_dev != *local_sys_dev) {
+                        ucs_debug("mismatched local sys_dev: ucp_memh[%zu].sys_dev=%u "
+                                  "first_sys_dev=%u",
+                                  i, memh->sys_dev, *local_sys_dev);
+                        return UCS_ERR_UNSUPPORTED;
+                    }
+                }
             }
         }
     }
@@ -228,6 +243,42 @@ static void ucp_device_mem_list_lane_lookup(
         ucs_trace("best lanes: lane[%u]=%lfMB/s lane[%u]=%lfMB/s", lanes[0],
                   best_bw[0] / UCS_MBYTE, lanes[1], best_bw[1] / UCS_MBYTE);
     }
+}
+
+static ucs_status_t
+ucp_device_detect_local_sys_dev(ucp_context_h context,
+                                ucs_memory_type_t mem_type,
+                                ucs_sys_device_t *local_sys_dev_p)
+{
+    ucs_memory_info_t mem_info;
+    uct_allocated_memory_t detect_mem;
+    ucs_status_t status;
+
+    status = ucp_mem_do_alloc(context, NULL,
+                              UCP_DEVICE_LOCAL_SYS_DEV_DETECT_SIZE,
+                              UCT_MD_MEM_ACCESS_LOCAL_READ |
+                              UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+                              mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
+                              "local_sys_dev_detect", &detect_mem);
+    if (status != UCS_OK) {
+        ucs_error("failed to allocate memory for sys_dev detection: %s",
+                  ucs_status_string(status));
+        return status;
+    }
+
+    ucp_memory_detect_internal(context, detect_mem.address, detect_mem.length,
+                               &mem_info);
+    *local_sys_dev_p = mem_info.sys_dev;
+
+    uct_mem_free(&detect_mem);
+
+    if (*local_sys_dev_p == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("detected unknown local_sys_dev");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    ucs_trace("detected local_sys_dev=%u", *local_sys_dev_p);
+    return UCS_OK;
 }
 
 static ucs_status_t ucp_device_mem_list_create_handle(
@@ -361,13 +412,17 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                                           ucp_ep_get_rsc_index(ep, lanes[i]));
         ucp_element    = params->elements;
         for (j = 0; j < params->num_elements; j++) {
-            /* Local registration */
-            uct_memh = ucp_element->memh->uct[local_md_index];
-            ucs_assertv((ucp_element->memh->md_map & UCS_BIT(local_md_index)) !=
-                                0,
-                        "uct_memh=%p md_map=0x%lx local_md_index=%u", uct_memh,
-                        ucp_element->memh->md_map, local_md_index);
-            ucs_assert(uct_memh != UCT_MEM_HANDLE_NULL);
+            if (ucp_element->memh != NULL) {
+                /* Local registration */
+                uct_memh = ucp_element->memh->uct[local_md_index];
+                ucs_assertv(
+                    (ucp_element->memh->md_map & UCS_BIT(local_md_index)) != 0,
+                     "uct_memh=%p md_map=0x%lx local_md_index=%u", uct_memh,
+                     ucp_element->memh->md_map, local_md_index);
+                ucs_assert(uct_memh != UCT_MEM_HANDLE_NULL);
+            } else {
+                uct_memh = UCT_MEM_HANDLE_NULL;
+            }
 
             /* Remote registration */
             rkey_index =
@@ -428,6 +483,15 @@ ucp_device_mem_list_create(ucp_ep_h ep,
                                               &mem_type);
     if (status != UCS_OK) {
         return status;
+    }
+
+    if (local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        status = ucp_device_detect_local_sys_dev(ep->worker->context, mem_type,
+                                                  &local_sys_dev);
+        if (status != UCS_OK) {
+            ucs_error("failed to detect local_sys_dev: %s", ucs_status_string(status));
+            return status;
+        }
     }
 
     /* Perform pseudo lane selection without size */
