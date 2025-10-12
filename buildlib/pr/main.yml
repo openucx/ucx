@@ -42,6 +42,18 @@ resources:
     - container: rhel100_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/rhel10.0/builder:mofed-25.07-0.9.7.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rocky89
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rocky8.9/builder:mofed-24.10-3.2.5.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rocky96
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rocky9.6/builder:mofed-24.10-3.2.5.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rocky89_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/rocky8.9/builder:mofed-24.10-3.2.5.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: rocky96_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/rocky9.6/builder:mofed-24.10-3.2.5.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2004
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
