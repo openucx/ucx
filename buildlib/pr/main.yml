@@ -159,6 +159,12 @@ resources:
     - container: ubuntu24_cuda_13_0
       image: nvidia/cuda:13.0.0-devel-ubuntu24.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
+    - container: rocky8_cuda_13_0
+      image: nvidia/cuda:13.0.0-devel-rockylinux8
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
+    - container: rocky9_cuda_13_0
+      image: nvidia/cuda:13.0.0-devel-rockylinux9
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
