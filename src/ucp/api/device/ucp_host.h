@@ -34,11 +34,11 @@ BEGIN_C_DECLS
  * It is used to enable backward compatibility support.
  */
 enum ucp_device_mem_list_elem_field {
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH        = UCS_BIT(0), /**< Source memory handle */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH        = UCS_BIT(0), /**< Source memory handle (optional for counter elements) */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY        = UCS_BIT(1), /**< Unpacked remote memory key */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR  = UCS_BIT(2), /**< Local address (optional for counter elements) */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(3), /**< Remote address */
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH      = UCS_BIT(4)  /**< Length of the local buffer in bytes (optional for counter elements) */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH      = UCS_BIT(4)  /**< Length of the local buffer in bytes */
 };
 
 
@@ -68,13 +68,13 @@ typedef struct ucp_device_mem_list_elem {
 
     /**
      * Local memory registration handle.
-     * Optional for elements used only for remote addressing (e.g., counters).
+     * Optional for counter elements.
      */
     ucp_mem_h  memh;
 
     /**
      * Local memory address for the device transfer operations.
-     * Optional for elements used only for remote addressing (e.g., counters).
+     * Optional for counter elements.
      */
     void*     local_addr;
 

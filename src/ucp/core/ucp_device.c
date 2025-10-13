@@ -90,7 +90,66 @@ ucp_device_mem_handle_hash_remove(ucp_device_mem_list_handle_h handle)
 }
 
 static ucs_status_t
-ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
+ucp_device_detect_local_sys_dev(ucp_context_h context,
+                                ucs_memory_type_t mem_type,
+                                ucs_sys_device_t *local_sys_dev_p)
+{
+    ucs_memory_info_t mem_info;
+    uct_allocated_memory_t detect_mem;
+    ucs_status_t status;
+
+    status = ucp_mem_do_alloc(context, NULL,
+                              UCP_DEVICE_LOCAL_SYS_DEV_DETECT_SIZE,
+                              UCT_MD_MEM_ACCESS_LOCAL_READ |
+                              UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+                              mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
+                              "local_sys_dev_detect", &detect_mem);
+    if (status != UCS_OK) {
+        ucs_error("failed to allocate memory for sys_dev detection: %s",
+                  ucs_status_string(status));
+        return status;
+    }
+
+    ucp_memory_detect_internal(context, detect_mem.address, detect_mem.length,
+                               &mem_info);
+    *local_sys_dev_p = mem_info.sys_dev;
+
+    uct_mem_free(&detect_mem);
+
+    if (*local_sys_dev_p == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("detected unknown local_sys_dev");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    ucs_trace("detected local_sys_dev=%u", *local_sys_dev_p);
+    return UCS_OK;
+}
+
+static ucp_md_map_t
+ucp_device_detect_local_md_map(ucp_context_h context,
+                               ucs_sys_device_t local_sys_dev)
+{
+    ucp_md_map_t local_md_map = 0;
+    ucp_md_index_t md_index;
+
+    /* Build MD map from MDs that can access the local_sys_dev */
+    for (md_index = 0; md_index < context->num_mds; md_index++) {
+        ucp_sys_dev_map_t sys_dev_map = context->tl_mds[md_index].sys_dev_map;
+
+        if (sys_dev_map & UCS_BIT(local_sys_dev)) {
+            local_md_map |= UCS_BIT(md_index);
+        }
+    }
+
+    ucs_trace("detected local_md_map=0x%" PRIx64 " for local_sys_dev=%u",
+              local_md_map, local_sys_dev);
+    return local_md_map;
+}
+
+
+static ucs_status_t
+ucp_device_mem_list_params_check(ucp_context_h context,
+                                 const ucp_device_mem_list_params_t *params,
                                  ucp_worker_cfg_index_t *rkey_cfg_index,
                                  ucs_sys_device_t *local_sys_dev,
                                  ucp_md_map_t *local_md_map,
@@ -100,6 +159,7 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
     ucp_mem_h memh;
     size_t i, num_elements, element_size;
     const ucp_device_mem_list_elem_t *elements, *element;
+    ucs_status_t status;
 
     if (params == NULL) {
         return UCS_ERR_INVALID_PARAM;
@@ -136,7 +196,6 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
                 *mem_type      = memh->mem_type;
             } else {
                 *mem_type      = rkey->mem_type;
-                *local_md_map  = UINT64_MAX;
             }
             *rkey_cfg_index = rkey->cfg_index;
             if (*rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
@@ -166,6 +225,18 @@ ucp_device_mem_list_params_check(const ucp_device_mem_list_params_t *params,
                 }
             }
         }
+    }
+
+    /* No memh provided */
+    if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        status = ucp_device_detect_local_sys_dev(context, *mem_type,
+                                                 local_sys_dev);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        *local_md_map = ucp_device_detect_local_md_map(context,
+                                                       *local_sys_dev);
     }
 
     return UCS_OK;
@@ -243,42 +314,6 @@ static void ucp_device_mem_list_lane_lookup(
         ucs_trace("best lanes: lane[%u]=%lfMB/s lane[%u]=%lfMB/s", lanes[0],
                   best_bw[0] / UCS_MBYTE, lanes[1], best_bw[1] / UCS_MBYTE);
     }
-}
-
-static ucs_status_t
-ucp_device_detect_local_sys_dev(ucp_context_h context,
-                                ucs_memory_type_t mem_type,
-                                ucs_sys_device_t *local_sys_dev_p)
-{
-    ucs_memory_info_t mem_info;
-    uct_allocated_memory_t detect_mem;
-    ucs_status_t status;
-
-    status = ucp_mem_do_alloc(context, NULL,
-                              UCP_DEVICE_LOCAL_SYS_DEV_DETECT_SIZE,
-                              UCT_MD_MEM_ACCESS_LOCAL_READ |
-                              UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                              mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
-                              "local_sys_dev_detect", &detect_mem);
-    if (status != UCS_OK) {
-        ucs_error("failed to allocate memory for sys_dev detection: %s",
-                  ucs_status_string(status));
-        return status;
-    }
-
-    ucp_memory_detect_internal(context, detect_mem.address, detect_mem.length,
-                               &mem_info);
-    *local_sys_dev_p = mem_info.sys_dev;
-
-    uct_mem_free(&detect_mem);
-
-    if (*local_sys_dev_p == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_error("detected unknown local_sys_dev");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    ucs_trace("detected local_sys_dev=%u", *local_sys_dev_p);
-    return UCS_OK;
 }
 
 static ucs_status_t ucp_device_mem_list_create_handle(
@@ -478,20 +513,11 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     }
 
     /* Parameter sanity checks and extraction */
-    status = ucp_device_mem_list_params_check(params, &rkey_cfg_index,
-                                              &local_sys_dev, &local_md_map,
-                                              &mem_type);
+    status = ucp_device_mem_list_params_check(ep->worker->context, params,
+                                              &rkey_cfg_index, &local_sys_dev,
+                                              &local_md_map, &mem_type);
     if (status != UCS_OK) {
         return status;
-    }
-
-    if (local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        status = ucp_device_detect_local_sys_dev(ep->worker->context, mem_type,
-                                                  &local_sys_dev);
-        if (status != UCS_OK) {
-            ucs_error("failed to detect local_sys_dev: %s", ucs_status_string(status));
-            return status;
-        }
     }
 
     /* Perform pseudo lane selection without size */
@@ -588,3 +614,4 @@ uint64_t ucp_device_counter_read(ucp_worker_h worker,
                       sizeof(counter_value), mem_type);
     return counter_value;
 }
+
