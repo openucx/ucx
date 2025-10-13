@@ -46,6 +46,7 @@ union uct_device_completion {
  *                              uct_device_ep_progress and @ref
  *                              uct_device_ep_check_completion to
  *                              check for completion.
+ * @return UCS_OK             - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
@@ -91,6 +92,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  *                               uct_device_ep_progress and @ref
  *                               uct_device_ep_check_completion to check
  *                               for completion.
+ * @return UCS_OK              - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
@@ -151,6 +153,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
  *                                     uct_device_ep_progress and @ref
  *                                     uct_device_ep_check_completion to check
  *                                     for completion.
+ * @return UCS_OK                    - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
@@ -231,6 +234,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
  *                                     uct_device_ep_progress and @ref
  *                                     uct_device_ep_check_completion to check
  *                                     for completion.
+ * @return UCS_OK                    - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
