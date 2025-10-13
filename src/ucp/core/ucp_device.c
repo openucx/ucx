@@ -499,11 +499,12 @@ ucp_device_mem_list_create(ucp_ep_h ep,
 {
     ucs_memory_type_t mem_type            = UCS_MEMORY_TYPE_UNKNOWN;
     ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    ucp_md_map_t local_md_map             = 0;
+    ucp_md_map_t remote_md_map            = 0;
     ucp_lane_index_t lanes[UCP_DEVICE_MEM_LIST_MAX_EPS];
     ucs_status_t status;
     ucp_rkey_config_t *rkey_config;
     ucs_sys_device_t local_sys_dev, remote_sys_dev;
-    ucp_md_map_t local_md_map, remote_md_map;
     ucp_ep_config_t *ep_config;
     uct_allocated_memory_t mem;
 
