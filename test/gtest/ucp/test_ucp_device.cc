@@ -115,6 +115,7 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
     std::vector<ucp_device_mem_list_elem_t> elems(count);
     for (auto i = 0; i < count; ++i) {
         auto &elem = elems[i];
+        elem = {};
         bool is_counter = (mode == MODE_COUNTER_ONLY) ||
                           (mode == MODE_LAST_ELEM_COUNTER && i == count - 1);
 
@@ -122,9 +123,7 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
             elem.field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
                                UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
                                UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-            elem.memh        = NULL;
-            elem.local_addr  = NULL;
-            elem.length      = size;
+            elem.length      = m_dst[i]->size();
         } else {
             /* Data element: with memh and local_addr */
             elem.field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
