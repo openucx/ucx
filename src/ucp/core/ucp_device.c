@@ -212,6 +212,7 @@ ucp_device_mem_list_params_check(ucp_context_h context,
                 if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
                     *local_sys_dev = memh->sys_dev;
                     *local_md_map  = memh->md_map;
+                    *mem_type      = memh->mem_type;
                 } else {
                     *local_md_map &= memh->md_map;
                     if (memh->sys_dev != *local_sys_dev) {
@@ -234,6 +235,7 @@ ucp_device_mem_list_params_check(ucp_context_h context,
 
         *local_md_map = ucp_device_detect_local_md_map(context,
                                                        *local_sys_dev);
+        *mem_type = UCS_MEMORY_TYPE_CUDA;
     }
 
     return UCS_OK;
