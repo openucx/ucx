@@ -31,12 +31,16 @@ BEGIN_C_DECLS
  * The enumeration allows specifying which fields in @ref
  * ucp_device_mem_list_elem are present.
  *
+ * @note Counter elements can omit the @a UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH
+ *       and @a UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR fields.
+ *       Data elements must have @a UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH field.
+ *
  * It is used to enable backward compatibility support.
  */
 enum ucp_device_mem_list_elem_field {
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH        = UCS_BIT(0), /**< Source memory handle (optional for counter elements) */
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY        = UCS_BIT(1), /**< Unpacked remote memory key */
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR  = UCS_BIT(2), /**< Local address (optional for counter elements) */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH        = UCS_BIT(0), /**< Source memory handle */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY        = UCS_BIT(1), /**< Unpacked remote memory key (always required) */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR  = UCS_BIT(2), /**< Local address */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(3), /**< Remote address */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH      = UCS_BIT(4)  /**< Length of the local buffer in bytes */
 };
@@ -49,13 +53,8 @@ enum ucp_device_mem_list_elem_field {
  * This describes a pair of local and remote memory for which a memory operation
  * can later be performed multiple times, possibly with varying memory offsets.
  *
- * @note The @a memh and @a local_addr fields are optional for elements
- *       that are only used for remote addressing (e.g., counter elements):
- *       - @ref ucp_device_counter_inc: All elements may omit these fields
- *       - @ref ucp_device_put_multi: The last element (counter) may omit these
- *         fields
- *       - @ref ucp_device_put_multi_partial: The element at counter_index may
- *         omit these fields if not also in mem_list_indices
+ * @note Counter elements can omit the @a memh and @a local_addr fields.
+ *       Data elements must have @a memh field.
  */
 typedef struct ucp_device_mem_list_elem {
     /**
@@ -68,13 +67,11 @@ typedef struct ucp_device_mem_list_elem {
 
     /**
      * Local memory registration handle.
-     * Optional for counter elements.
      */
     ucp_mem_h  memh;
 
     /**
      * Local memory address for the device transfer operations.
-     * Optional for counter elements.
      */
     void*     local_addr;
 
@@ -90,6 +87,7 @@ typedef struct ucp_device_mem_list_elem {
 
     /**
      * Unpacked memory key for the remote memory endpoint.
+     * Always required.
      */
     ucp_rkey_h rkey;
 } ucp_device_mem_list_elem_t;

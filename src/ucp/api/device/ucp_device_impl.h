@@ -224,9 +224,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * This operation can be polled on the receiver to detect completion of all the
  * operations of the batch, started during the same routine call.
  *
- * The last entry in the descriptor list contains
- * the remote memory registration descriptors to be used for the increment
- * operation.
+ * All the elements except the last one are data elements that must contain all
+ * @ref ucp_device_mem_list_elem_fields and @ref ucp_device_mem_list_elem_t.
+ *
+ * The last entry in the descriptor list contains the remote memory
+ * registration descriptors to be used for the increment operation.
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
@@ -410,7 +412,7 @@ UCS_F_DEVICE void ucp_device_counter_write(void *counter_ptr, uint64_t value)
  *
  * @tparam      level  Level of cooperation of the transfer.
  * @param [in]  req    Request containing operations in progress and channel to progress.
- * 
+ *
  * @return UCS_OK           - The request has completed, no more operations are
  *                            in progress.
  * @return UCS_INPROGRESS   - One or more operations in the request batch
