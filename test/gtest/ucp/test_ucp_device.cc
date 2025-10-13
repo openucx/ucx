@@ -98,14 +98,19 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
                                     mem_list_mode_t mode) :
     m_receiver(receiver), m_mode(mode)
 {
+    bool has_counter  = (mode != MODE_DATA_ONLY);
+    size_t data_count = (has_counter) ? count - 1 : count;
+
     // Prepare src and dst buffers
-    for (auto i = 0; i < count; ++i) {
-        bool need_src = (mode == MODE_DATA_ONLY) ||
-                        (mode == MODE_LAST_ELEM_COUNTER && i < count - 1);
-        if (need_src) {
-            m_src.emplace_back(new mapped_buffer(size, sender, 0, mem_type));
-            m_src.back()->pattern_fill(SEED_SRC, size);
-        }
+    for (auto i = 0; i < data_count; ++i) {
+        m_src.emplace_back(new mapped_buffer(size, sender, 0, mem_type));
+        m_src.back()->pattern_fill(SEED_SRC, size);
+        m_dst.emplace_back(new mapped_buffer(size, receiver, 0, mem_type));
+        m_rkeys.push_back(m_dst.back()->rkey(sender));
+        m_dst.back()->pattern_fill(SEED_DST, size);
+    }
+
+    if (has_counter) {
         m_dst.emplace_back(new mapped_buffer(size, receiver, 0, mem_type));
         m_rkeys.push_back(m_dst.back()->rkey(sender));
         m_dst.back()->pattern_fill(SEED_DST, size);
@@ -113,30 +118,26 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
 
     // Initialize elements
     std::vector<ucp_device_mem_list_elem_t> elems(count);
-    for (auto i = 0; i < count; ++i) {
-        auto &elem = elems[i];
-        elem = {};
-        bool is_counter = (mode == MODE_COUNTER_ONLY) ||
-                          (mode == MODE_LAST_ELEM_COUNTER && i == count - 1);
-
-        if (is_counter) {
-            elem.field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-            elem.length      = m_dst[i]->size();
-        } else {
-            /* Data element: with memh and local_addr */
-            elem.field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+    for (auto i = 0; i < data_count; ++i) {
+        elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
                                UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
                                UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
                                UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
                                UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-            elem.memh        = m_src[i]->memh();
-            elem.local_addr  = m_src[i]->ptr();
-            elem.length      = m_src[i]->size();
-        }
-        elem.rkey        = m_rkeys[i];
-        elem.remote_addr = reinterpret_cast<uint64_t>(m_dst[i]->ptr());
+        elems[i].memh        = m_src[i]->memh();
+        elems[i].rkey        = m_rkeys[i];
+        elems[i].local_addr  = m_src[i]->ptr();
+        elems[i].remote_addr = reinterpret_cast<uint64_t>(m_dst[i]->ptr());
+        elems[i].length      = m_src[i]->size();
+    }
+
+    if (has_counter) {
+        elems[data_count].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
+                                        UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                        UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
+        elems[data_count].rkey        = m_rkeys[data_count];
+        elems[data_count].remote_addr = reinterpret_cast<uint64_t>(m_dst[data_count]->ptr());
+        elems[data_count].length      = m_dst[data_count]->size();
     }
 
     // Initialize parameters

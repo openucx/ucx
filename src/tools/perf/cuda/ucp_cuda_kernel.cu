@@ -113,32 +113,32 @@ public:
 private:
     void init_mem_list(const ucx_perf_context_t &perf, bool has_counter)
     {
-        size_t count  = perf.params.msg_size_cnt + (has_counter ? 1 : 0);
-        size_t offset = 0;
+        size_t data_count = perf.params.msg_size_cnt;
+        size_t count      = data_count + (has_counter ? 1 : 0);
+        size_t offset     = 0;
         ucp_device_mem_list_elem_t elems[count];
 
-        for (size_t i = 0; i < count; ++i) {
-            bool is_counter = has_counter && (i == count - 1);
-
-            if (is_counter) {
-                elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                                       UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                                       UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-                elems[i].length      = ONESIDED_SIGNAL_SIZE;
-            } else {
-                elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                                       UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                                       UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                                       UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                                       UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-                elems[i].memh        = perf.ucp.send_memh;
-                elems[i].local_addr  = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
-                elems[i].length      = perf.params.msg_size_list[i];
-            }
-
+        for (size_t i = 0; i < data_count; ++i) {
+            elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
+            elems[i].memh        = perf.ucp.send_memh;
             elems[i].rkey        = perf.ucp.rkey;
+            elems[i].local_addr  = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
             elems[i].remote_addr = perf.ucp.remote_addr + offset;
+            elems[i].length      = perf.params.msg_size_list[i];
             offset              += elems[i].length;
+        }
+
+        if (has_counter) {
+            elems[data_count].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
+                                            UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                            UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
+            elems[data_count].rkey        = perf.ucp.rkey;
+            elems[data_count].remote_addr = perf.ucp.remote_addr + offset;
+            elems[data_count].length      = ONESIDED_SIGNAL_SIZE;
         }
 
         ucp_device_mem_list_params_t params;
