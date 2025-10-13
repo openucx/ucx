@@ -109,6 +109,13 @@ uct_rc_mlx5_gda_reserv_wqe_thread(uct_rc_gdaki_dev_ep_t *ep, unsigned count)
                      count);
 }
 
+UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_sync64(uint64_t v)
+{
+    uint32_t lo = __shfl_sync(0xffffffff, static_cast<uint32_t>(v), 0);
+    uint32_t hi = __shfl_sync(0xffffffff, static_cast<uint32_t>(v >> 32), 0);
+    return (static_cast<uint64_t>(hi) << 32) | lo;
+}
+
 template<ucs_device_level_t level>
 UCS_F_DEVICE void
 uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned count,
@@ -116,13 +123,10 @@ uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned count,
 {
     if (lane_id == 0) {
         wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(ep, count);
-    } else {
-        /* Initialize with 0, because __shfl_sync may set only 32 bits */
-        wqe_base = 0;
     }
 
     if (level == UCS_DEVICE_LEVEL_WARP) {
-        wqe_base = __shfl_sync(0xffffffff, wqe_base, 0);
+        wqe_base = uct_rc_mlx5_gda_sync64(wqe_base);
     } else if (level == UCS_DEVICE_LEVEL_BLOCK) {
         __syncthreads();
     }
