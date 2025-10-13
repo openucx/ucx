@@ -91,10 +91,11 @@ struct ucp_perf_cuda_params {
 class ucp_perf_cuda_params_handler {
 public:
     ucp_perf_cuda_params_handler(const ucx_perf_context_t &perf)
-        : m_has_counter(perf.params.command != UCX_PERF_CMD_PUT_SINGLE)
     {
-        init_mem_list(perf);
-        init_elements(perf);
+        bool has_counter = (perf.params.command != UCX_PERF_CMD_PUT_SINGLE);
+
+        init_mem_list(perf, has_counter);
+        init_elements(perf, has_counter);
         init_counters(perf);
     }
 
@@ -110,25 +111,21 @@ public:
     const ucp_perf_cuda_params &get_params() const { return m_params; }
 
 private:
-    void init_mem_list(const ucx_perf_context_t &perf)
+    void init_mem_list(const ucx_perf_context_t &perf, bool has_counter)
     {
-        size_t count  = perf.params.msg_size_cnt + (m_has_counter ? 1 : 0);
+        size_t count  = perf.params.msg_size_cnt + (has_counter ? 1 : 0);
         size_t offset = 0;
         ucp_device_mem_list_elem_t elems[count];
 
         for (size_t i = 0; i < count; ++i) {
-            bool is_counter = m_has_counter && (i == count - 1);
-
-            elems[i] = {};
+            bool is_counter = has_counter && (i == count - 1);
 
             if (is_counter) {
-                /* Counter element: only used by PUT_MULTI/PUT_PARTIAL */
                 elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
                                        UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
                                        UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
                 elems[i].length      = ONESIDED_SIGNAL_SIZE;
             } else {
-                /* Data element */
                 elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
                                        UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
                                        UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
@@ -159,9 +156,9 @@ private:
         }
     }
 
-    void init_elements(const ucx_perf_context_t &perf)
+    void init_elements(const ucx_perf_context_t &perf, bool has_counter)
     {
-        size_t count  = perf.params.msg_size_cnt + (m_has_counter ? 1 : 0);
+        size_t count  = perf.params.msg_size_cnt + (has_counter ? 1 : 0);
         size_t offset = 0;
 
         std::vector<unsigned> indices(count);
@@ -171,8 +168,8 @@ private:
 
         for (unsigned i = 0; i < count; ++i) {
             indices[i] = i;
-            lengths[i] = (m_has_counter && i == count - 1) ? ONESIDED_SIGNAL_SIZE :
-                                                             perf.params.msg_size_list[i];
+            lengths[i] = (has_counter && i == count - 1) ? ONESIDED_SIGNAL_SIZE :
+                                                           perf.params.msg_size_list[i];
             offset    += lengths[i];
         }
 
@@ -200,7 +197,6 @@ private:
                       cudaMemcpyHostToDevice);
     }
 
-    bool                 m_has_counter;
     ucp_perf_cuda_params m_params;
 };
 
