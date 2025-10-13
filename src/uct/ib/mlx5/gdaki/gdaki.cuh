@@ -463,20 +463,6 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
     return UCS_INPROGRESS;
 }
 
-UCS_F_DEVICE uint16_t uct_rc_mlx5_gda_bswap16(uint16_t x)
-{
-    uint32_t ret;
-    asm volatile("{\n\t"
-                 ".reg .b32 mask;\n\t"
-                 ".reg .b32 ign;\n\t"
-                 "mov.b32 mask, 0x1;\n\t"
-                 "prmt.b32 %0, %1, ign, mask;\n\t"
-                 "}"
-                 : "=r"(ret)
-                 : "r"((uint32_t)x));
-    return ret;
-}
-
 UCS_F_DEVICE void
 uct_rc_mlx5_gda_qedump(const char *pfx, void *buff, ssize_t len)
 {
@@ -503,20 +489,11 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
     void *curr_cqe   = (uint8_t*)cqe + (idx * DOCA_GPUNETIO_VERBS_CQE_SIZE);
     auto *cqe64      = reinterpret_cast<mlx5_cqe64*>(curr_cqe);
 
-    uint8_t op_owner = READ_ONCE(cqe64->op_own);
+    /* Read last 3 fields with a single atomic operation */
+    uint32_t *data_ptr = (uint32_t *)&cqe64->wqe_counter;
+    uint32_t data      = READ_ONCE(*data_ptr);
+    uint8_t op_owner   = data >> 24;
     if ((op_owner & MLX5_CQE_OWNER_MASK) ^ !!(cqe_idx & cqe_num)) {
-        return;
-    }
-    /* We use CQ without overrun detection, we need to ensure CQE is valid after
-     * reading the content */
-    __threadfence_block();
-    uint8_t opcode   = op_owner >> DOCA_GPUNETIO_VERBS_MLX5_CQE_OPCODE_SHIFT;
-    uint16_t wqe_cnt = uct_rc_mlx5_gda_bswap16(cqe64->wqe_counter);
-
-    /* Prevent reordering, validate that CQE is still valid */
-    __threadfence_block();
-    uint8_t op_owner_check = READ_ONCE(cqe64->op_own);
-    if (ucs_unlikely(op_owner_check != op_owner)) {
         return;
     }
 
@@ -526,7 +503,10 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_progress_thread(uct_rc_gdaki_dev_ep_t *ep)
         return;
     }
 
-    uint16_t wqe_idx = wqe_cnt & (ep->sq_wqe_num - 1);
+    uint8_t opcode    = op_owner >> DOCA_GPUNETIO_VERBS_MLX5_CQE_OPCODE_SHIFT;
+    uint32_t data_cpu = doca_gpu_dev_verbs_bswap32(data);
+    uint16_t wqe_cnt  = (data_cpu >> 16) & 0xffff;
+    uint16_t wqe_idx  = wqe_cnt & (ep->sq_wqe_num - 1);
 
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> pi_ref(ep->sq_wqe_pi);
     uint64_t sq_wqe_pi = pi_ref.load(cuda::std::memory_order_relaxed);

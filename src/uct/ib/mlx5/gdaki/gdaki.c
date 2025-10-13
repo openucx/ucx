@@ -83,13 +83,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         return status;
     }
 
-    /* CQE is being read/updated simultaneously by multiple threads.
-     * Overflow detection is disabled for CQ, but overflow is handled in
-     * progress by validating the CQE after reading the content.
-     * We give CQ extra space (x2) to reduce the probability of CQ overflows.
-     */
     init_attr.cq_len[UCT_IB_DIR_TX] = iface->super.super.config.tx_qp_len *
-                                      UCT_IB_MLX5_MAX_BB * 2;
+                                      UCT_IB_MLX5_MAX_BB;
     uct_ib_mlx5_cq_calc_sizes(&iface->super.super.super, UCT_IB_DIR_TX,
                               &init_attr, 0, &cq_attr);
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
