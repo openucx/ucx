@@ -91,7 +91,6 @@ ucp_device_mem_handle_hash_remove(ucp_device_mem_list_handle_h handle)
 
 static ucs_status_t
 ucp_device_detect_local_sys_dev(ucp_context_h context,
-                                ucs_memory_type_t mem_type,
                                 ucs_sys_device_t *local_sys_dev_p)
 {
     ucs_memory_info_t mem_info;
@@ -102,7 +101,7 @@ ucp_device_detect_local_sys_dev(ucp_context_h context,
                               UCP_DEVICE_LOCAL_SYS_DEV_DETECT_SIZE,
                               UCT_MD_MEM_ACCESS_LOCAL_READ |
                               UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                              mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
+                              UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN,
                               "local_sys_dev_detect", &detect_mem);
     if (status != UCS_OK) {
         ucs_error("failed to allocate memory for sys_dev detection: %s",
@@ -194,9 +193,8 @@ ucp_device_mem_list_params_check(ucp_context_h context,
                 *local_sys_dev = memh->sys_dev;
                 *local_md_map  = memh->md_map;
                 *mem_type      = memh->mem_type;
-            } else {
-                *mem_type      = rkey->mem_type;
             }
+
             *rkey_cfg_index = rkey->cfg_index;
             if (*rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
                 ucs_debug("invalid first rkey: cfg_index=%d", *rkey_cfg_index);
@@ -229,8 +227,7 @@ ucp_device_mem_list_params_check(ucp_context_h context,
 
     /* No memh provided */
     if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        status = ucp_device_detect_local_sys_dev(context, *mem_type,
-                                                 local_sys_dev);
+        status = ucp_device_detect_local_sys_dev(context, local_sys_dev);
         if (status != UCS_OK) {
             return status;
         }
