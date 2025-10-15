@@ -111,21 +111,22 @@ ucp_device_detect_local_sys_dev(ucp_context_h context,
 
     ucp_memory_detect_internal(context, detect_mem.address, detect_mem.length,
                                &mem_info);
-    *local_sys_dev_p = mem_info.sys_dev;
 
     uct_mem_free(&detect_mem);
 
-    if (*local_sys_dev_p == UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if (mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         ucs_error("detected unknown local_sys_dev");
         return UCS_ERR_UNSUPPORTED;
     }
+
+    *local_sys_dev_p = mem_info.sys_dev;
 
     ucs_trace("detected local_sys_dev=%u", *local_sys_dev_p);
     return UCS_OK;
 }
 
 static ucp_md_map_t
-ucp_device_detect_local_md_map(ucp_context_h context,
+ucp_device_detect_local_md_map(const ucp_context_h context,
                                ucs_sys_device_t local_sys_dev)
 {
     ucp_md_map_t local_md_map = 0;

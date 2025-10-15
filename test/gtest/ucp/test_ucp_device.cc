@@ -56,7 +56,6 @@ protected:
         std::vector<std::unique_ptr<mapped_buffer>> m_src, m_dst;
         std::vector<ucs::handle<ucp_rkey_h>>        m_rkeys;
         ucp_device_mem_list_handle_h                m_mem_list_h;
-        mem_list_mode_t                             m_mode;
     };
 
     size_t counter_size();
@@ -96,7 +95,7 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
                                     size_t size, unsigned count,
                                     ucs_memory_type_t mem_type,
                                     mem_list_mode_t mode) :
-    m_receiver(receiver), m_mode(mode)
+    m_receiver(receiver)
 {
     bool has_counter  = (mode != MODE_DATA_ONLY);
     size_t data_count = (has_counter) ? count - 1 : count;
@@ -584,6 +583,82 @@ UCS_TEST_P(test_ucp_device_xfer, counter)
 
     // Check destination
     wait_for_counter(list, mem_list_index);
+}
+
+UCS_TEST_P(test_ucp_device_xfer, large_dmabuf_registration)
+{
+    // Test large dmabuf registration that triggers ENOMEM
+    // This reproduces the issue: ibv_reg_dmabuf_mr(...) failed: Cannot allocate memory
+    // Error happens in: ib_md.c:296 -> ucp_mm.c:81
+    static constexpr size_t size = 7633635456UL; // 7.1 GB - the exact failing size
+
+    UCS_TEST_MESSAGE << "Allocating " << size << " bytes ("
+                     << (size / (1024.0 * 1024 * 1024)) << " GB) for dmabuf test";
+
+    // This triggers the basic UCP memory registration path
+    // mapped_buffer allocates GPU memory and registers it with UCX
+    // This should call ibv_reg_dmabuf_mr() and potentially fail with ENOMEM
+    mapped_buffer send_buffer(size, sender(), 0, UCS_MEMORY_TYPE_CUDA);
+    UCS_TEST_MESSAGE << "Successfully allocated send buffer";
+
+    mapped_buffer recv_buffer(size, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
+    UCS_TEST_MESSAGE << "Successfully allocated recv buffer";
+
+    // Get rkey - this ensures registration completed
+    auto rkey = recv_buffer.rkey(sender());
+    UCS_TEST_MESSAGE << "Successfully registered " << size << " bytes with dmabuf";
+}
+
+UCS_TEST_P(test_ucp_device_xfer, multi_large_dmabuf_registration)
+{
+    // Test multiple large dmabuf registrations to simulate multi-NIC scenario
+    // In production: 4 processes × 4 NICs × 7.6GB = ~122GB of registrations
+    static constexpr size_t size = 7633635456UL; // 7.1 GB each
+    static constexpr unsigned num_buffers = 4;    // Simulate 4 NICs
+
+    size_t total_size = size * num_buffers * 2; // send + recv
+    UCS_TEST_MESSAGE << "Allocating " << num_buffers << " buffers of " << size
+                     << " bytes each (total: " << (total_size / (1024.0 * 1024 * 1024))
+                     << " GB) to simulate multi-NIC dmabuf registration";
+
+    std::vector<std::unique_ptr<mapped_buffer>> send_buffers;
+    std::vector<std::unique_ptr<mapped_buffer>> recv_buffers;
+
+    // Allocate multiple buffers like in multi-NIC scenario
+    for (unsigned i = 0; i < num_buffers; ++i) {
+        UCS_TEST_MESSAGE << "Allocating buffer pair " << i << "...";
+        send_buffers.emplace_back(new mapped_buffer(size, sender(), 0,
+                                                     UCS_MEMORY_TYPE_CUDA));
+        recv_buffers.emplace_back(new mapped_buffer(size, receiver(), 0,
+                                                     UCS_MEMORY_TYPE_CUDA));
+
+        // Ensure each buffer is registered (get rkey)
+        auto rkey = recv_buffers[i]->rkey(sender());
+        UCS_TEST_MESSAGE << "Buffer pair " << i << " registered successfully";
+    }
+
+    UCS_TEST_MESSAGE << "Successfully registered " << total_size
+                     << " bytes total (" << (total_size / (1024.0 * 1024 * 1024))
+                     << " GB) across " << num_buffers << " buffer pairs";
+}
+
+UCS_TEST_P(test_ucp_device_xfer, extreme_large_dmabuf_registration)
+{
+    // Test even larger single allocation to stress the system
+    // Try 2x the original size: ~15GB
+    static constexpr size_t size = 15267270912UL * 4; // ~14.2 GB (2x original)
+
+    UCS_TEST_MESSAGE << "Allocating " << size << " bytes ("
+                     << (size / (1024.0 * 1024 * 1024)) << " GB) for extreme dmabuf test";
+
+    mapped_buffer send_buffer(size, sender(), 0, UCS_MEMORY_TYPE_CUDA);
+    UCS_TEST_MESSAGE << "Successfully allocated send buffer";
+
+    mapped_buffer recv_buffer(size, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
+    UCS_TEST_MESSAGE << "Successfully allocated recv buffer";
+
+    auto rkey = recv_buffer.rkey(sender());
+    UCS_TEST_MESSAGE << "Successfully registered " << size << " bytes with dmabuf";
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_xfer, rc_gda,
