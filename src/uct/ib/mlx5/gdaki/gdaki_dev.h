@@ -20,8 +20,8 @@ typedef struct {
     uint64_t                     sq_rsvd_index;
     uint64_t                     sq_ready_index;
     uint64_t                     sq_wqe_pi;
-    uint64_t                     cqe_ci;
     int                          sq_lock;
+    int                          cq_lock;
 
     uint8_t                      *sq_wqe_daddr;
     uint32_t                     *sq_dbrec;
@@ -30,6 +30,7 @@ typedef struct {
     uint32_t                     cqe_num;
     uint16_t                     sq_wqe_num;
     uint32_t                     sq_num;
+    uint16_t                     sq_fc_mask;
 } uct_rc_gdaki_dev_ep_t;
 
 
