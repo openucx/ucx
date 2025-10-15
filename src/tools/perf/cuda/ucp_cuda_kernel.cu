@@ -284,17 +284,17 @@ ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd, bool fc>
 UCS_F_DEVICE ucs_status_t
 ucp_perf_cuda_put_bw_iter(const ucp_perf_cuda_params &params,
-                          ucp_perf_cuda_request_manager &request_mgr,
+                          ucp_perf_cuda_request_manager &req_mgr,
                           ucx_perf_counter_t idx)
 {
-    auto *req = request_mgr.get_request<level>();
+    auto *req = req_mgr.get_request<level>();
     if (ucs_unlikely(req == nullptr)) {
         return UCS_INPROGRESS;
     }
 
     ucp_device_flags_t flags = UCP_DEVICE_FLAG_NODELAY;
     if constexpr (fc) {
-        request_mgr.flow_control(req, flags);
+        req_mgr.flow_control(req, flags);
     }
 
     return ucp_perf_cuda_send_async<level, cmd>(params, idx, req, flags);
@@ -304,11 +304,9 @@ template<ucs_device_level_t level, ucx_perf_cmd_t cmd, bool fc>
 UCS_F_DEVICE ucs_status_t
 ucp_perf_cuda_put_bw_kernel_impl(ucx_perf_cuda_context &ctx,
                                  const ucp_perf_cuda_params &params,
-                                 ucp_device_request_t *requests)
+                                 ucp_perf_cuda_request_manager &req_mgr)
 {
     ucx_perf_counter_t max_iters = ctx.max_iters;
-    ucp_perf_cuda_request_manager req_mgr(ctx.max_outstanding,
-                                          ctx.device_fc_window, requests);
     ucx_perf_cuda_reporter reporter(ctx);
     ucs_status_t status;
 
@@ -350,16 +348,20 @@ ucp_perf_cuda_put_bw_kernel(ucx_perf_cuda_context &ctx,
                             ucp_perf_cuda_params params)
 {
     extern __shared__ ucp_device_request_t shared_requests[];
-    unsigned thread_index          = ucx_perf_cuda_thread_index<level>(threadIdx.x);
-    ucp_device_request_t *requests = &shared_requests[ctx.max_outstanding *
-                                                      thread_index];
+    unsigned thread_index      = ucx_perf_cuda_thread_index<level>(threadIdx.x);
+    unsigned reqs_count        = ucx_ceil_div(ctx.max_outstanding,
+                                              ctx.device_fc_window);
+    ucp_device_request_t *reqs = &shared_requests[reqs_count * thread_index];
+
+    ucp_perf_cuda_request_manager req_mgr(ctx.max_outstanding,
+                                          ctx.device_fc_window, reqs);
 
     if (ctx.device_fc_window > 1) {
         ctx.status = ucp_perf_cuda_put_bw_kernel_impl<level, cmd, true>(
-                                                        ctx, params, requests);
+                                                        ctx, params, req_mgr);
     } else {
         ctx.status = ucp_perf_cuda_put_bw_kernel_impl<level, cmd, false>(
-                                                        ctx, params, requests);
+                                                        ctx, params, req_mgr);
     }
 }
 
