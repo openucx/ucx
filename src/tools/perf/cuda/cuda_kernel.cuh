@@ -98,27 +98,6 @@ __host__ UCS_F_DEVICE unsigned ucx_ceil_div(unsigned x, unsigned y) {
     return (x / y) + ((x % y) != 0);
 }
 
-/* Simple bitset */
-#define UCX_BIT_TYPE            uint32_t
-#define UCX_BIT_SIZE            (sizeof(UCX_BIT_TYPE) * CHAR_BIT)
-#define UCX_BIT_MASK(bit)       (1 << ((bit) & (UCX_BIT_SIZE - 1)))
-#define UCX_BIT_SET(set, bit)   (set[(bit)/UCX_BIT_SIZE] |= UCX_BIT_MASK(bit))
-#define UCX_BIT_RESET(set, bit) (set[(bit)/UCX_BIT_SIZE] &= ~UCX_BIT_MASK(bit))
-#define UCX_BIT_GET(set, bit)   (set[(bit)/UCX_BIT_SIZE] &  UCX_BIT_MASK(bit))
-#define UCX_BITSET_SIZE(bits)   ((bits + UCX_BIT_SIZE - 1) / UCX_BIT_SIZE)
-
-UCS_F_DEVICE size_t
-ucx_bitset_ffns(const UCX_BIT_TYPE *set, size_t bits)
-{
-    for (size_t i = 0; i < UCX_BITSET_SIZE(bits); ++i) {
-        size_t bit = __ffs(~set[i]);
-        if (bit) {
-            return i * UCX_BIT_SIZE + bit - 1;
-        }
-    }
-    return bits;
-}
-
 #define UCX_PERF_THREAD_INDEX_SET(_level, _tid, _outval) \
     (_outval) = ucx_perf_cuda_thread_index<_level>(_tid)
 

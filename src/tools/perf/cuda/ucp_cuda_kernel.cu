@@ -19,70 +19,97 @@
 
 class ucp_perf_cuda_request_manager {
 public:
+    using size_type = uint8_t;
+
     __device__
-    ucp_perf_cuda_request_manager(size_t size, ucp_device_request_t *requests)
-        : m_size(size), m_pending_count(0), m_requests(requests)
+    ucp_perf_cuda_request_manager(size_type size, size_type fc_window, ucp_device_request_t *requests)
+        : m_size(size),
+          m_fc_window(fc_window),
+          m_reqs_count(ucx_ceil_div(size, fc_window)),
+          m_pending_count(0),
+          m_requests(requests)
     {
         assert(m_size <= CAPACITY);
-        for (size_t i = 0; i < m_size; ++i) {
-            UCX_BIT_RESET(m_pending, i);
+        for (size_type i = 0; i < m_reqs_count; ++i) {
+            m_pending[i] = 0;
         }
     }
 
-    template<ucs_device_level_t level, bool check>
-    __device__ inline ucs_status_t progress_one(size_t &index)
+    template<ucs_device_level_t level, size_type reuse>
+    __device__ inline ucs_status_t progress_one(size_type &index)
     {
-        for (size_t i = 0; i < m_size; i++) {
-            if (check && !UCX_BIT_GET(m_pending, i)) {
+        for (size_type i = 0; i < m_reqs_count; i++) {
+            if (!reuse && !m_pending[i]) {
                 continue;
             }
             ucs_status_t status = ucp_device_progress_req<level>(&m_requests[i]);
             if (status == UCS_INPROGRESS) {
                 continue;
             }
-            index = i;
-            if (check) {
-                UCX_BIT_RESET(m_pending, index);
-                --m_pending_count;
-            }
+            index            = i;
+            m_pending_count -= (m_pending[index] - reuse);
+            m_pending[index] = reuse;
             return status;
         }
-        return UCS_OK;
+        return UCS_INPROGRESS;
     }
 
     template<ucs_device_level_t level>
     __device__ inline ucp_device_request_t *get_request()
     {
-        size_t index = SIZE_MAX;
-        if (ucs_likely(get_pending_count() == m_size)) {
-            while (index == SIZE_MAX) {
-                ucs_status_t status = progress_one<level, false>(index);
-                if (ucs_unlikely(status != UCS_OK)) {
-                    ucs_device_error("progress failed: %d", status);
-                    return nullptr;
-                }
+        size_type index;
+        if (m_pending_count == m_size) {
+            ucs_status_t status;
+            do {
+                status = progress_one<level, 1>(index);
+            } while (status == UCS_INPROGRESS);
+
+            if (ucs_unlikely(status != UCS_OK)) {
+                ucs_device_error("progress failed: %d", status);
+                return nullptr;
             }
         } else {
-            index = ucx_bitset_ffns(m_pending, m_size);
-            UCX_BIT_SET(m_pending, index);
+            index = find_free_index();
+            ++m_pending[index];
             ++m_pending_count;
         }
         return &m_requests[index];
     }
 
-    __device__ inline size_t get_pending_count() const
+    __device__ __forceinline__ void
+    flow_control(ucp_device_request_t *&req, ucp_device_flags_t &flags) const
+    {
+        size_type index = req - m_requests;
+        if ((m_pending_count < m_size) && (m_pending[index] < m_fc_window)) {
+            req   = nullptr;
+            flags = static_cast<ucp_device_flags_t>(0);
+        }
+    }
+
+    __device__ inline size_type get_pending_count() const
     {
         return m_pending_count;
     }
 
 private:
-    /* TODO: make it runtime configurable / alloc on host */
-    static const size_t CAPACITY = 128;
+    __device__ __forceinline__ size_type find_free_index() const
+    {
+        for (size_type i = 0; i < m_reqs_count; i++) {
+            if (m_pending[i] < m_fc_window) {
+                return i;
+            }
+        }
+        return m_reqs_count;
+    }
 
-    size_t               m_size;
-    size_t               m_pending_count;
+    static const size_type CAPACITY = 32;
+
+    const size_type      m_size;
+    const size_type      m_fc_window;
+    const size_type      m_reqs_count;
+    size_type            m_pending_count;
     ucp_device_request_t *m_requests;
-    UCX_BIT_TYPE         m_pending[UCX_BITSET_SIZE(CAPACITY)];
+    uint8_t              m_pending[CAPACITY];
 };
 
 struct ucp_perf_cuda_params {
@@ -94,7 +121,6 @@ struct ucp_perf_cuda_params {
     size_t                       *lengths;
     uint64_t                     *counter_send;
     uint64_t                     *counter_recv;
-    ucp_device_flags_t           flags;
 };
 
 class ucp_perf_cuda_params_handler {
@@ -186,7 +212,6 @@ private:
                                                      m_params.length);
         m_params.counter_recv = ucx_perf_cuda_get_sn(perf.recv_buffer,
                                                      m_params.length);
-        m_params.flags        = UCP_DEVICE_FLAG_NODELAY;
     }
 
     template<typename T>
@@ -204,8 +229,9 @@ private:
 
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 UCS_F_DEVICE ucs_status_t
-ucp_perf_cuda_send_async(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
-                         ucp_device_request_t *req)
+ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
+                         ucx_perf_counter_t idx, ucp_device_request_t *req,
+                         ucp_device_flags_t flags = UCP_DEVICE_FLAG_NODELAY)
 {
     switch (cmd) {
     case UCX_PERF_CMD_PUT_SINGLE:
@@ -214,10 +240,9 @@ ucp_perf_cuda_send_async(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
         return ucp_device_put_single<level>(params.mem_list, params.indices[0],
                                             0, 0,
                                             params.length + ONESIDED_SIGNAL_SIZE,
-                                            0, params.flags, req);
+                                            0, flags, req);
     case UCX_PERF_CMD_PUT_MULTI:
-        return ucp_device_put_multi<level>(params.mem_list, 1, 0, params.flags,
-                                           req);
+        return ucp_device_put_multi<level>(params.mem_list, 1, 0, flags, req);
     case UCX_PERF_CMD_PUT_PARTIAL: {
         unsigned counter_index = params.mem_list->mem_list_length - 1;
         return ucp_device_put_multi_partial<level>(params.mem_list,
@@ -227,7 +252,7 @@ ucp_perf_cuda_send_async(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                                                    params.remote_offsets,
                                                    params.lengths,
                                                    counter_index, 1, 0, 0,
-                                                   params.flags, req);
+                                                   flags, req);
         }
     }
 
@@ -239,7 +264,8 @@ UCS_F_DEVICE ucs_status_t
 ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
                         ucp_device_request_t *req)
 {
-    ucs_status_t status = ucp_perf_cuda_send_async<level, cmd>(params, idx, req);
+    ucs_status_t status = ucp_perf_cuda_send_async<level, cmd>(
+                                params, idx, req, UCP_DEVICE_FLAG_NODELAY);
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     }
@@ -255,48 +281,86 @@ ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
     return status;
 }
 
-template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
-__global__ void
-ucp_perf_cuda_put_bw_kernel(ucx_perf_cuda_context &ctx,
-                            ucp_perf_cuda_params params)
+template<ucs_device_level_t level, ucx_perf_cmd_t cmd, bool fc>
+UCS_F_DEVICE ucs_status_t
+ucp_perf_cuda_put_bw_iter(const ucp_perf_cuda_params &params,
+                          ucp_perf_cuda_request_manager &request_mgr,
+                          ucx_perf_counter_t idx)
 {
-    // TODO: use thread-local memory once we support it
-    extern __shared__ ucp_device_request_t shared_requests[];
-    ucx_perf_counter_t max_iters   = ctx.max_iters;
-    ucs_status_t status            = UCS_OK;
-    unsigned thread_index          = ucx_perf_cuda_thread_index<level>(threadIdx.x);
-    ucp_device_request_t *requests = &shared_requests[ctx.max_outstanding *
-                                                      thread_index];
-    ucp_perf_cuda_request_manager request_mgr(ctx.max_outstanding, requests);
+    auto *req = request_mgr.get_request<level>();
+    if (ucs_unlikely(req == nullptr)) {
+        return UCS_INPROGRESS;
+    }
+
+    ucp_device_flags_t flags = UCP_DEVICE_FLAG_NODELAY;
+    if constexpr (fc) {
+        request_mgr.flow_control(req, flags);
+    }
+
+    return ucp_perf_cuda_send_async<level, cmd>(params, idx, req, flags);
+}
+
+template<ucs_device_level_t level, ucx_perf_cmd_t cmd, bool fc>
+UCS_F_DEVICE ucs_status_t
+ucp_perf_cuda_put_bw_kernel_impl(ucx_perf_cuda_context &ctx,
+                                 const ucp_perf_cuda_params &params,
+                                 ucp_device_request_t *requests)
+{
+    ucx_perf_counter_t max_iters = ctx.max_iters;
+    ucp_perf_cuda_request_manager req_mgr(ctx.max_outstanding,
+                                          ctx.device_fc_window, requests);
     ucx_perf_cuda_reporter reporter(ctx);
+    ucs_status_t status;
 
-    for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
-        ucp_device_request_t *req = request_mgr.get_request<level>();
-        if (ucs_unlikely(req == nullptr)) {
-            goto out;
-        }
-
-        status = ucp_perf_cuda_send_async<level, cmd>(params, idx, req);
+    for (ucx_perf_counter_t idx = 0; idx < (max_iters - 1); idx++) {
+        status = ucp_perf_cuda_put_bw_iter<level, cmd, fc>(params, req_mgr, idx);
         if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
             ucs_device_error("send failed: %d", status);
-            goto out;
+            return status;
         }
 
         reporter.update_report(idx + 1);
         __syncthreads();
     }
 
-    while (request_mgr.get_pending_count() > 0) {
-        size_t index = SIZE_MAX;
-        status       = request_mgr.progress_one<level, true>(index);
+    /* Last iteration */
+    status = ucp_perf_cuda_put_bw_iter<level, cmd, false>(params, req_mgr,
+                                                          max_iters);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        ucs_device_error("final send failed: %d", status);
+        return status;
+    }
+
+    while (req_mgr.get_pending_count() > 0) {
+        uint8_t index;
+        status = req_mgr.progress_one<level, 0>(index);
         if (UCS_STATUS_IS_ERR(status)) {
             ucs_device_error("final progress failed: %d", status);
-            goto out;
+            return status;
         }
     }
 
-out:
-    ctx.status = status;
+    reporter.update_report(max_iters);
+    return UCS_OK;
+}
+
+template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
+__global__ void
+ucp_perf_cuda_put_bw_kernel(ucx_perf_cuda_context &ctx,
+                            ucp_perf_cuda_params params)
+{
+    extern __shared__ ucp_device_request_t shared_requests[];
+    unsigned thread_index          = ucx_perf_cuda_thread_index<level>(threadIdx.x);
+    ucp_device_request_t *requests = &shared_requests[ctx.max_outstanding *
+                                                      thread_index];
+
+    if (ctx.device_fc_window > 1) {
+        ctx.status = ucp_perf_cuda_put_bw_kernel_impl<level, cmd, true>(
+                                                        ctx, params, requests);
+    } else {
+        ctx.status = ucp_perf_cuda_put_bw_kernel_impl<level, cmd, false>(
+                                                        ctx, params, requests);
+    }
 }
 
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
@@ -304,14 +368,14 @@ __global__ void
 ucp_perf_cuda_put_latency_kernel(ucx_perf_cuda_context &ctx,
                                  ucp_perf_cuda_params params, bool is_sender)
 {
-    // TODO: use thread-local memory once we support it
     extern __shared__ ucp_device_request_t shared_requests[];
-    ucs_status_t status       = UCS_OK;
-    unsigned thread_index     = ucx_perf_cuda_thread_index<level>(threadIdx.x);
-    ucp_device_request_t *req = &shared_requests[thread_index];
+    ucx_perf_counter_t max_iters = ctx.max_iters;
+    ucs_status_t status          = UCS_OK;
+    unsigned thread_index        = ucx_perf_cuda_thread_index<level>(threadIdx.x);
+    ucp_device_request_t *req    = &shared_requests[thread_index];
     ucx_perf_cuda_reporter reporter(ctx);
 
-    for (ucx_perf_counter_t idx = 0; idx < ctx.max_iters; idx++) {
+    for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         if (is_sender) {
             status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req);
             if (status != UCS_OK) {
