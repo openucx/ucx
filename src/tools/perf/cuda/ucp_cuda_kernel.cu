@@ -126,14 +126,14 @@ private:
         ucp_device_mem_list_elem_t elems[count];
 
         for (size_t i = 0; i < count; ++i) {
-            elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                                  UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-            elems[i].memh       = perf.ucp.send_memh;
-            elems[i].rkey       = perf.ucp.rkey;
-            elems[i].local_addr = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
+            elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
+            elems[i].memh        = perf.ucp.send_memh;
+            elems[i].rkey        = perf.ucp.rkey;
+            elems[i].local_addr  = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
             elems[i].remote_addr = perf.ucp.remote_addr + offset;
             elems[i].length      = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
                                                            perf.params.msg_size_list[i];
@@ -173,20 +173,20 @@ private:
             offset    += lengths[i];
         }
 
-        m_params.indices          = device_vector(indices);
-        m_params.local_offsets    = device_vector(local_offsets);
-        m_params.remote_offsets   = device_vector(remote_offsets);
-        m_params.lengths          = device_vector(lengths);
+        m_params.indices        = device_vector(indices);
+        m_params.local_offsets  = device_vector(local_offsets);
+        m_params.remote_offsets = device_vector(remote_offsets);
+        m_params.lengths        = device_vector(lengths);
     }
 
     void init_counters(const ucx_perf_context_t &perf)
     {
-        m_params.length         = ucx_perf_get_message_size(&perf.params);
-        m_params.counter_send   = ucx_perf_cuda_get_sn(perf.send_buffer,
-                                                       m_params.length);
-        m_params.counter_recv   = ucx_perf_cuda_get_sn(perf.recv_buffer,
-                                                       m_params.length);
-        m_params.flags          = UCP_DEVICE_FLAG_NODELAY;
+        m_params.length       = ucx_perf_get_message_size(&perf.params);
+        m_params.counter_send = ucx_perf_cuda_get_sn(perf.send_buffer,
+                                                     m_params.length);
+        m_params.counter_recv = ucx_perf_cuda_get_sn(perf.recv_buffer,
+                                                     m_params.length);
+        m_params.flags        = UCP_DEVICE_FLAG_NODELAY;
     }
 
     template<typename T>
@@ -257,8 +257,8 @@ ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
 
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 __global__ void
-ucp_perf_cuda_put_multi_bw_kernel(ucx_perf_cuda_context &ctx,
-                                  ucp_perf_cuda_params params)
+ucp_perf_cuda_put_bw_kernel(ucx_perf_cuda_context &ctx,
+                            ucp_perf_cuda_params params)
 {
     // TODO: use thread-local memory once we support it
     extern __shared__ ucp_device_request_t shared_requests[];
@@ -301,9 +301,8 @@ out:
 
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>
 __global__ void
-ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
-                                       ucp_perf_cuda_params params,
-                                       bool is_sender)
+ucp_perf_cuda_put_latency_kernel(ucx_perf_cuda_context &ctx,
+                                 ucp_perf_cuda_params params, bool is_sender)
 {
     // TODO: use thread-local memory once we support it
     extern __shared__ ucp_device_request_t shared_requests[];
@@ -336,8 +335,8 @@ ucp_perf_cuda_put_multi_latency_kernel(ucx_perf_cuda_context &ctx,
 }
 
 __global__ void
-ucp_perf_cuda_wait_multi_bw_kernel(ucx_perf_cuda_context &ctx,
-                                   ucp_perf_cuda_params params)
+ucp_perf_cuda_wait_bw_kernel(ucx_perf_cuda_context &ctx,
+                             ucp_perf_cuda_params params)
 {
     // TODO: we can use ucp_device_counter_read, but it adds latency
     volatile uint64_t *sn = params.counter_recv;
@@ -367,7 +366,7 @@ public:
         ucp_perf_barrier(&m_perf);
         ucx_perf_test_start_clock(&m_perf);
 
-        UCX_PERF_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_latency_kernel,
+        UCX_PERF_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_latency_kernel,
                                  *m_gpu_ctx, params_handler.get_params(),
                                  my_index);
         CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
@@ -390,12 +389,12 @@ public:
         ucx_perf_test_start_clock(&m_perf);
 
         if (my_index == 1) {
-            UCX_PERF_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_multi_bw_kernel,
+            UCX_PERF_KERNEL_DISPATCH(m_perf, ucp_perf_cuda_put_bw_kernel,
                                      *m_gpu_ctx, params_handler.get_params());
             CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetLastError);
             wait_for_kernel();
         } else if (my_index == 0) {
-            ucp_perf_cuda_wait_multi_bw_kernel<<<1, 1>>>(
+            ucp_perf_cuda_wait_bw_kernel<<<1, 1>>>(
                     *m_gpu_ctx, params_handler.get_params());
         }
 

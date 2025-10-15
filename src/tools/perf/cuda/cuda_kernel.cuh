@@ -18,6 +18,7 @@ typedef unsigned long long ucx_perf_cuda_time_t;
 
 struct ucx_perf_cuda_context {
     unsigned             max_outstanding;
+    unsigned             device_fc_window;
     ucx_perf_counter_t   max_iters;
     ucx_perf_cuda_time_t report_interval_ns;
     ucx_perf_counter_t   completed_iters;
@@ -93,13 +94,14 @@ __host__ UCS_F_DEVICE unsigned ucx_perf_cuda_thread_index(size_t tid)
     }
 }
 
-#define UCX_PERF_THREAD_INDEX_SET(_level, _tid, _outval) \
-    (_outval) = ucx_perf_cuda_thread_index<_level>(_tid)
+__host__ UCS_F_DEVICE unsigned ucx_ceil_div(unsigned x, unsigned y) {
+    return (x / y) + ((x % y) != 0);
+}
 
 /* Simple bitset */
-#define UCX_BIT_TYPE            uint64_t
+#define UCX_BIT_TYPE            uint32_t
 #define UCX_BIT_SIZE            (sizeof(UCX_BIT_TYPE) * CHAR_BIT)
-#define UCX_BIT_MASK(bit)       (1ULL << ((bit) & (UCX_BIT_SIZE - 1)))
+#define UCX_BIT_MASK(bit)       (1 << ((bit) & (UCX_BIT_SIZE - 1)))
 #define UCX_BIT_SET(set, bit)   (set[(bit)/UCX_BIT_SIZE] |= UCX_BIT_MASK(bit))
 #define UCX_BIT_RESET(set, bit) (set[(bit)/UCX_BIT_SIZE] &= ~UCX_BIT_MASK(bit))
 #define UCX_BIT_GET(set, bit)   (set[(bit)/UCX_BIT_SIZE] &  UCX_BIT_MASK(bit))
@@ -109,13 +111,16 @@ UCS_F_DEVICE size_t
 ucx_bitset_ffns(const UCX_BIT_TYPE *set, size_t bits)
 {
     for (size_t i = 0; i < UCX_BITSET_SIZE(bits); ++i) {
-        size_t bit = __ffsll(~set[i]);
+        size_t bit = __ffs(~set[i]);
         if (bit) {
             return i * UCX_BIT_SIZE + bit - 1;
         }
     }
     return bits;
 }
+
+#define UCX_PERF_THREAD_INDEX_SET(_level, _tid, _outval) \
+    (_outval) = ucx_perf_cuda_thread_index<_level>(_tid)
 
 #define UCX_PERF_SWITCH_CMD(_cmd, _func, ...) \
     switch (_cmd) { \
@@ -150,11 +155,12 @@ ucx_bitset_ffns(const UCX_BIT_TYPE *set, size_t bits)
 
 #define UCX_PERF_KERNEL_DISPATCH_CMD_LEVEL(_cmd, _level, _perf, _kernel, ...) \
     do { \
-        unsigned _blocks    = _perf.params.device_block_count; \
-        unsigned _threads   = _perf.params.device_thread_count; \
-        size_t _shared_size = _perf.params.max_outstanding * \
-                              sizeof(ucp_device_request_t) * \
-                              ucx_perf_cuda_thread_index<_level>(_threads); \
+        unsigned _blocks     = _perf.params.device_block_count; \
+        unsigned _threads    = _perf.params.device_thread_count; \
+        unsigned _reqs_count = ucx_ceil_div(_perf.params.max_outstanding, \
+                                            _perf.params.device_fc_window); \
+        size_t _shared_size  = _reqs_count * sizeof(ucp_device_request_t) * \
+                               ucx_perf_cuda_thread_index<_level>(_threads); \
         _kernel<_level, _cmd><<<_blocks, _threads, _shared_size>>>(__VA_ARGS__); \
     } while (0)
 
@@ -174,6 +180,7 @@ public:
         init_ctx();
 
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
+        m_cpu_ctx->device_fc_window   = perf.params.device_fc_window;
         m_cpu_ctx->max_iters          = perf.max_iter;
         m_cpu_ctx->completed_iters    = 0;
         m_cpu_ctx->report_interval_ns = (perf.report_interval == ULONG_MAX) ?

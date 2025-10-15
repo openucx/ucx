@@ -166,6 +166,7 @@ typedef enum {
 
 #define UCX_PERF_MEM_DEV_DEFAULT -1
 
+#define UCP_PERF_FC_WINDOW_DEFAULT 4
 
 /**
  * Performance counter type.
@@ -289,6 +290,7 @@ typedef struct ucx_perf_params {
                                                in latency tests */
     unsigned               device_thread_count; /* Number of device threads */
     unsigned               device_block_count; /* Number of device blocks */
+    unsigned               device_fc_window; /* Flow control window size for device tests */
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
