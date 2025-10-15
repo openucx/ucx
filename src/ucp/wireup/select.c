@@ -2483,7 +2483,12 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     found_lane = ucp_wireup_add_bw_lanes(select_params, &bw_info,
                                          mem_type_tl_bitmap, UCP_NULL_LANE,
                                          select_ctx, 0);
-    if (!found_lane) {
+    /*
+     * Allow self endpoint to skip a device lane, as it might only be used
+     * for memory type-based copy.
+     */
+    if (!found_lane &&
+        (select_params->address->uuid != select_params->ep->worker->uuid)) {
         ucs_error("could not find device lanes");
         return UCS_ERR_UNREACHABLE;
     }
