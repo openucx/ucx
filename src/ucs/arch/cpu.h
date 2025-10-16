@@ -32,6 +32,7 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_INTEL_BROADWELL,
     UCS_CPU_MODEL_INTEL_SKYLAKE,
     UCS_CPU_MODEL_INTEL_ICELAKE,
+    UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS,
     UCS_CPU_MODEL_ARM_AARCH64,
     UCS_CPU_MODEL_AMD_NAPLES,
     UCS_CPU_MODEL_AMD_ROME,
@@ -166,7 +167,9 @@ static inline int ucs_cpu_prefer_relaxed_order()
              (cpu_model == UCS_CPU_MODEL_AMD_ROME) ||
              (cpu_model == UCS_CPU_MODEL_AMD_MILAN) ||
              (cpu_model == UCS_CPU_MODEL_AMD_GENOA) ||
-             (cpu_model == UCS_CPU_MODEL_AMD_TURIN)));
+             (cpu_model == UCS_CPU_MODEL_AMD_TURIN))) ||
+           ((cpu_vendor == UCS_CPU_VENDOR_INTEL) &&
+            (cpu_model == UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS));
 }
 
 
