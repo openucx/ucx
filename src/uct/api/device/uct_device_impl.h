@@ -65,6 +65,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
                                                  comp);
     }
 
+    ucs_device_error("unsupported device_ep->uct_tl_id=%d",
+                     device_ep->uct_tl_id);
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -110,6 +112,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
                                                  remote_address, flags, comp);
     }
 
+    ucs_device_error("unsupported device_ep->uct_tl_id=%d",
+                     device_ep->uct_tl_id);
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -180,6 +184,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
                                                 comp);
     }
 
+    ucs_device_error("unsupported device_ep->uct_tl_id=%d",
+                     device_ep->uct_tl_id);
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -260,6 +266,9 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
                 lengths, counter_index, counter_inc_value,
                 counter_remote_address, flags, comp);
     }
+
+    ucs_device_error("unsupported device_ep->uct_tl_id=%d",
+                     device_ep->uct_tl_id);
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -299,6 +308,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_check_completion(
         return uct_rc_mlx5_gda_ep_check_completion<level>(device_ep, comp);
     }
 
+    ucs_device_error("unsupported device_ep->uct_tl_id=%d",
+                     device_ep->uct_tl_id);
     return UCS_ERR_UNSUPPORTED;
 }
 
