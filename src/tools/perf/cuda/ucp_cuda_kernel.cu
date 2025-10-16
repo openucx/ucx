@@ -178,8 +178,7 @@ private:
     void init_elements(const ucx_perf_context_t &perf)
     {
         /* +1 for the counter */
-        size_t count  = perf.params.msg_size_cnt + 1;
-        size_t offset = 0;
+        size_t count = perf.params.msg_size_cnt + 1;
 
         std::vector<unsigned> indices(count);
         std::vector<size_t> local_offsets(count, 0);
@@ -190,7 +189,6 @@ private:
             indices[i] = i;
             lengths[i] = (i == count - 1) ? ONESIDED_SIGNAL_SIZE :
                                             perf.params.msg_size_list[i];
-            offset    += lengths[i];
         }
 
         m_params.indices        = device_vector(indices);
