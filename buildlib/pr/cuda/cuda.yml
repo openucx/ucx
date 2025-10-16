@@ -96,6 +96,10 @@ jobs:
           CONTAINER: ubuntu22_cuda_13_0
         ubuntu24_cuda_13_0:
           CONTAINER: ubuntu24_cuda_13_0
+        rocky8_cuda_13_0:
+          CONTAINER: rocky8_cuda_13_0
+        rocky9_cuda_13_0:
+          CONTAINER: rocky9_cuda_13_0
 
     container: $[ variables['CONTAINER'] ]
     timeoutInMinutes: 35
