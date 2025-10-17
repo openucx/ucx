@@ -459,6 +459,9 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
             case 0x7e:
                 cpu_model = UCS_CPU_MODEL_INTEL_ICELAKE;
                 break;
+            case 0xcf:
+                cpu_model = UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS;
+                break;
             }
             break;
         /* AMD Zen2 */
