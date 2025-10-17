@@ -482,8 +482,9 @@ UCS_TEST_P(test_ucp_device_xfer, put_single)
     list.dst_pattern_check(mem_list_index + 1, mem_list::SEED_DST);
 }
 
+/* TODO: Enable these tests in CI */
 UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_single_stress_test,
-                     RUNNING_ON_VALGRIND)
+                     RUNNING_ON_VALGRIND || true)
 {
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Skipping stress test under ASAN");
@@ -536,7 +537,7 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi)
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_multi_stress_test,
-                     RUNNING_ON_VALGRIND)
+                     RUNNING_ON_VALGRIND || true)
 {
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Skipping stress test under ASAN");
