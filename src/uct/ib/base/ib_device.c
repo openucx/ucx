@@ -1087,7 +1087,7 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
         {{UCT_IB_DEVICE_ROCE_V2, AF_INET6}, 1},
         {{UCT_IB_DEVICE_ROCE_V2, AF_INET6}},
         {{UCT_IB_DEVICE_ROCE_V1, AF_INET}},
-        {{UCT_IB_DEVICE_ROCE_V2, AF_INET6}, 1},
+        {{UCT_IB_DEVICE_ROCE_V1, AF_INET6}, 1},
         {{UCT_IB_DEVICE_ROCE_V1, AF_INET6}}
     };
     int gid_tbl_len         = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
