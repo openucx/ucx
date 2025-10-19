@@ -142,11 +142,6 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     dev_addr     = (const uct_cuda_ipc_device_addr_t *)params->device_addr;
     same_uuid    = (ucs_get_system_id() == dev_addr->system_uuid);
 
-    if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid) {
-        uct_iface_fill_info_str_buf(params, "same process");
-        return 0;
-    }
-
     if (same_uuid ||
         uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
         return uct_iface_scope_is_reachable(tl_iface, params);
