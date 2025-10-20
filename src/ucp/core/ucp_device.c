@@ -155,8 +155,8 @@ ucp_check_rkey_elem(const ucp_device_mem_list_elem_t *element, size_t i,
                                       rkey, RKEY, NULL);
 
     if (!rkey || (rkey->cfg_index == UCP_WORKER_CFG_INDEX_NULL)) {
-        ucs_debug("invalid rkey[%zu]: %s", i,
-                  rkey ? "cfg_index is NULL" : "rkey is NULL");
+        ucs_debug("invalid rkey[%zu]: %s is NULL", i,
+                  rkey ? "cfg_index" : "rkey");
         return UCS_ERR_INVALID_PARAM;
     }
 
