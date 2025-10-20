@@ -146,6 +146,60 @@ ucp_device_detect_local_md_map(const ucp_context_h context,
     return local_md_map;
 }
 
+static ucs_status_t
+ucp_check_rkey_elem(const ucp_device_mem_list_elem_t *element, size_t i,
+                    ucp_worker_cfg_index_t *rkey_cfg_index) {
+    ucp_rkey_h rkey = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
+                                      rkey, RKEY, NULL);
+
+    if (!rkey || rkey->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        ucs_debug("invalid rkey[%zu]: %s", i,
+                  rkey ? "cfg_index is NULL" : "rkey is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (*rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        *rkey_cfg_index = rkey->cfg_index;
+    } else if (*rkey_cfg_index != rkey->cfg_index) {
+        ucs_debug("mismatched rkey config index: "
+                  "ucp_rkey[%zu]->cfg_index=%u cfg_index=%u",
+                  i, rkey->cfg_index, *rkey_cfg_index);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
+                    int *have_memh, ucs_sys_device_t *local_sys_dev,
+                    ucp_md_map_t *local_md_map, ucs_memory_type_t *mem_type) {
+    ucp_mem_h memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
+                                     memh, MEMH, NULL);
+
+    if (memh == NULL) {
+        return UCS_OK;
+    }
+
+    if (!*have_memh) {
+        *local_sys_dev = memh->sys_dev;
+        *local_md_map  = memh->md_map;
+        *mem_type      = memh->mem_type;
+        *have_memh     = 1;
+        return UCS_OK;
+    }
+
+    if (memh->sys_dev != *local_sys_dev) {
+        ucs_debug("mismatched local sys_dev: ucp_memh[%zu].sys_dev=%u "
+                  "first_sys_dev=%u",
+                  i, memh->sys_dev, *local_sys_dev);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    *local_md_map &= memh->md_map;
+
+    return UCS_OK;
+}
 
 static ucs_status_t
 ucp_device_mem_list_params_check(ucp_context_h context,
@@ -155,8 +209,7 @@ ucp_device_mem_list_params_check(ucp_context_h context,
                                  ucp_md_map_t *local_md_map,
                                  ucs_memory_type_t *mem_type)
 {
-    ucp_rkey_h rkey;
-    ucp_mem_h memh;
+    int have_memh;
     size_t i, num_elements, element_size;
     const ucp_device_mem_list_elem_t *elements, *element;
     ucs_status_t status;
@@ -175,61 +228,25 @@ ucp_device_mem_list_params_check(ucp_context_h context,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    *local_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-    *local_md_map  = 0;
+    *local_md_map   = 0;
+    have_memh       = 0;
+    *rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+
     for (i = 0; i < num_elements; i++) {
         element = UCS_PTR_BYTE_OFFSET(elements, i * element_size);
-        memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh,
-                               MEMH, NULL);
-        rkey = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, rkey,
-                               RKEY, NULL);
-
-        /* TODO: Delegate most of checks below to proto selection */
-        if (rkey == NULL) {
-            ucs_error("element[%lu] rkey is NULL", i);
-            return UCS_ERR_INVALID_PARAM;
+        status = ucp_check_rkey_elem(element, i, rkey_cfg_index);
+        if (status != UCS_OK) {
+            return status;
         }
 
-        if (i == 0) {
-            if (memh != NULL) {
-                *local_sys_dev = memh->sys_dev;
-                *local_md_map  = memh->md_map;
-                *mem_type      = memh->mem_type;
-            }
-
-            *rkey_cfg_index = rkey->cfg_index;
-            if (*rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
-                ucs_debug("invalid first rkey: cfg_index=%d", *rkey_cfg_index);
-                return UCS_ERR_INVALID_PARAM;
-            }
-        } else {
-            if (rkey->cfg_index != *rkey_cfg_index) {
-                ucs_debug("mismatched rkey config index: "
-                          "ucp_rkey[%lu]->cfg_index=%u cfg_index=%u",
-                          i, rkey->cfg_index, *rkey_cfg_index);
-                return UCS_ERR_UNSUPPORTED;
-            }
-
-            if (memh != NULL) {
-                if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-                    *local_sys_dev = memh->sys_dev;
-                    *local_md_map  = memh->md_map;
-                    *mem_type      = memh->mem_type;
-                } else {
-                    *local_md_map &= memh->md_map;
-                    if (memh->sys_dev != *local_sys_dev) {
-                        ucs_debug("mismatched local sys_dev: ucp_memh[%zu].sys_dev=%u "
-                                  "first_sys_dev=%u",
-                                  i, memh->sys_dev, *local_sys_dev);
-                        return UCS_ERR_UNSUPPORTED;
-                    }
-                }
-            }
+        status = ucp_check_memh_elem(element, i, &have_memh, local_sys_dev,
+                                     local_md_map, mem_type);
+        if (status != UCS_OK) {
+            return status;
         }
     }
 
-    /* No memh provided */
-    if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if (!have_memh) {
         status = ucp_device_detect_local_sys_dev(context, local_sys_dev);
         if (status != UCS_OK) {
             return status;
