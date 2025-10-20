@@ -40,6 +40,22 @@ BEGIN_C_DECLS
 #define UCS_VALUE_UNKNOWN_STR "unknown"
 
 
+/* Macro for basename implementation logic used in both host and device code */
+#define UCS_BASENAME(_path) \
+    ({ \
+        const char *_p = (_path); \
+        const char *_result = (_path); \
+        while (*_p != '\0') { \
+            if (*_p == '/') { \
+                _result = _p + 1; \
+            } \
+            _p++; \
+        } \
+        _result; \
+    })
+
+
+
 /**
  * Expand a partial path to full path.
  *
@@ -210,9 +226,7 @@ char *ucs_strtrim(char *str);
  */
 static UCS_F_ALWAYS_INLINE const char* ucs_basename(const char *path)
 {
-    const char *name = strrchr(path, '/');
-
-    return (name == NULL) ? path : name + 1;
+    return UCS_BASENAME(path);
 }
 
 
