@@ -91,7 +91,7 @@ The acronym UCX stands for "Unified Communication X".
 
 This package was built from '@SCM_BRANCH@' branch, commit @SCM_VERSION@.
 
-%if "%{_vendor}" == "suse"
+%if "%{_vendor}" == "suse" && 0%{?suse_version} < 1600
 %debug_package
 %endif
 
