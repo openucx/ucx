@@ -92,10 +92,8 @@ class ucp_perf_cuda_params_handler {
 public:
     ucp_perf_cuda_params_handler(const ucx_perf_context_t &perf)
     {
-        bool has_counter = (perf.params.command != UCX_PERF_CMD_PUT_SINGLE);
-
-        init_mem_list(perf, has_counter);
-        init_elements(perf, has_counter);
+        init_mem_list(perf);
+        init_elements(perf);
         init_counters(perf);
     }
 
@@ -111,10 +109,15 @@ public:
     const ucp_perf_cuda_params &get_params() const { return m_params; }
 
 private:
-    void init_mem_list(const ucx_perf_context_t &perf, bool has_counter)
+    static bool has_counter(const ucx_perf_context_t &perf)
+    {
+        return (perf.params.command != UCX_PERF_CMD_PUT_SINGLE);
+    }
+
+    void init_mem_list(const ucx_perf_context_t &perf)
     {
         size_t data_count = perf.params.msg_size_cnt;
-        size_t count      = data_count + (has_counter ? 1 : 0);
+        size_t count      = data_count + (has_counter(perf) ? 1 : 0);
         size_t offset     = 0;
         ucp_device_mem_list_elem_t elems[count];
 
@@ -132,7 +135,7 @@ private:
             offset              += elems[i].length;
         }
 
-        if (has_counter) {
+        if (has_counter(perf)) {
             elems[data_count].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
                                             UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
                                             UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
@@ -156,21 +159,24 @@ private:
         }
     }
 
-    void init_elements(const ucx_perf_context_t &perf, bool has_counter)
+    void init_elements(const ucx_perf_context_t &perf)
     {
-        size_t count  = perf.params.msg_size_cnt + (has_counter ? 1 : 0);
-        size_t offset = 0;
+        size_t data_count = perf.params.msg_size_cnt;
+        size_t count      = data_count + (has_counter(perf) ? 1 : 0);
 
         std::vector<unsigned> indices(count);
         std::vector<size_t> local_offsets(count, 0);
         std::vector<size_t> remote_offsets(count, 0);
         std::vector<size_t> lengths(count);
 
-        for (unsigned i = 0; i < count; ++i) {
+        for (unsigned i = 0; i < data_count; ++i) {
             indices[i] = i;
-            lengths[i] = (has_counter && i == count - 1) ? ONESIDED_SIGNAL_SIZE :
-                                                           perf.params.msg_size_list[i];
-            offset    += lengths[i];
+            lengths[i] = perf.params.msg_size_list[i];
+        }
+
+        if (has_counter(perf)) {
+            indices[data_count] = data_count;
+            lengths[data_count] = ONESIDED_SIGNAL_SIZE;
         }
 
         device_clone(&m_params.indices, indices.data(), count);

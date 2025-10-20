@@ -91,7 +91,8 @@ ucp_device_mem_handle_hash_remove(ucp_device_mem_list_handle_h handle)
 
 static ucs_status_t
 ucp_device_detect_local_sys_dev(ucp_context_h context,
-                                ucs_sys_device_t *local_sys_dev_p)
+                                ucs_sys_device_t *local_sys_dev,
+                                ucs_memory_type_t mem_type)
 {
     ucs_memory_info_t mem_info;
     uct_allocated_memory_t detect_mem;
@@ -101,7 +102,7 @@ ucp_device_detect_local_sys_dev(ucp_context_h context,
                               UCP_DEVICE_LOCAL_SYS_DEV_DETECT_SIZE,
                               UCT_MD_MEM_ACCESS_LOCAL_READ |
                               UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                              UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN,
+                              mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
                               "local_sys_dev_detect", &detect_mem);
     if (status != UCS_OK) {
         ucs_error("failed to allocate memory for sys_dev detection: %s",
@@ -119,9 +120,9 @@ ucp_device_detect_local_sys_dev(ucp_context_h context,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    *local_sys_dev_p = mem_info.sys_dev;
+    *local_sys_dev = mem_info.sys_dev;
 
-    ucs_trace("detected local_sys_dev=%u", *local_sys_dev_p);
+    ucs_trace("detected local_sys_dev=%u", *local_sys_dev);
     return UCS_OK;
 }
 
@@ -228,9 +229,10 @@ ucp_device_mem_list_params_check(ucp_context_h context,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    *local_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
     *local_md_map   = 0;
-    have_memh       = 0;
     *rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    have_memh       = 0;
 
     for (i = 0; i < num_elements; i++) {
         element = UCS_PTR_BYTE_OFFSET(elements, i * element_size);
@@ -247,14 +249,15 @@ ucp_device_mem_list_params_check(ucp_context_h context,
     }
 
     if (!have_memh) {
-        status = ucp_device_detect_local_sys_dev(context, local_sys_dev);
+        *mem_type = UCS_MEMORY_TYPE_CUDA;
+        status    = ucp_device_detect_local_sys_dev(context, local_sys_dev,
+                                                    *mem_type);
         if (status != UCS_OK) {
             return status;
         }
 
         *local_md_map = ucp_device_detect_local_md_map(context,
                                                        *local_sys_dev);
-        *mem_type = UCS_MEMORY_TYPE_CUDA;
     }
 
     return UCS_OK;

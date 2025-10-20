@@ -103,9 +103,9 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
     // Prepare src and dst buffers
     for (auto i = 0; i < data_count; ++i) {
         m_src.emplace_back(new mapped_buffer(size, sender, 0, mem_type));
-        m_src.back()->pattern_fill(SEED_SRC, size);
         m_dst.emplace_back(new mapped_buffer(size, receiver, 0, mem_type));
         m_rkeys.push_back(m_dst.back()->rkey(sender));
+        m_src.back()->pattern_fill(SEED_SRC, size);
         m_dst.back()->pattern_fill(SEED_DST, size);
     }
 
