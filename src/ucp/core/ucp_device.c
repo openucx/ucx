@@ -91,8 +91,8 @@ ucp_device_mem_handle_hash_remove(ucp_device_mem_list_handle_h handle)
 
 static ucs_status_t
 ucp_device_detect_local_sys_dev(ucp_context_h context,
-                                ucs_sys_device_t *local_sys_dev,
-                                ucs_memory_type_t mem_type)
+                                ucs_memory_type_t mem_type,
+                                ucs_sys_device_t *local_sys_dev)
 {
     ucs_memory_info_t mem_info;
     uct_allocated_memory_t detect_mem;
@@ -250,8 +250,8 @@ ucp_device_mem_list_params_check(ucp_context_h context,
 
     if (!have_memh) {
         *mem_type = UCS_MEMORY_TYPE_CUDA;
-        status    = ucp_device_detect_local_sys_dev(context, local_sys_dev,
-                                                    *mem_type);
+        status    = ucp_device_detect_local_sys_dev(context, *mem_type,
+                                                    local_sys_dev);
         if (status != UCS_OK) {
             return status;
         }
