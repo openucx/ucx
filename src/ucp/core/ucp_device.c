@@ -149,11 +149,12 @@ ucp_device_detect_local_md_map(const ucp_context_h context,
 
 static ucs_status_t
 ucp_check_rkey_elem(const ucp_device_mem_list_elem_t *element, size_t i,
-                    ucp_worker_cfg_index_t *rkey_cfg_index) {
+                    ucp_worker_cfg_index_t *rkey_cfg_index)
+{
     ucp_rkey_h rkey = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
                                       rkey, RKEY, NULL);
 
-    if (!rkey || rkey->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+    if (!rkey || (rkey->cfg_index == UCP_WORKER_CFG_INDEX_NULL)) {
         ucs_debug("invalid rkey[%zu]: %s", i,
                   rkey ? "cfg_index is NULL" : "rkey is NULL");
         return UCS_ERR_INVALID_PARAM;
@@ -174,7 +175,8 @@ ucp_check_rkey_elem(const ucp_device_mem_list_elem_t *element, size_t i,
 static ucs_status_t
 ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
                     int *have_memh, ucs_sys_device_t *local_sys_dev,
-                    ucp_md_map_t *local_md_map, ucs_memory_type_t *mem_type) {
+                    ucp_md_map_t *local_md_map, ucs_memory_type_t *mem_type)
+{
     ucp_mem_h memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
                                      memh, MEMH, NULL);
 
