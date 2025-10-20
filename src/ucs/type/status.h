@@ -122,8 +122,9 @@ typedef void *ucs_status_ptr_t;
 /**
  * @brief Helper macro to generate switch case for status to string conversion
  */
-#define UCS_STATUS_STRINGIFY(ID, _, MSG) case ID: return MSG;
-
+#define UCS_STATUS_STRINGIFY(ID, _, MSG) \
+    case ID: \
+        return MSG;
 /**
  * @brief Common status code to string cases
  *

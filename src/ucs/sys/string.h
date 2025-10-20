@@ -43,7 +43,7 @@ BEGIN_C_DECLS
 /* Macro for basename implementation logic used in both host and device code */
 #define UCS_BASENAME(_path) \
     ({ \
-        const char *_p = (_path); \
+        const char *_p      = (_path); \
         const char *_result = (_path); \
         while (*_p != '\0') { \
             if (*_p == '/') { \
