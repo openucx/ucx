@@ -27,6 +27,11 @@ AS_IF([test "x$cuda_happy" = "xyes"],
                     ]) # "x$with_doca_gpunetio" != "xguess"
              ]) # "x$with_doca_gpunetio" != "xno"
 
+       AS_IF([test $CUDA_MAJOR_VERSION -eq 12 -a $CUDA_MINOR_VERSION -eq 9],
+             [
+	      GPUNETIO_CFLAGS="$GPUNETIO_CFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"
+             ])
+
        save_CPPFLAGS="$CPPFLAGS"
        CPPFLAGS="$CPPFLAGS $CUDA_CFLAGS $GPUNETIO_CFLAGS"
 
