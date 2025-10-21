@@ -17,6 +17,10 @@
 * Do not require transport memory support if rendezvous protocol is not used
 #### Build
 * Added CUDA 13 support to the release pipeline
+* Added Rocky OS support to the release pipeline
+### Bugfixes:
+#### UCS
+* Fixed Netlink fetch mechanism
 
 ## 1.19.0 (June 18, 2025)
 ### Features:
