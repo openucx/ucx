@@ -54,6 +54,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
                                                  remote_address, length, flags,
                                                  comp);
     }
+
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -89,7 +90,12 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
         return uct_rc_mlx5_gda_ep_atomic_add<level>(device_ep, mem_elem,
                                                     inc_value, remote_address,
                                                     flags, comp);
+    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+        return uct_cuda_ipc_ep_atomic_add<level>(device_ep, mem_elem,
+                                                 inc_value, remote_address,
+                                                 flags, comp);
     }
+
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -124,7 +130,6 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
  * @param [in]  addresses              Array of local addresses to send from.
  * @param [in]  remote_addresses       Array of remote addresses to send to.
  * @param [in]  lengths                Array of lengths in bytes for each send.
- * @param [in]  counter_index          Index of remote increment descriptor.
  * @param [in]  counter_inc_value      Value of the remote increment.
  * @param [in]  counter_remote_address Remote address to increment to.
  * @param [in]  flags                  Flags to modify the function behavior.
@@ -147,7 +152,15 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
                                                    counter_inc_value,
                                                    counter_remote_address,
                                                    flags, comp);
+    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+        return uct_cuda_ipc_ep_put_multi<level>(device_ep, mem_list,
+                                                mem_list_count, addresses,
+                                                remote_addresses, lengths,
+                                                counter_inc_value,
+                                                counter_remote_address,
+                                                flags, comp);
     }
+
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -212,6 +225,13 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
                 device_ep, mem_list, mem_list_indices, mem_list_count,
                 addresses, remote_addresses, lengths, counter_index,
                 counter_inc_value, counter_remote_address, flags, comp);
+    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+        return uct_cuda_ipc_ep_put_multi_partial<level>(device_ep, mem_list,
+                                                        mem_list_indices, mem_list_count,
+                                                        addresses, remote_addresses,
+                                                        lengths, counter_index,
+                                                        counter_inc_value, counter_remote_address,
+                                                        flags, comp);
     }
     return UCS_ERR_UNSUPPORTED;
 }
@@ -232,7 +252,10 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_progress(uct_device_ep_h device_ep)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_progress<level>(device_ep);
+    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+        return UCS_OK;
     }
+
     return UCS_ERR_UNSUPPORTED;
 }
 

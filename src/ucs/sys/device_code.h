@@ -7,6 +7,7 @@
 #ifndef UCS_DEVICE_CODE_H
 #define UCS_DEVICE_CODE_H
 
+#include <ucs/sys/compiler_def.h>
 #include <stdint.h>
 
 /*
@@ -19,6 +20,10 @@
 #endif /* __NVCC__ */
 
 
+/* Number of threads in a warp */
+#define UCS_DEVICE_NUM_THREADS_IN_WARP 32
+
+
 /**
  * @brief Cooperation level when calling device functions.
  */
@@ -28,6 +33,24 @@ typedef enum {
     UCS_DEVICE_LEVEL_BLOCK  = 2,
     UCS_DEVICE_LEVEL_GRID   = 3
 } ucs_device_level_t;
+
+
+static UCS_F_ALWAYS_INLINE const char*
+ucs_device_level_name(ucs_device_level_t level)
+{
+    switch (level) {
+    case UCS_DEVICE_LEVEL_THREAD:
+        return "thread";
+    case UCS_DEVICE_LEVEL_WARP:
+        return "warp";
+    case UCS_DEVICE_LEVEL_BLOCK:
+        return "block";
+    case UCS_DEVICE_LEVEL_GRID:
+        return "grid";
+    default:
+        return "unknown";
+    }
+}
 
 
 /*
@@ -44,6 +67,22 @@ UCS_F_DEVICE uint64_t ucs_device_atomic64_read(const uint64_t *ptr)
     ret = *ptr;
 #endif
     return ret;
+}
+
+
+/*
+ * Write a 64-bit value to counter global memory address.
+ */
+UCS_F_DEVICE void ucs_device_atomic64_write(uint64_t *ptr, uint64_t value)
+{
+#ifdef __NVCC__
+    asm volatile("st.release.sys.u64 [%0], %1;"
+             :
+             : "l"(ptr), "l"(value)
+             : "memory");
+#else
+    *ptr = value;
+#endif
 }
 
 

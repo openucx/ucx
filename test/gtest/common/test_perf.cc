@@ -217,6 +217,8 @@ void test_perf::test_params_init(const test_spec &test,
     params.send_device         = {UCS_MEMORY_TYPE_LAST, UCX_PERF_MEM_DEV_DEFAULT};
     params.recv_device         = {UCS_MEMORY_TYPE_LAST, UCX_PERF_MEM_DEV_DEFAULT};
     params.device_thread_count = 1;
+    params.device_block_count  = 1;
+    params.device_level        = UCS_DEVICE_LEVEL_THREAD;
     params.percentile_rank     = 50.0;
 
     memset(params.uct.md_name, 0, sizeof(params.uct.md_name));

@@ -1,7 +1,19 @@
 #
 # UCP basic device cuda tests
 #
-ucp_device_cuda_bw_1k_1thread         -t ucp_put_multi_bw -m cuda -s 1024 -n 10000
-ucp_device_cuda_bw_1k_128threads      -t ucp_put_multi_bw -m cuda -s 1024 -n 10000 -T 128
-ucp_device_cuda_lat_1k_1thread        -t ucp_put_multi_lat -m cuda -s 1024 -n 10000
-ucp_device_cuda_lat_1k_128threads     -t ucp_put_multi_lat -m cuda -s 1024 -n 10000 -T 128
+ucp_device_cuda_single_bw_1k_1thread         -t ucp_put_single_bw -m cuda -s 1024 -n 10000
+ucp_device_cuda_single_lat_1k_1thread        -t ucp_put_single_lat -m cuda -s 1024 -n 10000
+ucp_device_cuda_multi_bw_1k_1thread          -t ucp_put_multi_bw -m cuda -s 256:8 -n 10000
+ucp_device_cuda_multi_lat_1k_1thread         -t ucp_put_multi_lat -m cuda -s 256:8 -n 10000
+ucp_device_cuda_partial_bw_1k_1thread        -t ucp_put_partial_bw -m cuda -s 256:8 -n 10000
+ucp_device_cuda_partial_lat_1k_1thread       -t ucp_put_partial_lat -m cuda -s 256:8 -n 10000
+
+# Increase number of threads after following fixes:
+# - Use thread-local memory instead of shared for requests (limit 48K)
+# - Fix WQE size limit of 1024
+ucp_device_cuda_single_bw_1k_32threads       -t ucp_put_single_bw -m cuda -s 1024 -n 10000 -T 32
+ucp_device_cuda_single_lat_1k_32threads      -t ucp_put_single_lat -m cuda -s 1024 -n 10000 -T 32
+ucp_device_cuda_multi_bw_1k_32threads        -t ucp_put_multi_bw -m cuda -s 256:8 -n 10000 -T 32 -O 2
+ucp_device_cuda_multi_lat_1k_32threads       -t ucp_put_multi_lat -m cuda -s 256:8 -n 10000 -T 32 -O 2
+ucp_device_cuda_partial_bw_1k_32threads      -t ucp_put_partial_bw -m cuda -s 256:8 -n 10000 -T 32 -O 2
+ucp_device_cuda_partial_lat_1k_32threads     -t ucp_put_partial_lat -m cuda -s 256:8 -n 10000 -T 32 -O 2

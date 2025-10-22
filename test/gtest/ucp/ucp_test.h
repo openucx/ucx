@@ -380,6 +380,8 @@ protected:
 
         ucp_mem_h memh() const;
 
+        ucp_worker_h worker() const;
+
     private:
         const entity& m_entity;
         ucp_mem_h     m_memh;

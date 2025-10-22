@@ -152,6 +152,37 @@ ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
     return params->worker->context->tl_rscs[rsc_index].tl_rsc.sys_device;
 }
 
+int ucp_proto_common_add_unique_sys_dev(ucs_sys_device_t sys_dev,
+                                        ucs_sys_device_t *sys_devs,
+                                        ucp_lane_index_t *num_sys_devs,
+                                        ucp_lane_index_t max_sys_devs)
+{
+    ucp_lane_index_t i;
+
+    for (i = 0; i < *num_sys_devs; ++i) {
+        if (sys_dev == sys_devs[i]) {
+            return 0; /* Already exists */
+        }
+    }
+
+    if (*num_sys_devs < max_sys_devs) {
+        sys_devs[(*num_sys_devs)++] = sys_dev;
+        return 1; /* Added */
+    }
+
+    return 0; /* No space */
+}
+
+ucp_lane_index_t
+ucp_proto_common_select_sys_dev_by_node_id(const ucp_proto_init_params_t *params,
+                                           ucp_lane_index_t num_sys_devs)
+{
+    if (num_sys_devs == 0) {
+        return 0;
+    }
+    return params->worker->context->config.node_local_id % num_sys_devs;
+}
+
 /* Pack/unpack local distance to make it equal to the remote one */
 static void
 ucp_proto_common_fp8_pack_unpack_distance(ucs_sys_dev_distance_t *distance)

@@ -19,7 +19,7 @@
 #endif
 
 #define TL_RESOURCE_NAME_NONE   "<none>"
-#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:a:R:lyz"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:a:R:lyzL:"
 #define TEST_ID_UNDEFINED       -1
 
 #define DEFAULT_DAEMON_PORT     1338

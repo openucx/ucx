@@ -255,6 +255,15 @@ ucs_sys_device_t
 ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
                              ucp_lane_index_t lane);
 
+int ucp_proto_common_add_unique_sys_dev(ucs_sys_device_t sys_dev,
+                                        ucs_sys_device_t *sys_devs,
+                                        ucp_lane_index_t *num_sys_devs,
+                                        ucp_lane_index_t max_sys_devs);
+
+ucp_lane_index_t
+ucp_proto_common_select_sys_dev_by_node_id(const ucp_proto_init_params_t *params,
+                                           ucp_lane_index_t num_sys_devs);
+
 
 void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
                                         ucp_lane_index_t lane,

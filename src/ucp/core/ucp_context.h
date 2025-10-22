@@ -186,6 +186,8 @@ typedef struct ucp_context_config {
     char                                   *proto_info_dir;
     /** Memory types that perform non-blocking registration by default */
     uint64_t                               reg_nb_mem_types;
+    /** Enable fallback to blocking registration if no MDs support nonblocking */
+    int                                    reg_nb_fallback;
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
     /** RMA zcopy segment size */
@@ -215,6 +217,10 @@ typedef struct ucp_context_config {
     /** Extend endpoint lanes connections of each local device to all remote
      *  devices */
     int                                    connect_all_to_all;
+    /** Use only one network device for all protocols */
+    int                                    proto_use_single_net_device;
+    /** Local identificator on a single node */
+    unsigned long                          node_local_id;
 } ucp_context_config_t;
 
 
@@ -414,6 +420,9 @@ typedef struct ucp_context {
 
         /* How many endpoints are expected to be created on single node */
         int                       est_num_ppn;
+
+        /* Local identificator on a single node */
+        unsigned long             node_local_id;
 
         struct {
             size_t                         size;    /* Request size for user */

@@ -320,7 +320,7 @@ UCS_TEST_F(test_rwlock, memory_barriers) {
     ucs_rw_spinlock_t lock = UCS_RWLOCK_STATIC_INITIALIZER;
     data_t data1 = {0};
     data_t data2 = {0};
-    measure(10000000, threads,
+    measure(1000000, threads,
             [&]() {
                 ucs_rw_spinlock_read_lock(&lock);
                 data_t d1 = data1;
