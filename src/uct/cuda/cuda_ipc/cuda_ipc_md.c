@@ -391,7 +391,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     unpacked->super.pid    = packed->pid;
     unpacked->super.uuid   = packed->uuid;
 
-    /* Set default NS for wire compatability */
+    /* Set default NS for wire compatibility */
     unpacked->super.pid_ns = ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ?
                                      ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) :
                                      packed->pid_ns;
