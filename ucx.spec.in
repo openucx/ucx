@@ -166,6 +166,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 
 %files devel
 %{_includedir}/uc*
+%{_includedir}/stubs
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
