@@ -367,6 +367,7 @@ AC_SUBST([build_bindings], [${build_bindings}])
 # Final output
 #
 AC_CONFIG_FILES([Makefile
+                 stubs/Makefile
                  docs/doxygen/header.tex
                  src/uct/api/version.h
                  ])
