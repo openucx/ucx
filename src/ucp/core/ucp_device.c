@@ -358,7 +358,7 @@ ucp_device_detect_uct_memh(ucp_context_h context,
                                  length, LENGTH, 0);
 
     if ((local_addr == NULL) || (length == 0)) {
-        return UCS_OK;
+        return UCS_ERR_NO_ELEM;
     }
 
     status = ucp_memh_get(context, local_addr, length, mem_type,
@@ -525,8 +525,12 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                      ucp_element->memh->md_map, local_md_index);
                 ucs_assert(uct_memh != UCT_MEM_HANDLE_NULL);
             } else {
-                ucp_device_detect_uct_memh(ep->worker->context, ucp_element,
-                                           mem_type, local_md_index, &uct_memh);
+                status = ucp_device_detect_uct_memh(ep->worker->context, ucp_element,
+                                                    mem_type, local_md_index, &uct_memh);
+                if ((status != UCS_OK) && (status != UCS_ERR_NO_ELEM)) {
+                    ucs_error("failed to detect uct_memh for lane=%u: %s", lanes[i], ucs_status_string(status));
+                    goto err;
+                }
             }
 
             /* Remote registration */
