@@ -33,8 +33,6 @@ BEGIN_C_DECLS
  *
  * @note Counter elements can omit the @a UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH
  *       and @a UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR fields.
- *       Data elements must have either @a UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH
- *       or @a UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR field.
  *
  * It is used to enable backward compatibility support.
  */
@@ -55,7 +53,6 @@ enum ucp_device_mem_list_elem_field {
  * can later be performed multiple times, possibly with varying memory offsets.
  *
  * @note Counter elements can omit the @a memh and @a local_addr fields.
- *       Data elements must have either @a memh or @a local_addr field.
  */
 typedef struct ucp_device_mem_list_elem {
     /**

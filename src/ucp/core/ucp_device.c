@@ -410,7 +410,6 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     size_t length;
     void *local_addr;
     uint64_t remote_addr;
-    ucp_mem_h memh;
 
     handle_size += sizeof(*handle.local_addrs) + sizeof(*handle.remote_addrs) +
                    sizeof(*handle.lengths);
@@ -491,14 +490,6 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         ucp_element = &params->elements[i];
         local_addr  = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
                                       ucp_element, local_addr, LOCAL_ADDR, NULL);
-
-        if (local_addr == NULL) {
-            memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, ucp_element,
-                                   memh, MEMH, NULL);
-            if (memh != NULL) {
-                local_addr = ucp_memh_address(memh);
-            }
-        }
 
         remote_addr = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
                                       ucp_element, remote_addr, REMOTE_ADDR, 0);
