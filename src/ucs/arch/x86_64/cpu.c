@@ -499,9 +499,9 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
 }
 
 
-int ucs_arch_get_cpu_flag()
+ucs_cpu_flag_t ucs_arch_get_cpu_flag()
 {
-    static int cpu_flag = UCS_CPU_FLAG_UNKNOWN;
+    static ucs_cpu_flag_t cpu_flag = UCS_CPU_FLAG_UNKNOWN;
 
     if (UCS_CPU_FLAG_UNKNOWN == cpu_flag) {
         uint32_t result = 0;

@@ -133,6 +133,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
  * @param [in]  flags           Flags usable to modify the function behavior.
  * @param [out] req             Request populated by the call.
  *
+ * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
+ *                              NULL, use @ref ucp_device_progress_req to check
+ *                              for completion.
+ * @return UCS_OK             - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
@@ -188,6 +192,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  * @param [in]  flags           Flags usable to modify the function behavior.
  * @param [out] req             Request populated by the call.
  *
+ * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
+ *                              NULL, use @ref ucp_device_progress_req to check
+ *                              for completion.
+ * @return UCS_OK             - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
@@ -245,6 +253,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [out] req                    Request populated by the call.
  *
+ * @return UCS_INPROGRESS            - Operation successfully posted. If @a req
+ *                                     is not NULL, use @ref
+ *                                     ucp_device_progress_req to check for
+ *                                     completion.
+ * @return UCS_OK                    - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
@@ -323,6 +336,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [out] req                    Request populated by the call.
  *
+ * @return UCS_INPROGRESS            - Operation successfully posted. If @a req
+ *                                     is not NULL, use @ref
+ *                                     ucp_device_progress_req to check for
+ *                                     completion.
+ * @return UCS_OK                    - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>

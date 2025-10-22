@@ -36,6 +36,11 @@ public:
         return *m_ptr;
     }
 
+    T *operator->() const
+    {
+        return m_ptr.get();
+    }
+
     T *device_ptr()
     {
         T *device_ptr;
