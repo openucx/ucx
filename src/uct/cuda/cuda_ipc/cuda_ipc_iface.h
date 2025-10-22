@@ -50,6 +50,7 @@ typedef struct {
     uintptr_t             d_bptr;
     pid_t                 pid;
     CUdevice              cuda_device;
+    ucs_sys_ns_t          pid_ns;
 } uct_cuda_ipc_event_desc_t;
 
 

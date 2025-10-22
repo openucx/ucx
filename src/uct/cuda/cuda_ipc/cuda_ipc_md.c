@@ -286,6 +286,7 @@ found:
     packed->ph     = key->ph;
     packed->d_bptr = key->d_bptr;
     packed->b_len  = key->b_len;
+    packed->pid_ns = memh->pid_ns;
 
     return UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&packed->uuid,
                                                     memh->dev_num));
@@ -384,7 +385,16 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
         goto err;
     }
 
-    unpacked->super = *packed;
+    unpacked->super.ph     = packed->ph;
+    unpacked->super.d_bptr = packed->d_bptr;
+    unpacked->super.b_len  = packed->b_len;
+    unpacked->super.pid    = packed->pid;
+    unpacked->super.uuid   = packed->uuid;
+
+    /* Set default NS for wire compatability */
+    unpacked->super.pid_ns = ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ?
+                                     ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) :
+                                     packed->pid_ns;
 
     status = uct_cuda_ipc_is_peer_accessible(com, unpacked, sys_dev);
     if (status != UCS_OK) {
@@ -424,6 +434,7 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
     /* dev_num is initialized during pack in uct_cuda_ipc_mem_add_reg */
     memh->dev_num = CU_DEVICE_INVALID;
     memh->pid     = getpid();
+    memh->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
     ucs_list_head_init(&memh->list);
 
     *memh_p = memh;
