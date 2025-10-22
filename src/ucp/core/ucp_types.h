@@ -51,7 +51,7 @@ typedef ucs_static_bitmap_s(UCP_MAX_LANES) \
 #define UCP_LANE_MAP_BIT(_bit_index) \
                     UCS_STATIC_BITMAP_BIT(_bit_index, ucp_lane_map_t)
 
-#define UCP_LANE_MAP_FMT             "0x%lx 0x%lx"
+#define UCP_LANE_MAP_FMT             "0x%lx:0x%lx"
 #define UCP_LANE_MAP_ARG(_map_ptr)   (_map_ptr)->bits[0], (_map_ptr)->bits[1]
 
 /* Zero lane map */

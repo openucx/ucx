@@ -322,8 +322,8 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
                         "req=%p flush started_lanes=" UCP_LANE_MAP_FMT, req,
                         UCP_LANE_MAP_ARG(&req->send.flush.started_lanes));
         } else {
-            ucs_assertv(UCS_STATIC_BITMAP_GET(req->send.flush.started_lanes,
-                                              req->send.lane) == 0,
+            ucs_assertv(!UCS_STATIC_BITMAP_GET(req->send.flush.started_lanes,
+                                               req->send.lane),
                         "req=%p lane=%d started_lanes=" UCP_LANE_MAP_FMT,
                         req, req->send.lane,
                         UCP_LANE_MAP_ARG(&req->send.flush.started_lanes));
@@ -447,6 +447,7 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
     ucp_lane_map_t ff_lanes = UCS_STATIC_BITMAP_NOT(
                                     req->send.flush.started_lanes);
     ucp_lane_map_t lanes;
+
     UCS_STATIC_BITMAP_MASK(&lanes, req->send.flush.num_lanes);
 
     ucp_trace_req(req,
