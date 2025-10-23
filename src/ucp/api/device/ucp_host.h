@@ -31,13 +31,16 @@ BEGIN_C_DECLS
  * The enumeration allows specifying which fields in @ref
  * ucp_device_mem_list_elem are present.
  *
+ * @note Counter elements can omit the @a UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH
+ *       and @a UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR fields.
+ *
  * It is used to enable backward compatibility support.
  */
 enum ucp_device_mem_list_elem_field {
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH        = UCS_BIT(0), /**< Source memory handle */
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY        = UCS_BIT(1), /**< Unpacked remote memory key */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY        = UCS_BIT(1), /**< Unpacked remote memory key (always required) */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR  = UCS_BIT(2), /**< Local address */
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(3),  /**< Remote address */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(3), /**< Remote address */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH      = UCS_BIT(4)  /**< Length of the local buffer in bytes */
 };
 
@@ -48,6 +51,8 @@ enum ucp_device_mem_list_elem_field {
  *
  * This describes a pair of local and remote memory for which a memory operation
  * can later be performed multiple times, possibly with varying memory offsets.
+ *
+ * @note Counter elements can omit the @a memh and @a local_addr fields.
  */
 typedef struct ucp_device_mem_list_elem {
     /**
@@ -80,6 +85,7 @@ typedef struct ucp_device_mem_list_elem {
 
     /**
      * Unpacked memory key for the remote memory endpoint.
+     * Always required.
      */
     ucp_rkey_h rkey;
 } ucp_device_mem_list_elem_t;
