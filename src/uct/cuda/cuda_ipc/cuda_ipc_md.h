@@ -112,6 +112,7 @@ typedef struct uct_cuda_ipc_md_config {
 typedef struct {
     pid_t           pid;     /* PID as key to resolve peer_map hash */
     int             dev_num; /* GPU Device number */
+    ucs_sys_ns_t    pid_ns;  /* PID namespace */
     ucs_list_link_t list;
 } uct_cuda_ipc_memh_t;
 
@@ -136,6 +137,7 @@ typedef struct {
     CUdeviceptr               d_bptr;  /* Allocation base address */
     size_t                    b_len;   /* Allocation size */
     CUuuid                    uuid;    /* GPU Device UUID */
+    ucs_sys_ns_t              pid_ns;  /* PID namespace */
 } uct_cuda_ipc_rkey_t;
 
 

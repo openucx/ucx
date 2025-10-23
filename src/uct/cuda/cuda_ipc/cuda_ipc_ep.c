@@ -186,6 +186,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     cuda_ipc_event->mapped_addr = mapped_addr;
     cuda_ipc_event->d_bptr      = (uintptr_t)key->super.d_bptr;
     cuda_ipc_event->pid         = key->super.pid;
+    cuda_ipc_event->pid_ns      = key->super.pid_ns;
     cuda_ipc_event->cuda_device = cuda_device;
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);

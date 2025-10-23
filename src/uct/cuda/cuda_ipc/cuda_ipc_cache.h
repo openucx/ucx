@@ -66,6 +66,7 @@ uct_cuda_ipc_map_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
 
 ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
                                           void *mapped_addr, CUdevice cu_dev,
+                                          ucs_sys_ns_t pid_ns,
                                           int cache_enabled);
 
 #endif
