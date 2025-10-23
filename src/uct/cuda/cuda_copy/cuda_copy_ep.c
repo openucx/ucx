@@ -196,7 +196,7 @@ static ucs_status_t uct_cuda_copy_ep_push_memory_ctx(CUdeviceptr cuda_deviceptr,
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuPointerGetAttribute(&cuda_context, CU_POINTER_ATTRIBUTE_CONTEXT,
-                                  cuda_deviceptr))
+                                  cuda_deviceptr));
     if (status != UCS_OK) {
         return status;
     }
