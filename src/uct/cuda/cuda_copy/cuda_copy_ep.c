@@ -188,6 +188,34 @@ uct_cuda_primary_ctx_pop_and_release(CUdevice cuda_device,
     }
 }
 
+static ucs_status_t uct_cuda_copy_ep_push_memory_ctx(CUdeviceptr cuda_deviceptr,
+                                                     CUcontext *cuda_context_p)
+{
+    CUcontext cuda_context;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+                    cuPointerGetAttribute(&cuda_context,
+                                          CU_POINTER_ATTRIBUTE_CONTEXT,
+                                          cuda_deviceptr));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (cuda_context == NULL) {
+        ucs_error("failed to query cuda context for 0x%llx", cuda_deviceptr);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_context));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *cuda_context_p = cuda_context;
+    return UCS_OK;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
         uct_cuda_copy_iface_t *iface, ucs_sys_device_t sys_dev,
         CUdeviceptr cuda_deviceptr, CUdevice *cuda_device_p,
@@ -214,24 +242,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
         if (ucs_unlikely(status == UCS_ERR_NO_DEVICE)) {
             /* Device primary context of `cuda_device` is inactive. The memory
              * was probably allocated on the context created with cuCtxCreate.
-             * Fallback to query context based on memory address. */
-            status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuPointerGetAttribute(&cuda_context,
-                                          CU_POINTER_ATTRIBUTE_CONTEXT,
-                                          cuda_deviceptr));
-            if (status != UCS_OK) {
-                goto err;
-            }
-
-            if (cuda_context == NULL) {
-                ucs_error("failed to query cuda context for %p allocated on "
-                          "GPU%d",
-                          (void*)cuda_deviceptr, cuda_device);
-                status = UCS_ERR_UNSUPPORTED;
-                goto err;
-            }
-
-            status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_context));
+             * Fallback to push context based on memory address. */
+            status = uct_cuda_copy_ep_push_memory_ctx(cuda_deviceptr,
+                                                      &cuda_context);
             if (status != UCS_OK) {
                 goto err;
             }
@@ -251,9 +264,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
     result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
     if (ucs_unlikely(result != CUDA_SUCCESS)) {
         if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-            /* Primary context is pushed, but ctx_get_id failed, which means
-             * that some CUDA error occurred.*/
-            ucs_error("failed to get primary context id of device %s (%d)",
+            /* Context is pushed, but ctx_get_id failed, which means that some
+               CUDA error occurred.*/
+            ucs_error("failed to get context id of device %s (%d)",
                       ucs_topo_sys_device_get_name(sys_dev), cuda_device);
             status = UCS_ERR_IO_ERROR;
             goto err_pop_and_release;
