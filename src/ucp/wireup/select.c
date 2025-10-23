@@ -2817,8 +2817,9 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
      * requirement */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0);
     status = ucp_wireup_select_transport(select_ctx, &select_params, &criteria,
-                                       ucp_tl_bitmap_max, UINT64_MAX,
-                                       UINT64_MAX, UINT64_MAX, 1, select_info);
+                                         ucp_tl_bitmap_max, UINT64_MAX,
+                                         UINT64_MAX, UINT64_MAX, 1,
+                                         select_info);
 
 out:
     ucs_free(select_ctx);

@@ -292,7 +292,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
         return ucp_proto_multi_handle_send_error(req, lane, status);
     }
 
-    if (UCS_STATIC_BITMAP_POPCOUNT(remaining_lane_map) < 2) {
+    if (UCS_STATIC_BITMAP_IS_POW2_OR_ZERO(remaining_lane_map)) {
         /* This lane was the last one */
         ucp_request_invoke_uct_completion_success(req);
         return UCS_OK;

@@ -207,6 +207,30 @@ BEGIN_C_DECLS
 
 
 /**
+ * Check if the bitmap is a power of 2.
+ *
+ * @param _bitmap   Check if this bitmap is a power of 2.
+ *
+ * @return 1 if this bitmap is a power of 2, 0 otherwise.
+ */
+#define UCS_STATIC_BITMAP_IS_POW2(_bitmap) \
+    UCS_STATIC_BITMAP_FUNC_CALL(UCS_PP_UNIQUE_ID, _bitmap, \
+                                ucs_bitmap_bits_is_pow2)
+
+
+/**
+ * Check if the bitmap is a power of 2 or zero.
+ *
+ * @param _bitmap   Check if this bitmap is a power of 2 or zero.
+ *
+ * @return 1 if this bitmap is a power of 2 or zero, 0 otherwise.
+ */
+#define UCS_STATIC_BITMAP_IS_POW2_OR_ZERO(_bitmap) \
+    UCS_STATIC_BITMAP_FUNC_CALL(UCS_PP_UNIQUE_ID, _bitmap, \
+                                ucs_bitmap_bits_is_pow2_or_zero)
+
+
+/**
  * Count the number of bits set to 1 in the bitmap up to a given index.
  *
  * @param _bitmap     Count set bits in this bitmap.

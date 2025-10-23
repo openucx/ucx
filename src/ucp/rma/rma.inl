@@ -170,8 +170,9 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
         if (ucs_unlikely(UCS_STATIC_BITMAP_IS_ZERO(ep->ext->unflushed_lanes))) {
             status = UCS_OK;
-        } else if (ucs_likely(UCS_STATIC_BITMAP_POPCOUNT(UCS_STATIC_BITMAP_OR(
-                                   ep->ext->unflushed_lanes, lane_map)) <= 1)) {
+        } else if (ucs_likely(UCS_STATIC_BITMAP_IS_POW2_OR_ZERO(
+                                  UCS_STATIC_BITMAP_OR(ep->ext->unflushed_lanes,
+                                                       lane_map)))) {
             status = ucp_ep_fence_weak(ep);
         } else {
             status = ucp_ep_fence_strong(ep);

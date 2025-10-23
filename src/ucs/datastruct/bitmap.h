@@ -13,6 +13,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/debug/assert.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/preprocessor.h>
 
 BEGIN_C_DECLS
@@ -209,6 +210,46 @@ ucs_bitmap_bits_popcount(const ucs_bitmap_word_t *bits, size_t num_words)
     }
 
     return popcount;
+}
+
+
+/* Check if bitmap is a power of 2, optionally allowing 0 */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_bits_check_pow2_or_zero(const ucs_bitmap_word_t *bits, size_t num_words,
+                                   int allow_zero)
+{
+    const ucs_bitmap_word_t *bits_word;
+    int found = 0;
+
+    ucs_carray_for_each(bits_word, bits, num_words) {
+        if (*bits_word) {
+            if (ucs_is_pow2_or_zero(*bits_word)) {
+                if (found) {
+                    return 0;
+                }
+
+                found = 1;
+            } else {
+                return 0;
+            }
+        }
+    }
+
+    return found || allow_zero;
+}
+
+/* Helper function to check if the bitmap is a power of 2 */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_bits_is_pow2(const ucs_bitmap_word_t *bits, size_t num_words)
+{
+    return ucs_bitmap_bits_check_pow2_or_zero(bits, num_words, 0);
+}
+
+/* Helper function to check if the bitmap is a power of 2 or zero */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_bits_is_pow2_or_zero(const ucs_bitmap_word_t *bits, size_t num_words)
+{
+    return ucs_bitmap_bits_check_pow2_or_zero(bits, num_words, 1);
 }
 
 

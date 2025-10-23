@@ -863,7 +863,7 @@ ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 
-    ucs_assertv(UCS_STATIC_BITMAP_POPCOUNT(ep->ext->unflushed_lanes) == 1,
+    ucs_assertv(UCS_STATIC_BITMAP_IS_POW2(ep->ext->unflushed_lanes),
                 "ep=%p unflushed_lanes=" UCP_LANE_MAP_FMT,
                 ep, UCP_LANE_MAP_ARG(&ep->ext->unflushed_lanes));
 
