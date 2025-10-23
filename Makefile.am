@@ -41,7 +41,8 @@ SUBDIRS = \
 	src/ucm \
 	src/ucs \
 	src/uct \
-	src/ucp
+	src/ucp \
+	stubs
 
 if HAVE_UCG
 SUBDIRS += $(UCG_SUBDIR)
