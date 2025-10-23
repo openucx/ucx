@@ -195,9 +195,8 @@ static ucs_status_t uct_cuda_copy_ep_push_memory_ctx(CUdeviceptr cuda_deviceptr,
     ucs_status_t status;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuPointerGetAttribute(&cuda_context,
-                                          CU_POINTER_ATTRIBUTE_CONTEXT,
-                                          cuda_deviceptr));
+            cuPointerGetAttribute(&cuda_context, CU_POINTER_ATTRIBUTE_CONTEXT,
+                                  cuda_deviceptr))
     if (status != UCS_OK) {
         return status;
     }
@@ -359,7 +358,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
 
     q_desc  = &ctx.ctx_rsc->queue_desc[ctx.src_type][ctx.dst_type];
     event_q = &q_desc->event_queue;
-    stream  = uct_cuda_copy_get_stream(ctx.ctx_rsc, ctx.src_type, ctx.dst_type);
+    stream = uct_cuda_copy_get_stream(ctx.ctx_rsc, ctx.src_type, ctx.dst_type);
     if (ucs_unlikely(stream == NULL)) {
         ucs_error("stream for src %s dst %s not available",
                   ucs_memory_type_names[ctx.src_type],
