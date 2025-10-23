@@ -8,6 +8,8 @@
 #define UCS_DEVICE_CODE_H
 
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/string.h>
+#include <ucs/type/status.h>
 #include <stdint.h>
 
 /*
@@ -35,8 +37,7 @@ typedef enum {
 } ucs_device_level_t;
 
 
-static UCS_F_ALWAYS_INLINE const char*
-ucs_device_level_name(ucs_device_level_t level)
+UCS_F_DEVICE const char *ucs_device_level_name(ucs_device_level_t level)
 {
     switch (level) {
     case UCS_DEVICE_LEVEL_THREAD:
@@ -86,11 +87,33 @@ UCS_F_DEVICE void ucs_device_atomic64_write(uint64_t *ptr, uint64_t value)
 }
 
 
+/**
+ * @brief Device compatible basename function
+ *
+ * Get pointer to file name in path, same as basename but do not modify source
+ * string.
+ *
+ * @param [in] path Path to parse
+ *
+ * @return File name
+ */
+UCS_F_DEVICE const char *ucs_device_basename(const char *path)
+{
+    return UCS_BASENAME(path);
+}
+
+
+/* Device log format - matches UCX host log structure */
+#define UCS_DEVICE_LOG_FMT "%20s[%-8d:%-7d] %17s:%-4u %-4s %-5s %*s"
+
+
 /* Helper macro to print a message from a device function including the
- * thread and block indices */
-#define ucs_device_printf(_title, _fmt, ...) \
-    printf("(%d:%d) %6s " _fmt "\n", threadIdx.x, blockIdx.x, _title, \
+ * thread and block indices, file and line */
+#define ucs_device_printf(_level, _fmt, ...) \
+    printf(UCS_DEVICE_LOG_FMT _fmt "\n", "", threadIdx.x, blockIdx.x, \
+           ucs_device_basename(__FILE__), __LINE__, "UCX", _level, 0, "", \
            ##__VA_ARGS__)
+
 
 /* Print an error message from a device function */
 #define ucs_device_error(_fmt, ...) \
@@ -100,5 +123,22 @@ UCS_F_DEVICE void ucs_device_atomic64_write(uint64_t *ptr, uint64_t value)
 /* Print a debug message from a device function */
 #define ucs_device_debug(_fmt, ...) \
     ucs_device_printf("DEBUG", _fmt, ##__VA_ARGS__)
+
+
+/**
+ * @brief Device compatible status code to string conversion
+ *
+ * @param [in] status  Status code to convert
+ *
+ * @return String representation of the status code
+ */
+UCS_F_DEVICE const char *ucs_device_status_string(ucs_status_t status)
+{
+    switch (status) {
+        UCS_STATUS_STRING_CASES
+    default:
+        return "Unknown error";
+    };
+}
 
 #endif
