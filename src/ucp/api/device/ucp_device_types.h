@@ -47,7 +47,7 @@ typedef struct ucp_device_mem_list_handle {
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    size_t        mem_list_length;
+    size_t          mem_list_length;
 
     /**
      * Array of pointers to UCT device endpoints, used for multi-lane
@@ -73,7 +73,7 @@ typedef struct ucp_device_mem_list_handle {
     /**
      * Array of lengths of the local buffers in bytes.
      */
-    size_t *lengths;
+    size_t   *lengths;
 
     /**
      * Array of UCT memory element objects.

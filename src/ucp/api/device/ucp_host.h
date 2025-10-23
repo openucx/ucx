@@ -160,12 +160,11 @@ ucp_device_mem_list_create(ucp_ep_h ep,
  * @ingroup UCP_DEVICE
  * @brief Getter for mem list length.
  *
- * This function returns number of elememnts in the memory descriptors
- * array of the mem list handle.
+ * This function returns number of eleemnts in the mem list handle.
  *
  * @param [in] handle     Descriptors list handle.
  */
-size_t ucp_device_get_mem_list_length(ucp_device_mem_list_handle_h handle_p);
+size_t ucp_device_get_mem_list_length(const ucp_device_mem_list_handle_h handle_p);
 
 
 /**

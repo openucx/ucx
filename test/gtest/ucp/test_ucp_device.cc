@@ -259,8 +259,6 @@ UCS_TEST_P(test_ucp_device, get_mem_list_length)
 {
     static constexpr unsigned num_elements = 8;
     mem_list list(sender(), receiver(), 1 * UCS_KBYTE, num_elements);
-    EXPECT_NE(nullptr, list.handle());
-    EXPECT_NE(0, ucp_device_get_mem_list_length(list.handle()));
     EXPECT_EQ(num_elements, ucp_device_get_mem_list_length(list.handle()));
 }
 
