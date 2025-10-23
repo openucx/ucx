@@ -265,7 +265,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
     if (ucs_unlikely(result != CUDA_SUCCESS)) {
         if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
             /* Context is pushed, but ctx_get_id failed, which means that some
-               CUDA error occurred.*/
+             * CUDA error occurred.*/
             ucs_error("failed to get context id of device %s (%d)",
                       ucs_topo_sys_device_get_name(sys_dev), cuda_device);
             status = UCS_ERR_IO_ERROR;
