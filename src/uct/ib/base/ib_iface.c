@@ -50,7 +50,7 @@
  * XDR single path ratio for RDMA_READ operations.
  * 4 QPs are needed to achieve full bandwidth with PCIe Gen6.
  */
-#define UCT_IB_XDR_READ_PATH_RATIO 0.25
+#define UCT_IB_XDR_READ_PATH_RATIO 0.4
 
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),

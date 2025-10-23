@@ -50,12 +50,12 @@ typedef struct {
         struct {
             const unsigned *mem_list_indices;
             unsigned       mem_list_count;
-            void *const    *addresses;
-            const uint64_t *remote_addresses;
+            size_t         *local_offsets;
+            size_t         *remote_offsets;
             const size_t   *lengths;
             unsigned       counter_index;
             uint64_t       counter_inc_value;
-            uint64_t       counter_remote_address;
+            uint64_t       counter_remote_offset;
         } partial;
         struct {
             void     *address;
@@ -64,7 +64,14 @@ typedef struct {
     };
 } test_ucp_device_kernel_params_t;
 
-ucs_status_t
+struct test_ucp_device_kernel_result_t {
+    ucs_status_t status;
+    uint64_t     producer_index;
+    uint64_t     ready_index;
+    int32_t      avail_count;
+};
+
+test_ucp_device_kernel_result_t
 launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params);
 
 #endif
