@@ -114,8 +114,6 @@ UCS_F_DEVICE void
 uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned count,
                            unsigned lane_id, uint64_t &wqe_base)
 {
-    wqe_base = 0;
-
     if (lane_id == 0) {
         wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(ep, count);
     }
