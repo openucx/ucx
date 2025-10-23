@@ -566,7 +566,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         return UCS_OK;
     }
 
-    status = uct_cuda_ipc_get_remote_cache(key->pid, key->pid_ns, cu_dev,
+    status = uct_cuda_ipc_get_remote_cache(key->pid, cu_dev, key->pid_ns,
                                            &cache);
     if (status != UCS_OK) {
         return status;
