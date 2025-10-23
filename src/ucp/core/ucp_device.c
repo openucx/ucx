@@ -472,6 +472,12 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     return status;
 }
 
+size_t ucp_device_get_mem_list_length(ucp_device_mem_list_handle_h handle_p)
+{
+    assert(handle_p != NULL);
+    return handle_p->mem_list_length;
+}
+
 void ucp_device_mem_list_release(ucp_device_mem_list_handle_h handle)
 {
     uct_allocated_memory_t mem = ucp_device_mem_handle_hash_remove(handle);
