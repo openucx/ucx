@@ -12,9 +12,6 @@
 #include <common/cuda.h>
 #include "cuda/test_kernels.h"
 
-/* TODO: Enable these tests in CI */
-#define DISABLE_STRESS true
-
 class test_ucp_device : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants);
@@ -321,7 +318,6 @@ protected:
 
         uint64_t expected = params.num_iters * num_threads * count;
         EXPECT_UCS_OK(result.status);
-        EXPECT_EQ(expected - 1, result.producer_index);
         EXPECT_EQ(expected, result.ready_index);
     }
 };
@@ -484,8 +480,9 @@ UCS_TEST_P(test_ucp_device_xfer, put_single)
     list.dst_pattern_check(mem_list_index + 1, mem_list::SEED_DST);
 }
 
+/* TODO: Enable these tests in CI */
 UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_single_stress_test,
-                     RUNNING_ON_VALGRIND || DISABLE_STRESS)
+                     RUNNING_ON_VALGRIND || true)
 {
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Skipping stress test under ASAN");
@@ -538,7 +535,7 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi)
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_multi_stress_test,
-                     RUNNING_ON_VALGRIND || DISABLE_STRESS)
+                     RUNNING_ON_VALGRIND || true)
 {
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Skipping stress test under ASAN");

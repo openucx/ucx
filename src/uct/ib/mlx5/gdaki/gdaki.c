@@ -185,6 +185,14 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     dev_ep.sq_db     = self->sq_db;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemsetD8((CUdeviceptr)UCS_PTR_BYTE_OFFSET(self->ep_gpu,
+                                                        cq_attr.umem_offset),
+                       0xff, cq_attr.umem_len));
+    if (status != UCS_OK) {
+        goto err_dev_ep;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyHtoD((CUdeviceptr)self->ep_gpu, &dev_ep, sizeof(dev_ep)));
     if (status != UCS_OK) {
         goto err_dev_ep;

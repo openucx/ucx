@@ -19,9 +19,7 @@ typedef struct {
 
     uint64_t                     sq_rsvd_index;
     uint64_t                     sq_ready_index;
-    uint64_t                     sq_wqe_pi;
     int                          sq_lock;
-    int                          cq_lock;
 
     uint8_t                      *sq_wqe_daddr;
     uint32_t                     *sq_dbrec;

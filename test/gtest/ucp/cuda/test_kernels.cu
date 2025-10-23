@@ -140,7 +140,6 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
             (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA)) {
             uct_rc_gdaki_dev_ep_t *ep =
                         reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(device_ep);
-            result.producer_index     = ep->sq_wqe_pi - result.producer_index;
             result.ready_index        = ep->sq_ready_index - result.ready_index;
         }
     }
@@ -239,7 +238,6 @@ launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
 
     ucx_cuda::device_result_ptr<test_ucp_device_kernel_result_t> result;
     result->status         = UCS_ERR_NOT_IMPLEMENTED;
-    result->producer_index = 0;
     result->ready_index    = 0;
 
     switch (params.level) {
