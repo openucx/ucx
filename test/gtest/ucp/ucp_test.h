@@ -482,11 +482,19 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
                                             "srd") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib, \
                                             "shm,ib,gdr_copy") \
-    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib_ipc, \
-                                            "shm,ib,cuda_ipc,rocm_ipc") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ugni, \
                                             "ugni") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, tcp, \
                                             "tcp")
+
+
+/**
+ * Instantiate the parameterized test case for gpu ipc transports
+ *
+ * @param _test_case  Test case class, derived from ucp_test.
+ */
+#define UCP_INSTANTIATE_TEST_CASE_GPU_IPC(_test_case) \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib_ipc, \
+                                            "shm,ib,cuda_ipc,rocm_ipc")
 
 #endif
