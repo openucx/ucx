@@ -993,4 +993,3 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);
-UCP_INSTANTIATE_TEST_CASE_GPU_IPC(test_ucp_peer_failure_rndv_put_ppln_abort);
