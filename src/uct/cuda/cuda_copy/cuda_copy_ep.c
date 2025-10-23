@@ -26,7 +26,7 @@ typedef struct {
     CUdevice                cuda_device;
     CUcontext               cuda_context;
     uct_cuda_copy_ctx_rsc_t *ctx_rsc;
-} uct_cuda_copy_ep_rma_ctx_t;
+} uct_cuda_copy_ep_ctx_t;
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_copy_ep_t, const uct_ep_params_t *params)
 {
@@ -291,9 +291,9 @@ err:
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_get_rma_ctx(
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_get_ctx(
         uct_cuda_copy_iface_t *iface, const void *src, const void *dst,
-        size_t length, uct_cuda_copy_ep_rma_ctx_t *rma_ctx_p)
+        size_t length, uct_cuda_copy_ep_ctx_t *ctx_p)
 {
     ucs_memory_type_t src_type;
     ucs_memory_type_t dst_type;
@@ -314,11 +314,11 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_get_rma_ctx(
         return status;
     }
 
-    rma_ctx_p->src_type     = src_type;
-    rma_ctx_p->dst_type     = dst_type;
-    rma_ctx_p->cuda_device  = cuda_device;
-    rma_ctx_p->cuda_context = cuda_context;
-    rma_ctx_p->ctx_rsc      = ctx_rsc;
+    ctx_p->src_type     = src_type;
+    ctx_p->dst_type     = dst_type;
+    ctx_p->cuda_device  = cuda_device;
+    ctx_p->cuda_context = cuda_context;
+    ctx_p->ctx_rsc      = ctx_rsc;
     return UCS_OK;
 }
 
@@ -328,7 +328,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                   uct_cuda_copy_iface_t);
-    uct_cuda_copy_ep_rma_ctx_t rma_ctx;
+    uct_cuda_copy_ep_ctx_t ctx;
     ucs_status_t status;
     uct_cuda_queue_desc_t *q_desc;
     ucs_queue_head_t *event_q;
@@ -339,24 +339,23 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         return UCS_OK;
     }
 
-    status = uct_cuda_copy_ep_get_rma_ctx(iface, src, dst, length, &rma_ctx);
+    status = uct_cuda_copy_ep_get_ctx(iface, src, dst, length, &ctx);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
 
-    q_desc  = &rma_ctx.ctx_rsc->queue_desc[rma_ctx.src_type][rma_ctx.dst_type];
+    q_desc  = &ctx.ctx_rsc->queue_desc[ctx.src_type][ctx.dst_type];
     event_q = &q_desc->event_queue;
-    stream  = uct_cuda_copy_get_stream(rma_ctx.ctx_rsc, rma_ctx.src_type,
-                                       rma_ctx.dst_type);
+    stream  = uct_cuda_copy_get_stream(ctx.ctx_rsc, ctx.src_type, ctx.dst_type);
     if (ucs_unlikely(stream == NULL)) {
         ucs_error("stream for src %s dst %s not available",
-                  ucs_memory_type_names[rma_ctx.src_type],
-                  ucs_memory_type_names[rma_ctx.dst_type]);
+                  ucs_memory_type_names[ctx.src_type],
+                  ucs_memory_type_names[ctx.dst_type]);
         status = UCS_ERR_IO_ERROR;
         goto out_pop_and_release;
     }
 
-    cuda_event = ucs_mpool_get(&rma_ctx.ctx_rsc->super.event_mp);
+    cuda_event = ucs_mpool_get(&ctx.ctx_rsc->super.event_mp);
     if (ucs_unlikely(cuda_event == NULL)) {
         ucs_error("failed to allocate cuda event object");
         status = UCS_ERR_NO_MEMORY;
@@ -383,17 +382,16 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     cuda_event->comp = comp;
 
     UCS_STATIC_BITMAP_SET(&iface->streams_to_sync,
-                          uct_cuda_copy_flush_bitmap_idx(rma_ctx.src_type,
-                                                         rma_ctx.dst_type));
+                          uct_cuda_copy_flush_bitmap_idx(ctx.src_type,
+                                                         ctx.dst_type));
 
     ucs_trace("cuda async issued: %p dst:%p[%s], src:%p[%s] len:%ld",
-              cuda_event, dst, ucs_memory_type_names[rma_ctx.dst_type], src,
-              ucs_memory_type_names[rma_ctx.src_type], length);
+              cuda_event, dst, ucs_memory_type_names[ctx.dst_type], src,
+              ucs_memory_type_names[ctx.src_type], length);
     status = UCS_INPROGRESS;
 
 out_pop_and_release:
-    uct_cuda_primary_ctx_pop_and_release(rma_ctx.cuda_device,
-                                         rma_ctx.cuda_context);
+    uct_cuda_primary_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
 out:
     return status;
 err_mpool_put:
@@ -447,17 +445,17 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                   uct_cuda_copy_iface_t);
-    uct_cuda_copy_ep_rma_ctx_t rma_ctx;
+    uct_cuda_copy_ep_ctx_t ctx;
     ucs_status_t status;
     CUstream *stream;
 
-    status = uct_cuda_copy_ep_get_rma_ctx(iface, (void*)src, (void*)dst, length,
-                                          &rma_ctx);
+    status = uct_cuda_copy_ep_get_ctx(iface, (void*)src, (void*)dst, length,
+                                      &ctx);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
 
-    stream = &rma_ctx.ctx_rsc->short_stream;
+    stream = &ctx.ctx_rsc->short_stream;
     status = uct_cuda_base_init_stream(stream);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out_pop_and_release;
@@ -471,8 +469,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(*stream));
 
 out_pop_and_release:
-    uct_cuda_primary_ctx_pop_and_release(rma_ctx.cuda_device,
-                                         rma_ctx.cuda_context);
+    uct_cuda_primary_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
 out:
     return status;
 }
