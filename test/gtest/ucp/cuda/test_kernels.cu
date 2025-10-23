@@ -156,7 +156,8 @@ ucp_test_kernel(const test_ucp_device_kernel_params_t params,
                 test_ucp_device_kernel_result_t *result_ptr)
 {
     /* Execute fence on any return, to ensure result is visible to the host */
-    scope_guard fence(__threadfence_system);
+    auto fence_func = []() { __threadfence_system(); };
+    scope_guard<decltype(fence_func)> fence(fence_func);
     ucs_status_t &status = result_ptr->status;
 
     if (blockDim.x > device_request<level>::MAX_THREADS) {
