@@ -15,7 +15,6 @@
 #include <cuda/atomic>
 
 #define UCT_CUDA_IPC_IS_ALIGNED_POW2(_n, _p) (!((_n) & ((_p) - 1)))
-#define UCT_CUDA_IPC_WARP_SIZE 32
 #define UCT_CUDA_IPC_COPY_LOOP_UNROLL 8
 
 UCS_F_DEVICE int4 uct_cuda_ipc_ld_global_cg(const int4* p)
@@ -60,8 +59,8 @@ uct_cuda_ipc_get_lane(unsigned &lane_id, unsigned &num_lanes)
         num_lanes = 1;
         break;
     case UCS_DEVICE_LEVEL_WARP:
-        lane_id = threadIdx.x % UCT_CUDA_IPC_WARP_SIZE;
-        num_lanes = UCT_CUDA_IPC_WARP_SIZE;
+        lane_id   = threadIdx.x % UCS_DEVICE_NUM_THREADS_IN_WARP;
+        num_lanes = UCS_DEVICE_NUM_THREADS_IN_WARP;
         break;
     case UCS_DEVICE_LEVEL_BLOCK:
         lane_id   = threadIdx.x;
@@ -72,19 +71,6 @@ uct_cuda_ipc_get_lane(unsigned &lane_id, unsigned &num_lanes)
         num_lanes = blockDim.x * gridDim.x;
         break;
     }
-}
-
-UCS_F_DEVICE void* uct_cuda_ipc_map_remote(const uct_cuda_ipc_device_mem_element_t* elem,
-                                           uint64_t remote_address)
-{
-    return reinterpret_cast<void*>((uintptr_t)remote_address + elem->mapped_offset);
-}
-
-UCS_F_DEVICE void uct_cuda_ipc_atomic_inc(uint64_t *dst, uint64_t inc_value)
-{
-    cuda::atomic_ref<uint64_t, cuda::thread_scope_system> dst_ref{*dst};
-    dst_ref.fetch_add(inc_value, cuda::memory_order_relaxed);
-    cuda::atomic_thread_fence(cuda::memory_order_release, cuda::thread_scope_system);
 }
 
 template<ucs_device_level_t level>
@@ -107,6 +93,19 @@ UCS_F_DEVICE void uct_cuda_ipc_level_sync()
     return;
 }
 
+UCS_F_DEVICE void* uct_cuda_ipc_map_remote(const uct_cuda_ipc_device_mem_element_t* elem,
+                                           uint64_t remote_address)
+{
+    return reinterpret_cast<void*>((uintptr_t)remote_address + elem->mapped_offset);
+}
+
+UCS_F_DEVICE void uct_cuda_ipc_atomic_inc(uint64_t *dst, uint64_t inc_value)
+{
+    cuda::atomic_ref<uint64_t, cuda::thread_scope_system> dst_ref{*dst};
+    dst_ref.fetch_add(inc_value, cuda::memory_order_relaxed);
+    cuda::atomic_thread_fence(cuda::memory_order_release, cuda::thread_scope_system);
+}
+
 template<ucs_device_level_t level>
 UCS_F_DEVICE void uct_cuda_ipc_copy_level(void *dst, const void *src, size_t len);
 
@@ -121,50 +120,103 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_WARP>(void *dst, const void *src, 
 {
     using vec4 = int4;
     using vec2 = int2;
+    auto  s1   = reinterpret_cast<const char*>(src);
+    auto  d1   = reinterpret_cast<char *>(dst);
     unsigned int lane_id, num_lanes;
+    size_t num_lines;
 
     uct_cuda_ipc_get_lane<UCS_DEVICE_LEVEL_WARP>(lane_id, num_lanes);
-    auto s1 = reinterpret_cast<const char*>(src);
-    auto d1 = reinterpret_cast<char *>(dst);
 
-    /* 16B-aligned fast path using vec4 */
+    /* 16B-aligned fast path using vec4 with unrolling */
     if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
         UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
         const vec4 *s4 = reinterpret_cast<const vec4*>(s1);
-        vec4 *d4       = reinterpret_cast<vec4*>(d1);
-        size_t n4 = len / sizeof(vec4);
-        for (size_t i = lane_id; i < n4; i += num_lanes) {
-            vec4 v = uct_cuda_ipc_ld_global_cg(s4 + i);
-            uct_cuda_ipc_st_global_cg(d4 + i, v);
+        vec4       *d4 = reinterpret_cast<vec4*>(d1);
+        vec4 tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
+
+        num_lines = (len / (num_lanes * UCT_CUDA_IPC_COPY_LOOP_UNROLL * sizeof(vec4))) *
+                    (num_lanes * UCT_CUDA_IPC_COPY_LOOP_UNROLL);
+
+        for (size_t line = lane_id; line < num_lines; line += num_lanes * UCT_CUDA_IPC_COPY_LOOP_UNROLL) {
+#pragma unroll
+            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
+                tmp[i] = uct_cuda_ipc_ld_global_cg(s4 + (line + num_lanes * i));
+            }
+
+#pragma unroll
+            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
+                uct_cuda_ipc_st_global_cg(d4 + (line + num_lanes * i), tmp[i]);
+            }
         }
 
-        len = len - n4 * sizeof(vec4);
+        len = len - num_lines * sizeof(vec4);
         if (len == 0) {
             return;
         }
 
-        s1 = reinterpret_cast<const char*>(s4 + n4);
-        d1 = reinterpret_cast<char*>(d4 + n4);
+        s4 = s4 + num_lines;
+        d4 = d4 + num_lines;
+
+        /* leftover vec4 lines without unrolling */
+        num_lines = len / sizeof(vec4);
+        for (size_t line = lane_id; line < num_lines; line += num_lanes) {
+            vec4 v = uct_cuda_ipc_ld_global_cg(s4 + line);
+            uct_cuda_ipc_st_global_cg(d4 + line, v);
+        }
+
+        len = len - num_lines * sizeof(vec4);
+        if (len == 0) {
+            return;
+        }
+
+        s1 = reinterpret_cast<const char*>(s4 + num_lines);
+        d1 = reinterpret_cast<char*>(d4 + num_lines);
     }
 
-    /* 8B-aligned fast path using vec2 */
+    /* 8B-aligned fast path using vec2 with unrolling */
     if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
         UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
         const vec2 *s2 = reinterpret_cast<const vec2*>(s1);
-        vec2 *d2       = reinterpret_cast<vec2*>(d1);
-        size_t n2 = len / sizeof(vec2);
-        for (size_t i = lane_id; i < n2; i += num_lanes) {
-            vec2 v2 = uct_cuda_ipc_ld_global_cg(s2 + i);
-            uct_cuda_ipc_st_global_cg(d2 + i, v2);
+        vec2       *d2 = reinterpret_cast<vec2*>(d1);
+        vec2 tmp2[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
+
+        num_lines = (len / (num_lanes * UCT_CUDA_IPC_COPY_LOOP_UNROLL * sizeof(vec2))) *
+                    (num_lanes * UCT_CUDA_IPC_COPY_LOOP_UNROLL);
+
+        for (size_t line = lane_id; line < num_lines; line += num_lanes * UCT_CUDA_IPC_COPY_LOOP_UNROLL) {
+#pragma unroll
+            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
+                tmp2[i] = uct_cuda_ipc_ld_global_cg(s2 + (line + num_lanes * i));
+            }
+
+#pragma unroll
+            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
+                uct_cuda_ipc_st_global_cg(d2 + (line + num_lanes * i), tmp2[i]);
+            }
         }
 
-        len = len - n2 * sizeof(vec2);
+        len = len - num_lines * sizeof(vec2);
         if (len == 0) {
             return;
         }
 
-        s1 = reinterpret_cast<const char*>(s2 + n2);
-        d1 = reinterpret_cast<char*>(d2 + n2);
+        s2 = s2 + num_lines;
+        d2 = d2 + num_lines;
+
+        /* leftover vec2 lines without unrolling */
+        num_lines = len / sizeof(vec2);
+        for (size_t line = lane_id; line < num_lines; line += num_lanes) {
+            vec2 v2 = uct_cuda_ipc_ld_global_cg(s2 + line);
+            uct_cuda_ipc_st_global_cg(d2 + line, v2);
+        }
+
+        len = len - num_lines * sizeof(vec2);
+        if (len == 0) {
+            return;
+        }
+
+        s1 = reinterpret_cast<const char*>(s2 + num_lines);
+        d1 = reinterpret_cast<char*>(d2 + num_lines);
     }
 
     /* byte tail */
@@ -178,34 +230,32 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_BLOCK>(void *dst, const void *src,
 {
     using vec4 = int4;
     using vec2 = int2;
-    auto s1  = reinterpret_cast<const char*>(src);
-    auto d1  = reinterpret_cast<char *>(dst);
-    const vec4 *s4;
-    vec4 *d4;
-    int warp, num_warps, idx;
+    auto      s1        = reinterpret_cast<const char*>(src);
+    auto      d1        = reinterpret_cast<char *>(dst);
+    const int warp      = threadIdx.x / UCS_DEVICE_NUM_THREADS_IN_WARP;
+    const int num_warps = blockDim.x / UCS_DEVICE_NUM_THREADS_IN_WARP;
+    const int idx       = threadIdx.x % UCS_DEVICE_NUM_THREADS_IN_WARP;
     size_t num_lines;
 
     if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
         UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
+        const vec4 *s4 = reinterpret_cast<const vec4*>(s1);
+        vec4       *d4 = reinterpret_cast<vec4*>(d1);
         vec4 tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
-        warp      = threadIdx.x / UCT_CUDA_IPC_WARP_SIZE;
-        num_warps = blockDim.x / UCT_CUDA_IPC_WARP_SIZE;
-        idx       = threadIdx.x % UCT_CUDA_IPC_WARP_SIZE;
-        s4        = reinterpret_cast<const vec4*>(s1);
-        d4        = reinterpret_cast<vec4*>(d1);
-        num_lines = (len / (UCT_CUDA_IPC_WARP_SIZE * UCT_CUDA_IPC_COPY_LOOP_UNROLL * sizeof(vec4))) *
-                    (UCT_CUDA_IPC_WARP_SIZE * UCT_CUDA_IPC_COPY_LOOP_UNROLL);
 
-        for (size_t line = warp * UCT_CUDA_IPC_WARP_SIZE * UCT_CUDA_IPC_COPY_LOOP_UNROLL + idx; line < num_lines;
-             line += num_warps * UCT_CUDA_IPC_WARP_SIZE * UCT_CUDA_IPC_COPY_LOOP_UNROLL) {
+        num_lines = (len / (UCS_DEVICE_NUM_THREADS_IN_WARP * UCT_CUDA_IPC_COPY_LOOP_UNROLL * sizeof(vec4))) *
+                    (UCS_DEVICE_NUM_THREADS_IN_WARP * UCT_CUDA_IPC_COPY_LOOP_UNROLL);
+
+        for (size_t line = warp * UCS_DEVICE_NUM_THREADS_IN_WARP * UCT_CUDA_IPC_COPY_LOOP_UNROLL + idx; line < num_lines;
+             line += num_warps * UCS_DEVICE_NUM_THREADS_IN_WARP * UCT_CUDA_IPC_COPY_LOOP_UNROLL) {
 #pragma unroll
             for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                tmp[i] = uct_cuda_ipc_ld_global_cg(s4 + (line + UCT_CUDA_IPC_WARP_SIZE * i));
+                tmp[i] = uct_cuda_ipc_ld_global_cg(s4 + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i));
             }
 
 #pragma unroll
             for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                uct_cuda_ipc_st_global_cg(d4 + (line + UCT_CUDA_IPC_WARP_SIZE * i), tmp[i]);
+                uct_cuda_ipc_st_global_cg(d4 + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i), tmp[i]);
             }
         }
         len = len - num_lines * sizeof(vec4);
@@ -233,28 +283,23 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_BLOCK>(void *dst, const void *src,
     /* If not 16B-aligned, try 8B-aligned fast path using vec2 */
     if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
         UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
-        const vec2 *s2;
-        vec2 *d2;
-        vec2 tmp2[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
+        const vec2 *s2 = reinterpret_cast<const vec2*>(s1);
+        vec2       *d2 = reinterpret_cast<vec2*>(d1);
+        vec2 tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
 
-        warp      = threadIdx.x / UCT_CUDA_IPC_WARP_SIZE;
-        num_warps = blockDim.x / UCT_CUDA_IPC_WARP_SIZE;
-        idx       = threadIdx.x % UCT_CUDA_IPC_WARP_SIZE;
-        s2        = reinterpret_cast<const vec2*>(s1);
-        d2        = reinterpret_cast<vec2*>(d1);
-        num_lines = (len / (UCT_CUDA_IPC_WARP_SIZE * UCT_CUDA_IPC_COPY_LOOP_UNROLL * sizeof(vec2))) *
-                    (UCT_CUDA_IPC_WARP_SIZE * UCT_CUDA_IPC_COPY_LOOP_UNROLL);
+        num_lines = (len / (UCS_DEVICE_NUM_THREADS_IN_WARP * UCT_CUDA_IPC_COPY_LOOP_UNROLL * sizeof(vec2))) *
+                    (UCS_DEVICE_NUM_THREADS_IN_WARP * UCT_CUDA_IPC_COPY_LOOP_UNROLL);
 
-        for (size_t line = warp * UCT_CUDA_IPC_WARP_SIZE * UCT_CUDA_IPC_COPY_LOOP_UNROLL + idx; line < num_lines;
-             line += num_warps * UCT_CUDA_IPC_WARP_SIZE * UCT_CUDA_IPC_COPY_LOOP_UNROLL) {
+        for (size_t line = warp * UCS_DEVICE_NUM_THREADS_IN_WARP * UCT_CUDA_IPC_COPY_LOOP_UNROLL + idx; line < num_lines;
+             line += num_warps * UCS_DEVICE_NUM_THREADS_IN_WARP * UCT_CUDA_IPC_COPY_LOOP_UNROLL) {
 #pragma unroll
             for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                tmp2[i] = uct_cuda_ipc_ld_global_cg(s2 + (line + UCT_CUDA_IPC_WARP_SIZE * i));
+                tmp[i] = uct_cuda_ipc_ld_global_cg(s2 + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i));
             }
 
 #pragma unroll
             for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                uct_cuda_ipc_st_global_cg(d2 + (line + UCT_CUDA_IPC_WARP_SIZE * i), tmp2[i]);
+                uct_cuda_ipc_st_global_cg(d2 + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i), tmp[i]);
             }
         }
 

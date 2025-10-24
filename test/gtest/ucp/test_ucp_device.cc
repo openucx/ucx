@@ -256,7 +256,7 @@ UCS_TEST_P(test_ucp_device, create_fail)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")
-
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, cuda_ipc, "rc,cuda_copy,cuda_ipc")
 
 class test_ucp_device_kernel : public test_ucp_device {
 public:
@@ -347,7 +347,8 @@ UCS_TEST_P(test_ucp_device_kernel, local_counter)
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_kernel, rc_gda,
                                         "rc,rc_gda")
-
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_kernel, cuda_ipc,
+                                        "rc,cuda_copy,cuda_ipc")
 
 class test_ucp_device_xfer : public test_ucp_device_kernel {
 public:
@@ -640,3 +641,5 @@ UCS_TEST_P(test_ucp_device_xfer, counter)
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_xfer, rc_gda,
                                         "rc,rc_gda")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_xfer, cuda_ipc,
+                                        "rc,cuda_copy,cuda_ipc")
