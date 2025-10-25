@@ -490,7 +490,6 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         ucp_element = &params->elements[i];
         local_addr  = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
                                       ucp_element, local_addr, LOCAL_ADDR, NULL);
-
         remote_addr = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
                                       ucp_element, remote_addr, REMOTE_ADDR, 0);
         length = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, ucp_element,
