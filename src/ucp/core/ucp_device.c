@@ -340,50 +340,6 @@ static void ucp_device_mem_list_lane_lookup(
     }
 }
 
-static ucs_status_t
-ucp_device_detect_uct_memh(ucp_context_h context,
-                           const ucp_device_mem_list_elem_t *element,
-                           ucs_memory_type_t mem_type, ucp_md_index_t md_index,
-                           uct_mem_h *uct_memh)
-{
-    void *local_addr;
-    size_t length;
-    ucs_status_t status;
-    ucp_mem_h memh;
-
-    *uct_memh  = UCT_MEM_HANDLE_NULL;
-    local_addr = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
-                                 local_addr, LOCAL_ADDR, NULL);
-    length     = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
-                                 length, LENGTH, 0);
-
-    if ((local_addr == NULL) || (length == 0)) {
-        return UCS_ERR_NO_ELEM;
-    }
-
-    status = ucp_memh_get(context, local_addr, length, mem_type,
-                          UCS_BIT(md_index),
-                          UCT_MD_MEM_ACCESS_LOCAL_READ |
-                          UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                          "device_mem_list", &memh);
-    if (status != UCS_OK) {
-        ucs_debug("failed to detect memh from local_addr %p length %zu: %s",
-                  local_addr, length, ucs_status_string(status));
-        return status;
-    }
-
-    ucs_assertv((memh->md_map & UCS_BIT(md_index)) != 0,
-                "memh=%p md_map=0x%lx md_index=%u", memh, memh->md_map,
-                md_index);
-
-    *uct_memh = memh->uct[md_index];
-    ucs_assert(*uct_memh != UCT_MEM_HANDLE_NULL);
-
-    ucp_memh_put(memh);
-
-    return UCS_OK;
-}
-
 static ucs_status_t ucp_device_mem_list_create_handle(
         ucp_ep_h ep, ucs_sys_device_t local_sys_dev,
         const ucp_device_mem_list_params_t *params,
@@ -524,12 +480,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                      ucp_element->memh->md_map, local_md_index);
                 ucs_assert(uct_memh != UCT_MEM_HANDLE_NULL);
             } else {
-                status = ucp_device_detect_uct_memh(ep->worker->context, ucp_element,
-                                                    mem_type, local_md_index, &uct_memh);
-                if ((status != UCS_OK) && (status != UCS_ERR_NO_ELEM)) {
-                    ucs_error("failed to detect uct_memh for lane=%u: %s", lanes[i], ucs_status_string(status));
-                    goto err;
-                }
+                uct_memh = UCT_MEM_HANDLE_NULL;
             }
 
             /* Remote registration */

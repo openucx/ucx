@@ -591,52 +591,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_single_stress_test,
     check_result(params, result, 1);
 }
 
-UCS_TEST_P(test_ucp_device_xfer, put_single_local_addr_only)
-{
-    static constexpr size_t size = 32 * UCS_KBYTE;
-    mapped_buffer src(size, sender(), 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer dst(size, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
-
-    src.pattern_fill(mem_list::SEED_SRC, size);
-    dst.pattern_fill(mem_list::SEED_DST, size);
-
-    auto rkey = dst.rkey(sender());
-
-    ucp_device_mem_list_elem_t elem = {};
-    elem.field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                       UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                       UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                       UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-    elem.local_addr  = src.ptr();
-    elem.rkey        = rkey;
-    elem.remote_addr = reinterpret_cast<uint64_t>(dst.ptr());
-    elem.length      = size;
-
-    ucp_device_mem_list_params_t params_list;
-    params_list.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
-                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
-                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
-    params_list.element_size = sizeof(elem);
-    params_list.num_elements = 1;
-    params_list.elements     = &elem;
-
-    ucp_device_mem_list_handle_h handle;
-    ASSERT_UCS_OK(ucp_device_mem_list_create(sender().ep(), &params_list, &handle));
-
-    auto params = init_params();
-    params.operation             = TEST_UCP_DEVICE_KERNEL_PUT_SINGLE;
-    params.mem_list              = handle;
-    params.single.mem_list_index = 0;
-    params.single.address        = src.ptr();
-    params.single.remote_address = reinterpret_cast<uint64_t>(dst.ptr());
-    params.single.length         = size;
-    launch_kernel(params);
-
-    dst.pattern_check(mem_list::SEED_SRC, size);
-
-    ucp_device_mem_list_release(handle);
-}
-
 UCS_TEST_P(test_ucp_device_xfer, put_multi)
 {
     static constexpr size_t size = 32 * UCS_KBYTE;
