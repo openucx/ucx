@@ -24,6 +24,11 @@
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
+#define UCP_WIREUP_UCT_INFO_SIZE           256
+
+/* 6 for the string format constant length */
+#define UCP_WIREUP_TLS_INFO_SIZE       (UCP_WIREUP_UCT_INFO_SIZE + \
+                                        UCT_TL_NAME_MAX + UCT_DEVICE_NAME_MAX + 6)
 
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
@@ -410,8 +415,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_rsc_index_t rsc_index;
     ucp_rsc_index_t dev_index;
     ucp_lane_index_t lane;
-    char tls_info[256];
-    char uct_info[256];
+    char tls_info[UCP_WIREUP_TLS_INFO_SIZE];
+    char uct_info[UCP_WIREUP_UCT_INFO_SIZE];
     char *p, *endp;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_v2_t *md_attr;
@@ -2435,6 +2440,18 @@ ucp_wireup_select_context_init(ucp_wireup_select_context_t *select_ctx)
     UCS_STATIC_BITMAP_RESET_ALL(&select_ctx->tl_bitmap);
 }
 
+static double ucp_wireup_device_score_func(const ucp_worker_iface_t *wiface,
+                                           const uct_md_attr_v2_t *md_attr,
+                                           const ucp_unpacked_address_t *unpacked_addr,
+                                           const ucp_address_entry_t *remote_addr,
+                                           int is_prioritized_ep, void *arg)
+{
+    ucp_wireup_dev_usage_count *dev_count = arg;
+
+    return ucp_wireup_iface_avail_bandwidth(wiface, unpacked_addr, remote_addr,
+                                            dev_count) / UCS_MBYTE;
+}
+
 /* Also ignore error mode when set to peer failure */
 static ucs_status_t
 ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
@@ -2462,7 +2479,7 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_init_select_flags(&peer_rma_flags, 0, 0);
     ucp_wireup_criteria_init(&bw_info.criteria);
 
-    bw_info.criteria.calc_score = ucp_wireup_rma_bw_score_func;
+    bw_info.criteria.calc_score = ucp_wireup_device_score_func;
     ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_DEVICE_EP, 0);
 

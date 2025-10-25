@@ -158,6 +158,7 @@ uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned count,
     if (lane_id == 0) {
         wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(ep, count);
     }
+
     if (level == UCS_DEVICE_LEVEL_WARP) {
         wqe_base = __shfl_sync(0xffffffff, wqe_base, 0);
     } else if (level == UCS_DEVICE_LEVEL_BLOCK) {
@@ -246,9 +247,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uint64_t add)
 {
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-    unsigned cflag = 0;
+    unsigned cflag                = 0;
     uint64_t wqe_base;
-    uint64_t wqe_idx;
     unsigned lane_id;
     unsigned num_lanes;
 
@@ -258,8 +258,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         return UCS_ERR_NO_RESOURCE;
     }
 
-    wqe_idx = wqe_base & 0xffff;
     if (lane_id == 0) {
+        uint16_t wqe_idx = (uint16_t)wqe_base;
         if ((comp != nullptr) || uct_rc_mlx5_gda_fc(ep, wqe_idx)) {
             cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
@@ -329,10 +329,9 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-
-    int count                 = mem_list_count;
-    int counter_index         = count - 1;
-    bool atomic               = false;
+    int count                     = mem_list_count;
+    int counter_index             = count - 1;
+    bool atomic                   = false;
     uint64_t wqe_idx;
     unsigned cflag;
     unsigned lane_id;
@@ -422,8 +421,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-    unsigned count            = mem_list_count;
-    bool atomic               = false;
+    unsigned count                = mem_list_count;
+    bool atomic                   = false;
     uint64_t wqe_idx;
     unsigned lane_id;
     unsigned num_lanes;
