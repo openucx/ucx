@@ -378,7 +378,7 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
             req->send.ep->worker->context, md_map & memh->md_map, memh,
             dt_iter->type.contig.buffer, dt_iter->length, &dt_iter->mem_info,
             distance_dev_map, dev_distance,
-            ucp_ep_config(req->send.ep)->uct_rkey_pack_flags, rkey_buffer);
+            ucp_ep_config(req->send.ep)->uct_rkey_pack_flags, 0, rkey_buffer);
 
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
@@ -405,6 +405,36 @@ ucp_proto_common_get_dev_index(const ucp_proto_init_params_t *params,
 {
     ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
     return params->worker->context->tl_rscs[rsc_index].dev_index;
+}
+
+static UCS_F_ALWAYS_INLINE const uct_tl_resource_desc_t *
+ucp_proto_common_get_tl_rsc(const ucp_proto_init_params_t *params,
+                            ucp_lane_index_t lane)
+{
+    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+    return &params->worker->context->tl_rscs[rsc_index].tl_rsc;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_is_net_dev(const ucp_proto_init_params_t *params,
+                            ucp_lane_index_t lane)
+{
+    return ucp_proto_common_get_tl_rsc(params, lane)->dev_type ==
+           UCT_DEVICE_TYPE_NET;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_bandwidth_equal(double bw1, double bw2)
+{
+    return fabs(bw1 - bw2) <= UCP_PROTO_PERF_EPSILON;
+}
+
+static UCS_F_ALWAYS_INLINE double
+ucp_proto_common_iface_bandwidth(ucp_context_h context,
+                                 const uct_ppn_bandwidth_t *bandwidth)
+{
+    return bandwidth->dedicated +
+           (bandwidth->shared / ucs_min(context->config.est_num_ppn, 8));
 }
 
 #endif

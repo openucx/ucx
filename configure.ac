@@ -10,7 +10,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 20) # Minor version. Increased for each release.
+define([ucx_ver_minor], 21) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -199,6 +199,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_CUDA_STATIC], [false])
      AM_CONDITIONAL([HAVE_NVCC], [false])
      AM_CONDITIONAL([HAVE_GDR_COPY], [false])
+     AM_CONDITIONAL([HAVE_GPUNETIO], [false])
      AM_CONDITIONAL([HAVE_ROCM], [false])
      AM_CONDITIONAL([HAVE_HIP], [false])
      AM_CONDITIONAL([HAVE_XPMEM], [false])
@@ -220,6 +221,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [false])
      AM_CONDITIONAL([INSTALL_DEVEL_HEADERS], [false])
      AM_CONDITIONAL([HAVE_EXAMPLES], [false])
+     AM_CONDITIONAL([HAVE_TEST_APPS], [false])
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [false])
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
      AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
@@ -334,6 +336,16 @@ AS_IF([test "x$with_docs_only" = xyes],
                    [],
                    [enable_examples=no])
     AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])
+
+     #
+     # Enable test apps build
+     #
+     AC_ARG_ENABLE([test-apps],
+                   AS_HELP_STRING([--enable-test-apps],
+                                  [Enable test apps build, default: NO]),
+                   [],
+                   [enable_test_apps=no])
+    AM_CONDITIONAL([HAVE_TEST_APPS], [test "x$enable_test_apps" = "xyes"])
     ]) # Docs only
 
 #
@@ -342,6 +354,7 @@ AS_IF([test "x$with_docs_only" = xyes],
 build_modules="${uct_modules}"
 build_modules="${build_modules}${ucs_modules}"
 build_modules="${build_modules}${uct_ib_modules}"
+build_modules="${build_modules}${uct_ib_mlx5_modules}"
 build_modules="${build_modules}${uct_cuda_modules}"
 build_modules="${build_modules}${ucm_modules}"
 build_modules="${build_modules}${ucx_perftest_modules}"
@@ -412,6 +425,10 @@ AC_MSG_NOTICE([                 CXX:   ${CXX}])
 AC_MSG_NOTICE([            CPPFLAGS:   ${BASE_CPPFLAGS} ${CPPFLAGS}])
 AC_MSG_NOTICE([              CFLAGS:   ${BASE_CFLAGS} ${CFLAGS}])
 AC_MSG_NOTICE([            CXXFLAGS:   ${BASE_CXXFLAGS} ${CXXFLAGS}])
+AS_IF([test "x$NVCC" != "x"], [
+    AC_MSG_NOTICE([                NVCC:   ${NVCC}])
+    AC_MSG_NOTICE([           NVCCFLAGS:   ${BASE_NVCCFLAGS} ${NVCCFLAGS}])
+])
 AC_MSG_NOTICE([          ASAN check:   ${enable_asan}])
 AC_MSG_NOTICE([        Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([           MPI tests:   ${mpi_enable}])
@@ -424,6 +441,7 @@ AC_MSG_NOTICE([         UCT modules:   <$(echo ${uct_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        CUDA modules:   <$(echo ${uct_cuda_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        ROCM modules:   <$(echo ${uct_rocm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([          IB modules:   <$(echo ${uct_ib_modules}|tr ':' ' ') >])
+AC_MSG_NOTICE([        MLX5 modules:   <$(echo ${uct_ib_mlx5_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCM modules:   <$(echo ${ucm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        Perf modules:   <$(echo ${ucx_perftest_modules}|tr ':' ' ') >])
 AS_IF([test "x$enable_ucg" != "xno"], [

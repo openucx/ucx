@@ -17,6 +17,7 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/status.h>
+#include <ucs/sys/ptr_arith.h>
 
 /**
  * When using a clang version that is higher than 3.0, the GNUC_MINOR is set
@@ -440,11 +441,16 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
     struct {
-        /* Max dp ordering level per transport, 
+        /* Max dp ordering level per transport in DevX,
            as listed in uct_ib_mlx5_dp_ordering_t */
         uint8_t              rc;
         uint8_t              dc;
-    } dp_ordering_cap;
+    } dp_ordering_cap_devx;
+    struct {
+        /* DDP support per transport in DV API */
+        uint8_t              rc;
+        uint8_t              dc;
+    } ddp_support_dv;
 } uct_ib_mlx5_md_t;
 
 
@@ -574,6 +580,21 @@ typedef struct uct_ib_mlx5_devx_uar {
 } uct_ib_mlx5_devx_uar_t;
 
 
+enum {
+    UCT_IB_MLX5_CQ_IGNORE_OVERRUN = UCS_BIT(0),
+    UCT_IB_MLX5_CQ_CQE_ZIP        = UCS_BIT(1),
+};
+
+
+typedef struct uct_ib_mlx5_cq_attr {
+    unsigned cq_size;
+    unsigned cqe_size;
+    size_t   umem_len;
+    size_t   umem_offset;
+    unsigned flags;
+} uct_ib_mlx5_cq_attr_t;
+
+
 /* Completion queue */
 typedef struct uct_ib_mlx5_cq {
     uct_ib_mlx5_obj_type_t type;
@@ -626,6 +647,9 @@ typedef struct uct_ib_mlx5_qp_attr {
     int                         full_handshake;
     int                         rdma_wr_disabled;
     uint8_t                     log_num_dci_stream_channels;
+    unsigned                    max_tx;
+    unsigned                    len;
+    size_t                      umem_offset;
 } uct_ib_mlx5_qp_attr_t;
 
 
@@ -795,12 +819,19 @@ extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
  */
 ucs_status_t uct_ib_mlx5_fill_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
 
+
 /**
- * Fill internal CQ information.
+ * Init internal CQ information.
  */
-void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
+void uct_ib_mlx5_init_cq_common(uct_ib_mlx5_cq_t *cq, unsigned cq_size,
                                 unsigned cqe_size, uint32_t cqn, void *cq_buf,
                                 void* uar, volatile void *dbrec, int zip);
+
+/**
+ * Fill CQ work buffer.
+ */
+void uct_ib_mlx5_fill_cq_buf(uct_ib_mlx5_cq_t *cq, unsigned cq_size);
+
 
 /**
  * Destroy CQ.
@@ -878,6 +909,8 @@ void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
  */
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq);
 
+void uct_ib_mlx5_init_wq_buf(uct_ib_mlx5_txwq_t *txwq);
+
 /**
  * Add txwq attributes to a VFS object
  */
@@ -903,9 +936,11 @@ void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs
 /**
  * DEVX UAR API
  */
-int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
-                             uct_ib_mlx5_md_t *md,
+int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar, uct_ib_mlx5_md_t *md,
                              uct_ib_mlx5_mmio_mode_t mmio_mode);
+
+ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, uint32_t flags,
+                                        struct mlx5dv_devx_uar **uar_p);
 
 ucs_status_t uct_ib_mlx5_devx_check_uar(uct_ib_mlx5_md_t *md);
 
@@ -921,6 +956,8 @@ void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
 void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
                                    const uct_ib_mlx5_iface_config_t *mlx5_config,
                                    uct_ib_iface_init_attr_t *init_attr);
+
+size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);
 
 /**
  * DEVX QP API
@@ -940,6 +977,13 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_txwq_t *tx,
                                         uct_ib_mlx5_qp_attr_t *attr);
 
+ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
+                                               const uct_ib_mlx5_cq_t *send_cq,
+                                               const uct_ib_mlx5_cq_t *recv_cq,
+                                               uct_ib_mlx5_qp_t *qp,
+                                               uct_ib_mlx5_txwq_t *tx,
+                                               uct_ib_mlx5_qp_attr_t *attr);
+
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                                         const void *in, size_t inlen,
                                         void *out, size_t outlen);
@@ -948,6 +992,8 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp);
+
+void uct_ib_mlx5_devx_destroy_qp_common(uct_ib_mlx5_qp_t *qp);
 
 ucs_status_t uct_ib_mlx5_devx_obj_modify(struct mlx5dv_devx_obj *obj,
                                          const void *in, size_t inlen,
@@ -1024,11 +1070,25 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                            const uct_ib_iface_init_attr_t *init_attr,
                            uct_ib_mlx5_cq_t *cq, int preferred_cpu, size_t inl);
 
+ucs_status_t
+uct_ib_mlx5_devx_create_cq_common(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                  const uct_ib_mlx5_cq_attr_t *attr,
+                                  uct_ib_mlx5_cq_t *cq, int preferred_cpu,
+                                  size_t inl);
+
 void uct_ib_mlx5_devx_destroy_cq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_cq_t *cq);
+
+void uct_ib_mlx5_devx_destroy_cq_common(uct_ib_mlx5_cq_t *cq);
 
 ucs_status_t
 uct_ib_mlx5_devx_allow_xgvmi_access(uct_ib_mlx5_md_t *md,
                                     uint32_t exported_lkey, int silent);
+
+void uct_ib_mlx5_wq_calc_sizes(uct_ib_mlx5_qp_attr_t *attr);
+
+void uct_ib_mlx5_cq_calc_sizes(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                               const uct_ib_iface_init_attr_t *init_attr,
+                               size_t inl, uct_ib_mlx5_cq_attr_t *attr);
 
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
@@ -1208,8 +1268,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char* name, size_t size,
 ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
                                                uct_ib_mlx5_devx_mem_t *memh);
 #endif
-
-size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);
 
 ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                                    ucs_ternary_auto_value_t ar_enable,

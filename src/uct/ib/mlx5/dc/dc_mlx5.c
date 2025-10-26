@@ -836,7 +836,7 @@ uct_dc_mlx5_dci_pool_get_or_create(uct_dc_mlx5_iface_t *iface,
 {
     uint32_t config_hash = uct_dc_mlx5_dci_config_hash(dci_config);
     khiter_t khit;
-    ucs_kh_put_t kh_put_ret;
+    int kh_put_ret;
 
     khit = kh_put(uct_dc_mlx5_config_hash, &iface->dc_config_hash, config_hash,
                   &kh_put_ret);
@@ -914,8 +914,7 @@ static ucs_status_t uct_dc_mlx5_iface_estimate_perf(uct_iface_h tl_iface,
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
-        if (uct_ib_iface_port_attr(ib_iface)->active_speed ==
-            UCT_IB_SPEED_NDR) {
+        if (uct_ib_iface_port_is_ndr(ib_iface)) {
             perf_attr->flags |= UCT_PERF_ATTR_FLAGS_TX_RX_SHARED;
         }
     }
@@ -1389,13 +1388,16 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf   = uct_dc_mlx5_iface_estimate_perf,
-            .iface_vfs_refresh     = uct_dc_mlx5_iface_vfs_refresh,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = uct_dc_mlx5_ep_invalidate,
-            .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
-            .iface_is_reachable_v2 = uct_dc_mlx5_iface_is_reachable_v2,
-            .ep_is_connected       = uct_dc_mlx5_ep_is_connected
+            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_estimate_perf    = uct_dc_mlx5_iface_estimate_perf,
+            .iface_vfs_refresh      = uct_dc_mlx5_iface_vfs_refresh,
+            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate          = uct_dc_mlx5_ep_invalidate,
+            .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+            .iface_is_reachable_v2  = uct_dc_mlx5_iface_is_reachable_v2,
+            .ep_is_connected        = uct_dc_mlx5_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -1608,12 +1610,14 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     init_attr.fc_req_size   = sizeof(uct_dc_fc_request_t);
     init_attr.max_rd_atomic = md->max_rd_atomic_dc;
     init_attr.tx_moderation = 0; /* disable tx moderation for dcs */
+    init_attr.dev_name      = params->mode.device.dev_name;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DC_TM) {
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
-    if (md->dp_ordering_cap.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
+    if ((md->dp_ordering_cap_devx.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        md->ddp_support_dv.dc) {
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
@@ -1625,7 +1629,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * self->tx.ndci;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
-                                              md->dp_ordering_cap.dc,
+                                              md->dp_ordering_cap_devx.dc,
+                                              md->ddp_support_dv.dc,
                                               &config->rc_mlx5_common, "dc");
     if (status != UCS_OK) {
         return status;
@@ -1831,17 +1836,18 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
 
     status = uct_ib_mlx5_modify_qp_state(&iface->super.super.super,
                                          &txwq->super, IBV_QPS_RESET);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
+                  iface, dci_index, txwq->super.qp_num,
+                  ucs_status_string(status));
+    }
 
     uct_rc_mlx5_iface_commom_clean(&iface->super.cq[UCT_IB_DIR_TX], NULL,
                                    txwq->super.qp_num);
 
     /* Resume posting from to the beginning of the QP */
     uct_ib_mlx5_txwq_reset(txwq);
-    if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                  iface, dci_index, txwq->super.qp_num,
-                  ucs_status_string(status));
-    }
+    uct_ib_mlx5_init_wq_buf(txwq);
 
     status = uct_dc_mlx5_iface_dci_connect(iface, dci);
     if (status != UCS_OK) {

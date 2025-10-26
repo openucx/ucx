@@ -277,9 +277,11 @@ static int vfs_unlink_socket(int silent_notexist)
 }
 
 /* return 0 or the (negative) value of errno in case of error */
-static int vfs_listen(int silent_addinuse_err)
+static int vfs_listen(int silent_addrinuse_err)
 {
     int listen_fd, ret;
+
+    vfs_log("listening on socket %s", (const char*)g_sockaddr.sun_path);
 
     ret = umask(~S_IRWXU);
     if (ret < 0) {
@@ -304,7 +306,7 @@ static int vfs_listen(int silent_addinuse_err)
                sizeof(g_sockaddr));
     if (ret < 0) {
         ret = -errno;
-        if ((errno != EADDRINUSE) || !silent_addinuse_err) {
+        if ((errno != EADDRINUSE) || !silent_addrinuse_err) {
             vfs_error("bind(%s) failed: %m", g_sockaddr.sun_path);
         }
         goto out_close;

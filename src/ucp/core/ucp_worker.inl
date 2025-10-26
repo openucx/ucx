@@ -228,6 +228,35 @@ ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 }
 
 /**
+ * Check if interface with @a iface_attr supports device-operated
+ * communications.
+ *
+ * @param [in]  iface_attr   iface attributes.
+ *
+ * @return 1 if iface supports device operations connections, otherwise 0.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_iface_is_tl_device(const uct_iface_attr_t *iface_attr)
+{
+    return !!(iface_attr->cap.flags & UCT_IFACE_FLAG_DEVICE_EP);
+}
+
+/**
+ * Check if TL supports device-operated communications.
+ *
+ * @param [in]  worker       UCP worker.
+ * @param [in]  rsc_index    resource index.
+ *
+ * @return 1 if TL supports device-operated connections, otherwise 0.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_is_tl_device(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return ucp_worker_iface_is_tl_device(
+            ucp_worker_iface_get_attr(worker, rsc_index));
+}
+
+/**
  * Check if TL supports connection to interface.
  *
  * @param [in]  worker       UCP worker.

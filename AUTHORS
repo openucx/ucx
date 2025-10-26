@@ -46,6 +46,7 @@ Hui Zhou <hzhou321@anl.gov>
 Igor Ivanov <igori@mellanox.com>
 Ilia Yastrebov <iyastrebov@nvidia.com>
 Ilya Nelkenbaum <ilyan@mellanox.com>
+Itay Alroy <ialroy@nvidia.com>
 Ivan Kochin <ikochin@nvidia.com>
 Jakir Kham <jakirkham@gmail.com>
 Jason Gunthorpe <jgg@mellanox.com>
@@ -65,6 +66,7 @@ Manjunath Gorentla Venkata <manjugv@gmail.com>
 Marek Schimara <Marek.Schimara@bull.net>
 Mark Allen <markalle@us.ibm.com>
 Matthew Baker <bakermb@ornl.gov>
+Michael Braverman <michaelbr@nvidia.com>
 Michal Shalev <mshalev@nvidia.com>
 Mike Dubman <miked@mellanox.com>
 Mikhail Brinskii <mikhailb@nvidia.com>
@@ -101,7 +103,7 @@ Srinivasan Subramanian <srinivasan.subramanian@amd.com>
 Stephen Richmond <srichmond@dancer.icl.utk.edu>
 Swen Boehm <boehms@ornl.gov>
 Thomas Vegas <tvegas@nvidia.com>
-Tony Curtis <anthony.curtis@stonybrook.edu>
+Tony Curtis <tonycurtis32@gmail.com>
 Tzafrir Cohen <tzafrirc@nvidia.com>
 Valentin Petrov <valentinp@mellanox.com>
 Wenbin Lu <wenbin.lu@stonybrook.edu>
@@ -112,6 +114,7 @@ Yossi Itigin <yosefe@nvidia.com>
 Yuriy Shestakov <yuriis@mellanox.com>
 Zhu Yanjun <yanjunz@mellanox.com>
 Zihao Zhao <zizhao@nvidia.com>
+lzhang2 <cherry.zhang@intel.com>
 
 In addition we would like to acknowledge the following members of UCX community
 for their participation in annual face-to-face meeting, design discussions, and

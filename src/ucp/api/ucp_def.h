@@ -869,4 +869,7 @@ typedef struct {
 
 } ucp_transports_t;
 
+
+typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
+
 #endif

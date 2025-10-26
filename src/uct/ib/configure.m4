@@ -233,6 +233,9 @@ AS_IF([test "x$with_ib" = "xyes"],
                          struct ibv_device_attr_ex.odp_caps],
                         [], [], [[#include <infiniband/verbs.h>]])
 
+       AC_CHECK_MEMBERS([struct ibv_port_attr.active_speed_ex],
+                        [], [], [[#include <infiniband/verbs.h>]])
+
        AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,
                        IBV_ACCESS_ON_DEMAND,
                        IBV_QPF_GRH_REQUIRED],
@@ -290,9 +293,7 @@ AS_IF([test "x$with_ib" = "xyes"],
 
            # Direct NIC support, from IB side
            AC_CHECK_DECLS([mlx5dv_get_data_direct_sysfs_path,
-                           mlx5dv_reg_dmabuf_mr],
-                           [AC_DEFINE([HAVE_DIRECT_NIC], 1,
-                                      [Have Direct NIC support])], [],
+                           mlx5dv_reg_dmabuf_mr], [], [],
                           [[#include <infiniband/mlx5dv.h>]])
               ])
 

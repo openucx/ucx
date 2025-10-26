@@ -63,6 +63,7 @@ nobase_dist_libucs_la_HEADERS = \
 	stats/libstats.h \
 	sys/event_set.h \
 	sys/compiler_def.h\
+	sys/device_code.h \
 	sys/math.h \
 	sys/preprocessor.h \
 	sys/string.h \

@@ -1219,6 +1219,7 @@ static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
     ucp_rsc_index_t i;
     ucp_tl_resource_desc_t *cmp_rsc;
     char buf[128];
+    ucs_status_t status;
 
     *distance = ucs_topo_default_distance;
 
@@ -1232,7 +1233,9 @@ static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
         device     = ucp_worker_iface_get_sys_device(wiface);
         cmp_device = cmp_rsc->tl_rsc.sys_device;
 
-        ucs_topo_get_distance(device, cmp_device, distance);
+        status = ucs_topo_get_distance(device, cmp_device, distance);
+        ucs_assertv_always(status == UCS_OK, "device=%u cmp_device=%u", device,
+                           cmp_device);
 
         ucs_trace("distance between %s/%s and %s/%s is %s",
                   context->tl_rscs[wiface->rsc_index].tl_rsc.tl_name,
@@ -1864,6 +1867,10 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
             UCS_STATIC_BITMAP_SET(&ka_lanes_map, lane);
         }
 
+        if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
+            device_lanes_map |= UCS_BIT(lane);
+        }
+
         if ((ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane) >= 0)) {
             UCS_STATIC_BITMAP_SET(&rma_lanes_map, lane);
         }
@@ -1896,6 +1903,7 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
                                !rma_emul ? "rma" : "rma_am", &strb);
     ucp_worker_add_feature_rsc(context, key, amo_lanes_map,
                                !amo_emul ? "amo" : "amo_am", &strb);
+    ucp_worker_add_feature_rsc(context, key, device_lanes_map, "device", &strb);
     ucp_worker_add_feature_rsc(context, key, am_lanes_map, "am", &strb);
     ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream", &strb);
     ucp_worker_add_feature_rsc(context, key, ka_lanes_map, "ka", &strb);
@@ -2379,7 +2387,7 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
     max_am_header  = SIZE_MAX;
     max_rts_size   = sizeof(ucp_rndv_rts_hdr_t) +
                      ucp_rkey_packed_size(context, UCS_MASK(context->num_mds),
-                                          UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                          UCS_SYS_DEVICE_ID_UNKNOWN, 0, 0);
     max_ucp_header = ucs_max(max_rts_size, UCP_AM_FIRST_FRAG_META_LEN);
 
     /* Make sure maximal AM header can fit into one bcopy fragment

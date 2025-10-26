@@ -36,14 +36,21 @@ enum {
     /*
      * Memory handle was imported and points to some peer's memory buffer.
      */
-    UCP_MEMH_FLAG_IMPORTED     = UCS_BIT(0),
-    UCP_MEMH_FLAG_MLOCKED      = UCS_BIT(1),
-    UCP_MEMH_FLAG_HAS_AUTO_GVA = UCS_BIT(2),
+    UCP_MEMH_FLAG_IMPORTED           = UCS_BIT(0),
+    UCP_MEMH_FLAG_MLOCKED            = UCS_BIT(1),
+    UCP_MEMH_FLAG_HAS_AUTO_GVA       = UCS_BIT(2),
 
     /**
      * Avoid using registration cache for the particular memory region.
      */
-    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3)
+    UCP_MEMH_FLAG_NO_RCACHE          = UCS_BIT(3),
+
+    /**
+     * Track if sender-side flush is needed, check is only done when needed
+     * and cached.
+     */
+    UCP_MEMH_FLAG_SEND_FLUSH_CHECKED = UCS_BIT(4),
+    UCP_MEMH_FLAG_SEND_FLUSH_NEEDED  = UCS_BIT(5)
 };
 
 
@@ -68,7 +75,6 @@ typedef struct ucp_mem {
     ucp_context_h       context;        /* UCP context that owns a memory handle */
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_sys_device_t    sys_dev;        /* System device index */
-    ucs_sys_device_t    packed_sys_dev; /* System device index */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
@@ -228,6 +234,12 @@ ucs_status_t ucp_mm_get_alloc_md_index(ucp_context_h context,
                                        ucs_sys_device_t alloc_sys_dev,
                                        ucp_md_index_t *md_idx_p,
                                        ucp_memory_info_t *mem_info_p);
+
+ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
+                              size_t length, unsigned uct_flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, const char *name,
+                              uct_allocated_memory_t *mem);
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)

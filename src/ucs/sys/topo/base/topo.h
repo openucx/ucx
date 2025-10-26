@@ -45,6 +45,13 @@ typedef struct ucs_sys_bus_id {
 typedef uint8_t ucs_sys_device_t;
 
 
+/**
+ * @ingroup UCS_RESOURCE
+ * Global state of the topology subsystem.
+ */
+typedef struct ucs_global_state ucs_global_state_t;
+
+
 /*
  * Captures the estimated latency and bandwidth between two system devices
  * referred by ucs_sys_device_t handle.
@@ -305,6 +312,9 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem);
 int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem);
 
 
+int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev);
+
+
 /**
  * Get the number of registered system devices.
  *
@@ -318,6 +328,23 @@ unsigned ucs_topo_num_devices(void);
  * discovered.
  */
 void ucs_topo_print_info(FILE *stream);
+
+
+/**
+ * Extract the state of the topology subsystem and clear the global context.
+ *
+ * @return A pointer to the saved state of the topology subsystem.
+ */
+ucs_global_state_t *ucs_topo_extract_state(void);
+
+
+/**
+ * Restore the state of the topology subsystem, overriding the current global
+ * context.
+ *
+ * @param [in] state A pointer to the saved state of the topology subsystem.
+ */
+void ucs_topo_restore_state(ucs_global_state_t *state);
 
 
 /**

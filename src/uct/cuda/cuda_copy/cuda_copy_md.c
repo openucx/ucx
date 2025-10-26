@@ -848,12 +848,13 @@ out_default_range:
     return UCS_OK;
 }
 
-static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
+static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
+                                          ucs_sys_device_t sys_dev)
 {
 #if CUDA_VERSION >= 11070
+    unsigned long long flags = 0;
     PFN_cuMemGetHandleForAddressRange_v11070 get_handle_func;
     CUresult cu_err;
-    unsigned long long flags;
     int fd;
 
     /* Get fxn ptr for cuMemGetHandleForAddressRange in case installed libcuda
@@ -880,31 +881,33 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
 #endif
 
 #if CUDA_VERSION >= 12080
-    flags  = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+    /**
+     * DMA_BUF handle mapped via PCIE BAR1 can only be used in conjunction with
+     * mlx5dv_reg_dmabuf_mr. Other interfaces (e.g. ibv_reg_dmabuf_mr) may
+     * successfully register the handle, but the subsequent remote ib operation
+     * will fail.
+     * Check if there is a sibling device to determine if the handle will be
+     * used by a Direct NIC via mlx5dv_reg_dmabuf_mr.
+     */
+    if (ucs_topo_device_has_sibling(sys_dev)) {
+        flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+    }
+#endif
+
     cu_err = get_handle_func((void*)&fd, address, length,
                              CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, flags);
     if (cu_err == CUDA_SUCCESS) {
-        goto out;
+        ucs_trace("dmabuf for address 0x%lx length %zu flags %llx is fd %d",
+                  address, length, flags, fd);
+        return fd;
     }
+
+    ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
+              "flags=%llx DMA_BUF_FD) failed: %s",
+              address, length, flags,
+              uct_cuda_base_cu_get_error_string(cu_err));
 #endif
-
-    flags  = 0;
-    cu_err = get_handle_func((void*)&fd, address, length,
-                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, flags);
-    if (cu_err != CUDA_SUCCESS) {
-        ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
-                  "DMA_BUF_FD) failed: %s",
-                  address, length, uct_cuda_base_cu_get_error_string(cu_err));
-        return UCT_DMABUF_FD_INVALID;
-    }
-
-out:
-    ucs_trace("dmabuf for address 0x%lx length %zu flags %llx is fd %d",
-              address, length, flags, fd);
-    return fd;
-#else
     return UCT_DMABUF_FD_INVALID;
-#endif
 }
 
 ucs_status_t
@@ -970,7 +973,8 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
                                         ucs_get_page_size());
 
         mem_attr->dmabuf_fd = uct_cuda_copy_md_get_dmabuf_fd(
-                aligned_start, aligned_end - aligned_start);
+                aligned_start, aligned_end - aligned_start,
+                addr_mem_info.sys_dev);
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {

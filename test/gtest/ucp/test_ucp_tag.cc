@@ -56,6 +56,9 @@ void test_ucp_tag::init()
 
 void test_ucp_tag::enable_tag_mp_offload()
 {
+    if (ucs::skip_hw_tm_offload()) {
+        test_skip();
+    }
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MP_SRQ_ENABLE", "try"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MP_NUM_STRIDES", "8"));
@@ -425,6 +428,9 @@ public:
     test_ucp_tag_limits() {
         m_test_offload = get_variant_value();
         if (m_test_offload) {
+            if (ucs::skip_hw_tm_offload()) {
+                test_skip();
+            }
             m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
         }
         m_tag_min_rndv = 0;

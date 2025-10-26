@@ -40,7 +40,6 @@ ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
         .parent         = &ucp_mem_dummy_handle.memh,
         .mem_type       = UCS_MEMORY_TYPE_HOST,
         .sys_dev        = UCS_SYS_DEVICE_ID_UNKNOWN,
-        .packed_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
         .md_map         = 0,
         .inv_md_map     = 0,
         .reg_id         = 0,
@@ -246,11 +245,11 @@ static int ucp_is_md_selected_by_config(ucp_context_h context,
            !strncmp(cfg_cmpt_name, cmpt_name, UCT_COMPONENT_NAME_MAX);
 }
 
-static ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
-                                     size_t length, unsigned uct_flags,
-                                     ucs_memory_type_t mem_type,
-                                     ucs_sys_device_t sys_dev, const char *name,
-                                     uct_allocated_memory_t *mem)
+ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
+                              size_t length, unsigned uct_flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, const char *name,
+                              uct_allocated_memory_t *mem)
 {
     uct_alloc_method_t method;
     uct_mem_alloc_params_t params;
@@ -727,13 +726,6 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
     memh->alloc_method   = method;
     memh->mem_type       = mem_type;
     memh->sys_dev        = sys_dev;
-
-    /* Cache sys_dev in a format packed to rkey to minimize overhead during
-     * rndv protocols. TODO remove if using another method to mark rkey with
-     * remote flush requirement. */
-    memh->packed_sys_dev = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
-                                   UCS_SYS_DEVICE_ID_UNKNOWN :
-                                   ucp_rkey_pack_sys_dev(memh);
 }
 
 static ucs_status_t

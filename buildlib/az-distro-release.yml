@@ -37,6 +37,18 @@ jobs:
         ubuntu24_cuda12_${{ parameters.arch }}:
           build_container: ubuntu24_cuda12_${{ parameters.arch }}
           artifact_name: $(POSTFIX)-ubuntu24.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+        ubuntu22_cuda13_${{ parameters.arch }}:
+          build_container: ubuntu22_cuda13_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda13-${{ parameters.arch }}.tar.bz2
+        ubuntu24_cuda13_${{ parameters.arch }}:
+          build_container: ubuntu24_cuda13_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-ubuntu24.04-mofed5-cuda13-${{ parameters.arch }}.tar.bz2
+        rocky8_cuda13_${{ parameters.arch }}:
+          build_container: rocky8_cuda13_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-rocky8-mofed24.10-cuda13-${{ parameters.arch }}.tar.bz2
+        rocky9_cuda13_${{ parameters.arch }}:
+          build_container: rocky9_cuda13_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-rocky9-mofed24.10-cuda13-${{ parameters.arch }}.tar.bz2
         # x86 only
         ${{ if eq(parameters.arch, 'x86_64') }}:
           centos7_cuda11_${{ parameters.arch }}:
@@ -78,7 +90,7 @@ jobs:
           cd ../../..
           tar -tjf "${AZ_ARTIFACT_NAME}"
         displayName: Build RPM package
-        condition: and(succeeded(), contains(variables['artifact_name'], 'centos'))
+        condition: and(succeeded(), or(contains(variables['artifact_name'], 'centos'), contains(variables['artifact_name'], 'rocky')))
         env:
           AZ_ARTIFACT_NAME: $(artifact_name)
 

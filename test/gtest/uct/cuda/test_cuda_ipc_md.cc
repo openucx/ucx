@@ -103,7 +103,8 @@ protected:
 
     void test_mkey_pack_on_thread(void *ptr, size_t size)
     {
-       uct_md_mem_reg_params_t reg_params = {};
+       uct_md_mem_reg_params_t reg_params  = {};
+       uct_rkey_bundle_t       rkey_bundle = {};
        uct_mem_h memh;
        ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), ptr, size, &reg_params, &memh));
 
@@ -119,26 +120,28 @@ protected:
                uct_rkey_unpack_params_t unpack_params = {};
                ucs_status_t status = uct_rkey_unpack_v2(
                                          md()->component, rkey.data(),
-                                         &unpack_params, NULL);
+                                         &unpack_params, &rkey_bundle);
                ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
 
                // No context and unknown sys_dev is provided
                unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
                unpack_params.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
                status = uct_rkey_unpack_v2(md()->component, rkey.data(),
-                                           &unpack_params, NULL);
+                                           &unpack_params, &rkey_bundle);
                ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
 
-               // No context and some valid sys_dev is provided, but
-               // cuIpcOpenMemHandle used by cuda_ipc_cache does not allow to
-               // open a handle that was created by the same process
+               // No context and some valid sys_dev is provided
                ucs_sys_device_t sys_dev;
                uct_cuda_base_get_sys_dev(0, &sys_dev);
 
                unpack_params.sys_device = sys_dev;
                status = uct_rkey_unpack_v2(md()->component, rkey.data(),
-                                           &unpack_params, NULL);
-               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+                                           &unpack_params, &rkey_bundle);
+               ASSERT_TRUE((status == UCS_OK) ||
+                           (status == UCS_ERR_UNREACHABLE));
+               if (status == UCS_OK) {
+                   uct_rkey_release(md()->component, &rkey_bundle);
+               }
            } catch (...) {
                thread_exception = std::current_exception();
            }
@@ -193,6 +196,15 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_legacy)
 UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
 {
 #if HAVE_CUDA_FABRIC
+    int driver_version;
+    EXPECT_EQ(CUDA_SUCCESS, cuDriverGetVersion(&driver_version));
+    if (driver_version == 13000) {
+        UCS_TEST_SKIP_R("in CUDA 13.0, calling cuMemPoolDestroy results in a "
+                        "segmentation fault if "
+                        "cuMemPoolExportToShareableHandle returned an error "
+                        "before that");
+    }
+
     size_t size = 4 * UCS_MBYTE;
     CUdeviceptr ptr;
     CUmemoryPool mpool;

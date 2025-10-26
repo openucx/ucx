@@ -192,7 +192,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Directory to search for loadable modules",
   ucs_offsetof(ucs_global_opts_t, module_dir), UCS_CONFIG_TYPE_STRING},
 
- {"MODULE_LOG_LEVEL", "trace",
+ {"MODULE_LOG_LEVEL", "debug",
   "Logging level for module loader",
   ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 

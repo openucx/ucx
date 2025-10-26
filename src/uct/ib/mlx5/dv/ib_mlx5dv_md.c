@@ -38,8 +38,9 @@ uct_ib_mlx5_md_check_odp_common(uct_ib_mlx5_md_t *md, const char **reason_ptr)
     }
 
     /* Issue 4238670 */
-    if ((md->dp_ordering_cap.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-        (md->dp_ordering_cap.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL)) {
+    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        (md->dp_ordering_cap_devx.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        md->ddp_support_dv.rc || md->ddp_support_dv.dc) {
         *reason_ptr = "ODP does not work with DDP";
         return 0;
     }
@@ -52,13 +53,16 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
                                            uct_ib_mlx5_md_t *md,
                                            const uct_ib_md_config_t *md_config)
 {
-#if HAVE_DIRECT_NIC
+#if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
     char sys_path[PATH_MAX];
     char dev_name[64];
     int ret;
+    ucs_sys_device_t sys_dev_dnic;
     ucs_status_t status;
 
     if (!md_config->ext.direct_nic) {
+        ucs_debug("%s: direct NIC is disabled by configuration",
+                  uct_ib_device_name(&md->super.dev));
         goto out;
     }
 
@@ -66,33 +70,37 @@ static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
     if (ret != 0) {
         ucs_debug("%s: mlx5dv_get_data_direct_sysfs_path() failed: ret=%d",
                   uct_ib_device_name(&md->super.dev), ret);
-        goto out;
+        goto out_not_supported;
     }
 
     /* Create a DMA specific device from topology perspective */
     snprintf(dev_name, sizeof(dev_name), "%s_direct",
              uct_ib_device_name(&md->super.dev));
-    md->direct_nic_sys_dev = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
+    sys_dev_dnic = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
 
-    status = ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev,
-                                                 md->direct_nic_sys_dev);
+    status = ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev, sys_dev_dnic);
     if (status != UCS_OK) {
-        ucs_debug("ucs_topo_sys_device_set_sys_dev_aux failed: %s",
-                  ucs_status_string(status));
-        goto out;
+        goto out_not_supported;
     }
 
     ucs_debug("%s: Direct NIC is supported sys_path='%s%s' "
               "sys_dev=%u sys_dev_aux=%u",
               uct_ib_device_name(&md->super.dev),
               (sys_path[0] != 0) ? "/sys" : "", sys_path, dev->sys_dev,
-              md->direct_nic_sys_dev);
+              sys_dev_dnic);
+    md->direct_nic_sys_dev = sys_dev_dnic;
     return;
+
+out_not_supported:
+    ucs_debug("%s: direct NIC is requested but not supported",
+              uct_ib_device_name(&md->super.dev));
 out:
+#else
+    ucs_debug("%s: direct NIC is disabled because declaration of "
+              "mlx5dv_get_data_direct_sysfs_path was not found",
+              uct_ib_device_name(&md->super.dev));
 #endif
     md->direct_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-    ucs_debug("%s: Direct NIC support disabled",
-              uct_ib_device_name(&md->super.dev));
 }
 
 #if HAVE_DEVX
@@ -423,7 +431,7 @@ uct_ib_md_mlx5_devx_mr_lru_push(uct_ib_mlx5_md_t *md, uint32_t rkey, void *mr)
 {
     uct_ib_mlx5_mem_lru_entry_t *entry;
     khint_t iter;
-    ucs_kh_put_t res;
+    int res;
 
     ucs_assert(rkey != UCT_IB_INVALID_MKEY);
 
@@ -769,7 +777,7 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address,
                               const uct_md_mem_reg_params_t *params,
                               uint64_t access_flags)
 {
-#if HAVE_DIRECT_NIC
+#if HAVE_DECL_MLX5DV_REG_DMABUF_MR
     int dmabuf_fd;
     size_t dmabuf_offset;
     struct ibv_mr *mr;
@@ -2015,19 +2023,19 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
                                                uct_ib_device_t *dev)
 {
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_rc)) {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->dp_ordering_cap_devx.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_rc)) {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+        md->dp_ordering_cap_devx.rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     } else {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        md->dp_ordering_cap_devx.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_dc)) {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->dp_ordering_cap_devx.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_dc)) {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+        md->dp_ordering_cap_devx.dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     } else {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        md->dp_ordering_cap_devx.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if ((cap_2 != NULL) &&
@@ -2038,7 +2046,7 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
     ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
               uct_ib_device_name(dev),
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
-              md->dp_ordering_cap.rc, md->dp_ordering_cap.dc);
+              md->dp_ordering_cap_devx.rc, md->dp_ordering_cap_devx.dc);
 }
 
 static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
@@ -2273,6 +2281,9 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
+static ucs_status_t
+uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md);
+
 ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
                                              struct ibv_device *ibv_device,
                                              const uct_ib_md_config_t *md_config,
@@ -2469,6 +2480,11 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     }
 
     uct_ib_mlx5_devx_check_dp_ordering(md, cap, cap_2, dev);
+
+    status = uct_ib_mlx5dv_check_ddp(ctx, md);
+    if (status != UCS_OK) {
+        goto err_lru_cleanup;
+    }
 
     uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 
@@ -3246,15 +3262,15 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
     }
 
     if (ctx_dv.ooo_recv_wrs_caps.max_rc > 0) {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->ddp_support_dv.rc = 1;
     }
 
     if (ctx_dv.ooo_recv_wrs_caps.max_dct > 0) {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->ddp_support_dv.dc = 1;
     }
 #else
-    md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
-    md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    md->ddp_support_dv.rc = 0;
+    md->ddp_support_dv.dc = 0;
 #endif
     return UCS_OK;
 }

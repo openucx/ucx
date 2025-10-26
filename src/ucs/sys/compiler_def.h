@@ -149,9 +149,9 @@
 
 /**
  * Get the type of a structure or variable.
- * 
+ *
  * @param _type  Return the type of this argument.
- * 
+ *
  * @return The type of the given argument.
  */
 #define ucs_typeof(_type) \
