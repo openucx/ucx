@@ -419,9 +419,11 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     uct_allocated_memory_t mem;
 
     if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-        /* Do not log error here because UCS_ERR_NOT_CONNECTED is expected
+        /*
+         * Do not log error here because UCS_ERR_NOT_CONNECTED is expected
          * during connection establishment. Applications are expected to retry
-         * with progress. */
+         * with progress.
+         */
         return UCS_ERR_NOT_CONNECTED;
     }
 
@@ -460,9 +462,11 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     status = ucp_device_mem_list_create_handle(ep, local_sys_dev, params, lanes,
                                                ep_config, mem_type, &mem);
     if (status != UCS_OK) {
-        /* Do not log error for UCS_ERR_NOT_CONNECTED because it is expected
+        /*
+         * Do not log error for UCS_ERR_NOT_CONNECTED because it is expected
          * during connection establishment. Applications are expected to retry
-         * with progress. */
+         * with progress.
+         */
         if (status != UCS_ERR_NOT_CONNECTED) {
             ucs_error("failed to create handle: %s", ucs_status_string(status));
         }
