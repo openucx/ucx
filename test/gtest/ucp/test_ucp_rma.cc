@@ -564,8 +564,8 @@ public:
         }
 
         ASSERT_FALSE(UCS_PTR_IS_ERR(sptr));
-        ASSERT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(
-                                sender().ep()->ext->unflushed_lanes));
+        ASSERT_FALSE(
+                UCS_STATIC_BITMAP_IS_ZERO(sender().ep()->ext->unflushed_lanes));
         request_release(sptr);
     }
 

@@ -46,16 +46,15 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 #define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
 typedef uint8_t                      ucp_lane_index_t;
-typedef ucs_static_bitmap_s(UCP_MAX_LANES) \
-                                     ucp_lane_map_t;
+typedef ucs_static_bitmap_s(UCP_MAX_LANES) ucp_lane_map_t;
 #define UCP_LANE_MAP_BIT(_bit_index) \
-                    UCS_STATIC_BITMAP_BIT(_bit_index, ucp_lane_map_t)
+    UCS_STATIC_BITMAP_BIT(_bit_index, ucp_lane_map_t)
 
-#define UCP_LANE_MAP_FMT             "0x%lx:0x%lx"
-#define UCP_LANE_MAP_ARG(_map_ptr)   (_map_ptr)->bits[0], (_map_ptr)->bits[1]
+#define UCP_LANE_MAP_FMT           "0x%lx:0x%lx"
+#define UCP_LANE_MAP_ARG(_map_ptr) (_map_ptr)->bits[0], (_map_ptr)->bits[1]
 
 /* Zero lane map */
-extern const ucp_lane_map_t          ucp_lane_map_zero;
+extern const ucp_lane_map_t ucp_lane_map_zero;
 
 /* System devices */
 #define UCP_MAX_SYS_DEVICES          64

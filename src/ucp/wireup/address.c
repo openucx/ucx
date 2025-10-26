@@ -204,8 +204,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_address_remote_device_array_t, unsigned,
                                        UCP_ADDRESS_FLAG_LAST))
 
 /* Mask for lane number - allows 7 bits (0-127) */
-#define UCP_ADDRESS_LANE_NUM_MASK    (UCS_MASK(8) ^ \
-                                      UCP_ADDRESS_FLAG_LAST)
+#define UCP_ADDRESS_LANE_NUM_MASK (UCS_MASK(8) ^ UCP_ADDRESS_FLAG_LAST)
 
 #define UCP_ADDRESS_FLAG_MD_EMPTY_DEV 0x80u  /* Device without TL addresses */
 

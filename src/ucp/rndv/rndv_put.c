@@ -273,7 +273,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         .opt_align_offs      = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.opt_zcopy_align),
     };
-    ucp_lane_map_t atp_map = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    ucp_lane_map_t atp_map               = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane_idx, lane;
     ucp_proto_rndv_put_priv_t *rpriv;
@@ -317,7 +317,8 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     /* Use fence only if all lanes support sending ATP and flush is not forced
      */
     use_fence = send_atp && !context->config.ext.rndv_put_force_flush &&
-                UCS_STATIC_BITMAP_IS_EQUAL(&rpriv->bulk.mpriv.lane_map, &atp_map);
+                UCS_STATIC_BITMAP_IS_EQUAL(&rpriv->bulk.mpriv.lane_map,
+                                           &atp_map);
 
     /* All lanes can send ATP - invalidate am_lane, to use mpriv->lanes.
      * Otherwise, would need to flush all lanes and send ATP on:

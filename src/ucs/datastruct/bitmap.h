@@ -215,8 +215,8 @@ ucs_bitmap_bits_popcount(const ucs_bitmap_word_t *bits, size_t num_words)
 
 /* Check if bitmap is a power of 2, optionally allowing 0 */
 static UCS_F_ALWAYS_INLINE int
-ucs_bitmap_bits_check_pow2_or_zero(const ucs_bitmap_word_t *bits, size_t num_words,
-                                   int allow_zero)
+ucs_bitmap_bits_check_pow2_or_zero(const ucs_bitmap_word_t *bits,
+                                   size_t num_words, int allow_zero)
 {
     const ucs_bitmap_word_t *bits_word;
     int found = 0;

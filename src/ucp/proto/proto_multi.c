@@ -397,7 +397,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         lpriv->flush_sys_dev_mask = ucp_proto_multi_init_flush_sys_dev_mask(
                 params->super.super.rkey_config_key);
     }
-    ucs_assert(mpriv->num_lanes == UCS_STATIC_BITMAP_POPCOUNT(selection.lane_map));
+    ucs_assert(mpriv->num_lanes ==
+               UCS_STATIC_BITMAP_POPCOUNT(selection.lane_map));
 
     /* After this block, 'perf_node' and 'lane_perf_nodes[]' have extra ref */
     if (mpriv->num_lanes == 1) {

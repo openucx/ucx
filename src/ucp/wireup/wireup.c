@@ -726,8 +726,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
      * 1) CM flow (the client's EP has to be marked as REMOTE_CONNECTED)
      * 2) P2P lanes exist in EP configuration (client-server flow)
      * 3) Old AM lane was replaced (ensures message order) */
-    full_handshake_required = has_cm_lane ||
-                              ucp_ep_has_p2p_lanes(ep) ||
+    full_handshake_required = has_cm_lane || ucp_ep_has_p2p_lanes(ep) ||
                               am_need_flush;
 
     /* Send a reply if remote side does not have ep_ptr (active-active flow) or

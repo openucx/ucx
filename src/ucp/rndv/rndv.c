@@ -518,7 +518,7 @@ static ucp_lane_index_t ucp_rndv_zcopy_get_lane(ucp_request_t *rndv_req,
                (proto == UCP_REQUEST_SEND_PROTO_RNDV_PUT));
 
     if (ucs_unlikely(UCS_STATIC_BITMAP_IS_ZERO(
-                                rndv_req->send.rndv.zcopy.lanes_map_all))) {
+                rndv_req->send.rndv.zcopy.lanes_map_all))) {
         return UCP_NULL_LANE;
     }
 
@@ -544,9 +544,7 @@ static void ucp_rndv_zcopy_next_lane(ucp_request_t *rndv_req)
     lane_map = UCS_STATIC_BITMAP_AND_NOT(lanes_map_all, lane_map);
 
     rndv_req->send.multi_lane_idx = UCS_STATIC_BITMAP_FFS(
-                                        UCS_STATIC_BITMAP_IS_ZERO(lane_map) ?
-                                        lanes_map_all :
-                                        lane_map);
+            UCS_STATIC_BITMAP_IS_ZERO(lane_map) ? lanes_map_all : lane_map);
 }
 
 static ucs_status_t
@@ -603,7 +601,7 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
         length = ucp_mtu - remaining;
     } else {
         lanes_count = UCS_STATIC_BITMAP_POPCOUNT(
-                                    req->send.rndv.zcopy.lanes_map_all);
+                req->send.rndv.zcopy.lanes_map_all);
         ucs_assert(lanes_count > 0);
         chunk  = ucs_align_up((size_t)(req->send.length /
                                             lanes_count * scale),
@@ -828,8 +826,7 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
 
     ucs_assertv(UCS_STATIC_BITMAP_POPCOUNT(lane_map) <= chunk_count,
                 "lanes_count=%lu chunk_count=%zu",
-                UCS_STATIC_BITMAP_POPCOUNT(lane_map),
-                chunk_count);
+                UCS_STATIC_BITMAP_POPCOUNT(lane_map), chunk_count);
 
 out:
     ucp_rndv_req_init_lanes(rndv_req, lane_map);

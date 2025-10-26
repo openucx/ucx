@@ -440,10 +440,12 @@ ucp_proto_select_wiface_activate(ucp_worker_h worker,
                                  ucp_worker_cfg_index_t ep_cfg_index)
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, ep_cfg_index);
-    ucp_lane_map_t lane_map    = ucp_proto_select_get_lane_map(worker, select_elem);
+    ucp_lane_map_t lane_map    = ucp_proto_select_get_lane_map(worker,
+                                                               select_elem);
 
     UCS_STATIC_BITMAP_AND_INPLACE(&lane_map,
-                                  UCS_STATIC_BITMAP_NOT(ep_config->proto_lane_map));
+                                  UCS_STATIC_BITMAP_NOT(
+                                          ep_config->proto_lane_map));
 
     ucp_wiface_process_for_each_lane(worker, ep_config, lane_map,
                                      ucp_worker_iface_progress_ep);

@@ -1215,12 +1215,12 @@ public:
         VARIANT_128_PATHS = 101
     };
 
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant_with_value(variants, get_ctx_params(),
-                               VARIANT_64_PATHS, "64_paths");
-        add_variant_with_value(variants, get_ctx_params(),
-                               VARIANT_128_PATHS, "128_paths");
+        add_variant_with_value(variants, get_ctx_params(), VARIANT_64_PATHS,
+                               "64_paths");
+        add_variant_with_value(variants, get_ctx_params(), VARIANT_128_PATHS,
+                               "128_paths");
     }
 
     void init() override
@@ -1310,7 +1310,8 @@ public:
         closedir(dir);
     }
 
-    void test_max_lanes(int num_paths) {
+    void test_max_lanes(int num_paths)
+    {
         receiver().connect(&sender(), get_ep_params());
         test_run_xfer(true, true, true, true, false);
 
@@ -1321,13 +1322,14 @@ public:
             EXPECT_EQ(num_paths, ep_num_lanes);
         }
 
-        size_t bytes_sent = 0;
+        size_t bytes_sent       = 0;
         unsigned num_used_lanes = 0;
         for (ucp_lane_index_t lane = 0; lane < ep_num_lanes; ++lane) {
             size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
             size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
             UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
-                            << "sender " << sender_tx << " receiver " << receiver_tx;
+                             << "sender " << sender_tx << " receiver "
+                             << receiver_tx;
             if ((sender_tx > 0) || (receiver_tx > 0)) {
                 ++num_used_lanes;
             }
@@ -1342,8 +1344,8 @@ public:
     }
 };
 
-UCS_TEST_P(multi_rail_max, max_lanes, "TM_SW_RNDV=y",
-           "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
+UCS_TEST_P(multi_rail_max, max_lanes, "TM_SW_RNDV=y", "RNDV_THRESH=1",
+           "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
     if (get_variant_value() == VARIANT_64_PATHS) {
         test_max_lanes(64);
@@ -1354,6 +1356,6 @@ UCS_TEST_P(multi_rail_max, max_lanes, "TM_SW_RNDV=y",
 
 UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rcv, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rcx, "rc_x")
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, dc,  "dc")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, dc, "dc")
 
 #endif

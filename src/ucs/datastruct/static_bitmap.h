@@ -125,11 +125,12 @@ BEGIN_C_DECLS
 #define UCS_STATIC_BITMAP_BIT(_bit_index, _bitmap_type) \
     ({ \
         _bitmap_type _r_##_uid = UCS_STATIC_BITMAP_ZERO_INITIALIZER; \
-        ucs_bitmap_bits_set(UCS_STATIC_BITMAP_BITS_ARGS(&_r_##_uid), _bit_index); \
+        ucs_bitmap_bits_set(UCS_STATIC_BITMAP_BITS_ARGS(&_r_##_uid), \
+                            _bit_index); \
         _r_##_uid; \
     })
 
-    
+
 /**
  * Return a bitmap with all bits set to 0.
  *
