@@ -475,7 +475,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
 uint32_t
 ucp_device_get_mem_list_length(const ucp_device_mem_list_handle_h handle)
 {
-    assert(handle != NULL);
+    ucs_assert(handle != NULL);
     return handle->mem_list_length;
 }
 
