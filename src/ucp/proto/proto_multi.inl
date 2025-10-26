@@ -269,14 +269,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
         ucp_request_t *req, ucp_lane_index_t *lane_p, ucp_lane_map_t lane_map,
         ucp_proto_multi_lane_send_func_t send_func)
 {
-    ucp_lane_map_t remaining_lane_map;
+    ucp_lane_map_t remaining_lane_map, mask;
     ucp_lane_index_t lane;
     ucs_status_t status;
 
-    UCS_STATIC_BITMAP_MASK(&remaining_lane_map, *lane_p);
-    remaining_lane_map = UCS_STATIC_BITMAP_AND(
-                                UCS_STATIC_BITMAP_NOT(remaining_lane_map),
-                                lane_map);
+    UCS_STATIC_BITMAP_MASK(&mask, *lane_p);
+    remaining_lane_map = UCS_STATIC_BITMAP_AND_NOT(lane_map, mask);
 
     ucs_assertv(!UCS_STATIC_BITMAP_IS_ZERO(remaining_lane_map),
                 "req=%p *lane_p=%d lane_map=" UCP_LANE_MAP_FMT, req,

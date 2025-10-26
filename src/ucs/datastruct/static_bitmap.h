@@ -283,6 +283,18 @@ BEGIN_C_DECLS
 
 
 /**
+ * Perform bitwise "and_not" operation (bitmap1 & ~bitmap2) and return the result.
+ *
+ * @param _bitmap1   First bitmap for the bitwise and_not.
+ * @param _bitmap2   Second bitmap for the bitwise and_not.
+ *
+ * @return Resulting bitmap of the bitwise and_not operation.
+ */
+#define UCS_STATIC_BITMAP_AND_NOT(_bitmap1, _bitmap2) \
+    UCS_STATIC_BITMAP_BINARY_OP(_bitmap1, _bitmap2, and_not, UCS_PP_UNIQUE_ID)
+
+
+/**
  * Inverse the bits of the bitmap in-place.
  *
  * @param _bitmap   Inverse the bits of this bitmap.

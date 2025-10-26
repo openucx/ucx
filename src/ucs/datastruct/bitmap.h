@@ -357,6 +357,14 @@ ucs_bitmap_word_xor(ucs_bitmap_word_t word1, ucs_bitmap_word_t word2)
 }
 
 
+/* Helper function to do bitwise and_not between bitmap words */
+static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
+ucs_bitmap_word_and_not(ucs_bitmap_word_t word1, ucs_bitmap_word_t word2)
+{
+    return word1 & ~word2;
+}
+
+
 /* Helper function to apply a binary operation on two bitmap bit arrays and
    return the result in a third array. The destination size must be at least
    the size of each of the source arrays. */

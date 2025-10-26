@@ -99,13 +99,11 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
             ucp_lane_map_t prev_all_lanes, destroyed_lanes;
 
             UCS_STATIC_BITMAP_MASK(&prev_all_lanes, req->send.flush.num_lanes);
-            destroyed_lanes = UCS_STATIC_BITMAP_AND(
-                                            prev_all_lanes,
-                                            UCS_STATIC_BITMAP_NOT(all_lanes));
-            ff_lanes        = UCS_STATIC_BITMAP_AND(
-                                            destroyed_lanes,
-                                            UCS_STATIC_BITMAP_NOT(
-                                                req->send.flush.started_lanes));
+            destroyed_lanes = UCS_STATIC_BITMAP_AND_NOT(prev_all_lanes,
+                                                        all_lanes);
+            ff_lanes        = UCS_STATIC_BITMAP_AND_NOT(
+                                                destroyed_lanes,
+                                                req->send.flush.started_lanes);
             ucp_ep_flush_request_update_uct_comp(
                     req, -UCS_STATIC_BITMAP_POPCOUNT(ff_lanes),
                     ucp_lane_map_zero);

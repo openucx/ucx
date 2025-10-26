@@ -541,8 +541,7 @@ static void ucp_rndv_zcopy_next_lane(ucp_request_t *rndv_req)
     ucp_lane_map_t lane_map;
 
     UCS_STATIC_BITMAP_MASK(&lane_map, rndv_req->send.multi_lane_idx + 1);
-    lane_map = UCS_STATIC_BITMAP_AND(UCS_STATIC_BITMAP_NOT(lane_map),
-                                     lanes_map_all);
+    lane_map = UCS_STATIC_BITMAP_AND_NOT(lanes_map_all, lane_map);
 
     rndv_req->send.multi_lane_idx = UCS_STATIC_BITMAP_FFS(
                                         UCS_STATIC_BITMAP_IS_ZERO(lane_map) ?

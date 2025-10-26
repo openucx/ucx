@@ -2688,9 +2688,7 @@ ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
 void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
                             const ucp_tl_bitmap_t *tl_bitmap_super)
 {
-    ucp_tl_bitmap_t b = UCS_STATIC_BITMAP_AND(*tl_bitmap,
-                                              UCS_STATIC_BITMAP_NOT(
-                                                      *tl_bitmap_super));
+    ucp_tl_bitmap_t b = UCS_STATIC_BITMAP_AND_NOT(*tl_bitmap, *tl_bitmap_super);
     ucs_assert_always(UCS_STATIC_BITMAP_IS_ZERO(b));
 }
 
