@@ -199,6 +199,13 @@ ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if (memh->mem_type != *mem_type) {
+        ucs_debug("mismatched mem_type: ucp_memh[%zu].mem_type=%d "
+                  "first_mem_type=%d",
+                  i, memh->mem_type, *mem_type);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     *local_md_map &= memh->md_map;
 
     return UCS_OK;
