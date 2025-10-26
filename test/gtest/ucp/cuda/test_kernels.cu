@@ -109,6 +109,16 @@ private:
     ucp_device_request_t *m_ptr;
 };
 
+template <typename Func>
+class scope_guard {
+public:
+    __device__ scope_guard(Func& func) : m_func(func) {}
+    __device__ ~scope_guard() { m_func(); }
+
+private:
+    Func& m_func;
+};
+
 UCS_F_DEVICE ucs_status_t
 ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
                           test_ucp_device_kernel_result_t &result)
@@ -140,18 +150,13 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
     return status;
 }
 
-static __global__ void ucp_test_fence_kernel() 
-{
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        __threadfence_system();
-    }
-}
-
 template<ucs_device_level_t level>
 static __global__ void
 ucp_test_kernel(const test_ucp_device_kernel_params_t params,
                 test_ucp_device_kernel_result_t *result_ptr)
 {
+    /* Execute fence on any return, to ensure result is visible to the host */
+    scope_guard<decltype(__threadfence_system)> fence(__threadfence_system);
     ucs_status_t &status = result_ptr->status;
 
     if (blockDim.x > device_request<level>::MAX_THREADS) {
@@ -253,9 +258,6 @@ launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
     default:
         return {UCS_ERR_INVALID_PARAM};
     }
-
-    /* Execute fence, to ensure result is visible to the host */
-    ucp_test_fence_kernel<<<1, 1>>>();
 
     ucs_status_t sync_status = ucx_cuda::synchronize();
     if (sync_status != UCS_OK) {
