@@ -370,6 +370,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     size_t length;
     void *local_addr;
     uint64_t remote_addr;
+    ucp_mem_h memh;
 
     handle_size += sizeof(*handle.local_addrs) + sizeof(*handle.remote_addrs) +
                    sizeof(*handle.lengths);
@@ -475,13 +476,15 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                                           ucp_ep_get_rsc_index(ep, lanes[i]));
         ucp_element    = params->elements;
         for (j = 0; j < params->num_elements; j++) {
-            if (ucp_element->memh != NULL) {
+            memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
+                                   ucp_element, memh, MEMH, NULL);
+            if (memh != NULL) {
                 /* Local registration */
-                uct_memh = ucp_element->memh->uct[local_md_index];
+                uct_memh = memh->uct[local_md_index];
                 ucs_assertv(
-                    (ucp_element->memh->md_map & UCS_BIT(local_md_index)) != 0,
+                    (memh->md_map & UCS_BIT(local_md_index)) != 0,
                      "uct_memh=%p md_map=0x%lx local_md_index=%u", uct_memh,
-                     ucp_element->memh->md_map, local_md_index);
+                     memh->md_map, local_md_index);
                 ucs_assert(uct_memh != UCT_MEM_HANDLE_NULL);
             } else {
                 uct_memh = UCT_MEM_HANDLE_NULL;
