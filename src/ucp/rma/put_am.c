@@ -103,7 +103,7 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
                                UCP_PROTO_COMMON_INIT_FLAG_RESUME,
-        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
+        .super.exclude_map   = ucp_lane_map_zero,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = 1,
         .min_chunk           = 0,

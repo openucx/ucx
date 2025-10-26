@@ -35,7 +35,7 @@ ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
         .send_op       = UCT_EP_OP_LAST,
         .memtype_op    = UCT_EP_OP_LAST,
         .flags         = 0,
-        .exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER
+        .exclude_map   = ucp_lane_map_zero
     };
     return params;
 }

@@ -260,7 +260,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
-        .super.exclude_map   = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
+        .super.exclude_map   = ucp_lane_map_zero,
         .super.reg_mem_info  = *reg_mem_info,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .min_chunk           = context->config.ext.min_rndv_chunk_size,
@@ -273,7 +273,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         .opt_align_offs      = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.opt_zcopy_align),
     };
-    ucp_lane_map_t atp_map               = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    ucp_lane_map_t atp_map               = ucp_lane_map_zero;
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane_idx, lane;
     ucp_proto_rndv_put_priv_t *rpriv;

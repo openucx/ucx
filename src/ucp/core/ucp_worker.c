@@ -1818,12 +1818,12 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
                                                      cfg_index).key;
     ucp_context_h context          = worker->context;
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
-    ucp_lane_map_t tag_lanes_map    = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    ucp_lane_map_t rma_lanes_map    = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    ucp_lane_map_t amo_lanes_map    = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    ucp_lane_map_t stream_lanes_map = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    ucp_lane_map_t am_lanes_map     = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    ucp_lane_map_t ka_lanes_map     = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    ucp_lane_map_t tag_lanes_map    = ucp_lane_map_zero;
+    ucp_lane_map_t rma_lanes_map    = ucp_lane_map_zero;
+    ucp_lane_map_t amo_lanes_map    = ucp_lane_map_zero;
+    ucp_lane_map_t stream_lanes_map = ucp_lane_map_zero;
+    ucp_lane_map_t am_lanes_map     = ucp_lane_map_zero;
+    ucp_lane_map_t ka_lanes_map     = ucp_lane_map_zero;
     int rma_emul                    = 0;
     int amo_emul                    = 0;
     int num_valid_lanes             = 0;

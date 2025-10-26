@@ -412,7 +412,7 @@ static ucp_lane_map_t
 ucp_proto_select_get_lane_map(ucp_worker_h worker,
                               const ucp_proto_select_elem_t *select_elem)
 {
-    ucp_lane_map_t lane_map = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    ucp_lane_map_t lane_map = ucp_lane_map_zero;
     size_t range_start, range_end;
     ucp_proto_query_attr_t query_attr;
 

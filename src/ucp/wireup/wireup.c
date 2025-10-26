@@ -338,7 +338,7 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
                            const unsigned *addr_indices,
                            ucp_lane_index_t *lanes2remote)
 {
-    ucp_lane_map_t used_remote_lanes = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    ucp_lane_map_t used_remote_lanes = ucp_lane_map_zero;
     const ucp_address_entry_t *address;
     unsigned address_index;
     ucp_lane_index_t lane, remote_lane, num_lanes;
@@ -1532,7 +1532,7 @@ static ucp_lane_index_t
 ucp_wireup_find_non_reused_lane(ucp_ep_h ep, const ucp_ep_config_key_t *key,
                                 const ucp_lane_index_t *reuse_lane_map)
 {
-    ucp_lane_map_t lane_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    ucp_lane_map_t lane_bitmap = ucp_lane_map_zero;
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {

@@ -732,7 +732,7 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_context_h context      = ep->worker->context;
     ucp_rkey_h rkey            = rndv_req->send.rndv.rkey;
-    ucp_lane_map_t lane_map    = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    ucp_lane_map_t lane_map    = ucp_lane_map_zero;
     ucp_lane_index_t *lanes;
     ucp_lane_index_t lane, lane_idx;
     ucp_md_index_t md_index;
