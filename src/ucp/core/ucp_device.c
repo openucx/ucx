@@ -175,7 +175,7 @@ ucp_check_rkey_elem(const ucp_device_mem_list_elem_t *element, size_t i,
 
 static ucs_status_t
 ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
-                    int *have_memh, ucs_sys_device_t *local_sys_dev,
+                    ucs_sys_device_t *local_sys_dev,
                     ucp_md_map_t *local_md_map, ucs_memory_type_t *mem_type)
 {
     ucp_mem_h memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
@@ -185,11 +185,10 @@ ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
         return UCS_OK;
     }
 
-    if (!*have_memh) {
+    if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         *local_sys_dev = memh->sys_dev;
         *local_md_map  = memh->md_map;
         *mem_type      = memh->mem_type;
-        *have_memh     = 1;
         return UCS_OK;
     }
 
@@ -213,7 +212,6 @@ ucp_device_mem_list_params_check(ucp_context_h context,
                                  ucp_md_map_t *local_md_map,
                                  ucs_memory_type_t *mem_type)
 {
-    int have_memh;
     size_t i, num_elements, element_size;
     const ucp_device_mem_list_elem_t *elements, *element;
     ucs_status_t status;
@@ -235,7 +233,6 @@ ucp_device_mem_list_params_check(ucp_context_h context,
     *local_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
     *local_md_map   = 0;
     *rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-    have_memh       = 0;
 
     for (i = 0; i < num_elements; i++) {
         element = UCS_PTR_BYTE_OFFSET(elements, i * element_size);
@@ -244,14 +241,14 @@ ucp_device_mem_list_params_check(ucp_context_h context,
             return status;
         }
 
-        status = ucp_check_memh_elem(element, i, &have_memh, local_sys_dev,
+        status = ucp_check_memh_elem(element, i, local_sys_dev,
                                      local_md_map, mem_type);
         if (status != UCS_OK) {
             return status;
         }
     }
 
-    if (!have_memh) {
+    if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         *mem_type = UCS_MEMORY_TYPE_CUDA;
         status    = ucp_device_detect_local_sys_dev(context, *mem_type,
                                                     local_sys_dev);
