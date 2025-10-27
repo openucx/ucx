@@ -141,8 +141,8 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
 }
 
 template<ucs_device_level_t level>
-static __device__ void
-ucp_test_kernel_job(const test_ucp_device_kernel_params_t params,
+UCS_F_DEVICE void
+ucp_test_kernel_job(const test_ucp_device_kernel_params_t &params,
                     test_ucp_device_kernel_result_t *result_ptr)
 {
     ucs_status_t &status = result_ptr->status;
