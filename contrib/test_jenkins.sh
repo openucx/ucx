@@ -980,6 +980,14 @@ run_gtest_watchdog_test() {
 	fi
 }
 
+run_cuda_usr_ctx_gtest() {
+	echo "==== Running cuda user context test ===="
+	$TIMEOUT \
+		GTEST_CLEAR_CUDA_CTX_=y \
+		GTEST_FILTER='*test_p2p_create_destroy_ctx*' \
+		make -C test/gtest test
+}
+
 run_malloc_hook_gtest() {
 	# GTEST_SHARD_INDEX/GTEST_TOTAL_SHARDS should NOT be set
 
@@ -1051,6 +1059,7 @@ run_specific_tests() {
 	set_gtest_common_test_flags
 
 	# Run specific tests
+	do_distributed_task 0 4 run_cuda_usr_ctx_gtest
 	do_distributed_task 1 4 run_malloc_hook_gtest
 	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
 	do_distributed_task 3 4 test_memtrack

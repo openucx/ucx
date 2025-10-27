@@ -210,26 +210,19 @@ void test_p2p_create_destroy_ctx::test_xfer(send_func_t send, size_t length,
     CUdevice device;
     ASSERT_EQ(cuDeviceGet(&device, 0), CUDA_SUCCESS);
 
-    for (;;) {
-        unsigned ctx_flags;
-        int active;
-        ASSERT_EQ(cuDevicePrimaryCtxGetState(device, &ctx_flags, &active),
-                  CUDA_SUCCESS);
-        if (active == 0) {
-            break;
+    auto clear_ctx = getenv("GTEST_CLEAR_CUDA_CTX_");
+    if ((clear_ctx != nullptr) && (strcmp(clear_ctx, "y") == 0)) {
+        ASSERT_EQ(cuDevicePrimaryCtxReset(device), CUDA_SUCCESS);
+
+        for (;;) {
+            CUcontext cuda_context;
+            ASSERT_EQ(cuCtxGetCurrent(&cuda_context), CUDA_SUCCESS);
+            if (cuda_context == nullptr) {
+                break;
+            }
+
+            ASSERT_EQ(cuCtxPopCurrent(nullptr), CUDA_SUCCESS);
         }
-
-        ASSERT_EQ(cuDevicePrimaryCtxRelease(device), CUDA_SUCCESS);
-    }
-
-    for (;;) {
-        CUcontext cuda_context;
-        ASSERT_EQ(cuCtxGetCurrent(&cuda_context), CUDA_SUCCESS);
-        if (cuda_context == nullptr) {
-            break;
-        }
-
-        ASSERT_EQ(cuCtxPopCurrent(NULL), CUDA_SUCCESS);
     }
 
 #if CUDA_VERSION >= 13000
