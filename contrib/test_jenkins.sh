@@ -982,7 +982,7 @@ run_gtest_watchdog_test() {
 
 run_cuda_usr_ctx_gtest() {
 	echo "==== Running cuda user context test ===="
-	$TIMEOUT \
+	$TIMEOUT env \
 		GTEST_CLEAR_CUDA_CTX_=y \
 		GTEST_FILTER='*test_p2p_create_destroy_ctx*' \
 		make -C test/gtest test
