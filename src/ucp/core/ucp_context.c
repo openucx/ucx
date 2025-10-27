@@ -1747,11 +1747,28 @@ ucp_update_memtype_md_map(uint64_t mem_types_map, ucs_memory_type_t mem_type,
     }
 }
 
+/* Returns the MDs that are part of the fallback mechanism */
+static ucp_md_map_t ucp_fill_fallback_reg_nonblock_mds(ucp_context_h context)
+{
+    ucp_md_map_t md_map = 0;
+    ucp_rsc_index_t tl_idx;
+
+    for (tl_idx = 0; tl_idx < context->num_tls; tl_idx++) {
+        if (context->tl_rscs[tl_idx].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+            /* Find all memory domains with at least one network device. */
+            md_map |= UCS_BIT(context->tl_rscs[tl_idx].md_index);
+        }
+    }
+
+    return (md_map == 0) ? ~md_map : md_map;
+}
+
 static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_md_map_t reg_block_md_map;
     ucp_md_map_t reg_nonblock_md_map;
+    ucp_md_map_t fallback_reg_nonblock_md_map;
     ucs_memory_type_t mem_type;
     ucp_md_index_t md_index;
     const uct_md_attr_v2_t *md_attr;
@@ -1766,6 +1783,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
             context->dmabuf_reg_md_map |= UCS_BIT(md_index);
         }
     }
+
+    fallback_reg_nonblock_md_map = ucp_fill_fallback_reg_nonblock_mds(context);
 
     ucs_memory_type_for_each(mem_type) {
         reg_block_md_map    = 0;
@@ -1806,7 +1825,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
          * buffers for rndv pipeline protocols). */
         context->reg_block_md_map[mem_type] = reg_block_md_map;
 
-        if ((reg_nonblock_md_map == 0) && context->config.ext.reg_nb_fallback) {
+        if (context->config.ext.reg_nb_fallback &&
+            ((reg_nonblock_md_map & fallback_reg_nonblock_md_map) == 0)) {
             /* Fallback to blocking registration if no MD supports non-blocking
              * registration */
             reg_nonblock_md_map = reg_block_md_map;

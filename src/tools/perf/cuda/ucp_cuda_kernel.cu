@@ -22,7 +22,8 @@ public:
     using size_type = uint8_t;
 
     __device__
-    ucp_perf_cuda_request_manager(size_type size, size_type fc_window, ucp_device_request_t *requests)
+    ucp_perf_cuda_request_manager(size_type size, size_type fc_window,
+                                  ucp_device_request_t *requests)
         : m_size(size),
           m_fc_window(fc_window),
           m_reqs_count(ucx_ceil_div(size, fc_window)),
