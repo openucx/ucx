@@ -149,6 +149,8 @@ typedef struct ucp_device_mem_list_params {
  * @param [out] handle    Created descriptor list handle.
  *
  * @return Error code as defined by @ref ucs_status_t.
+ * @retval UCS_ERR_NOT_CONNECTED if the endpoint is not connected yet.
+ *         The caller should retry after calling @ref ucp_worker_progress.
  */
 ucs_status_t
 ucp_device_mem_list_create(ucp_ep_h ep,
