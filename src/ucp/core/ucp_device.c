@@ -51,7 +51,7 @@ void ucp_device_cleanup(void)
 }
 
 static ucs_status_t
-ucp_device_mem_handle_hash_insert(uct_allocated_memory_t *mem_handle,
+ucp_device_mem_handle_hash_insert(const uct_allocated_memory_t *mem_handle,
                                   uint32_t mem_list_length)
 {
     ucs_status_t status;
@@ -84,16 +84,16 @@ static uct_allocated_memory_t
 ucp_device_mem_handle_hash_remove(ucp_device_mem_list_handle_h handle)
 {
     khiter_t iter;
-    ucp_device_handle_info_t info;
+    uct_allocated_memory_t mem;
 
     ucs_spin_lock(&ucp_device_handle_hash_lock);
     iter = kh_get(ucp_device_handle_allocs, &ucp_device_handle_hash, handle);
     ucs_assertv_always((iter != kh_end(&ucp_device_handle_hash)), "handle=%p",
                        handle);
-    info = kh_value(&ucp_device_handle_hash, iter);
+    mem = kh_value(&ucp_device_handle_hash, iter).mem;
     kh_del(ucp_device_handle_allocs, &ucp_device_handle_hash, iter);
     ucs_spin_unlock(&ucp_device_handle_hash_lock);
-    return info.mem;
+    return mem;
 }
 
 static ucs_status_t
