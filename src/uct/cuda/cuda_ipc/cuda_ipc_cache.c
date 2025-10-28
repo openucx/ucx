@@ -538,7 +538,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
-                 (key, cu_dev, mapped_addr, log_level),
+                 (ext_key, cu_dev, mapped_addr, log_level),
                  uct_cuda_ipc_extended_rkey_t *ext_key, CUdevice cu_dev,
                  void **mapped_addr, ucs_log_level_t log_level)
 {
