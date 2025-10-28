@@ -539,9 +539,10 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                  (key, cu_dev, mapped_addr, log_level),
-                 uct_cuda_ipc_rkey_t *key, CUdevice cu_dev, void **mapped_addr,
-                 ucs_log_level_t log_level)
+                 uct_cuda_ipc_extended_rkey_t *ext_key, CUdevice cu_dev,
+                 void **mapped_addr, ucs_log_level_t log_level)
 {
+    uct_cuda_ipc_rkey_t *key = &ext_key->super;
     uct_cuda_ipc_cache_t *cache;
     ucs_status_t status;
     ucs_pgt_region_t *pgt_region;
@@ -555,7 +556,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     }
 
     if ((getpid() == key->pid) &&
-        (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == key->pid_ns) &&
+        (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == ext_key->pid_ns) &&
         (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {
         /* TODO: added for test purpose to enable cuda_ipc tests in gtest
          * mapped addrr is set to be same as d_bptr avoiding any calls to
@@ -566,7 +567,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         return UCS_OK;
     }
 
-    status = uct_cuda_ipc_get_remote_cache(key->pid, cu_dev, key->pid_ns,
+    status = uct_cuda_ipc_get_remote_cache(key->pid, cu_dev, ext_key->pid_ns,
                                            &cache);
     if (status != UCS_OK) {
         return status;

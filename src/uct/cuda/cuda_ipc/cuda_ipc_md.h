@@ -137,13 +137,21 @@ typedef struct {
     CUdeviceptr               d_bptr;  /* Allocation base address */
     size_t                    b_len;   /* Allocation size */
     CUuuid                    uuid;    /* GPU Device UUID */
-    ucs_sys_ns_t              pid_ns;  /* PID namespace */
 } uct_cuda_ipc_rkey_t;
 
 
+/**
+ * @brief cuda ipc extended remote key
+ */
 typedef struct {
-    uct_cuda_ipc_rkey_t       super;
-    int                       stream_id;
+    uct_cuda_ipc_rkey_t super;
+    ucs_sys_ns_t        pid_ns; /* PID namespace */
+} uct_cuda_ipc_extended_rkey_t;
+
+
+typedef struct {
+    uct_cuda_ipc_extended_rkey_t super;
+    int                          stream_id;
 } uct_cuda_ipc_unpacked_rkey_t;
 
 #endif

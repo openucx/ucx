@@ -59,9 +59,9 @@ void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
  * 
  * @return UCS_OK on success, or error status on failure
  */
-ucs_status_t
-uct_cuda_ipc_map_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
-                           void **mapped_addr, ucs_log_level_t log_level);
+ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_extended_rkey_t *key,
+                                        CUdevice cu_dev, void **mapped_addr,
+                                        ucs_log_level_t log_level);
 
 
 ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
