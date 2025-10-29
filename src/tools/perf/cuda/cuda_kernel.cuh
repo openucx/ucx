@@ -54,7 +54,7 @@ public:
                                              (completed - m_ctx.completed_iters);
             m_last_report_time             = cur_time;
             m_ctx.completed_iters          = completed;
-            __threadfence();
+            __threadfence_system();
 
             m_next_report_iter = ucs_min(completed + (m_report_interval_ns / iter_time),
                                          m_max_iters);
