@@ -93,6 +93,58 @@ UCS_F_DEVICE void uct_cuda_ipc_level_sync()
     return;
 }
 
+template<typename VecT>
+UCS_F_DEVICE void uct_cuda_ipc_try_copy_aligned(const char* &src, char* &dst,
+                                                size_t &len,
+                                                unsigned warp_id,
+                                                unsigned num_warps,
+                                                unsigned lane_id,
+                                                unsigned num_lanes)
+{
+    if (!(UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)src, sizeof(VecT)) &&
+          UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)dst, sizeof(VecT)))) {
+        return;
+    }
+
+    auto src_vec                    = reinterpret_cast<const VecT*>(src);
+    auto dst_vec                    = reinterpret_cast<VecT*>(dst);
+    constexpr unsigned lanes_unroll = UCS_DEVICE_NUM_THREADS_IN_WARP *
+                                      UCT_CUDA_IPC_COPY_LOOP_UNROLL;
+    size_t num_lines                = (len / (lanes_unroll * sizeof(VecT))) *
+                                      lanes_unroll;
+    VecT tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
+
+    for (size_t line = warp_id * lanes_unroll + lane_id % UCS_DEVICE_NUM_THREADS_IN_WARP;
+         line < num_lines;
+         line += num_warps * lanes_unroll) {
+#pragma unroll
+        for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
+            tmp[i] = uct_cuda_ipc_ld_global_cg(
+                src_vec + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i));
+        }
+
+#pragma unroll
+        for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
+            uct_cuda_ipc_st_global_cg(
+                dst_vec + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i), tmp[i]);
+        }
+    }
+
+    src_vec += num_lines;
+    dst_vec += num_lines;
+    len = len - num_lines * sizeof(VecT);
+
+    num_lines = len / sizeof(VecT);
+    for (size_t line = lane_id; line < num_lines; line += num_lanes) {
+        VecT v = uct_cuda_ipc_ld_global_cg(src_vec + line);
+        uct_cuda_ipc_st_global_cg(dst_vec + line, v);
+    }
+
+    len -= num_lines * sizeof(VecT);
+    src = reinterpret_cast<const char*>(src_vec + num_lines);
+    dst = reinterpret_cast<char*>(dst_vec + num_lines);
+}
+
 UCS_F_DEVICE void*
 uct_cuda_ipc_map_remote(const uct_cuda_ipc_device_mem_element_t* elem,
                         uint64_t remote_address)
@@ -109,240 +161,38 @@ uct_cuda_ipc_atomic_inc(uint64_t *dst, uint64_t inc_value)
 }
 
 template<ucs_device_level_t level>
-UCS_F_DEVICE void uct_cuda_ipc_copy_level(void *dst, const void *src, size_t len);
-
-template<>
-void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_THREAD>(void *dst, const void *src,
-                                                      size_t len)
+UCS_F_DEVICE void uct_cuda_ipc_copy_level(void *dst, const void *src, size_t len)
 {
-    memcpy(dst, src, len);
-}
+    auto s1 = reinterpret_cast<const char*>(src);
+    auto d1 = reinterpret_cast<char *>(dst);
+    unsigned int lane_id, num_lanes, warp_id, num_warps;
 
-template<>
-void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_WARP>(void *dst, const void *src,
-                                                    size_t len)
-{
-    using vec4                      = int4;
-    using vec2                      = int2;
-    auto s1                         = reinterpret_cast<const char*>(src);
-    auto d1                         = reinterpret_cast<char *>(dst);
-    constexpr unsigned lanes_unroll = UCS_DEVICE_NUM_THREADS_IN_WARP *
-                                      UCT_CUDA_IPC_COPY_LOOP_UNROLL;
-    unsigned int lane_id, num_lanes;
-    size_t num_lines;
+    uct_cuda_ipc_get_lane<level>(lane_id, num_lanes);
+    warp_id = lane_id / UCS_DEVICE_NUM_THREADS_IN_WARP;
+    num_warps = num_lanes / UCS_DEVICE_NUM_THREADS_IN_WARP;
 
-    uct_cuda_ipc_get_lane<UCS_DEVICE_LEVEL_WARP>(lane_id, num_lanes);
+    uct_cuda_ipc_try_copy_aligned<int4>(s1, d1, len, warp_id, num_warps,
+                                        lane_id, num_lanes);
+    uct_cuda_ipc_try_copy_aligned<int2>(s1, d1, len, warp_id, num_warps,
+                                        lane_id, num_lanes);
 
-    /* 16B-aligned fast path using vec4 with unrolling */
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
-        auto s4 = reinterpret_cast<const vec4*>(s1);
-        auto d4 = reinterpret_cast<vec4*>(d1);
-        vec4 tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
-
-        num_lines = (len / (lanes_unroll * sizeof(vec4))) * lanes_unroll;
-
-        for (size_t line = lane_id; line < num_lines; line += lanes_unroll) {
-#pragma unroll
-            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                tmp[i] = uct_cuda_ipc_ld_global_cg(s4 + (line + num_lanes * i));
-            }
-
-#pragma unroll
-            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                uct_cuda_ipc_st_global_cg(d4 + (line + num_lanes * i), tmp[i]);
-            }
-        }
-
-        len = len - num_lines * sizeof(vec4);
-        if (len == 0) {
-            return;
-        }
-
-        s4 = s4 + num_lines;
-        d4 = d4 + num_lines;
-
-        /* leftover vec4 lines without unrolling */
-        num_lines = len / sizeof(vec4);
-        for (size_t line = lane_id; line < num_lines; line += num_lanes) {
-            vec4 v = uct_cuda_ipc_ld_global_cg(s4 + line);
-            uct_cuda_ipc_st_global_cg(d4 + line, v);
-        }
-
-        len = len - num_lines * sizeof(vec4);
-        if (len == 0) {
-            return;
-        }
-
-        s1 = reinterpret_cast<const char*>(s4 + num_lines);
-        d1 = reinterpret_cast<char*>(d4 + num_lines);
-    }
-
-    /* 8B-aligned fast path using vec2 with unrolling */
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
-        auto s2 = reinterpret_cast<const vec2*>(s1);
-        auto d2 = reinterpret_cast<vec2*>(d1);
-        vec2 tmp2[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
-
-        num_lines = (len / (lanes_unroll * sizeof(vec2))) * lanes_unroll;
-
-        for (size_t line = lane_id; line < num_lines; line += lanes_unroll) {
-#pragma unroll
-            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                tmp2[i] = uct_cuda_ipc_ld_global_cg(s2 + (line + num_lanes * i));
-            }
-
-#pragma unroll
-            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                uct_cuda_ipc_st_global_cg(d2 + (line + num_lanes * i), tmp2[i]);
-            }
-        }
-
-        len = len - num_lines * sizeof(vec2);
-        if (len == 0) {
-            return;
-        }
-
-        s2 = s2 + num_lines;
-        d2 = d2 + num_lines;
-
-        /* leftover vec2 lines without unrolling */
-        num_lines = len / sizeof(vec2);
-        for (size_t line = lane_id; line < num_lines; line += num_lanes) {
-            vec2 v2 = uct_cuda_ipc_ld_global_cg(s2 + line);
-            uct_cuda_ipc_st_global_cg(d2 + line, v2);
-        }
-
-        len = len - num_lines * sizeof(vec2);
-        if (len == 0) {
-            return;
-        }
-
-        s1 = reinterpret_cast<const char*>(s2 + num_lines);
-        d1 = reinterpret_cast<char*>(d2 + num_lines);
-    }
-
-    /* byte tail */
-    for (size_t i = lane_id; i < len; i += num_lanes) {
-        d1[i] = s1[i];
-    }
-}
-
-template<>
-void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_BLOCK>(void *dst, const void *src,
-                                                     size_t len)
-{
-    using vec4                      = int4;
-    using vec2                      = int2;
-    auto s1                         = reinterpret_cast<const char*>(src);
-    auto d1                         = reinterpret_cast<char *>(dst);
-    const int warp                  = threadIdx.x / UCS_DEVICE_NUM_THREADS_IN_WARP;
-    const int num_warps             = blockDim.x / UCS_DEVICE_NUM_THREADS_IN_WARP;
-    const int idx                   = threadIdx.x % UCS_DEVICE_NUM_THREADS_IN_WARP;
-    constexpr unsigned lanes_unroll = UCS_DEVICE_NUM_THREADS_IN_WARP *
-                                      UCT_CUDA_IPC_COPY_LOOP_UNROLL;
-    size_t num_lines;
-
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
-        auto s4 = reinterpret_cast<const vec4*>(s1);
-        auto d4 = reinterpret_cast<vec4*>(d1);
-        vec4 tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
-
-        num_lines = (len / (lanes_unroll * sizeof(vec4))) * lanes_unroll;
-
-        for (size_t line = warp * lanes_unroll + idx; line < num_lines;
-             line += num_warps * lanes_unroll) {
-#pragma unroll
-            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                tmp[i] = uct_cuda_ipc_ld_global_cg(
-                    s4 + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i));
-            }
-
-#pragma unroll
-            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                uct_cuda_ipc_st_global_cg(
-                    d4 + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i), tmp[i]);
-            }
-        }
-
-        len = len - num_lines * sizeof(vec4);
-        if (len == 0) {
-            return;
-        }
-
-        s4 = s4 + num_lines;
-        d4 = d4 + num_lines;
-        num_lines = len / sizeof(vec4);
-        for (size_t line = threadIdx.x; line < num_lines; line += blockDim.x) {
-            vec4 v = uct_cuda_ipc_ld_global_cg(s4 + line);
-            uct_cuda_ipc_st_global_cg(d4 + line, v);
-        }
-
-        len = len - num_lines * sizeof(vec4);
-        if (len == 0) {
-            return;
-        }
-
-        s1 = reinterpret_cast<const char*>(s4 + num_lines);
-        d1 = reinterpret_cast<char*>(d4 + num_lines);
-    }
-
-    /* If not 16B-aligned, try 8B-aligned fast path using vec2 */
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
-        auto s2 = reinterpret_cast<const vec2*>(s1);
-        auto d2 = reinterpret_cast<vec2*>(d1);
-        vec2 tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
-
-        num_lines = (len / (lanes_unroll * sizeof(vec2))) * lanes_unroll;
-
-        for (size_t line = warp * lanes_unroll + idx; line < num_lines;
-             line += num_warps * lanes_unroll) {
-#pragma unroll
-            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                tmp[i] = uct_cuda_ipc_ld_global_cg(
-                    s2 + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i));
-            }
-
-#pragma unroll
-            for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
-                uct_cuda_ipc_st_global_cg(
-                    d2 + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i), tmp[i]);
-            }
-        }
-
-        len = len - num_lines * sizeof(vec2);
-        if (len == 0) {
-            return;
-        }
-
-        s2 = s2 + num_lines;
-        d2 = d2 + num_lines;
-        num_lines = len / sizeof(vec2);
-        for (size_t line = threadIdx.x; line < num_lines; line += blockDim.x) {
-            vec2 v2 = uct_cuda_ipc_ld_global_cg(s2 + line);
-            uct_cuda_ipc_st_global_cg(d2 + line, v2);
-        }
-
-        len = len - num_lines * sizeof(vec2);
-        if (len == 0) {
-            return;
-        }
-
-        s1 = reinterpret_cast<const char*>(s2 + num_lines);
-        d1 = reinterpret_cast<char*>(d2 + num_lines);
-    }
-
-    for (size_t line = threadIdx.x; line < len; line += blockDim.x) {
+    for (size_t line = lane_id; line < len; line += num_lanes) {
         d1[line] = s1[line];
     }
 }
 
 template<>
-void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_GRID>(void *dst, const void *src,
-                                                    size_t len)
+__device__ __forceinline__ void
+uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_THREAD>(void *dst, const void *src,
+                                                 size_t len)
+{
+    memcpy(dst, src, len);
+}
+
+template<>
+__device__ __forceinline__ void
+uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_GRID>(void *dst, const void *src,
+                                               size_t len)
 {/* not implemented */}
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
