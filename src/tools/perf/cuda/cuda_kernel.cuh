@@ -88,14 +88,9 @@ __host__ UCS_F_DEVICE unsigned ucx_perf_cuda_thread_index(size_t tid)
 {
     switch (level) {
     case UCS_DEVICE_LEVEL_THREAD: return tid;
-    /* TODO: use UCS_DEVICE_NUM_THREADS_IN_WARP */
-    case UCS_DEVICE_LEVEL_WARP:   return tid / 32;
+    case UCS_DEVICE_LEVEL_WARP:   return tid / UCS_DEVICE_NUM_THREADS_IN_WARP;
     default:                      return 0;
     }
-}
-
-__host__ UCS_F_DEVICE unsigned ucx_ceil_div(unsigned x, unsigned y) {
-    return (x / y) + ((x % y) != 0);
 }
 
 #define UCX_PERF_THREAD_INDEX_SET(_level, _tid, _outval) \
@@ -136,8 +131,8 @@ __host__ UCS_F_DEVICE unsigned ucx_ceil_div(unsigned x, unsigned y) {
     do { \
         unsigned _blocks     = _perf.params.device_block_count; \
         unsigned _threads    = _perf.params.device_thread_count; \
-        unsigned _reqs_count = ucx_ceil_div(_perf.params.max_outstanding, \
-                                            _perf.params.device_fc_window); \
+        unsigned _reqs_count = ucs_div_round_up(_perf.params.max_outstanding, \
+                                                _perf.params.device_fc_window); \
         size_t _shared_size  = _reqs_count * sizeof(ucp_device_request_t) * \
                                ucx_perf_cuda_thread_index<_level>(_threads); \
         _kernel<_level, _cmd><<<_blocks, _threads, _shared_size>>>(__VA_ARGS__); \

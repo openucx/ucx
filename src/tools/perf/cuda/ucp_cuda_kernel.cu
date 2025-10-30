@@ -26,7 +26,7 @@ public:
                                   ucp_device_request_t *requests)
         : m_size(size),
           m_fc_window(fc_window),
-          m_reqs_count(ucx_ceil_div(size, fc_window)),
+          m_reqs_count(ucs_div_round_up(size, fc_window)),
           m_pending_count(0),
           m_requests(requests),
           m_pending_map(0)
@@ -357,8 +357,8 @@ ucp_perf_cuda_put_bw_kernel(ucx_perf_cuda_context &ctx,
 {
     extern __shared__ ucp_device_request_t shared_requests[];
     unsigned thread_index      = ucx_perf_cuda_thread_index<level>(threadIdx.x);
-    unsigned reqs_count        = ucx_ceil_div(ctx.max_outstanding,
-                                              ctx.device_fc_window);
+    unsigned reqs_count        = ucs_div_round_up(ctx.max_outstanding,
+                                                  ctx.device_fc_window);
     ucp_device_request_t *reqs = &shared_requests[reqs_count * thread_index];
 
     ucp_perf_cuda_request_manager req_mgr(ctx.max_outstanding,
