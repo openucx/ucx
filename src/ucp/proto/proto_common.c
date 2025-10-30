@@ -350,7 +350,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     ucs_sys_dev_distance_t distance;
     size_t tl_min_frag, tl_max_frag;
     uct_perf_attr_t perf_attr;
-    ucs_sys_device_t sys_dev;
+    ucs_sys_device_t sys_dev, device_sys_dev;
     ucs_status_t status;
     char bdf_name[32];
 
@@ -427,6 +427,15 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                 ucs_topo_sys_device_get_name(sys_dev),
                 ucs_topo_sys_device_bdf_name(sys_dev, bdf_name,
                                              sizeof(bdf_name)));
+
+        /* Add bandwidth for interfaces very close to the memory. */
+        device_sys_dev = ucp_proto_common_get_tl_rsc(&params->super, lane)->sys_device;
+        if ((sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+            (device_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+            (sys_dev != device_sys_dev) &&
+            ucs_topo_is_pci_bridge(device_sys_dev, sys_dev)) {
+            tl_perf->bandwidth *= 1.2;
+        }
     }
 
     /* For remote memory access, consider remote system topology distance */
