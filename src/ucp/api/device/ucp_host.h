@@ -152,7 +152,7 @@ typedef struct ucp_device_mem_list_params {
  *
  * @param [in]  ep        Remote endpoint handle.
  * @param [in]  params    Parameters used to create the handle.
- * @param [out] handle    Created descriptor list handle.
+ * @param [out] handle    Created descriptors list handle.
  *
  * @return Error code as defined by @ref ucs_status_t.
  * @retval UCS_ERR_NOT_CONNECTED if the endpoint is not connected yet.
@@ -162,6 +162,18 @@ ucs_status_t
 ucp_device_mem_list_create(ucp_ep_h ep,
                            const ucp_device_mem_list_params_t *params,
                            ucp_device_mem_list_handle_h *handle);
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Return the number of elements in the descriptors mem list handle.
+ *
+ * @param [in] handle     Descriptors list handle.
+ *
+ * @return Descriptors mem list length.
+ */
+uint32_t
+ucp_device_get_mem_list_length(const ucp_device_mem_list_handle_h handle);
 
 
 /**

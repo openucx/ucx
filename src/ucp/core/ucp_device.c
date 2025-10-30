@@ -21,12 +21,17 @@
 #include "ucp_mm.inl"
 
 
+typedef struct {
+    uct_allocated_memory_t mem;
+    uint32_t               mem_list_length;
+} ucp_device_handle_info_t;
+
 KHASH_TYPE(ucp_device_handle_allocs, ucp_device_mem_list_handle_h,
-           uct_allocated_memory_t);
+           ucp_device_handle_info_t);
 #define ucp_device_handle_hash_key(_handle) \
     kh_int64_hash_func((uintptr_t)(_handle))
 KHASH_IMPL(ucp_device_handle_allocs, ucp_device_mem_list_handle_h,
-           uct_allocated_memory_t, 1, ucp_device_handle_hash_key,
+           ucp_device_handle_info_t, 1, ucp_device_handle_hash_key,
            kh_int64_hash_equal);
 
 /* Hash to track handle allocator, used at release time */
@@ -50,11 +55,16 @@ void ucp_device_cleanup(void)
 }
 
 static ucs_status_t
-ucp_device_mem_handle_hash_insert(uct_allocated_memory_t *mem_handle)
+ucp_device_mem_handle_hash_insert(const uct_allocated_memory_t *mem_handle,
+                                  uint32_t mem_list_length)
 {
     ucs_status_t status;
     khiter_t iter;
     int ret;
+    ucp_device_handle_info_t info;
+
+    info.mem             = *mem_handle;
+    info.mem_list_length = mem_list_length;
 
     ucs_spin_lock(&ucp_device_handle_hash_lock);
     iter = kh_put(ucp_device_handle_allocs, &ucp_device_handle_hash,
@@ -66,7 +76,7 @@ ucp_device_mem_handle_hash_insert(uct_allocated_memory_t *mem_handle)
         ucs_error("handle=%p already found in hash", mem_handle->address);
         status = UCS_ERR_ALREADY_EXISTS;
     } else {
-        kh_value(&ucp_device_handle_hash, iter) = *mem_handle;
+        kh_value(&ucp_device_handle_hash, iter) = info;
         status                                  = UCS_OK;
     }
 
@@ -84,7 +94,7 @@ ucp_device_mem_handle_hash_remove(ucp_device_mem_list_handle_h handle)
     iter = kh_get(ucp_device_handle_allocs, &ucp_device_handle_hash, handle);
     ucs_assertv_always((iter != kh_end(&ucp_device_handle_hash)), "handle=%p",
                        handle);
-    mem = kh_value(&ucp_device_handle_hash, iter);
+    mem = kh_value(&ucp_device_handle_hash, iter).mem;
     kh_del(ucp_device_handle_allocs, &ucp_device_handle_hash, iter);
     ucs_spin_unlock(&ucp_device_handle_hash_lock);
     return mem;
@@ -595,7 +605,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     }
 
     /* Track memory allocator for later release */
-    status = ucp_device_mem_handle_hash_insert(&mem);
+    status = ucp_device_mem_handle_hash_insert(&mem, params->num_elements);
     if (status != UCS_OK) {
         uct_mem_free(&mem);
     } else {
@@ -603,6 +613,24 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     }
 
     return status;
+}
+
+uint32_t
+ucp_device_get_mem_list_length(const ucp_device_mem_list_handle_h handle)
+{
+    khiter_t iter;
+    uint32_t length;
+
+    ucs_assert(handle != NULL);
+
+    ucs_spin_lock(&ucp_device_handle_hash_lock);
+    iter = kh_get(ucp_device_handle_allocs, &ucp_device_handle_hash, handle);
+    ucs_assertv_always((iter != kh_end(&ucp_device_handle_hash)), "handle=%p",
+                       handle);
+    length = kh_value(&ucp_device_handle_hash, iter).mem_list_length;
+    ucs_spin_unlock(&ucp_device_handle_hash_lock);
+
+    return length;
 }
 
 void ucp_device_mem_list_release(ucp_device_mem_list_handle_h handle)

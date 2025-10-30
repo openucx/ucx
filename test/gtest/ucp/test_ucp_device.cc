@@ -334,6 +334,13 @@ UCS_TEST_P(test_ucp_device, create_fail)
     EXPECT_EQ(nullptr, handle);
 }
 
+UCS_TEST_P(test_ucp_device, get_mem_list_length)
+{
+    constexpr unsigned num_elements = 8;
+    mem_list list(sender(), receiver(), 1 * UCS_KBYTE, num_elements);
+    EXPECT_EQ(num_elements, ucp_device_get_mem_list_length(list.handle()));
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")
 
 
