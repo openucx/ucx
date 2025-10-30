@@ -63,22 +63,22 @@ typedef struct ucp_device_mem_list_handle {
     /**
      * Array of local addresses for the device transfer operations.
      */
-    void     **local_addrs;
+    void            **local_addrs;
 
     /**
      * Array of remote addresses for the device transfer operations.
      */
-    uint64_t *remote_addrs;
-    
+    uint64_t        *remote_addrs;
+
     /**
      * Array of lengths of the local buffers in bytes.
      */
-    size_t *lengths;
+    size_t          *lengths;
 
     /**
      * Array of UCT memory element objects.
      */
-    void *uct_mem_elements;
+    void            *uct_mem_elements;
 
     /**
      * local address, remote address, and length arrays, are allocated contiguously.
