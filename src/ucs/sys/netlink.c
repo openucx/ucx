@@ -174,7 +174,7 @@ out:
 
 static ucs_status_t
 ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
-                           const void **dst_in_addr)
+                           const void **dst_in_addr, unsigned char rtm_dst_len)
 {
     *if_index_p  = -1;
     *dst_in_addr = NULL;
@@ -182,7 +182,7 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
     for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
         if (rta->rta_type == RTA_OIF) {
             *if_index_p = *((const int *)RTA_DATA(rta));
-        } else if (rta->rta_type == RTA_DST) {
+        } else if ((rta->rta_type == RTA_DST) || (rta->rta_type == RTA_GATEWAY)) {
             *dst_in_addr = RTA_DATA(rta);
         }
     }
@@ -206,7 +206,8 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
     int khret;
 
     if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
-                                   &iface_index, &dst_in_addr) != UCS_OK) {
+                                   &iface_index, &dst_in_addr,
+                                   rt_msg->rtm_dst_len) != UCS_OK) {
         return UCS_INPROGRESS;
     }
 
@@ -228,15 +229,17 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
                                 ucs_error("could not allocate route entry");
                                 return UCS_ERR_NO_MEMORY);
 
-    memset(&new_rule->dest, 0, sizeof(sizeof(new_rule->dest)));
+    memset(&new_rule->dest, 0, sizeof(new_rule->dest));
     new_rule->dest.ss_family = rt_msg->rtm_family;
-    if (UCS_OK != ucs_sockaddr_set_inet_addr((struct sockaddr *)&new_rule->dest,
-                                             dst_in_addr)) {
-        ucs_array_pop_back(iface_rules);
-        return UCS_ERR_IO_ERROR;
-    }
+    if (rt_msg->rtm_dst_len != 0) {
+        if (ucs_sockaddr_set_inet_addr((struct sockaddr *)&new_rule->dest,
+                                       dst_in_addr) != UCS_OK) {
+            ucs_array_pop_back(iface_rules);
+            return UCS_ERR_IO_ERROR;
+        }
 
-    new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
+        new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
+    }
 
     return UCS_INPROGRESS;
 }
@@ -256,7 +259,8 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     ucs_array_for_each(curr_entry, iface_rules) {
-        if (ucs_sockaddr_is_same_subnet(
+        if ((curr_entry->subnet_prefix_len == 0) ||
+            ucs_sockaddr_is_same_subnet(
                                 info->sa_remote,
                                 (const struct sockaddr *)&curr_entry->dest,
                                 curr_entry->subnet_prefix_len)) {
