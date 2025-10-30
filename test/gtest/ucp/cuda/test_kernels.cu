@@ -109,16 +109,6 @@ private:
     ucp_device_request_t *m_ptr;
 };
 
-template <typename Func>
-class scope_guard {
-public:
-    __device__ scope_guard(Func& func) : m_func(func) {}
-    __device__ ~scope_guard() { m_func(); }
-
-private:
-    Func& m_func;
-};
-
 UCS_F_DEVICE ucs_status_t
 ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
                           test_ucp_device_kernel_result_t &result)
@@ -151,12 +141,10 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
 }
 
 template<ucs_device_level_t level>
-static __global__ void
-ucp_test_kernel(const test_ucp_device_kernel_params_t params,
-                test_ucp_device_kernel_result_t *result_ptr)
+UCS_F_DEVICE void
+ucp_test_kernel_job(const test_ucp_device_kernel_params_t &params,
+                    test_ucp_device_kernel_result_t *result_ptr)
 {
-    /* Execute fence on any return, to ensure result is visible to the host */
-    scope_guard fence(__threadfence_system);
     ucs_status_t &status = result_ptr->status;
 
     if (blockDim.x > device_request<level>::MAX_THREADS) {
@@ -195,6 +183,16 @@ ucp_test_kernel(const test_ucp_device_kernel_params_t params,
     }
 
     status = ucp_test_kernel_get_state(params, *result_ptr);
+}
+
+template<ucs_device_level_t level>
+static __global__ void
+ucp_test_kernel(const test_ucp_device_kernel_params_t params,
+                test_ucp_device_kernel_result_t *result_ptr)
+{
+    ucp_test_kernel_job<level>(params, result_ptr);
+    /* Execute fence on any return, to ensure result is visible to the host */
+    __threadfence_system();
 }
 
 static ucs_status_t check_warp_size()
