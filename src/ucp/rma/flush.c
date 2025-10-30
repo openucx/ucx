@@ -530,7 +530,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nbx, (ep, param),
     return request;
 }
 
-static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
+ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
 {
     ucp_rsc_index_t iface_id;
     ucp_worker_iface_t *wiface;

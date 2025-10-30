@@ -10,6 +10,10 @@
 #include <common/mem_buffer.h>
 #include <common/test_helpers.h>
 #include <ucs/sys/sys.h>
+extern "C" {
+#include <ucp/rma/rma.h>
+}
+
 #include <ucs/sys/ptr_arith.h>
 
 
@@ -95,6 +99,9 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
         flush_ep(sender());
     } else {
         flush_worker(sender());
+        while(ucp_worker_flush_check(sender().worker()) != UCS_OK) {
+            progress();
+        }
     }
 
     /* Validate data */
