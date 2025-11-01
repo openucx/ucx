@@ -240,6 +240,23 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
     doca_gpu_dev_verbs_store_wqe_seg(dseg_ptr, (uint64_t*)&(dseg));
 }
 
+UCS_F_DEVICE void uct_rc_mlx5_gda_lock(int *lock) {
+    while (atomicCAS(lock, 0, 1) != 0)
+        ;
+#ifdef DOCA_GPUNETIO_VERBS_HAS_FENCE_ACQUIRE_RELEASE_PTX
+    asm volatile("fence.acquire.gpu;");
+#else
+    uint32_t dummy;
+    uint32_t UCS_V_UNUSED val;
+    asm volatile("ld.acquire.gpu.b32 %0, [%1];" : "=r"(val) : "l"(&dummy));
+#endif
+}
+
+UCS_F_DEVICE void uct_rc_mlx5_gda_unlock(int *lock) {
+    cuda::atomic_ref<int, cuda::thread_scope_device> lock_aref(*lock);
+    lock_aref.store(0, cuda::std::memory_order_release);
+}
+
 UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
                                      uint64_t wqe_base, unsigned count,
                                      uint64_t flags)
@@ -259,13 +276,11 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
         return;
     }
 
-    doca_gpu_dev_verbs_lock<DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU>(
-            &ep->sq_lock);
+    uct_rc_mlx5_gda_lock(&ep->sq_lock);
     uct_rc_mlx5_gda_ring_db(ep, ep->sq_ready_index);
     uct_rc_mlx5_gda_update_dbr(ep, ep->sq_ready_index);
     uct_rc_mlx5_gda_ring_db(ep, ep->sq_ready_index);
-    doca_gpu_dev_verbs_unlock<DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU>(
-            &ep->sq_lock);
+    uct_rc_mlx5_gda_unlock(&ep->sq_lock);
 }
 
 UCS_F_DEVICE bool
