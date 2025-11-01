@@ -66,9 +66,7 @@ typedef struct {
 
 struct test_ucp_device_kernel_result_t {
     ucs_status_t status;
-    uint64_t     producer_index;
     uint64_t     ready_index;
-    int32_t      avail_count;
 };
 
 test_ucp_device_kernel_result_t
