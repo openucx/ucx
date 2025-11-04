@@ -852,9 +852,11 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
         return UCS_ERR_NO_DEVICE;
     }
 
-    ucs_assertv(mlx5_md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY,
-                "md %p: cap_flags=0x%" PRIx64 " do not have EXPORTED_MKEY flag",
-                mlx5_md, mlx5_md->super.cap_flags);
+    if (!(mlx5_md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY)) {
+        ucs_debug("md %p: cap_flags=0x%" PRIx64 " does not have EXPORTED_MKEY "
+                  "flag", mlx5_md, mlx5_md->super.cap_flags);
+        return UCS_ERR_NO_DEVICE;
+    }
 
     ucs_assertv(ucs_test_all_flags(mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS),
                 "md %p: flags=0x%x do not have mandatory capabilities 0x%x",
