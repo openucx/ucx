@@ -43,6 +43,7 @@ public:
         m_ctx(ctx),
         m_max_iters(ctx.max_iters),
         m_next_report_iter(1),
+        m_last_completed(0),
         m_last_report_time(ucx_perf_cuda_get_time_ns()),
         m_report_interval_ns(ctx.report_interval_ns / UPDATES_PER_INTERVAL)
     {
@@ -52,13 +53,14 @@ public:
     update_report(ucx_perf_counter_t completed)
     {
         if ((threadIdx.x == 0) && ucs_unlikely(completed >= m_next_report_iter)) {
-            assert(completed - m_ctx.completed_iters > 0);
+            assert(completed - m_last_completed > 0);
             ucx_perf_cuda_time_t cur_time  = ucx_perf_cuda_get_time_ns();
             ucx_perf_cuda_time_t iter_time = (cur_time - m_last_report_time) /
-                                             (completed - m_ctx.completed_iters);
+                                             (completed - m_last_completed);
             assert(iter_time > 0);
+            m_last_completed               = completed;
             m_last_report_time             = cur_time;
-            m_ctx.completed_iters          = completed;
+            m_ctx.completed_iters          = completed * gridDim.x;
             __threadfence_system();
 
             m_next_report_iter = ucs_min(completed + (m_report_interval_ns / iter_time),
@@ -70,6 +72,7 @@ private:
     ucx_perf_cuda_context &m_ctx;
     ucx_perf_counter_t    m_max_iters;
     ucx_perf_counter_t    m_next_report_iter;
+    ucx_perf_counter_t    m_last_completed;
     ucx_perf_cuda_time_t  m_last_report_time;
     ucx_perf_cuda_time_t  m_report_interval_ns;
 };
@@ -179,6 +182,7 @@ public:
         ucx_perf_counter_t last_completed = 0;
         ucx_perf_counter_t completed      = m_cpu_ctx->completed_iters;
         unsigned thread_count             = m_perf.params.device_thread_count;
+        unsigned block_count              = m_perf.params.device_block_count;
         ucs_device_level_t level          = m_perf.params.device_level;
         unsigned msgs_per_iter;
         UCX_PERF_SWITCH_LEVEL(level, UCX_PERF_THREAD_INDEX_SET, thread_count,
@@ -189,7 +193,7 @@ public:
             if (delta > 0) {
                 // TODO: calculate latency percentile on kernel
                 ucx_perf_update(&m_perf, delta, delta * msgs_per_iter, msg_length);
-            } else if (completed >= m_perf.max_iter) {
+            } else if (completed >= m_perf.max_iter * block_count) {
                 break;
             }
             last_completed = completed;
