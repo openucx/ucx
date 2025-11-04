@@ -564,6 +564,81 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_gdaki_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 
+/**
+ * Probe whether NVIDIA peermem driver is available for the given CUDA device.
+ *
+ * Attempts to allocate and register a device-visible memory region that can be
+ * accessed by the provided mlx5 memory domain to determine if peermem support
+ * is present.
+ *
+ * @param md         mlx5 memory domain whose protection domain will be used
+ *                   to register the test memory.
+ * @param cuda_dev   CUDA device to test for peermem support.
+ *
+ * @returns UCS_OK if peermem support is available and memory registration succeeded;
+ *          UCS_ERR_IO_ERROR if memory registration failed;
+ *          other UCS error codes for CUDA-related failures.
+ */
+static ucs_status_t
+uct_gdaki_md_check_peermem(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
+{
+    ucs_status_t status;
+    CUcontext cuda_ctx;
+    CUdeviceptr raw_p;
+    uint64_t *buff;
+    struct ibv_mr *reg_mr;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_dev));
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+    if (status != UCS_OK) {
+        goto out_ctx_release;
+    }
+
+    status = uct_rc_gdaki_alloc(sizeof(uint64_t), sizeof(uint64_t),
+                                (void**)&buff, &raw_p);
+    if (status != UCS_OK) {
+        goto err_ctx;
+    }
+
+    reg_mr = ibv_reg_mr(md->super.pd, buff, sizeof(uint64_t),
+                        IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE |
+                                IBV_ACCESS_REMOTE_READ |
+                                IBV_ACCESS_REMOTE_ATOMIC);
+    if (reg_mr == NULL) {
+        status = UCS_ERR_IO_ERROR;
+        goto err_mem;
+    }
+
+    if (ibv_dereg_mr(reg_mr)) {
+        status = UCS_ERR_IO_ERROR;
+    }
+
+err_mem:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(raw_p));
+err_ctx:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+out_ctx_release:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_dev));
+out:
+    return status;
+}
+
+/**
+ * Probe whether a DEVX UAR region can be registered with the CUDA driver for a given CUDA device.
+ *
+ * Attempts to allocate a DEVX UAR and register its host-mapped region with the CUDA runtime using
+ * portable, devicemap and IO-memory flags; all resources are released before returning.
+ *
+ * @param md        mlx5 device memory domain used to allocate the DEVX UAR.
+ * @param cuda_dev  CUDA device to use for pushing/retaining the primary CUDA context.
+ *
+ * @returns UCS_OK if the UAR region was successfully registered with CUDA, otherwise the error
+ *          status returned by the first failing operation. */
 static ucs_status_t
 uct_gdaki_md_check_uar(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
 {
@@ -605,14 +680,39 @@ out:
     return status;
 }
 
+/**
+ * Enumerate transport-layer devices that support GDAKI for available CUDA GPUs.
+ *
+ * Checks each CUDA device for UAR and Nvidia peermem driver support, filters by
+ * topology latency against the MD's gda_max_sys_latency, and builds an array
+ * of TL device resources for devices that pass the checks.
+ *
+ * @param tl_md           MD handle used to determine the system device and
+ *                        configuration (derived from uct_ib_mlx5_md_t).
+ * @param[out] tl_devices_p
+ *                        On success, set to a newly allocated array of
+ *                        uct_tl_device_resource_t describing discovered devices.
+ *                        The array is allocated with ucs_malloc.
+ * @param[out] num_tl_devices_p
+ *                        On success, set to the number of entries written into
+ *                        @p tl_devices_p.
+ *
+ * @returns UCS_OK               if one or more TL devices were discovered and
+ *                               outputs were set.
+ * @returns UCS_ERR_NO_MEMORY    if allocation for the device array failed.
+ * @returns UCS_ERR_NO_DEVICE    if required GDAKI support (UAR or peermem)
+ *                               is not available for the queried GPUs.
+ * @returns other UCS error code if a CUDA or topology query failed.
+ */
 static ucs_status_t
 uct_gdaki_query_tl_devices(uct_md_h tl_md,
                            uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p)
 {
-    static int uar_supported = -1;
-    uct_ib_mlx5_md_t *md     = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    unsigned num_tl_devices  = 0;
+    static int uar_supported  = -1;
+    static int peermem_loaded = -1;
+    uct_ib_mlx5_md_t *md      = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    unsigned num_tl_devices   = 0;
     uct_tl_device_resource_t *tl_devices;
     ucs_status_t status;
     CUdevice device;
@@ -653,6 +753,28 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             }
         }
         if (uar_supported == 0) {
+            status = UCS_ERR_NO_DEVICE;
+            goto err;
+        }
+
+        /*
+         * Save the result of peermem driver check in a global flag to avoid the
+         * overhead of checking peermem driver for each GPU and MD, assuming the
+         * driver will remain loaded.
+         */
+        if (peermem_loaded == -1) {
+            status = uct_gdaki_md_check_peermem(md, device);
+            if (status == UCS_OK) {
+                peermem_loaded = 1;
+            } else {
+                ucs_diag("GDAKI not supported, please load "
+                         "Nvidia peermem driver by running "
+                         "\"modprobe nvidia_peermem\"");
+                peermem_loaded = 0;
+            }
+        }
+
+        if (peermem_loaded == 0) {
             status = UCS_ERR_NO_DEVICE;
             goto err;
         }
