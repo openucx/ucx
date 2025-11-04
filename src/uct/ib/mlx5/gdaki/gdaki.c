@@ -565,6 +565,55 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_gdaki_iface_t, uct_iface_t, uct_md_h,
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 
 static ucs_status_t
+uct_gdaki_md_check_peermem(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
+{
+    ucs_status_t status;
+    CUcontext cuda_ctx;
+    CUdeviceptr raw_p;
+    uint64_t *buff;
+    struct ibv_mr *reg_mr;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_dev));
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+    if (status != UCS_OK) {
+        goto out_ctx_release;
+    }
+
+    status = uct_rc_gdaki_alloc(sizeof(uint64_t), sizeof(uint64_t),
+                                (void**)&buff, &raw_p);
+    if (status != UCS_OK) {
+        goto err_ctx;
+    }
+
+    reg_mr = ibv_reg_mr(md->super.pd, buff, sizeof(uint64_t),
+                        IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE |
+                                IBV_ACCESS_REMOTE_READ |
+                                IBV_ACCESS_REMOTE_ATOMIC);
+    if (reg_mr == NULL) {
+        status = UCS_ERR_IO_ERROR;
+        goto err_mem;
+    }
+
+    if (ibv_dereg_mr(reg_mr)) {
+        status = UCS_ERR_IO_ERROR;
+    }
+
+err_mem:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(raw_p));
+err_ctx:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+out_ctx_release:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_dev));
+out:
+    return status;
+}
+
+static ucs_status_t
 uct_gdaki_md_check_uar(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
 {
     struct mlx5dv_devx_uar *uar;
@@ -610,9 +659,10 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
                            uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p)
 {
-    static int uar_supported = -1;
-    uct_ib_mlx5_md_t *md     = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    unsigned num_tl_devices  = 0;
+    static int uar_supported  = -1;
+    static int peermem_loaded = -1;
+    uct_ib_mlx5_md_t *md      = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    unsigned num_tl_devices   = 0;
     uct_tl_device_resource_t *tl_devices;
     ucs_status_t status;
     CUdevice device;
@@ -653,6 +703,28 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             }
         }
         if (uar_supported == 0) {
+            status = UCS_ERR_NO_DEVICE;
+            goto err;
+        }
+
+        /*
+         * Save the result of peermem driver check in a global flag to avoid the
+         * overhead of checking peermem driver for each GPU and MD, assuming the
+         * driver will remain loaded.
+         */
+        if (peermem_loaded == -1) {
+            status = uct_gdaki_md_check_peermem(md, device);
+            if (status == UCS_OK) {
+                peermem_loaded = 1;
+            } else {
+                ucs_diag("GDAKI not supported, please load "
+                         "Nvidia peermem driver by running "
+                         "\"modprobe nvidia_peermem\"");
+                peermem_loaded = 0;
+            }
+        }
+
+        if (peermem_loaded == 0) {
             status = UCS_ERR_NO_DEVICE;
             goto err;
         }
