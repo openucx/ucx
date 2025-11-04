@@ -107,26 +107,22 @@ UCS_F_DEVICE uint16_t uct_rc_mlx5_gda_bswap16(uint16_t x)
     return ret;
 }
 
-UCS_F_DEVICE void uct_rc_mlx5_gda_read_cqe(uct_rc_gdaki_dev_ep_t *ep,
-                                           uint16_t *wqe_cnt, uint8_t *opcode)
+UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_parse_cqe(uct_rc_gdaki_dev_ep_t *ep,
+                                                uint16_t *wqe_cnt,
+                                                uint8_t *opcode)
 {
     auto *cqe64        = reinterpret_cast<mlx5_cqe64*>(ep->cqe_daddr);
     uint32_t *data_ptr = (uint32_t*)&cqe64->wqe_counter;
     uint32_t data      = READ_ONCE(*data_ptr);
+    uint64_t rsvd_idx  = READ_ONCE(ep->sq_rsvd_index);
 
     *wqe_cnt = uct_rc_mlx5_gda_bswap16(data);
-    if (opcode != NULL) {
+    if (opcode != nullptr) {
         *opcode = data >> 28;
     }
-}
 
-UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_calc_pi(uct_rc_gdaki_dev_ep_t *ep,
-                                              uint16_t wqe_cnt)
-{
-    uint64_t rsvd_idx = READ_ONCE(ep->sq_rsvd_index);
-    return rsvd_idx - ((rsvd_idx - wqe_cnt) & 0xffff);
+    return rsvd_idx - ((rsvd_idx - *wqe_cnt) & 0xffff);
 }
-
 
 UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_max_alloc_wqe_base(
     uct_rc_gdaki_dev_ep_t *ep, unsigned count)
@@ -134,8 +130,7 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_max_alloc_wqe_base(
     uint16_t wqe_cnt;
     uint64_t pi;
 
-    uct_rc_mlx5_gda_read_cqe(ep, &wqe_cnt, NULL);
-    pi = uct_rc_mlx5_gda_calc_pi(ep, wqe_cnt);
+    pi = uct_rc_mlx5_gda_parse_cqe(ep, &wqe_cnt, nullptr);
     return pi + ep->sq_wqe_num + 1 - count;
 }
 
@@ -584,8 +579,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
     uint8_t opcode;
     uint64_t pi;
 
-    uct_rc_mlx5_gda_read_cqe(ep, &wqe_cnt, &opcode);
-    pi = uct_rc_mlx5_gda_calc_pi(ep, wqe_cnt);
+    pi = uct_rc_mlx5_gda_parse_cqe(ep, &wqe_cnt, &opcode);
 
     if (pi < comp->wqe_idx) {
         return UCS_INPROGRESS;

@@ -404,6 +404,7 @@ protected:
 
         uint64_t expected = params.num_iters * num_threads * count;
         EXPECT_UCS_OK(result.status);
+        EXPECT_EQ(expected, result.producer_index);
         EXPECT_EQ(expected, result.ready_index);
     }
 };
