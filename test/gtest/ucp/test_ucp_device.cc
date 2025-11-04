@@ -85,12 +85,6 @@ void test_ucp_device::init()
     if (!is_loopback()) {
         receiver().connect(&sender(), get_ep_params());
     }
-
-    ucp_device_mem_list_handle_h handle;
-    while (ucp_device_mem_list_create(sender().ep(), NULL, &handle) ==
-           UCS_ERR_NOT_CONNECTED) {
-        progress();
-    }
 }
 
 test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
