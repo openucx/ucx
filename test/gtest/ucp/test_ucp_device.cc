@@ -334,6 +334,13 @@ UCS_TEST_P(test_ucp_device, create_fail)
     EXPECT_EQ(nullptr, handle);
 }
 
+UCS_TEST_P(test_ucp_device, get_mem_list_length)
+{
+    constexpr unsigned num_elements = 8;
+    mem_list list(sender(), receiver(), 1 * UCS_KBYTE, num_elements);
+    EXPECT_EQ(num_elements, ucp_device_get_mem_list_length(list.handle()));
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")
 
 
@@ -563,7 +570,7 @@ UCS_TEST_P(test_ucp_device_xfer, put_single)
 
 /* TODO: Enable these tests in CI */
 UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_single_stress_test,
-                     RUNNING_ON_VALGRIND || true)
+                     RUNNING_ON_VALGRIND)
 {
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Skipping stress test under ASAN");
@@ -617,7 +624,7 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi)
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_multi_stress_test,
-                     RUNNING_ON_VALGRIND || true)
+                     RUNNING_ON_VALGRIND)
 {
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Skipping stress test under ASAN");
