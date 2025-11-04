@@ -152,8 +152,15 @@ private:
         params.num_elements = count;
         params.elements     = elems;
 
-        ucs_status_t status = ucp_device_mem_list_create(perf.ucp.ep, &params,
-                                                         &m_params.mem_list);
+        ucs_status_t status;
+        do {
+            status = ucp_device_mem_list_create(perf.ucp.ep, &params,
+                                                &m_params.mem_list);
+            if (status == UCS_ERR_NOT_CONNECTED) {
+                ucp_worker_progress(perf.ucp.worker);
+            }
+        } while (status == UCS_ERR_NOT_CONNECTED);
+
         if (status != UCS_OK) {
             throw std::runtime_error("Failed to create memory list");
         }

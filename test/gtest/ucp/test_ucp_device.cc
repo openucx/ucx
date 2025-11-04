@@ -144,9 +144,17 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
     params.num_elements = count;
     params.elements     = elems.data();
 
-    // Create memory list
-    ASSERT_UCS_OK(
-            ucp_device_mem_list_create(sender.ep(), &params, &m_mem_list_h));
+    // Create memory list (with retry on connection)
+    ucs_status_t status;
+    do {
+        status = ucp_device_mem_list_create(sender.ep(), &params, &m_mem_list_h);
+        if (status != UCS_ERR_NOT_CONNECTED) {
+            break;
+        }
+        sender.progress();
+        receiver.progress();
+    } while (status == UCS_ERR_NOT_CONNECTED);
+    ASSERT_UCS_OK(status);
 }
 
 test_ucp_device::mem_list::~mem_list()
