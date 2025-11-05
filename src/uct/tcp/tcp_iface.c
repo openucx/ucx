@@ -128,7 +128,8 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "The mode used for performing the reachability check\n"
    " - route - all routable addresses are assumed as reachable\n"
    " - all   - all addresses are assumed as reachable, without any check",
-   ucs_offsetof(uct_tcp_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_tcp_reachability_modes)},
+   ucs_offsetof(uct_tcp_iface_config_t, reachability_mode),
+   UCS_CONFIG_TYPE_ENUM(uct_tcp_reachability_modes)},
 
   {NULL}
 };

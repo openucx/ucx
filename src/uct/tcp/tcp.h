@@ -236,7 +236,7 @@ typedef enum {
     UCT_TCP_REACHABILITY_MODE_ROUTE = 0,
     UCT_TCP_REACHABILITY_MODE_ALL   = 1,
     UCT_TCP_REACHABILITY_MODE_LAST
-} uct_tcp_iface_reachability_mode_t;
+} uct_tcp_reachability_mode_t;
 
 
 /**
@@ -432,7 +432,7 @@ typedef struct uct_tcp_iface {
             ucs_time_t            intvl;             /* The time between individual keepalive
                                                       * probes (TCP_KEEPINTVL socket option). */
         } keepalive;
-        unsigned                  reachability_mode; /* Mode used for performing reachability check */
+        uct_tcp_reachability_mode_t reachability_mode; /* Mode used for performing reachability check */
     } config;
 
     struct {
@@ -470,7 +470,7 @@ typedef struct uct_tcp_iface_config {
         ucs_time_t                 intvl;
     } keepalive;
     ucs_ternary_auto_value_t       ep_bind_src_addr;
-    unsigned                       reachability_mode;
+    uct_tcp_reachability_mode_t    reachability_mode;
 } uct_tcp_iface_config_t;
 
 
