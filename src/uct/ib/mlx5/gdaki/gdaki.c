@@ -669,7 +669,6 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
                 ucs_diag("GDAKI not supported, please load "
                          "Nvidia peermem driver by running "
                          "\"modprobe nvidia_peermem\"");
-                peermem_loaded = 0;
             }
         }
 
