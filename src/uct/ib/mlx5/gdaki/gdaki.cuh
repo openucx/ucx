@@ -269,10 +269,12 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
     }
 
     if (no_delay) {
+        uct_rc_mlx5_gda_lock(&ep->sq_lock);
         const uint64_t ready_index = ep->sq_ready_index;
         uct_rc_mlx5_gda_ring_db(ep, ready_index);
         uct_rc_mlx5_gda_update_dbr(ep, ready_index);
         uct_rc_mlx5_gda_ring_db(ep, ready_index);
+        uct_rc_mlx5_gda_unlock(&ep->sq_lock);
         return;
     }
 
