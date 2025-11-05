@@ -93,7 +93,7 @@ UCS_F_DEVICE void uct_cuda_ipc_level_sync()
     return;
 }
 
-template<typename VecT>
+template<typename vec_t>
 UCS_F_DEVICE void uct_cuda_ipc_try_copy_aligned(const char* &src, char* &dst,
                                                 size_t &len,
                                                 unsigned warp_id,
@@ -101,48 +101,50 @@ UCS_F_DEVICE void uct_cuda_ipc_try_copy_aligned(const char* &src, char* &dst,
                                                 unsigned lane_id,
                                                 unsigned num_lanes)
 {
-    if (!(UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)src, sizeof(VecT)) &&
-          UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)dst, sizeof(VecT)))) {
+    constexpr size_t vec_size = sizeof(vec_t);
+
+    if (!(UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)src, vec_size) &&
+          UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)dst, vec_size))) {
         return;
     }
 
-    auto src_vec                    = reinterpret_cast<const VecT*>(src);
-    auto dst_vec                    = reinterpret_cast<VecT*>(dst);
-    constexpr unsigned lanes_unroll = UCS_DEVICE_NUM_THREADS_IN_WARP *
+    auto src_vec                    = reinterpret_cast<const vec_t*>(src);
+    auto dst_vec                    = reinterpret_cast<vec_t*>(dst);
+    constexpr size_t lanes_unroll   = UCS_DEVICE_NUM_THREADS_IN_WARP *
                                       UCT_CUDA_IPC_COPY_LOOP_UNROLL;
-    size_t num_lines                = (len / (lanes_unroll * sizeof(VecT))) *
+    size_t num_vectors                = (len / (lanes_unroll * vec_size)) *
                                       lanes_unroll;
-    VecT tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
 
-    for (size_t line = warp_id * lanes_unroll + lane_id % UCS_DEVICE_NUM_THREADS_IN_WARP;
-         line < num_lines;
-         line += num_warps * lanes_unroll) {
+    for (size_t vec = warp_id * lanes_unroll + lane_id % UCS_DEVICE_NUM_THREADS_IN_WARP;
+         vec < num_vectors;
+         vec += num_warps * lanes_unroll) {
+        vec_t tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
 #pragma unroll
         for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
             tmp[i] = uct_cuda_ipc_ld_global_cg(
-                src_vec + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i));
+                src_vec + (vec + UCS_DEVICE_NUM_THREADS_IN_WARP * i));
         }
 
 #pragma unroll
         for (int i = 0; i < UCT_CUDA_IPC_COPY_LOOP_UNROLL; i++) {
             uct_cuda_ipc_st_global_cg(
-                dst_vec + (line + UCS_DEVICE_NUM_THREADS_IN_WARP * i), tmp[i]);
+                dst_vec + (vec + UCS_DEVICE_NUM_THREADS_IN_WARP * i), tmp[i]);
         }
     }
 
-    src_vec += num_lines;
-    dst_vec += num_lines;
-    len = len - num_lines * sizeof(VecT);
+    src_vec += num_vectors;
+    dst_vec += num_vectors;
+    len = len - num_vectors * vec_size;
 
-    num_lines = len / sizeof(VecT);
-    for (size_t line = lane_id; line < num_lines; line += num_lanes) {
-        VecT v = uct_cuda_ipc_ld_global_cg(src_vec + line);
-        uct_cuda_ipc_st_global_cg(dst_vec + line, v);
+    num_vectors = len / vec_size;
+    for (size_t vec = lane_id; vec < num_vectors; vec += num_lanes) {
+        vec_t v = uct_cuda_ipc_ld_global_cg(src_vec + vec);
+        uct_cuda_ipc_st_global_cg(dst_vec + vec, v);
     }
 
-    len -= num_lines * sizeof(VecT);
-    src = reinterpret_cast<const char*>(src_vec + num_lines);
-    dst = reinterpret_cast<char*>(dst_vec + num_lines);
+    len -= num_vectors * vec_size;
+    src = reinterpret_cast<const char*>(src_vec + num_vectors);
+    dst = reinterpret_cast<char*>(dst_vec + num_vectors);
 }
 
 UCS_F_DEVICE void*
@@ -165,11 +167,12 @@ UCS_F_DEVICE void uct_cuda_ipc_copy_level(void *dst, const void *src, size_t len
 {
     auto s1 = reinterpret_cast<const char*>(src);
     auto d1 = reinterpret_cast<char *>(dst);
-    unsigned int lane_id, num_lanes, warp_id, num_warps;
+    unsigned int lane_id, num_lanes;
 
     uct_cuda_ipc_get_lane<level>(lane_id, num_lanes);
-    warp_id = lane_id / UCS_DEVICE_NUM_THREADS_IN_WARP;
-    num_warps = num_lanes / UCS_DEVICE_NUM_THREADS_IN_WARP;
+
+    const unsigned warp_id   = lane_id / UCS_DEVICE_NUM_THREADS_IN_WARP;
+    const unsigned num_warps = num_lanes / UCS_DEVICE_NUM_THREADS_IN_WARP;
 
     uct_cuda_ipc_try_copy_aligned<int4>(s1, d1, len, warp_id, num_warps,
                                         lane_id, num_lanes);
