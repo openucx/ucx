@@ -432,7 +432,8 @@ typedef struct uct_tcp_iface {
             ucs_time_t            intvl;             /* The time between individual keepalive
                                                       * probes (TCP_KEEPINTVL socket option). */
         } keepalive;
-        uct_tcp_reachability_mode_t reachability_mode; /* Mode used for performing reachability check */
+        uct_tcp_reachability_mode_t
+                                  reachability_mode; /* Mode used for performing reachability check */
     } config;
 
     struct {
