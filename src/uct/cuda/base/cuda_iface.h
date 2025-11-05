@@ -95,6 +95,23 @@ typedef struct {
 } uct_cuda_event_desc_t;
 
 
+/* Base flush descriptor */
+typedef struct {
+    /* How many streams are currently active */
+    uint32_t          stream_counter;
+    uct_completion_t *comp;
+} uct_cuda_flush_desc_t;
+
+
+/* Stream Flush descriptor */
+typedef struct {
+    uct_cuda_event_desc_t  super;
+    /* Pointer to base flush descriptor */
+    uct_cuda_flush_desc_t *flush_desc;
+    uct_completion_t       comp;
+} uct_cuda_flush_stream_desc_t;
+
+
 typedef struct {
     /* CUDA context handle */
     CUcontext          ctx;
@@ -130,6 +147,8 @@ typedef struct {
     /* list of queues which require progress */
     ucs_queue_head_t          active_queue;
     uct_cuda_iface_ops_t      *ops;
+    /* Pool for flush events */
+    ucs_mpool_t               flush_mpool;
 
     struct {
         unsigned              max_events;
@@ -148,6 +167,8 @@ unsigned uct_cuda_base_iface_progress(uct_iface_h tl_iface);
 ucs_status_t uct_cuda_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                        uct_completion_t *comp);
 
+ucs_status_t
+uct_cuda_base_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 ucs_status_t
 uct_cuda_base_query_devices_common(
         uct_md_h md, uct_device_type_t dev_type,
