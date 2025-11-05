@@ -274,7 +274,7 @@ uct_cuda_base_progress_event_queue(uct_cuda_iface_t *iface,
 
     ucs_queue_for_each_extract(cuda_event, queue_head, queue,
                                (count < max_events) &&
-                               (ucs_likely(uct_cuda_base_event_is_flush(
+                               (ucs_unlikely(uct_cuda_base_event_is_flush(
                                        cuda_event)) ||
                                (cuEventQuery(cuda_event->event) == CUDA_SUCCESS))) {
         ucs_trace_data("cuda event %p completed", cuda_event);
