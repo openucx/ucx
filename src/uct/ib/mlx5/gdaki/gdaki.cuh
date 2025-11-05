@@ -258,24 +258,26 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
 {
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
             ep->sq_ready_index);
-    uint64_t wqe_base_orig = wqe_base;
+    const uint64_t wqe_num = __ldg(&ep->sq_wqe_num);
+    const uint64_t wqe_next = wqe_base + count;
+    const uint64_t wqe_base_orig = wqe_base;
 
     __threadfence();
-    while (!ref.compare_exchange_strong(wqe_base, wqe_base + count,
+    while (!ref.compare_exchange_strong(wqe_base, wqe_next,
                                         cuda::std::memory_order_relaxed)) {
         wqe_base = wqe_base_orig;
     }
 
-    if (!(flags & UCT_DEVICE_FLAG_NODELAY) &&
-        !((wqe_base ^ (wqe_base + count)) & 128)) {
-        return;
+    if (READ_ONCE(ep->sq_ready_index) == wqe_next) {
+        uct_rc_mlx5_gda_lock(&ep->sq_lock);
+        const uint64_t ready_index = READ_ONCE(ep->sq_ready_index);
+        if (ready_index == wqe_next) {
+            uct_rc_mlx5_gda_ring_db(ep, ready_index);
+            uct_rc_mlx5_gda_update_dbr(ep, ready_index);
+            uct_rc_mlx5_gda_ring_db(ep, ready_index);
+        }
+        uct_rc_mlx5_gda_unlock(&ep->sq_lock);
     }
-
-    uct_rc_mlx5_gda_lock(&ep->sq_lock);
-    uct_rc_mlx5_gda_ring_db(ep, ep->sq_ready_index);
-    uct_rc_mlx5_gda_update_dbr(ep, ep->sq_ready_index);
-    uct_rc_mlx5_gda_ring_db(ep, ep->sq_ready_index);
-    uct_rc_mlx5_gda_unlock(&ep->sq_lock);
 }
 
 UCS_F_DEVICE bool
