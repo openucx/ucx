@@ -245,7 +245,6 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
 {
     switch (cmd) {
     case UCX_PERF_CMD_PUT_SINGLE:
-        /* TODO: Change to ucp_device_counter_write */
         *params.counter_send = idx + 1;
         return ucp_device_put_single<level>(params.mem_list, params.indices[0],
                                             0, 0,
@@ -331,7 +330,7 @@ ucp_perf_cuda_put_bw_kernel_impl(ucx_perf_cuda_context &ctx,
 
     /* Last iteration */
     status = ucp_perf_cuda_put_bw_iter<level, cmd, false>(params, req_mgr,
-                                                          max_iters);
+                                                          max_iters - 1);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucs_device_error("final send failed: %d", status);
         return status;
@@ -412,7 +411,6 @@ __global__ void
 ucp_perf_cuda_wait_bw_kernel(ucx_perf_cuda_context &ctx,
                              ucp_perf_cuda_params params)
 {
-    // TODO: we can use ucp_device_counter_read, but it adds latency
     volatile uint64_t *sn = params.counter_recv;
     while (*sn < ctx.max_iters) {
         __nanosleep(100000); // 100us
