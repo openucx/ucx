@@ -268,20 +268,12 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
         wqe_base = wqe_base_orig;
     }
 
-    if (no_delay) {
+    if ((no_delay && READ_ONCE(ep->sq_ready_index) == wqe_next) ||
+        (!no_delay && ((wqe_base ^ wqe_next) & 128))) {
         uct_rc_mlx5_gda_lock(&ep->sq_lock);
         const uint64_t ready_index = ep->sq_ready_index;
-        uct_rc_mlx5_gda_ring_db(ep, ready_index);
-        uct_rc_mlx5_gda_update_dbr(ep, ready_index);
-        uct_rc_mlx5_gda_ring_db(ep, ready_index);
-        uct_rc_mlx5_gda_unlock(&ep->sq_lock);
-        return;
-    }
-
-    if (READ_ONCE(ep->sq_ready_index) == wqe_next) {
-        uct_rc_mlx5_gda_lock(&ep->sq_lock);
-        const uint64_t ready_index = ep->sq_ready_index;
-        if (ready_index == wqe_next) {
+        if (ep->sq_db_index != ready_index) {
+            ep->sq_db_index = ready_index;
             uct_rc_mlx5_gda_ring_db(ep, ready_index);
             uct_rc_mlx5_gda_update_dbr(ep, ready_index);
             uct_rc_mlx5_gda_ring_db(ep, ready_index);
