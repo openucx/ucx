@@ -13,7 +13,7 @@ includedir = @includedir@
 Name: @PACKAGE@
 Description: Unified Communication X Library
 Version: @VERSION@
-Cflags: -I${includedir}
+Cflags: -I${includedir} @STUB_CFLAGS@
 Libs: -L${libdir} -lucp
 Libs.private: -Wl,--undefined=ucp_global_init
 Requires: @PACKAGE@-uct, @PACKAGE@-ucs
