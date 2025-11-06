@@ -68,7 +68,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     }
     printf("\n");
     printf("     -a <send-device-type[:dev-id]>[,<recv-device-type[:dev-id]>]\n");
-    printf("                   Accelerator device type and device id to use for running the test.\n");
+    printf("                    Accelerator device type and device id to use for running the test.\n");
     printf("                    device id is optional, it corresponds to the index of\n");
     printf("                    the device in the list of available devices\n");
     printf("     -L <level>     device cooperation level for gdaki (thread)\n");
@@ -76,6 +76,10 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                    warp   - warp level\n");
     printf("                    block  - block level\n");
     printf("                    grid   - grid level\n");
+    printf("     -F <size>      flow control window size for device tests (%u).\n",
+                                ctx->params.super.device_fc_window);
+    printf("                    This option defines the number of iterations per which a single flow control\n");
+    printf("                    request is sent.\n");
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
@@ -721,6 +725,9 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
                                          &params->super.recv_device);
     case 'L':
         return parse_device_level(opt_arg, &params->super.device_level);
+    case 'F':
+        return parse_int(opt_arg, &params->super.device_fc_window,
+                         "device flow control window size", 1, INT_MAX);
     case 'y':
         params->super.flags |= UCX_PERF_TEST_FLAG_AM_RECV_COPY;
         return UCS_OK;

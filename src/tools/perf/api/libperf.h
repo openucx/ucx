@@ -166,6 +166,7 @@ typedef enum {
 
 #define UCX_PERF_MEM_DEV_DEFAULT -1
 
+#define UCP_PERF_FC_WINDOW_DEFAULT 4
 
 /**
  * Performance counter type.
@@ -266,9 +267,9 @@ typedef struct ucx_perf_params {
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     ucs_memory_type_t      send_mem_type;   /* Send memory type */
     ucs_memory_type_t      recv_mem_type;   /* Recv memory type */
-    ucx_perf_accel_dev_t   send_device;     /* Send memory device for gdaki */
-    ucx_perf_accel_dev_t   recv_device;     /* Recv memory device for gdaki */
-    ucs_device_level_t     device_level;    /* Device level for gdaki */
+    ucx_perf_accel_dev_t   send_device;     /* Send memory device */
+    ucx_perf_accel_dev_t   recv_device;     /* Recv memory device */
+    ucs_device_level_t     device_level;    /* Device level */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size
@@ -289,6 +290,7 @@ typedef struct ucx_perf_params {
                                                in latency tests */
     unsigned               device_thread_count; /* Number of device threads */
     unsigned               device_block_count; /* Number of device blocks */
+    unsigned               device_fc_window; /* Flow control window size for device tests */
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
