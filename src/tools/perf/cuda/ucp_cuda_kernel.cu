@@ -110,6 +110,7 @@ private:
 struct ucp_perf_cuda_params {
     ucp_device_mem_list_handle_h mem_list;
     size_t                       length;
+    unsigned                     num_channels;
     unsigned                     *indices;
     size_t                       *local_offsets;
     size_t                       *remote_offsets;
@@ -122,6 +123,7 @@ class ucp_perf_cuda_params_handler {
 public:
     ucp_perf_cuda_params_handler(const ucx_perf_context_t &perf)
     {
+        init_params(perf);
         init_mem_list(perf);
         init_elements(perf);
         init_counters(perf);
@@ -142,6 +144,11 @@ private:
     static bool has_counter(const ucx_perf_context_t &perf)
     {
         return (perf.params.command != UCX_PERF_CMD_PUT_SINGLE);
+    }
+
+    void init_params(const ucx_perf_context_t &perf)
+    {
+        m_params.num_channels = perf.params.device_ep_channel_count;
     }
 
     void init_mem_list(const ucx_perf_context_t &perf)
@@ -243,15 +250,18 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
                          ucx_perf_counter_t idx, ucp_device_request_t *req,
                          ucp_device_flags_t flags = UCP_DEVICE_FLAG_NODELAY)
 {
+    const unsigned channel_id = threadIdx.x % params.num_channels;
+
     switch (cmd) {
     case UCX_PERF_CMD_PUT_SINGLE:
         *params.counter_send = idx + 1;
         return ucp_device_put_single<level>(params.mem_list, params.indices[0],
                                             0, 0,
                                             params.length + ONESIDED_SIGNAL_SIZE,
-                                            0, flags, req);
+                                            channel_id, flags, req);
     case UCX_PERF_CMD_PUT_MULTI:
-        return ucp_device_put_multi<level>(params.mem_list, 1, 0, flags, req);
+        return ucp_device_put_multi<level>(params.mem_list, 1, channel_id,
+                                           flags, req);
     case UCX_PERF_CMD_PUT_PARTIAL: {
         unsigned counter_index = params.mem_list->mem_list_length - 1;
         return ucp_device_put_multi_partial<level>(params.mem_list,
@@ -260,8 +270,8 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
                                                    params.local_offsets,
                                                    params.remote_offsets,
                                                    params.lengths,
-                                                   counter_index, 1, 0, 0,
-                                                   flags, req);
+                                                   counter_index, 1, 0,
+                                                   channel_id, flags, req);
         }
     }
 

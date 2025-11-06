@@ -288,6 +288,7 @@ typedef struct ucx_perf_params {
     double                 report_interval; /* Interval at which to call the report callback */
     double                 percentile_rank; /* The percentile rank of the percentile reported
                                                in latency tests */
+    unsigned               device_ep_channel_count; /* Number of channels for each ucp device endpoint */
     unsigned               device_thread_count; /* Number of device threads */
     unsigned               device_block_count; /* Number of device blocks */
     unsigned               device_fc_window; /* Flow control window size for device tests */

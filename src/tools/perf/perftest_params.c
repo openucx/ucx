@@ -756,9 +756,11 @@ ucs_status_t adjust_test_params(perftest_params_t *params,
     }
 
     if (params->super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+        /* TODO: read number of channels from ucp config */
+        params->super.device_ep_channel_count = 1;
         /* TODO: Add getter function for thread count */
-        params->super.device_thread_count = params->super.thread_count;
-        params->super.thread_count        = 1;
+        params->super.device_thread_count     = params->super.thread_count;
+        params->super.thread_count            = 1;
     }
 
     return UCS_OK;
