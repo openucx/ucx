@@ -52,7 +52,7 @@ public:
     __device__ inline void
     update_report(ucx_perf_counter_t completed)
     {
-        if ((threadIdx.x == 0) && ucs_unlikely(completed >= m_next_report_iter)) {
+        if ((blockIdx.x == 0) && (threadIdx.x == 0) && ucs_unlikely(completed >= m_next_report_iter)) {
             assert(completed - m_last_completed > 0);
             ucx_perf_cuda_time_t cur_time  = ucx_perf_cuda_get_time_ns();
             ucx_perf_cuda_time_t iter_time = (cur_time - m_last_report_time) /
