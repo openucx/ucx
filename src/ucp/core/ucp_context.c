@@ -445,7 +445,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Number of usage tracker rounds performed for each progress operation. Must be\n"
    "non-zero value.",
    ucs_offsetof(ucp_context_config_t, dynamic_tl_progress_factor),
-   UCS_CONFIG_TYPE_TIME_UNITS},
+   UCS_CONFIG_TYPE_UINT},
 
   {"RESOLVE_REMOTE_EP_ID", "n",
    "Defines whether resolving remote endpoint ID is required or not when\n"
