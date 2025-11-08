@@ -1341,6 +1341,12 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
 
+#if HAVE_ZE
+        uct_ib_check_gpudirect_driver(
+                md, "/sys/module/xe/srcversion",
+                UCS_MEMORY_TYPE_ZE_DEVICE);
+#endif
+
         /* Check for dma-buf support */
         uct_ib_md_check_dmabuf(md);
     }
@@ -1349,7 +1355,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         !(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
         (md_config->enable_gpudirect_rdma == UCS_YES)) {
         ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure "
-                  "nv_peer_mem or amdgpu plugin installed correctly, or dmabuf "
+                  "nv_peer_mem, amdgpu plugin, or Intel XE driver is installed correctly, or dmabuf "
                   "is supported.",
                   uct_ib_device_name(&md->dev));
         status = UCS_ERR_UNSUPPORTED;
