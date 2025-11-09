@@ -20,6 +20,7 @@ typedef enum {
 } test_ucp_device_operation_t;
 
 typedef struct {
+    unsigned                     num_channels;
     unsigned                     num_threads;
     unsigned                     num_blocks;
     test_ucp_device_operation_t  operation;

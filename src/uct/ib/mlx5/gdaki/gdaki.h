@@ -24,18 +24,24 @@ typedef struct uct_rc_gdaki_iface {
     CUdeviceptr                atomic_raw;
     uint64_t                   *atomic_buff;
     CUcontext                  cuda_ctx;
+    unsigned                   num_channels;
 } uct_rc_gdaki_iface_t;
+
+
+typedef struct {
+    uct_ib_mlx5_cq_t             cq;
+    uct_ib_mlx5_txwq_t           qp;
+    void                         *sq_db;
+} uct_rc_gdaki_channel_t;
 
 
 typedef struct uct_rc_gdaki_ep {
     uct_base_ep_t                super;
-    uct_ib_mlx5_cq_t             cq;
-    uct_ib_mlx5_txwq_t           qp;
     struct mlx5dv_devx_umem      *umem;
     CUdeviceptr                  ep_raw;
     uct_rc_gdaki_dev_ep_t        *ep_gpu;
-    void                         *sq_db;
     uint8_t                      dev_ep_init;
+    uct_rc_gdaki_channel_t       *channels;
 } uct_rc_gdaki_ep_t;
 
 #endif /* UCT_GDAKI_IFACE_H */
