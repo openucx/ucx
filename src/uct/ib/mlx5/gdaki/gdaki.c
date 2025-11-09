@@ -117,12 +117,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         goto err_ctx;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemsetD8((CUdeviceptr)self->ep_gpu, 0, dev_ep_size));
-    if (status != UCS_OK) {
-        goto err_mem;
-    }
-
     /* TODO add dmabuf_fd support */
     self->umem = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, self->ep_gpu,
                                       dev_ep_size, IBV_ACCESS_LOCAL_WRITE);
@@ -190,19 +184,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     dev_ep.cqe_num   = cq_attr.cq_size;
     dev_ep.sq_db     = self->sq_db;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemsetD8((CUdeviceptr)UCS_PTR_BYTE_OFFSET(self->ep_gpu,
-                                                        cq_attr.umem_offset),
-                       0xff, cq_attr.umem_len));
-    if (status != UCS_OK) {
-        goto err_dev_ep;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyHtoD((CUdeviceptr)self->ep_gpu, &dev_ep, sizeof(dev_ep)));
-    if (status != UCS_OK) {
-        goto err_dev_ep;
-    }
+    self->dev_ep_host   = dev_ep;
+    self->cq_attr       = cq_attr;
+    self->dev_ep_size   = dev_ep_size;
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
@@ -378,10 +362,45 @@ uct_rc_gdaki_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
 ucs_status_t
 uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 {
-    uct_rc_gdaki_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_gdaki_ep_t);
+    uct_rc_gdaki_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_gdaki_ep_t);
+    uct_rc_gdaki_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                 uct_rc_gdaki_iface_t);
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemsetD8((CUdeviceptr)ep->ep_gpu, 0, ep->dev_ep_size));
+    if (status != UCS_OK) {
+        goto out_ctx;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemsetD8(
+            (CUdeviceptr)UCS_PTR_BYTE_OFFSET(ep->ep_gpu,
+                                             ep->cq_attr.umem_offset),
+            0xff, ep->cq_attr.umem_len));
+    if (status != UCS_OK) {
+        goto out_ctx;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyHtoD(
+            (CUdeviceptr)ep->ep_gpu, &ep->dev_ep_host,
+            sizeof(ep->dev_ep_host)));
+    if (status != UCS_OK) {
+        goto out_ctx;
+    }
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 
     *device_ep_p = &ep->ep_gpu->super;
     return UCS_OK;
+
+out_ctx:
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    return status;
 }
 
 ucs_status_t

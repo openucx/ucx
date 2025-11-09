@@ -35,6 +35,9 @@ typedef struct uct_rc_gdaki_ep {
     CUdeviceptr                  ep_raw;
     uct_rc_gdaki_dev_ep_t        *ep_gpu;
     void                         *sq_db;
+    uct_rc_gdaki_dev_ep_t        dev_ep_host;
+    uct_ib_mlx5_cq_attr_t        cq_attr;
+    size_t                       dev_ep_size;
 } uct_rc_gdaki_ep_t;
 
 #endif /* UCT_GDAKI_IFACE_H */
