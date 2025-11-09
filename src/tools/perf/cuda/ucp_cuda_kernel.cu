@@ -154,11 +154,9 @@ private:
 
         ucs_status_t status;
         do {
+            ucp_worker_progress(perf.ucp.worker);
             status = ucp_device_mem_list_create(perf.ucp.ep, &params,
                                                 &m_params.mem_list);
-            if (status == UCS_ERR_NOT_CONNECTED) {
-                ucp_worker_progress(perf.ucp.worker);
-            }
         } while (status == UCS_ERR_NOT_CONNECTED);
 
         if (status != UCS_OK) {
