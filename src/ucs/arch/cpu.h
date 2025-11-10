@@ -169,6 +169,15 @@ static inline int ucs_cpu_prefer_relaxed_order()
              (cpu_model == UCS_CPU_MODEL_AMD_TURIN)));
 }
 
+static inline int ucs_cpu_prefer_odp()
+{
+    ucs_cpu_vendor_t cpu_vendor = ucs_arch_get_cpu_vendor();
+    ucs_cpu_model_t cpu_model   = ucs_arch_get_cpu_model();
+
+    return ((cpu_vendor == UCS_CPU_VENDOR_NVIDIA) &&
+            (cpu_model == UCS_CPU_MODEL_NVIDIA_GRACE));
+}
+
 
 #define UCS_CPU_VENDOR_LABEL "CPU vendor"
 #define UCS_CPU_MODEL_LABEL  "CPU model"
