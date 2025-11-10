@@ -193,7 +193,7 @@ public:
             if (delta > 0) {
                 // TODO: calculate latency percentile on kernel
                 ucx_perf_update(&m_perf, delta, delta * msgs_per_iter, msg_length);
-            } else if (completed >= m_perf.max_iter * block_count) {
+            } else if (completed >= (m_perf.max_iter * block_count)) {
                 break;
             }
             last_completed = completed;
