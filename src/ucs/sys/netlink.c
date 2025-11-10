@@ -29,6 +29,8 @@ typedef struct {
     const struct sockaddr *sa_remote;
     int                    if_index;
     int                    found;
+    int                    allow_default_gw; /* Allow matching default
+                                                gateway routes */
 } ucs_netlink_route_info_t;
 
 
@@ -248,6 +250,7 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 {
     ucs_netlink_rt_rules_t *iface_rules;
     ucs_netlink_route_entry_t *curr_entry;
+    int is_default_gw;
     khiter_t iter;
 
     iter = kh_get(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
@@ -259,8 +262,17 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     ucs_array_for_each(curr_entry, iface_rules) {
-        if ((curr_entry->subnet_prefix_len == 0) ||
-            ucs_sockaddr_is_same_subnet(
+        is_default_gw = (curr_entry->subnet_prefix_len == 0);
+
+        /* Skip default gateway routes if not allowed (e.g., for
+           IPoIB remote devices) */
+        if (is_default_gw && !info->allow_default_gw) {
+            ucs_trace("iface_index=%d: skipping default gateway route",
+                      info->if_index);
+            continue;
+        }
+
+        if (is_default_gw || ucs_sockaddr_is_same_subnet(
                                 info->sa_remote,
                                 (const struct sockaddr *)&curr_entry->dest,
                                 curr_entry->subnet_prefix_len)) {
@@ -270,7 +282,8 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
     }
 }
 
-int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
+int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
+                             int allow_default_gw)
 {
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     struct rtmsg rtm                 = {0};
@@ -289,10 +302,18 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
                                  NULL);
     }
 
-    info.if_index  = if_index;
-    info.sa_remote = sa_remote;
-    info.found     = 0;
+    info.if_index         = if_index;
+    info.sa_remote        = sa_remote;
+    info.found            = 0;
+    info.allow_default_gw = allow_default_gw;
+
     ucs_netlink_lookup_route(&info);
 
     return info.found;
+}
+
+int ucs_netlink_ethernet_device_route_exists(int if_index,
+                                             const struct sockaddr *sa_remote)
+{
+    return ucs_netlink_route_exists(if_index, sa_remote, 1);
 }
