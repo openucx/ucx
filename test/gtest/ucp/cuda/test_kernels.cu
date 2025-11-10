@@ -128,11 +128,13 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
                                          uct_elem, comp);
         if ((status == UCS_OK) &&
             (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA)) {
+            uint16_t wqe_cnt;
             uct_rc_gdaki_dev_ep_t *ep =
                         reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(device_ep);
-            result.producer_index     = ep->sq_wqe_pi - result.producer_index;
+            result.producer_index     = uct_rc_mlx5_gda_parse_cqe(ep, &wqe_cnt,
+                                                                  nullptr) +
+                                        1;
             result.ready_index        = ep->sq_ready_index - result.ready_index;
-            result.avail_count        = ep->avail_count - result.avail_count;
         }
     }
 
@@ -240,7 +242,6 @@ launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
     result->status         = UCS_ERR_NOT_IMPLEMENTED;
     result->producer_index = 0;
     result->ready_index    = 0;
-    result->avail_count    = 0;
 
     switch (params.level) {
     case UCS_DEVICE_LEVEL_THREAD:
