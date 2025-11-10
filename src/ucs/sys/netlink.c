@@ -239,9 +239,9 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
             ucs_array_pop_back(iface_rules);
             return UCS_ERR_IO_ERROR;
         }
-
-        new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
     }
+
+    new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
 
     return UCS_INPROGRESS;
 }
