@@ -1782,6 +1782,9 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
             (UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) | UCS_BIT(UCT_IB_DEVX_OBJ_DCI))) {
             reason = "version 1 is not supported for DevX QP";
             goto no_odp;
+        } else if (ucs_cpu_prefer_odp()) {
+            ucs_warn("%s: devx objects are disabled in ucx.conf, the performance may be degraded, as ODPv2 is not supported",
+               uct_ib_device_name(&md->super.dev));
         }
 
         odp_cap = UCT_IB_MLX5DV_ADDR_OF(
