@@ -219,6 +219,7 @@ void test_perf::test_params_init(const test_spec &test,
     params.device_thread_count = 1;
     params.device_block_count  = 1;
     params.device_level        = UCS_DEVICE_LEVEL_THREAD;
+    params.device_fc_window    = UCP_PERF_FC_WINDOW_DEFAULT;
     params.percentile_rank     = 50.0;
 
     memset(params.uct.md_name, 0, sizeof(params.uct.md_name));

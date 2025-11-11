@@ -83,8 +83,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         return status;
     }
 
-    init_attr.cq_len[UCT_IB_DIR_TX] = iface->super.super.config.tx_qp_len *
-                                      UCT_IB_MLX5_MAX_BB;
+    init_attr.cq_len[UCT_IB_DIR_TX] = 1;
     uct_ib_mlx5_cq_calc_sizes(&iface->super.super.super, UCT_IB_DIR_TX,
                               &init_attr, 0, &cq_attr);
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
@@ -176,16 +175,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     dev_ep.sq_num       = self->qp.super.qp_num;
     dev_ep.sq_wqe_daddr = UCS_PTR_BYTE_OFFSET(self->ep_gpu,
                                               qp_attr.umem_offset);
-    dev_ep.sq_rsvd_index  = 0;
-    dev_ep.sq_ready_index = 0;
-    dev_ep.sq_wqe_pi      = 0;
-    dev_ep.sq_wqe_num     = qp_attr.max_tx;
+    dev_ep.sq_wqe_num   = qp_attr.max_tx;
+    dev_ep.sq_dbrec     = &self->ep_gpu->qp_dbrec[MLX5_SND_DBR];
     /* FC mask is used to determine if WQE should be posted with completion.
      * qp_attr.max_tx must be a power of 2. */
-    dev_ep.sq_fc_mask     = (qp_attr.max_tx >> 1) - 1;
-    dev_ep.avail_count    = qp_attr.max_tx;
-    dev_ep.sq_dbrec       = &self->ep_gpu->qp_dbrec[MLX5_SND_DBR];
-
+    dev_ep.sq_fc_mask   = (qp_attr.max_tx >> 1) - 1;
     dev_ep.cqe_daddr = UCS_PTR_BYTE_OFFSET(self->ep_gpu, cq_attr.umem_offset);
     dev_ep.cqe_num   = cq_attr.cq_size;
     dev_ep.sq_db     = self->sq_db;
@@ -610,9 +604,10 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
                            uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p)
 {
-    static int uar_supported = -1;
-    uct_ib_mlx5_md_t *md     = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    unsigned num_tl_devices  = 0;
+    static int uar_supported  = -1;
+    static int peermem_loaded = -1;
+    uct_ib_mlx5_md_t *md      = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    unsigned num_tl_devices   = 0;
     uct_tl_device_resource_t *tl_devices;
     ucs_status_t status;
     CUdevice device;
@@ -653,6 +648,25 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             }
         }
         if (uar_supported == 0) {
+            status = UCS_ERR_NO_DEVICE;
+            goto err;
+        }
+
+        /*
+         * Save the result of peermem driver check in a global flag to avoid
+         * printing diag message for each GPU and MD.
+         */
+        if (peermem_loaded == -1) {
+            peermem_loaded = !!(md->super.reg_mem_types &
+                                UCS_BIT(UCS_MEMORY_TYPE_CUDA));
+            if (peermem_loaded == 0) {
+                ucs_diag("GDAKI not supported, please load "
+                         "Nvidia peermem driver by running "
+                         "\"modprobe nvidia_peermem\"");
+            }
+        }
+
+        if (peermem_loaded == 0) {
             status = UCS_ERR_NO_DEVICE;
             goto err;
         }
