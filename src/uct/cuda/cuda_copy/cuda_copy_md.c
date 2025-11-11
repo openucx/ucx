@@ -88,7 +88,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 
 static struct {} uct_cuda_dummy_memh;
 
-int uct_cuda_copy_md_is_dmabuf_supported()
+static int uct_cuda_copy_md_is_dmabuf_supported()
 {
     int dmabuf_supported = 0;
     CUdevice cuda_device;

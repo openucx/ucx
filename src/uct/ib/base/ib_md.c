@@ -31,6 +31,10 @@
 #endif
 #include <sys/resource.h>
 
+#ifdef HAVE_CUDA
+#include <cuda.h>
+#endif
+
 
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
@@ -1224,23 +1228,37 @@ void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
               md->reg_mem_types & UCS_BIT(mem_type) ? "" : "not ", file);
 }
 
-/* Weak symbol that returns 0 if CUDA module is not loaded.
- * The actual implementation is in cuda_copy_md.c */
-int uct_cuda_copy_md_is_dmabuf_supported(void) __attribute__((weak));
-
-int uct_cuda_copy_md_is_dmabuf_supported(void)
-{
-    return 0;
-}
-
 static int uct_ib_md_is_cuda_dmabuf_supported(void)
 {
-    /* Check if CUDA module is loaded by checking if the weak symbol
-     * has been resolved to the real implementation */
-    if (uct_cuda_copy_md_is_dmabuf_supported != NULL) {
-        return uct_cuda_copy_md_is_dmabuf_supported();
+#if defined(HAVE_CUDA) && (CUDA_VERSION >= 11070)
+    /* Check if CUDA devices support exporting memory as DMABUF.
+     * This requires CUDA 11.7+ for CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED */
+    int cuda_dmabuf_supported;
+    CUdevice cuda_device;
+    CUresult cu_err;
+
+    cu_err = cuInit(0);
+    if (cu_err != CUDA_SUCCESS) {
+        return 0;
     }
+
+    cu_err = cuDeviceGet(&cuda_device, 0);
+    if (cu_err != CUDA_SUCCESS) {
+        return 0;
+    }
+
+    cu_err = cuDeviceGetAttribute(&cuda_dmabuf_supported,
+                                  CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED,
+                                  cuda_device);
+    if (cu_err != CUDA_SUCCESS) {
+        return 0;
+    }
+
+    return cuda_dmabuf_supported;
+#else
+    /* CUDA support not compiled in or CUDA version too old */
     return 0;
+#endif
 }
 
 static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)

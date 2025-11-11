@@ -80,12 +80,5 @@ ucs_status_t
 uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
                            uct_md_mem_attr_t *mem_attr);
 
-/**
- * Check if CUDA supports exporting memory as DMABUF
- *
- * @return 1 if CUDA supports DMABUF export, 0 otherwise
- */
-int uct_cuda_copy_md_is_dmabuf_supported(void);
-
 
 #endif
