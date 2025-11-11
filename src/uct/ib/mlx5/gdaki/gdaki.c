@@ -92,6 +92,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
+    self->dev_ep_init = 0;
+
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
     if (status != UCS_OK) {
         return status;
@@ -358,6 +360,10 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     size_t cq_umem_offset, cq_umem_len, qp_umem_offset, dev_ep_size;
     ucs_status_t status;
 
+    if (ep->dev_ep_init) {
+        goto out;
+    }
+
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
     if (status != UCS_OK) {
         return status;
@@ -409,6 +415,9 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 
+    ep->dev_ep_init = 1;
+
+out:
     *device_ep_p = &ep->ep_gpu->super;
     return UCS_OK;
 
