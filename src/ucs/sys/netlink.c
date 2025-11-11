@@ -184,12 +184,12 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
     for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
         if (rta->rta_type == RTA_OIF) {
             *if_index_p = *((const int *)RTA_DATA(rta));
-        } else if ((rta->rta_type == RTA_DST) || (rta->rta_type == RTA_GATEWAY)) {
+        } else if (rta->rta_type == RTA_DST) {
             *dst_in_addr = RTA_DATA(rta);
         }
     }
 
-    if ((*if_index_p == -1) || (*dst_in_addr == NULL)) {
+    if ((*if_index_p == -1) || ((*dst_in_addr == NULL) && (rtm_dst_len != 0))) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -272,7 +272,7 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
             continue;
         }
 
-        if (is_default_gw || ucs_sockaddr_is_same_subnet(
+        if (ucs_sockaddr_is_same_subnet(
                                 info->sa_remote,
                                 (const struct sockaddr *)&curr_entry->dest,
                                 curr_entry->subnet_prefix_len)) {
