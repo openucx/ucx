@@ -62,6 +62,21 @@ err:
     return status;
 }
 
+static void
+uct_rc_gdaki_calc_dev_ep_layout(unsigned cq_size, unsigned cqe_size,
+                                unsigned max_tx, size_t *cq_umem_offset_p,
+                                size_t *cq_umem_len_p,
+                                size_t *qp_umem_offset_p,
+                                size_t *dev_ep_size_p)
+{
+    *cq_umem_len_p     = cqe_size * cq_size;
+    *cq_umem_offset_p  = ucs_align_up_pow2(sizeof(uct_rc_gdaki_dev_ep_t),
+                                           ucs_get_page_size());
+    *qp_umem_offset_p  = ucs_align_up_pow2(*cq_umem_offset_p + *cq_umem_len_p,
+                                           ucs_get_page_size());
+    *dev_ep_size_p     = *qp_umem_offset_p + (max_tx * MLX5_SEND_WQE_BB);
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
@@ -91,25 +106,23 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
 
     cq_attr.flags      |= UCT_IB_MLX5_CQ_IGNORE_OVERRUN;
-    cq_attr.umem_offset = ucs_align_up_pow2(sizeof(uct_rc_gdaki_dev_ep_t),
-                                            ucs_get_page_size());
 
     qp_attr.mmio_mode     = UCT_IB_MLX5_MMIO_MODE_DB;
     qp_attr.super.srq_num = 0;
-    qp_attr.umem_offset   = ucs_align_up_pow2(cq_attr.umem_offset +
-                                                      cq_attr.umem_len,
-                                              ucs_get_page_size());
 
     /* Disable inline scatter to TX CQE */
     qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
 
-    dev_ep_size = qp_attr.umem_offset + qp_attr.len;
     /*
      * dev_ep layout:
      * +---------------------+---------+---------+
      * | counters, dbr       | cq buff | wq buff |
      * +---------------------+---------+---------+
      */
+    uct_rc_gdaki_calc_dev_ep_layout(cq_attr.cq_size, cq_attr.cqe_size,
+                                    qp_attr.super.cap.max_send_wr,
+                                    &cq_attr.umem_offset, &cq_attr.umem_len,
+                                    &qp_attr.umem_offset, &dev_ep_size);
     status      = uct_rc_gdaki_alloc(dev_ep_size, ucs_get_page_size(),
                                      (void**)&self->ep_gpu, &self->ep_raw);
     if (status != UCS_OK) {
@@ -342,7 +355,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                                                   uct_rc_gdaki_iface_t);
     uct_rc_gdaki_dev_ep_t dev_ep = {};
     unsigned cq_size, cqe_size, max_tx;
-    size_t cq_umem_len, cq_umem_offset, qp_umem_offset, dev_ep_size;
+    size_t cq_umem_offset, cq_umem_len, qp_umem_offset, dev_ep_size;
     ucs_status_t status;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
@@ -350,15 +363,13 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
         return status;
     }
 
-    cq_size        = UCS_BIT(ep->cq.cq_length_log);
-    cqe_size       = UCS_BIT(ep->cq.cqe_size_log);
-    cq_umem_len    = cqe_size * cq_size;
-    cq_umem_offset = ucs_align_up_pow2(sizeof(uct_rc_gdaki_dev_ep_t),
-                                       ucs_get_page_size());
-    max_tx         = ep->qp.bb_max;
-    qp_umem_offset = ucs_align_up_pow2(cq_umem_offset + cq_umem_len,
-                                       ucs_get_page_size());
-    dev_ep_size    = qp_umem_offset + (max_tx * MLX5_SEND_WQE_BB);
+    cq_size  = UCS_BIT(ep->cq.cq_length_log);
+    cqe_size = UCS_BIT(ep->cq.cqe_size_log);
+    max_tx   = ep->qp.bb_max;
+
+    uct_rc_gdaki_calc_dev_ep_layout(cq_size, cqe_size, max_tx,
+                                    &cq_umem_offset, &cq_umem_len,
+                                    &qp_umem_offset, &dev_ep_size);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemsetD8((CUdeviceptr)ep->ep_gpu, 0, dev_ep_size));
