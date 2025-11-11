@@ -1224,6 +1224,25 @@ void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
               md->reg_mem_types & UCS_BIT(mem_type) ? "" : "not ", file);
 }
 
+/* Weak symbol that returns 0 if CUDA module is not loaded.
+ * The actual implementation is in cuda_copy_md.c */
+int uct_cuda_copy_md_is_dmabuf_supported(void) __attribute__((weak));
+
+int uct_cuda_copy_md_is_dmabuf_supported(void)
+{
+    return 0;
+}
+
+static int uct_ib_md_is_cuda_dmabuf_supported(void)
+{
+    /* Check if CUDA module is loaded by checking if the weak symbol
+     * has been resolved to the real implementation */
+    if (uct_cuda_copy_md_is_dmabuf_supported != NULL) {
+        return uct_cuda_copy_md_is_dmabuf_supported();
+    }
+    return 0;
+}
+
 static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
 {
 #if HAVE_DECL_IBV_REG_DMABUF_MR
@@ -1248,6 +1267,15 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
 
     ucs_debug("%s: dmabuf is supported", uct_ib_device_name(&md->dev));
     md->cap_flags |= UCT_MD_FLAG_REG_DMABUF;
+
+    /* Check if CUDA also supports DMABUF export. If both IB and CUDA support
+     * DMABUF, we can register CUDA memory on IB devices even without
+     * nvidia_peermem kernel module. */
+    if (uct_ib_md_is_cuda_dmabuf_supported()) {
+        md->reg_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+        ucs_debug("%s: cuda memory registration via DMABUF is enabled",
+                  uct_ib_device_name(&md->dev));
+    }
 #endif
 }
 
