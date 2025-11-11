@@ -153,10 +153,14 @@ private:
         params.elements     = elems;
 
         ucs_status_t status;
+        const ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(5.0);
         do {
             ucp_worker_progress(perf.ucp.worker);
             status = ucp_device_mem_list_create(perf.ucp.ep, &params,
                                                 &m_params.mem_list);
+            if (ucs_get_time() >= deadline) {
+                throw std::runtime_error("Timeout waiting for connection");
+            }
         } while (status == UCS_ERR_NOT_CONNECTED);
 
         if (status != UCS_OK) {

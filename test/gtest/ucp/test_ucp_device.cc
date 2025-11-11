@@ -148,11 +148,16 @@ test_ucp_device::mem_list::mem_list(const test_ucp_device &test,
     params.elements     = elems.data();
 
     // Create memory list (with retry on connection)
-    ucs_status_t status;
-    do {
-        m_test.progress();
-        status = ucp_device_mem_list_create(sender.ep(), &params, &m_mem_list_h);
-    } while (status == UCS_ERR_NOT_CONNECTED);
+    ucs_status_t status = UCS_ERR_NOT_CONNECTED;
+    m_test.wait_for_cond(
+        [&]() {
+            m_test.progress();
+            status = ucp_device_mem_list_create(sender.ep(), &params, &m_mem_list_h);
+            return status != UCS_ERR_NOT_CONNECTED;
+        },
+        []() {}, 5.0);
+
+    ASSERT_UCS_OK(status);
 }
 
 test_ucp_device::mem_list::~mem_list()
