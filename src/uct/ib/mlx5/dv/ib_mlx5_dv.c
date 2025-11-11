@@ -606,6 +606,7 @@ uct_ib_mlx5_devx_create_cq_common(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     UCT_IB_MLX5DV_SET(cqc, cqctx, log_cq_size, log_cq_size);
     UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_sz, (attr->cqe_size == 128) ? 1 : 0);
+    UCT_IB_MLX5DV_SET(cqc, cqctx, cc, (attr->cq_size == 1) ? 1 : 0);
 
     if (attr->flags & UCT_IB_MLX5_CQ_CQE_ZIP) {
         UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_comp_en, 1);

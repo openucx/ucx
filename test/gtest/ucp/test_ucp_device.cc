@@ -406,7 +406,6 @@ protected:
         EXPECT_UCS_OK(result.status);
         EXPECT_EQ(expected, result.producer_index);
         EXPECT_EQ(expected, result.ready_index);
-        EXPECT_EQ(0, result.avail_count);
     }
 };
 
@@ -570,7 +569,7 @@ UCS_TEST_P(test_ucp_device_xfer, put_single)
 
 /* TODO: Enable these tests in CI */
 UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_single_stress_test,
-                     RUNNING_ON_VALGRIND || true)
+                     RUNNING_ON_VALGRIND)
 {
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Skipping stress test under ASAN");
@@ -624,7 +623,7 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi)
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_multi_stress_test,
-                     RUNNING_ON_VALGRIND || true)
+                     RUNNING_ON_VALGRIND)
 {
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Skipping stress test under ASAN");
