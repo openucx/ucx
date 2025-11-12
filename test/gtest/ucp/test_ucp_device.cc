@@ -54,7 +54,6 @@ protected:
         void dst_pattern_check(unsigned index, uint64_t seed) const;
 
     private:
-        test_ucp_device                             &m_test;
         std::vector<std::unique_ptr<mapped_buffer>> m_src, m_dst;
         std::vector<ucs::handle<ucp_rkey_h>>        m_rkeys;
         ucp_device_mem_list_handle_h                m_mem_list_h;
@@ -90,8 +89,7 @@ void test_ucp_device::init()
 test_ucp_device::mem_list::mem_list(test_ucp_device &test,
                                     size_t size, unsigned count,
                                     ucs_memory_type_t mem_type,
-                                    mem_list_mode_t mode) :
-    m_test(test)
+                                    mem_list_mode_t mode)
 {
     bool has_counter  = (mode != MODE_DATA_ONLY);
     size_t data_count = (has_counter) ? count - 1 : count;
@@ -146,9 +144,9 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test,
 
     // Create memory list (with retry on connection)
     ucs_status_t status = UCS_ERR_NOT_CONNECTED;
-    m_test.wait_for_cond(
+    test.wait_for_cond(
         [&]() {
-            m_test.progress();
+            test.progress();
             status = ucp_device_mem_list_create(test.sender().ep(), &params, &m_mem_list_h);
             return status != UCS_ERR_NOT_CONNECTED;
         },
