@@ -63,16 +63,14 @@ err:
 }
 
 static void
-uct_rc_gdaki_calc_dev_ep_layout(unsigned cq_size, unsigned cqe_size,
-                                unsigned max_tx, size_t *cq_umem_offset_p,
-                                size_t *cq_umem_len_p,
+uct_rc_gdaki_calc_dev_ep_layout(size_t cq_umem_len, unsigned max_tx,
+                                size_t *cq_umem_offset_p,
                                 size_t *qp_umem_offset_p,
                                 size_t *dev_ep_size_p)
 {
-    *cq_umem_len_p     = cqe_size * cq_size;
     *cq_umem_offset_p  = ucs_align_up_pow2(sizeof(uct_rc_gdaki_dev_ep_t),
                                            ucs_get_page_size());
-    *qp_umem_offset_p  = ucs_align_up_pow2(*cq_umem_offset_p + *cq_umem_len_p,
+    *qp_umem_offset_p  = ucs_align_up_pow2(*cq_umem_offset_p + cq_umem_len,
                                            ucs_get_page_size());
     *dev_ep_size_p     = *qp_umem_offset_p + max_tx * MLX5_SEND_WQE_BB;
 }
@@ -120,9 +118,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
      * | counters, dbr       | cq buff | wq buff |
      * +---------------------+---------+---------+
      */
-    uct_rc_gdaki_calc_dev_ep_layout(cq_attr.cq_size, cq_attr.cqe_size,
-                                    qp_attr.max_tx,
-                                    &cq_attr.umem_offset, &cq_attr.umem_len,
+    uct_rc_gdaki_calc_dev_ep_layout(cq_attr.umem_len, qp_attr.max_tx,
+                                    &cq_attr.umem_offset,
                                     &qp_attr.umem_offset, &dev_ep_size);
 
     status      = uct_rc_gdaki_alloc(dev_ep_size, ucs_get_page_size(),
@@ -366,13 +363,14 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
             return status;
         }
 
-        cq_size  = UCS_BIT(ep->cq.cq_length_log);
-        cqe_size = UCS_BIT(ep->cq.cqe_size_log);
+        cq_size     = UCS_BIT(ep->cq.cq_length_log);
+        cqe_size    = UCS_BIT(ep->cq.cqe_size_log);
+        cq_umem_len = cqe_size * cq_size;
         /* Reconstruct original max_tx from bb_max */
-        max_tx   = ep->qp.bb_max + 2 * UCT_IB_MLX5_MAX_BB;
+        max_tx      = ep->qp.bb_max + 2 * UCT_IB_MLX5_MAX_BB;
 
-        uct_rc_gdaki_calc_dev_ep_layout(cq_size, cqe_size, max_tx,
-                                        &cq_umem_offset, &cq_umem_len,
+        uct_rc_gdaki_calc_dev_ep_layout(cq_umem_len, max_tx,
+                                        &cq_umem_offset,
                                         &qp_umem_offset, &dev_ep_size);
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
@@ -393,8 +391,9 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
         dev_ep.sq_num         = ep->qp.super.qp_num;
         dev_ep.sq_wqe_daddr   = UCS_PTR_BYTE_OFFSET(ep->ep_gpu, qp_umem_offset);
         dev_ep.sq_dbrec       = &ep->ep_gpu->qp_dbrec[MLX5_SND_DBR];
+        dev_ep.sq_wqe_num     = max_tx;
         /* FC mask is used to determine if WQE should be posted with completion.
-        * max_tx must be a power of 2. */
+         * max_tx must be a power of 2. */
         dev_ep.sq_fc_mask     = (max_tx >> 1) - 1;
 
         dev_ep.cqe_daddr      = UCS_PTR_BYTE_OFFSET(ep->ep_gpu, cq_umem_offset);
