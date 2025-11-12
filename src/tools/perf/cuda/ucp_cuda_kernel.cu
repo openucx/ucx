@@ -188,12 +188,11 @@ private:
             ucp_worker_progress(perf.ucp.worker);
             status = ucp_device_mem_list_create(perf.ucp.ep, &params,
                                                 &m_params.mem_list);
-            if (ucs_get_time() >= deadline) {
-                throw std::runtime_error("Timeout waiting for connection");
-            }
-        } while (status == UCS_ERR_NOT_CONNECTED);
+        } while ((status == UCS_ERR_NOT_CONNECTED) && (ucs_get_time() < deadline));
 
-        if (status != UCS_OK) {
+        if (status == UCS_ERR_NOT_CONNECTED) {
+            throw std::runtime_error("Timeout waiting for connection");
+        } else if (status != UCS_OK) {
             throw std::runtime_error("Failed to create memory list");
         }
     }
