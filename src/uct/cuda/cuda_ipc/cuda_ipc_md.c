@@ -25,7 +25,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-/* Indicates whether PID NS is contained in rkey */
+/* Indicates whether PID NS is contained in rkey.
+ * Wire compatibility isn't broken because PID is used only for caching
+ * purposes. */
 #define UCT_CUDA_IPC_RKEY_FLAG_PID_NS UCS_BIT(31)
 
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
