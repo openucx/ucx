@@ -123,7 +123,7 @@ class ucp_perf_cuda_params_handler {
 public:
     ucp_perf_cuda_params_handler(const ucx_perf_context_t &perf)
     {
-        init_params(perf);
+        m_params.num_channels = perf.params.device_ep_channel_count;
         init_mem_list(perf);
         init_elements(perf);
         init_counters(perf);
@@ -144,11 +144,6 @@ private:
     static bool has_counter(const ucx_perf_context_t &perf)
     {
         return (perf.params.command != UCX_PERF_CMD_PUT_SINGLE);
-    }
-
-    void init_params(const ucx_perf_context_t &perf)
-    {
-        m_params.num_channels = perf.params.device_ep_channel_count;
     }
 
     void init_mem_list(const ucx_perf_context_t &perf)
