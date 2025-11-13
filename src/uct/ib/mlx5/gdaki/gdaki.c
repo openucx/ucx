@@ -62,6 +62,19 @@ err:
     return status;
 }
 
+static void
+uct_rc_gdaki_calc_dev_ep_layout(size_t cq_umem_len, unsigned max_tx,
+                                size_t *cq_umem_offset_p,
+                                size_t *qp_umem_offset_p,
+                                size_t *dev_ep_size_p)
+{
+    *cq_umem_offset_p  = ucs_align_up_pow2(sizeof(uct_rc_gdaki_dev_ep_t),
+                                           ucs_get_page_size());
+    *qp_umem_offset_p  = ucs_align_up_pow2(*cq_umem_offset_p + cq_umem_len,
+                                           ucs_get_page_size());
+    *dev_ep_size_p     = *qp_umem_offset_p + max_tx * MLX5_SEND_WQE_BB;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
@@ -71,12 +84,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
-    uct_rc_gdaki_dev_ep_t dev_ep       = {};
     ucs_status_t status;
     size_t dev_ep_size;
     uct_ib_mlx5_dbrec_t dbrec;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
+
+    self->dev_ep_init = 0;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
     if (status != UCS_OK) {
@@ -91,35 +105,27 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
 
     cq_attr.flags      |= UCT_IB_MLX5_CQ_IGNORE_OVERRUN;
-    cq_attr.umem_offset = ucs_align_up_pow2(sizeof(uct_rc_gdaki_dev_ep_t),
-                                            ucs_get_page_size());
 
     qp_attr.mmio_mode     = UCT_IB_MLX5_MMIO_MODE_DB;
     qp_attr.super.srq_num = 0;
-    qp_attr.umem_offset   = ucs_align_up_pow2(cq_attr.umem_offset +
-                                                      cq_attr.umem_len,
-                                              ucs_get_page_size());
 
     /* Disable inline scatter to TX CQE */
     qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
 
-    dev_ep_size = qp_attr.umem_offset + qp_attr.len;
     /*
      * dev_ep layout:
      * +---------------------+---------+---------+
      * | counters, dbr       | cq buff | wq buff |
      * +---------------------+---------+---------+
      */
+    uct_rc_gdaki_calc_dev_ep_layout(cq_attr.umem_len, qp_attr.max_tx,
+                                    &cq_attr.umem_offset,
+                                    &qp_attr.umem_offset, &dev_ep_size);
+
     status      = uct_rc_gdaki_alloc(dev_ep_size, ucs_get_page_size(),
                                      (void**)&self->ep_gpu, &self->ep_raw);
     if (status != UCS_OK) {
         goto err_ctx;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemsetD8((CUdeviceptr)self->ep_gpu, 0, dev_ep_size));
-    if (status != UCS_OK) {
-        goto err_mem;
     }
 
     /* TODO add dmabuf_fd support */
@@ -169,40 +175,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         goto err_dev_ep;
     }
 
-    dev_ep.atomic_va   = iface->atomic_buff;
-    dev_ep.atomic_lkey = htonl(iface->atomic_mr->lkey);
-
-    dev_ep.sq_num       = self->qp.super.qp_num;
-    dev_ep.sq_wqe_daddr = UCS_PTR_BYTE_OFFSET(self->ep_gpu,
-                                              qp_attr.umem_offset);
-    dev_ep.sq_wqe_num   = qp_attr.max_tx;
-    dev_ep.sq_dbrec     = &self->ep_gpu->qp_dbrec[MLX5_SND_DBR];
-    /* FC mask is used to determine if WQE should be posted with completion.
-     * qp_attr.max_tx must be a power of 2. */
-    dev_ep.sq_fc_mask   = (qp_attr.max_tx >> 1) - 1;
-    dev_ep.cqe_daddr = UCS_PTR_BYTE_OFFSET(self->ep_gpu, cq_attr.umem_offset);
-    dev_ep.cqe_num   = cq_attr.cq_size;
-    dev_ep.sq_db     = self->sq_db;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemsetD8((CUdeviceptr)UCS_PTR_BYTE_OFFSET(self->ep_gpu,
-                                                        cq_attr.umem_offset),
-                       0xff, cq_attr.umem_len));
-    if (status != UCS_OK) {
-        goto err_dev_ep;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyHtoD((CUdeviceptr)self->ep_gpu, &dev_ep, sizeof(dev_ep)));
-    if (status != UCS_OK) {
-        goto err_dev_ep;
-    }
-
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 
 err_dev_ep:
-    (void)cuMemHostUnregister(dev_ep.sq_db);
+    (void)cuMemHostUnregister(self->qp.reg->addr.ptr);
     uct_ib_mlx5_devx_destroy_qp_common(&self->qp.super);
 err_cq:
     uct_ib_mlx5_devx_destroy_cq_common(&self->cq);
@@ -372,10 +349,74 @@ uct_rc_gdaki_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
 ucs_status_t
 uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 {
-    uct_rc_gdaki_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_gdaki_ep_t);
+    uct_rc_gdaki_ep_t *ep        = ucs_derived_of(tl_ep, uct_rc_gdaki_ep_t);
+    uct_rc_gdaki_iface_t *iface  = ucs_derived_of(ep->super.super.iface,
+                                                  uct_rc_gdaki_iface_t);
+    uct_rc_gdaki_dev_ep_t dev_ep = {};
+    unsigned cq_size, cqe_size, max_tx;
+    size_t cq_umem_offset, cq_umem_len, qp_umem_offset, dev_ep_size;
+    ucs_status_t status;
+
+    if (!ep->dev_ep_init) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        cq_size     = UCS_BIT(ep->cq.cq_length_log);
+        cqe_size    = UCS_BIT(ep->cq.cqe_size_log);
+        cq_umem_len = cqe_size * cq_size;
+        /* Reconstruct original max_tx from bb_max */
+        max_tx      = ep->qp.bb_max + 2 * UCT_IB_MLX5_MAX_BB;
+
+        uct_rc_gdaki_calc_dev_ep_layout(cq_umem_len, max_tx,
+                                        &cq_umem_offset,
+                                        &qp_umem_offset, &dev_ep_size);
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuMemsetD8((CUdeviceptr)ep->ep_gpu, 0, dev_ep_size));
+        if (status != UCS_OK) {
+            goto out_ctx;
+        }
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemsetD8(
+                (CUdeviceptr)UCS_PTR_BYTE_OFFSET(ep->ep_gpu, cq_umem_offset),
+                0xff, cq_umem_len));
+        if (status != UCS_OK) {
+            goto out_ctx;
+        }
+
+        dev_ep.atomic_va      = iface->atomic_buff;
+        dev_ep.atomic_lkey    = htonl(iface->atomic_mr->lkey);
+        dev_ep.sq_num         = ep->qp.super.qp_num;
+        dev_ep.sq_wqe_daddr   = UCS_PTR_BYTE_OFFSET(ep->ep_gpu, qp_umem_offset);
+        dev_ep.sq_dbrec       = &ep->ep_gpu->qp_dbrec[MLX5_SND_DBR];
+        dev_ep.sq_wqe_num     = max_tx;
+        /* FC mask is used to determine if WQE should be posted with completion.
+         * max_tx must be a power of 2. */
+        dev_ep.sq_fc_mask     = (max_tx >> 1) - 1;
+
+        dev_ep.cqe_daddr      = UCS_PTR_BYTE_OFFSET(ep->ep_gpu, cq_umem_offset);
+        dev_ep.cqe_num        = cq_size;
+        dev_ep.sq_db          = ep->sq_db;
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyHtoD(
+                (CUdeviceptr)ep->ep_gpu, &dev_ep, sizeof(dev_ep)));
+        if (status != UCS_OK) {
+            goto out_ctx;
+        }
+
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+
+        ep->dev_ep_init = 1;
+    }
 
     *device_ep_p = &ep->ep_gpu->super;
     return UCS_OK;
+
+out_ctx:
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    return status;
 }
 
 ucs_status_t
