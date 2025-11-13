@@ -210,6 +210,11 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
                                   const char *title)
 {
     ucp_request_t *req = ucp_request_get_super(freq);
+    ucs_warn("ucp_proto_rndv_ppln_frag_complete (%s -> %s) req %p freq %p"
+             " send_ack %d abort %d title %s size %zu",
+             req->send.proto_config->proto->name,
+             freq->send.proto_config->proto->name, req, freq, send_ack,
+             abort, title, freq->send.state.dt_iter.length);
 
     if (send_ack) {
         req->send.rndv.ppln.ack_data_size += freq->send.state.dt_iter.length;
@@ -299,8 +304,10 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         ucp_proto_request_set_proto(freq, &rpriv->frag_proto_cfg,
                                     freq->send.state.dt_iter.length);
 
-        ucp_trace_req(req, "send freq %p offset %zu size %zu", freq,
-                      freq->send.rndv.offset, freq->send.state.dt_iter.length);
+        ucs_warn("ucp_request_send (%s -> %s) req %p freq %p offset %zu size %zu",
+                 req->send.proto_config->proto->name,
+                 freq->send.proto_config->proto->name, req, freq,
+                 freq->send.rndv.offset, freq->send.state.dt_iter.length);
         UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send, freq);
 
         ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
