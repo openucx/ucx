@@ -51,7 +51,9 @@ static void ucp_ep_flush_error(ucp_request_t *req, ucp_lane_index_t lane,
     ucs_assertv(lane != UCP_NULL_LANE, "req=%p ep=%p lane=%d status=%s",
                 req, req->send.ep, lane, ucs_status_string(status));
 
-    req->status = status;
+    /* Update the UCT completion status, not req->status directly.
+     * The completion callback will propagate it to req->status. */
+    uct_completion_update_status(&req->send.state.uct_comp, status);
 
     ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
 
@@ -395,11 +397,13 @@ void ucp_ep_flush_completion(uct_completion_t *self)
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
     ucs_assert(status != UCS_INPROGRESS);
 
-    req->status = status;
-
     if (status == UCS_OK) {
         ucp_ep_flush_progress(req);
     } else {
+        if (req->status == UCS_OK) {
+            /* store first failure status */
+            req->status = status;
+        }
         /* force flush completion in case of error */
         req->send.flush.sw_done        = 1;
         req->send.state.uct_comp.count = 0;
