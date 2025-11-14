@@ -229,7 +229,7 @@ BEGIN_C_DECLS
 #define _UCS_STATIC_BITMAP_UNARY_OP(_bitmap, _op_name, _uid) \
     ({ \
         ucs_typeof(_bitmap) _b_##_uid = (_bitmap); \
-        ucs_typeof(_bitmap) _r_##_uid; \
+        ucs_typeof(_bitmap) _r_##_uid = {0}; \
         \
         ucs_bitmap_bits_##_op_name(UCS_STATIC_BITMAP_BITS_ARGS(&_r_##_uid), \
                                    UCS_STATIC_BITMAP_BITS_CARGS(&_b_##_uid)); \
@@ -255,7 +255,7 @@ BEGIN_C_DECLS
     ({ \
         ucs_typeof(_bitmap1) _b1_##_uid = (_bitmap1); \
         ucs_typeof(_bitmap2) _b2_##_uid = (_bitmap2); \
-        ucs_typeof(_bitmap1) _r_##_uid; \
+        ucs_typeof(_bitmap1) _r_##_uid = {0}; \
         \
         ucs_bitmap_bits_binary_op(UCS_STATIC_BITMAP_BITS_ARGS(&_r_##_uid), \
                                   UCS_STATIC_BITMAP_BITS_CARGS(&_b1_##_uid), \

@@ -19,6 +19,7 @@
 #include <csignal>
 #include <cerrno>
 #include <vector>
+#include <random>
 #include <map>
 #include <queue>
 #include <algorithm>
@@ -2998,9 +2999,17 @@ static int do_client(options_t& test_opts)
     IoDemoRandom::srand(test_opts.random_seed);
     LOG << "random seed: " << test_opts.random_seed;
 
-    // randomize servers to optimize startup
+    // randomize servers to optimize startup (handle C++17+)
+#if __cplusplus >= 201703L
+    // std::shuffle replaces std::random_shuffle in C++17
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    std::shuffle(test_opts.servers.begin(), test_opts.servers.end(), rng);
+#else
+    // For older C++ standards, keep std::random_shuffle
     std::random_shuffle(test_opts.servers.begin(), test_opts.servers.end(),
                         IoDemoRandom::urand<size_t>);
+#endif
 
     UcxLog vlog(LOG_PREFIX, test_opts.verbose);
     vlog << "List of servers:";
