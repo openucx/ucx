@@ -710,7 +710,7 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
         return 0;
     }
 
-    if (!ucs_netlink_route_exists(ndev_index, sa_remote)) {
+    if (!ucs_netlink_ethernet_device_route_exists(ndev_index, sa_remote)) {
         /* try to use loopback interface for reachability check, because it may
          * be used for routing in case of an interface with VRF is configured
          * and a RoCE IP interface uses this VRF table for routing.
@@ -721,7 +721,8 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
             return 0;
         }
 
-        if (!ucs_netlink_route_exists(lo_ndev_index, sa_remote)) {
+        if (!ucs_netlink_ethernet_device_route_exists(lo_ndev_index,
+                                                      sa_remote)) {
             uct_iface_fill_info_str_buf(params,
                                         "remote address %s is not routable "
                                         "neither by interface "UCT_IB_IFACE_FMT
