@@ -656,6 +656,25 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     ucs_sys_dev_distance_t dist;
     int i, num_gpus;
 
+    /*
+    * Save the result of peermem driver check in a global flag to avoid
+    * printing diag message for each MD.
+    */
+    if (peermem_loaded == -1) {
+        peermem_loaded = !!(md->super.reg_mem_types &
+                            UCS_BIT(UCS_MEMORY_TYPE_CUDA));
+        if (peermem_loaded == 0) {
+            ucs_diag("GDAKI not supported, please load "
+                        "Nvidia peermem driver by running "
+                        "\"modprobe nvidia_peermem\"");
+        }
+    }
+
+    if (peermem_loaded == 0) {
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
+
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_gpus));
     if (status != UCS_OK) {
         return status;
@@ -693,25 +712,6 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             goto err;
         }
 
-        /*
-         * Save the result of peermem driver check in a global flag to avoid
-         * printing diag message for each GPU and MD.
-         */
-        if (peermem_loaded == -1) {
-            peermem_loaded = !!(md->super.reg_mem_types &
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA));
-            if (peermem_loaded == 0) {
-                ucs_diag("GDAKI not supported, please load "
-                         "Nvidia peermem driver by running "
-                         "\"modprobe nvidia_peermem\"");
-            }
-        }
-
-        if (peermem_loaded == 0) {
-            status = UCS_ERR_NO_DEVICE;
-            goto err;
-        }
-
         uct_cuda_base_get_sys_dev(device, &dev);
         status = ucs_topo_get_distance(dev, md->super.dev.sys_dev, &dist);
         if (status != UCS_OK) {
@@ -738,6 +738,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
 
 err:
     ucs_free(tl_devices);
+out:    
     return status;
 }
 
