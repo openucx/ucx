@@ -308,7 +308,7 @@ stages:
       - template: coverity.yml
         parameters:
           demands: ucx_docker -equals yes
-          container: coverity_rh7
+          container: rhel90
 
   - stage: Tests
     dependsOn: [Static_check]
