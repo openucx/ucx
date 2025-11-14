@@ -549,15 +549,6 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     ucp_ep_config_t *ep_config;
     uct_allocated_memory_t mem;
 
-    if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-        /*
-         * Do not log error here because UCS_ERR_NOT_CONNECTED is expected
-         * during connection establishment. Applications are expected to retry
-         * with progress.
-         */
-        return UCS_ERR_NOT_CONNECTED;
-    }
-
     /* Parameter sanity checks and extraction */
     status = ucp_device_mem_list_params_check(ep->worker->context, params,
                                               &rkey_cfg_index, &local_sys_dev,
