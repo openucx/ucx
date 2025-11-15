@@ -124,9 +124,11 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2), /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
+    UCP_WORKER_IFACE_FLAG_AM_LANE           = UCS_BIT(3)  /**< This interface is selected
+                                                               for AM lane */
 };
 
 
