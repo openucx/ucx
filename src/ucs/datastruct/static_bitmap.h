@@ -115,6 +115,37 @@ BEGIN_C_DECLS
 
 
 /**
+ * Return a bitmap with a single bit in the given index set to 1.
+ *
+ * @param _bit_index Bit index to set.
+ * @param _bitmap_type Type of the static bitmap to return.
+ *
+ * @return Bitmap with a single bit in the given index set to 1.
+ */
+#define UCS_STATIC_BITMAP_BIT(_bit_index, _bitmap_type) \
+    ({ \
+        _bitmap_type _r_##_uid = UCS_STATIC_BITMAP_ZERO_INITIALIZER; \
+        ucs_bitmap_bits_set(UCS_STATIC_BITMAP_BITS_ARGS(&_r_##_uid), \
+                            _bit_index); \
+        _r_##_uid; \
+    })
+
+
+/**
+ * Return a bitmap with all bits set to 0.
+ *
+ * @param _bitmap_type Type of the static bitmap to return.
+ *
+ * @return Bitmap with all bits set to 0.
+ */
+#define UCS_STATIC_BITMAP_ZERO_VALUE(_bitmap_type) \
+    ({ \
+        _bitmap_type _r_##_uid = UCS_STATIC_BITMAP_ZERO_INITIALIZER; \
+        _r_##_uid; \
+    })
+
+
+/**
  * Set a bit in the bitmap to 0.
  *
  * @param _bitmap    Set value in this bitmap.
@@ -177,6 +208,30 @@ BEGIN_C_DECLS
 
 
 /**
+ * Check if the bitmap is a power of 2.
+ *
+ * @param _bitmap   Check if this bitmap is a power of 2.
+ *
+ * @return 1 if this bitmap is a power of 2, 0 otherwise.
+ */
+#define UCS_STATIC_BITMAP_IS_POW2(_bitmap) \
+    UCS_STATIC_BITMAP_FUNC_CALL(UCS_PP_UNIQUE_ID, _bitmap, \
+                                ucs_bitmap_bits_is_pow2)
+
+
+/**
+ * Check if the bitmap is a power of 2 or zero.
+ *
+ * @param _bitmap   Check if this bitmap is a power of 2 or zero.
+ *
+ * @return 1 if this bitmap is a power of 2 or zero, 0 otherwise.
+ */
+#define UCS_STATIC_BITMAP_IS_POW2_OR_ZERO(_bitmap) \
+    UCS_STATIC_BITMAP_FUNC_CALL(UCS_PP_UNIQUE_ID, _bitmap, \
+                                ucs_bitmap_bits_is_pow2_or_zero)
+
+
+/**
  * Count the number of bits set to 1 in the bitmap up to a given index.
  *
  * @param _bitmap     Count set bits in this bitmap.
@@ -204,6 +259,19 @@ BEGIN_C_DECLS
 
 
 /**
+ * Compare two bitmaps
+ *
+ * @param [in] bitmap1   First bitmap to compare.
+ * @param [in] bitmap2   Second bitmap to compare.
+ *
+ * @return Nonzero if the bitmaps are equal, zero if they are different.
+ */
+#define UCS_STATIC_BITMAP_IS_EQUAL(_bitmap1_ptr, _bitmap2_ptr) \
+    ucs_bitmap_bits_is_equal(UCS_STATIC_BITMAP_BITS_CARGS(_bitmap1_ptr), \
+                             UCS_STATIC_BITMAP_BITS_CARGS(_bitmap2_ptr))
+
+
+/**
  * Fill the bitmap with a bit-mask up to the given index: bits before the given
  * index will be set to 1, and bits starting from the index onward will be set
  * to 0.
@@ -213,6 +281,18 @@ BEGIN_C_DECLS
  */
 #define UCS_STATIC_BITMAP_MASK(_bitmap_ptr, _bit_index) \
     ucs_bitmap_bits_mask(UCS_STATIC_BITMAP_BITS_ARGS(_bitmap_ptr), _bit_index)
+
+
+/**
+ * Perform bitwise "and_not" operation (bitmap1 & ~bitmap2) and return the result.
+ *
+ * @param _bitmap1   First bitmap for the bitwise and_not.
+ * @param _bitmap2   Second bitmap for the bitwise and_not.
+ *
+ * @return Resulting bitmap of the bitwise and_not operation.
+ */
+#define UCS_STATIC_BITMAP_AND_NOT(_bitmap1, _bitmap2) \
+    UCS_STATIC_BITMAP_BINARY_OP(_bitmap1, _bitmap2, and_not, UCS_PP_UNIQUE_ID)
 
 
 /**
