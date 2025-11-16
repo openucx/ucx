@@ -231,16 +231,22 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
         ucs_assert(req->send.rndv.ppln.outstanding_frags > 0);
         req->send.rndv.ppln.outstanding_frags--;
 
+        /* Decrement global fragment count */
+        ucs_assert(worker->rndv_ppln_fc_stats.total_frags > 0);
+        worker->rndv_ppln_fc_stats.total_frags--;
+
         /* Check if there are more fragments to send */
         has_more_frags = (req->send.rndv.ppln.next_frag_idx <
                          req->send.rndv.ppln.total_frags);
 
         ucs_trace_req("frag_complete: outstanding=%zu next_idx=%zu "
-                      "total=%zu has_more=%d",
+                      "total=%zu has_more=%d global_super_reqs=%zu global_frags=%zu",
                       req->send.rndv.ppln.outstanding_frags,
                       req->send.rndv.ppln.next_frag_idx,
                       req->send.rndv.ppln.total_frags,
-                      has_more_frags);
+                      has_more_frags,
+                      worker->rndv_ppln_fc_stats.num_ppln_super_reqs,
+                      worker->rndv_ppln_fc_stats.total_frags);
     }
 
     /* In case of abort we don't destroy super request until all fragments are
@@ -268,6 +274,19 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
 
     if (!all_frags_complete) {
         return;
+    }
+
+    /* Decrement super request count when all fragments complete */
+    if (fc_enabled && !abort) {
+        ucs_assert(worker->rndv_ppln_fc_stats.num_ppln_super_reqs > 0);
+        worker->rndv_ppln_fc_stats.num_ppln_super_reqs--;
+
+        ucs_trace_req("super_req_complete: global_super_reqs=%zu global_frags=%zu "
+                      "peak_super_reqs=%zu peak_frags=%zu",
+                      worker->rndv_ppln_fc_stats.num_ppln_super_reqs,
+                      worker->rndv_ppln_fc_stats.total_frags,
+                      worker->rndv_ppln_fc_stats.max_super_reqs,
+                      worker->rndv_ppln_fc_stats.max_total_frags);
     }
 
     if (req->send.rndv.rkey != NULL) {
@@ -338,11 +357,22 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
             req->send.rndv.ppln.total_frags =
                 ucs_div_round_up(req->send.state.dt_iter.length, rpriv->frag_size);
 
-            ucs_trace_req("ppln_progress: proto=%s total_frags=%zu "
-                          "max_outstanding=%zu fc_enabled=1",
-                          req->send.proto_config->proto->name,
+            /* Track global super request statistics */
+            worker->rndv_ppln_fc_stats.num_ppln_super_reqs++;
+            if (worker->rndv_ppln_fc_stats.num_ppln_super_reqs >
+                worker->rndv_ppln_fc_stats.max_super_reqs) {
+                worker->rndv_ppln_fc_stats.max_super_reqs =
+                    worker->rndv_ppln_fc_stats.num_ppln_super_reqs;
+            }
+
+            ucs_trace_req("ppln_progress: req=%p proto=%s total_frags=%zu "
+                          "max_outstanding=%zu fc_enabled=1 "
+                          "global_super_reqs=%zu global_total_frags=%zu",
+                          req, req->send.proto_config->proto->name,
                           req->send.rndv.ppln.total_frags,
-                          req->send.rndv.ppln.max_outstanding);
+                          req->send.rndv.ppln.max_outstanding,
+                          worker->rndv_ppln_fc_stats.num_ppln_super_reqs,
+                          worker->rndv_ppln_fc_stats.total_frags);
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
@@ -396,6 +426,14 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         if (fc_enabled) {
             req->send.rndv.ppln.outstanding_frags++;
             req->send.rndv.ppln.next_frag_idx++;
+
+            /* Track global fragment count */
+            worker->rndv_ppln_fc_stats.total_frags++;
+            if (worker->rndv_ppln_fc_stats.total_frags >
+                worker->rndv_ppln_fc_stats.max_total_frags) {
+                worker->rndv_ppln_fc_stats.max_total_frags =
+                    worker->rndv_ppln_fc_stats.total_frags;
+            }
         }
 
         ucs_trace_req("ucp_request_send (%s -> %s) req %p freq %p "
