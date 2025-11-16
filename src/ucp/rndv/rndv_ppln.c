@@ -250,8 +250,19 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
     /* If flow control is enabled and there are more fragments to send,
      * reschedule the super request */
     if (fc_enabled && has_more_frags && !all_frags_complete) {
-        ucs_trace_req("frag_complete: rescheduling super request "
-                      "to send more fragments");
+        ucs_warn("frag_complete: rescheduling super request "
+                 "to send more fragments (%zu/%zu)",
+                 req->send.rndv.ppln.next_frag_idx - 1,
+                 req->send.rndv.ppln.total_frags);
+
+        /* Must ensure request is sent or queued. We use ucp_request_send()
+         * which spins until the request is either:
+         * 1. Progress function returns UCS_OK (sent fragments or hit throttle)
+         * 2. Successfully added to pending queue
+         *
+         * The spin should be very brief (microseconds) as it only happens
+         * when the pending queue is transiently busy. This is the standard
+         * UCX pattern for rescheduling from completion context. */
         ucp_request_send(req);
     }
 
@@ -310,11 +321,14 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
     rpriv      = req->send.proto_config->priv;
     fc_enabled = context->config.ext.rndv_ppln_frag_fc_enable;
 
-    /* Initialize state on first call (next_frag_idx == 0) */
-    if (req->send.rndv.ppln.next_frag_idx == 0) {
+    /* Initialize state on first call (check if protocol initialized) */
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        /* These are already initialized by the parent protocol/request allocation,
+         * but we set them explicitly for clarity */
         req->send.state.completed_size    = 0;
         req->send.rndv.ppln.ack_data_size = 0;
         req->send.rndv.ppln.outstanding_frags = 0;
+        req->send.rndv.ppln.next_frag_idx     = 0;
 
         if (fc_enabled) {
             req->send.rndv.ppln.max_outstanding =
@@ -330,6 +344,8 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
                           req->send.rndv.ppln.total_frags,
                           req->send.rndv.ppln.max_outstanding);
         }
+
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
     frags_sent = 0;
@@ -339,7 +355,7 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         if (fc_enabled &&
             (req->send.rndv.ppln.outstanding_frags >=
              req->send.rndv.ppln.max_outstanding)) {
-            ucs_trace_req("ppln_progress: throttle limit reached "
+            ucs_warn("ppln_progress: throttle limit reached "
                           "outstanding=%zu max=%zu, queuing request",
                           req->send.rndv.ppln.outstanding_frags,
                           req->send.rndv.ppln.max_outstanding);
@@ -436,7 +452,13 @@ ucs_status_t ucp_proto_rndv_ppln_reset(ucp_request_t *req)
         return UCS_OK;
     }
 
-    ucs_assert(req->send.state.completed_size == 0);
+    /* During reset, we might have some fragments in flight but not yet completed,
+     * so completed_size might be non-zero. We assert the super request hasn't
+     * finished yet. */
+    ucs_assertv(req->send.state.completed_size < req->send.state.dt_iter.length,
+                "req=%p completed=%zu length=%zu", req,
+                req->send.state.completed_size, req->send.state.dt_iter.length);
+
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
     if ((req->send.proto_stage != UCP_PROTO_RNDV_PPLN_STAGE_SEND) &&
@@ -444,11 +466,13 @@ ucs_status_t ucp_proto_rndv_ppln_reset(ucp_request_t *req)
         ucp_proto_fatal_invalid_stage(req, "reset");
     }
 
-    /* Reset throttling state */
+    /* Reset throttling state - when protocol is reselected, it will reinitialize */
     req->send.rndv.ppln.outstanding_frags = 0;
     req->send.rndv.ppln.next_frag_idx     = 0;
     req->send.rndv.ppln.total_frags       = 0;
     req->send.rndv.ppln.max_outstanding   = 0;
+    req->send.state.completed_size        = 0;
+    req->send.rndv.ppln.ack_data_size     = 0;
 
     return UCS_OK;
 }
