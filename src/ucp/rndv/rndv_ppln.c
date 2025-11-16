@@ -250,10 +250,10 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
     /* If flow control is enabled and there are more fragments to send,
      * reschedule the super request */
     if (fc_enabled && has_more_frags && !all_frags_complete) {
-        ucs_warn("frag_complete: rescheduling super request "
-                 "to send more fragments (%zu/%zu)",
-                 req->send.rndv.ppln.next_frag_idx - 1,
-                 req->send.rndv.ppln.total_frags);
+        // ucs_warn("frag_complete: rescheduling super request "
+        //          "to send more fragments (%zu/%zu)",
+        //          req->send.rndv.ppln.next_frag_idx - 1,
+        //          req->send.rndv.ppln.total_frags);
 
         /* Must ensure request is sent or queued. We use ucp_request_send()
          * which spins until the request is either:
@@ -355,10 +355,10 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         if (fc_enabled &&
             (req->send.rndv.ppln.outstanding_frags >=
              req->send.rndv.ppln.max_outstanding)) {
-            ucs_warn("ppln_progress: throttle limit reached "
-                          "outstanding=%zu max=%zu, queuing request",
-                          req->send.rndv.ppln.outstanding_frags,
-                          req->send.rndv.ppln.max_outstanding);
+            // ucs_warn("ppln_progress: throttle limit reached "
+            //               "outstanding=%zu max=%zu, queuing request",
+            //               req->send.rndv.ppln.outstanding_frags,
+            //               req->send.rndv.ppln.max_outstanding);
 
             /* If we sent at least one fragment, return OK.
              * Otherwise, return NO_RESOURCE to be queued */
