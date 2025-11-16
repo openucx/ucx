@@ -319,6 +319,12 @@ struct ucp_request {
                                 struct {
                                     /* Size to send in ack message */
                                     ssize_t ack_data_size;
+
+                                    /* Throttling state for fragment flow control */
+                                    size_t  outstanding_frags;  /* Current outstanding fragments */
+                                    size_t  max_outstanding;    /* Max allowed outstanding fragments */
+                                    size_t  total_frags;        /* Total number of fragments */
+                                    size_t  next_frag_idx;      /* Next fragment to send */
                                 } ppln;
 
                                 /* Used by rndv/rkey_ptr */

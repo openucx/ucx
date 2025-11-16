@@ -209,20 +209,53 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
                                   ucp_proto_complete_cb_t complete_func,
                                   const char *title)
 {
-    ucp_request_t *req = ucp_request_get_super(freq);
-    ucs_warn("ucp_proto_rndv_ppln_frag_complete (%s -> %s) req %p freq %p"
-             " send_ack %d abort %d title %s size %zu",
-             req->send.proto_config->proto->name,
-             freq->send.proto_config->proto->name, req, freq, send_ack,
-             abort, title, freq->send.state.dt_iter.length);
+    ucp_request_t *req       = ucp_request_get_super(freq);
+    ucp_worker_h worker      = req->send.ep->worker;
+    ucp_context_h context    = worker->context;
+    int fc_enabled           = context->config.ext.rndv_ppln_frag_fc_enable;
+    int has_more_frags       = 0;
+    int all_frags_complete   = 0;
+
+    ucs_trace_req("ucp_proto_rndv_ppln_frag_complete (%s -> %s) req %p "
+                  "freq %p send_ack %d abort %d title %s size %zu",
+                  req->send.proto_config->proto->name,
+                  freq->send.proto_config->proto->name, req, freq, send_ack,
+                  abort, title, freq->send.state.dt_iter.length);
 
     if (send_ack) {
         req->send.rndv.ppln.ack_data_size += freq->send.state.dt_iter.length;
     }
 
+    /* Decrement outstanding counter and check if more fragments need to be sent */
+    if (fc_enabled && !abort) {
+        ucs_assert(req->send.rndv.ppln.outstanding_frags > 0);
+        req->send.rndv.ppln.outstanding_frags--;
+
+        /* Check if there are more fragments to send */
+        has_more_frags = (req->send.rndv.ppln.next_frag_idx <
+                         req->send.rndv.ppln.total_frags);
+
+        ucs_trace_req("frag_complete: outstanding=%zu next_idx=%zu "
+                      "total=%zu has_more=%d",
+                      req->send.rndv.ppln.outstanding_frags,
+                      req->send.rndv.ppln.next_frag_idx,
+                      req->send.rndv.ppln.total_frags,
+                      has_more_frags);
+    }
+
     /* In case of abort we don't destroy super request until all fragments are
      * completed */
-    if (!ucp_proto_rndv_frag_complete(req, freq, title)) {
+    all_frags_complete = ucp_proto_rndv_frag_complete(req, freq, title);
+
+    /* If flow control is enabled and there are more fragments to send,
+     * reschedule the super request */
+    if (fc_enabled && has_more_frags && !all_frags_complete) {
+        ucs_trace_req("frag_complete: rescheduling super request "
+                      "to send more fragments");
+        ucp_request_send(req);
+    }
+
+    if (!all_frags_complete) {
         return;
     }
 
@@ -257,13 +290,16 @@ void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
 
 static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req  = ucs_container_of(uct_req, ucp_request_t, send.uct);
-    ucp_worker_h worker = req->send.ep->worker;
+    ucp_request_t *req     = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    ucp_worker_h worker    = req->send.ep->worker;
+    ucp_context_h context  = worker->context;
     const ucp_proto_rndv_ppln_priv_t *rpriv;
     ucp_datatype_iter_t next_iter;
     ucs_status_t status;
     ucp_request_t *freq;
     size_t overlap;
+    int fc_enabled;
+    size_t frags_sent;
 
     /* Nested pipeline is prevented during protocol selection */
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_FRAG));
@@ -271,11 +307,48 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
     /* Zero-length is not supported */
     ucs_assert(req->send.state.dt_iter.length > 0);
 
-    req->send.state.completed_size    = 0;
-    req->send.rndv.ppln.ack_data_size = 0;
-    rpriv                             = req->send.proto_config->priv;
+    rpriv      = req->send.proto_config->priv;
+    fc_enabled = context->config.ext.rndv_ppln_frag_fc_enable;
+
+    /* Initialize state on first call (next_frag_idx == 0) */
+    if (req->send.rndv.ppln.next_frag_idx == 0) {
+        req->send.state.completed_size    = 0;
+        req->send.rndv.ppln.ack_data_size = 0;
+        req->send.rndv.ppln.outstanding_frags = 0;
+
+        if (fc_enabled) {
+            req->send.rndv.ppln.max_outstanding =
+                context->config.ext.rndv_ppln_frag_wnd_size;
+
+            /* Calculate total number of fragments for this request */
+            req->send.rndv.ppln.total_frags =
+                ucs_div_round_up(req->send.state.dt_iter.length, rpriv->frag_size);
+
+            ucs_trace_req("ppln_progress: proto=%s total_frags=%zu "
+                          "max_outstanding=%zu fc_enabled=1",
+                          req->send.proto_config->proto->name,
+                          req->send.rndv.ppln.total_frags,
+                          req->send.rndv.ppln.max_outstanding);
+        }
+    }
+
+    frags_sent = 0;
 
     while (!ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
+        /* Check throttling limit */
+        if (fc_enabled &&
+            (req->send.rndv.ppln.outstanding_frags >=
+             req->send.rndv.ppln.max_outstanding)) {
+            ucs_trace_req("ppln_progress: throttle limit reached "
+                          "outstanding=%zu max=%zu, queuing request",
+                          req->send.rndv.ppln.outstanding_frags,
+                          req->send.rndv.ppln.max_outstanding);
+
+            /* If we sent at least one fragment, return OK.
+             * Otherwise, return NO_RESOURCE to be queued */
+            return (frags_sent > 0) ? UCS_OK : UCS_ERR_NO_RESOURCE;
+        }
+
         status = ucp_proto_rndv_frag_request_alloc(worker, req, &freq);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
@@ -304,14 +377,24 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         ucp_proto_request_set_proto(freq, &rpriv->frag_proto_cfg,
                                     freq->send.state.dt_iter.length);
 
-        ucs_warn("ucp_request_send (%s -> %s) req %p freq %p offset %zu size %zu",
-                 req->send.proto_config->proto->name,
-                 freq->send.proto_config->proto->name, req, freq,
-                 freq->send.rndv.offset, freq->send.state.dt_iter.length);
+        if (fc_enabled) {
+            req->send.rndv.ppln.outstanding_frags++;
+            req->send.rndv.ppln.next_frag_idx++;
+        }
+
+        ucs_trace_req("ucp_request_send (%s -> %s) req %p freq %p "
+                      "offset %zu size %zu frag_idx=%zu outstanding=%zu",
+                      req->send.proto_config->proto->name,
+                      freq->send.proto_config->proto->name, req, freq,
+                      freq->send.rndv.offset, freq->send.state.dt_iter.length,
+                      req->send.rndv.ppln.next_frag_idx - 1,
+                      req->send.rndv.ppln.outstanding_frags);
+
         UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send, freq);
 
         ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
                                         UCS_BIT(UCP_DATATYPE_CONTIG));
+        frags_sent++;
     }
 
     return UCS_OK;
@@ -347,6 +430,29 @@ ucp_proto_rndv_send_ppln_atp_progress(uct_pending_req_t *uct_req)
                                        ucp_proto_request_zcopy_complete_success);
 }
 
+ucs_status_t ucp_proto_rndv_ppln_reset(ucp_request_t *req)
+{
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        return UCS_OK;
+    }
+
+    ucs_assert(req->send.state.completed_size == 0);
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+
+    if ((req->send.proto_stage != UCP_PROTO_RNDV_PPLN_STAGE_SEND) &&
+        (req->send.proto_stage != UCP_PROTO_RNDV_PPLN_STAGE_ACK)) {
+        ucp_proto_fatal_invalid_stage(req, "reset");
+    }
+
+    /* Reset throttling state */
+    req->send.rndv.ppln.outstanding_frags = 0;
+    req->send.rndv.ppln.next_frag_idx     = 0;
+    req->send.rndv.ppln.total_frags       = 0;
+    req->send.rndv.ppln.max_outstanding   = 0;
+
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_send_ppln_proto = {
     .name     = "rndv/send/ppln",
     .desc     = NULL,
@@ -358,7 +464,7 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_send_ppln_atp_progress,
     },
     .abort    = ucp_proto_rndv_stub_abort,
-    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_ppln_reset
 };
 
 static void
@@ -381,23 +487,6 @@ ucp_proto_rndv_recv_ppln_ats_progress(uct_pending_req_t *uct_req)
     return ucp_proto_rndv_ack_progress(req, &rpriv->ack, UCP_AM_ID_RNDV_ATS,
                                        ucp_proto_rndv_ppln_pack_ack,
                                        ucp_proto_rndv_recv_complete);
-}
-
-ucs_status_t ucp_proto_rndv_ppln_reset(ucp_request_t *req)
-{
-    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        return UCS_OK;
-    }
-
-    ucs_assert(req->send.state.completed_size == 0);
-    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
-
-    if ((req->send.proto_stage != UCP_PROTO_RNDV_PPLN_STAGE_SEND) &&
-        (req->send.proto_stage != UCP_PROTO_RNDV_PPLN_STAGE_ACK)) {
-        ucp_proto_fatal_invalid_stage(req, "reset");
-    }
-
-    return UCS_OK;
 }
 
 ucp_proto_t ucp_rndv_recv_ppln_proto = {
