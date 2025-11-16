@@ -389,7 +389,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "staging buffer resource exhaustion",
    ucs_offsetof(ucp_context_config_t, rndv_ppln_frag_fc_enable), UCS_CONFIG_TYPE_BOOL},
 
-  {"RNDV_PIPELINE_FRAG_WND_SIZE", "8",
+  {"RNDV_PIPELINE_FRAG_WND_SIZE", "1000",
    "Maximum number of outstanding fragments allowed in rendezvous pipeline\n"
    "protocol when fragment flow control is enabled. This limits the number\n"
    "of staging buffers allocated at any given time",
