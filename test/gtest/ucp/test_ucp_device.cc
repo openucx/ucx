@@ -32,7 +32,7 @@ protected:
             MODE_LAST_ELEM_COUNTER
         };
 
-        mem_list(entity &sender, entity &receiver, size_t size, unsigned count,
+        mem_list(test_ucp_device &test, size_t size, unsigned count,
                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA,
                  mem_list_mode_t mode = MODE_DATA_ONLY);
         ~mem_list();
@@ -54,7 +54,6 @@ protected:
         void dst_pattern_check(unsigned index, uint64_t seed) const;
 
     private:
-        entity                                      &m_receiver;
         std::vector<std::unique_ptr<mapped_buffer>> m_src, m_dst;
         std::vector<ucs::handle<ucp_rkey_h>>        m_rkeys;
         ucp_device_mem_list_handle_h                m_mem_list_h;
@@ -85,19 +84,12 @@ void test_ucp_device::init()
     if (!is_loopback()) {
         receiver().connect(&sender(), get_ep_params());
     }
-
-    ucp_device_mem_list_handle_h handle;
-    while (ucp_device_mem_list_create(sender().ep(), NULL, &handle) ==
-           UCS_ERR_NOT_CONNECTED) {
-        progress();
-    }
 }
 
-test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
+test_ucp_device::mem_list::mem_list(test_ucp_device &test,
                                     size_t size, unsigned count,
                                     ucs_memory_type_t mem_type,
-                                    mem_list_mode_t mode) :
-    m_receiver(receiver)
+                                    mem_list_mode_t mode)
 {
     bool has_counter  = (mode != MODE_DATA_ONLY);
     size_t data_count = (has_counter) ? count - 1 : count;
@@ -105,16 +97,16 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
 
     // Prepare src and dst buffers
     for (auto i = 0; i < data_count; ++i) {
-        m_src.emplace_back(new mapped_buffer(size, sender, 0, mem_type));
-        m_dst.emplace_back(new mapped_buffer(size, receiver, 0, mem_type));
-        m_rkeys.push_back(m_dst.back()->rkey(sender));
+        m_src.emplace_back(new mapped_buffer(size, test.sender(), 0, mem_type));
+        m_dst.emplace_back(new mapped_buffer(size, test.receiver(), 0, mem_type));
+        m_rkeys.push_back(m_dst.back()->rkey(test.sender()));
         m_src.back()->pattern_fill(SEED_SRC, size);
         m_dst.back()->pattern_fill(SEED_DST, size);
     }
 
     if (has_counter) {
-        m_dst.emplace_back(new mapped_buffer(size, receiver, 0, mem_type));
-        m_rkeys.push_back(m_dst.back()->rkey(sender));
+        m_dst.emplace_back(new mapped_buffer(size, test.receiver(), 0, mem_type));
+        m_rkeys.push_back(m_dst.back()->rkey(test.sender()));
         m_dst.back()->pattern_fill(SEED_DST, size);
     }
 
@@ -151,11 +143,17 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
     params.num_elements = count;
     params.elements     = elems.data();
 
-    // Create memory list
+    // Create memory list (with retry on connection)
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
-        status = ucp_device_mem_list_create(sender.ep(), &params,
-                                            &m_mem_list_h);
+        status = UCS_ERR_NOT_CONNECTED;
+        test.wait_for_cond(
+            [&]() {
+                test.progress();
+                status = ucp_device_mem_list_create(test.sender().ep(), &params, &m_mem_list_h);
+                return status != UCS_ERR_NOT_CONNECTED;
+            },
+            []() {}, 5.0);
     }
 
     if (status == UCS_ERR_NO_RESOURCE) {
@@ -246,7 +244,7 @@ uint64_t test_ucp_device::counter_read(const mapped_buffer &buffer)
 
 UCS_TEST_P(test_ucp_device, create_success)
 {
-    mem_list list(sender(), receiver(), 4 * UCS_MBYTE, 4);
+    mem_list list(*this, 4 * UCS_MBYTE, 4);
     EXPECT_NE(nullptr, list.handle());
 }
 
@@ -347,7 +345,7 @@ UCS_TEST_P(test_ucp_device, create_fail)
 UCS_TEST_P(test_ucp_device, get_mem_list_length)
 {
     constexpr unsigned num_elements = 8;
-    mem_list list(sender(), receiver(), 1 * UCS_KBYTE, num_elements);
+    mem_list list(*this, 1 * UCS_KBYTE, num_elements);
     EXPECT_EQ(num_elements, ucp_device_get_mem_list_length(list.handle()));
 }
 
@@ -558,7 +556,7 @@ protected:
 UCS_TEST_P(test_ucp_device_xfer, put_single)
 {
     static constexpr size_t size = 32 * UCS_KBYTE;
-    mem_list list(sender(), receiver(), size, 6);
+    mem_list list(*this, size, 6);
 
     // Perform the transfer
     static constexpr unsigned mem_list_index = 3;
@@ -587,7 +585,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_single_stress_test,
 
     static constexpr size_t size             = 8;
     static constexpr unsigned mem_list_index = 0;
-    mem_list list(sender(), receiver(), size, 1);
+    mem_list list(*this, size, 1);
 
     // Perform the transfer
     auto params                  = init_params();
@@ -611,8 +609,8 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi)
 {
     static constexpr size_t size = 32 * UCS_KBYTE;
     unsigned count               = get_multi_elem_count();
-    mem_list list(sender(), receiver(), size, count + 1, UCS_MEMORY_TYPE_CUDA,
-                  mem_list::MODE_LAST_ELEM_COUNTER);
+    mem_list list(*this, size, count + 1,
+                  UCS_MEMORY_TYPE_CUDA, mem_list::MODE_LAST_ELEM_COUNTER);
 
     const unsigned counter_index = count;
     list.dst_counter_init(counter_index);
@@ -641,7 +639,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_multi_stress_test,
 
     static constexpr size_t size = 8;
     unsigned count               = get_multi_elem_count();
-    mem_list list(sender(), receiver(), size, count + 1);
+    mem_list list(*this, size, count + 1);
 
     const unsigned counter_index = count;
     list.dst_counter_init(counter_index);
@@ -667,8 +665,8 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi_partial)
 {
     static constexpr size_t size = 32 * UCS_KBYTE;
     unsigned total_count         = get_multi_elem_count() * 2;
-    mem_list list(sender(), receiver(), size, total_count + 1, UCS_MEMORY_TYPE_CUDA,
-                  mem_list::MODE_LAST_ELEM_COUNTER);
+    mem_list list(*this, size, total_count + 1,
+                  UCS_MEMORY_TYPE_CUDA, mem_list::MODE_LAST_ELEM_COUNTER);
 
     const unsigned counter_index = total_count;
     list.dst_counter_init(counter_index);
@@ -718,7 +716,7 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi_partial)
 UCS_TEST_P(test_ucp_device_xfer, counter)
 {
     const size_t size = counter_size();
-    mem_list list(sender(), receiver(), size, 1, UCS_MEMORY_TYPE_CUDA,
+    mem_list list(*this, size, 1, UCS_MEMORY_TYPE_CUDA,
                   mem_list::MODE_COUNTER_ONLY);
 
     static constexpr unsigned mem_list_index = 0;
