@@ -11,19 +11,11 @@
 #include "gdaki.h"
 
 #include <ucs/time/time.h>
-#include <ucs/arch/atomic.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 #include <uct/cuda/base/cuda_iface.h>
 
 #include <cuda.h>
-
-
-enum {
-    UCT_RC_GDAKI_DEV_EP_INIT_NONE        = 0,
-    UCT_RC_GDAKI_DEV_EP_INIT_IN_PROGRESS = 1,
-    UCT_RC_GDAKI_DEV_EP_INIT_DONE        = 2
-};
 
 
 typedef struct {
@@ -364,16 +356,13 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     unsigned cq_size, cqe_size, max_tx;
     size_t cq_umem_offset, cq_umem_len, qp_umem_offset, dev_ep_size;
     ucs_status_t status;
-    uint8_t old_state;
 
-    old_state = ucs_atomic_cswap8(&ep->dev_ep_init,
-                                   UCT_RC_GDAKI_DEV_EP_INIT_NONE,
-                                   UCT_RC_GDAKI_DEV_EP_INIT_IN_PROGRESS);
-    if (old_state == UCT_RC_GDAKI_DEV_EP_INIT_NONE) {
+    ucs_spin_lock(&iface->ep_init_lock);
+
+    if (!ep->dev_ep_init) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
         if (status != UCS_OK) {
-            __atomic_store_n(&ep->dev_ep_init, UCT_RC_GDAKI_DEV_EP_INIT_NONE, __ATOMIC_RELEASE);
-            return status;
+            goto out_unlock;
         }
 
         cq_size     = UCS_BIT(ep->cq.cq_length_log);
@@ -421,26 +410,17 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 
-        __atomic_store_n(&ep->dev_ep_init, UCT_RC_GDAKI_DEV_EP_INIT_DONE, __ATOMIC_RELEASE);
-    } else if (old_state == UCT_RC_GDAKI_DEV_EP_INIT_IN_PROGRESS) {
-        do {
-            old_state = __atomic_load_n(&ep->dev_ep_init, __ATOMIC_ACQUIRE);
-            ucs_cpu_relax();
-        } while (old_state == UCT_RC_GDAKI_DEV_EP_INIT_IN_PROGRESS);
-
-        if (old_state != UCT_RC_GDAKI_DEV_EP_INIT_DONE) {
-            return UCS_ERR_IO_ERROR;
-        }
-    } else if (old_state != UCT_RC_GDAKI_DEV_EP_INIT_DONE) {
-        return UCS_ERR_IO_ERROR;
+        ep->dev_ep_init = 1;
     }
 
     *device_ep_p = &ep->ep_gpu->super;
+    ucs_spin_unlock(&iface->ep_init_lock);
     return UCS_OK;
 
 out_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    __atomic_store_n(&ep->dev_ep_init, UCT_RC_GDAKI_DEV_EP_INIT_NONE, __ATOMIC_RELEASE);
+out_unlock:
+    ucs_spin_unlock(&iface->ep_init_lock);
     return status;
 }
 
@@ -597,8 +577,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_atomic;
     }
 
+    status = ucs_spinlock_init(&self->ep_init_lock, 0);
+    if (status != UCS_OK) {
+        goto err_lock;
+    }
+
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
+
+err_lock:
+    ibv_dereg_mr(self->atomic_mr);
 
 err_atomic:
     cuMemFree(self->atomic_raw);
@@ -611,6 +599,7 @@ err_ctx_release:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
 {
+    ucs_spinlock_destroy(&self->ep_init_lock);
     ibv_dereg_mr(self->atomic_mr);
     cuMemFree(self->atomic_raw);
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(self->cuda_dev));
@@ -763,7 +752,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
 
 err:
     ucs_free(tl_devices);
-out:    
+out:
     return status;
 }
 
