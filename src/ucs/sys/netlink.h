@@ -60,21 +60,6 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
 int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
                              int allow_default_gw);
 
-/**
- * Check whether a routing table rule exists for a given network
- * interface name and a destination address, while allowing default gateway
- * routes.
- *
- * @param [in]  if_index   A global index representing the network interface,
-                           as assigned by the system (e.g., obtained via
-                           if_nametoindex()).
- * @param [in]  sa_remote  Pointer to the destination address.
- *
- * @return 1 if rule exists, or 0 otherwise.
- */
-int ucs_netlink_route_exists_allow_default(int if_index,
-                                           const struct sockaddr *sa_remote);
-
 END_C_DECLS
 
 #endif /* UCS_NETLINK_H */

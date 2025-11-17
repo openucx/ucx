@@ -309,9 +309,3 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
 
     return info.found;
 }
-
-int ucs_netlink_route_exists_allow_default(int if_index,
-                                           const struct sockaddr *sa_remote)
-{
-    return ucs_netlink_route_exists(if_index, sa_remote, 1);
-}
