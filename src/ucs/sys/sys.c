@@ -190,7 +190,7 @@ int ucs_netif_is_ipoib(const char *if_name)
         return 0;
     }
 
-    return (ifr.ifr_hwaddr.sa_family == ARPHRD_INFINIBAND);
+    return ifr.ifr_hwaddr.sa_family == ARPHRD_INFINIBAND;
 }
 
 static uint64_t ucs_get_mac_address()

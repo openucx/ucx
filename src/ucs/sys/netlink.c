@@ -233,7 +233,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 
     memset(&new_rule->dest, 0, sizeof(new_rule->dest));
     new_rule->dest.ss_family = rt_msg->rtm_family;
-    if (rt_msg->rtm_dst_len != 0) {
+    if (dst_in_addr != NULL) {
         if (ucs_sockaddr_set_inet_addr((struct sockaddr *)&new_rule->dest,
                                        dst_in_addr) != UCS_OK) {
             ucs_array_pop_back(iface_rules);
@@ -250,7 +250,6 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 {
     ucs_netlink_rt_rules_t *iface_rules;
     ucs_netlink_route_entry_t *curr_entry;
-    int is_default_gw;
     khiter_t iter;
 
     iter = kh_get(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
@@ -262,11 +261,10 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     ucs_array_for_each(curr_entry, iface_rules) {
-        is_default_gw = (curr_entry->subnet_prefix_len == 0);
 
         /* Skip default gateway routes if not allowed (e.g., for
            IPoIB remote devices) */
-        if (is_default_gw && !info->allow_default_gw) {
+        if ((curr_entry->subnet_prefix_len == 0) && !info->allow_default_gw) {
             ucs_trace("iface_index=%d: skipping default gateway route",
                       info->if_index);
             continue;
@@ -312,8 +310,8 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
     return info.found;
 }
 
-int ucs_netlink_ethernet_device_route_exists(int if_index,
-                                             const struct sockaddr *sa_remote)
+int ucs_netlink_route_exists_allow_default(int if_index,
+                                           const struct sockaddr *sa_remote)
 {
     return ucs_netlink_route_exists(if_index, sa_remote, 1);
 }

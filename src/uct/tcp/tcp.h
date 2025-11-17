@@ -296,6 +296,7 @@ typedef enum uct_tcp_device_addr_flags {
      * @ref uct_iface_local_addr_ns_t for loopback reachability
      */
     UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK      = UCS_BIT(0),
+
     /**
      * Interface is IPoIB (IP over InfiniBand)
      */

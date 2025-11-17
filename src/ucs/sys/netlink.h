@@ -62,7 +62,8 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
 
 /**
  * Check whether a routing table rule exists for a given network
- * interface name and a destination address (allows default gateway).
+ * interface name and a destination address, while allowing default gateway
+ * routes.
  *
  * @param [in]  if_index   A global index representing the network interface,
                            as assigned by the system (e.g., obtained via
@@ -71,8 +72,8 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
  *
  * @return 1 if rule exists, or 0 otherwise.
  */
-int ucs_netlink_ethernet_device_route_exists(int if_index,
-                                             const struct sockaddr *sa_remote);
+int ucs_netlink_route_exists_allow_default(int if_index,
+                                           const struct sockaddr *sa_remote);
 
 END_C_DECLS
 
