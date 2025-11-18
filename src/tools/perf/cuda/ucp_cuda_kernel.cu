@@ -183,7 +183,13 @@ private:
         params.elements     = elems;
 
         ucs_status_t status;
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(60.0);
         do {
+            if (ucs_get_time() > deadline) {
+                ucs_device_debug("Timeout on creating device memory list has been exceeded.");
+                deadline = ULONG_MAX;
+            }
+            
             ucp_worker_progress(perf.ucp.worker);
             status = ucp_device_mem_list_create(perf.ucp.ep, &params,
                                                 &m_params.mem_list);
