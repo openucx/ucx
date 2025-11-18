@@ -146,14 +146,11 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test,
     // Create memory list (with retry on connection)
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
-        status = UCS_ERR_NOT_CONNECTED;
-        test.wait_for_cond(
-            [&]() {
-                test.progress();
-                status = ucp_device_mem_list_create(test.sender().ep(), &params, &m_mem_list_h);
-                return status != UCS_ERR_NOT_CONNECTED;
-            },
-            []() {}, 5.0);
+        do {
+            test.progress();
+            status = ucp_device_mem_list_create(test.sender().ep(), &params,
+                                                &m_mem_list_h);
+        } while (status == UCS_ERR_NOT_CONNECTED);
     }
 
     if (status == UCS_ERR_NO_RESOURCE) {
