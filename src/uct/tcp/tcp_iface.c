@@ -139,6 +139,7 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
     dev_addr->flags     = 0;
     dev_addr->sa_family = saddr->sa_family;
 
+    /* Default gateway is not relevant for IPoIB interfaces */
     if (!ucs_netif_is_ipoib(iface->if_name)) {
         dev_addr->flags |= UCT_TCP_DEVICE_ADDR_FLAG_ALLOW_DEFAULT_GW;
     }
@@ -269,7 +270,6 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    /* Default gateway is not relevant for IPoIB interfaces */
     allow_default_gw = !!(tcp_dev_addr->flags &
                           UCT_TCP_DEVICE_ADDR_FLAG_ALLOW_DEFAULT_GW);
 

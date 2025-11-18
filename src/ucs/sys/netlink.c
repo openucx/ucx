@@ -189,8 +189,7 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
         }
     }
 
-    /* In some kernel versions, RTA_DST attribute is not set for default
-     * gateway routes */
+    /* dst_in_addr is required only for non-default gateway routes */
     if ((*if_index_p == -1) || ((*dst_in_addr == NULL) && (rtm_dst_len != 0))) {
         return UCS_ERR_INVALID_PARAM;
     }
