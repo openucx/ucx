@@ -139,8 +139,8 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
     dev_addr->flags     = 0;
     dev_addr->sa_family = saddr->sa_family;
 
-    if (ucs_netif_is_ipoib(iface->if_name)) {
-        dev_addr->flags |= UCT_TCP_DEVICE_ADDR_FLAG_LINK_LAYER_IB;
+    if (!ucs_netif_is_ipoib(iface->if_name)) {
+        dev_addr->flags |= UCT_TCP_DEVICE_ADDR_FLAG_ALLOW_DEFAULT_GW;
     }
 
     if (ucs_sockaddr_is_inaddr_loopback(saddr)) {
@@ -270,8 +270,8 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     /* Default gateway is not relevant for IPoIB interfaces */
-    allow_default_gw = !(tcp_dev_addr->flags &
-                         UCT_TCP_DEVICE_ADDR_FLAG_LINK_LAYER_IB);
+    allow_default_gw = !!(tcp_dev_addr->flags &
+                          UCT_TCP_DEVICE_ADDR_FLAG_ALLOW_DEFAULT_GW);
 
     if (!ucs_netlink_route_exists(ndev_index,
                                   (const struct sockaddr *)&remote_addr,
