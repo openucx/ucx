@@ -195,15 +195,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 
-err_dev_ep:
-    (void)cuMemHostUnregister(self->channels[i].sq_db);
-    uct_ib_mlx5_devx_destroy_qp_common(&self->channels[i].qp.super);
 err_cq:
     uct_ib_mlx5_devx_destroy_cq_common(&self->channels[i].cq);
 err_qp:
     while (i > 0) {
         i--;
-        (void)cuMemHostUnregister(self->channels[i].sq_db);
         uct_ib_mlx5_devx_destroy_qp_common(&self->channels[i].qp.super);
         uct_ib_mlx5_devx_destroy_cq_common(&self->channels[i].cq);
     }
@@ -224,7 +220,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
     unsigned i;
 
     for (i = 0; i < iface->num_channels; i++) {
-        (void)cuMemHostUnregister(self->channels[i].sq_db);
+        (void)cuMemHostUnregister(self->channels[i].qp.reg->addr.ptr);
         uct_ib_mlx5_devx_destroy_qp_common(&self->channels[i].qp.super);
         uct_ib_mlx5_devx_destroy_cq_common(&self->channels[i].cq);
     }
@@ -404,6 +400,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     size_t cq_umem_offset, dev_ep_size;
     uct_rc_gdaki_channel_t *channel;
     ucs_status_t status;
+    CUdeviceptr sq_db;
     unsigned i;
 
     if (!ep->dev_ep_init) {
@@ -420,6 +417,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 
         dev_ep = ucs_calloc(1, qp_attr.umem_offset, "dev_ep");
         if (dev_ep == NULL) {
+            status = UCS_ERR_NO_MEMORY;
             goto out_ctx;
         }
 
@@ -446,13 +444,13 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                                     CU_MEMHOSTREGISTER_IOMEMORY);
 
             status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuMemHostGetDevicePointer((CUdeviceptr*)&channel->sq_db,
+                    cuMemHostGetDevicePointer(&sq_db,
                                               channel->qp.reg->addr.ptr, 0));
             if (status != UCS_OK) {
                 goto out_free;
             }
 
-            dev_ep->qps[i].sq_db  = channel->sq_db;
+            dev_ep->qps[i].sq_db  = (uint64_t *)sq_db;
             dev_ep->qps[i].sq_num = channel->qp.super.qp_num;
             memset(&dev_ep->qps[i].cq_buff, 0xff, 64);
         }

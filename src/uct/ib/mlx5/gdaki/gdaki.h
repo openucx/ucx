@@ -31,7 +31,6 @@ typedef struct uct_rc_gdaki_iface {
 typedef struct {
     uct_ib_mlx5_cq_t             cq;
     uct_ib_mlx5_txwq_t           qp;
-    void                         *sq_db;
 } uct_rc_gdaki_channel_t;
 
 
