@@ -176,7 +176,7 @@ out:
 
 static ucs_status_t
 ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
-                           const void **dst_in_addr, unsigned char rtm_dst_len)
+                           const void **dst_in_addr, size_t rtm_dst_len)
 {
     *if_index_p  = -1;
     *dst_in_addr = NULL;
@@ -189,8 +189,10 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
         }
     }
 
-    /* dst_in_addr is required only for non-default gateway routes */
-    if ((*if_index_p == -1) || ((*dst_in_addr == NULL) && (rtm_dst_len != 0))) {
+    if (/* Network interface index is not valid */
+        (*if_index_p == -1) ||
+        /* dst_in_addr required but not present */
+        ((rtm_dst_len != 0) && (*dst_in_addr == NULL))) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -263,8 +265,6 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     ucs_array_for_each(curr_entry, iface_rules) {
 
-        /* Skip default gateway routes if not allowed (e.g., for
-           IPoIB remote devices) */
         if ((curr_entry->subnet_prefix_len == 0) && !info->allow_default_gw) {
             ucs_trace("iface_index=%d: skipping default gateway route",
                       info->if_index);
