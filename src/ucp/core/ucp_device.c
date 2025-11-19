@@ -364,10 +364,12 @@ static void ucp_device_mem_list_lane_lookup(
                   lane, src_md_index, lane_key->dst_md_index, src_sys_dev,
                   lane_key->dst_sys_dev, bandwidth / UCS_MBYTE, is_non_rma);
 
-        if (is_non_rma && ((best_non_rma_lane == UCP_NULL_LANE) ||
-                           (bandwidth > best_non_rma_bw))) {
-            best_non_rma_lane = lane;
-            best_non_rma_bw   = bandwidth;
+        if (is_non_rma) {
+            if ((best_non_rma_lane == UCP_NULL_LANE) ||
+                (bandwidth > best_non_rma_bw)) {
+                best_non_rma_lane = lane;
+                best_non_rma_bw   = bandwidth;
+            }
         } else {
             best_lanes[num_valid_lanes].bandwidth = bandwidth;
             best_lanes[num_valid_lanes].lane      = lane;
