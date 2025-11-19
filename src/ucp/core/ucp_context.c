@@ -592,6 +592,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "resulting performance.",
    ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"DFLOW_ENABLE", "n",
+   "Enable dynamic flow",
+   ucs_offsetof(ucp_context_config_t, dflow_enabled), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 

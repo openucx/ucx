@@ -55,6 +55,15 @@ typedef struct ucp_proto_send_multi {
 } ucp_proto_send_multi_t;
 
 
+/* TODO */
+typedef struct {
+    uct_completion_t dflow_comp;
+    uct_completion_t *parent;
+    ucs_time_t       start_time;
+    ucs_time_t       end_time;
+} ucp_proto_multi_dflow_t;
+
+
 /*
  * One lane configuration for multi-lane protocol
  */
@@ -84,8 +93,20 @@ typedef struct {
 
     /* Map of system devices that require a flush operation */
     ucp_sys_dev_map_t            flush_sys_dev_mask;
+
+    /* TODO */
+    ucp_proto_multi_dflow_t      dflow;
 } ucp_proto_multi_lane_priv_t;
 
+
+/* TODO */
+typedef enum {
+    UCP_PROTO_MULTI_DFLOW_MODE_DISABLED,
+    UCP_PROTO_MULTI_DFLOW_MODE_IDLE,
+    UCP_PROTO_MULTI_DFLOW_MODE_WAITING,
+    UCP_PROTO_MULTI_DFLOW_MODE_READY,
+    UCP_PROTO_MULTI_DFLOW_MODE_RUNNING,
+} ucp_proto_multi_dflow_mode_t;
 
 /*
  * Base class for protocols with fragmentation
@@ -101,6 +122,11 @@ typedef struct {
     ucp_lane_index_t            num_lanes;    /* Number of lanes to use */
     size_t                      align_thresh; /* Cached value of threshold for
                                                  enabling data split alignment */
+    /* TODO */
+    ucp_proto_multi_dflow_mode_t dflow_mode;
+    /* TODO */
+    ucp_proto_multi_dflow_t      dflow;
+
     ucp_proto_multi_lane_priv_t lanes[UCP_MAX_LANES]; /* Array of lanes */
 } ucp_proto_multi_priv_t;
 
@@ -126,6 +152,8 @@ typedef struct {
      * optimal alignment for buffer address for the UCT operation used
      * by this protocol */
     ptrdiff_t                      opt_align_offs;
+    /* TODO */
+    int                            dflow_enabled;
 
     struct {
         /* Required iface capabilities */

@@ -382,6 +382,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     weight_sum          = 0;
     min_end_offset      = 0;
 
+    mpriv->dflow_mode = params->dflow_enabled ?
+        UCP_PROTO_MULTI_DFLOW_MODE_READY : UCP_PROTO_MULTI_DFLOW_MODE_DISABLED;
+
     ucs_for_each_bit(lane, selection.lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
 

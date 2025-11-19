@@ -115,7 +115,8 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
-        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .dflow_enabled       = 0
     };
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
@@ -225,7 +226,8 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_ZCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
-        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .dflow_enabled       = 0
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {

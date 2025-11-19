@@ -45,7 +45,8 @@ ucp_am_eager_multi_bcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
-        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .dflow_enabled       = 0
     };
 
     if (!ucp_am_check_init_params(init_params, UCP_PROTO_AM_OP_ID_MASK,
@@ -212,6 +213,7 @@ ucp_am_eager_multi_zcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .min_chunk           = 0,
         .initial_reg_md_map  = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .dflow_enabled       = 0,
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,

@@ -221,6 +221,8 @@ typedef struct ucp_context_config {
     int                                    proto_use_single_net_device;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
+    /** Enable dynamic flow */
+    int                                    dflow_enabled;
 } ucp_context_config_t;
 
 

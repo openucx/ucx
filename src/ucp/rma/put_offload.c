@@ -221,7 +221,8 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_PUT_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
-        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .dflow_enabled       = 0
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
@@ -262,7 +263,7 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
     status = uct_ep_put_zcopy(uct_ep, &iov, 1, address, tl_rkey,
-                              &req->send.state.uct_comp);
+                              ucp_proto_multi_dflow_get_completion(req, lpriv));
     if (!UCS_STATUS_IS_ERR(status)) {
         ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
                                                   tl_rkey, uct_ep, address);
@@ -321,6 +322,7 @@ ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_PUT_ZCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .dflow_enabled       = context->config.ext.dflow_enabled,
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {

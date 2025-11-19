@@ -272,6 +272,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         .super.hdr_size      = 0,
         .opt_align_offs      = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.opt_zcopy_align),
+        .dflow_enabled       = 0
     };
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane_idx, lane;

@@ -55,6 +55,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_ZCOPY,
         .opt_align_offs      = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.opt_zcopy_align),
+        .dflow_enabled       = 0
     };
     ucp_proto_rndv_bulk_priv_t rpriv;
     ucp_proto_perf_t *perf;
