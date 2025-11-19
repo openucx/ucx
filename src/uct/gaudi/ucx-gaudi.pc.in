@@ -1,0 +1,12 @@
+#
+# Copyright (C) Intel Corporation, 2025. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
+Name: @PACKAGE@-gaudi
+Description: Unified Communication X Library GAUDI module
+Version: @VERSION@
+Libs:
+Libs.private:
+

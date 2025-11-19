@@ -222,7 +222,7 @@ libucs_la_SOURCES = \
 
 if HAVE_AARCH64_THUNDERX2
 libucs_la_SOURCES += \
-        arch/aarch64/memcpy_thunderx2.S
+    arch/aarch64/memcpy_thunderx2.S
 endif
 
 if HAVE_STATS
