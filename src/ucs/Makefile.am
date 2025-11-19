@@ -90,6 +90,11 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/rv64/global_opts.h \
 	arch/global_opts.h
 
+if HAVE_GAUDI
+    nobase_dist_libucs_la_HEADERS += \
+	sys/topo/gaudi/topo.h
+endif
+
 noinst_HEADERS = \
 	arch/aarch64/cpu.h \
 	arch/generic/cpu.h \
@@ -220,9 +225,14 @@ libucs_la_SOURCES = \
 	vfs/base/vfs_obj.c \
 	vfs/base/vfs_cb.c
 
+if HAVE_GAUDI
+    libucs_la_SOURCES += \
+	sys/topo/gaudi/topo.c
+endif
+
 if HAVE_AARCH64_THUNDERX2
 libucs_la_SOURCES += \
-        arch/aarch64/memcpy_thunderx2.S
+    arch/aarch64/memcpy_thunderx2.S
 endif
 
 if HAVE_STATS
