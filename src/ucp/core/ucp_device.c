@@ -280,18 +280,44 @@ ucp_device_mem_list_params_check(ucp_context_h context,
     return UCS_OK;
 }
 
+typedef struct {
+    double           bandwidth;
+    ucp_lane_index_t lane;
+    const char       *dev_name;
+} ucp_device_lane_info_t;
+
+static int ucp_device_lane_compare(const void *a, const void *b)
+{
+    const ucp_device_lane_info_t *lane_a = (const ucp_device_lane_info_t*)a;
+    const ucp_device_lane_info_t *lane_b = (const ucp_device_lane_info_t*)b;
+    int cmp;
+
+    cmp = -ucp_score_cmp(lane_a->bandwidth, lane_b->bandwidth);
+    if (cmp != 0) {
+        return cmp;
+    }
+
+    /* If bandwidth is equal, sort by device name */
+    return strcmp(lane_a->dev_name, lane_b->dev_name);
+}
+
 static void ucp_device_mem_list_lane_lookup(
         ucp_ep_h ep, ucp_ep_config_t *ep_config, ucs_sys_device_t local_sys_dev,
         ucp_md_map_t local_md_map, ucs_sys_device_t remote_sys_dev,
         ucp_md_map_t remote_md_map,
         ucp_lane_index_t lanes[UCP_DEVICE_MEM_LIST_MAX_EPS])
 {
-    double best_bw[UCP_DEVICE_MEM_LIST_MAX_EPS] = {-1., -1.};
+    unsigned long node_local_id = ep->worker->context->config.node_local_id;
+    ucp_lane_index_t num_valid_lanes   = 0;
+    ucp_lane_index_t best_non_rma_lane = UCP_NULL_LANE;
+    double best_non_rma_bw             = -1.0;
+    ucp_device_lane_info_t best_lanes[UCP_MAX_LANES];
     ucp_lane_index_t lane;
     double bandwidth;
     ucp_ep_config_key_lane_t *lane_key;
     ucs_sys_device_t src_sys_dev;
     ucp_md_index_t src_md_index;
+    int is_non_rma;
 
     lanes[0] = UCP_NULL_LANE;
     lanes[1] = UCP_NULL_LANE;
@@ -331,26 +357,52 @@ static void ucp_device_mem_list_lane_lookup(
 
         bandwidth = ucp_worker_iface_bandwidth(ep->worker,
                                                ucp_ep_get_rsc_index(ep, lane));
-        ucs_trace("checking lane[%u] src_md_index=%u dst_md_index=%u "
-                  "src_sys_dev=%u dst_sys_dev=%u bandwidth=%lfMB/s",
-                  lane, src_md_index, lane_key->dst_md_index, src_sys_dev,
-                  lane_key->dst_sys_dev, bandwidth / UCS_MBYTE);
 
-        UCS_STATIC_ASSERT(UCP_DEVICE_MEM_LIST_MAX_EPS == 2);
-        if (bandwidth > best_bw[0]) {
-            best_bw[1] = best_bw[0];
-            lanes[1]   = lanes[0];
-            best_bw[0] = bandwidth;
-            lanes[0]   = lane;
-        } else if (bandwidth > best_bw[1]) {
-            best_bw[1] = bandwidth;
-            lanes[1]   = lane;
+        is_non_rma = !(ucp_ep_md_attr(ep, lane)->flags & UCT_MD_FLAG_NEED_MEMH);
+        ucs_trace("checking lane[%u] src_md_index=%u dst_md_index=%u "
+                  "src_sys_dev=%u dst_sys_dev=%u bandwidth=%lfMB/s non_rma=%d",
+                  lane, src_md_index, lane_key->dst_md_index, src_sys_dev,
+                  lane_key->dst_sys_dev, bandwidth / UCS_MBYTE, is_non_rma);
+
+        if (is_non_rma && ((best_non_rma_lane == UCP_NULL_LANE) ||
+                           (bandwidth > best_non_rma_bw))) {
+            best_non_rma_lane = lane;
+            best_non_rma_bw   = bandwidth;
         } else {
-            continue;
+            best_lanes[num_valid_lanes].bandwidth = bandwidth;
+            best_lanes[num_valid_lanes].lane      = lane;
+            best_lanes[num_valid_lanes].dev_name =
+                    ucp_ep_get_tl_rsc(ep, lane)->dev_name;
+            num_valid_lanes++;
+        }
+    }
+
+    if ((num_valid_lanes == 0) && (best_non_rma_lane == UCP_NULL_LANE)) {
+        return;
+    }
+
+    if (best_non_rma_lane != UCP_NULL_LANE) {
+        lanes[0] = best_non_rma_lane;
+        ucs_trace("selected non-RMA lane: (%lfMB/s)",
+                  best_non_rma_bw / UCS_MBYTE);
+    }
+
+    if (num_valid_lanes > 0) {
+        /* Sort RMA lanes */
+        qsort(best_lanes, num_valid_lanes, sizeof(ucp_device_lane_info_t),
+              ucp_device_lane_compare);
+        lane     = node_local_id % num_valid_lanes;
+        ucs_trace("selected RMA lane: (idx=%u, %lfMB/s) "
+                  "node_local_id=%lu dev_name=%s",
+                  lane, best_lanes[lane].bandwidth / UCS_MBYTE, node_local_id,
+                  best_lanes[lane].dev_name);
+        if (best_lanes[lane].bandwidth > best_non_rma_bw) {
+            lanes[1] = lanes[0];
+            lanes[0] = best_lanes[lane].lane;
+        } else {
+            lanes[1] = best_lanes[lane].lane;
         }
 
-        ucs_trace("best lanes: lane[%u]=%lfMB/s lane[%u]=%lfMB/s", lanes[0],
-                  best_bw[0] / UCS_MBYTE, lanes[1], best_bw[1] / UCS_MBYTE);
     }
 }
 
