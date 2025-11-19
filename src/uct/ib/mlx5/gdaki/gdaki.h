@@ -8,9 +8,9 @@
 
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/base/uct_iface.h>
-#include <ucs/type/spinlock.h>
 
 #include <cuda.h>
+#include <pthread.h>
 
 #include "gdaki_dev.h"
 
@@ -25,7 +25,7 @@ typedef struct uct_rc_gdaki_iface {
     CUdeviceptr                atomic_raw;
     uint64_t                   *atomic_buff;
     CUcontext                  cuda_ctx;
-    ucs_spinlock_t             ep_init_lock;
+    pthread_mutex_t            ep_init_lock;
 } uct_rc_gdaki_iface_t;
 
 
