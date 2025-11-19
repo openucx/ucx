@@ -2037,6 +2037,7 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
                                               OPERATION, UCT_EP_OP_LAST);
     const uct_ib_iface_send_overhead_t *send_overhead =
             &ib_iface->config.send_overhead;
+    double bcopy_send_overhead = send_overhead->bcopy;
     uct_iface_attr_t iface_attr;
     double max_bandwidth;
     ucs_status_t status;
@@ -2046,10 +2047,15 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         return status;
     }
 
+     /* NEW: Adjust overhead for Grace CPU to influence threshold calculations */
+     if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_NVIDIA) && (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_NVIDIA_GRACE)) {
+        bcopy_send_overhead += 2 * 1e-6;
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
         perf_attr->send_pre_overhead = send_overhead->wqe_post;
         if (uct_ep_op_is_bcopy(op)) {
-            perf_attr->send_pre_overhead += send_overhead->bcopy;
+            perf_attr->send_pre_overhead += bcopy_send_overhead;
         }
     }
 
