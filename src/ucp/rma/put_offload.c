@@ -255,6 +255,9 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                          req->send.state.dt_iter.offset;
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
+
+    uct_completion_t *comp = ucp_proto_dflow_get_completion(lpriv->dflow_lane, req);
+
     uct_iov_t iov;
     ucs_status_t status;
 
@@ -262,8 +265,7 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
-    status = uct_ep_put_zcopy(uct_ep, &iov, 1, address, tl_rkey,
-                              ucp_proto_multi_dflow_get_completion(req, lpriv));
+    status = uct_ep_put_zcopy(uct_ep, &iov, 1, address, tl_rkey, comp);
     if (!UCS_STATUS_IS_ERR(status)) {
         ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
                                                   tl_rkey, uct_ep, address);

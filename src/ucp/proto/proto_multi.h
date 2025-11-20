@@ -9,6 +9,7 @@
 
 #include "proto.h"
 #include "proto_common.h"
+#include "proto_dflow.h"
 
 #include <ucp/dt/datatype_iter.h>
 
@@ -55,15 +56,6 @@ typedef struct ucp_proto_send_multi {
 } ucp_proto_send_multi_t;
 
 
-/* TODO */
-typedef struct {
-    uct_completion_t dflow_comp;
-    uct_completion_t *parent;
-    ucs_time_t       start_time;
-    ucs_time_t       end_time;
-} ucp_proto_multi_dflow_t;
-
-
 /*
  * One lane configuration for multi-lane protocol
  */
@@ -94,19 +86,9 @@ typedef struct {
     /* Map of system devices that require a flush operation */
     ucp_sys_dev_map_t            flush_sys_dev_mask;
 
-    /* TODO */
-    ucp_proto_multi_dflow_t      dflow;
+    /* Stats for a single lane transfer */
+    ucp_proto_dflow_lane_t       *dflow_lane;
 } ucp_proto_multi_lane_priv_t;
-
-
-/* TODO */
-typedef enum {
-    UCP_PROTO_MULTI_DFLOW_MODE_DISABLED,
-    UCP_PROTO_MULTI_DFLOW_MODE_IDLE,
-    UCP_PROTO_MULTI_DFLOW_MODE_WAITING,
-    UCP_PROTO_MULTI_DFLOW_MODE_READY,
-    UCP_PROTO_MULTI_DFLOW_MODE_RUNNING,
-} ucp_proto_multi_dflow_mode_t;
 
 /*
  * Base class for protocols with fragmentation
@@ -122,10 +104,7 @@ typedef struct {
     ucp_lane_index_t            num_lanes;    /* Number of lanes to use */
     size_t                      align_thresh; /* Cached value of threshold for
                                                  enabling data split alignment */
-    /* TODO */
-    ucp_proto_multi_dflow_mode_t dflow_mode;
-    /* TODO */
-    ucp_proto_multi_dflow_t      dflow;
+    ucp_proto_dflow_node_t      dflow_node;   /* Dynamic flow node */
 
     ucp_proto_multi_lane_priv_t lanes[UCP_MAX_LANES]; /* Array of lanes */
 } ucp_proto_multi_priv_t;

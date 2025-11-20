@@ -382,8 +382,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     weight_sum          = 0;
     min_end_offset      = 0;
 
-    mpriv->dflow_mode = params->dflow_enabled ?
-        UCP_PROTO_MULTI_DFLOW_MODE_READY : UCP_PROTO_MULTI_DFLOW_MODE_DISABLED;
+    ucp_proto_dflow_node_init(&mpriv->dflow_node, params->dflow_enabled,
+                              selection.num_lanes);
 
     ucs_for_each_bit(lane, selection.lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
@@ -470,6 +470,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                 ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
+    mpriv->dflow_node.min_length = min_end_offset;
 
     /* After this block, 'perf_node' and 'lane_perf_nodes[]' have extra ref */
     if (mpriv->num_lanes == 1) {

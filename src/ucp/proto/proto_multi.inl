@@ -9,6 +9,7 @@
 
 #include "proto_multi.h"
 
+#include <ucp/proto/proto_dflow.inl>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/rma/rma.inl>
 
@@ -159,126 +160,6 @@ ucp_proto_multi_advance_lane_idx(ucp_request_t *req, ucp_lane_index_t num_lanes,
     req->send.multi_lane_idx = lane_idx;
 }
 
-static UCS_F_ALWAYS_INLINE uct_completion_t *
-ucp_proto_multi_dflow_get_completion(ucp_request_t *req,
-                                     const ucp_proto_multi_lane_priv_t *lpriv)
-{
-    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_DFLOW)) {
-        /* TODO: get rid of const cast */
-        return &((ucp_proto_multi_lane_priv_t *)lpriv)->dflow.dflow_comp;
-    }
-
-    return &req->send.state.uct_comp;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_proto_multi_dflow_enabled(const ucp_request_t *req,
-                              const ucp_proto_multi_priv_t *mpriv,
-                              ucp_lane_index_t lane_idx)
-{
-    size_t length           = req->send.state.dt_iter.length;
-    size_t min_dflow_length = mpriv->lanes[mpriv->num_lanes - 1].min_end_offset;
-
-    if (ucs_likely(mpriv->dflow_mode < UCP_PROTO_MULTI_DFLOW_MODE_READY)) {
-        return 0;
-    }
-
-    /* Profile only requests that are split between all lanes */
-    if (length < min_dflow_length) {
-        return 0;
-    }
-
-    if (lane_idx == 0) {
-        return mpriv->dflow_mode == UCP_PROTO_MULTI_DFLOW_MODE_READY;
-    } else {
-        return (req->flags & UCP_REQUEST_FLAG_DFLOW) &&
-               (mpriv->dflow_mode == UCP_PROTO_MULTI_DFLOW_MODE_RUNNING);
-    }
-}
-
-static void
-ucp_proto_multi_dflow_comp(uct_completion_t *comp)
-{
-    ucp_proto_multi_dflow_t *dflow = ucs_container_of(comp,
-                                                      ucp_proto_multi_dflow_t,
-                                                      dflow_comp);
-    ucp_proto_multi_priv_t *mpriv  = ucs_container_of(dflow,
-                                                      ucp_proto_multi_priv_t,
-                                                      dflow);
-    double time;
-
-    dflow->end_time = ucs_get_time();
-    ucs_assert(dflow->parent->count == mpriv->num_lanes);
-    dflow->parent->count = 1;
-    ucp_invoke_uct_completion(dflow->parent, comp->status);
-
-    /* TODO: upload data to LB */
-    mpriv->dflow_mode = UCP_PROTO_MULTI_DFLOW_MODE_READY;
-
-    time = ucs_time_to_usec(dflow->end_time - dflow->start_time);
-    ucs_diag("dflow completed, time: %f usec", time);
-}
-
-static void
-ucp_proto_multi_dflow_lane_comp(uct_completion_t *comp)
-{
-    ucp_proto_multi_dflow_t *dflow = ucs_container_of(comp,
-                                                      ucp_proto_multi_dflow_t,
-                                                      dflow_comp);
-    double time;
-
-    dflow->end_time = ucs_get_time();
-
-    time = ucs_time_to_usec(dflow->end_time - dflow->start_time);
-    ucs_diag("dflow lane completed, time: %f usec", time);
-
-    ucp_invoke_uct_completion(dflow->parent, comp->status);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_multi_dflow_init(ucp_proto_multi_dflow_t *dflow,
-                           uct_completion_callback_t comp_func,
-                           uct_completion_t *parent, int count)
-{
-    dflow->dflow_comp.func   = comp_func;
-    dflow->dflow_comp.count  = count;
-    dflow->dflow_comp.status = UCS_OK;
-    dflow->parent            = parent;
-    dflow->start_time        = ucs_get_time();
-    dflow->end_time          = 0;
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_multi_dflow_setup(ucp_request_t *req, ucp_proto_multi_priv_t *mpriv,
-                            ucp_lane_index_t lane_idx)
-{
-    ucp_proto_multi_dflow_t *dflow = &mpriv->dflow;
-    ucp_proto_multi_dflow_t *dflow_lane;
-    ucp_lane_index_t lane;
-
-    if (lane_idx == 0) {
-        mpriv->dflow_mode = UCP_PROTO_MULTI_DFLOW_MODE_RUNNING;
-        req->flags       |= UCP_REQUEST_FLAG_DFLOW;
-        ucp_proto_multi_dflow_init(dflow, ucp_proto_multi_dflow_comp,
-                                   &req->send.state.uct_comp, mpriv->num_lanes);
-
-        for (lane = 1; lane < mpriv->num_lanes; ++lane) {
-            dflow_lane = &mpriv->lanes[lane].dflow;
-            memset(dflow_lane, 0, sizeof(*dflow_lane));
-        }
-    } else {
-        ucs_assert(req->flags & UCP_REQUEST_FLAG_DFLOW);
-        ucs_assert(mpriv->dflow_mode == UCP_PROTO_MULTI_DFLOW_MODE_RUNNING);
-    }
-
-    dflow_lane = &mpriv->lanes[lane_idx].dflow;
-    ucp_proto_multi_dflow_init(dflow_lane, ucp_proto_multi_dflow_lane_comp,
-                               &dflow->dflow_comp, 1);
-    if (lane_idx == mpriv->num_lanes - 1) {
-        mpriv->dflow_mode = UCP_PROTO_MULTI_DFLOW_MODE_WAITING;
-    }
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_multi_progress(ucp_request_t *req,
                          const ucp_proto_multi_priv_t *mpriv,
@@ -299,9 +180,10 @@ ucp_proto_multi_progress(ucp_request_t *req,
     lane_idx = req->send.multi_lane_idx;
     lpriv    = &mpriv->lanes[lane_idx];
 
-    if (ucs_unlikely(ucp_proto_multi_dflow_enabled(req, mpriv, lane_idx))) {
+    if (ucs_unlikely(ucp_proto_dflow_enabled(&mpriv->dflow_node, req, lane_idx))) {
         /* TODO: get rid of const cast */
-        ucp_proto_multi_dflow_setup(req, (ucp_proto_multi_priv_t *)mpriv, lane_idx);
+        ((ucp_proto_multi_lane_priv_t *)lpriv)->dflow_lane =
+                    ucp_proto_dflow_setup(&mpriv->dflow_node, req, lane_idx);
     }
 
     /* send the next fragment */
