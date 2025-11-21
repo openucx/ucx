@@ -118,3 +118,19 @@ UCS_TEST_P(test_ucp_version, version_string) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_version, all, "all")
+
+class test_unused_config_modifications : public test_ucp_context {
+public:
+    test_unused_config_modifications()
+    {
+        ucp_config_modify(m_ucp_config, "QWERTY", "QWERTY");
+        ucp_config_modify(m_ucp_config, "WARN_UNUSED_CONFIG_MODIFICATIONS",
+                          "n");
+    }
+};
+
+UCS_TEST_P(test_unused_config_modifications, hidden_warning)
+{
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_unused_config_modifications, self, "self")
