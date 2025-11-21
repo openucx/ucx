@@ -241,6 +241,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     uint32_t weight_sum;
     ucs_status_t status;
     int fixed_first_lane;
+    const char *weight = getenv("WEIGHT");
+    double weight_value;
 
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
@@ -418,6 +420,14 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                                     perf.bandwidth);
         ucs_assert(lpriv->weight > 0);
         ucs_assert(lpriv->weight <= UCP_PROTO_MULTI_WEIGHT_MAX);
+
+        if (weight) {
+            weight_value = (double)atoi(weight);
+            if (mpriv->num_lanes > 1) {
+                weight_value = 100.0 - weight_value;
+            }
+            lpriv->weight = (uint32_t)(weight_value * UCP_PROTO_MULTI_WEIGHT_MAX / 100.0);
+        }
 
         /* Calculate minimal message length according to lane's relative weight:
            When the message length is scaled by this lane's weight, it must not
