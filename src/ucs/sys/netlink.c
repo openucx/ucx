@@ -29,6 +29,8 @@ typedef struct {
     const struct sockaddr *sa_remote;
     int                    if_index;
     int                    found;
+    int                    allow_default_gw; /* Allow matching default
+                                                gateway routes */
 } ucs_netlink_route_info_t;
 
 
@@ -174,7 +176,7 @@ out:
 
 static ucs_status_t
 ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
-                           const void **dst_in_addr)
+                           const void **dst_in_addr, size_t rtm_dst_len)
 {
     *if_index_p  = -1;
     *dst_in_addr = NULL;
@@ -187,7 +189,10 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
         }
     }
 
-    if ((*if_index_p == -1) || (*dst_in_addr == NULL)) {
+    if (/* Network interface index is not valid */
+        (*if_index_p == -1) ||
+        /* dst_in_addr required but not present */
+        ((rtm_dst_len != 0) && (*dst_in_addr == NULL))) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -206,7 +211,8 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
     int khret;
 
     if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
-                                   &iface_index, &dst_in_addr) != UCS_OK) {
+                                   &iface_index, &dst_in_addr,
+                                   rt_msg->rtm_dst_len) != UCS_OK) {
         return UCS_INPROGRESS;
     }
 
@@ -228,12 +234,14 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
                                 ucs_error("could not allocate route entry");
                                 return UCS_ERR_NO_MEMORY);
 
-    memset(&new_rule->dest, 0, sizeof(sizeof(new_rule->dest)));
+    memset(&new_rule->dest, 0, sizeof(new_rule->dest));
     new_rule->dest.ss_family = rt_msg->rtm_family;
-    if (UCS_OK != ucs_sockaddr_set_inet_addr((struct sockaddr *)&new_rule->dest,
-                                             dst_in_addr)) {
-        ucs_array_pop_back(iface_rules);
-        return UCS_ERR_IO_ERROR;
+    if (dst_in_addr != NULL) {
+        if (ucs_sockaddr_set_inet_addr((struct sockaddr *)&new_rule->dest,
+                                       dst_in_addr) != UCS_OK) {
+            ucs_array_pop_back(iface_rules);
+            return UCS_ERR_IO_ERROR;
+        }
     }
 
     new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
@@ -256,6 +264,13 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     ucs_array_for_each(curr_entry, iface_rules) {
+
+        if ((curr_entry->subnet_prefix_len == 0) && !info->allow_default_gw) {
+            ucs_trace("iface_index=%d: skipping default gateway route",
+                      info->if_index);
+            continue;
+        }
+
         if (ucs_sockaddr_is_same_subnet(
                                 info->sa_remote,
                                 (const struct sockaddr *)&curr_entry->dest,
@@ -266,7 +281,8 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
     }
 }
 
-int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
+int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
+                             int allow_default_gw)
 {
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     struct rtmsg rtm                 = {0};
@@ -285,9 +301,11 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote)
                                  NULL);
     }
 
-    info.if_index  = if_index;
-    info.sa_remote = sa_remote;
-    info.found     = 0;
+    info.if_index         = if_index;
+    info.sa_remote        = sa_remote;
+    info.found            = 0;
+    info.allow_default_gw = allow_default_gw;
+
     ucs_netlink_lookup_route(&info);
 
     return info.found;
