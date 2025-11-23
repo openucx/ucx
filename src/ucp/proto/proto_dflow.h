@@ -37,6 +37,7 @@ typedef struct {
 /* TODO */
 typedef struct {
     ucp_proto_dflow_stats_t stats;
+    ucp_proto_dflow_mode_t  mode;
     uint8_t                 weight;
 } ucp_proto_dflow_lane_t;
 
@@ -55,10 +56,19 @@ typedef struct {
 
 /* TODO */
 typedef struct {
+    ucs_time_t             interval;
+    uct_worker_cb_id_t     progress_cb_id;
+    ucs_time_t             next_progress_time;
+    unsigned               num_samples_interval;
+    /* TODO: hash map */
+    ucp_proto_dflow_node_t *node;
 } ucp_proto_dflow_service_t;
 
 
-ucs_status_t ucp_proto_dflow_service_init(ucp_proto_dflow_service_t *service);
-void ucp_proto_dflow_service_cleanup(ucp_proto_dflow_service_t *service);
+ucs_status_t ucp_proto_dflow_service_init(ucp_worker_h worker,
+                                          ucp_proto_dflow_service_t *service);
+
+void ucp_proto_dflow_service_cleanup(ucp_worker_h worker,
+                                     ucp_proto_dflow_service_t *service);
 
 #endif

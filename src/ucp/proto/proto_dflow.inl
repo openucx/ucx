@@ -16,9 +16,10 @@ ucp_proto_dflow_node_init(ucp_proto_dflow_node_t *node, int enabled,
     node->mode       = enabled && (num_lanes <= UCP_PROTO_DFLOW_MAX_LANES) ?
                                 UCP_PROTO_DFLOW_MODE_READY :
                                 UCP_PROTO_DFLOW_MODE_DISABLED;
-    node->min_length = 0;
-    node->length_sum = 0;
-    node->num_lanes  = num_lanes;
+    node->min_length  = 0;
+    node->length_sum  = 0;
+    node->num_lanes   = num_lanes;
+    node->num_samples = 0;
 
     memset(&node->stats, 0, sizeof(node->stats));
     memset(&node->lanes, 0, sizeof(node->lanes));
@@ -53,31 +54,43 @@ ucp_proto_dflow_stats_init(ucp_proto_dflow_stats_t *stats,
     stats->start_time  = ucs_get_time();
 }
 
+static UCS_F_ALWAYS_INLINE ucp_proto_dflow_mode_t
+ucp_proto_dflow_service_update(ucp_proto_dflow_service_t *service,
+                               ucp_proto_dflow_node_t *node)
+{
+    service->node = node;
+
+    if (node->num_samples >= service->num_samples_interval) {
+        return UCP_PROTO_DFLOW_MODE_IDLE;
+    }
+    return UCP_PROTO_DFLOW_MODE_READY;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_proto_dflow_service_t *
+ucp_proto_dflow_service_get(ucp_request_t *req)
+{
+    return &req->send.ep->worker->dflow_service;
+}
+
 static void
 ucp_proto_dflow_node_comp(uct_completion_t *comp)
 {
     ucp_proto_dflow_stats_t *stats = ucs_container_of(comp, ucp_proto_dflow_stats_t, comp);
     ucp_proto_dflow_node_t *node   = ucs_container_of(stats, ucp_proto_dflow_node_t, stats);
+    ucp_request_t *req             = ucs_container_of(stats->parent, ucp_request_t,
+                                                      send.state.uct_comp);
+    ucp_proto_dflow_service_t *srv = &req->send.ep->worker->dflow_service;
     ucs_time_t tx_time             = ucs_get_time() - stats->start_time;
-    ucp_lane_index_t i;
 
-    stats->latency_sum += tx_time;
-    ucs_assert(stats->parent->count == node->num_lanes);
-    stats->parent->count = 1;
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_DFLOW);
+    ucs_assert(node->mode == UCP_PROTO_DFLOW_MODE_WAITING);
+
+    stats->latency_sum   += tx_time;
+    stats->parent->count -= node->num_lanes - 1;
     ucp_invoke_uct_completion(stats->parent, comp->status);
 
-    /* TODO: upload data to LB */
-    node->mode = UCP_PROTO_DFLOW_MODE_READY;
-
-    if (++node->num_samples % 10000 == 0) {
-        ucs_diag("dflow samples=%d latency_sum=%.2f", node->num_samples, ucs_time_to_msec(node->stats.latency_sum));
-        for (i = 0; i < node->num_lanes; ++i) {
-            ucs_diag("  lane %d latency_sum=%.2f", i, ucs_time_to_msec(node->lanes[i].stats.latency_sum));
-            node->lanes[i].stats.latency_sum = 0;
-        }
-        node->num_samples = 0;
-        node->stats.latency_sum = 0;
-    }
+    ++node->num_samples;
+    node->mode = ucp_proto_dflow_service_update(srv, node);
 }
 
 static void
@@ -115,17 +128,22 @@ ucp_proto_dflow_setup(const ucp_proto_dflow_node_t *cnode,
     }
 
     lane = &node->lanes[lane_idx];
+    lane->mode = UCP_PROTO_DFLOW_MODE_READY;
     ucp_proto_dflow_stats_init(&lane->stats, ucp_proto_dflow_lane_comp,
                                &node->stats.comp, 1);
     return lane;
 }
 
 static UCS_F_ALWAYS_INLINE uct_completion_t *
-ucp_proto_dflow_get_completion(const ucp_proto_dflow_lane_t *lane, ucp_request_t *req)
+ucp_proto_dflow_get_completion(const ucp_proto_dflow_lane_t *clane,
+                               ucp_request_t *req)
 {
-    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_DFLOW)) {
-        /* TODO: get rid of const cast */
-        return (uct_completion_t *)&lane->stats.comp;
+    /* TODO: get rid of const cast */
+    ucp_proto_dflow_lane_t *lane = (ucp_proto_dflow_lane_t *)clane;
+
+    if (ucs_unlikely(lane->mode == UCP_PROTO_DFLOW_MODE_READY)) {
+        lane->mode = UCP_PROTO_DFLOW_MODE_WAITING;
+        return &lane->stats.comp;
     }
 
     return &req->send.state.uct_comp;

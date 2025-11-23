@@ -2689,7 +2689,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_am_cleanup;
     }
 
-    status = ucp_proto_dflow_service_init(&worker->dflow_service);
+    status = ucp_proto_dflow_service_init(worker, &worker->dflow_service);
     if (status != UCS_OK) {
         goto err_am_cleanup;
     }
@@ -2960,7 +2960,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
         close(worker->keepalive.timerfd);
     }
 
-    ucp_proto_dflow_service_cleanup(&worker->dflow_service);
+    ucp_proto_dflow_service_cleanup(worker, &worker->dflow_service);
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, worker,
                                  ucp_worker_ep_config_filter, NULL);
 
