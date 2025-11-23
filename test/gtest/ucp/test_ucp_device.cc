@@ -153,7 +153,7 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test,
         } while (status == UCS_ERR_NOT_CONNECTED);
     }
 
-    if (status == UCS_ERR_NO_RESOURCE) {
+    if (status == UCS_ERR_NO_DEVICE) {
         UCS_TEST_SKIP_R("Skipping test if no device lanes exists.");
     } else {
         ASSERT_UCS_OK(status);
