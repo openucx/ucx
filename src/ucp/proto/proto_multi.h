@@ -87,7 +87,7 @@ typedef struct {
     ucp_sys_dev_map_t            flush_sys_dev_mask;
 
     /* Stats for a single lane transfer */
-    ucp_proto_dflow_lane_t       *dflow_lane;
+    ucp_proto_dflow_lane_t       dflow_lane;
 } ucp_proto_multi_lane_priv_t;
 
 /*

@@ -13,7 +13,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_dflow_node_init(ucp_proto_dflow_node_t *node, int enabled,
                           ucp_lane_index_t num_lanes)
 {
-    node->mode       = enabled && (num_lanes <= UCP_PROTO_DFLOW_MAX_LANES) ?
+    node->mode        = enabled && (num_lanes <= UCP_PROTO_DFLOW_MAX_LANES) ?
                                 UCP_PROTO_DFLOW_MODE_READY :
                                 UCP_PROTO_DFLOW_MODE_DISABLED;
     node->min_length  = 0;
@@ -23,6 +23,13 @@ ucp_proto_dflow_node_init(ucp_proto_dflow_node_t *node, int enabled,
 
     memset(&node->stats, 0, sizeof(node->stats));
     memset(&node->lanes, 0, sizeof(node->lanes));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_dflow_lane_init(ucp_proto_dflow_lane_t *lane)
+{
+    lane->mode = UCP_PROTO_DFLOW_MODE_DISABLED;
+    memset(&lane->stats, 0, sizeof(lane->stats));
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -103,14 +110,15 @@ ucp_proto_dflow_lane_comp(uct_completion_t *comp)
     ucp_invoke_uct_completion(stats->parent, comp->status);
 }
 
-static UCS_F_ALWAYS_INLINE ucp_proto_dflow_lane_t *
+static UCS_F_ALWAYS_INLINE void
 ucp_proto_dflow_setup(const ucp_proto_dflow_node_t *cnode,
+                      const ucp_proto_dflow_lane_t *clane,
                       ucp_request_t *req,
                       ucp_lane_index_t lane_idx)
 {
     /* TODO: get rid of const cast */
     ucp_proto_dflow_node_t *node = (ucp_proto_dflow_node_t *)cnode;
-    ucp_proto_dflow_lane_t *lane;
+    ucp_proto_dflow_lane_t *lane = (ucp_proto_dflow_lane_t *)clane;
 
     if (lane_idx == 0) {
         node->mode  = UCP_PROTO_DFLOW_MODE_RUNNING;
@@ -127,11 +135,10 @@ ucp_proto_dflow_setup(const ucp_proto_dflow_node_t *cnode,
         }
     }
 
-    lane = &node->lanes[lane_idx];
-    lane->mode = UCP_PROTO_DFLOW_MODE_READY;
+    node->lanes[lane_idx] = lane;
+    lane->mode            = UCP_PROTO_DFLOW_MODE_READY;
     ucp_proto_dflow_stats_init(&lane->stats, ucp_proto_dflow_lane_comp,
                                &node->stats.comp, 1);
-    return lane;
 }
 
 static UCS_F_ALWAYS_INLINE uct_completion_t *

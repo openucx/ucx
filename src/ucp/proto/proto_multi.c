@@ -393,6 +393,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         lpriv     = &mpriv->lanes[mpriv->num_lanes++];
         lane_perf = &lanes_perf[lane];
 
+        ucp_proto_dflow_lane_init(&lpriv->dflow_lane);
         ucp_proto_common_lane_priv_init(&params->super, mpriv->reg_md_map, lane,
                                         &lpriv->super);
 

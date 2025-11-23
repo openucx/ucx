@@ -256,7 +256,8 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
 
-    uct_completion_t *comp = ucp_proto_dflow_get_completion(lpriv->dflow_lane, req);
+    uct_completion_t *comp = ucp_proto_dflow_get_completion(&lpriv->dflow_lane,
+                                                            req);
 
     uct_iov_t iov;
     ucs_status_t status;

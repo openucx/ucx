@@ -182,8 +182,7 @@ ucp_proto_multi_progress(ucp_request_t *req,
 
     if (ucs_unlikely(ucp_proto_dflow_enabled(&mpriv->dflow_node, req, lane_idx))) {
         /* TODO: get rid of const cast */
-        ((ucp_proto_multi_lane_priv_t *)lpriv)->dflow_lane =
-                    ucp_proto_dflow_setup(&mpriv->dflow_node, req, lane_idx);
+        ucp_proto_dflow_setup(&mpriv->dflow_node, &lpriv->dflow_lane, req, lane_idx);
     }
 
     /* send the next fragment */

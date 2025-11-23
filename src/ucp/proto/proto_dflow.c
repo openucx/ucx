@@ -26,10 +26,12 @@ static unsigned ucp_proto_dflow_service_progress(void *arg)
     }
 
     if (node && node->mode == UCP_PROTO_DFLOW_MODE_IDLE) {
-        ucs_diag("dflow samples=%d latency_sum=%.2f", node->num_samples, ucs_time_to_msec(node->stats.latency_sum));
+        ucs_diag("dflow samples=%d latency_sum=%.2f", node->num_samples,
+                 ucs_time_to_msec(node->stats.latency_sum));
         for (i = 0; i < node->num_lanes; ++i) {
-            ucs_diag("  lane %d latency_sum=%.2f", i, ucs_time_to_msec(node->lanes[i].stats.latency_sum));
-            node->lanes[i].stats.latency_sum = 0;
+            ucs_diag("  lane %d latency_sum=%.2f", i,
+                     ucs_time_to_msec(node->lanes[i]->stats.latency_sum));
+            node->lanes[i]->stats.latency_sum = 0;
         }
         node->num_samples = 0;
         node->stats.latency_sum = 0;

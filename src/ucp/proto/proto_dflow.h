@@ -50,7 +50,7 @@ typedef struct {
     size_t                  length_sum;
     unsigned                num_samples;
     ucp_lane_index_t        num_lanes;
-    ucp_proto_dflow_lane_t  lanes[UCP_PROTO_DFLOW_MAX_LANES];
+    ucp_proto_dflow_lane_t  *lanes[UCP_PROTO_DFLOW_MAX_LANES];
 } ucp_proto_dflow_node_t;
 
 
