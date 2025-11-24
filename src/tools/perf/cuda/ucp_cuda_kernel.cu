@@ -189,7 +189,7 @@ private:
                 ucs_warn("timeout creating device memory list");
                 deadline = ULONG_MAX;
             }
-            
+
             ucp_worker_progress(perf.ucp.worker);
             status = ucp_device_mem_list_create(perf.ucp.ep, &params,
                                                 &m_params.mem_list);
