@@ -414,7 +414,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     if (i == 0) {
         ucs_error("failed to select lane for local device %s",
                   ucs_topo_sys_device_get_name(local_sys_dev));
-        return UCS_ERR_NO_RESOURCE;
+        return UCS_ERR_NO_DEVICE;
     }
 
     /* Populate handle header */

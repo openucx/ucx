@@ -2501,8 +2501,7 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
                                          mem_type_tl_bitmap, UCP_NULL_LANE,
                                          select_ctx, 0);
     if (!found_lane) {
-        ucs_error("could not find device lanes");
-        return UCS_ERR_UNREACHABLE;
+        ucs_debug("ep %p: could not find device lanes", select_params->ep);
     }
 
     return UCS_OK;
