@@ -808,11 +808,12 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
     return iface->internal_ops->ep_query(ep, ep_attr);
 }
 
-ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags)
+ucs_status_t uct_ep_invalidate(uct_ep_h ep,
+                               const uct_ep_invalidate_params_t *params)
 {
     const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
 
-    return iface->internal_ops->ep_invalidate(ep, flags);
+    return iface->internal_ops->ep_invalidate(ep, params);
 }
 
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
