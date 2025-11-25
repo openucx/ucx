@@ -1140,6 +1140,18 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
  */
 ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
+/** @ingroup UCT_RESOURCE
+ * @brief Invalidate the endpoint.
+ *
+ * This routine invalidates the endpoint and moves it to error state. All the operations
+ * posted after this call will complete with error.
+ *
+ * @param [in]  ep         Endpoint to invalidate.
+ * @param [in]  flags      Flags.
+ *
+ * @return Error code.
+*/
+ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags);
 
 /**
  * @ingroup UCT_RESOURCE
