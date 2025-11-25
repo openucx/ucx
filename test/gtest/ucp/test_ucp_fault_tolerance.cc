@@ -21,19 +21,22 @@ public:
     }
 
     test_ucp_fault_tolerance() {
-        /* Configure multiple RMA lanes to ensure we have >1 lanes */
-        modify_config("MAX_RMA_LANES", "2");
-        modify_config("RNDV_THRESH", "inf"); /* Disable RNDV to use short protocol */
-        
+        configure_peer_failure_settings();
+
         /* Configure failure injection parameters */
         modify_config("FAILURE_LANE", "0");
-        modify_config("FAILURE_TIMEOUT", "1.0"); /* 1 second timeout */
+        modify_config("FAILURE_TIMEOUT", "1.0s"); /* 1 second timeout */
     }
 
 protected:
     enum {
         GOOD_EP_INDEX = 0,      /* Index for good endpoint */
         INJECTED_EP_INDEX = 1   /* Index for failure-injected endpoint */
+    };
+
+    enum failure_side_t {
+        FAILURE_SIDE_INITIATOR, /* Inject failure on sender (initiator) side */
+        FAILURE_SIDE_TARGET     /* Inject failure on receiver (target) side */
     };
 
     void init() override {
@@ -50,16 +53,16 @@ protected:
     /**
      * Connect endpoints with proper error handling
      */
-    void connect_endpoints(bool inject_failure_on_ep1) {
+    void connect_endpoints(failure_side_t failure_side) {
         ucp_ep_params_t ep_params_good = get_ep_params(false);
-        ucp_ep_params_t ep_params_inject = get_ep_params(inject_failure_on_ep1);
 
         /* Connect sender to receiver - one good endpoint, one with injection */
         sender().connect(&receiver(), ep_params_good, GOOD_EP_INDEX);
-        sender().connect(&receiver(), ep_params_inject, INJECTED_EP_INDEX);
+        sender().connect(&receiver(), get_ep_params(failure_side == FAILURE_SIDE_INITIATOR), INJECTED_EP_INDEX);
 
-        /* Connect receiver back to sender */
-        receiver().connect(&sender(), get_ep_params(false));
+        /* Connect receiver back to sender - with or without injection */
+        receiver().connect(&sender(), ep_params_good, GOOD_EP_INDEX);
+        receiver().connect(&sender(), get_ep_params(failure_side == FAILURE_SIDE_TARGET), INJECTED_EP_INDEX);
     }
 
     /**
@@ -129,21 +132,80 @@ protected:
         ucs_status_ptr_t status_ptr = ucp_put_nbx(ep, src_buf.ptr(), src_buf.size(),
                                                   (uintptr_t)dst_buf.ptr(),
                                                   rkey, &param);
-
-        /* Wait for completion */
-        if (UCS_PTR_IS_PTR(status_ptr)) {
-            ucs_status_t status;
-            do {
-                progress();
-                status = ucp_request_check_status(status_ptr);
-            } while (status == UCS_INPROGRESS);
-            ucp_request_free(status_ptr);
-            return status;
-        } else {
-            return UCS_PTR_STATUS(status_ptr);
-        }
+        return request_wait(status_ptr);
     }
 
+
+    /**
+     * Common helper function to test PUT operation with injected failure
+     */
+    void test_put_with_injected_failure(failure_side_t failure_side) {
+        const size_t size = 2 * UCS_GBYTE;
+        const char *side_name = (failure_side == FAILURE_SIDE_INITIATOR) ? 
+                                "initiator" : "target";
+
+        UCS_TEST_MESSAGE << "Testing failure injection on " << side_name << " side";
+
+        connect_endpoints(failure_side);
+
+        /* TODO: cover case when wireup is in progress, flush here is to complete wireup */
+        flush_workers();
+        skip_if_insufficient_rma_lanes(sender().ep(0, INJECTED_EP_INDEX));
+
+        /* Setup RMA buffers using mapped_buffer */
+        mem_buffer src_buf(size, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer dst_buf(size, receiver());
+
+        /* Fill source with pattern, clear destination */
+        src_buf.pattern_fill(size, 0x12345678);
+        dst_buf.memset(0);
+
+        UCS_TEST_MESSAGE << "Sleeping for 1 second to allow failure injection timer to fire...";
+        sleep(1); /* Wait longer than FAILURE_TIMEOUT (0.5s) */
+        short_progress_loop(); /* Progress the async context */
+
+        UCS_TEST_MESSAGE << "Attempting PUT operation with " << side_name 
+                        << " side failure injected...";
+
+        ucs_status_t status = do_put_and_wait(sender().ep(0, INJECTED_EP_INDEX),
+                                              src_buf, dst_buf);
+
+        UCS_TEST_MESSAGE << "PUT operation returned status: " 
+                        << ucs_status_string(status);
+        UCS_TEST_MESSAGE << "Error callback invoked " << m_err_count << " times";
+
+        /*
+         * Expected behavior (once fault tolerance is implemented):
+         * - The operation should complete successfully (UCS_OK) OR
+         * - The error callback should be triggered (m_err_count > 0) OR  
+         * - The operation should fail gracefully with appropriate error status
+         * 
+         * For now, we document that this test will FAIL, demonstrating
+         * the current lack of fault tolerance when using injected failures.
+         */
+        if (status == UCS_OK) {
+            UCS_TEST_MESSAGE << "SUCCESS: Operation completed despite injected failure "
+                            << "on " << side_name << " side (fault tolerance working!)";
+            /* Verify data integrity */
+            EXPECT_EQ(0, memcmp(src_buf.ptr(), dst_buf.ptr(), size));
+        } else if (m_err_count > 0) {
+            UCS_TEST_MESSAGE << "PARTIAL SUCCESS: Error callback triggered, "
+                            << "but operation failed with status: " 
+                            << ucs_status_string(status);
+        } else {
+            UCS_TEST_MESSAGE << "EXPECTED FAILURE: Operation failed without triggering "
+                            << "error callback or completing successfully. "
+                            << "Status: " << ucs_status_string(status);
+            UCS_TEST_MESSAGE << "This demonstrates the need for fault tolerance implementation.";
+            
+            /* For now, we expect failure since implementation is not complete */
+            EXPECT_NE(UCS_OK, status) 
+                << "Expected failure due to incomplete fault tolerance implementation";
+        }
+
+        status = do_put_and_wait(sender().ep(0, GOOD_EP_INDEX), src_buf, dst_buf);
+        EXPECT_EQ(UCS_OK, status);
+    }
 
     size_t m_err_count;
     ucs_status_t m_err_status;
@@ -152,112 +214,22 @@ protected:
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 
 /**
- * Test that normal ucp_put operations work on the good endpoint
+ * Test fault tolerance: PUT operation with initiator-side failure injection
+ * The sender's endpoint fails, testing recovery when the initiator side fails
  */
-UCS_TEST_P(test_ucp_fault_tolerance, put_on_good_endpoint)
+UCS_TEST_P(test_ucp_fault_tolerance, put_with_initiator_failure,
+          "FAILURE_TIMEOUT=0.5")
 {
-    const size_t size = 8192;
-
-    connect_endpoints(false);
-    skip_if_insufficient_rma_lanes(sender().ep(0, GOOD_EP_INDEX));
-
-    /* Setup RMA buffers using mapped_buffer */
-    mem_buffer src_buf(size, UCS_MEMORY_TYPE_HOST);
-    mapped_buffer dst_buf(size, receiver());
-
-    /* Fill source with pattern, clear destination */
-    src_buf.pattern_fill(size, 0x12345678);
-    dst_buf.memset(0);
-
-    /* Perform PUT operation on good endpoint */
-    ucs_status_t status = do_put_and_wait(sender().ep(0, GOOD_EP_INDEX),
-                                          src_buf, dst_buf);
-    EXPECT_EQ(UCS_OK, status);
-
-    /* Flush to ensure completion */
-    void *flush_req = ucp_ep_flush_nb(sender().ep(0, GOOD_EP_INDEX), 0, (ucp_send_callback_t)ucs_empty_function);
-    if (UCS_PTR_IS_PTR(flush_req)) {
-        request_wait(flush_req);
-    }
-
-    /* Verify data was transferred correctly */
-    EXPECT_EQ(0, memcmp(src_buf.ptr(), dst_buf.ptr(), size));
+    test_put_with_injected_failure(FAILURE_SIDE_INITIATOR);
 }
 
 /**
- * Test fault tolerance: PUT operation on endpoint with failure injection
- * This test should FAIL until the fault tolerance implementation is complete
+ * Test fault tolerance: PUT operation with target-side failure injection
+ * The receiver's endpoint fails, testing recovery when the target side fails
  */
-UCS_TEST_P(test_ucp_fault_tolerance, put_with_injected_failure,
+UCS_TEST_P(test_ucp_fault_tolerance, put_with_target_failure,
           "FAILURE_TIMEOUT=0.5")
 {
-    const size_t size = 8192;
-
-    connect_endpoints(true); /* Enable failure injection on second endpoint */
-    flush_workers();
-    skip_if_insufficient_rma_lanes(sender().ep(0, INJECTED_EP_INDEX));
-
-    /* Setup RMA buffers using mapped_buffer */
-    mem_buffer src_buf(size, UCS_MEMORY_TYPE_HOST);
-    mapped_buffer dst_buf(size, receiver());
-
-    /* Fill source with pattern, clear destination */
-    src_buf.pattern_fill(size, 0x12345678);
-    dst_buf.memset(0);
-
-    UCS_TEST_MESSAGE << "Sleeping for 1 second to allow failure injection timer to fire...";
-    sleep(1); /* Wait longer than FAILURE_TIMEOUT (0.5s) */
-    progress(); /* Progress the async context */
-
-    UCS_TEST_MESSAGE << "Attempting PUT operation on endpoint with injected failure...";
-
-    /* 
-     * Attempt PUT operation AFTER injection timeout
-     * This should fail because the endpoint has been invalidated
-     * 
-     * NOTE: Once fault tolerance is implemented, this operation should
-     * gracefully handle the failure and either:
-     * 1. Return an error status
-     * 2. Trigger the error callback
-     * 3. Automatically recover using an alternate lane
-     * 
-     * For now, we expect this to fail to demonstrate the need for
-     * fault tolerance implementation.
-     */
-    ucs_status_t status = do_put_and_wait(sender().ep(0, INJECTED_EP_INDEX),
-                                          src_buf, dst_buf);
-
-    UCS_TEST_MESSAGE << "PUT operation returned status: " 
-                    << ucs_status_string(status);
-    UCS_TEST_MESSAGE << "Error callback invoked " << m_err_count << " times";
-
-    /*
-     * Expected behavior (once fault tolerance is implemented):
-     * - The operation should complete successfully (UCS_OK) OR
-     * - The error callback should be triggered (m_err_count > 0) OR  
-     * - The operation should fail gracefully with appropriate error status
-     * 
-     * For now, we document that this test will FAIL, demonstrating
-     * the current lack of fault tolerance when using injected failures.
-     */
-    if (status == UCS_OK) {
-        UCS_TEST_MESSAGE << "SUCCESS: Operation completed despite injected failure "
-                        << "(fault tolerance working!)";
-        /* Verify data integrity */
-        EXPECT_EQ(0, memcmp(src_buf.ptr(), dst_buf.ptr(), size));
-    } else if (m_err_count > 0) {
-        UCS_TEST_MESSAGE << "PARTIAL SUCCESS: Error callback triggered, "
-                        << "but operation failed with status: " 
-                        << ucs_status_string(status);
-    } else {
-        UCS_TEST_MESSAGE << "EXPECTED FAILURE: Operation failed without triggering "
-                        << "error callback or completing successfully. "
-                        << "Status: " << ucs_status_string(status);
-        UCS_TEST_MESSAGE << "This demonstrates the need for fault tolerance implementation.";
-        
-        /* For now, we expect failure since implementation is not complete */
-        EXPECT_NE(UCS_OK, status) 
-            << "Expected failure due to incomplete fault tolerance implementation";
-    }
+    test_put_with_injected_failure(FAILURE_SIDE_TARGET);
 }
 
