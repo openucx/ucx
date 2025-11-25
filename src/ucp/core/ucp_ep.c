@@ -57,20 +57,17 @@ static void ucp_ep_failure_inject_timer(int timer_id, ucs_event_set_types_t even
     ucs_debug("ep %p: timer %d fired, injecting failure on lane %d",
               ep, timer_id, failure_lane);
 
-    /* Mark as no longer scheduled */
-    ep->ext->failure_timer_id = 0;
-
     if ((failure_lane < 0) || (failure_lane >= num_lanes)) {
         ucs_debug("ep %p: failure injection lane %d is invalid (num_lanes=%d)",
                   ep, failure_lane, num_lanes);
-        return;
+        goto out_remove_timer;
     }
 
     uct_ep = ucp_ep_get_lane(ep, failure_lane);
     if (uct_ep == NULL) {
         ucs_debug("ep %p: failure injection lane %d has no UCT endpoint",
                   ep, failure_lane);
-        return;
+        goto out_remove_timer;
     }
 
     ucs_debug("ep %p: injecting failure on lane %d (uct_ep=%p)",
@@ -84,6 +81,17 @@ static void ucp_ep_failure_inject_timer(int timer_id, ucs_event_set_types_t even
         ucs_warn("ep %p: uct_ep_invalidate failed on lane %d: %s",
                  ep, failure_lane, ucs_status_string(status));
     }
+
+out_remove_timer:
+    /* Remove the timer after it fires (one-shot timer) */
+    status = ucs_async_remove_handler(timer_id, 0);
+    if (status != UCS_OK) {
+        ucs_warn("ep %p: failed to remove timer %d: %s",
+                 ep, timer_id, ucs_status_string(status));
+    }
+
+    /* Mark as no longer scheduled */
+    ep->ext->failure_timer_id = 0;
 }
 
 /* Check and schedule failure injection if needed */
@@ -567,6 +575,7 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
     ucp_ep_peer_mem_data_t data;
+    ucs_status_t status;
 
     ucp_ep_refcount_field_assert(ep, refcount, ==, 0);
     ucp_ep_refcount_assert(ep, create, ==, 0);
@@ -581,7 +590,12 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
 
     /* Remove failure injection timer if active */
     if (ep->ext->failure_timer_id != 0) {
-        ucs_async_remove_handler(ep->ext->failure_timer_id, 1);
+        status = ucs_async_remove_handler(ep->ext->failure_timer_id, 1);
+        if (status != UCS_OK && status != UCS_ERR_NO_ELEM) {
+            /* UCS_ERR_NO_ELEM is OK - timer may have already been removed */
+            ucs_warn("ep %p: failed to remove failure injection timer %d: %s",
+                     ep, ep->ext->failure_timer_id, ucs_status_string(status));
+        }
         ep->ext->failure_timer_id = 0;
     }
 
