@@ -593,6 +593,18 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "resulting performance.",
    ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"FAILURE_LANE", "-1",
+   "Failure emulation: lane index to inject failure on (-1 to disable).\n"
+   "When set to a valid lane index (0 or greater), uct_ep_invalidate will be\n"
+   "called on that lane after FAILURE_TIMEOUT. This is for testing purposes only.",
+   ucs_offsetof(ucp_context_config_t, failure_lane), UCS_CONFIG_TYPE_INT},
+
+  {"FAILURE_TIMEOUT", "inf",
+   "Failure emulation: timeout before injecting failure on FAILURE_LANE.\n"
+   "If FAILURE_LANE is set to a valid lane index, the failure will be injected\n"
+   "after this timeout. Use 'inf' to disable. This is for testing purposes only.",
+   ucs_offsetof(ucp_context_config_t, failure_timeout), UCS_CONFIG_TYPE_TIME_UNITS},
+
   {NULL}
 };
 

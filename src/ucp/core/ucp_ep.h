@@ -563,6 +563,12 @@ typedef struct ucp_ep_ext {
      * Map of system devices that require a flush operation
      */
     ucp_sys_dev_map_t             flush_sys_dev_map;
+
+    /**
+     * Failure emulation: timer ID for the failure injection timer
+     * (0 means no timer is active)
+     */
+    int                           failure_timer_id;
 } ucp_ep_ext_t;
 
 

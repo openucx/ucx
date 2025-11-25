@@ -221,6 +221,10 @@ typedef struct ucp_context_config {
     int                                    proto_use_single_net_device;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
+    /** Failure emulation: lane index to inject failure (-1 to disable) */
+    int                                    failure_lane;
+    /** Failure emulation: timeout before injecting failure */
+    ucs_time_t                             failure_timeout;
 } ucp_context_config_t;
 
 

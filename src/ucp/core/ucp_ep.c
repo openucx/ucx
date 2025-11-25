@@ -43,6 +43,80 @@ __KHASH_IMPL(ucp_ep_peer_mem_hash, kh_inline, uint64_t,
              ucp_ep_peer_mem_data_t, 1,
              kh_int64_hash_func, kh_int64_hash_equal);
 
+/* Failure injection timer callback */
+static void ucp_ep_failure_inject_timer(int timer_id, ucs_event_set_types_t events,
+                                        void *arg)
+{
+    ucp_ep_h ep                     = (ucp_ep_h)arg;
+    ucp_context_h context           = ep->worker->context;
+    int failure_lane                = context->config.ext.failure_lane;
+    ucp_lane_index_t num_lanes      = ucp_ep_num_lanes(ep);
+    uct_ep_h uct_ep;
+    ucs_status_t status;
+
+    ucs_debug("ep %p: timer %d fired, injecting failure on lane %d",
+              ep, timer_id, failure_lane);
+
+    /* Mark as no longer scheduled */
+    ep->ext->failure_timer_id = 0;
+
+    if ((failure_lane < 0) || (failure_lane >= num_lanes)) {
+        ucs_debug("ep %p: failure injection lane %d is invalid (num_lanes=%d)",
+                  ep, failure_lane, num_lanes);
+        return;
+    }
+
+    uct_ep = ucp_ep_get_lane(ep, failure_lane);
+    if (uct_ep == NULL) {
+        ucs_debug("ep %p: failure injection lane %d has no UCT endpoint",
+                  ep, failure_lane);
+        return;
+    }
+
+    ucs_debug("ep %p: injecting failure on lane %d (uct_ep=%p)",
+              ep, failure_lane, uct_ep);
+
+    status = uct_ep_invalidate(uct_ep, 0);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        ucs_warn("ep %p: uct_ep_invalidate is not supported on lane %d",
+                 ep, failure_lane);
+    } else if (status != UCS_OK) {
+        ucs_warn("ep %p: uct_ep_invalidate failed on lane %d: %s",
+                 ep, failure_lane, ucs_status_string(status));
+    }
+}
+
+/* Check and schedule failure injection if needed */
+static void ucp_ep_check_failure_inject(ucp_ep_h ep)
+{
+    ucp_context_h context           = ep->worker->context;
+    ucs_async_context_t *async      = &ep->worker->async;
+    int failure_lane                = context->config.ext.failure_lane;
+    ucs_time_t failure_timeout      = context->config.ext.failure_timeout;
+    ucs_status_t status;
+
+    /* Check if failure injection is enabled */
+    if ((failure_lane < 0) || (failure_timeout == UCS_TIME_INFINITY)) {
+        return;
+    }
+
+    ucs_debug("ep %p: scheduling failure injection on lane %d after %f sec",
+              ep, failure_lane, ucs_time_to_sec(failure_timeout));
+
+    /* Add timer that will fire after the specified timeout */
+    status = ucs_async_add_timer(async->mode, failure_timeout,
+                                 ucp_ep_failure_inject_timer, ep, async,
+                                 &ep->ext->failure_timer_id);
+    if (status != UCS_OK) {
+        ucs_warn("ep %p: failed to add failure injection timer: %s",
+                 ep, ucs_status_string(status));
+        return;
+    }
+
+    ucs_debug("ep %p: added failure injection timer %d",
+              ep, ep->ext->failure_timer_id);
+}
+
 typedef struct {
     double reg_growth;
     double reg_overhead;
@@ -230,6 +304,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
     ep->ext->flush_sys_dev_map            = 0;
+    ep->ext->failure_timer_id             = 0;
 
     UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
                       sizeof(ep->ext->flush_state));
@@ -502,6 +577,12 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucs_assert(worker->num_all_eps > 0);
         --worker->num_all_eps;
+    }
+
+    /* Remove failure injection timer if active */
+    if (ep->ext->failure_timer_id != 0) {
+        ucs_async_remove_handler(ep->ext->failure_timer_id, 1);
+        ep->ext->failure_timer_id = 0;
     }
 
     ucp_worker_keepalive_remove_ep(ep);
@@ -1227,6 +1308,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
 
         ucp_ep_params_check_err_handling(ep, params);
         ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
+        ucp_ep_check_failure_inject(ep);
         *ep_p = ep;
     } else {
         ++worker->counters.ep_creation_failures;
