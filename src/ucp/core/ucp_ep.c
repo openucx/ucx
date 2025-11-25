@@ -87,7 +87,7 @@ static void ucp_ep_failure_inject_timer(int timer_id, ucs_event_set_types_t even
 }
 
 /* Check and schedule failure injection if needed */
-static void ucp_ep_check_failure_inject(ucp_ep_h ep)
+static void ucp_ep_inject_failure(ucp_ep_h ep)
 {
     ucp_context_h context           = ep->worker->context;
     ucs_async_context_t *async      = &ep->worker->async;
@@ -1308,7 +1308,12 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
 
         ucp_ep_params_check_err_handling(ep, params);
         ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
-        ucp_ep_check_failure_inject(ep);
+
+        if ((params->field_mask & UCP_EP_PARAM_FIELD_FLAGS) &&
+            (params->flags & UCP_EP_PARAMS_FLAGS_INJECT_FAILURE)) {
+            ucp_ep_inject_failure(ep);
+        }
+
         *ep_p = ep;
     } else {
         ++worker->counters.ep_creation_failures;

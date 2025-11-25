@@ -297,7 +297,7 @@ enum ucp_ep_params_flags_field {
                                                            send to a particular
                                                            remote endpoint, for
                                                            example stream */
-    UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID = UCS_BIT(2)   /**< Send client id
+    UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID = UCS_BIT(2),  /**< Send client id
                                                            when connecting to remote
                                                            socket address as part of the
                                                            connection request payload.
@@ -305,6 +305,14 @@ enum ucp_ep_params_flags_field {
                                                            can be obtained from
                                                            @ref ucp_conn_request_h using
                                                            @ref ucp_conn_request_query */
+    UCP_EP_PARAMS_FLAGS_INJECT_FAILURE = UCS_BIT(3)   /**< Enable failure injection
+                                                           for this endpoint. When set,
+                                                           the endpoint will inject
+                                                           failure on the configured lane
+                                                           after the configured timeout
+                                                           (see UCX_FAILURE_LANE and
+                                                           UCX_FAILURE_TIMEOUT). This is
+                                                           for testing purposes only. */
 };
 
 
