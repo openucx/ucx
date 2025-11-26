@@ -365,7 +365,7 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
                     worker->rndv_ppln_fc_stats.num_ppln_super_reqs;
             }
 
-            ucs_trace_req("ppln_progress: req=%p proto=%s total_frags=%zu "
+            ucs_warn("ppln_progress: req=%p proto=%s total_frags=%zu "
                           "max_outstanding=%zu fc_enabled=1 "
                           "global_super_reqs=%zu global_total_frags=%zu",
                           req, req->send.proto_config->proto->name,

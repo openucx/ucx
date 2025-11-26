@@ -3093,7 +3093,7 @@ unsigned ucp_worker_progress(ucp_worker_h worker)
     /* Periodically log RNDV pipeline flow control statistics */
     if (worker->context->config.ext.rndv_ppln_frag_fc_enable) {
         /* Log every 10M progress calls (lightweight check - just a counter) */
-        if (++worker->rndv_ppln_fc_stats.progress_count >= 100000) {
+        if (++worker->rndv_ppln_fc_stats.progress_count >= 10000) {
             if (worker->rndv_ppln_fc_stats.num_ppln_super_reqs > 0 ||
                 worker->rndv_ppln_fc_stats.max_super_reqs > 0) {
                 ucs_warn("RNDV_PPLN_FC: current super_reqs=%zu frags=%zu | "
