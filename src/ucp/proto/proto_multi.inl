@@ -9,6 +9,7 @@
 
 #include "proto_multi.h"
 
+#include <ucp/proto/proto_dflow.inl>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/rma/rma.inl>
 
@@ -178,6 +179,11 @@ ucp_proto_multi_progress(ucp_request_t *req,
 
     lane_idx = req->send.multi_lane_idx;
     lpriv    = &mpriv->lanes[lane_idx];
+
+    if (ucs_unlikely(ucp_proto_dflow_enabled(&mpriv->dflow_node, req, lane_idx))) {
+        /* TODO: get rid of const cast */
+        ucp_proto_dflow_setup(&mpriv->dflow_node, &lpriv->dflow_lane, req, lane_idx);
+    }
 
     /* send the next fragment */
     status = send_func(req, lpriv, &next_iter, &lane_shift);

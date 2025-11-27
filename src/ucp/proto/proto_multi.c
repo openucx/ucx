@@ -241,6 +241,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     uint32_t weight_sum;
     ucs_status_t status;
     int fixed_first_lane;
+    const char *weight = getenv("WEIGHT");
+    double weight_value;
 
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
@@ -382,12 +384,16 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     weight_sum          = 0;
     min_end_offset      = 0;
 
+    ucp_proto_dflow_node_init(&mpriv->dflow_node, params->dflow_enabled,
+                              selection.num_lanes);
+
     ucs_for_each_bit(lane, selection.lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
 
         lpriv     = &mpriv->lanes[mpriv->num_lanes++];
         lane_perf = &lanes_perf[lane];
 
+        ucp_proto_dflow_lane_init(&lpriv->dflow_lane);
         ucp_proto_common_lane_priv_init(&params->super, mpriv->reg_md_map, lane,
                                         &lpriv->super);
 
@@ -415,6 +421,14 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                                     perf.bandwidth);
         ucs_assert(lpriv->weight > 0);
         ucs_assert(lpriv->weight <= UCP_PROTO_MULTI_WEIGHT_MAX);
+
+        if (weight) {
+            weight_value = (double)atoi(weight);
+            if (mpriv->num_lanes > 1) {
+                weight_value = 100.0 - weight_value;
+            }
+            lpriv->weight = (uint32_t)(weight_value * UCP_PROTO_MULTI_WEIGHT_MAX / 100.0);
+        }
 
         /* Calculate minimal message length according to lane's relative weight:
            When the message length is scaled by this lane's weight, it must not
@@ -467,6 +481,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                 ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
+    mpriv->dflow_node.min_length = min_end_offset;
 
     /* After this block, 'perf_node' and 'lane_perf_nodes[]' have extra ref */
     if (mpriv->num_lanes == 1) {

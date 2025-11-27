@@ -14,6 +14,7 @@
 #include "ucp_rkey.h"
 
 #include <ucp/core/ucp_am.h>
+#include <ucp/proto/proto_dflow.h>
 #include <ucp/tag/tag_match.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/mpool_set.h>
@@ -404,6 +405,8 @@ typedef struct ucp_worker {
         /* Last round timestamp */
         ucs_time_t                   last_round;
     } usage_tracker;
+
+    ucp_proto_dflow_service_t        dflow_service;
 } ucp_worker_t;
 
 

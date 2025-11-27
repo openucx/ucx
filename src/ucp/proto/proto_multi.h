@@ -9,6 +9,7 @@
 
 #include "proto.h"
 #include "proto_common.h"
+#include "proto_dflow.h"
 
 #include <ucp/dt/datatype_iter.h>
 
@@ -84,8 +85,10 @@ typedef struct {
 
     /* Map of system devices that require a flush operation */
     ucp_sys_dev_map_t            flush_sys_dev_mask;
-} ucp_proto_multi_lane_priv_t;
 
+    /* Stats for a single lane transfer */
+    ucp_proto_dflow_lane_t       dflow_lane;
+} ucp_proto_multi_lane_priv_t;
 
 /*
  * Base class for protocols with fragmentation
@@ -101,6 +104,8 @@ typedef struct {
     ucp_lane_index_t            num_lanes;    /* Number of lanes to use */
     size_t                      align_thresh; /* Cached value of threshold for
                                                  enabling data split alignment */
+    ucp_proto_dflow_node_t      dflow_node;   /* Dynamic flow node */
+
     ucp_proto_multi_lane_priv_t lanes[UCP_MAX_LANES]; /* Array of lanes */
 } ucp_proto_multi_priv_t;
 
@@ -126,6 +131,8 @@ typedef struct {
      * optimal alignment for buffer address for the UCT operation used
      * by this protocol */
     ptrdiff_t                      opt_align_offs;
+    /* TODO */
+    int                            dflow_enabled;
 
     struct {
         /* Required iface capabilities */
