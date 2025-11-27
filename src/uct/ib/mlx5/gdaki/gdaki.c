@@ -403,10 +403,12 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     CUdeviceptr sq_db;
     unsigned i;
 
+    pthread_mutex_lock(&iface->ep_init_lock);
+
     if (!ep->dev_ep_init) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
         if (status != UCS_OK) {
-            return status;
+            goto out_unlock;
         }
 
         uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
@@ -469,12 +471,15 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     }
 
     *device_ep_p = &ep->ep_gpu->super;
+    pthread_mutex_unlock(&iface->ep_init_lock);
     return UCS_OK;
 
 out_free:
     ucs_free(dev_ep);
 out_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+out_unlock:
+    pthread_mutex_unlock(&iface->ep_init_lock);
     return status;
 }
 
@@ -631,11 +636,17 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_atomic;
     }
 
-    self->num_channels = config->num_channels;
+    if (pthread_mutex_init(&self->ep_init_lock, NULL) != 0) {
+        status = UCS_ERR_IO_ERROR;
+        goto err_lock;
+    }
 
+    self->num_channels = config->num_channels;
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 
+err_lock:
+    ibv_dereg_mr(self->atomic_mr);
 err_atomic:
     cuMemFree(self->atomic_raw);
 err_ctx:
@@ -647,6 +658,7 @@ err_ctx_release:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
 {
+    pthread_mutex_destroy(&self->ep_init_lock);
     ibv_dereg_mr(self->atomic_mr);
     cuMemFree(self->atomic_raw);
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(self->cuda_dev));
@@ -799,7 +811,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
 
 err:
     ucs_free(tl_devices);
-out:    
+out:
     return status;
 }
 

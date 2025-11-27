@@ -29,25 +29,6 @@ static uint32_t uct_ib_mlx5_flush_rkey_make()
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
 }
 
-/* Should be called after DDP is initialized */
-static int
-uct_ib_mlx5_md_check_odp_common(uct_ib_mlx5_md_t *md, const char **reason_ptr)
-{
-    if (!uct_ib_md_check_odp_common(&md->super, reason_ptr)) {
-        return 0;
-    }
-
-    /* Issue 4238670 */
-    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-        (md->dp_ordering_cap_devx.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-        md->ddp_support_dv.rc || md->ddp_support_dv.dc) {
-        *reason_ptr = "ODP does not work with DDP";
-        return 0;
-    }
-
-    return 1;
-}
-
 static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
                                            uct_ib_device_t *dev,
                                            uct_ib_mlx5_md_t *md,
@@ -110,6 +91,24 @@ typedef struct uct_ib_mlx5_dbrec_page {
     uct_ib_mlx5_devx_umem_t    mem;
 } uct_ib_mlx5_dbrec_page_t;
 
+
+/* Should be called after DDP is initialized */
+static int
+uct_ib_mlx5_md_check_odp_common(const uct_ib_mlx5_md_t *md, const char **reason_ptr,
+                                const uct_ib_md_config_t *md_config)
+{
+    int is_odp_supported = uct_ib_md_check_odp_common(&md->super, reason_ptr);
+
+    /* Issue 4238670 */
+    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        (md->dp_ordering_cap_devx.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        md->ddp_support_dv.rc || md->ddp_support_dv.dc) {
+        *reason_ptr         = "ODP does not work with DDP";
+        return 0;
+    }
+
+    return is_odp_supported;
+}
 
 static size_t uct_ib_mlx5_calc_mkey_inlen(int list_size)
 {
@@ -1733,9 +1732,9 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_str       = NULL
 };
 
-static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
-                                       const uct_ib_md_config_t *md_config,
-                                       void *cap)
+static int 
+uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
+                           const uct_ib_md_config_t *md_config, void *cap)
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
@@ -1745,8 +1744,13 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     const char *reason;
     struct ibv_mr *mr;
     uint8_t version;
+    int is_odp_supported;
 
-    if (!uct_ib_mlx5_md_check_odp_common(md, &reason)) {
+    is_odp_supported = uct_ib_mlx5_md_check_odp_common(md, &reason, md_config);
+
+    if (!is_odp_supported) {
+        ucs_debug("%s: ODP is disabled because %s",
+                  uct_ib_device_name(&md->super.dev), reason);
         goto no_odp;
     }
 
@@ -1778,8 +1782,9 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                 capability.odp_cap.memory_page_fault_scheme_cap);
         version = 2;
     } else {
-        if (md_config->devx_objs &
-            (UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) | UCS_BIT(UCT_IB_DEVX_OBJ_DCI))) {
+        if ((md_config->devx_objs &
+             (UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) | UCS_BIT(UCT_IB_DEVX_OBJ_DCI)))
+            && !(md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_AUTO))) {
             reason = "version 1 is not supported for DevX QP";
             goto no_odp;
         }
@@ -1819,23 +1824,24 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     }
 
     if (!md->super.relaxed_order) {
-        return;
+        return version;
     }
 
     mr = ibv_reg_mr(md->super.pd, NULL, SIZE_MAX,
                     UCT_IB_MEM_ACCESS_FLAGS | IBV_ACCESS_RELAXED_ORDERING |
                     IBV_ACCESS_ON_DEMAND);
     if (mr == NULL) {
-        return;
+        return version;
     }
 
     ibv_dereg_mr(mr);
     md->flags |= UCT_IB_MLX5_MD_FLAG_GVA_RO;
-    return;
+    return version;
 
 no_odp:
     ucs_debug("%s: ODP is disabled because %s",
               uct_ib_device_name(&md->super.dev), reason);
+    return 0;
 }
 
 static uct_ib_port_select_mode_t
@@ -2303,6 +2309,8 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     unsigned max_rd_atomic_dc;
     ucs_mpool_params_t mp_params;
     int ksm_atomic;
+    int odp_version;
+    uint64_t devx_objs;
 
     buf = ucs_calloc(1, total_len, "mlx5_devx_buffers");
     if (buf == NULL) {
@@ -2486,7 +2494,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
         goto err_lru_cleanup;
     }
 
-    uct_ib_mlx5_devx_check_odp(md, md_config, cap);
+    odp_version = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 
     uct_ib_mlx5dv_check_direct_nic(ctx, dev, md, md_config);
 
@@ -2566,7 +2574,13 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     dev->flags          |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags           |= UCT_IB_MLX5_MD_FLAG_DEVX;
-    md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
+
+    devx_objs = md_config->devx_objs;
+    if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_AUTO)) {
+        devx_objs = (odp_version == 1) ? 0 : UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_MASK;
+    }
+
+    md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(devx_objs);
     md->super.name       = UCT_IB_MD_NAME(mlx5);
     md->super.vhca_id    = vhca_id;
     md->super.uuid       = ucs_generate_uuid((uintptr_t)md);
@@ -3275,21 +3289,6 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
     return UCS_OK;
 }
 
-static void uct_ib_mlx5dv_md_check_odp(uct_ib_mlx5_md_t *md,
-                                       const uct_ib_md_config_t *md_config)
-{
-    const char *device_name = uct_ib_device_name(&md->super.dev);
-    const char *reason;
-
-    if (!uct_ib_mlx5_md_check_odp_common(md, &reason)) {
-        ucs_debug("%s: ODP is disabled because %s", device_name, reason);
-        return;
-    }
-
-    md->super.reg_nonblock_mem_types = md_config->ext.odp.mem_types;
-    ucs_debug("%s: ODP is supported", device_name);
-}
-
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
                                           const uct_ib_md_config_t *md_config,
                                           uct_ib_md_t **p_md)
@@ -3358,7 +3357,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
-    uct_ib_mlx5dv_md_check_odp(md, md_config);
+    uct_ib_md_check_odp(&md->super, md_config);
     uct_ib_mlx5dv_check_direct_nic(ctx, dev, md, md_config);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();

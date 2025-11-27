@@ -93,6 +93,7 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test,
 {
     bool has_counter  = (mode != MODE_DATA_ONLY);
     size_t data_count = (has_counter) ? count - 1 : count;
+    ucs_status_t status;
 
     // Prepare src and dst buffers
     for (auto i = 0; i < data_count; ++i) {
@@ -143,16 +144,20 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test,
     params.elements     = elems.data();
 
     // Create memory list (with retry on connection)
-    ucs_status_t status = UCS_ERR_NOT_CONNECTED;
-    test.wait_for_cond(
-        [&]() {
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        do {
             test.progress();
-            status = ucp_device_mem_list_create(test.sender().ep(), &params, &m_mem_list_h);
-            return status != UCS_ERR_NOT_CONNECTED;
-        },
-        []() {}, 5.0);
+            status = ucp_device_mem_list_create(test.sender().ep(), &params,
+                                                &m_mem_list_h);
+        } while (status == UCS_ERR_NOT_CONNECTED);
+    }
 
-    ASSERT_UCS_OK(status);
+    if (status == UCS_ERR_NO_DEVICE) {
+        UCS_TEST_SKIP_R("Skipping test if no device lanes exists.");
+    } else {
+        ASSERT_UCS_OK(status);
+    }
 }
 
 test_ucp_device::mem_list::~mem_list()

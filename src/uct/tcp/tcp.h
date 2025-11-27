@@ -295,7 +295,12 @@ typedef enum uct_tcp_device_addr_flags {
      * Device address is extended by additional information:
      * @ref uct_iface_local_addr_ns_t for loopback reachability
      */
-    UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK = UCS_BIT(0)
+    UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK         = UCS_BIT(0),
+
+    /**
+     * Allow communication with default gateway
+     */
+    UCT_TCP_DEVICE_ADDR_FLAG_ALLOW_DEFAULT_GW = UCS_BIT(1)
 } uct_tcp_device_addr_flags_t;
 
 
