@@ -17,6 +17,12 @@
 #define UCT_RC_GDA_WQE_MASK             UCS_MASK(63)
 
 
+UCS_F_DEVICE uct_rc_gdaki_dev_qp_t *
+uct_rc_mlx5_gda_get_qp(uct_rc_gdaki_dev_ep_t *ep, unsigned cid)
+{
+    return ep->qps + cid;
+}
+
 UCS_F_DEVICE void *uct_rc_mlx5_gda_get_wqe_ptr(uct_rc_gdaki_dev_ep_t *ep,
                                                unsigned cid, uint16_t wqe_idx)
 {
@@ -30,7 +36,7 @@ UCS_F_DEVICE void *uct_rc_mlx5_gda_get_wqe_ptr(uct_rc_gdaki_dev_ep_t *ep,
 UCS_F_DEVICE void uct_rc_mlx5_gda_ring_db(uct_rc_gdaki_dev_ep_t *ep,
                                           unsigned cid, uint64_t prod_index)
 {
-    uct_rc_gdaki_dev_qp_t *qp                       = ep->qps + cid;
+    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     struct doca_gpu_dev_verbs_wqe_ctrl_seg ctrl_seg = {0};
     __be64 *db_ptr = (__be64*)__ldg((uintptr_t*)&qp->sq_db);
 
@@ -113,7 +119,7 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_parse_cqe(uct_rc_gdaki_dev_ep_t *ep,
                                                 unsigned cid, uint16_t *wqe_cnt,
                                                 uint8_t *opcode)
 {
-    uct_rc_gdaki_dev_qp_t *qp = ep->qps + cid;
+    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     auto *cqe64               = reinterpret_cast<mlx5_cqe64*>(qp->cq_buff);
     uint32_t *data_ptr        = (uint32_t*)&cqe64->wqe_counter;
     uint32_t data             = READ_ONCE(*data_ptr);
@@ -140,7 +146,7 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_max_alloc_wqe_base(
 UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
         uct_rc_gdaki_dev_ep_t *ep, unsigned cid, unsigned count)
 {
-    uct_rc_gdaki_dev_qp_t *qp = ep->qps + cid;
+    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     /* Do not attempt to reserve if the available space is less than the
      * requested count, to avoid starvation of threads trying to rollback the
      * reservation with atomicCAS. */
@@ -207,7 +213,7 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
         uint64_t laddr, uint32_t lkey, uint32_t bytes, bool is_atomic,
         uint64_t add, unsigned cid)
 {
-    uct_rc_gdaki_dev_qp_t *qp = ep->qps + cid;
+    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     uint64_t *dseg_ptr  = (uint64_t*)wqe_ptr + 4 + 2 * is_atomic;
     uint64_t *cseg_ptr  = (uint64_t*)wqe_ptr;
     uint64_t *rseg_ptr  = (uint64_t*)wqe_ptr + 2;
@@ -261,7 +267,7 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
                                      uint64_t wqe_base, unsigned count,
                                      uint64_t flags)
 {
-    uct_rc_gdaki_dev_qp_t *qp = ep->qps + cid;
+    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
             qp->sq_ready_index);
     uint64_t wqe_base_orig = wqe_base;

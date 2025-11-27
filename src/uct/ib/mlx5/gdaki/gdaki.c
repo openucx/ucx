@@ -78,7 +78,7 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
     ucs_assert(sizeof(uct_rc_gdaki_dev_ep_t) == 64);
     ucs_assert(sizeof(uct_rc_gdaki_dev_qp_t) == 128);
 
-    *cq_umem_offset_p = sizeof(uct_rc_gdaki_dev_ep_t),
+    *cq_umem_offset_p    = sizeof(uct_rc_gdaki_dev_ep_t);
     qp_attr->umem_offset = *cq_umem_offset_p +
                            sizeof(uct_rc_gdaki_dev_qp_t) * num_channels;
     *dev_ep_size_p       = qp_attr->umem_offset + qp_attr->len * num_channels;
