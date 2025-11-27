@@ -24,8 +24,9 @@ public:
         configure_peer_failure_settings();
 
         /* Configure failure injection parameters */
-        modify_config("FAILURE_LANE", "0");
+        modify_config("FAILURE_LANE", "1");
         modify_config("FAILURE_TIMEOUT", "1.0s"); /* 1 second timeout */
+        modify_config("MAX_RMA_RAILS", "32");
     }
 
 protected:
@@ -71,9 +72,9 @@ protected:
     ucp_ep_params_t get_ep_params(bool inject_failure) {
         ucp_ep_params_t params;
         memset(&params, 0, sizeof(params));
-        
+
         params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                           UCP_EP_PARAM_FIELD_ERR_HANDLER;
+                            UCP_EP_PARAM_FIELD_ERR_HANDLER;
         params.err_mode = UCP_ERR_HANDLING_MODE_PEER;
         params.err_handler.cb = err_cb;
         params.err_handler.arg = reinterpret_cast<void*>(this);
