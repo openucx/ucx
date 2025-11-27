@@ -309,6 +309,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 #endif
     ep->ext->peer_mem                     = NULL;
     ep->ext->unflushed_lanes              = 0;
+    ep->ext->failed_lanes                 = 0;
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
     ep->ext->flush_sys_dev_map            = 0;
@@ -523,14 +524,14 @@ ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
     return 1;
 }
 
-static unsigned ucp_ep_set_failed_progress(void *arg)
+static unsigned ucp_ep_set_lane_failed_progress(void *arg)
 {
     ucp_ep_set_failed_arg_t *set_ep_failed_arg = arg;
     ucp_ep_h ucp_ep                            = set_ep_failed_arg->ucp_ep;
     ucp_worker_h worker                        = ucp_ep->worker;
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ucp_ep_set_failed(ucp_ep, set_ep_failed_arg->lane,
+    ucp_ep_set_lane_failed(ucp_ep, set_ep_failed_arg->lane,
                       set_ep_failed_arg->status);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
@@ -543,7 +544,7 @@ static int ucp_ep_set_failed_remove_filter(const ucs_callbackq_elem_t *elem,
 {
     ucp_ep_set_failed_arg_t *set_ep_failed_arg = elem->arg;
 
-    if ((elem->cb == ucp_ep_set_failed_progress) &&
+    if ((elem->cb == ucp_ep_set_lane_failed_progress) &&
         (set_ep_failed_arg->ucp_ep == arg)) {
         ucs_free(set_ep_failed_arg);
         return 1;
@@ -1408,42 +1409,41 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
 #if UCS_ENABLE_ASSERT
     uint8_t num_inprog       = ep->refcounts.discard + ep->refcounts.flush +
                                ep->refcounts.create;
-    uint8_t num_failed_tl_ep = 0;
-    ucp_lane_index_t lane;
-    uct_ep_h uct_ep;
+//    uint8_t num_failed_tl_ep = 0;
+// ucp_lane_index_t lane;
+// uct_ep_h uct_ep;
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
-        if ((uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep)) {
-            num_failed_tl_ep++;
-        }
-    }
+    // for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+    //     uct_ep = ucp_ep_get_lane(ep, lane);
+    //     if ((uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep)) {
+    //         num_failed_tl_ep++;
+    //     }
+    // }
 
-    ucs_assert((num_failed_tl_ep == 0) ||
-               (ucp_ep_num_lanes(ep) == num_failed_tl_ep));
+    // ucs_assert((num_failed_tl_ep == 0) ||
+    //            (ucp_ep_num_lanes(ep) == num_failed_tl_ep));
     ucp_ep_refcount_field_assert(ep, refcount, ==, num_inprog);
 #endif
 }
 
 static void
-ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps, uct_ep_h failed_ep)
+ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps,
+                        ucp_lane_map_t failed_lanes, uct_ep_h stub_ep)
 {
     ucp_lane_index_t lane;
-    uct_ep_h uct_ep;
 
     ucp_ep_check_lanes(ep);
     ucp_ep_release_id(ep);
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep        = ucp_ep_get_lane(ep, lane);
-        uct_eps[lane] = uct_ep;
+//    ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
+    ucs_for_each_bit(lane, failed_lanes) {
+        uct_eps[lane] = ucp_ep_get_lane(ep, lane);
 
         /* Set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
          * due to some UCT EP discarding procedures are in-progress and UCP EP
          * may get some operation completions which could try to dereference its
          * lanes */
-        ucp_ep_set_lane(ep, lane, failed_ep);
+        ucp_ep_set_lane(ep, lane, stub_ep);
     }
 }
 
@@ -1514,7 +1514,8 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
     ucp_ep_release_discard_arg(arg);
 }
 
-static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
+static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t failed_lanes,
+                                 ucs_status_t discard_status)
 {
     unsigned ep_flush_flags         = ucp_ep_config_err_handling_enabled(ep) ?
                                       UCT_FLUSH_FLAG_CANCEL :
@@ -1546,15 +1547,13 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
     discard_arg->ucp_ep          = ep;
     discard_arg->status          = discard_status;
     discard_arg->discard_counter = 1;
-    discard_arg->destroy_counter = ucp_ep_num_lanes(ep);
+    discard_arg->destroy_counter = ucs_popcount(failed_lanes);
 
     ucs_debug("ep %p: discarding lanes", ep);
-    ucp_ep_set_lanes_failed(ep, uct_eps, &discard_arg->failed_ep);
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+    ucp_ep_set_lanes_failed(ep, uct_eps, failed_lanes, &discard_arg->failed_ep);
+    ucs_for_each_bit(lane, failed_lanes) {
         uct_ep = uct_eps[lane];
-        if (uct_ep == NULL) {
-            continue;
-        }
+        ucs_assertv(uct_ep != NULL, "lane %d", lane);
 
         ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
         status = ucp_worker_discard_uct_ep(ep, uct_ep,
@@ -1572,23 +1571,16 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
     ucp_ep_discard_lanes_callback(NULL, UCS_OK, discard_arg);
 }
 
-ucs_status_t
-ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
+static ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucs_status_t status)
 {
-    UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
     ucp_ep_ext_t *ep_ext = ucp_ep->ext;
     ucs_log_level_t log_level;
     ucp_request_t *close_req;
 
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
-    ucs_assert(UCS_STATUS_IS_ERR(status));
-    ucs_assert(!ucs_async_is_from_async(&ucp_ep->worker->async));
+    /* All lanes must be in failed state */
+    ucs_assert(ucp_ep->ext->failed_lanes == UCS_MASK(ucp_ep_num_lanes(ucp_ep)));
 
-    ucs_debug("ep %p: set_ep_failed status %s on lane[%d]=%p", ucp_ep,
-              ucs_status_string(status), lane,
-              (lane != UCP_NULL_LANE) ? ucp_ep_get_lane(ucp_ep, lane) : NULL);
-
-    /* In case if this is a local failure we need to notify remote side */
+    /* In case if this is a local unrecoverable failure we need to notify remote side */
     if (ucp_ep_is_cm_local_connected(ucp_ep)) {
         ucp_ep_cm_disconnect_cm_lane(ucp_ep);
     }
@@ -1599,12 +1591,10 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     }
 
     ++ucp_ep->worker->counters.ep_failures;
-
-    /* The EP can be closed from last completion callback */
-    ucp_ep_discard_lanes(ucp_ep, status);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
+        ep_ext = ucp_ep->ext;
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
             if (ep_ext->close_req != NULL) {
                 /* Promote close operation to CANCEL in case of transport error,
@@ -1614,7 +1604,9 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
                 ucp_ep_local_disconnect_progress(close_req);
             }
             return UCS_OK;
-        } else if (ep_ext->err_cb == NULL) {
+        }
+
+        if (ep_ext->err_cb == NULL) {
             /* Print error if user requested error handling support but did not
                install a valid error handling callback */
             log_level =
@@ -1622,12 +1614,10 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
                                                UCP_ERR_HANDLING_MODE_NONE)) ?
                     UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
 
-            ucp_ep_get_lane_info_str(ucp_ep, lane, &lane_info_strb);
             ucs_log(log_level,
-                    "ep %p: error '%s' on %s will not be handled"
+                    "ep %p: error '%s' will not be handled"
                     " since no error callback is installed",
-                    ucp_ep, ucs_status_string(status),
-                    ucs_string_buffer_cstr(&lane_info_strb));
+                    ucp_ep, ucs_status_string(status));
             return UCS_ERR_UNSUPPORTED;
         } else {
             ucp_ep_invoke_err_cb(ucp_ep, status);
@@ -1646,10 +1636,33 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         ucp_ep_disconnected(ucp_ep, 1);
         return UCS_OK;
     }
+
+    return UCS_OK;
 }
 
-void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                                ucs_status_t status)
+ucs_status_t
+ucp_ep_set_lane_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
+{
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
+    ucs_assert(UCS_STATUS_IS_ERR(status));
+    ucs_assert(!ucs_async_is_from_async(&ucp_ep->worker->async));
+
+    ucs_debug("ep %p: set_ep_lane_failed status %s on lane[%d]=%p", ucp_ep,
+              ucs_status_string(status), lane,
+              (lane != UCP_NULL_LANE) ? ucp_ep_get_lane(ucp_ep, lane) : NULL);
+
+    /* The EP can be closed from last completion callback */
+    ucp_ep_discard_lanes(ucp_ep, UCS_BIT(lane), status);
+
+    if (ucs_popcount(ucp_ep->ext->failed_lanes) == ucp_ep_num_lanes(ucp_ep)) {
+        ucp_ep_set_failed(ucp_ep, status);
+    }
+
+    return UCS_OK;
+}
+
+void ucp_ep_set_lane_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                     ucs_status_t status)
 {
     ucp_worker_h worker = ucp_ep->worker;
     ucp_ep_set_failed_arg_t *set_ep_failed_arg;
@@ -1668,7 +1681,7 @@ void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     set_ep_failed_arg->status = status;
 
     ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,
-                              ucp_ep_set_failed_progress, set_ep_failed_arg);
+                              ucp_ep_set_lane_failed_progress, set_ep_failed_arg);
 
     /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
      * that he can wake-up on this event */
@@ -1716,7 +1729,7 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 
     ucs_debug("ep %p: cleanup lanes", ep);
 
-    ucp_ep_set_lanes_failed(ep, uct_eps,
+    ucp_ep_set_lanes_failed(ep, uct_eps, UCS_MASK(ucp_ep_num_lanes(ep)),
                             &ucp_failed_tl_ep_discard_arg.failed_ep);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
@@ -1874,7 +1887,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSED, 0);
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
-        ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
+        ucp_ep_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
+                             UCS_ERR_CANCELED);
         ucp_ep_disconnected(ep, 1);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,

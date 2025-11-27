@@ -137,6 +137,11 @@ static inline ucp_lane_index_t ucp_ep_num_lanes(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.num_lanes;
 }
 
+static inline int ucp_ep_is_alive(ucp_ep_h ep)
+{
+    return !(ep->ext->failed_lanes == UCS_MASK(ucp_ep_num_lanes(ep)));
+}
+
 static inline int ucp_ep_is_lane_p2p(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     return !!(ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane));
