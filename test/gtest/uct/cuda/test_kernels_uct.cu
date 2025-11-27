@@ -107,9 +107,9 @@ template<typename T> class device_result_ptr {
     uct_device_completion_t comp;
 
     if (is_op_enabled(level)) {
-        *status = uct_device_ep_put_single<level>(device_ep, mem_elem,
-                                                  address, remote_address,
-                                                  length, 0, &comp);
+        *status = uct_device_ep_put_single<level>(device_ep, mem_elem, address,
+                                                  remote_address, length, 0, 0,
+                                                  &comp);
     }
 }
 
@@ -175,8 +175,9 @@ uct_atomic_kernel(uct_device_ep_h ep,
     uct_device_completion_t comp;
 
     if (is_op_enabled(level)) {
-        *status_p = uct_device_ep_atomic_add<level>(ep, mem_elem, add, rva,
-                                                    UCT_DEVICE_FLAG_NODELAY, &comp);
+        *status_p = uct_device_ep_atomic_add<level>(ep, mem_elem, add, rva, 0,
+                                                    UCT_DEVICE_FLAG_NODELAY,
+                                                    &comp);
     }
 }
 
@@ -236,7 +237,7 @@ uct_put_multi_kernel(uct_device_ep_h ep,
         *status_p = uct_device_ep_put_multi<level>(ep, mem_list, mem_list_count,
                                                    addresses, remote_addresses,
                                                    lengths, counter_inc_value,
-                                                   counter_remote_address,
+                                                   counter_remote_address, 0,
                                                    UCT_DEVICE_FLAG_NODELAY,
                                                    &comp);
     }
@@ -319,7 +320,7 @@ static __global__ void uct_put_multi_partial_kernel(
         *status_p = uct_device_ep_put_multi_partial<level>(
                 ep, mem_list, mem_list_indices, mem_list_count, addresses,
                 remote_addresses, offsets, offsets, lengths, counter_index,
-                counter_inc_value, counter_remote_address,
+                counter_inc_value, counter_remote_address, 0,
                 UCT_DEVICE_FLAG_NODELAY, &comp);
     }
 }
