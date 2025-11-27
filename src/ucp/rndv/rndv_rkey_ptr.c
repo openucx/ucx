@@ -88,10 +88,11 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_LAST,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR |
-                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR      |
+                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
+                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG   |
+                               UCP_PROTO_COMMON_INIT_FLAG_RNDV,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
@@ -269,6 +270,7 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_GET_ZCOPY,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR   |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
+                               UCP_PROTO_COMMON_INIT_FLAG_RNDV       |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
         .super.exclude_map   = (rkey_ptr_lane == UCP_NULL_LANE) ?
                                0 : UCS_BIT(rkey_ptr_lane),

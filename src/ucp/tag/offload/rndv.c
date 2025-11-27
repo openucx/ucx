@@ -43,6 +43,7 @@ ucp_tag_rndv_offload_proto_probe(const ucp_proto_init_params_t *init_params)
        .super.memtype_op    = UCT_EP_OP_LAST,
        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
+                              UCP_PROTO_COMMON_INIT_FLAG_RNDV       |
                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
        .super.exclude_map   = 0,
        .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
