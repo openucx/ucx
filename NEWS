@@ -11,6 +11,88 @@
 ### Features:
 ### Bugfixes:
 
+## 1.19.1 (Sep 18, 2025)
+### Features:
+#### UCP
+* Do not require transport memory support if rendezvous protocol is not used
+#### Build
+* Added CUDA 13 support to the release pipeline
+* Added Rocky OS support to the release pipeline
+### Bugfixes:
+#### UCS
+* Fixed Netlink fetch mechanism
+
+## 1.19.0 (June 18, 2025)
+### Features:
+#### UCP
+* Enabled multi-GPU support within a single process
+* Added dynamic selection between strong and weak fences in RMA flush operations
+* Improved endpoint reconfiguration capabilities
+* Added All2All lane selection for multi-NIC-GPU systems
+* Improved rkey debug info when config cache limit is reached
+* Improved UCP protocol selection based on available memory types
+* Removed dummy memory key from irrelevant transports (TCP, CMA and CUDA)
+* Improved RNDV performance with device-local staging buffers
+* Enabled error handling for RMA get_offload protocols
+#### UCT
+* Defined uct_rkey_unpack_v2 API to support passing sys-dev
+#### RDMA CORE (IB, ROCE, etc.)
+* Added SRD transport support in EFA with reordering, AM, and control operations
+* Removed XGVMI BF2 support (umem)
+* Removed device memory indirect key
+* Fixed VFS objects for DCIs and pools
+* Added routing table cache to the reachability check
+* Fixed strict order usage in IB auxiliary rkeys
+* Improved various init logging messages
+#### CUDA
+* Added multi-context support for remote key unpacking to CUDA IPC
+* Added context switching aware resource management to CUDA IPC
+* Use buffer ID to detect VA recycling in CUDA IPC
+* Added support for allocating CUDA memory on specific system devices
+* Added multi-device support in CUDA copy
+* Improved protocol lane selection for GPU memory operations
+* Relaxed CUDA context requirements in CUDA copy
+* Added deadlock prevention in CUDA copy
+* Added support for address range detection for VMM
+* Enabled memory attributes query after switching CUDA GPU
+* Added multi-GPU send tests for CUDA transports
+* Removed host-to-host performance estimation from CUDA copy transport
+* Replaced cuCtxCreate by cuDevicePrimaryCtxRetain
+* Improved various init logging messages
+#### ROCM
+* Added control parameters for IPC handle cache and signal pool size
+* Optimized ROCm memory type detection with caching
+#### UCS
+* Removed compilation warnings
+#### Tools
+* Added name filter option (-F 'str') to ucx_info for config and feature dumps
+* Improved ucx_info input validation
+### Bugfixes:
+#### UCP
+* Made UCX_TLS=^ib disable all transports including auxiliary
+* Fixed send request status handling
+* Fixed performance degradation in RNDV by optimizing md cache updates
+* Fixed protocol selection when first lane is filtered out by fragment size
+* Fixed rkey selection by using memory registration flag
+#### UCT
+#### RDMA CORE (IB, ROCE, etc.)
+* Improved reliability of DC transport by adding DCI validation and separating connection logic
+* Fixed segfault in DC fence operation
+#### GPU (CUDA, ROCM)
+* Updated ROCm configuration for ROCm 6.3 compatibility
+* Fixed system device detection for CUDA async memory operations
+* Fixed legacy type detection during CUDA IPC mpack
+* Fixed CUDA IPC RMA operations by using correct context for local buffers
+#### UCS
+* Use UCS function for counting leading zeros on x86 architecture
+* Fixed a compilation warning
+#### Shared Memory
+* Fixed FIFO availability check for sm transport
+#### Documentation
+* Fixed open-mpi clone instruction
+#### Build
+* Fixed enum-int-mismatch warnings with GCC 15
+
 ## 1.18.0 (January 17, 2025)
 ### Features:
 #### UCP
