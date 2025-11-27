@@ -22,6 +22,7 @@
 #include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
+#include <netinet/in.h>
 #include <libgen.h>
 #include <pthread.h>
 #include <sched.h>
@@ -849,6 +850,11 @@ const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size)
     return str;
 }
 
+static int uct_ib_gid_is_ipv6_ll(const union ibv_gid *gid)
+{
+    return IN6_IS_ADDR_LINKLOCAL((struct in6_addr *)gid);
+}
+
 static int uct_ib_device_is_addr_ipv4_mcast(const struct in6_addr *raw,
                                             const uint32_t addr_last_bits)
 {
@@ -1074,11 +1080,16 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
                          uct_ib_device_gid_info_t *gid_info)
 {
     static const size_t max_str_len                     = 200;
-    static const uct_ib_roce_version_info_t roce_prio[] = {
-        {UCT_IB_DEVICE_ROCE_V2, AF_INET},
-        {UCT_IB_DEVICE_ROCE_V2, AF_INET6},
-        {UCT_IB_DEVICE_ROCE_V1, AF_INET},
-        {UCT_IB_DEVICE_ROCE_V1, AF_INET6}
+    struct {
+        uct_ib_roce_version_info_t info;
+        int                        allow_ll; /* link-local allowed when true */
+    } roce_prio[] = {
+        {{UCT_IB_DEVICE_ROCE_V2, AF_INET},  1},
+        {{UCT_IB_DEVICE_ROCE_V2, AF_INET6}, 0},
+        {{UCT_IB_DEVICE_ROCE_V2, AF_INET6}, 1},
+        {{UCT_IB_DEVICE_ROCE_V1, AF_INET},  1},
+        {{UCT_IB_DEVICE_ROCE_V1, AF_INET6}, 0},
+        {{UCT_IB_DEVICE_ROCE_V1, AF_INET6}, 1}
     };
     int gid_tbl_len         = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
     ucs_status_t status     = UCS_OK;
@@ -1108,8 +1119,9 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
                 goto out;
             }
 
-            if ((roce_prio[prio_idx].ver         == gid_info_tmp.roce_info.ver) &&
-                (roce_prio[prio_idx].addr_family == gid_info_tmp.roce_info.addr_family) &&
+            if ((roce_prio[prio_idx].info.ver         == gid_info_tmp.roce_info.ver) &&
+                (roce_prio[prio_idx].info.addr_family == gid_info_tmp.roce_info.addr_family) &&
+                (roce_prio[prio_idx].allow_ll || !uct_ib_gid_is_ipv6_ll(&gid_info_tmp.gid)) &&
                 uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info_tmp.gid, i) &&
                 uct_ib_device_match_roce_subnet(&gid_info_tmp, &subnets,
                                                 subnet_strs->mode)) {
