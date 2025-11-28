@@ -482,6 +482,7 @@ protected:
         switch (get_send_mode()) {
         case MULTI_CHANNEL:
             params.num_channels = 32;
+            // fall through, rest args from nodelay_with_req
         case NODELAY_WITH_REQ:
             params.with_no_delay = true;
             params.with_request  = true;

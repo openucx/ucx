@@ -598,6 +598,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
 
     pi = uct_rc_mlx5_gda_parse_cqe(ep, cid, &wqe_cnt, &opcode);
 
+    /* since first message wqe_idx is 0 and initial pi is -1
+       we need to cast to signed */
     if ((int64_t)pi < (int64_t)comp->wqe_idx) {
         return UCS_INPROGRESS;
     }

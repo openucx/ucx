@@ -75,8 +75,8 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
                                             size_t *cq_umem_offset_p,
                                             size_t *dev_ep_size_p)
 {
-    ucs_assert(sizeof(uct_rc_gdaki_dev_ep_t) == 64);
-    ucs_assert(sizeof(uct_rc_gdaki_dev_qp_t) == 128);
+    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_ep_t) == 64);
+    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_qp_t) == 128);
 
     *cq_umem_offset_p    = sizeof(uct_rc_gdaki_dev_ep_t);
     qp_attr->umem_offset = *cq_umem_offset_p +
@@ -164,7 +164,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     }
 
     for (i = 0; i < iface->num_channels; i++) {
-        channel = self->channels + i;
+        channel = &self->channels[i];
 
         channel->cq.devx.mem.mem       = self->umem;
         channel->qp.super.devx.mem.mem = self->umem;
@@ -198,8 +198,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 err_cq:
     uct_ib_mlx5_devx_destroy_cq_common(&self->channels[i].cq);
 err_qp:
-    while (i > 0) {
-        i--;
+    while (i-- > 0) {
         uct_ib_mlx5_devx_destroy_qp_common(&self->channels[i].qp.super);
         uct_ib_mlx5_devx_destroy_cq_common(&self->channels[i].cq);
     }
@@ -220,7 +219,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
     unsigned i;
 
     for (i = 0; i < iface->num_channels; i++) {
-        (void)cuMemHostUnregister(self->channels[i].qp.reg->addr.ptr);
+        if (self->dev_ep_init) {
+            /* page with UAR might be or might be not registered already
+             * so currently we just ignore errors. this may cause
+             * use-after-free if we release page which is used by another EP
+             * TODO and reference counted tracking for UAR pages */
+            (void)cuMemHostUnregister(self->channels[i].qp.reg->addr.ptr);
+        }
         uct_ib_mlx5_devx_destroy_qp_common(&self->channels[i].qp.super);
         uct_ib_mlx5_devx_destroy_cq_common(&self->channels[i].cq);
     }
@@ -449,7 +454,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                     cuMemHostGetDevicePointer(&sq_db,
                                               channel->qp.reg->addr.ptr, 0));
             if (status != UCS_OK) {
-                goto out_free;
+                goto out_unreg;
             }
 
             dev_ep->qps[i].sq_db  = (uint64_t *)sq_db;
@@ -474,6 +479,10 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     pthread_mutex_unlock(&iface->ep_init_lock);
     return UCS_OK;
 
+out_unreg:
+    do {
+        (void)cuMemHostUnregister(ep->channels[i].qp.reg->addr.ptr);
+    } while (i-- > 0);
 out_free:
     ucs_free(dev_ep);
 out_ctx:
