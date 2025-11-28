@@ -1427,13 +1427,17 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
 }
 
 static void
-ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps,
-                        ucp_lane_map_t failed_lanes, uct_ep_h stub_ep)
+ucp_ep_extract_failed_lanes(ucp_ep_h ep, uct_ep_h *uct_eps,
+                            ucp_lane_map_t failed_lanes, uct_ep_h stub_ep)
 {
     ucp_lane_index_t lane;
 
     ucp_ep_check_lanes(ep);
-    ucp_ep_release_id(ep);
+
+    ep->ext->failed_lanes |= failed_lanes;
+    if (!ucp_ep_is_alive(ep)) {
+        ucp_ep_release_id(ep);
+    }
 
 //    ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
     ucs_for_each_bit(lane, failed_lanes) {
@@ -1550,7 +1554,8 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t failed_lanes,
     discard_arg->destroy_counter = ucs_popcount(failed_lanes);
 
     ucs_debug("ep %p: discarding lanes", ep);
-    ucp_ep_set_lanes_failed(ep, uct_eps, failed_lanes, &discard_arg->failed_ep);
+    ucp_ep_extract_failed_lanes(ep, uct_eps, failed_lanes,
+                                &discard_arg->failed_ep);
     ucs_for_each_bit(lane, failed_lanes) {
         uct_ep = uct_eps[lane];
         ucs_assertv(uct_ep != NULL, "lane %d", lane);
@@ -1578,7 +1583,7 @@ static ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucs_status_t status)
     ucp_request_t *close_req;
 
     /* All lanes must be in failed state */
-    ucs_assert(ucp_ep->ext->failed_lanes == UCS_MASK(ucp_ep_num_lanes(ucp_ep)));
+    ucs_assert(!ucp_ep_is_alive(ucp_ep));
 
     /* In case if this is a local unrecoverable failure we need to notify remote side */
     if (ucp_ep_is_cm_local_connected(ucp_ep)) {
@@ -1640,6 +1645,11 @@ static ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucs_status_t status)
     return UCS_OK;
 }
 
+static ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep)
+{
+    return UCS_OK;
+}
+
 ucs_status_t
 ucp_ep_set_lane_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 {
@@ -1654,11 +1664,12 @@ ucp_ep_set_lane_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t stat
     /* The EP can be closed from last completion callback */
     ucp_ep_discard_lanes(ucp_ep, UCS_BIT(lane), status);
 
-    if (ucs_popcount(ucp_ep->ext->failed_lanes) == ucp_ep_num_lanes(ucp_ep)) {
+    if (!ucp_ep_is_alive(ucp_ep)) {
         ucp_ep_set_failed(ucp_ep, status);
+        return UCS_OK;
     }
 
-    return UCS_OK;
+    return ucp_ep_failover_reconfig(ucp_ep);
 }
 
 void ucp_ep_set_lane_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
@@ -1729,7 +1740,7 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 
     ucs_debug("ep %p: cleanup lanes", ep);
 
-    ucp_ep_set_lanes_failed(ep, uct_eps, UCS_MASK(ucp_ep_num_lanes(ep)),
+    ucp_ep_extract_failed_lanes(ep, uct_eps, UCS_MASK(ucp_ep_num_lanes(ep)),
                             &ucp_failed_tl_ep_discard_arg.failed_ep);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
