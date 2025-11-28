@@ -812,8 +812,7 @@ ucs_log_func_rc_t ucp_test_base::entity::hide_config_warns_logger(
         ucs_log_level_t level, const ucs_log_component_config_t *comp_conf,
         const char *message, va_list ap)
 {
-    if ((strstr(message, "unused configurations") == NULL) ||
-        (strstr(message, "UCX_WARN_UNUSED_CONFIG_MODIFICATIONS") == NULL)) {
+    if (strstr(message, "invalid configuration") == NULL) {
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
