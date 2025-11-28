@@ -55,6 +55,7 @@
  * Introduced lightweight rwlock data structure
  * Added built-in atomics for rcache rwlock
  * Improved VFS symlink paths and duplicate object handling
+ * Disabled error signal interception by default
 #### CUDA
  * Added wrappers for NVML functions
  * Added hook for cuLibraryGetGlobal
