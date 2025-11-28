@@ -826,8 +826,13 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_address_version, self, "self")
 class test_ucp_modify_uct_cfg : public test_ucp_context {
 public:
     test_ucp_modify_uct_cfg() : m_seg_size((ucs::rand() & 0x3ff) + 1024) {
-        ucp_config_modify(m_ucp_config, "IB_SEG_SIZE",
-                          ucs::to_string(m_seg_size).c_str());
+        const auto status = ucp_config_modify(
+                m_ucp_config, "IB_SEG_SIZE",
+                ucs::to_string(m_seg_size).c_str());
+        if (status != UCS_OK) {
+            UCS_TEST_ABORT("Failed to set IB_SEG_SIZE: " <<
+                           ucs_status_string(status));
+        }
     }
 
     void verify_seg_size(ucp_worker_h worker) const {
@@ -838,7 +843,8 @@ public:
 
             if (wiface->attr.cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
                 EXPECT_EQ(m_seg_size, wiface->attr.cap.put.max_bcopy)
-                << "tl : " << worker->context->tl_rscs[tl_id].tl_rsc.tl_name;
+                << "tl : " << worker->context->tl_rscs[tl_id].tl_rsc.tl_name
+                << "dev : " << worker->context->tl_rscs[tl_id].tl_rsc.dev_name;
             }
         }
     }
