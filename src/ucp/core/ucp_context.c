@@ -592,11 +592,6 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "resulting performance.",
    ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
 
-   {UCP_WARN_UNUSED_CONFIG_MODIFICATIONS, "y",
-    "Issue a warning about configuration modifications which were not applied.",
-    ucs_offsetof(ucp_context_config_t, warn_unused_config_modifications),
-    UCS_CONFIG_TYPE_BOOL},
-
   {NULL}
 };
 

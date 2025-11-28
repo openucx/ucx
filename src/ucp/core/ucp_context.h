@@ -221,8 +221,6 @@ typedef struct ucp_context_config {
     int                                    proto_use_single_net_device;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
-    /** Issue a warning in case of unused configuration modifications */
-    int                                    warn_unused_config_modifications;
 } ucp_context_config_t;
 
 
@@ -594,9 +592,6 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 #define ucp_assert_memtype(_context, _buffer, _length, _mem_type) \
     ucs_assert(ucp_memory_type_detect(_context, _buffer, _length) == (_mem_type))
-
-
-#define UCP_WARN_UNUSED_CONFIG_MODIFICATIONS "WARN_UNUSED_CONFIG_MODIFICATIONS"
 
 
 extern ucp_am_handler_t *ucp_am_handlers[];
