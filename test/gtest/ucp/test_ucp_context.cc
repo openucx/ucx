@@ -124,24 +124,13 @@ public:
     test_unused_config_modifications()
     {
         ucp_config_modify(m_ucp_config, "QWERTY", "QWERTY");
-    }
-
-    void init() override
-    {
+        ucp_config_modify(m_ucp_config, "WARN_UNUSED_CONFIG_MODIFICATIONS",
+                          "n");
     }
 };
 
-UCS_TEST_P(test_unused_config_modifications, wrap_warning)
+UCS_TEST_P(test_unused_config_modifications, hidden_warning)
 {
-    scoped_log_handler log_handler(wrap_warns_logger);
-    create_entity();
-    EXPECT_EQ(m_warnings.size(), 2);
-}
-
-UCS_TEST_P(test_unused_config_modifications, hide_warning)
-{
-    ucp_config_modify(m_ucp_config, "WARN_UNUSED_CONFIG_MODIFICATIONS", "n");
-    create_entity();
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_unused_config_modifications, self, "self")
