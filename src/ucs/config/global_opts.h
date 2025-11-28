@@ -180,6 +180,14 @@ ucs_status_t ucs_global_opts_clone(void *dst);
 void ucs_global_opts_release(void);
 void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags);
 
+/**
+ * Check if a field is unmodifiable.
+ *
+ * @param name Field name to check.
+ * @return     1 if the field is unmodifiable, 0 otherwise.
+ */
+int ucs_global_opts_is_unmodifiable(const char *name);
+
 END_C_DECLS
 
 #endif

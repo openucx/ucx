@@ -23,6 +23,7 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/type/init_once.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
@@ -863,6 +864,47 @@ ucs_status_t ucp_config_modify_internal(ucp_config_t *config, const char *name,
                                        value);
 }
 
+static void ucp_config_query_uct_components(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    uct_component_h *components;
+    unsigned num_components;
+    ucs_status_t status;
+
+    UCS_INIT_ONCE(&init_once) {
+        status = uct_query_components(&components, &num_components);
+        if (status == UCS_OK) {
+            uct_release_component_list(components);
+        } else {
+            ucs_warn("failed to query UCT components: %s",
+                     ucs_status_string(status));
+        }
+    }
+}
+
+static int ucp_config_global_list_has_field(const char *name)
+{
+    const ucs_config_global_list_entry_t *entry;
+    const char *field_name;
+    size_t prefix_len;
+
+    ucs_list_for_each(entry, &ucs_config_global_list, list) {
+        field_name = name;
+        if (entry->prefix != NULL) {
+            prefix_len = strlen(entry->prefix);
+            if (!strncmp(entry->prefix, field_name, prefix_len)) {
+                field_name += prefix_len;
+            }
+        }
+
+        if (ucs_config_parser_has_field(entry->table, field_name)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
                                const char *value)
 {
@@ -876,6 +918,18 @@ ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
     status = ucs_global_opts_set_value_modifiable(name, value);
     if (status != UCS_ERR_NO_ELEM) {
         return status;
+    }
+
+    if (ucs_global_opts_is_unmodifiable(name)) {
+        ucs_debug("%s configuration cannot be changed, the change is only "
+                  "available through the environment variable",
+                  name);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    ucp_config_query_uct_components();
+    if (!ucp_config_global_list_has_field(name)) {
+        return UCS_ERR_NO_ELEM;
     }
 
     return ucp_config_cached_key_add(&config->cached_key_list, name, value);

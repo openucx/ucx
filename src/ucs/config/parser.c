@@ -2461,3 +2461,31 @@ void ucs_config_parser_cleanup()
     })
     kh_destroy_inplace(ucs_config_map, &ucs_config_file_vars);
 }
+
+int ucs_config_parser_has_field(const ucs_config_field_t *fields,
+                                const char *name)
+{
+    const ucs_config_field_t *field;
+    size_t table_name_len;
+
+    if (!fields || !name) {
+        return 0;
+    }
+
+    for (field = fields; !ucs_config_field_is_last(field); ++field) {
+        if (!strncmp(field->name, name, strlen(name))) {
+            return 1;
+        }
+
+        if (ucs_config_is_table_field(field)) {
+            table_name_len = strlen(field->name);
+            if (!strncmp(field->name, name, table_name_len) &&
+                ucs_config_parser_has_field(field->parser.arg,
+                                            name + table_name_len)) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}

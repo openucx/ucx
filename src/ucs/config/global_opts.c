@@ -368,6 +368,11 @@ ucs_status_t ucs_global_opts_set_value_modifiable(const char *name,
                                        NULL, name, value);
 }
 
+int ucs_global_opts_is_unmodifiable(const char *name)
+{
+    return ucs_config_parser_has_field(ucs_global_opts_read_only_table, name);
+}
+
 ucs_status_t ucs_global_opts_get_value(const char *name, char *value,
                                        size_t max)
 {
