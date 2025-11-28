@@ -129,7 +129,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #if ENABLE_DEBUG_DATA
   "bt,freeze",
 #else
-  "bt",
+  "none",
 #endif
   "Error signal handling mode. Either 'none' to disable signal interception,\n"
   "or a combination of:\n"
