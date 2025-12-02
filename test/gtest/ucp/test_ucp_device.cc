@@ -89,6 +89,8 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
                                     ucs_memory_type_t mem_type) :
     m_receiver(receiver)
 {
+    ucs_status_t status;
+
     // Prepare src and dst buffers
     for (auto i = 0; i < count; ++i) {
         m_src.emplace_back(new mapped_buffer(size, sender, 0, mem_type));
@@ -124,8 +126,16 @@ test_ucp_device::mem_list::mem_list(entity &sender, entity &receiver,
     params.elements     = elems.data();
 
     // Create memory list
-    ASSERT_UCS_OK(
-            ucp_device_mem_list_create(sender.ep(), &params, &m_mem_list_h));
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        status = ucp_device_mem_list_create(sender.ep(), &params, &m_mem_list_h);
+    }
+
+    if (status == UCS_ERR_NO_DEVICE) {
+        UCS_TEST_SKIP_R("Skipping test if no device lanes exists.");
+    } else {
+        ASSERT_UCS_OK(status);
+    }
 }
 
 test_ucp_device::mem_list::~mem_list()
