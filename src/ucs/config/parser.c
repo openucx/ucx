@@ -1390,18 +1390,17 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
     return UCS_OK;
 }
 
-static int
-ucs_config_prefix_name_match(const char *prefix, size_t prefix_len,
-                             const char *name, const char *pattern)
+static int ucs_config_prefix_name_match(const char *prefix, const char *name,
+                                        const char *pattern)
 {
     const char *match_name;
     char *full_name;
     size_t full_name_len;
 
-    if (prefix_len == 0) {
+    if (!prefix) {
         match_name = name;
     } else {
-        full_name_len = prefix_len + strlen(name) + 1;
+        full_name_len = strlen(prefix) + strlen(name) + 1;
         full_name     = ucs_alloca(full_name_len);
 
         ucs_snprintf_safe(full_name, full_name_len, "%s%s", prefix, name);
@@ -1421,14 +1420,11 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
 {
     char value_buf[256] = "";
     ucs_config_field_t *field, *sub_fields;
-    size_t prefix_len;
     ucs_status_t status;
     ucs_status_t UCS_V_UNUSED status_restore;
     int UCS_V_UNUSED ret;
     unsigned count;
     void *var;
-
-    prefix_len = (table_prefix == NULL) ? 0 : strlen(table_prefix);
 
     count = 0;
     for (field = fields; !ucs_config_field_is_last(field); ++field) {
@@ -1461,8 +1457,8 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
                     return status;
                 }
             }
-        } else if (ucs_config_prefix_name_match(table_prefix, prefix_len,
-                                                field->name, name)) {
+        } else if (ucs_config_prefix_name_match(table_prefix, field->name,
+                                                name)) {
             if (ucs_config_is_deprecated_field(field)) {
                 return UCS_ERR_NO_ELEM;
             }
@@ -2462,30 +2458,42 @@ void ucs_config_parser_cleanup()
     kh_destroy_inplace(ucs_config_map, &ucs_config_file_vars);
 }
 
-int ucs_config_parser_has_field(const ucs_config_field_t *fields,
-                                const char *name)
+static int
+ucs_config_parser_has_field_internal(const ucs_config_field_t *fields,
+                                     const char *prefix, const char *name,
+                                     int override_prefix)
 {
-    const ucs_config_field_t *field;
-    size_t table_name_len;
+    const ucs_config_field_t *field, *sub_fields;
 
     if (!fields || !name) {
         return 0;
     }
 
     for (field = fields; !ucs_config_field_is_last(field); ++field) {
-        if (!strncmp(field->name, name, strlen(name))) {
-            return 1;
-        }
-
         if (ucs_config_is_table_field(field)) {
-            table_name_len = strlen(field->name);
-            if (!strncmp(field->name, name, table_name_len) &&
-                ucs_config_parser_has_field(field->parser.arg,
-                                            name + table_name_len)) {
+            sub_fields = field->parser.arg;
+
+            if (override_prefix &&
+                ucs_config_parser_has_field_internal(sub_fields, field->name,
+                                                     name, 1)) {
                 return 1;
             }
+
+            if (prefix &&
+                ucs_config_parser_has_field_internal(sub_fields, prefix, name,
+                                                     0)) {
+                return 1;
+            }
+        } else if (ucs_config_prefix_name_match(prefix, field->name, name)) {
+            return !ucs_config_is_deprecated_field(field);
         }
     }
 
     return 0;
+}
+
+int ucs_config_parser_has_field(const ucs_config_field_t *fields,
+                                const char *prefix, const char *name)
+{
+    return ucs_config_parser_has_field_internal(fields, prefix, name, 1);
 }

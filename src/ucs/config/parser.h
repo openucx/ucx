@@ -644,11 +644,12 @@ void ucs_config_parser_cleanup(void);
  * Check if a field exists in the configuration table.
  *
  * @param fields Array of fields which define the configuration table.
+ * @param prefix Configuration table prefix.
  * @param name   Field name to check.
  * @return       1 if the field exists, 0 otherwise.
  */
 int ucs_config_parser_has_field(const ucs_config_field_t *fields,
-                                const char *name);
+                                const char *prefix, const char *name);
 
 END_C_DECLS
 
