@@ -804,7 +804,12 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucp_worker_iface_t *wiface = arg;
 
     ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
-    ucs_trace_func("async_cb for iface=%p", wiface->iface);
+    ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
+
+    if (flags == UCT_EVENT_SPEED_CHANGED) {
+        /* TODO: handle speed changed event */
+        return;
+    }
 
     ucp_worker_iface_event_common(wiface);
 }
