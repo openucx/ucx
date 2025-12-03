@@ -23,6 +23,7 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/type/init_once.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
@@ -865,16 +866,19 @@ ucs_status_t ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 static void ucp_config_query_uct_components(void)
 {
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     uct_component_h *components;
     unsigned num_components;
     ucs_status_t status;
 
-    status = uct_query_components(&components, &num_components);
-    if (status == UCS_OK) {
-        uct_release_component_list(components);
-    } else {
-        ucs_warn("failed to query UCT components: %s",
-                 ucs_status_string(status));
+    UCS_INIT_ONCE(&init_once) {
+        status = uct_query_components(&components, &num_components);
+        if (status == UCS_OK) {
+            uct_release_component_list(components);
+        } else {
+            ucs_warn("failed to query UCT components: %s",
+                     ucs_status_string(status));
+        }
     }
 }
 
