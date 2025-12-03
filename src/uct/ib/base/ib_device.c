@@ -342,8 +342,7 @@ uct_ib_device_async_event_wait(uct_ib_device_t *dev,
     ucs_spin_lock(&dev->async_event_lock);
     iter  = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
     ucs_assert(iter != kh_end(&dev->async_events_hash));
-    entry = &kh_value(&dev->async_events_hash, iter);
-
+    entry           = &kh_value(&dev->async_events_hash, iter);
     status          = UCS_OK;
     wait_ctx->cb_id = UCS_CALLBACKQ_ID_NULL;
     ucs_list_add_tail(&entry->list, &wait_ctx->link);
@@ -351,7 +350,6 @@ uct_ib_device_async_event_wait(uct_ib_device_t *dev,
         uct_ib_device_async_event_schedule_callback(dev, wait_ctx);
     }
 
-out_unlock:
     ucs_spin_unlock(&dev->async_event_lock);
     return status;
 }
@@ -607,6 +605,48 @@ out:
     return status;
 }
 
+static ucs_status_t uct_ib_device_init_async_events(uct_ib_device_t *dev)
+{
+    ucs_status_t status = UCS_OK;
+
+#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+    uint8_t port_num;
+
+    for (port_num = dev->first_port;
+         port_num < dev->first_port + dev->num_ports; ++port_num) {
+        status = uct_ib_device_async_event_register(dev,
+                                                    IBV_EVENT_PORT_SPEED_CHANGE,
+                                                    port_num);
+        if (status != UCS_OK) {
+            goto err;
+        }
+    }
+
+    return UCS_OK;
+
+err:
+    while (port_num --> dev->first_port) {
+        uct_ib_device_async_event_unregister(dev, IBV_EVENT_PORT_SPEED_CHANGE,
+                                             port_num);
+    }
+#endif
+
+    return status;
+}
+
+static void uct_ib_device_cleanup_async_events(uct_ib_device_t *dev)
+{
+#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+    uint8_t port_num;
+
+    for (port_num = dev->first_port;
+         port_num < dev->first_port + dev->num_ports; ++port_num) {
+        uct_ib_device_async_event_unregister(dev, IBV_EVENT_PORT_SPEED_CHANGE,
+                                             port_num);
+    }
+#endif
+}
+
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
@@ -651,11 +691,21 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
     ucs_spinlock_init(&dev->async_event_lock, 0);
 
+    status = uct_ib_device_init_async_events(dev);
+    if (status != UCS_OK) {
+        goto err_cleanup_async_events;
+    }
+
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
               dev->num_ports);
     return UCS_OK;
 
+err_cleanup_async_events:
+    kh_destroy_inplace(uct_ib_async_event, &dev->async_events_hash);
+    ucs_spinlock_destroy(&dev->async_event_lock);
+    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
+    ucs_recursive_spinlock_destroy(&dev->ah_lock);
 err_release_stats:
     UCS_STATS_NODE_FREE(dev->stats);
 err:
@@ -674,6 +724,7 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
+    uct_ib_device_cleanup_async_events(dev);
     if (kh_size(&dev->async_events_hash) != 0) {
         ucs_warn("async_events_hash not empty");
     }

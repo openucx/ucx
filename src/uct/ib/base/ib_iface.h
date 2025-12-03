@@ -324,6 +324,13 @@ struct uct_ib_iface_ops {
 };
 
 
+typedef struct {
+    uct_ib_async_event_wait_t super;
+    void                      *arg;
+    uct_async_event_cb_t      cb;
+} uct_ib_async_event_ctx_t;
+
+
 struct uct_ib_iface {
     uct_base_iface_t          super;
 
@@ -366,6 +373,8 @@ struct uct_ib_iface {
         uct_ib_iface_send_overhead_t     send_overhead;
         uct_ib_iface_reachability_mode_t reachability_mode;
     } config;
+
+    uct_ib_async_event_ctx_t  async_ctx;
 
     uct_ib_iface_ops_t        *ops;
     UCS_STATS_NODE_DECLARE(stats)
