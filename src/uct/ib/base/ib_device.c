@@ -259,6 +259,7 @@ uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
 {
     khiter_t iter = kh_get(uct_ib_async_event, &dev->async_events_hash, *event);
     uct_ib_async_event_val_t *entry;
+    uct_ib_async_event_wait_t *wait_ctx;
 
     if (iter == kh_end(&dev->async_events_hash)) {
         return;
@@ -266,8 +267,8 @@ uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
 
     entry        = &kh_value(&dev->async_events_hash, iter);
     entry->fired = 1;
-    if (entry->wait_ctx != NULL) {
-        uct_ib_device_async_event_schedule_callback(dev, entry->wait_ctx);
+    ucs_list_for_each(wait_ctx, &entry->list, link) {
+        uct_ib_device_async_event_schedule_callback(dev, wait_ctx);
     }
 }
 
@@ -315,19 +316,13 @@ uct_ib_device_async_event_register(uct_ib_device_t *dev,
 
     ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
     entry           = &kh_value(&dev->async_events_hash, iter);
-    entry->wait_ctx = NULL;
+    ucs_list_head_init(&entry->list);
     entry->fired    = 0;
     status          = UCS_OK;
 
 out:
     ucs_spin_unlock(&dev->async_event_lock);
     return status;
-}
-
-static int uct_ib_device_async_event_inprogress(uct_ib_async_event_val_t *entry)
-{
-    return (entry->wait_ctx != NULL) &&
-           (entry->wait_ctx->cb_id != UCS_CALLBACKQ_ID_NULL);
 }
 
 ucs_status_t
@@ -349,14 +344,9 @@ uct_ib_device_async_event_wait(uct_ib_device_t *dev,
     ucs_assert(iter != kh_end(&dev->async_events_hash));
     entry = &kh_value(&dev->async_events_hash, iter);
 
-    if (uct_ib_device_async_event_inprogress(entry)) {
-        status = UCS_ERR_BUSY;
-        goto out_unlock;
-    }
-
     status          = UCS_OK;
     wait_ctx->cb_id = UCS_CALLBACKQ_ID_NULL;
-    entry->wait_ctx = wait_ctx;
+    ucs_list_add_tail(&entry->list, &wait_ctx->link);
     if (entry->fired) {
         uct_ib_device_async_event_schedule_callback(dev, wait_ctx);
     }
@@ -366,11 +356,24 @@ out_unlock:
     return status;
 }
 
+void uct_ib_device_async_event_cancel(uct_ib_device_t *dev,
+                                      uct_ib_async_event_wait_t *wait_ctx)
+{
+    ucs_spin_lock(&dev->async_event_lock);
+    /* cancel scheduled callback */
+    if (wait_ctx->cb_id != UCS_CALLBACKQ_ID_NULL) {
+        ucs_callbackq_remove_safe(wait_ctx->cbq, wait_ctx->cb_id);
+    }
+    ucs_list_del(&wait_ctx->link);
+    ucs_spin_unlock(&dev->async_event_lock);
+}
+
 void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
                                           enum ibv_event_type event_type,
                                           uint32_t resource_id)
 {
     uct_ib_async_event_val_t *entry;
+    uct_ib_async_event_wait_t *wait_ctx;
     uct_ib_async_event_t event;
     khiter_t iter;
 
@@ -381,9 +384,11 @@ void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
     iter = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
     ucs_assert(iter != kh_end(&dev->async_events_hash));
     entry = &kh_value(&dev->async_events_hash, iter);
-    if (uct_ib_device_async_event_inprogress(entry)) {
-        /* cancel scheduled callback */
-        ucs_callbackq_remove_safe(entry->wait_ctx->cbq, entry->wait_ctx->cb_id);
+    ucs_list_for_each(wait_ctx, &entry->list, link) {
+        /* cancel scheduled callbacks */
+        if (wait_ctx->cb_id != UCS_CALLBACKQ_ID_NULL) {
+            ucs_callbackq_remove_safe(wait_ctx->cbq, wait_ctx->cb_id);
+        }
     }
     kh_del(uct_ib_async_event, &dev->async_events_hash, iter);
     ucs_spin_unlock(&dev->async_event_lock);

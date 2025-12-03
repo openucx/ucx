@@ -61,16 +61,10 @@ public:
 
     static unsigned last_wqe_check_cb(void *arg) {
         event_ctx *event = (event_ctx *)arg;
-        int cb_id;
-
-        ucs_spin_lock(&event->dev->async_event_lock);
-        cb_id              = event->super.cb_id;
-        event->super.cb_id = UCS_CALLBACKQ_ID_NULL;
-        ucs_spin_unlock(&event->dev->async_event_lock);
 
         EXPECT_FALSE(event->got);
         event->got = true;
-        ucs_callbackq_remove_safe(event->super.cbq, cb_id);
+        uct_ib_device_async_event_cancel(event->dev, &event->super);
         return 1;
     }
 

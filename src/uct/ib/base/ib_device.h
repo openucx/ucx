@@ -197,6 +197,7 @@ typedef struct uct_ib_async_event_wait {
     ucs_callback_t      cb;                     /* Callback */
     ucs_callbackq_t     *cbq;                   /* Async queue for callback */
     int                 cb_id;                  /* Scheduled callback ID */
+    ucs_list_link_t     link;                   /* Link in list */
 } uct_ib_async_event_wait_t;
 
 
@@ -205,7 +206,7 @@ typedef struct uct_ib_async_event_wait {
  */
 typedef struct {
     unsigned                  fired;            /* Event happened */
-    uct_ib_async_event_wait_t *wait_ctx;        /* Waiting context */
+    ucs_list_link_t           list;             /* List of waiting contexts */
 } uct_ib_async_event_val_t;
 
 
@@ -464,6 +465,9 @@ uct_ib_device_async_event_wait(uct_ib_device_t *dev,
                                enum ibv_event_type event_type,
                                uint32_t resource_id,
                                uct_ib_async_event_wait_t *wait_ctx);
+
+void uct_ib_device_async_event_cancel(uct_ib_device_t *dev,
+                                      uct_ib_async_event_wait_t *wait_ctx);
 
 void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
                                           enum ibv_event_type event_type,
