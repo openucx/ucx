@@ -994,3 +994,33 @@ UCS_TEST_F(test_config, test_config_file_parse_files) {
     EXPECT_EQ(100, opts.price);
     ucs_config_parser_release_opts(&opts, car_opts_table);
 }
+
+UCS_TEST_F(test_config, global_opts) {
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("LOG_FILE"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("LOG_FILE_SIZE"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("LOG_FILE_ROTATE"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("ERROR_SIGNALS"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("VFS_ENABLE"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("VFS_SOCK_PATH"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("VFS_THREAD_AFFINITY"), 1);
+#ifdef ENABLE_STATS
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("STATS_DEST"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("STATS_TRIGGER"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("STATS_FILTER"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("STATS_FORMAT"), 1);
+#endif
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("MEMTRACK_DEST"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("PROFILE_MODE"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("PROFILE_FILE"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("PROFILE_LOG_SIZE"), 1);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("RCACHE_STAT_MIN"), 1);
+
+    for (auto field = ucs_arch_global_opts_table; field->name != nullptr;
+         ++field) {
+        EXPECT_EQ(ucs_global_opts_is_unmodifiable(field->name), 1);
+    }
+
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable("LOG_LEVEL"), 0);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable(""), 0);
+    EXPECT_EQ(ucs_global_opts_is_unmodifiable(nullptr), 0);
+}
