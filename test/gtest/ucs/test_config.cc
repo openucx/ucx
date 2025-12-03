@@ -1024,3 +1024,42 @@ UCS_TEST_F(test_config, global_opts) {
     EXPECT_EQ(ucs_global_opts_is_unmodifiable(""), 0);
     EXPECT_EQ(ucs_global_opts_is_unmodifiable(nullptr), 0);
 }
+
+UCS_TEST_F(test_config, has_field)
+{
+    std::pair<const char*, const char*> dummy_names[] = {
+        { nullptr, nullptr },
+        { "PREFIX_", nullptr },
+        { nullptr, "NAME" },
+        { "PREFIX_", "NAME" }
+    };
+
+    for (const auto& name : dummy_names) {
+        EXPECT_EQ(ucs_config_parser_has_field(nullptr, name.first, name.second),
+                  0);
+        EXPECT_EQ(ucs_config_parser_has_field(seat_opts_table, name.first,
+                                              name.second), 0);
+    }
+
+    for (auto field = seat_opts_table; field->name != nullptr; ++field) {
+        EXPECT_EQ(ucs_config_parser_has_field(seat_opts_table, "", field->name),
+                  1);
+        EXPECT_EQ(ucs_config_parser_has_field(seat_opts_table, nullptr,
+                                              field->name), 1);
+        EXPECT_EQ(ucs_config_parser_has_field(seat_opts_table, "PREFIX_",
+                                              field->name), 0);
+    }
+
+    for (auto field = coach_opts_table; field->name != nullptr; ++field) {
+        const std::string prefix{field->name};
+        for (auto sub_field = seat_opts_table; sub_field->name != nullptr;
+             ++sub_field) {
+            const std::string name{prefix + std::string(sub_field->name)};
+            EXPECT_EQ(ucs_config_parser_has_field(coach_opts_table, "",
+                                                  name.c_str()), 1);
+        }
+    }
+
+    EXPECT_EQ(ucs_config_parser_has_field(engine_opts_table, "", "FUEL_LEVEL"),
+              0);
+}
