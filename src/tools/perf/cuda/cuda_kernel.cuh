@@ -159,7 +159,7 @@ public:
     {
         init_ctx();
 
-        m_cpu_ctx->num_channels       = perf.params.device_ep_channel_count;
+        m_cpu_ctx->num_channels       = perf.params.device_num_channels;
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
         m_cpu_ctx->device_fc_window   = perf.params.device_fc_window;
         m_cpu_ctx->max_iters          = perf.max_iter;

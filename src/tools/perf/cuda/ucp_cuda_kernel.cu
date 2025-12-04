@@ -123,7 +123,7 @@ class ucp_perf_cuda_params_handler {
 public:
     ucp_perf_cuda_params_handler(const ucx_perf_context_t &perf)
     {
-        m_params.num_channels = perf.params.device_ep_channel_count;
+        m_params.num_channels = perf.params.device_num_channels;
         init_mem_list(perf);
         init_elements(perf);
         init_counters(perf);
