@@ -13,10 +13,13 @@
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/algorithm/qsort_r.h>
+#include <ucs/type/init_once.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 #include <uct/cuda/base/cuda_iface.h>
 
 #include <cuda.h>
+
+#define UCT_GDAKI_MAX_GPU_PER_IB 8
 
 
 typedef struct {
@@ -656,8 +659,6 @@ out:
 
 typedef struct {
     unsigned               index;
-    struct ibv_device      *dev;
-    ucs_sys_device_t       sys_dev;
     ucs_sys_dev_distance_t dist;
     int                    usecount;
 } uct_gdaki_dev_score_t;
@@ -665,13 +666,12 @@ typedef struct {
 typedef struct {
     ucs_sys_device_t sys_dev;
     size_t           num;
-    CUdevice         gpus[8];
+    CUdevice         gpus[UCT_GDAKI_MAX_GPU_PER_IB];
 } uct_gdaki_dev_matrix_elem_t;
 
-uct_gdaki_dev_matrix_elem_t *uct_gdaki_dev_matrix;
-size_t uct_gdaki_dev_matrix_length;
-int uct_gdaki_dev_matrix_initialized = 0;
-pthread_mutex_t uct_gdaki_dev_matrix_lock = PTHREAD_MUTEX_INITIALIZER;
+static uct_gdaki_dev_matrix_elem_t *uct_gdaki_dev_matrix;
+static size_t uct_gdaki_dev_matrix_length;
+static ucs_init_once_t uct_gdaki_dev_matrix_once = UCS_INIT_ONCE_INITIALIZER;
 
 static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 {
@@ -683,16 +683,17 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 
 static ucs_status_t uct_gdaki_dev_matrix_init(void)
 {
-    struct ibv_device **device_list;
-    CUdevice device;
     ucs_status_t status = UCS_OK;
     int i, j, num_ibs, num_gpus;
+    struct ibv_device **device_list;
+    struct ibv_device *ib_dev;
     uct_gdaki_dev_score_t *scores;
     char *path_buffer;
-    ucs_sys_device_t gpu_dev;
+    ucs_sys_device_t gpu_sys_dev;
     const char *sysfs_path;
     unsigned ib_per_gpu;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
+    CUdevice gpu_dev;
 
     status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
     if (status != UCS_OK) {
@@ -720,15 +721,13 @@ static ucs_status_t uct_gdaki_dev_matrix_init(void)
 
     for (i = 0; i < num_ibs; i++) {
         ibdesc        = &uct_gdaki_dev_matrix[i];
-        scores[i].dev = device_list[i];
+        ib_dev        = device_list[i];
 
-        sysfs_path = ucs_topo_resolve_sysfs_path(scores[i].dev->ibdev_path,
-                                                 path_buffer);
-        scores[i].sys_dev = ucs_topo_get_sysfs_dev(ibv_get_device_name(
-                                                           scores[i].dev),
+        sysfs_path        = ucs_topo_resolve_sysfs_path(ib_dev->ibdev_path,
+                                                        path_buffer);
+        ibdesc->sys_dev   = ucs_topo_get_sysfs_dev(ibv_get_device_name(ib_dev),
                                                    sysfs_path, 20);
         scores[i].index   = i;
-        ibdesc->sys_dev   = scores[i].sys_dev;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_gpus));
@@ -739,14 +738,15 @@ static ucs_status_t uct_gdaki_dev_matrix_init(void)
     ib_per_gpu = ucs_min(num_ibs / num_gpus, num_ibs);
 
     for (j = 0; j < num_gpus; j++) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&device, j));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&gpu_dev, j));
         if (status != UCS_OK) {
             goto out;
         }
 
-        uct_cuda_base_get_sys_dev(device, &gpu_dev);
+        uct_cuda_base_get_sys_dev(gpu_dev, &gpu_sys_dev);
         for (i = 0; i < num_ibs; i++) {
-            status = ucs_topo_get_distance(gpu_dev, scores[i].sys_dev,
+            ibdesc = &uct_gdaki_dev_matrix[scores[i].index];
+            status = ucs_topo_get_distance(gpu_sys_dev, ibdesc->sys_dev,
                                            &scores[i].dist);
             if (status != UCS_OK) {
                 goto out;
@@ -758,8 +758,10 @@ static ucs_status_t uct_gdaki_dev_matrix_init(void)
 
         for (i = 0; i < ib_per_gpu; i++) {
             ibdesc = &uct_gdaki_dev_matrix[scores[i].index];
-            ibdesc->gpus[ibdesc->num++] = device;
-            scores[i].usecount++;
+            if (ibdesc->num < UCT_GDAKI_MAX_GPU_PER_IB) {
+                ibdesc->gpus[ibdesc->num++] = gpu_dev;
+                scores[i].usecount++;
+            }
         }
     }
 
@@ -784,10 +786,10 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     uct_ib_mlx5_md_t *md      = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     unsigned num_tl_devices   = 0;
     uct_tl_device_resource_t *tl_devices;
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
     CUdevice device;
     ucs_sys_device_t dev;
-    int i, num_gpus;
+    int i;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
 
     /*
@@ -809,25 +811,11 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         goto out;
     }
 
-    pthread_mutex_lock(&uct_gdaki_dev_matrix_lock);
-    if (!uct_gdaki_dev_matrix_initialized) {
+    UCS_INIT_ONCE(&uct_gdaki_dev_matrix_once) {
         status = uct_gdaki_dev_matrix_init();
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        uct_gdaki_dev_matrix_initialized = 1;
     }
-    pthread_mutex_unlock(&uct_gdaki_dev_matrix_lock);
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_gpus));
     if (status != UCS_OK) {
         return status;
-    }
-
-    tl_devices = ucs_malloc(sizeof(*tl_devices) * num_gpus, "gdaki_tl_devices");
-    if (tl_devices == NULL) {
-        return UCS_ERR_NO_MEMORY;
     }
 
     ibdesc = uct_gdaki_dev_matrix;
@@ -835,6 +823,17 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         ucs_assertv_always(++ibdesc - uct_gdaki_dev_matrix <
                                    uct_gdaki_dev_matrix_length,
                            "dev %s", uct_ib_device_name(&md->super.dev));
+    }
+
+    if (ibdesc->num == 0) {
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
+
+    tl_devices = ucs_malloc(sizeof(*tl_devices) * ibdesc->num,
+                            "gdaki_tl_devices");
+    if (tl_devices == NULL) {
+        return UCS_ERR_NO_MEMORY;
     }
 
     for (i = 0; i < ibdesc->num; i++) {
