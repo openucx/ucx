@@ -1874,6 +1874,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 #if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
     if (self->async_ctx.cb != NULL) {
         uct_ib_device_async_event_cancel(uct_ib_iface_device(self),
+                                         IBV_EVENT_PORT_SPEED_CHANGE,
+                                         self->config.port_num,
                                          &self->async_ctx.super);
     }
 #endif
