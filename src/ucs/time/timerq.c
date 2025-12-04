@@ -72,7 +72,7 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
 
     /* Initialize the new timer */
     ptr = &timerq->timers[timerq->num_timers - 1];
-    ptr->expiration = 0; /* will fire the next time sweep is called */
+    ptr->expiration = ucs_get_time() + interval; /* will fire the next time sweep is called */
     ptr->interval   = interval;
     ptr->id         = timer_id;
 
