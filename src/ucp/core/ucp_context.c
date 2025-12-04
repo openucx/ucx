@@ -864,7 +864,7 @@ ucs_status_t ucp_config_modify_internal(ucp_config_t *config, const char *name,
                                        value);
 }
 
-static void ucp_config_query_uct_components(void)
+static void ucp_config_load_uct_components(void)
 {
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     uct_component_h *components;
@@ -917,9 +917,9 @@ ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    /* Query UCT components to populate ucs_config_global_list with UCT
+    /* Load UCT components to populate ucs_config_global_list with UCT
      * configuration options */
-    ucp_config_query_uct_components();
+    ucp_config_load_uct_components();
     if (!ucp_config_global_list_has_field(name)) {
         return UCS_ERR_NO_ELEM;
     }
