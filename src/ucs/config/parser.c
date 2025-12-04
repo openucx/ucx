@@ -1397,7 +1397,7 @@ static int ucs_config_prefix_name_match(const char *prefix, const char *name,
     char *full_name;
     size_t full_name_len;
 
-    if (!prefix) {
+    if (prefix == NULL) {
         match_name = name;
     } else {
         full_name_len = strlen(prefix) + strlen(name) + 1;
