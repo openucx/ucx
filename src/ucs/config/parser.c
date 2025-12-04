@@ -2465,7 +2465,7 @@ ucs_config_parser_has_field_internal(const ucs_config_field_t *fields,
 {
     const ucs_config_field_t *field, *sub_fields;
 
-    if (!fields || !name) {
+    if ((fields == NULL) || (name == NULL)) {
         return 0;
     }
 
@@ -2479,7 +2479,7 @@ ucs_config_parser_has_field_internal(const ucs_config_field_t *fields,
                 return 1;
             }
 
-            if (prefix &&
+            if ((prefix != NULL) &&
                 ucs_config_parser_has_field_internal(sub_fields, prefix, name,
                                                      0)) {
                 return 1;
