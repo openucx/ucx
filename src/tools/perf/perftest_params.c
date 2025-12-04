@@ -81,11 +81,9 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                    This option defines the number of iterations per which a single flow control\n");
     printf("                    request is sent.\n");
     printf("     -N <mode>      channel selection mode for device tests (single)\n");
-    printf("                    single     - use a single fixed channel (channel 0, default)\n");
-    printf("                    random     - use random channel per operation\n");
-    printf("                    per-thread - use global thread ID modulo num_channels\n");
-    printf("     -S <seed>      random seed for random channel mode (%llu)\n",
-                                ctx->params.super.random_seed);
+    printf("                    single        - use a single fixed channel (channel 0, default)\n");
+    printf("                    random:<seed> - use random channel per operation with the given seed\n");
+    printf("                    per-thread    - use global thread ID modulo num_channels\n");
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
@@ -497,10 +495,14 @@ static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
 }
 
 static ucs_status_t parse_channel_mode(const char *opt_arg,
-                                       ucx_perf_channel_mode_t *channel_mode)
+                                       ucx_perf_channel_mode_t *channel_mode,
+                                       unsigned long long *random_seed)
 {
     if (!strcmp(opt_arg, "single")) {
         *channel_mode = UCX_PERF_CHANNEL_MODE_SINGLE;
+    } else if (!strncmp(opt_arg, "random:", 7)) {
+        *channel_mode = UCX_PERF_CHANNEL_MODE_RANDOM;
+        *random_seed  = strtoull(opt_arg + 7, NULL, 10);
     } else if (!strcmp(opt_arg, "random")) {
         *channel_mode = UCX_PERF_CHANNEL_MODE_RANDOM;
     } else if (!strcmp(opt_arg, "per-thread")) {
@@ -751,10 +753,8 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         return parse_int(opt_arg, &params->super.device_fc_window,
                          "device flow control window size", 1, INT_MAX);
     case 'N':
-        return parse_channel_mode(opt_arg, &params->super.device_channel_mode);
-    case 'S':
-        params->super.random_seed = atoll(opt_arg);
-        return UCS_OK;
+        return parse_channel_mode(opt_arg, &params->super.device_channel_mode,
+                                  &params->super.random_seed);
     case 'y':
         params->super.flags |= UCX_PERF_TEST_FLAG_AM_RECV_COPY;
         return UCS_OK;
