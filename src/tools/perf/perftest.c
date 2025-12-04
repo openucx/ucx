@@ -222,6 +222,8 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.ucp.recv_datatype       = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.am_hdr_size         = 0;
     params->super.device_num_channels     = UINT_MAX;
+    params->super.device_channel_mode     = UCX_PERF_CHANNEL_MODE_SINGLE;
+    params->super.random_seed             = time(0) ^ getpid();;
     params->super.device_thread_count     = 1;
     params->super.device_block_count      = 1;
     params->super.device_fc_window        = UCP_PERF_FC_WINDOW_DEFAULT;

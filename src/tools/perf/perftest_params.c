@@ -80,6 +80,12 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.device_fc_window);
     printf("                    This option defines the number of iterations per which a single flow control\n");
     printf("                    request is sent.\n");
+    printf("     -N <mode>      channel selection mode for device tests (single)\n");
+    printf("                    single     - use a single fixed channel (channel 0, default)\n");
+    printf("                    random     - use random channel per operation\n");
+    printf("                    per-thread - use global thread ID modulo num_channels\n");
+    printf("     -S <seed>      random seed for random channel mode (%llu)\n",
+                                ctx->params.super.random_seed);
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
@@ -490,6 +496,22 @@ static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
     return UCS_OK;
 }
 
+static ucs_status_t parse_channel_mode(const char *opt_arg,
+                                       ucx_perf_channel_mode_t *channel_mode)
+{
+    if (!strcmp(opt_arg, "single")) {
+        *channel_mode = UCX_PERF_CHANNEL_MODE_SINGLE;
+    } else if (!strcmp(opt_arg, "random")) {
+        *channel_mode = UCX_PERF_CHANNEL_MODE_RANDOM;
+    } else if (!strcmp(opt_arg, "per-thread")) {
+        *channel_mode = UCX_PERF_CHANNEL_MODE_PER_THREAD;
+    } else {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 /**
  * Verifies that the daemon parameters are valid before each test run in the
  * batch. Parameters verified by this function are configured per test case
@@ -728,6 +750,11 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'F':
         return parse_int(opt_arg, &params->super.device_fc_window,
                          "device flow control window size", 1, INT_MAX);
+    case 'N':
+        return parse_channel_mode(opt_arg, &params->super.device_channel_mode);
+    case 'S':
+        params->super.random_seed = atoll(opt_arg);
+        return UCS_OK;
     case 'y':
         params->super.flags |= UCX_PERF_TEST_FLAG_AM_RECV_COPY;
         return UCS_OK;
