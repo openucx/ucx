@@ -302,10 +302,13 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_config_err_handling_enabled(ucp_ep_h ep)
            ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER);
 }
 
-static UCS_F_ALWAYS_INLINE int ucp_ep_is_alive(ucp_ep_h ep)
+static UCS_F_ALWAYS_INLINE int ucp_ep_is_alive(ucp_ep_h ep, ucp_lane_map_t new_failed_lanes)
 {
-    return (ep->ext->failed_lanes != UCS_MASK(ucp_ep_num_lanes(ep))) ||
-           (ucp_ep_has_cm_lane(ep) && (ep->ext->failed_lanes & UCS_BIT(ucp_ep_get_cm_lane(ep))));
+    ucp_lane_map_t failed_lanes = ucp_ep_config_get_failed_lanes(&ucp_ep_config(ep)->key) |
+                                  new_failed_lanes;
+
+    return (failed_lanes != UCS_MASK(ucp_ep_num_lanes(ep))) ||
+           (ucp_ep_has_cm_lane(ep) && !(failed_lanes & UCS_BIT(ucp_ep_get_cm_lane(ep))));
 }
 
 #endif

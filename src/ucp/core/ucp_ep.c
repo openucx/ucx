@@ -54,9 +54,6 @@ static void ucp_ep_failure_inject_timer(int timer_id, ucs_event_set_types_t even
     uct_ep_h uct_ep;
     ucs_status_t status;
 
-    ucs_debug("ep %p: timer %d fired, injecting failure on lane %d",
-              ep, timer_id, failure_lane);
-
     if ((failure_lane < 0) || (failure_lane >= num_lanes)) {
         ucs_debug("ep %p: failure injection lane %d is invalid (num_lanes=%d)",
                   ep, failure_lane, num_lanes);
@@ -70,7 +67,7 @@ static void ucp_ep_failure_inject_timer(int timer_id, ucs_event_set_types_t even
         goto out_remove_timer;
     }
 
-    ucs_debug("ep %p: injecting failure on lane %d (uct_ep=%p)",
+    ucs_debug("ep %p: timer fired, injecting failure on lane %d (uct_ep=%p)",
               ep, failure_lane, uct_ep);
 
     status = uct_ep_invalidate(uct_ep, 0);
@@ -97,10 +94,10 @@ out_remove_timer:
 /* Check and schedule failure injection if needed */
 static void ucp_ep_inject_failure(ucp_ep_h ep)
 {
-    ucp_context_h context           = ep->worker->context;
-    ucs_async_context_t *async      = &ep->worker->async;
-    int failure_lane                = context->config.ext.failure_lane;
-    ucs_time_t failure_timeout      = context->config.ext.failure_timeout;
+    ucp_context_h context      = ep->worker->context;
+    ucs_async_context_t *async = &ep->worker->async;
+    int failure_lane           = context->config.ext.failure_lane;
+    ucs_time_t failure_timeout = context->config.ext.failure_timeout;
     ucs_status_t status;
 
     /* Check if failure injection is enabled */
@@ -108,21 +105,17 @@ static void ucp_ep_inject_failure(ucp_ep_h ep)
         return;
     }
 
-    ucs_debug("ep %p: scheduling failure injection on lane %d after %f sec",
-              ep, failure_lane, ucs_time_to_sec(failure_timeout));
-
-    /* Add timer that will fire after the specified timeout */
     status = ucs_async_add_timer(async->mode, failure_timeout,
                                  ucp_ep_failure_inject_timer, ep, async,
                                  &ep->ext->failure_timer_id);
-    if (status != UCS_OK) {
+    if (status == UCS_OK) {
+        ucs_debug("ep %p: failure injection scheduled on lane %d in %lf sec, "
+                  "timer id %d", ep, failure_lane,
+                  ucs_time_to_sec(failure_timeout), ep->ext->failure_timer_id);
+    } else {
         ucs_warn("ep %p: failed to add failure injection timer: %s",
                  ep, ucs_status_string(status));
-        return;
     }
-
-    ucs_debug("ep %p: added failure injection timer %d",
-              ep, ep->ext->failure_timer_id);
 }
 
 typedef struct {
@@ -309,7 +302,6 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 #endif
     ep->ext->peer_mem                     = NULL;
     ep->ext->unflushed_lanes              = 0;
-    ep->ext->failed_lanes                 = 0;
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
     ep->ext->flush_sys_dev_map            = 0;
@@ -685,6 +677,20 @@ void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
                            UCP_EP_INIT_CREATE_AM_LANE | UCP_EP_INIT_CM_PHASE)) {
         key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE;
     }
+}
+
+ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key)
+{
+    ucp_lane_map_t failed_lanes = 0;
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED)) {
+            failed_lanes |= UCS_BIT(lane);
+        }
+    }
+
+    return failed_lanes;
 }
 
 ucs_status_t
@@ -1434,8 +1440,7 @@ ucp_ep_extract_failed_lanes(ucp_ep_h ep, uct_ep_h *uct_eps,
 
     ucp_ep_check_lanes(ep);
 
-    ep->ext->failed_lanes |= failed_lanes;
-    if (!ucp_ep_is_alive(ep)) {
+    if (!ucp_ep_is_alive(ep, failed_lanes)) {
         ucp_ep_release_id(ep);
     }
 
@@ -1583,7 +1588,7 @@ static ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucs_status_t status)
     ucp_request_t *close_req;
 
     /* All lanes must be in failed state */
-    ucs_assert(!ucp_ep_is_alive(ucp_ep));
+    ucs_assert(!ucp_ep_is_alive(ucp_ep, 0));
 
     /* In case if this is a local unrecoverable failure we need to notify remote side */
     if (ucp_ep_is_cm_local_connected(ucp_ep)) {
@@ -1645,60 +1650,6 @@ static ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucs_status_t status)
     return UCS_OK;
 }
 
-static ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep)
-{
-    return UCS_OK;
-}
-
-ucs_status_t
-ucp_ep_set_lane_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
-{
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
-    ucs_assert(UCS_STATUS_IS_ERR(status));
-    ucs_assert(!ucs_async_is_from_async(&ucp_ep->worker->async));
-
-    ucs_debug("ep %p: set_ep_lane_failed status %s on lane[%d]=%p", ucp_ep,
-              ucs_status_string(status), lane,
-              (lane != UCP_NULL_LANE) ? ucp_ep_get_lane(ucp_ep, lane) : NULL);
-
-    /* The EP can be closed from last completion callback */
-    ucp_ep_discard_lanes(ucp_ep, UCS_BIT(lane), status);
-
-    if (!ucp_ep_is_alive(ucp_ep)) {
-        ucp_ep_set_failed(ucp_ep, status);
-        return UCS_OK;
-    }
-
-    return ucp_ep_failover_reconfig(ucp_ep);
-}
-
-void ucp_ep_set_lane_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                                     ucs_status_t status)
-{
-    ucp_worker_h worker = ucp_ep->worker;
-    ucp_ep_set_failed_arg_t *set_ep_failed_arg;
-
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
-
-    set_ep_failed_arg = ucs_malloc(sizeof(*set_ep_failed_arg),
-                                   "set_ep_failed_arg");
-    if (set_ep_failed_arg == NULL) {
-        ucs_error("failed to allocate set_ep_failed argument");
-        return;
-    }
-
-    set_ep_failed_arg->ucp_ep = ucp_ep;
-    set_ep_failed_arg->lane   = lane;
-    set_ep_failed_arg->status = status;
-
-    ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,
-                              ucp_ep_set_lane_failed_progress, set_ep_failed_arg);
-
-    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
-     * that he can wake-up on this event */
-    ucp_worker_signal_internal(worker);
-}
-
 static void
 ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
                                      ucp_worker_cfg_index_t cfg_index)
@@ -1730,6 +1681,83 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
                                          ep_config->proto_lane_map,
                                          ucp_worker_iface_unprogress_ep);
     }
+}
+
+static ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,
+                                             ucp_lane_map_t failed_lanes)
+{
+    ucp_ep_config_key_t cfg_key = ucp_ep_config(ucp_ep)->key;
+    unsigned ep_init_flags      = (ucp_ep->flags & UCP_EP_FLAG_INTERNAL) ?
+                                  UCP_EP_INIT_FLAG_INTERNAL : 0;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+
+    ucs_for_each_bit(lane, failed_lanes) {
+        cfg_key.lanes[lane].lane_types |= UCS_BIT(UCP_LANE_TYPE_FAILED);
+    }
+
+    ucp_ep_config_deactivate_worker_ifaces(ucp_ep->worker, ucp_ep->cfg_index);
+    status = ucp_worker_get_ep_config(ucp_ep->worker, &cfg_key, ep_init_flags,
+                                      &ucp_ep->cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_ep_config_activate_worker_ifaces(ucp_ep->worker, ucp_ep->cfg_index);
+    return UCS_OK;
+}
+
+ucs_status_t
+ucp_ep_set_lane_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
+{
+    ucp_lane_map_t failed_lanes = UCS_BIT(lane);
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
+    ucs_assert(UCS_STATUS_IS_ERR(status));
+    ucs_assert(!ucs_async_is_from_async(&ucp_ep->worker->async));
+    ucs_assert(lane != UCP_NULL_LANE);
+    ucs_assert(lane < UCP_MAX_LANES);
+
+    ucs_debug("ep %p: set_ep_lane_failed status %s on lane[%d]=%p", ucp_ep,
+              ucs_status_string(status), lane,
+              (lane != UCP_NULL_LANE) ? ucp_ep_get_lane(ucp_ep, lane) : NULL);
+
+    /* The EP can be closed from last completion callback */
+    ucp_ep_discard_lanes(ucp_ep, failed_lanes, status);
+
+    if (!ucp_ep_is_alive(ucp_ep, failed_lanes)) {
+        ucp_ep_set_failed(ucp_ep, status);
+        return UCS_OK;
+    }
+
+    return ucp_ep_failover_reconfig(ucp_ep, failed_lanes);
+}
+
+void ucp_ep_set_lane_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                     ucs_status_t status)
+{
+    ucp_worker_h worker = ucp_ep->worker;
+    ucp_ep_set_failed_arg_t *set_ep_failed_arg;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
+
+    set_ep_failed_arg = ucs_malloc(sizeof(*set_ep_failed_arg),
+                                   "set_ep_failed_arg");
+    if (set_ep_failed_arg == NULL) {
+        ucs_error("failed to allocate set_ep_failed argument");
+        return;
+    }
+
+    set_ep_failed_arg->ucp_ep = ucp_ep;
+    set_ep_failed_arg->lane   = lane;
+    set_ep_failed_arg->status = status;
+
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,
+                              ucp_ep_set_lane_failed_progress, set_ep_failed_arg);
+
+    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
+     * that he can wake-up on this event */
+    ucp_worker_signal_internal(worker);
 }
 
 void ucp_ep_cleanup_lanes(ucp_ep_h ep)

@@ -98,7 +98,7 @@ ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
-    if (ucs_unlikely(status != UCS_OK) && ucp_ep_is_alive(req->send.ep)) {
+    if (ucs_unlikely(status != UCS_OK) && ucp_ep_is_alive(req->send.ep, 0)) {
         ucp_proto_request_restart(req);
     } else {
         ucp_request_complete_send(req, status);

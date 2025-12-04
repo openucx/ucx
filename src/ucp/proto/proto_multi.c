@@ -539,23 +539,33 @@ void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
 {
     UCS_STRING_BUFFER_FIXED(strb, attr->config, sizeof(attr->config));
     const ucp_proto_multi_priv_t *mpriv = params->priv;
+    ucp_lane_map_t failed_lanes_map = ucp_ep_config_get_failed_lanes(params->ep_config_key);
     const ucp_ep_config_key_lane_t *cfg_lane, *cfg_lane0;
     const ucp_proto_multi_lane_priv_t *lpriv;
     size_t percent, remaining;
     int same_rsc, same_path;
-    ucp_lane_index_t i;
+    ucp_lane_index_t start_lane, lane;
 
     ucs_assert(mpriv->num_lanes <= UCP_MAX_LANES);
     ucs_assert(mpriv->num_lanes >= 1);
 
     same_rsc  = 1;
     same_path = 1;
-    cfg_lane0 = ucp_proto_multi_ep_lane_cfg(params, 0);
-    for (i = 1; i < mpriv->num_lanes; ++i) {
-        cfg_lane  = ucp_proto_multi_ep_lane_cfg(params, i);
-        same_rsc  = same_rsc && (cfg_lane->rsc_index == cfg_lane0->rsc_index);
-        same_path = same_path &&
-                    (cfg_lane->path_index == cfg_lane0->path_index);
+    for (start_lane = 0; start_lane < mpriv->num_lanes; ++start_lane) {
+        if (!(UCS_BIT(start_lane) & failed_lanes_map)) {
+            cfg_lane0 = ucp_proto_multi_ep_lane_cfg(params, start_lane);
+            break;
+        }
+    }
+
+    for (lane = start_lane + 1; lane < mpriv->num_lanes; ++lane) {
+        if (!(UCS_BIT(lane) & failed_lanes_map)) {
+            cfg_lane  = ucp_proto_multi_ep_lane_cfg(params, lane);
+            same_rsc  = same_rsc &&
+                        (cfg_lane->rsc_index == cfg_lane0->rsc_index);
+            same_path = same_path &&
+                        (cfg_lane->path_index == cfg_lane0->path_index);
+        }
     }
 
     if (same_rsc) {
@@ -565,8 +575,12 @@ void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
     }
 
     remaining = 100;
-    for (i = 0; i < mpriv->num_lanes; ++i) {
-        lpriv      = &mpriv->lanes[i];
+    for (lane = start_lane; lane < mpriv->num_lanes; ++lane) {
+        if (UCS_BIT(lane) & failed_lanes_map) {
+            continue;
+        }
+
+        lpriv      = &mpriv->lanes[lane];
         percent    = ucs_min(remaining,
                              ucp_proto_multi_scaled_length(lpriv->weight, 100));
         remaining -= percent;
@@ -579,8 +593,8 @@ void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
                                        !(same_rsc && same_path), &strb);
 
         /* Print a string like "30% on A, 40% on B, and 30% on C" */
-        if (i != (mpriv->num_lanes - 1)) {
-            if (i == (mpriv->num_lanes - 2)) {
+        if (lane != (mpriv->num_lanes - 1)) {
+            if (lane == (mpriv->num_lanes - 2)) {
                 ucs_string_buffer_appendf(&strb, " and ");
             } else {
                 ucs_string_buffer_appendf(&strb, ", ");
@@ -589,7 +603,13 @@ void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
     }
 
     ucs_string_buffer_rtrim(&strb, NULL);
-    attr->lane_map = mpriv->lane_map;
+
+    ucs_trace("querying config for %s with num_lanes %d, lane_map 0x%" PRIx64
+              ", failed_lanes_map 0x%" PRIx64,
+              params->proto->name, mpriv->num_lanes, mpriv->lane_map,
+              failed_lanes_map);
+
+    attr->lane_map = (mpriv->lane_map & (~failed_lanes_map));
 }
 
 void ucp_proto_multi_query(const ucp_proto_query_params_t *params,

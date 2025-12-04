@@ -559,12 +559,6 @@ typedef struct ucp_ep_ext {
     uct_ep_h                     *uct_eps;
 
     /**
-     * Bitmap of lanes which are in failed state.
-     */
-    ucp_lane_map_t                failed_lanes;
-
-
-    /**
      * Map of system devices that require a flush operation
      */
     ucp_sys_dev_map_t             flush_sys_dev_map;
@@ -746,6 +740,8 @@ void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
 
 void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
                                   unsigned ep_init_flags);
+
+ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 
