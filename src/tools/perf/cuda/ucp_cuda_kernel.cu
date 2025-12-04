@@ -18,13 +18,30 @@
 #include <stdexcept>
 
 
+struct ucp_perf_cuda_params {
+    ucp_device_mem_list_handle_h mem_list;
+    size_t                       length;
+    unsigned                     num_threads;
+    unsigned                     num_channels;
+    ucx_perf_channel_mode_t      channel_mode;
+    unsigned long long           random_seed;
+    unsigned                     *indices;
+    size_t                       *local_offsets;
+    size_t                       *remote_offsets;
+    size_t                       *lengths;
+    uint64_t                     *counter_send;
+    uint64_t                     *counter_recv;
+};
+
+template<ucs_device_level_t level>
 class ucp_perf_cuda_request_manager {
 public:
     using size_type = uint8_t;
 
     __device__
     ucp_perf_cuda_request_manager(size_type size, size_type fc_window,
-                                  ucp_device_request_t *requests)
+                                  ucp_device_request_t *requests,
+                                  const ucp_perf_cuda_params &params)
         : m_size(size),
           m_fc_window(fc_window),
           m_reqs_count(ucs_div_round_up(size, fc_window)),
@@ -36,9 +53,19 @@ public:
         for (size_type i = 0; i < m_reqs_count; ++i) {
             m_pending[i] = 0;
         }
+
+        if (params.channel_mode == UCX_PERF_CHANNEL_MODE_RANDOM) {
+            unsigned thread_index     = ucx_perf_cuda_thread_index<level>(
+                    threadIdx.x);
+            unsigned num_threads      = ucx_perf_cuda_thread_index<level>(
+                    params.num_threads);
+            unsigned global_thread_id = blockIdx.x * num_threads + thread_index;
+
+            curand_init(params.random_seed, global_thread_id, 0, &m_rand_state);
+        }
     }
 
-    template<ucs_device_level_t level, bool fc, size_type reuse>
+    template<bool fc, size_type reuse>
     __device__ inline ucs_status_t progress_one(size_type &index)
     {
         for (size_type i = 0; i < m_reqs_count; i++) {
@@ -60,7 +87,7 @@ public:
         return UCS_INPROGRESS;
     }
 
-    template<ucs_device_level_t level, bool fc>
+    template<bool fc>
     __device__ inline ucs_status_t get_request(ucp_device_request_t *&req,
                                                ucp_device_flags_t &flags)
     {
@@ -68,7 +95,7 @@ public:
         if (m_pending_count == m_size) {
             ucs_status_t status;
             do {
-                status = progress_one<level, fc, 1>(index);
+                status = progress_one<fc, 1>(index);
             } while (status == UCS_INPROGRESS);
 
             if (ucs_unlikely(status != UCS_OK)) {
@@ -96,6 +123,11 @@ public:
         return m_pending_count;
     }
 
+    __device__ inline curandState* get_rand_state()
+    {
+        return &m_rand_state;
+    }
+
 private:
     static const size_type CAPACITY = 32;
 
@@ -106,21 +138,7 @@ private:
     ucp_device_request_t *m_requests;
     uint32_t             m_pending_map;
     uint8_t              m_pending[CAPACITY];
-};
-
-struct ucp_perf_cuda_params {
-    ucp_device_mem_list_handle_h mem_list;
-    size_t                       length;
-    unsigned                     num_threads;
-    unsigned                     num_channels;
-    ucx_perf_channel_mode_t      channel_mode;
-    unsigned long long           random_seed;
-    unsigned                     *indices;
-    size_t                       *local_offsets;
-    size_t                       *remote_offsets;
-    size_t                       *lengths;
-    uint64_t                     *counter_send;
-    uint64_t                     *counter_recv;
+    curandState          m_rand_state;
 };
 
 class ucp_perf_cuda_params_handler {
@@ -323,17 +341,18 @@ ucp_perf_cuda_send_sync(ucp_perf_cuda_params &params, ucx_perf_counter_t idx,
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd, bool fc>
 UCS_F_DEVICE ucs_status_t
 ucp_perf_cuda_put_bw_iter(const ucp_perf_cuda_params &params,
-                          ucp_perf_cuda_request_manager &req_mgr,
-                          ucx_perf_counter_t idx, curandState *rand_state)
+                          ucp_perf_cuda_request_manager<level> &req_mgr,
+                          ucx_perf_counter_t idx)
 {
     ucp_device_flags_t flags = UCP_DEVICE_FLAG_NODELAY;
     ucp_device_request_t *req;
 
-    ucs_status_t status = req_mgr.get_request<level, fc>(req, flags);
+    ucs_status_t status = req_mgr.template get_request<fc>(req, flags);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
 
+    curandState *rand_state = req_mgr.get_rand_state();
     return ucp_perf_cuda_send_async<level, cmd>(params, idx, req, rand_state,
                                                 flags);
 }
@@ -342,16 +361,14 @@ template<ucs_device_level_t level, ucx_perf_cmd_t cmd, bool fc>
 UCS_F_DEVICE ucs_status_t
 ucp_perf_cuda_put_bw_kernel_impl(ucx_perf_cuda_context &ctx,
                                  const ucp_perf_cuda_params &params,
-                                 ucp_perf_cuda_request_manager &req_mgr,
-                                 curandState *rand_state)
+                                 ucp_perf_cuda_request_manager<level> &req_mgr)
 {
     ucx_perf_counter_t max_iters = ctx.max_iters;
     ucx_perf_cuda_reporter reporter(ctx);
     ucs_status_t status;
 
     for (ucx_perf_counter_t idx = 0; idx < (max_iters - 1); idx++) {
-        status = ucp_perf_cuda_put_bw_iter<level, cmd, fc>(params, req_mgr, idx,
-                                                           rand_state);
+        status = ucp_perf_cuda_put_bw_iter<level, cmd, fc>(params, req_mgr, idx);
         if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
             ucs_device_error("send failed: %d", status);
             return status;
@@ -363,8 +380,7 @@ ucp_perf_cuda_put_bw_kernel_impl(ucx_perf_cuda_context &ctx,
 
     /* Last iteration */
     status = ucp_perf_cuda_put_bw_iter<level, cmd, false>(params, req_mgr,
-                                                          max_iters - 1,
-                                                          rand_state);
+                                                          max_iters - 1);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucs_device_error("final send failed: %d", status);
         return status;
@@ -372,7 +388,7 @@ ucp_perf_cuda_put_bw_kernel_impl(ucx_perf_cuda_context &ctx,
 
     while (req_mgr.get_pending_count() > 0) {
         uint8_t index;
-        status = req_mgr.progress_one<level, fc, 0>(index);
+        status = req_mgr.template progress_one<fc, 0>(index);
         if (UCS_STATUS_IS_ERR(status)) {
             ucs_device_error("final progress failed: %d", status);
             return status;
@@ -390,28 +406,20 @@ ucp_perf_cuda_put_bw_kernel(ucx_perf_cuda_context &ctx,
 {
     extern __shared__ ucp_device_request_t shared_requests[];
     unsigned thread_index      = ucx_perf_cuda_thread_index<level>(threadIdx.x);
-    unsigned num_threads       = ucx_perf_cuda_thread_index<level>(params.num_threads);
-    unsigned global_thread_id  = blockIdx.x * num_threads + thread_index;
     unsigned reqs_count        = ucs_div_round_up(ctx.max_outstanding,
                                                   ctx.device_fc_window);
     ucp_device_request_t *reqs = &shared_requests[reqs_count * thread_index];
-    curandState rand_state;
 
-    if (params.channel_mode == UCX_PERF_CHANNEL_MODE_RANDOM) {
-        curand_init(params.random_seed, global_thread_id, 0, &rand_state);
-    }
-
-    ucp_perf_cuda_request_manager req_mgr(ctx.max_outstanding,
-                                          ctx.device_fc_window, reqs);
+    ucp_perf_cuda_request_manager<level> req_mgr(ctx.max_outstanding,
+                                                 ctx.device_fc_window, reqs,
+                                                 params);
 
     if (ctx.device_fc_window > 1) {
         ctx.status = ucp_perf_cuda_put_bw_kernel_impl<level, cmd, true>(
-                                                        ctx, params, req_mgr,
-                                                        &rand_state);
+                                                        ctx, params, req_mgr);
     } else {
         ctx.status = ucp_perf_cuda_put_bw_kernel_impl<level, cmd, false>(
-                                                        ctx, params, req_mgr,
-                                                        &rand_state);
+                                                        ctx, params, req_mgr);
     }
 }
 
@@ -424,21 +432,16 @@ ucp_perf_cuda_put_latency_kernel(ucx_perf_cuda_context &ctx,
     ucx_perf_counter_t max_iters = ctx.max_iters;
     ucs_status_t status          = UCS_OK;
     unsigned thread_index        = ucx_perf_cuda_thread_index<level>(threadIdx.x);
-    unsigned num_threads         = ucx_perf_cuda_thread_index<level>(params.num_threads);
-    unsigned global_thread_id    = blockIdx.x * num_threads + thread_index;
     ucp_device_request_t *req    = &shared_requests[thread_index];
-    curandState rand_state;
-
-    if (params.channel_mode == UCX_PERF_CHANNEL_MODE_RANDOM) {
-        curand_init(params.random_seed, global_thread_id, 0, &rand_state);
-    }
 
     ucx_perf_cuda_reporter reporter(ctx);
+    ucp_perf_cuda_request_manager<level> req_mgr(1, 1, req, params);
+    curandState *rand_state = req_mgr.get_rand_state();
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {
         if (is_sender) {
             status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req,
-                                                         &rand_state);
+                                                         rand_state);
             if (status != UCS_OK) {
                 ucs_device_error("sender send failed: %d", status);
                 break;
@@ -447,7 +450,7 @@ ucp_perf_cuda_put_latency_kernel(ucx_perf_cuda_context &ctx,
         } else {
             ucx_perf_cuda_wait_sn(params.counter_recv, idx + 1);
             status = ucp_perf_cuda_send_sync<level, cmd>(params, idx, req,
-                                                         &rand_state);
+                                                         rand_state);
             if (status != UCS_OK) {
                 ucs_device_error("receiver send failed: %d", status);
                 break;
