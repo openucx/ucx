@@ -671,6 +671,7 @@ typedef struct {
 uct_gdaki_dev_matrix_elem_t *uct_gdaki_dev_matrix;
 size_t uct_gdaki_dev_matrix_length;
 int uct_gdaki_dev_matrix_initialized = 0;
+pthread_mutex_t uct_gdaki_dev_matrix_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 {
@@ -808,6 +809,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         goto out;
     }
 
+    pthread_mutex_lock(&uct_gdaki_dev_matrix_lock);
     if (!uct_gdaki_dev_matrix_initialized) {
         status = uct_gdaki_dev_matrix_init();
         if (status != UCS_OK) {
@@ -816,6 +818,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
 
         uct_gdaki_dev_matrix_initialized = 1;
     }
+    pthread_mutex_unlock(&uct_gdaki_dev_matrix_lock);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_gpus));
     if (status != UCS_OK) {
