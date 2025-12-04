@@ -100,7 +100,8 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
                                 UCT_MD_FLAG_INVALIDATE |
                                 UCT_MD_FLAG_INVALIDATE_RMA |
                                 UCT_MD_FLAG_INVALIDATE_AMO |
-                                UCT_MD_FLAG_MEMTYPE_COPY;
+                                UCT_MD_FLAG_MEMTYPE_COPY |
+                                UCT_MD_FLAG_RKEY_PTR;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
@@ -549,13 +550,40 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     return UCS_OK;
 }
 
+ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
+                                   void *handle, uint64_t raddr, void **laddr_p)
+{
+    uct_cuda_ipc_unpacked_rkey_t *unpacked = (uct_cuda_ipc_unpacked_rkey_t *)rkey;
+    void *mapped_addr;
+    size_t offset;
+    CUdevice cu_dev;
+    ucs_status_t status;
+
+    if (cuCtxGetDevice(&cu_dev) != CUDA_SUCCESS) {
+        ucs_error("cuCtxGetDevice failed");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    status = uct_cuda_ipc_map_memhandle(&unpacked->super, cu_dev, &mapped_addr,
+                                        UCS_LOG_LEVEL_ERROR);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    offset   = (size_t)((uintptr_t)raddr - (uintptr_t)unpacked->super.d_bptr);
+    ucs_assert(offset <= unpacked->super.b_len);
+    *laddr_p = UCS_PTR_BYTE_OFFSET(mapped_addr, (ptrdiff_t)offset);
+
+    return UCS_OK;
+}
+
 uct_cuda_ipc_component_t uct_cuda_ipc_component = {
     .super = {
         .query_md_resources = uct_cuda_base_query_md_resources,
         .md_open            = uct_cuda_ipc_md_open,
         .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
         .rkey_unpack        = uct_cuda_ipc_rkey_unpack,
-        .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
+        .rkey_ptr           = uct_cuda_ipc_rkey_ptr,
         .rkey_release       = uct_cuda_ipc_rkey_release,
         .rkey_compare       = uct_base_rkey_compare,
         .name               = "cuda_ipc",

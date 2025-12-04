@@ -359,6 +359,71 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
     uct_rkey_release(GetParam().component, &rkey_bundle);
 }
 
+UCS_TEST_SKIP_COND_P(test_md, rkey_ptr_cuda,
+                     !check_caps(UCT_MD_FLAG_RKEY_PTR))
+{
+    void *rkey_buffer;
+    ucs_status_t status;
+    void *ptr;
+    size_t size = sizeof(unsigned) * UCS_MBYTE;;
+    uct_mem_h memh;
+    uct_md_mkey_pack_params_t params = {};
+    uct_rkey_bundle_t rkey_bundle;
+    unsigned *rva, *lva;
+
+    if (!(md_attr().reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
+        UCS_TEST_SKIP_R("MD does not support CUDA memory registration");
+    }
+
+    rkey_buffer = malloc(md_attr().rkey_packed_size);
+    if (rkey_buffer == NULL) {
+        GTEST_FAIL();
+    }
+
+    alloc_memory(&ptr, size, NULL, UCS_MEMORY_TYPE_CUDA);
+    rva = (unsigned *)ptr;
+
+    ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh));
+
+    status = uct_md_mkey_pack_v2(md(), memh, ptr, size, &params,
+                                 rkey_buffer);
+    ASSERT_UCS_OK(status);
+
+    status = uct_rkey_unpack(GetParam().component, rkey_buffer, &rkey_bundle);
+    ASSERT_UCS_OK(status);
+
+    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva,
+                          (void **)&lva);
+    ASSERT_UCS_OK(status);
+
+    {
+        const size_t nelems = size / sizeof(unsigned);
+        std::vector<unsigned> host(nelems);
+        for (size_t i = 0; i < nelems; ++i) {
+            host[i] = static_cast<unsigned>(i);
+        }
+        mem_buffer::copy_to(rva, host.data(), size, UCS_MEMORY_TYPE_CUDA);
+        EXPECT_TRUE(mem_buffer::compare(host.data(), lva, size,
+                                        UCS_MEMORY_TYPE_HOST,
+                                        UCS_MEMORY_TYPE_CUDA));
+    }
+
+    {
+        const size_t nelems = size / sizeof(unsigned);
+        std::vector<unsigned> host(nelems);
+        for (size_t i = 0; i < nelems; ++i) {
+            host[i] = static_cast<unsigned>(nelems - i);
+        }
+        mem_buffer::copy_to(lva, host.data(), size, UCS_MEMORY_TYPE_CUDA);
+        EXPECT_TRUE(mem_buffer::compare(host.data(), rva, size,
+                                        UCS_MEMORY_TYPE_HOST,
+                                        UCS_MEMORY_TYPE_CUDA));
+    }
+    free(rkey_buffer);
+    free_memory(ptr, UCS_MEMORY_TYPE_CUDA);
+    uct_rkey_release(GetParam().component, &rkey_bundle);
+}
+
 static ucs_log_func_rc_t
 ignore_alloc_failure_log_handler(const char *file, unsigned line,
                                  const char *function, ucs_log_level_t level,
