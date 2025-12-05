@@ -271,6 +271,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.cq_len[UCT_IB_DIR_RX] = ib_config->rx.queue_len;
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.seg_size              = ib_config->seg_size;
+    init_attr.xport_hdr_len         = ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN);
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
     init_attr.dev_name              = params->mode.device.dev_name;

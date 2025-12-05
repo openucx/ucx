@@ -1719,6 +1719,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
                                               config->rx.queue_len / 4);
     self->config.port_num           = port_num;
+    self->config.xport_hdr_len      = init_attr->xport_hdr_len;
     /* initialize to invalid value */
     self->config.sl                 = UCT_IB_SL_NUM;
     self->config.reverse_sl         = UCT_IB_SL_NUM;
@@ -1883,23 +1884,44 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
     return count;
 }
 
-ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
+static uct_ppn_bandwidth_t
+uct_ib_iface_get_bandwidth(uct_ib_iface_t *iface, double wire_speed)
+{
+    uct_ib_md_t *md      = uct_ib_iface_md(iface);
+    uint8_t active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
+    size_t mtu           = ucs_min(uct_ib_mtu_value((enum ibv_mtu)active_mtu),
+                                 iface->config.seg_size);
+    size_t extra_pkt_len = UCT_IB_BTH_LEN + iface->config.xport_hdr_len +
+                           UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
+    uct_ppn_bandwidth_t bandwidth;
+
+    if (uct_ib_iface_is_roce(iface)) {
+        extra_pkt_len += UCT_IB_GRH_LEN + UCT_IB_ROCE_LEN;
+    } else {
+        /* TODO check if UCT_IB_DELIM_LEN is present in RoCE as well */
+        extra_pkt_len += UCT_IB_LRH_LEN;
+    }
+
+    bandwidth.shared    = ucs_min((wire_speed * mtu) / (mtu + extra_pkt_len),
+                                  md->pci_bw);
+    bandwidth.dedicated = 0;
+    return bandwidth;
+}
+
+ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr)
 {
     static const uint8_t ib_port_widths[] =
             {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
     uct_ib_device_t *dev                 = uct_ib_iface_device(iface);
-    uct_ib_md_t *md                      = uct_ib_iface_md(iface);
-    uint8_t active_width, active_mtu, width;
+    uint8_t active_width, width;
     uint32_t active_speed;
     double encoding, signal_rate, wire_speed;
-    size_t mtu, extra_pkt_len;
     unsigned num_path;
 
     uct_base_iface_query(&iface->super, iface_attr);
 
     active_width = uct_ib_iface_port_attr(iface)->active_width;
-    active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
     active_speed = uct_ib_iface_port_active_speed(iface);
 
     /*
@@ -1979,31 +2001,16 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     }
 
     iface_attr->latency.m  = 0;
-
-    /* Wire speed calculation: Width * SignalRate * Encoding * Num_paths */
-    num_path   = uct_ib_iface_is_roce(iface) ?
-                 uct_ib_iface_roce_lag_level(iface) : 1;
-    wire_speed = (width * signal_rate * encoding * num_path) / 8.0;
-
-    /* Calculate packet overhead  */
-    mtu = ucs_min(uct_ib_mtu_value((enum ibv_mtu)active_mtu),
-                  iface->config.seg_size);
-
-    extra_pkt_len = UCT_IB_BTH_LEN + xport_hdr_len +  UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
-
     if (uct_ib_iface_is_roce(iface)) {
-        extra_pkt_len += UCT_IB_GRH_LEN + UCT_IB_ROCE_LEN;
         iface_attr->latency.c += 200e-9;
-    } else {
-        /* TODO check if UCT_IB_DELIM_LEN is present in RoCE as well */
-        extra_pkt_len += UCT_IB_LRH_LEN;
     }
 
-    iface_attr->bandwidth.shared    = ucs_min((wire_speed * mtu) /
-                                              (mtu + extra_pkt_len),
-                                              md->pci_bw);
-    iface_attr->bandwidth.dedicated = 0;
-    iface_attr->priority            = uct_ib_device_spec(dev)->priority;
+    /* Wire speed calculation: Width * SignalRate * Encoding * Num_paths */
+    num_path              = uct_ib_iface_is_roce(iface) ?
+                            uct_ib_iface_roce_lag_level(iface) : 1;
+    wire_speed            = (width * signal_rate * encoding * num_path) / 8.0;
+    iface_attr->bandwidth = uct_ib_iface_get_bandwidth(iface, wire_speed);
+    iface_attr->priority  = uct_ib_device_spec(dev)->priority;
 
     return UCS_OK;
 }
@@ -2040,8 +2047,6 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
 {
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    uct_ib_md_t *md      = uct_ib_iface_md(iface);
-    uct_ppn_bandwidth_t bandwidth;
     uint64_t port_speed;
     int ret;
 
@@ -2053,10 +2058,8 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
         return iface_attr->bandwidth;
     }
 
-    bandwidth.shared    = ucs_min(UCT_IB_PORT_SPEED_TO_BANDWIDTH(port_speed),
-                                  md->pci_bw);
-    bandwidth.dedicated = 0;
-    return bandwidth;
+    return uct_ib_iface_get_bandwidth(iface,
+                                      UCT_IB_PORT_SPEED_TO_BANDWIDTH(port_speed));
 #else
     return iface_attr->bandwidth;
 #endif
