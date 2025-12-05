@@ -15,7 +15,7 @@
 #define UCT_RC_GDA_RESV_WQE_NO_RESOURCE -1ULL
 #define UCT_RC_GDA_WQE_ERR              UCS_BIT(63)
 #define UCT_RC_GDA_WQE_MASK             UCS_MASK(63)
-
+#define UCT_RC_GDA_DB_BATCH_SIZE        128
 
 UCS_F_DEVICE void *
 uct_rc_mlx5_gda_get_wqe_ptr(uct_rc_gdaki_dev_ep_t *ep, uint16_t wqe_idx)
@@ -258,24 +258,43 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep,
 {
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
             ep->sq_ready_index);
-    uint64_t wqe_base_orig = wqe_base;
+    const bool no_delay = (flags & UCT_DEVICE_FLAG_NODELAY);
+    const uint64_t wqe_next = wqe_base + count;
+    const uint64_t wqe_base_orig = wqe_base;
 
     __threadfence();
-    while (!ref.compare_exchange_strong(wqe_base, wqe_base + count,
+    /*
+     * Spin until sq_ready_index reaches wqe_base, then atomically advance to
+     * wqe_next to mark WQEs ready in order.
+     * If the spin fails, reset wqe_base to the original value and try again.
+     */
+    while (!ref.compare_exchange_strong(wqe_base, wqe_next,
                                         cuda::std::memory_order_relaxed)) {
         wqe_base = wqe_base_orig;
     }
 
-    if (!(flags & UCT_DEVICE_FLAG_NODELAY) &&
-        !((wqe_base ^ (wqe_base + count)) & 128)) {
-        return;
+    /*
+     * Ring doorbell when:
+     * - NODELAY: sq_ready_index reaches wqe_next (coalesce multiple threads)
+     * - Normal: crossing UCT_RC_GDA_DB_BATCH_SIZE boundary (batch updates)
+     *
+     * Note: sq_ready_index is read twice:
+     * - Lock-free check outside lock avoids contention when condition not met.
+     * - Inside lock, skip doorbell if sq_db_index already matches ready_index
+     *   (another thread already rang it).
+     */
+    if ((no_delay && READ_ONCE(ep->sq_ready_index) == wqe_next) ||
+        (!no_delay && ((wqe_base ^ wqe_next) & UCT_RC_GDA_DB_BATCH_SIZE))) {
+        uct_rc_mlx5_gda_lock(&ep->sq_lock);
+        const uint64_t ready_index = ep->sq_ready_index;
+        if (ep->sq_db_index != ready_index) {
+            ep->sq_db_index = ready_index;
+            uct_rc_mlx5_gda_ring_db(ep, ready_index);
+            uct_rc_mlx5_gda_update_dbr(ep, ready_index);
+            uct_rc_mlx5_gda_ring_db(ep, ready_index);
+        }
+        uct_rc_mlx5_gda_unlock(&ep->sq_lock);
     }
-
-    uct_rc_mlx5_gda_lock(&ep->sq_lock);
-    uct_rc_mlx5_gda_ring_db(ep, ep->sq_ready_index);
-    uct_rc_mlx5_gda_update_dbr(ep, ep->sq_ready_index);
-    uct_rc_mlx5_gda_ring_db(ep, ep->sq_ready_index);
-    uct_rc_mlx5_gda_unlock(&ep->sq_lock);
 }
 
 UCS_F_DEVICE bool
