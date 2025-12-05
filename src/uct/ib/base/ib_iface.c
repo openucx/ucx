@@ -52,6 +52,11 @@
  */
 #define UCT_IB_XDR_READ_PATH_RATIO 0.4
 
+/**
+ * Convert port speed (in 100 Mb/s granularity) to bandwidth (in bytes/s).
+ */
+#define UCT_IB_PORT_SPEED_TO_BANDWIDTH(speed) ((double)(speed) * 1e8 / 8)
+
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
                                UCS_CONFIG_TYPE_RANGE_SPEC);
@@ -2029,6 +2034,34 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
     return ucs_min(iface_attr->bandwidth.shared * path_ratio, max_path_bandwidth);
 }
 
+static uct_ppn_bandwidth_t
+uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
+                                const uct_iface_attr_t *iface_attr)
+{
+#if HAVE_DECL_IBV_QUERY_PORT_SPEED
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uct_ib_md_t *md      = uct_ib_iface_md(iface);
+    uct_ppn_bandwidth_t bandwidth;
+    uint64_t port_speed;
+    int ret;
+
+    ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
+                               &port_speed);
+    if (ret != 0) {
+        ucs_warn("ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
+                 " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
+        return iface_attr->bandwidth;
+    }
+
+    bandwidth.shared    = ucs_min(UCT_IB_PORT_SPEED_TO_BANDWIDTH(port_speed),
+                                  md->pci_bw);
+    bandwidth.dedicated = 0;
+    return bandwidth;
+#else
+    return iface_attr->bandwidth;
+#endif
+}
+
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
@@ -2065,7 +2098,8 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
-        perf_attr->bandwidth = iface_attr.bandwidth;
+        perf_attr->bandwidth = uct_ib_iface_estimate_bandwidth(ib_iface,
+                                                               &iface_attr);
         if (uct_ep_op_is_get(op) && uct_ib_iface_port_is_xdr(ib_iface)) {
             max_bandwidth = perf_attr->bandwidth.shared *
                             iface_attr.dev_num_paths * UCT_IB_XDR_READ_PATH_RATIO;
