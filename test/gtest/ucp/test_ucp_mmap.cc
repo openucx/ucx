@@ -14,6 +14,7 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
+#include <ucs/sys/math.h>
 #include <ucs/type/float8.h>
 #include <ucs/type/serialize.h>
 }
@@ -432,7 +433,7 @@ void test_ucp_mmap::check_distance_precision(double rkey_value,
     } else if (rkey_value == pack_max) {
         /* Capped by pack_max, no cache entry */
         EXPECT_GE(std::lround(topo_value), pack_max);
-    } else if (topo_value == INFINITY) {
+    } else if (topo_value == UCS_INFINITY) {
         /* Infinity values can be packed without loss */
         EXPECT_EQ(topo_value, rkey_value);
     } else {

@@ -27,6 +27,12 @@ BEGIN_C_DECLS
 #define UCS_TBYTE    (1ull << 40)
 #define UCS_PBYTE    (1ull << 50)
 
+#if defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__
+#define UCS_INFINITY (DBL_MAX)
+#else
+#define UCS_INFINITY (INFINITY)
+#endif
+
 #define ucs_min(_a, _b) \
 ({ \
     ucs_typeof(_a) _min_a = (_a); \
