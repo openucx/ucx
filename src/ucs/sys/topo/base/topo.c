@@ -536,7 +536,7 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t sys_dev1,
     }
 
     distance->bandwidth = 0;
-    distance->latency   = INFINITY;
+    distance->latency   = UCS_INFINITY;
     ucs_topo_update_distance_sysfs(sys_dev1, sys_dev2, distance);
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
@@ -1241,7 +1241,7 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 
 out_max_bw:
     ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
-    return INFINITY;
+    return UCS_INFINITY;
 }
 
 const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)
