@@ -53,6 +53,31 @@ BEGIN_C_DECLS
 #define ucs_div_round_up(_n, _d) \
     (((_n) + (_d) - 1) / (_d))
 
+
+/**
+ * Calculate a small value to overcome float imprecision
+ * between two float values
+ */
+static UCS_F_ALWAYS_INLINE double ucs_calc_epsilon(double val1, double val2)
+{
+    return (val1 + val2) * (1e-6);
+}
+
+
+/**
+ * Compare two scores and return:
+ * - `-1` if score1 < score2
+ * -  `0` if score1 == score2
+ * -  `1` if score1 > score2
+ */
+static UCS_F_ALWAYS_INLINE int ucs_score_cmp(double score1, double score2)
+{
+    double diff = score1 - score2;
+    return ((fabs(diff) < ucs_calc_epsilon(score1, score2)) ? 0 :
+                                                              ucs_signum(diff));
+}
+
+
 static inline double ucs_log2(double x)
 {
     return log(x) / log(2.0);
