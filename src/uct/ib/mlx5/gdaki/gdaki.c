@@ -774,6 +774,7 @@ static ucs_status_t uct_gdaki_dev_matrix_init(unsigned max_ib_per_gpu)
         goto out_buff;
     }
 
+    ucs_assert(num_ibs > 0);
     uct_gdaki_dev_matrix = ucs_calloc(num_ibs, sizeof(*uct_gdaki_dev_matrix),
                                       "dev matrix");
     if (uct_gdaki_dev_matrix == NULL) {
@@ -809,6 +810,7 @@ static ucs_status_t uct_gdaki_dev_matrix_init(unsigned max_ib_per_gpu)
     }
 
     ib_per_gpu = ucs_min(num_ibs / num_gpus, max_ib_per_gpu);
+    ib_per_gpu = ucs_max(ib_per_gpu, 1);
 
     for (j = 0; j < num_gpus; j++) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&gpu_dev, j));
