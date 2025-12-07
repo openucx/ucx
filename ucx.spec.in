@@ -426,6 +426,8 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %endif
 
 %changelog
+* Sun Dec 7 2025 Alma Mastbaum <amastbaum@nvidia.com> 1.19.1-1
+- Bump version to 1.19.1
 * Sat Oct 12 2024 Yossi Itigin <yosefe@nvidia.com> 1.19.0-1
 - Bump version to 1.19.0
 * Fri Apr 19 2024 Yossi Itigin <yosefe@nvidia.com> 1.18.0-1
