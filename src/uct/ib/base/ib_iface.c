@@ -52,11 +52,6 @@
  */
 #define UCT_IB_XDR_READ_PATH_RATIO 0.4
 
-/**
- * Convert port speed (in 100 Mb/s granularity) to bandwidth (in bytes/s).
- */
-#define UCT_IB_PORT_SPEED_TO_BANDWIDTH(speed) ((double)(speed) * 1e8 / 8)
-
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
                                UCS_CONFIG_TYPE_RANGE_SPEC);
@@ -1890,11 +1885,12 @@ uct_ib_iface_get_bandwidth(uct_ib_iface_t *iface, double wire_speed)
     uct_ib_md_t *md      = uct_ib_iface_md(iface);
     uint8_t active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
     size_t mtu           = ucs_min(uct_ib_mtu_value((enum ibv_mtu)active_mtu),
-                                 iface->config.seg_size);
-    size_t extra_pkt_len = UCT_IB_BTH_LEN + iface->config.xport_hdr_len +
-                           UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
+                                   iface->config.seg_size);
+    size_t extra_pkt_len;
     uct_ppn_bandwidth_t bandwidth;
 
+    extra_pkt_len = UCT_IB_BTH_LEN + iface->config.xport_hdr_len +
+                    UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
     if (uct_ib_iface_is_roce(iface)) {
         extra_pkt_len += UCT_IB_GRH_LEN + UCT_IB_ROCE_LEN;
     } else {
@@ -2048,6 +2044,7 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint64_t port_speed;
+    double wire_speed;
     int ret;
 
     ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
@@ -2058,8 +2055,9 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
         return iface_attr->bandwidth;
     }
 
-    return uct_ib_iface_get_bandwidth(iface,
-                                      UCT_IB_PORT_SPEED_TO_BANDWIDTH(port_speed));
+    /* Convert port speed (in 100 Mb/s granularity) to bandwidth in bytes/s. */
+    wire_speed = (double)port_speed * 1e8 / 8.0;
+    return uct_ib_iface_get_bandwidth(iface, wire_speed);
 #else
     return iface_attr->bandwidth;
 #endif
