@@ -1032,15 +1032,15 @@ UCS_TEST_F(test_config, has_field) {
                                                          {"PREFIX_", "NAME"}};
 
     for (const auto &name : dummy_names) {
-        EXPECT_FALSE(ucs_config_parser_has_field(nullptr, name.first,
-                                                 name.second));
+        EXPECT_FALSE(
+                ucs_config_parser_has_field(nullptr, name.first, name.second));
         EXPECT_FALSE(ucs_config_parser_has_field(seat_opts_table, name.first,
                                                  name.second));
     }
 
     for (auto field = seat_opts_table; field->name != nullptr; ++field) {
-        EXPECT_TRUE(ucs_config_parser_has_field(seat_opts_table, "",
-                                                field->name));
+        EXPECT_TRUE(
+                ucs_config_parser_has_field(seat_opts_table, "", field->name));
         EXPECT_TRUE(ucs_config_parser_has_field(seat_opts_table, nullptr,
                                                 field->name));
         EXPECT_FALSE(ucs_config_parser_has_field(seat_opts_table, "PREFIX_",
@@ -1057,6 +1057,6 @@ UCS_TEST_F(test_config, has_field) {
         }
     }
 
-    EXPECT_FALSE(ucs_config_parser_has_field(engine_opts_table, "",
-                                             "FUEL_LEVEL"));
+    EXPECT_FALSE(
+            ucs_config_parser_has_field(engine_opts_table, "", "FUEL_LEVEL"));
 }
