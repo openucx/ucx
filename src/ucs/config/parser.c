@@ -2473,12 +2473,16 @@ ucs_config_parser_has_field_internal(const ucs_config_field_t *fields,
         if (ucs_config_is_table_field(field)) {
             sub_fields = field->parser.arg;
 
+            /* Changing the prefix to the name of the sub-table allows to
+             * find the parent configuration name, e.g. IB_SEG_SIZE  */
             if (override_prefix &&
                 ucs_config_parser_has_field_internal(sub_fields, field->name,
                                                      name, 1)) {
                 return 1;
             }
 
+            /* Keeping the original prefix allows to find the inherited
+             * configuration name, e.g. RC_MLX5_SEG_SIZE */
             if ((prefix != NULL) &&
                 ucs_config_parser_has_field_internal(sub_fields, prefix, name,
                                                      0)) {
@@ -2496,4 +2500,17 @@ int ucs_config_parser_has_field(const ucs_config_field_t *fields,
                                 const char *prefix, const char *name)
 {
     return ucs_config_parser_has_field_internal(fields, prefix, name, 1);
+}
+
+int ucs_config_global_list_has_field(const char *name)
+{
+    const ucs_config_global_list_entry_t *entry;
+
+    ucs_list_for_each(entry, &ucs_config_global_list, list) {
+        if (ucs_config_parser_has_field(entry->table, entry->prefix, name)) {
+            return 1;
+        }
+    }
+
+    return 0;
 }

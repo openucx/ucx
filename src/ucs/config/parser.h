@@ -651,6 +651,14 @@ void ucs_config_parser_cleanup(void);
 int ucs_config_parser_has_field(const ucs_config_field_t *fields,
                                 const char *prefix, const char *name);
 
+/**
+ * Check if a field exists in the global configuration list.
+ *
+ * @param name   Field name to check.
+ * @return       1 if the field exists, 0 otherwise.
+ */
+int ucs_config_global_list_has_field(const char *name);
+
 END_C_DECLS
 
 #endif
