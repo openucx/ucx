@@ -82,7 +82,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                    request is sent.\n");
     printf("     -N <mode>      channel selection mode for device tests (single)\n");
     printf("                    single          - use a single fixed channel (channel 0, default)\n");
-    printf("                    random[:<seed>] - use random channel per operation with optional seed\n");
+    printf("                    random[:<seed>] - use random channel per operation with optional random seed\n");
     printf("                    per-thread      - use global thread ID modulo num_channels\n");
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
