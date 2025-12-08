@@ -132,6 +132,10 @@ typedef struct ucp_context_config {
     int                                    rndv_errh_ppln_enable;
     /** Force-enable the RMA rendezvous put/get protocols */
     int                                    rma_ppln_enable;
+    /** Enable flow control for rndv pipeline fragments at worker level */
+    int                                    rndv_ppln_worker_fc_enable;
+    /** Maximum number of concurrent pipeline fragments per worker */
+    size_t                                 rndv_ppln_worker_max_frags;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
