@@ -169,6 +169,86 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
     return status;
 }
 
+/* Reschedule callback for throttled mtype requests */
+static unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
+{
+    ucp_request_t *req = arg;
+    ucp_request_send(req);
+    return 1;
+}
+
+/**
+ * Check if request should be throttled due to flow control limit.
+ * If throttled, the request is queued to pending_q.
+ *
+ * @return UCS_OK if not throttled (caller should continue),
+ *         UCS_ERR_NO_RESOURCE if throttled and queued (caller should return UCS_OK).
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_mtype_fc_check(ucp_request_t *req)
+{
+    ucp_worker_h worker   = req->send.ep->worker;
+    ucp_context_h context = worker->context;
+
+    if (!context->config.ext.rndv_ppln_worker_fc_enable) {
+        return UCS_OK;
+    }
+
+    if (worker->rndv_ppln_fc.active_frags >=
+        context->config.ext.rndv_ppln_worker_max_frags) {
+        ucs_trace_req("mtype_fc: throttle limit reached active_frags=%zu max=%zu",
+                      worker->rndv_ppln_fc.active_frags,
+                      context->config.ext.rndv_ppln_worker_max_frags);
+        ucs_queue_push(&worker->rndv_ppln_fc.pending_q,
+                       &req->send.rndv.ppln.queue_elem);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    return UCS_OK;
+}
+
+/**
+ * Increment active_frags counter after successful mtype allocation.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_fc_increment(ucp_request_t *req)
+{
+    ucp_worker_h worker = req->send.ep->worker;
+
+    if (worker->context->config.ext.rndv_ppln_worker_fc_enable) {
+        worker->rndv_ppln_fc.active_frags++;
+    }
+}
+
+/**
+ * Decrement active_frags counter and reschedule pending request if any.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
+{
+    ucp_worker_h worker   = req->send.ep->worker;
+    ucp_context_h context = worker->context;
+
+    if (!context->config.ext.rndv_ppln_worker_fc_enable) {
+        return;
+    }
+
+    ucs_assert(worker->rndv_ppln_fc.active_frags > 0);
+    worker->rndv_ppln_fc.active_frags--;
+
+    if (!ucs_queue_is_empty(&worker->rndv_ppln_fc.pending_q)) {
+        ucp_request_t *pending_req;
+        ucs_queue_elem_t *elem;
+
+        elem        = ucs_queue_pull(&worker->rndv_ppln_fc.pending_q);
+        pending_req = ucs_container_of(elem, ucp_request_t,
+                                       send.rndv.ppln.queue_elem);
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
+                                  ucp_proto_rndv_mtype_fc_reschedule_cb,
+                                  pending_req);
+    }
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mdesc_mtype_copy(ucp_request_t *req,
                                 uct_ep_put_zcopy_func_t copy_func,

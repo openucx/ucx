@@ -318,7 +318,10 @@ struct ucp_request {
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
                                 struct {
                                     /* Size to send in ack message */
-                                    ssize_t ack_data_size;
+                                    ssize_t          ack_data_size;
+                                    /* Element in worker-level pending queue
+                                     * for throttled ppln requests */
+                                    ucs_queue_elem_t queue_elem;
                                 } ppln;
 
                                 /* Used by rndv/rkey_ptr */
