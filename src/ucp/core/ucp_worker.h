@@ -394,6 +394,12 @@ typedef struct ucp_worker {
     } counters;
 
     struct {
+        /* Worker-level ppln fragment flow control */
+        size_t                       active_frags;       /* Current active fragments */
+        ucs_queue_head_t             pending_q;          /* Queue of throttled ppln requests */
+    } rndv_ppln_fc;
+
+    struct {
         /* Usage tracker handle */
         ucs_usage_tracker_h          handle;
         /* Number of progress iterations passed so far (used to minimize

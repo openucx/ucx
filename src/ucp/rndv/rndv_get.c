@@ -262,6 +262,8 @@ ucp_proto_rndv_get_mtype_unpack_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucs_mpool_put_inline(req->send.rndv.mdesc);
+    ucp_proto_rndv_mtype_fc_decrement(req);
+
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
         ucp_proto_rndv_ppln_recv_frag_complete(req, 1, 0);
     } else {
@@ -292,6 +294,12 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
     rpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        /* Check throttling. If no resource at the moment, queue the request
+         * in the throttle pending queue and return UCS_OK. */
+        if (ucp_proto_rndv_mtype_fc_check(req) == UCS_ERR_NO_RESOURCE) {
+            return UCS_OK;
+        }
+
         status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
                                                    rpriv->frag_sys_dev);
         if (status != UCS_OK) {
@@ -299,6 +307,7 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
             return UCS_OK;
         }
 
+        ucp_proto_rndv_mtype_fc_increment(req);
         ucp_proto_rndv_get_common_request_init(req);
         ucp_proto_completion_init(&req->send.state.uct_comp,
                                   ucp_proto_rndv_get_mtype_fetch_completion);
@@ -363,6 +372,8 @@ static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
     ucs_mpool_put_inline(req->send.rndv.mdesc);
     req->send.rndv.mdesc = NULL;
     req->flags          &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+
+    ucp_proto_rndv_mtype_fc_decrement(req);
 
     if ((req->send.proto_stage != UCP_PROTO_RNDV_GET_STAGE_FETCH) &&
         (req->send.proto_stage != UCP_PROTO_RNDV_GET_STAGE_ATS)) {

@@ -383,6 +383,16 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_PIPELINE_WORKER_FC_ENABLE", "n",
+   "Enable worker-level flow control to limit total concurrent pipeline fragments\n"
+   "across all requests, preventing memory exhaustion",
+   ucs_offsetof(ucp_context_config_t, rndv_ppln_worker_fc_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"RNDV_PIPELINE_WORKER_MAX_FRAGS", "5000",
+   "Maximum number of concurrent pipeline fragments per worker\n"
+   "(only applies when RNDV_PIPELINE_WORKER_FC_ENABLE=y)",
+   ucs_offsetof(ucp_context_config_t, rndv_ppln_worker_max_frags), UCS_CONFIG_TYPE_ULUNITS},
+
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"
