@@ -7,6 +7,8 @@
 #define UCT_CUDA_IPC_INL
 
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 
 #include <cuda.h>
 
@@ -78,6 +80,31 @@ uct_cuda_ipc_check_and_pop_ctx(int is_ctx_pushed)
     if (is_ctx_pushed) {
         UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     }
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_ipc_get_remote_address(uct_rkey_t rkey, uint64_t raddr, CUdevice cu_dev,
+                                void **laddr_p, void **base_addr_p)
+{
+    uct_cuda_ipc_unpacked_rkey_t *unpacked = (uct_cuda_ipc_unpacked_rkey_t *)rkey;
+    ucs_status_t status;
+    size_t offset;
+    void *mapped_addr;
+
+    status = uct_cuda_ipc_map_memhandle(&unpacked->super, cu_dev, &mapped_addr,
+                                        UCS_LOG_LEVEL_ERROR);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    offset = (size_t)((uintptr_t)raddr - (uintptr_t)unpacked->super.d_bptr);
+    ucs_assert(offset <= unpacked->super.b_len);
+    *laddr_p = UCS_PTR_BYTE_OFFSET(mapped_addr, (ptrdiff_t)offset);
+    if (base_addr_p != NULL) {
+        *base_addr_p = mapped_addr;
+    }
+
+    return UCS_OK;
 }
 
 #endif

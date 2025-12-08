@@ -553,28 +553,14 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                                    void *handle, uint64_t raddr, void **laddr_p)
 {
-    uct_cuda_ipc_unpacked_rkey_t *unpacked = (uct_cuda_ipc_unpacked_rkey_t *)rkey;
-    void *mapped_addr;
-    size_t offset;
     CUdevice cu_dev;
-    ucs_status_t status;
 
     if (cuCtxGetDevice(&cu_dev) != CUDA_SUCCESS) {
         ucs_error("cuCtxGetDevice failed");
         return UCS_ERR_IO_ERROR;
     }
 
-    status = uct_cuda_ipc_map_memhandle(&unpacked->super, cu_dev, &mapped_addr,
-                                        UCS_LOG_LEVEL_ERROR);
-    if (ucs_unlikely(status != UCS_OK)) {
-        return status;
-    }
-
-    offset   = (size_t)((uintptr_t)raddr - (uintptr_t)unpacked->super.d_bptr);
-    ucs_assert(offset <= unpacked->super.b_len);
-    *laddr_p = UCS_PTR_BYTE_OFFSET(mapped_addr, (ptrdiff_t)offset);
-
-    return UCS_OK;
+    return uct_cuda_ipc_get_remote_address(rkey, raddr, cu_dev, laddr_p, NULL);
 }
 
 uct_cuda_ipc_component_t uct_cuda_ipc_component = {
