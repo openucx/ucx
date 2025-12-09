@@ -906,7 +906,8 @@ ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
     }
 
     if (!ucs_config_global_list_has_field(name)) {
-        return UCS_ERR_NO_ELEM;
+        ucs_debug("'%s' configuration is invalid", name);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return ucp_config_cached_key_add(&config->cached_key_list, name, value);
