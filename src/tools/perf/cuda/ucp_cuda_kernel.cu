@@ -283,7 +283,7 @@ ucp_perf_cuda_init_rand_state(const ucx_perf_cuda_context &ctx, curandState *ran
             ctx.num_threads);
     unsigned global_thread_id = blockIdx.x * num_threads + thread_index;
 
-    curand_init(ctx.random_seed, global_thread_id, 0, rand_state);
+    curand_init(ctx.channel_rand_seed, global_thread_id, 0, rand_state);
 }
 
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd>

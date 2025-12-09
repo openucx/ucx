@@ -223,7 +223,7 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.ucp.am_hdr_size         = 0;
     params->super.device_num_channels     = UINT_MAX;
     params->super.device_channel_mode     = UCX_PERF_CHANNEL_MODE_SINGLE;
-    params->super.random_seed             = ucs_generate_uuid((uintptr_t)params);
+    params->super.channel_rand_seed       = ucs_generate_uuid((uintptr_t)params);
     params->super.device_thread_count     = 1;
     params->super.device_block_count      = 1;
     params->super.device_fc_window        = UCP_PERF_FC_WINDOW_DEFAULT;

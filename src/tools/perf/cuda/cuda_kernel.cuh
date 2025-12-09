@@ -20,7 +20,7 @@ struct ucx_perf_cuda_context {
     unsigned                num_threads;
     unsigned                num_channels;
     ucx_perf_channel_mode_t channel_mode;
-    unsigned long long      random_seed;
+    unsigned long long      channel_rand_seed;
     unsigned                max_outstanding;
     unsigned                device_fc_window;
     ucx_perf_counter_t      max_iters;
@@ -168,7 +168,7 @@ public:
         m_cpu_ctx->num_threads        = perf.params.device_thread_count;
         m_cpu_ctx->num_channels       = perf.params.device_num_channels;
         m_cpu_ctx->channel_mode       = perf.params.device_channel_mode;
-        m_cpu_ctx->random_seed        = perf.params.random_seed;
+        m_cpu_ctx->channel_rand_seed  = perf.params.channel_rand_seed;
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
         m_cpu_ctx->device_fc_window   = perf.params.device_fc_window;
         m_cpu_ctx->max_iters          = perf.max_iter;

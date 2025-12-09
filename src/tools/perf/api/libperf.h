@@ -298,7 +298,7 @@ typedef struct ucx_perf_params {
                                                 in latency tests */
     unsigned                device_num_channels; /* Number of channels for each ucp device endpoint */
     ucx_perf_channel_mode_t device_channel_mode; /* Channel selection mode */
-    unsigned long long      random_seed; /* Seed for random generation */
+    unsigned long long      channel_rand_seed; /* Seed for random generation */
     unsigned                device_thread_count; /* Number of device threads */
     unsigned                device_block_count; /* Number of device blocks */
     unsigned                device_fc_window; /* Flow control window size for device tests */

@@ -496,13 +496,13 @@ static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
 
 static ucs_status_t parse_channel_mode(const char *opt_arg,
                                        ucx_perf_channel_mode_t *channel_mode,
-                                       unsigned long long *random_seed)
+                                       unsigned long long *channel_rand_seed)
 {
     if (!strcmp(opt_arg, "single")) {
         *channel_mode = UCX_PERF_CHANNEL_MODE_SINGLE;
     } else if (!strncmp(opt_arg, "random:", 7)) {
-        *channel_mode = UCX_PERF_CHANNEL_MODE_RANDOM;
-        *random_seed  = strtoull(opt_arg + 7, NULL, 10);
+        *channel_mode      = UCX_PERF_CHANNEL_MODE_RANDOM;
+        *channel_rand_seed = strtoull(opt_arg + 7, NULL, 10);
     } else if (!strcmp(opt_arg, "random")) {
         *channel_mode = UCX_PERF_CHANNEL_MODE_RANDOM;
     } else if (!strcmp(opt_arg, "per-thread")) {
@@ -754,7 +754,7 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
                          "device flow control window size", 1, INT_MAX);
     case 'Y':
         return parse_channel_mode(opt_arg, &params->super.device_channel_mode,
-                                  &params->super.random_seed);
+                                  &params->super.channel_rand_seed);
     case 'y':
         params->super.flags |= UCX_PERF_TEST_FLAG_AM_RECV_COPY;
         return UCS_OK;
