@@ -29,7 +29,6 @@ public:
         : m_size(ctx.max_outstanding),
           m_fc_window(ctx.device_fc_window),
           m_reqs_count(ucs_div_round_up(m_size, m_fc_window)),
-          m_num_threads(ctx.num_threads),
           m_num_channels(ctx.num_channels),
           m_channel_mode(ctx.channel_mode),
           m_pending_count(0),
@@ -112,7 +111,7 @@ public:
         case UCX_PERF_CHANNEL_MODE_PER_THREAD:
         default:
             return (blockIdx.x *
-                    ucx_perf_cuda_thread_index<level>(m_num_threads) +
+                    ucx_perf_cuda_thread_index<level>(blockDim.x) +
                     ucx_perf_cuda_thread_index<level>(threadIdx.x)) %
                    m_num_channels;
         }
@@ -124,7 +123,6 @@ private:
     const size_type               m_size;
     const size_type               m_fc_window;
     const size_type               m_reqs_count;
-    const unsigned                m_num_threads;
     const unsigned                m_num_channels;
     const ucx_perf_channel_mode_t m_channel_mode;
     size_type                     m_pending_count;
@@ -278,10 +276,9 @@ private:
 template<ucs_device_level_t level>
 UCS_F_DEVICE void
 ucp_perf_cuda_init_rand_state(const ucx_perf_cuda_context &ctx, curandState *rand_state) {
-    unsigned thread_index     = ucx_perf_cuda_thread_index<level>(threadIdx.x);
-    unsigned num_threads      = ucx_perf_cuda_thread_index<level>(
-            ctx.num_threads);
-    unsigned global_thread_id = blockIdx.x * num_threads + thread_index;
+    unsigned global_thread_id = blockIdx.x *
+                                ucx_perf_cuda_thread_index<level>(blockDim.x) +
+                                ucx_perf_cuda_thread_index<level>(threadIdx.x);
 
     curand_init(ctx.channel_rand_seed, global_thread_id, 0, rand_state);
 }
