@@ -370,6 +370,15 @@ typedef struct ucp_worker {
     unsigned                         rkey_config_count;   /* Current number of rkey configurations */
     ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
 
+    /* RNDV pipeline flow control statistics */
+    struct {
+        size_t                       num_ppln_super_reqs;  /* Number of active pipeline super requests */
+        size_t                       total_frags;          /* Total outstanding fragments across all reqs */
+        size_t                       max_super_reqs;       /* Peak number of super requests */
+        size_t                       max_total_frags;      /* Peak total fragments */
+        size_t                       progress_count;       /* Progress call counter for periodic logging */
+    } rndv_ppln_fc_stats;
+
     struct {
         int                          timerfd;             /* Timer needed to signal to user's fd when
                                                            * the next keepalive round must be done */
