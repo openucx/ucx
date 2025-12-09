@@ -14,6 +14,7 @@
 
 #include <ucs/async/async_fwd.h>
 #include <ucs/config/types.h>
+#include <ucs/debug/assert.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
@@ -29,11 +30,13 @@
 #include <string>
 #include <algorithm>
 #include <unordered_map>
+#include <mutex>
 #include <sys/socket.h>
 #include <dirent.h>
 #include <stdint.h>
 #include <ifaddrs.h>
 #include <sys/resource.h>
+#include <dlfcn.h>
 
 
 #ifndef UINT16_MAX
@@ -1139,6 +1142,122 @@ private:
     if (_status != UCS_OK) { \
         return _status; \
     } \
+}
+
+/**
+ * Class for mocking C functions loaded dynamically by interposing them.
+ */
+class interpose_mock {
+public:
+    using functor_t  = std::shared_ptr<void>;
+    using func_t     = void (*)();
+    using executor_t = std::pair<functor_t, func_t>;
+
+    template<typename Ret, typename Fn, typename... Args>
+    static Ret hook(const char *name, Args &&...args)
+    {
+        executor_t exec = make_exec(name);
+        if (exec.first) {
+            /* Call the mock functor if set */
+            using fn_t = std::function<Ret(Args...)>;
+            fn_t *fn   = static_cast<fn_t*>(exec.first.get());
+            return (*fn)(std::forward<Args>(args)...);
+        }
+
+        /* Call the original function */
+        Fn *fn = reinterpret_cast<Fn *>(exec.second);
+        return (*fn)(std::forward<Args>(args)...);
+    }
+
+    template<typename Ret, typename... Args>
+    static interpose_mock&
+    setup(const char *name, std::function<Ret(Args...)> mock_fn,
+          unsigned calls = 1)
+    {
+        interpose_mock &mock = get(name);
+        std::lock_guard<std::mutex> guard(mock.m_mutex);
+
+        using fn_t   = std::function<Ret(Args...)>;
+        mock.m_calls = calls;
+        mock.m_mock  = std::shared_ptr<void>(
+                            new fn_t(std::move(mock_fn)),
+                            [](void *ptr) { delete static_cast<fn_t*>(ptr); });
+        return mock;
+    }
+
+    template<typename Fn, typename... Args>
+    static auto call_orig(const char *name, Args &&...args) ->
+        decltype((*((Fn*)0))(std::forward<Args>(args)...))
+    {
+        interpose_mock &mock = get(name);
+        Fn *fn = reinterpret_cast<Fn *>(mock.m_orig);
+        return (*fn)(std::forward<Args>(args)...);
+    }
+
+    static void clear()
+    {
+        std::lock_guard<std::mutex> guard(m_map_mutex);
+        m_mocks.clear();
+    }
+
+    static void reset(const char *name)
+    {
+        interpose_mock &mock = get(name);
+        mock.reset();
+    }
+
+    void reset()
+    {
+        std::lock_guard<std::mutex> guard(m_mutex);
+        m_mock.reset();
+        m_calls = 0;
+    }
+
+private:
+    explicit interpose_mock(const char *name)
+    {
+        void *sym = dlsym(RTLD_NEXT, name);
+        ucs_assert_always(sym != nullptr);
+        m_orig    = reinterpret_cast<func_t>(sym);
+        m_calls   = 0;
+    }
+
+    static executor_t make_exec(const char *name)
+    {
+        interpose_mock &mock = get(name);
+        std::lock_guard<std::mutex> guard(mock.m_mutex);
+
+        executor_t exec = { mock.m_mock, mock.m_orig };
+        if (mock.m_calls > 0 && (--mock.m_calls == 0)) {
+            mock.m_mock.reset();
+        }
+        return exec;
+    }
+
+    static interpose_mock &get(const char *name)
+    {
+        std::lock_guard<std::mutex> guard(m_map_mutex);
+        auto it = m_mocks.find(name);
+        if (it == m_mocks.end()) {
+            it = m_mocks.emplace(name, std::unique_ptr<interpose_mock>(
+                                            new interpose_mock(name))).first;
+        }
+        return *(it->second);
+    }
+
+    func_t     m_orig;
+    functor_t  m_mock;
+    unsigned   m_calls;
+    std::mutex m_mutex;
+
+    static std::map<std::string, std::unique_ptr<interpose_mock>> m_mocks;
+    static std::mutex m_map_mutex;
+};
+
+#define UCS_INTERPOSE_MOCK_DEFINE(ret, name, args, ...) \
+extern "C" ret name args \
+{ \
+    return ucs::interpose_mock::hook<ret, decltype(name)>(#name, __VA_ARGS__); \
 }
 
 // Used to manipulate and restore rlimits
