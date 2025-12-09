@@ -39,6 +39,7 @@ union uct_device_completion {
  * @param [in]  address         Local virtual address to send data from.
  * @param [in]  remote_address  Remote virtual address to write data to.
  * @param [in]  length          Length in bytes of the data to send.
+ * @param [in]  channel_id      Channel ID to use for the transfer.
  * @param [in]  flags           Flags to modify the function behavior.
  * @param [in]  comp            Completion object to track the progress of operation.
  *
@@ -53,12 +54,13 @@ template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
         const void *address, uint64_t remote_address, size_t length,
-        uint64_t flags, uct_device_completion_t *comp)
+        unsigned channel_id, uint64_t flags, uct_device_completion_t *comp)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_put_single<level>(device_ep, mem_elem,
                                                     address, remote_address,
-                                                    length, flags, comp);
+                                                    length, channel_id, flags,
+                                                    comp);
     } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_put_single<level>(device_ep, mem_elem, address,
                                                  remote_address, length, flags,
@@ -85,6 +87,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
  * @param [in]  mem_elem        Memory element representing the memory to be modified.
  * @param [in]  inc_value       Value of the remote increment.
  * @param [in]  remote_address  Remote virtual address to write data to.
+ * @param [in]  channel_id      Channel ID to use for the transfer.
  * @param [in]  flags           Flags to modify the function behavior.
  * @param [in]  comp            Completion object to track the progress of operation.
  *
@@ -98,13 +101,13 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
-        uint64_t inc_value, uint64_t remote_address, uint64_t flags,
-        uct_device_completion_t *comp)
+        uint64_t inc_value, uint64_t remote_address, unsigned channel_id,
+        uint64_t flags, uct_device_completion_t *comp)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_atomic_add<level>(device_ep, mem_elem,
                                                     inc_value, remote_address,
-                                                    flags, comp);
+                                                    channel_id, flags, comp);
     } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
                                                  remote_address, flags, comp);
@@ -146,6 +149,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
  * @param [in]  lengths                Array of lengths in bytes for each send.
  * @param [in]  counter_inc_value      Value of the remote increment.
  * @param [in]  counter_remote_address Remote address to increment to.
+ * @param [in]  channel_id             Channel ID to use for the transfer.
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [out] req                    Request populated by the call.
  *
@@ -162,7 +166,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
         unsigned mem_list_count, void *const *addresses,
         const uint64_t *remote_addresses, const size_t *lengths,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
-        uint64_t flags, uct_device_completion_t *comp)
+        unsigned channel_id, uint64_t flags, uct_device_completion_t *comp)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_put_multi<level>(device_ep, mem_list,
@@ -170,7 +174,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
                                                    remote_addresses, lengths,
                                                    counter_inc_value,
                                                    counter_remote_address,
-                                                   flags, comp);
+                                                   channel_id, flags, comp);
     } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_put_multi<level>(device_ep, mem_list,
                                                 mem_list_count, addresses,
@@ -227,6 +231,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
  * @param [in]  counter_index          Index of remote increment descriptor.
  * @param [in]  counter_inc_value      Value of the remote increment.
  * @param [in]  counter_remote_address Remote address to increment to.
+ * @param [in]  channel_id             Channel ID to use for the transfer.
  * @param [in]  flags                  Flags to modify the function behavior.
  * @param [in]  comp                   Completion object to track progress.
  *
@@ -245,14 +250,14 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
         const size_t *local_offsets, const size_t *remote_offsets,
         const size_t *lengths, unsigned counter_index,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
-        uint64_t flags, uct_device_completion_t *comp)
+        unsigned channel_id, uint64_t flags, uct_device_completion_t *comp)
 {
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_put_multi_partial<level>(
                 device_ep, mem_list, mem_list_indices, mem_list_count,
                 addresses, remote_addresses, local_offsets, remote_offsets,
                 lengths, counter_index, counter_inc_value,
-                counter_remote_address, flags, comp);
+                counter_remote_address, channel_id, flags, comp);
     } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_put_multi_partial<level>(
                 device_ep, mem_list, mem_list_indices, mem_list_count,

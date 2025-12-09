@@ -191,8 +191,19 @@ private:
         params.num_elements = count;
         params.elements     = elems;
 
-        ucs_status_t status = ucp_device_mem_list_create(perf.ucp.ep, &params,
-                                                         &m_params.mem_list);
+        ucs_status_t status;
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(60.0);
+        do {
+            if (ucs_get_time() > deadline) {
+                ucs_warn("timeout creating device memory list");
+                deadline = ULONG_MAX;
+            }
+
+            ucp_worker_progress(perf.ucp.worker);
+            status = ucp_device_mem_list_create(perf.ucp.ep, &params,
+                                                &m_params.mem_list);
+        } while (status == UCS_ERR_NOT_CONNECTED);
+
         if (status != UCS_OK) {
             throw std::runtime_error("Failed to create memory list");
         }

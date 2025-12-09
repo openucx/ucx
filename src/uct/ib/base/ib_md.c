@@ -45,6 +45,7 @@ static const char *uct_ib_devx_objs[] = {
     [UCT_IB_DEVX_OBJ_DCSRQ] = "dcsrq",
     [UCT_IB_DEVX_OBJ_DCI]   = "dci",
     [UCT_IB_DEVX_OBJ_CQ]    = "cq",
+    [UCT_IB_DEVX_OBJ_AUTO]  = "auto",
     NULL
 };
 
@@ -1251,7 +1252,7 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
 #endif
 }
 
-int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
+int uct_ib_md_check_odp_common(const uct_ib_md_t *md, const char **reason_ptr)
 {
     if (IBV_ACCESS_ON_DEMAND == 0) {
         *reason_ptr = "IBV_ACCESS_ON_DEMAND is not supported";
@@ -1266,8 +1267,7 @@ int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
     return 1;
 }
 
-static void
-uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
+void uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
     const char *device_name = uct_ib_device_name(&md->dev);
     const char *reason;

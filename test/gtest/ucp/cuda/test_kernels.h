@@ -20,6 +20,7 @@ typedef enum {
 } test_ucp_device_operation_t;
 
 typedef struct {
+    unsigned                     num_channels;
     unsigned                     num_threads;
     unsigned                     num_blocks;
     test_ucp_device_operation_t  operation;
@@ -68,7 +69,6 @@ struct test_ucp_device_kernel_result_t {
     ucs_status_t status;
     uint64_t     producer_index;
     uint64_t     ready_index;
-    int32_t      avail_count;
 };
 
 test_ucp_device_kernel_result_t

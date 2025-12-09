@@ -414,7 +414,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     if (i == 0) {
         ucs_error("failed to select lane for local device %s",
                   ucs_topo_sys_device_get_name(local_sys_dev));
-        return UCS_ERR_NO_RESOURCE;
+        return UCS_ERR_NO_DEVICE;
     }
 
     /* Populate handle header */
@@ -548,15 +548,6 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     ucp_md_map_t local_md_map, remote_md_map;
     ucp_ep_config_t *ep_config;
     uct_allocated_memory_t mem;
-
-    if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-        /*
-         * Do not log error here because UCS_ERR_NOT_CONNECTED is expected
-         * during connection establishment. Applications are expected to retry
-         * with progress.
-         */
-        return UCS_ERR_NOT_CONNECTED;
-    }
 
     /* Parameter sanity checks and extraction */
     status = ucp_device_mem_list_params_check(ep->worker->context, params,

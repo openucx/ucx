@@ -22,7 +22,6 @@ jobs:
 
     steps:
       - checkout: self
-        fetchDepth: 200
         clean: true
         retryCountOnTaskFailure: 5
         displayName: Checkout

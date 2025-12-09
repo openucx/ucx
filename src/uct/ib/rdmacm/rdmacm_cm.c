@@ -944,7 +944,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
     self->ev_ch = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
         status  = UCS_ERR_IO_ERROR;
-        if ((errno == ENODEV) || (errno == ENOENT)) {
+        if ((errno == ENODEV) || (errno == ENOENT) || (errno == EACCES)) {
             log_lvl = UCS_LOG_LEVEL_DIAG;
         } else {
             log_lvl = UCS_LOG_LEVEL_ERROR;
