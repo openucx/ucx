@@ -80,7 +80,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.device_fc_window);
     printf("                    This option defines the number of iterations per which a single flow control\n");
     printf("                    request is sent.\n");
-    printf("     -N <mode>      channel selection mode for device tests (single)\n");
+    printf("     -Y <mode>      channel selection mode for device tests (single)\n");
     printf("                    single          - use a single fixed channel (channel 0, default)\n");
     printf("                    random[:<seed>] - use random channel per operation with optional random seed\n");
     printf("                    per-thread      - use global thread ID modulo num_channels\n");
@@ -752,7 +752,7 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'F':
         return parse_int(opt_arg, &params->super.device_fc_window,
                          "device flow control window size", 1, INT_MAX);
-    case 'N':
+    case 'Y':
         return parse_channel_mode(opt_arg, &params->super.device_channel_mode,
                                   &params->super.random_seed);
     case 'y':
