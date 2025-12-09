@@ -554,13 +554,15 @@ ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                                    void *handle, uint64_t raddr, void **laddr_p)
 {
     CUdevice cu_dev;
+    ucs_status_t status;
 
-    if (cuCtxGetDevice(&cu_dev) != CUDA_SUCCESS) {
-        ucs_error("cuCtxGetDevice failed");
-        return UCS_ERR_IO_ERROR;
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cu_dev));
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
-    return uct_cuda_ipc_get_remote_address(rkey, raddr, cu_dev, laddr_p, NULL);
+    return uct_cuda_ipc_get_remote_address((uct_cuda_ipc_rkey_t *)rkey,
+                                           raddr, cu_dev, laddr_p, NULL);
 }
 
 uct_cuda_ipc_component_t uct_cuda_ipc_component = {

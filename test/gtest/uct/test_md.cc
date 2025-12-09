@@ -233,18 +233,18 @@ void test_md::modify_config(const std::string& name, const std::string& value,
 
 bool test_md::check_caps(uint64_t flags) const
 {
-    return ((md() == NULL) || ucs_test_all_flags(m_md_attr.flags, flags));
+    return ((md() == nullptr) || ucs_test_all_flags(m_md_attr.flags, flags));
 }
 
 bool test_md::check_reg_mem_type(ucs_memory_type_t mem_type)
 {
-    return ((md() == NULL) || (check_caps(UCT_MD_FLAG_REG) &&
+    return ((md() == nullptr) || (check_caps(UCT_MD_FLAG_REG) &&
                 (m_md_attr.reg_mem_types & UCS_BIT(mem_type))));
 }
 
 bool test_md::check_alloc_mem_type(ucs_memory_type_t mem_type)
 {
-    return ((md() == NULL) || (check_caps(UCT_MD_FLAG_ALLOC) &&
+    return ((md() == nullptr) || (check_caps(UCT_MD_FLAG_ALLOC) &&
                 (m_md_attr.alloc_mem_types & UCS_BIT(mem_type))));
 }
 
@@ -285,32 +285,35 @@ void test_md::dereg_cb(uct_completion_t *comp)
 UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
     uct_md_h md_ref                       = md();
     uct_md_mkey_pack_params_t pack_params = {};
+    void *ptr                             = nullptr;
     size_t size;
-    void *rkey_buffer, *ptr;
+    void *rkey_buffer;
     ucs_status_t status;
     unsigned *rva, *lva;
     uct_allocated_memory_t mem;
     uct_rkey_bundle_t rkey_bundle;
-    unsigned mem_type;
+    unsigned mt;
     uct_mem_h memh;
+    ucs_memory_type_t mem_type;
 
     /* allocate rkey buffer once for all iterations */
     rkey_buffer = malloc(md_attr().rkey_packed_size);
-    if (rkey_buffer == NULL) {
+    if (rkey_buffer == nullptr) {
         GTEST_FAIL();
     }
 
-    ucs_for_each_bit(mem_type, md_attr().reg_mem_types |
-                               md_attr().alloc_mem_types) {
+    ucs_for_each_bit(mt, md_attr().reg_mem_types |
+                         md_attr().alloc_mem_types) {
         UCS_TEST_MESSAGE << "rkey_ptr test for memory type "
-                         << ucs_memory_type_names[mem_type];
+                         << ucs_memory_type_names[mt];
+        mem_type = static_cast<ucs_memory_type_t>(mt);
         size = sizeof(unsigned) * UCS_MBYTE;
-        rva = NULL;
-        if (check_alloc_mem_type((ucs_memory_type_t)mem_type)) {
+        if (check_alloc_mem_type(mem_type)) {
             // allocate registered memory using md alloc
             uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
             uct_mem_alloc_params_t params;
 
+            rva = nullptr;
             params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
                                      UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
                                      UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
@@ -318,7 +321,7 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
                                      UCT_MEM_ALLOC_PARAM_FIELD_NAME;
             params.flags           = UCT_MD_MEM_ACCESS_ALL;
             params.name            = "test";
-            params.mem_type        = (ucs_memory_type_t)mem_type;
+            params.mem_type        = mem_type;
             params.mds.mds         = &md_ref;
             params.mds.count       = 1;
             params.address         = (void *)rva;
@@ -326,25 +329,25 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
             ASSERT_UCS_OK(status);
             EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, mem.length);
             size = mem.length;
-            rva = (unsigned *)mem.address;
+            rva = static_cast<unsigned *>(mem.address);
             memh = mem.memh;
         } else {
             // allocate memory using system allocator and register it
-            alloc_memory(&ptr, size, NULL, (ucs_memory_type_t)mem_type);
-            rva = (unsigned *)ptr;
+            alloc_memory(&ptr, size, nullptr, mem_type);
+            rva = static_cast<unsigned *>(ptr);
             ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh));
         }
 
         // pack
         status = uct_md_mkey_pack_v2(md(), memh, rva, size, &pack_params,
                                      rkey_buffer);
-
+        ASSERT_UCS_OK(status);
         // unpack
         status = uct_rkey_unpack(GetParam().component, rkey_buffer, &rkey_bundle);
         ASSERT_UCS_OK(status);
         // get direct ptr
         status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva,
-                            (void **)&lva);
+                              (void **)&lva);
         ASSERT_UCS_OK(status);
 
         const size_t nelems = size / sizeof(unsigned);
@@ -353,27 +356,29 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
         for (size_t i = 0; i < nelems; ++i) {
             host[i] = static_cast<unsigned>(i);
         }
-        mem_buffer::copy_to(rva, host.data(), size, (ucs_memory_type_t)mem_type);
+
+        mem_buffer::copy_to(rva, host.data(), size, mem_type);
         EXPECT_TRUE(mem_buffer::compare(host.data(), lva, size,
-                                        UCS_MEMORY_TYPE_HOST,
-                                        (ucs_memory_type_t)mem_type));
+                                        UCS_MEMORY_TYPE_HOST, mem_type));
         // check_direct_access write
         for (size_t i = 0; i < nelems; ++i) {
             host[i] = static_cast<unsigned>(nelems - i);
         }
-        mem_buffer::copy_to(lva, host.data(), size, (ucs_memory_type_t)mem_type);
-        EXPECT_TRUE(mem_buffer::compare(host.data(), rva, size,
-                                        UCS_MEMORY_TYPE_HOST,
-                                        (ucs_memory_type_t)mem_type));
 
-        if (check_alloc_mem_type((ucs_memory_type_t)mem_type)) {
+        mem_buffer::copy_to(lva, host.data(), size, mem_type);
+        EXPECT_TRUE(mem_buffer::compare(host.data(), rva, size,
+                                        UCS_MEMORY_TYPE_HOST, mem_type));
+
+        if (check_alloc_mem_type(mem_type)) {
             uct_mem_free(&mem);
         } else {
             EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
-            free_memory(ptr, (ucs_memory_type_t)mem_type);
+            free_memory(ptr, mem_type);
         }
+
         uct_rkey_release(GetParam().component, &rkey_bundle);
     }
+
     free(rkey_buffer);
 }
 

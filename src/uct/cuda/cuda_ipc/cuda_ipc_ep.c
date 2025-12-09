@@ -120,7 +120,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return status;
     }
 
-    status = uct_cuda_ipc_get_remote_address(rkey, remote_addr, cuda_device,
+    status = uct_cuda_ipc_get_remote_address((uct_cuda_ipc_rkey_t *)rkey,
+                                             remote_addr, cuda_device,
                                              &mapped_rem_addr, &mapped_addr);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
