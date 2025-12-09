@@ -783,8 +783,11 @@ ucs_status_t adjust_test_params(perftest_params_t *params,
     }
 
     if (params->super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
-        /* TODO: read number of channels from ucp config */
-        params->super.device_num_channels     = 1;
+        const char *channel_str = getenv("UCX_RC_GDA_NUM_CHANNELS");
+        if (channel_str) {
+            params->super.device_num_channels = atoi(channel_str);
+        }
+
         /* TODO: Add getter function for thread count */
         params->super.device_thread_count     = params->super.thread_count;
         params->super.thread_count            = 1;
