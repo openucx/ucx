@@ -859,7 +859,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
                            unsigned *num_tl_devices_p)
 {
     static ucs_init_once_t dmat_once = UCS_INIT_ONCE_INITIALIZER;
-    static ucs_status_t dmat_status  = UCS_INPROGRESS;
+    static ucs_status_t dmat_status;
     static int uar_supported  = -1;
     static int peermem_loaded = -1;
     uct_ib_mlx5_md_t *md      = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
@@ -891,14 +891,13 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     }
 
     UCS_INIT_ONCE(&dmat_once) {
-        if (dmat_status == UCS_INPROGRESS) {
-            dmat_status = uct_gdaki_dev_matrix_init(
-                    md->super.config.gda_max_ib_per_gpu);
-        }
+        dmat_status = uct_gdaki_dev_matrix_init(
+                md->super.config.gda_max_ib_per_gpu);
     }
 
     if (dmat_status != UCS_OK) {
-        return dmat_status;
+        status = dmat_status;
+        goto out;
     }
 
     ibdesc = uct_gdaki_dev_matrix;
