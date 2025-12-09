@@ -23,6 +23,7 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/type/init_once.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
@@ -748,6 +749,24 @@ const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX}};
 const ucp_tl_bitmap_t ucp_tl_bitmap_min = {{0}};
 
 
+static void ucp_load_uct_components(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    uct_component_h *components;
+    unsigned num_components;
+    ucs_status_t status;
+
+    UCS_INIT_ONCE(&init_once) {
+        status = uct_query_components(&components, &num_components);
+        if (status == UCS_OK) {
+            uct_release_component_list(components);
+        } else {
+            ucs_warn("failed to query UCT components: %s",
+                     ucs_status_string(status));
+        }
+    }
+}
+
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
 {
@@ -790,6 +809,9 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
     }
 
     ucs_list_head_init(&config->cached_key_list);
+    /* Load UCT components to populate ucs_config_global_list with UCT
+     * configuration options */
+    ucp_load_uct_components();
 
     *config_p = config;
     return UCS_OK;
@@ -873,9 +895,19 @@ ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
         return status;
     }
 
-    status = ucs_global_opts_set_value_modifiable(name, value);
+    if (ucs_global_opts_is_read_only(name)) {
+        ucs_debug("'%s' global configuration is read-only", name);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucs_global_opts_set_value(name, value);
     if (status != UCS_ERR_NO_ELEM) {
         return status;
+    }
+
+    if (!ucs_config_global_list_has_field(name)) {
+        ucs_debug("'%s' configuration is invalid", name);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return ucp_config_cached_key_add(&config->cached_key_list, name, value);
