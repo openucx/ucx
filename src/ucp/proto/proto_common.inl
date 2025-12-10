@@ -220,8 +220,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucs_info("thresh_elem->proto_config.ep_cfg_index=%u ep->cfg_index=%u", thresh_elem->proto_config.ep_cfg_index, ep->cfg_index);
-
     /* Set pointer to request's protocol configuration */
     ucs_assertv(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index,
                 "ep_cfg_index=%u cfg_index=%u", thresh_elem->proto_config.ep_cfg_index, ep->cfg_index);
