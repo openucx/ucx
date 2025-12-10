@@ -178,21 +178,6 @@ ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p)
     return UCS_OK;
 }
 
-int ucs_netif_is_ipoib(const char *if_name)
-{
-    struct ifreq ifr;
-    ucs_status_t status;
-
-    status = ucs_netif_ioctl(if_name, SIOCGIFHWADDR, &ifr);
-    if (status != UCS_OK) {
-        /* If we can't determine the hardware type, assume it's not IPoIB */
-        ucs_debug("failed to get hardware address for %s", if_name);
-        return 0;
-    }
-
-    return ifr.ifr_hwaddr.sa_family == ARPHRD_INFINIBAND;
-}
-
 static uint64_t ucs_get_mac_address()
 {
     static uint64_t mac_address = 0;
