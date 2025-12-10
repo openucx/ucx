@@ -24,7 +24,7 @@ uct_gaudi_gdr_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->bandwidth.dedicated =
             0.0001; // DBL_MIN will be round down to 0 when packing address;
     iface_attr->bandwidth.shared = 0;
-    iface_attr->max_num_eps = 0;
+    iface_attr->max_num_eps      = 0;
 
     return UCS_OK;
 }
@@ -45,8 +45,7 @@ static uct_iface_ops_t uct_gaudi_gdr_iface_ops = {
     .ep_am_short = (uct_ep_am_short_func_t)ucs_empty_function_return_unsupported,
     .ep_am_short_iov = (uct_ep_am_short_iov_func_t)
             ucs_empty_function_return_unsupported,
-    .ep_am_bcopy = (uct_ep_am_bcopy_func_t)
-            ucs_empty_function_return_unsupported,
+    .ep_am_bcopy = (uct_ep_am_bcopy_func_t)ucs_empty_function_return_unsupported,
     .ep_atomic_cswap64 = (uct_ep_atomic_cswap64_func_t)
             ucs_empty_function_return_unsupported,
     .ep_atomic64_post  = (uct_ep_atomic64_post_func_t)
@@ -89,8 +88,7 @@ static uct_iface_internal_ops_t uct_gaudi_gdr_iface_internal_ops = {
     .iface_query_v2      = uct_iface_base_query_v2,
     .iface_estimate_perf = (uct_iface_estimate_perf_func_t)
             ucs_empty_function_return_unsupported,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)
-            ucs_empty_function,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)
             ucs_empty_function_return_unsupported,

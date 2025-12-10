@@ -17,7 +17,7 @@ void uct_gaudi_base_close_fd(int fd, bool fd_created);
 
 void uct_gaudi_base_close_dmabuf_fd(int fd);
 
-ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t* sys_dev);
+ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t *sys_dev);
 
 ucs_status_t uct_gaudi_base_get_info(int fd,
                                      uint64_t *device_base_allocated_address,

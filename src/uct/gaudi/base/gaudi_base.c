@@ -56,7 +56,7 @@ void uct_gaudi_base_close_dmabuf_fd(int fd)
     }
 }
 
-ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t* sys_dev)
+ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t *sys_dev)
 {
     ucs_status_t status;
     char pci_bus_id[13];
