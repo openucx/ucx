@@ -2421,7 +2421,7 @@ static void ucp_ep_config_rndv_zcopy_set(
         ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
         scale = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
                 max_bw[mem_type_index];
-        if ((scale - min_scale) < -ucs_calc_epsilon(scale, min_scale)) {
+        if ((scale - min_scale) < -ucs_fp_compare_thresh(scale, min_scale)) {
             continue;
         }
 

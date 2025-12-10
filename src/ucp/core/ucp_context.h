@@ -628,7 +628,7 @@ double ucp_tl_iface_latency_with_priority(ucp_context_h context,
 static UCS_F_ALWAYS_INLINE
 int ucp_score_prio_cmp(double score1, int prio1, double score2, int prio2)
 {
-    int score_res = ucs_score_cmp(score1, score2);
+    int score_res = ucs_fp_compare(score1, score2);
 
     return score_res ? score_res : ucs_signum(prio1 - prio2);
 }

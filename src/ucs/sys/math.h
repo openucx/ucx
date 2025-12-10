@@ -64,23 +64,25 @@ BEGIN_C_DECLS
  * Calculate a small value to overcome float imprecision
  * between two float values
  */
-static UCS_F_ALWAYS_INLINE double ucs_calc_epsilon(double val1, double val2)
+static UCS_F_ALWAYS_INLINE double
+ucs_fp_compare_thresh(double val1, double val2)
 {
     return (val1 + val2) * (1e-6);
 }
 
 
 /**
- * Compare two scores and return:
- * - `-1` if score1 < score2
- * -  `0` if score1 == score2
- * -  `1` if score1 > score2
+ * Compare two values and return:
+ * - `-1` if value1 < value2
+ * -  `0` if value1 == value2
+ * -  `1` if value1 > value2
  */
-static UCS_F_ALWAYS_INLINE int ucs_score_cmp(double score1, double score2)
+static UCS_F_ALWAYS_INLINE int ucs_fp_compare(double val1, double val2)
 {
-    double diff = score1 - score2;
-    return ((fabs(diff) < ucs_calc_epsilon(score1, score2)) ? 0 :
-                                                              ucs_signum(diff));
+    double diff = val1 - val2;
+    return ((fabs(diff) < ucs_fp_compare_thresh(val1, val2)) ?
+                    0 :
+                    ucs_signum(diff));
 }
 
 
