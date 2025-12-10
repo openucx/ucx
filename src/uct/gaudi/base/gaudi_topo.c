@@ -7,7 +7,7 @@
 #include "config.h"
 #endif
 
-#include "uct/gaudi/api/gaudi_topo.h"
+#include "gaudi_topo.h"
 
 #include <ucs/config/global_opts.h>
 #include <ucs/debug/log.h>
@@ -34,66 +34,74 @@
 #define COMPARE(a, b)                      ((a) < (b) ? -1 : (a) > (b) ? 1 : 0)
 #define UCT_GAUDI_TOPO_ACCEL_PATH          "/sys/class/accel/"
 #define UCT_GAUDI_TOPO_INFINIBAND_PORT_FMT "/sys/class/infiniband/%s/ports/1/"
-#define UCT_GAUDI_TOPO_VENDOR_ID           0x1da3 /* Habana Labs Vendor ID */
+#define UCT_GAUDI_TOPO_VENDOR_ID           0x1da3 /* Habana Labs Vendor id */
 #define UCT_GAUDI_TOPO_MELLANOX_VENDOR_ID  0x15b3
 #define UCT_GAUDI_TOPO_BROADCOM_VENDOR_ID  0x14e4
 #define GAUDI_DEVICE_NAME_LEN              10
 
-static pthread_mutex_t gaudi_init_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t uct_gaudi_init_mutex        = PTHREAD_MUTEX_INITIALIZER;
 /* File-scope one-time control and status */
-static pthread_once_t gaudi_spinlock_once_flag = PTHREAD_ONCE_INIT;
-static ucs_status_t gaudi_spinlock_init_status = UCS_OK;
+static pthread_once_t uct_gaudi_spinlock_once_flag = PTHREAD_ONCE_INIT;
+static ucs_status_t uct_gaudi_spinlock_init_status = UCS_OK;
 
-static const ucs_sys_dev_distance_t gaudi_fallback_node_distance =
-        {.latency = 100e-9, .bandwidth = 17e9}; /* 100ns, 17 GB/s */
-static const ucs_sys_dev_distance_t gaudi_fallback_sys_distance =
-        {.latency = 300e-9, .bandwidth = 220e6}; /* 300ns, 220 MB/s */
+static const ucs_sys_dev_distance_t uct_gaudi_fallback_node_distance = {
+    .latency   = 100e-9,
+    .bandwidth = 17e9
+}; /* 100ns, 17 GB/s */
+static const ucs_sys_dev_distance_t uct_gaudi_fallback_sys_distance  = {
+    .latency   = 300e-9,
+    .bandwidth = 220e6
+}; /* 300ns, 220 MB/s */
 
 /* Structure to hold Gaudi and HNIC mappings */
 typedef struct {
-    ucs_sys_device_t gaudi_device;
-    ucs_sys_device_t hnic_device;
-    uint16_t hnic_vendor_id;
+    ucs_sys_device_t       gaudi_device;
+    ucs_sys_device_t       hnic_device;
+    uint16_t               hnic_vendor_id;
     ucs_sys_dev_distance_t distance;
-    ucs_numa_node_t common_numa_node;
-    char gaudi_dev_name[GAUDI_DEVICE_NAME_LEN];
+    ucs_numa_node_t        common_numa_node;
+    char                   gaudi_dev_name[GAUDI_DEVICE_NAME_LEN];
 } uct_gaudi_connection_t;
 
 /* Static context for Gaudi topology */
+// clang-format off
 typedef struct {
-    ucs_spinlock_t lock;
-    unsigned initialized;
-    unsigned provider_added;
-    ucs_sys_device_t *gaudi_devices;
-    char (*gaudi_devices_names)[GAUDI_DEVICE_NAME_LEN];
-    unsigned num_gaudi_devices;
-    ucs_sys_device_t *hnic_devices;
-    uint16_t *hnic_vendor_ids;
-    unsigned num_hnic_devices;
+    ucs_spinlock_t         lock;
+    unsigned               initialized;
+    unsigned               provider_added;
+    ucs_sys_device_t       *gaudi_devices;
+    char                   (*gaudi_devices_names)[GAUDI_DEVICE_NAME_LEN];
+    unsigned               num_gaudi_devices;
+    ucs_sys_device_t       *hnic_devices;
+    uint16_t               *hnic_vendor_ids;
+    unsigned               num_hnic_devices;
     uct_gaudi_connection_t *connections;
-    unsigned num_connections;
-    ucs_sys_device_t *assigned_hnic_for_gaudi;
-    int *assigned_port_for_gaudi;
-    unsigned have_assignment;
+    unsigned               num_connections;
+    ucs_sys_device_t       *assigned_hnic_for_gaudi;
+    int                    *assigned_port_for_gaudi;
+    unsigned               have_assignment;
 } uct_gaudi_topo_ctx_t;
+// clang-format on
 
 static uct_gaudi_topo_ctx_t uct_gaudi_topo_ctx = {0};
 
 /* Compatible definition of ucs_sys_topo_ops_t (from topo.c layout) */
+// clang-format off
 typedef struct {
-    ucs_status_t (*get_distance)(ucs_sys_device_t device1,
-                                 ucs_sys_device_t device2,
-                                 ucs_sys_dev_distance_t *distance);
-    void (*get_memory_distance)(ucs_sys_device_t device,
-                                ucs_sys_dev_distance_t *distance);
-} compatible_topo_ops_t;
+    ucs_status_t (*get_distance)       (ucs_sys_device_t device1,
+                                        ucs_sys_device_t device2,
+                                        ucs_sys_dev_distance_t *distance);
+    void         (*get_memory_distance)(ucs_sys_device_t device,
+                                        ucs_sys_dev_distance_t *distance);
+} uct_compatible_topo_ops_t;
+// clang-format on
 
 /* Compatible definition of ucs_sys_topo_provider_t (from topo.c layout) */
 typedef struct {
-    const char *name;
-    compatible_topo_ops_t ops;
-    ucs_list_link_t list;
-} compatible_topo_provider_t;
+    const char                *name;
+    uct_compatible_topo_ops_t ops;
+    ucs_list_link_t           list;
+} uct_compatible_topo_provider_t;
 
 /* Forward declarations */
 static ucs_status_t uct_gaudi_get_distance(ucs_sys_device_t device1,
@@ -109,14 +117,15 @@ static int
 uct_gaudi_is_hnic_active(ucs_sys_device_t hnic_device, uint16_t hnic_vendor_id);
 
 /* Gaudi topology provider (compatible structure) */
-static compatible_topo_provider_t uct_gaudi_topo_provider = {
-        .name = "gaudi",
-        .ops =
-                {
-                        .get_distance        = uct_gaudi_get_distance,
-                        .get_memory_distance = uct_gaudi_get_memory_distance,
-                },
-        .list = {NULL, NULL}};
+static uct_compatible_topo_provider_t uct_gaudi_topo_provider = {
+    .name = "gaudi",
+    .ops =
+            {
+                    .get_distance        = uct_gaudi_get_distance,
+                    .get_memory_distance = uct_gaudi_get_memory_distance,
+            },
+    .list = {NULL, NULL}
+};
 
 
 /* Helper function to construct sysfs path from ucs_sys_device_t */
@@ -131,12 +140,12 @@ static ucs_status_t uct_gaudi_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev,
 
     status = ucs_topo_get_device_bus_id(sys_dev, &bus_id);
     if (status != UCS_OK) {
-        ucs_error("Failed to get bus ID for device %d", sys_dev);
+        ucs_error("failed to get bus id for device %d", sys_dev);
         return status;
     }
 
     if (max < PATH_MAX) {
-        ucs_error("Output buffer too small (%zu < %d)", max, PATH_MAX);
+        ucs_error("output buffer too small (%zu < %d)", max, PATH_MAX);
         return UCS_ERR_BUFFER_TOO_SMALL;
     }
 
@@ -148,7 +157,7 @@ static ucs_status_t uct_gaudi_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev,
 
     link_path = realpath(path, NULL);
     if (link_path == NULL) {
-        ucs_error("Failed to resolve realpath for %s: %s", path,
+        ucs_error("failed to resolve realpath for %s: %s", path,
                   strerror(errno));
         return UCS_ERR_IO_ERROR;
     }
@@ -159,7 +168,7 @@ static ucs_status_t uct_gaudi_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev,
     return UCS_OK;
 }
 
-/* Helper function to read PCI vendor ID from sysfs */
+/* Helper function to read PCI vendor id from sysfs */
 static ucs_status_t
 uct_gaudi_read_vendor_id(ucs_sys_device_t sys_dev, uint16_t *vendor_id)
 {
@@ -178,7 +187,7 @@ uct_gaudi_read_vendor_id(ucs_sys_device_t sys_dev, uint16_t *vendor_id)
 
     status = uct_gaudi_sys_dev_to_sysfs_path(sys_dev, path, PATH_MAX);
     if (status != UCS_OK) {
-        ucs_debug("Failed to get sysfs path for device %d: %s", sys_dev,
+        ucs_debug("failed to get sysfs path for device %d: %s", sys_dev,
                   ucs_status_string(status));
         ucs_free(path);
         return status;
@@ -193,13 +202,13 @@ uct_gaudi_read_vendor_id(ucs_sys_device_t sys_dev, uint16_t *vendor_id)
 
     file = fopen(path, "r");
     if (!file) {
-        ucs_debug("Failed to open %s", path);
+        ucs_debug("failed to open %s", path);
         ucs_free(path);
         return UCS_ERR_IO_ERROR;
     }
 
     if (!fgets(vendor_str, sizeof(vendor_str), file)) {
-        ucs_debug("Failed to read vendor ID from %s", path);
+        ucs_debug("failed to read vendor id from %s", path);
         fclose(file);
         ucs_free(path);
         return UCS_ERR_IO_ERROR;
@@ -215,13 +224,13 @@ uct_gaudi_read_vendor_id(ucs_sys_device_t sys_dev, uint16_t *vendor_id)
     }
 
     if (errno != 0 || endptr == vendor_str || *endptr != '\0') {
-        ucs_debug("Invalid vendor ID '%s' in %s", vendor_str, path);
+        ucs_debug("invalid vendor id '%s' in %s", vendor_str, path);
         ucs_free(path);
         return UCS_ERR_INVALID_PARAM;
     }
 
     if (val > UINT16_MAX) {
-        ucs_debug("Vendor ID 0x%lx exceeds maximum value in %s", val, path);
+        ucs_debug("vendor id 0x%lx exceeds maximum value in %s", val, path);
         ucs_free(path);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -245,12 +254,12 @@ uct_gaudi_read_pci_addr(const char *accel_name, char *pci_addr, size_t max)
 
     file = fopen(path, "r");
     if (!file) {
-        ucs_debug("Failed to open %s", path);
+        ucs_debug("failed to open %s", path);
         return UCS_ERR_IO_ERROR;
     }
 
     if (fgets(pci_addr, max, file) == NULL) {
-        ucs_debug("Failed to read PCI address from %s", path);
+        ucs_debug("failed to read pci address from %s", path);
         status = UCS_ERR_IO_ERROR;
     } else {
         /* Remove trailing newline */
@@ -265,7 +274,7 @@ uct_gaudi_read_pci_addr(const char *accel_name, char *pci_addr, size_t max)
     return status;
 }
 
-/* Helper function to read module ID from sysfs */
+/* Helper function to read module id from sysfs */
 static ucs_status_t
 uct_gaudi_read_module_id(const char *accel_name, uint32_t *module_id)
 {
@@ -280,12 +289,12 @@ uct_gaudi_read_module_id(const char *accel_name, uint32_t *module_id)
 
     file = fopen(path, "r");
     if (!file) {
-        ucs_debug("Failed to open %s", path);
+        ucs_debug("failed to open %s", path);
         return UCS_ERR_IO_ERROR;
     }
 
     if (fgets(buffer, sizeof(buffer), file) == NULL) {
-        ucs_debug("Failed to read module ID from %s", path);
+        ucs_debug("failed to read module id from %s", path);
         fclose(file);
         return UCS_ERR_IO_ERROR;
     }
@@ -297,11 +306,11 @@ uct_gaudi_read_module_id(const char *accel_name, uint32_t *module_id)
         endptr++;
     }
     if (errno != 0 || endptr == buffer || *endptr != '\0') {
-        ucs_debug("Invalid module ID in %s: '%s'", path, buffer);
+        ucs_debug("invalid module id in %s: '%s'", path, buffer);
         return UCS_ERR_INVALID_PARAM;
     }
     if (val > UINT32_MAX) {
-        ucs_debug("Module ID %lu exceeds uint32_t in %s", val, path);
+        ucs_debug("module id %lu exceeds uint32_t in %s", val, path);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -309,7 +318,7 @@ uct_gaudi_read_module_id(const char *accel_name, uint32_t *module_id)
     return UCS_OK;
 }
 
-/* Get Gaudi device index from a given module ID. */
+/* Get Gaudi device index from a given module id. */
 int uct_gaudi_get_index_from_module_id(uint32_t module_id)
 {
     DIR *dir;
@@ -320,7 +329,7 @@ int uct_gaudi_get_index_from_module_id(uint32_t module_id)
 
     dir = opendir(UCT_GAUDI_TOPO_ACCEL_PATH);
     if (!dir) {
-        ucs_error("Failed to open directory %s: %s", UCT_GAUDI_TOPO_ACCEL_PATH,
+        ucs_error("failed to open directory %s: %s", UCT_GAUDI_TOPO_ACCEL_PATH,
                   strerror(errno));
         return -1;
     }
@@ -328,8 +337,8 @@ int uct_gaudi_get_index_from_module_id(uint32_t module_id)
     /* Default: not found */
     device_id = -1;
     while ((entry = readdir(dir)) != NULL) {
-        if (strncmp(entry->d_name, "accel", 5) != 0 ||
-            strncmp(entry->d_name, "accel_", 6) == 0) {
+        if ((strncmp(entry->d_name, "accel", 5) != 0) ||
+            (strncmp(entry->d_name, "accel_", 6) == 0)) {
             continue;
         }
 
@@ -347,7 +356,7 @@ int uct_gaudi_get_index_from_module_id(uint32_t module_id)
     closedir(dir);
 
     if (device_id < 0) {
-        ucs_error("no Gaudi accelerator with module_id %u found", module_id);
+        ucs_error("no gaudi accelerator with module_id %u found", module_id);
     }
 
     return device_id;
@@ -371,7 +380,7 @@ static ucs_status_t uct_gaudi_enumerate_devices()
 
     dir = opendir(UCT_GAUDI_TOPO_ACCEL_PATH);
     if (!dir) {
-        ucs_error("Failed to open directory %s", UCT_GAUDI_TOPO_ACCEL_PATH);
+        ucs_error("failed to open directory %s", UCT_GAUDI_TOPO_ACCEL_PATH);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -393,13 +402,13 @@ static ucs_status_t uct_gaudi_enumerate_devices()
                           UCT_GAUDI_TOPO_ACCEL_PATH, entry->d_name);
 
         if (stat(accel_path, &statbuf) == 0 && S_ISDIR(statbuf.st_mode)) {
-            ucs_debug("Found Gaudi device: %s", entry->d_name);
+            ucs_debug("found gaudi device: %s", entry->d_name);
             uct_gaudi_topo_ctx.num_gaudi_devices++;
         }
     }
 
     if (uct_gaudi_topo_ctx.num_gaudi_devices == 0) {
-        ucs_error("No Gaudi devices found under %s — aborting enumeration",
+        ucs_error("no gaudi devices found under %s — aborting enumeration",
                   UCT_GAUDI_TOPO_ACCEL_PATH);
         status = UCS_ERR_NO_DEVICE;
         goto out;
@@ -413,7 +422,7 @@ static ucs_status_t uct_gaudi_enumerate_devices()
                 /* Assume Mellanox and Broadcom devices are HNICs */
                 if (vendor_id == UCT_GAUDI_TOPO_MELLANOX_VENDOR_ID ||
                     vendor_id == UCT_GAUDI_TOPO_BROADCOM_VENDOR_ID) {
-                    ucs_debug("Found HNIC device: %d (%s, active: %d)", i,
+                    ucs_debug("found hnic device: %d (%s, active: %d)", i,
                               ucs_topo_sys_device_get_name(i),
                               uct_gaudi_is_hnic_active(i, vendor_id));
                     uct_gaudi_topo_ctx.num_hnic_devices++;
@@ -423,7 +432,7 @@ static ucs_status_t uct_gaudi_enumerate_devices()
     }
 
     if (uct_gaudi_topo_ctx.num_hnic_devices == 0) {
-        ucs_error("No HNIC devices found (no Mellanox/Broadcom NICs) — "
+        ucs_error("no hnic devices found (no mellanox/broadcom nics) — "
                   "aborting enumeration");
         status = UCS_ERR_NO_DEVICE;
         goto out;
@@ -467,7 +476,7 @@ static ucs_status_t uct_gaudi_enumerate_devices()
             status = uct_gaudi_read_pci_addr(entry->d_name, pci_addr,
                                              sizeof(pci_addr));
             if (status != UCS_OK) {
-                ucs_debug("Skipping device %s due to PCI address read "
+                ucs_debug("skipping device %s due to pci address read "
                           "failure",
                           entry->d_name);
                 continue;
@@ -482,7 +491,7 @@ static ucs_status_t uct_gaudi_enumerate_devices()
                         entry->d_name, GAUDI_DEVICE_NAME_LEN);
                 gaudi_idx++;
             } else {
-                ucs_debug("Failed to find device by BDF %s for %s", pci_addr,
+                ucs_debug("failed to find device by bdf %s for %s", pci_addr,
                           entry->d_name);
             }
         }
@@ -595,10 +604,10 @@ uct_gaudi_is_hnic_active(ucs_sys_device_t hnic_device, uint16_t hnic_vendor_id)
 
     /* Fallback: assume inactive */
     if (hnic_vendor_id == UCT_GAUDI_TOPO_MELLANOX_VENDOR_ID) {
-        ucs_debug("Mellanox HNIC %s: IB state files absent, assuming inactive",
+        ucs_debug("mellanox hnic %s: ib state files absent, assuming inactive",
                   dev_name);
     } else {
-        ucs_debug("Broadcom HNIC %s: IB state files absent, assuming inactive",
+        ucs_debug("broadcom hnic %s: ib state files absent, assuming inactive",
                   dev_name);
     }
 
@@ -646,7 +655,7 @@ uct_gaudi_estimate_distance(ucs_sys_device_t device1, ucs_sys_device_t device2,
         (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
         *distance = (ucs_global_opts.dist.node.bandwidth > 0) ?
                             ucs_global_opts.dist.node :
-                            gaudi_fallback_node_distance;
+                            uct_gaudi_fallback_node_distance;
         return UCS_OK;
     }
 
@@ -662,7 +671,7 @@ uct_gaudi_estimate_distance(ucs_sys_device_t device1, ucs_sys_device_t device2,
         if (numa1 != numa2) {
             *distance = (ucs_global_opts.dist.sys.bandwidth > 0) ?
                                 ucs_global_opts.dist.sys :
-                                gaudi_fallback_sys_distance;
+                                uct_gaudi_fallback_sys_distance;
             return UCS_OK;
         }
         /* Same NUMA; continue to PCIe refinement */
@@ -706,12 +715,12 @@ uct_gaudi_estimate_distance(ucs_sys_device_t device1, ucs_sys_device_t device2,
      */
     distance->latency = (ucs_global_opts.dist.node.bandwidth > 0 ?
                                  ucs_global_opts.dist.node.latency :
-                                 gaudi_fallback_node_distance.latency) +
+                                 uct_gaudi_fallback_node_distance.latency) +
                         hop_latency_ns * hops;
 
     distance->bandwidth = (ucs_global_opts.dist.node.bandwidth > 0 ?
                                    ucs_global_opts.dist.node.bandwidth :
-                                   gaudi_fallback_node_distance.bandwidth) *
+                                   uct_gaudi_fallback_node_distance.bandwidth) *
                           pow(hop_bw_penalty, hops);
 
     status = UCS_OK;
@@ -739,8 +748,8 @@ static ucs_status_t uct_gaudi_create_connection_matrix()
     unsigned max_num_connections;
     uint16_t hnic_vendor_id;
 
-    max_num_connections = uct_gaudi_topo_ctx.num_gaudi_devices *
-                          uct_gaudi_topo_ctx.num_hnic_devices;
+    max_num_connections            = uct_gaudi_topo_ctx.num_gaudi_devices *
+                                     uct_gaudi_topo_ctx.num_hnic_devices;
     uct_gaudi_topo_ctx.connections = ucs_calloc(max_num_connections,
                                                 sizeof(uct_gaudi_connection_t),
                                                 "gaudi_connections");
@@ -775,8 +784,8 @@ static ucs_status_t uct_gaudi_create_connection_matrix()
 
             status = uct_gaudi_estimate_distance(gaudi, hnic, &conn->distance);
             if (status != UCS_OK) {
-                ucs_debug("Failed to estimate distance between Gaudi %u and "
-                          "HNIC %u",
+                ucs_debug("failed to estimate distance between gaudi %u and "
+                          "hnic %u",
                           gaudi, hnic);
                 conn->distance = ucs_topo_default_distance;
             }
@@ -813,8 +822,8 @@ static int uct_gaudi_lookup_distance(ucs_sys_device_t gaudi_device,
 /* Compare function for sorting connections by distance */
 static int uct_gaudi_compare_connections(const void *a, const void *b)
 {
-    const uct_gaudi_connection_t *conn_a = (const uct_gaudi_connection_t *)a;
-    const uct_gaudi_connection_t *conn_b = (const uct_gaudi_connection_t *)b;
+    const uct_gaudi_connection_t *conn_a = (const uct_gaudi_connection_t*)a;
+    const uct_gaudi_connection_t *conn_b = (const uct_gaudi_connection_t*)b;
     int cmp;
     const char *hnic_a;
     const char *hnic_b;
@@ -886,7 +895,7 @@ static int uct_gaudi_is_host_bridge_path(const char *common_path)
     int n;
 
     if (!common_path) {
-        ucs_debug("common_path is NULL");
+        ucs_debug("common_path is null");
         return 0;
     }
 
@@ -907,7 +916,7 @@ static int uct_gaudi_is_host_bridge_path(const char *common_path)
 
     /* Bus 00 typically indicates a PCIe root complex (Host Bridge) */
     if (bus != 0) {
-        /* ucs_debug("common_path %s has non-zero bus %02x, not a Host Bridge", common_path, bus); */
+        /* ucs_debug("common_path %s has non-zero bus %02x, not a host bridge", common_path, bus); */
         return 0;
     }
 
@@ -982,7 +991,7 @@ static void uct_gaudi_print_connection_matrix()
         gaudi_name = uct_gaudi_topo_ctx.gaudi_devices_names[i];
         gaudi_numa = ucs_topo_sys_device_get_numa_node(gaudi);
 
-        /* Get module ID */
+        /* Get module id */
         status = uct_gaudi_read_module_id(gaudi_name, &module_id);
         if (status != UCS_OK) {
             ucs_strncpy_safe(module_id_str, "N/A", sizeof(module_id_str));
@@ -1123,7 +1132,7 @@ out:
     return;
 }
 
-/* Return default UCX port for given NIC vendor ID */
+/* Return default UCX port for given NIC vendor id */
 static int uct_gaudi_get_default_port(uint16_t vendor_id)
 {
     switch (vendor_id) {
@@ -1137,7 +1146,7 @@ static int uct_gaudi_get_default_port(uint16_t vendor_id)
 }
 
 /*
- * Get and validate the NUMA node ID for a device.
+ * Get and validate the NUMA node id for a device.
  * Returns node 0 if the node is undefined or out of range.
  */
 static inline unsigned
@@ -1148,12 +1157,12 @@ uct_gaudi_get_validated_numa_node(ucs_sys_device_t device,
 
     node = ucs_topo_sys_device_get_numa_node(device);
     if (node == UCS_NUMA_NODE_UNDEFINED) {
-        ucs_warn("Device %d has undefined NUMA node, falling back to 0",
+        ucs_warn("device %d has undefined numa node, falling back to 0",
                  device);
         return 0U;
     }
     if ((unsigned)node >= num_numa_nodes) {
-        ucs_debug("Device %d NUMA node %d out of range (max %u), "
+        ucs_debug("device %d numa node %d out of range (max %u), "
                   "falling back to 0",
                   device, node, num_numa_nodes);
         return 0U;
@@ -1255,7 +1264,7 @@ static ucs_status_t uct_gaudi_build_assignment_balanced()
 
     /* Short-circuit if no devices */
     if (num_gaudi_devices == 0 || num_hnic_devices == 0) {
-        ucs_debug("No devices to assign (Gaudis: %u, NICs: %u)",
+        ucs_debug("no devices to assign (gaudis: %u, nics: %u)",
                   num_gaudi_devices, num_hnic_devices);
         return status;
     }
@@ -1402,10 +1411,10 @@ static ucs_status_t uct_gaudi_build_assignment_balanced()
                 lat_eq     = !lat_better && (fabs(distance.latency -
                                                   best_latency) <= LATENCY_EPSILON);
                 bw_better  = lat_eq && (distance.bandwidth >
-                                       best_bandwidth + BANDWIDTH_EPSILON);
+                                        best_bandwidth + BANDWIDTH_EPSILON);
                 bw_eq      = lat_eq && !bw_better &&
-                        (fabs(distance.bandwidth - best_bandwidth) <=
-                         BANDWIDTH_EPSILON);
+                             (fabs(distance.bandwidth - best_bandwidth) <=
+                              BANDWIDTH_EPSILON);
                 use_better = bw_eq && (hnic_usage[hidx] < best_usage);
                 idx_better = bw_eq && !use_better &&
                              ((ssize_t)hidx < best_hidx);
@@ -1457,12 +1466,12 @@ static ucs_status_t uct_gaudi_build_assignment_balanced()
             /* Tie-breaking: latency -> bandwidth -> under-cap -> usage -> index */
             lat_better = (distance.latency + LATENCY_EPSILON < best_latency);
             lat_eq     = !lat_better &&
-                     (fabs(distance.latency - best_latency) <= LATENCY_EPSILON);
-            bw_better = lat_eq && (distance.bandwidth >
-                                   best_bandwidth + BANDWIDTH_EPSILON);
-            bw_eq     = lat_eq && !bw_better &&
-                    (fabs(distance.bandwidth - best_bandwidth) <=
-                     BANDWIDTH_EPSILON);
+                         (fabs(distance.latency - best_latency) <= LATENCY_EPSILON);
+            bw_better  = lat_eq && (distance.bandwidth >
+                                    best_bandwidth + BANDWIDTH_EPSILON);
+            bw_eq      = lat_eq && !bw_better &&
+                         (fabs(distance.bandwidth - best_bandwidth) <=
+                          BANDWIDTH_EPSILON);
             cap_better = bw_eq && (this_under_cap > best_under_cap);
             use_better = bw_eq && !cap_better && (hnic_usage[j] < best_usage);
             idx_better = bw_eq && !cap_better && !use_better &&
@@ -1499,7 +1508,7 @@ static ucs_status_t uct_gaudi_build_assignment_balanced()
 
     uct_gaudi_topo_ctx.have_assignment = (assigned_count == num_gaudi_devices);
     if (!uct_gaudi_topo_ctx.have_assignment) {
-        ucs_warn("Gaudi->NIC assignment incomplete: %u of %u devices assigned",
+        ucs_warn("gaudi->nic assignment incomplete: %u of %u devices assigned",
                  assigned_count, num_gaudi_devices);
     }
 
@@ -1528,7 +1537,7 @@ ucs_status_t uct_gaudi_find_best_connection(const char *accel_name,
 
     /* Validate parameters */
     if ((accel_name == NULL) || (hnic_device == NULL) || (port_num == NULL)) {
-        ucs_error("Invalid NULL parameter(s) to "
+        ucs_error("invalid null parameter(s) to "
                   "uct_gaudi_find_best_connection()");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -1540,7 +1549,7 @@ ucs_status_t uct_gaudi_find_best_connection(const char *accel_name,
             /* Provider disabled: treat like "nothing suitable" */
             return UCS_ERR_NO_ELEM;
         }
-        ucs_error("Failed to initialize Gaudi topology: %s",
+        ucs_error("failed to initialize gaudi topology: %s",
                   ucs_status_string(status));
         return status;
     }
@@ -1561,14 +1570,14 @@ ucs_status_t uct_gaudi_find_best_connection(const char *accel_name,
         *hnic_device = uct_gaudi_topo_ctx.assigned_hnic_for_gaudi[i];
         *port_num    = uct_gaudi_topo_ctx.assigned_port_for_gaudi[i];
         ucs_spin_unlock(&uct_gaudi_topo_ctx.lock);
-        ucs_info("Selected HNIC %s:%d for Gaudi %s",
+        ucs_info("selected hnic %s:%d for gaudi %s",
                  ucs_topo_sys_device_get_name(*hnic_device), *port_num,
                  accel_name);
         return UCS_OK;
     }
 
     ucs_spin_unlock(&uct_gaudi_topo_ctx.lock);
-    ucs_error("No suitable HNIC found for Gaudi %s", accel_name);
+    ucs_error("no suitable hnic found for gaudi %s", accel_name);
     return UCS_ERR_NO_ELEM;
 }
 
@@ -1584,7 +1593,7 @@ static ucs_status_t uct_gaudi_get_distance(ucs_sys_device_t device1,
 
     /* Validate parameters */
     if (distance == NULL) {
-        ucs_error("distance parameter cannot be NULL");
+        ucs_error("distance parameter cannot be null");
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1598,7 +1607,7 @@ static ucs_status_t uct_gaudi_get_distance(ucs_sys_device_t device1,
             /* Provider disabled: fall back to generic estimation */
             goto fallback;
         }
-        ucs_error("Failed to initialize Gaudi topology: %s",
+        ucs_error("failed to initialize gaudi topology: %s",
                   ucs_status_string(status));
         return status;
     }
@@ -1658,7 +1667,7 @@ static void uct_gaudi_get_memory_distance(ucs_sys_device_t device,
 
     /* Validate parameters */
     if (distance == NULL) {
-        ucs_error("distance parameter cannot be NULL");
+        ucs_error("distance parameter cannot be null");
         return;
     }
 
@@ -1724,7 +1733,8 @@ static void uct_gaudi_get_memory_distance(ucs_sys_device_t device,
 /* Initialize spinlock exactly once */
 static void uct_gaudi_spinlock_once_init()
 {
-    gaudi_spinlock_init_status = ucs_spinlock_init(&uct_gaudi_topo_ctx.lock, 0);
+    uct_gaudi_spinlock_init_status = ucs_spinlock_init(&uct_gaudi_topo_ctx.lock,
+                                                       0);
 }
 
 /* Initialization function */
@@ -1734,35 +1744,35 @@ void uct_gaudi_topo_init()
 
     disable = getenv("UCT_GAUDI_TOPO_DISABLE");
     if (disable && strcmp(disable, "0") != 0) {
-        ucs_debug("Gaudi topology provider disabled by UCT_GAUDI_TOPO_DISABLE");
+        ucs_debug("gaudi topology provider disabled by UCT_GAUDI_TOPO_DISABLE");
         return;
     }
 
     /* Prevent double registration */
     if (uct_gaudi_topo_ctx.provider_added) {
-        ucs_debug("Gaudi topology provider already registered");
+        ucs_debug("gaudi topology provider already registered");
         return;
     }
 
     /* Ensure spinlock exists even if lazy init is first */
-    pthread_once(&gaudi_spinlock_once_flag, uct_gaudi_spinlock_once_init);
-    if (gaudi_spinlock_init_status != UCS_OK) {
-        ucs_error("Failed to initialize spinlock: %s",
-                  ucs_status_string(gaudi_spinlock_init_status));
+    pthread_once(&uct_gaudi_spinlock_once_flag, uct_gaudi_spinlock_once_init);
+    if (uct_gaudi_spinlock_init_status != UCS_OK) {
+        ucs_error("failed to initialize spinlock: %s",
+                  ucs_status_string(uct_gaudi_spinlock_init_status));
         return;
     }
 
-    pthread_mutex_lock(&gaudi_init_mutex);
+    pthread_mutex_lock(&uct_gaudi_init_mutex);
     if (!uct_gaudi_topo_ctx.provider_added) {
-        ucs_debug("Registering Gaudi topology provider");
+        ucs_debug("registering gaudi topology provider");
         ucs_list_add_head(&ucs_sys_topo_providers_list,
                           &uct_gaudi_topo_provider.list);
         uct_gaudi_topo_ctx.provider_added = 1;
-        ucs_debug("Gaudi topology provider registered");
+        ucs_debug("gaudi topology provider registered");
     } else {
-        ucs_debug("Gaudi topology provider already registered (raced)");
+        ucs_debug("gaudi topology provider already registered (raced)");
     }
-    pthread_mutex_unlock(&gaudi_init_mutex);
+    pthread_mutex_unlock(&uct_gaudi_init_mutex);
 }
 
 static ucs_status_t uct_gaudi_lazy_init()
@@ -1772,16 +1782,16 @@ static ucs_status_t uct_gaudi_lazy_init()
 
     disable = getenv("UCT_GAUDI_TOPO_DISABLE");
     if (disable && strcmp(disable, "0") != 0) {
-        ucs_debug("Gaudi topology provider disabled by UCT_GAUDI_TOPO_DISABLE");
+        ucs_debug("gaudi topology provider disabled by UCT_GAUDI_TOPO_DISABLE");
         return UCS_ERR_UNSUPPORTED;
     }
 
     /* Ensure spinlock exists */
-    pthread_once(&gaudi_spinlock_once_flag, uct_gaudi_spinlock_once_init);
-    if (gaudi_spinlock_init_status != UCS_OK) {
-        ucs_error("Failed to initialize spinlock: %s",
-                  ucs_status_string(gaudi_spinlock_init_status));
-        return gaudi_spinlock_init_status;
+    pthread_once(&uct_gaudi_spinlock_once_flag, uct_gaudi_spinlock_once_init);
+    if (uct_gaudi_spinlock_init_status != UCS_OK) {
+        ucs_error("failed to initialize spinlock: %s",
+                  ucs_status_string(uct_gaudi_spinlock_init_status));
+        return uct_gaudi_spinlock_init_status;
     }
 
     ucs_spin_lock(&uct_gaudi_topo_ctx.lock);
@@ -1791,11 +1801,11 @@ static ucs_status_t uct_gaudi_lazy_init()
         return UCS_OK;
     }
 
-    ucs_debug("Performing lazy initialization of Gaudi topology");
+    ucs_debug("performing lazy initialization of gaudi topology");
 
     status = uct_gaudi_enumerate_devices();
     if (status != UCS_OK) {
-        ucs_error("Failed to enumerate Gaudi devices: %s",
+        ucs_error("failed to enumerate gaudi devices: %s",
                   ucs_status_string(status));
         ucs_spin_unlock(&uct_gaudi_topo_ctx.lock);
         return status;
@@ -1803,7 +1813,7 @@ static ucs_status_t uct_gaudi_lazy_init()
 
     status = uct_gaudi_create_connection_matrix();
     if (status != UCS_OK) {
-        ucs_error("Failed to create connection matrix: %s",
+        ucs_error("failed to create connection matrix: %s",
                   ucs_status_string(status));
         goto out;
     }
@@ -1838,7 +1848,7 @@ static ucs_status_t uct_gaudi_lazy_init()
     }
 
     uct_gaudi_topo_ctx.initialized = 1;
-    ucs_debug("Gaudi topology initialized");
+    ucs_debug("gaudi topology initialized");
     ucs_spin_unlock(&uct_gaudi_topo_ctx.lock);
     return UCS_OK;
 
@@ -1872,11 +1882,11 @@ out:
 /* Cleanup function */
 void uct_gaudi_topo_cleanup()
 {
-    pthread_mutex_lock(&gaudi_init_mutex);
+    pthread_mutex_lock(&uct_gaudi_init_mutex);
 
     /* If provider was never added, nothing to clean up */
     if (!uct_gaudi_topo_ctx.provider_added) {
-        pthread_mutex_unlock(&gaudi_init_mutex);
+        pthread_mutex_unlock(&uct_gaudi_init_mutex);
         return;
     }
 
@@ -1912,8 +1922,8 @@ void uct_gaudi_topo_cleanup()
     uct_gaudi_topo_ctx.have_assignment   = 0;
 
     ucs_spin_unlock(&uct_gaudi_topo_ctx.lock);
-    pthread_mutex_unlock(&gaudi_init_mutex);
-    ucs_debug("Gaudi topology cleaned up");
+    pthread_mutex_unlock(&uct_gaudi_init_mutex);
+    ucs_debug("gaudi topology cleaned up");
 }
 
 #endif /* HAVE_GAUDI_TOPO_API */

@@ -24,8 +24,8 @@ typedef struct uct_gaudi_md {
 } uct_gaudi_md_t;
 
 typedef struct uct_gaudi_md_config {
-    uct_md_config_t  super;
-    int              device_id;
+    uct_md_config_t super;
+    int             device_id;
 } uct_gaudi_md_config_t;
 
 #endif

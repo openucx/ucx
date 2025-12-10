@@ -1342,7 +1342,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
 
         /* Check for HabanaLabs Gaudi DMABuf support */
-        uct_ib_check_gpudirect_driver(md, "/dev/accel/accel0", 
+        uct_ib_check_gpudirect_driver(md, "/dev/accel/accel0",
                                       UCS_MEMORY_TYPE_GAUDI);
         uct_ib_check_gpudirect_driver(md, "/dev/hl0", UCS_MEMORY_TYPE_GAUDI);
 

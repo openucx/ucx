@@ -19,12 +19,12 @@ void uct_gaudi_base_close_dmabuf_fd(int fd);
 
 ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t* sys_dev);
 
-ucs_status_t uct_gaudi_base_get_info(int fd, 
-                                     uint64_t *device_base_allocated_address, 
+ucs_status_t uct_gaudi_base_get_info(int fd,
+                                     uint64_t *device_base_allocated_address,
                                      uint64_t *device_base_address,
                                      uint64_t *totalSize, int *dmabuf_fd);
-                                
-ucs_status_t 
+
+ucs_status_t
 uct_gaudi_base_query_devices(uct_md_h md,
                              uct_tl_device_resource_t **tl_devices_p,
                              unsigned *num_tl_devices_p);

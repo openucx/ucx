@@ -20,7 +20,7 @@
 #include <hlthunk.h>
 #include <synapse_api.h>
 
-int uct_gaudi_base_get_fd(int device_id, bool *fd_created) 
+int uct_gaudi_base_get_fd(int device_id, bool *fd_created)
 {
     synDeviceInfo deviceInfo;
 
@@ -28,9 +28,9 @@ int uct_gaudi_base_get_fd(int device_id, bool *fd_created)
         int fd = hlthunk_open_by_module_id(device_id);
         if (fd < 0) {
             ucs_info("failed to get device fd via hlthunk_open_by_module_id, "
-                     "id %d", 
+                     "id %d",
                      device_id);
-	        fd = hlthunk_open(HLTHUNK_DEVICE_DONT_CARE, NULL);
+            fd = hlthunk_open(HLTHUNK_DEVICE_DONT_CARE, NULL);
         }
 
         if (fd >= 0 && fd_created != NULL) {
@@ -42,21 +42,21 @@ int uct_gaudi_base_get_fd(int device_id, bool *fd_created)
     return deviceInfo.fd;
 }
 
-void uct_gaudi_base_close_fd(int fd, bool fd_created) 
+void uct_gaudi_base_close_fd(int fd, bool fd_created)
 {
     if (fd_created && fd >= 0) {
         hlthunk_close(fd);
     }
 }
 
-void uct_gaudi_base_close_dmabuf_fd(int fd) 
+void uct_gaudi_base_close_dmabuf_fd(int fd)
 {
     if (fd >= 0) {
         close(fd);
     }
 }
 
-ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t* sys_dev) 
+ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t* sys_dev)
 {
     ucs_status_t status;
     char pci_bus_id[13];
@@ -65,7 +65,7 @@ ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t* sys_dev)
     rc = hlthunk_get_pci_bus_id_from_fd(fd, pci_bus_id, sizeof(pci_bus_id));
     if (rc != 0) {
         ucs_error("failed to get pci_bus_id via hlthunk_get_pci_bus_id_from_fd "
-                  "(fd=%d)", 
+                  "(fd=%d)",
                   fd);
         return UCS_ERR_IO_ERROR;
     }
@@ -79,8 +79,8 @@ ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t* sys_dev)
     return UCS_OK;
 }
 
-ucs_status_t uct_gaudi_base_get_info(int fd, 
-                                     uint64_t *device_base_allocated_address, 
+ucs_status_t uct_gaudi_base_get_info(int fd,
+                                     uint64_t *device_base_allocated_address,
                                      uint64_t *device_base_address,
                                      uint64_t *totalSize, int *dmabuf_fd)
 {
@@ -100,21 +100,21 @@ ucs_status_t uct_gaudi_base_get_info(int fd,
     }
 
     if (rc != UCT_GAUID_SCAL_SUCCESS) {
-	    ucs_error("failed to get scal handle from gaudi device (fd=%d, rc=%d)", 
+        ucs_error("failed to get scal handle from gaudi device (fd=%d, rc=%d)",
                   fd, rc);
         return UCS_ERR_IO_ERROR;
     }
 
-    rc = scal_get_pool_handle_by_name(scal_handle, "global_hbm", 
+    rc = scal_get_pool_handle_by_name(scal_handle, "global_hbm",
                                       &scal_pool_handle);
     if (rc != UCT_GAUID_SCAL_SUCCESS) {
-	    ucs_error("failed to get scal pool");
+        ucs_error("failed to get scal pool");
         return UCS_ERR_INVALID_ADDR;
     }
 
     rc = scal_pool_get_infoV2(scal_pool_handle, &scal_mem_pool_info);
     if (rc != UCT_GAUID_SCAL_SUCCESS) {
-	    ucs_error("failed to get scal pool info");
+        ucs_error("failed to get scal pool info");
         return UCS_ERR_INVALID_ADDR;
     }
 
@@ -125,7 +125,7 @@ ucs_status_t uct_gaudi_base_get_info(int fd,
     *dmabuf_fd     = hlthunk_device_mapped_memory_export_dmabuf_fd(
             fd, addr, size, offset, (O_RDWR | O_CLOEXEC));
     if (*dmabuf_fd < 0) {
-	    ucs_error("failed to get dmabuf fd from fd %d", fd);
+        ucs_error("failed to get dmabuf fd from fd %d", fd);
         return UCS_ERR_INVALID_ADDR;
     }
 
@@ -135,7 +135,7 @@ ucs_status_t uct_gaudi_base_get_info(int fd,
     return UCS_OK;
 }
 
-ucs_status_t 
+ucs_status_t
 uct_gaudi_base_query_devices(uct_md_h md,
                              uct_tl_device_resource_t **tl_devices_p,
                              unsigned *num_tl_devices_p)
@@ -149,6 +149,6 @@ uct_gaudi_base_query_devices(uct_md_h md,
         return status;
     }
     return uct_single_device_resource(md, md->component->name,
-                                      UCT_DEVICE_TYPE_ACC, sys_dev, 
+                                      UCT_DEVICE_TYPE_ACC, sys_dev,
                                       tl_devices_p, num_tl_devices_p);
 }

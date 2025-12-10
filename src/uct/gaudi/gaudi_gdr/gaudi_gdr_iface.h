@@ -8,7 +8,7 @@
 
 #include <uct/base/uct_iface.h>
 
-#define UCT_GAUDI_GDR_TL_NAME    "gaudi_gdr"
+#define UCT_GAUDI_GDR_TL_NAME "gaudi_gdr"
 
 typedef struct uct_gaudi_gdr_iface {
     uct_base_iface_t super;

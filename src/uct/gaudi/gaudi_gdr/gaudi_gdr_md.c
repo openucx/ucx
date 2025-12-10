@@ -17,7 +17,7 @@
 #include <fcntl.h>
 #include <hlthunk.h>
 
-static ucs_config_field_t uct_gaudi_md_config_table[] = 
+static ucs_config_field_t uct_gaudi_md_config_table[] =
         {{"", "", NULL, ucs_offsetof(uct_gaudi_md_config_t, super),
           UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
@@ -48,8 +48,8 @@ uct_gaudi_md_query_attributes(uct_md_h md, const void *addr, size_t length,
 {
     uct_gaudi_md_t *gaudi_md = ucs_derived_of(md, uct_gaudi_md_t);
 
-    void *begin = (void *)gaudi_md->device_base_address;
-    void *end   = (uint8_t *)begin + gaudi_md->totalSize;
+    void *begin = (void*)gaudi_md->device_base_address;
+    void *end   = (uint8_t*)begin + gaudi_md->totalSize;
 
     if ((addr < begin) || (addr >= end)) {
         mem_info->type = UCS_MEMORY_TYPE_LAST;
@@ -58,7 +58,7 @@ uct_gaudi_md_query_attributes(uct_md_h md, const void *addr, size_t length,
 
     *dmabuf_fd             = gaudi_md->dmabuf_fd;
     mem_info->type         = UCS_MEMORY_TYPE_GAUDI;
-    mem_info->base_address = (void *)gaudi_md->device_base_address;
+    mem_info->base_address = (void*)gaudi_md->device_base_address;
     mem_info->alloc_length = (size_t)gaudi_md->totalSize;
     mem_info->sys_dev      = gaudi_md->sys_dev;
     return UCS_OK;
@@ -103,7 +103,7 @@ static ucs_status_t uct_gaudi_md_mem_query(uct_md_h md, const void *addr,
             return UCS_ERR_IO_ERROR;
         }
         mem_attr_p->dmabuf_fd = dup_fd;
-    }    
+    }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
         mem_attr_p->dmabuf_offset = UCS_PTR_BYTE_DIFF(mem_info.base_address,
@@ -130,16 +130,18 @@ uct_gaudi_md_detect_memory_type(uct_md_h md, const void *addr, size_t length,
 }
 
 static uct_md_ops_t md_ops = {
-    .close              = uct_gaudi_md_close,
-    .query              = uct_gaudi_md_query,
-    .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
-    .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
-    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
-    .mem_reg            = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
-    .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
-    .mem_query          = uct_gaudi_md_mem_query,
-    .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_unsupported,
-    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+    .close     = uct_gaudi_md_close,
+    .query     = uct_gaudi_md_query,
+    .mem_alloc = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+    .mem_free  = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
+    .mem_advise = (uct_md_mem_advise_func_t)
+            ucs_empty_function_return_unsupported,
+    .mem_reg    = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
+    .mem_dereg = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+    .mem_query = uct_gaudi_md_mem_query,
+    .mkey_pack = (uct_md_mkey_pack_func_t)ucs_empty_function_return_unsupported,
+    .mem_attach         = (uct_md_mem_attach_func_t)
+            ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_gaudi_md_detect_memory_type,
 };
 
@@ -148,7 +150,7 @@ uct_gaudi_md_open(uct_component_h component, const char *md_name,
                   const uct_md_config_t *md_config, uct_md_h *md_p)
 {
     uct_gaudi_md_config_t *config = ucs_derived_of(md_config,
-                                                     uct_gaudi_md_config_t);
+                                                   uct_gaudi_md_config_t);
     uct_gaudi_md_t *md;
     ucs_status_t status;
     bool fd_created = false;
@@ -168,8 +170,8 @@ uct_gaudi_md_open(uct_component_h component, const char *md_name,
     }
 
     status = uct_gaudi_base_get_info(fd, &md->device_base_allocated_address,
-		                             &md->device_base_address, &md->totalSize,
-		                             &md->dmabuf_fd);
+                                     &md->device_base_address, &md->totalSize,
+                                     &md->dmabuf_fd);
 
     if (status != UCS_OK) {
         ucs_error("failed to get dmabuf information\n");
@@ -196,7 +198,7 @@ err_close_fd:
     uct_gaudi_base_close_fd(fd, fd_created);
 err_free_md:
     ucs_free(md);
-    return status;    
+    return status;
 }
 
 ucs_status_t uct_gaudi_query_md_resources(uct_component_h component,
@@ -210,21 +212,24 @@ ucs_status_t uct_gaudi_query_md_resources(uct_component_h component,
 uct_component_t uct_gaudi_gdr_component = {
     .query_md_resources = uct_gaudi_query_md_resources,
     .md_open            = uct_gaudi_md_open,
-    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)
+            ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_md_stub_rkey_unpack,
-    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
-    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)
+            ucs_empty_function_return_unsupported,
+    .rkey_release       = (uct_component_rkey_release_func_t)
+            ucs_empty_function_return_success,
     .name               = "gaudi_gdr",
-    .md_config = 
+    .md_config =
             {
-                .name   = "gaudi-gdr memory domain",
-                .prefix = "GAUDI_GDR_",
-                .table  = uct_gaudi_md_config_table,
-                .size   = sizeof(uct_gaudi_md_config_t),
-    },
-    .cm_config      = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
-    .tl_list        = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_gaudi_gdr_component),
-    .flags          = 0,
-    .md_vfs_init    = (uct_component_md_vfs_init_func_t)ucs_empty_function
+                    .name   = "gaudi-gdr memory domain",
+                    .prefix = "GAUDI_GDR_",
+                    .table  = uct_gaudi_md_config_table,
+                    .size   = sizeof(uct_gaudi_md_config_t),
+            },
+    .cm_config   = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
+    .tl_list     = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_gaudi_gdr_component),
+    .flags       = 0,
+    .md_vfs_init = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_gaudi_gdr_component);

@@ -10,18 +10,16 @@
 #include <ucs/type/status.h>
 
 /**
- * @defgroup UCT_GAUDI_TOPO Gaudi Topology Developer API
- * @brief Experimental API for external libraries to influence UCX topology
+ * @defgroup UCT_GAUDI_INTERNAL Internal Gaudi Topology Helpers
+ * @brief UNSTABLE – Do not include from external code
  *
- * This API is intended for advanced integrations (e.g., middleware such as NIXL)
- * that need Gaudi-specific NIC affinity before UCX communication contexts are created.
+ * This header defines an *unstable* internal interface for the Gaudi transport.
+ * It is NOT installed and may change or be removed without notice.
  *
- * @warning This is NOT part of UCX's stable public API. It is provided as an
- * experimental developer interface and may change or be removed without notice.
+ * External middleware (e.g., NIXL) should forward-declare any needed prototypes
+ * rather than including this file. Only the implementation inside UCX may use it.
  *
- * @note Requires configure --enable-gaudi-topo-api and ucp_init() to be called first
- *       to populate UCX system topology. This API modifies internal UCX topology state
- *       and should be used with care.
+ * @note Requires configure --enable-gaudi-topo-api to build the provider.
  */
 
 BEGIN_C_DECLS
