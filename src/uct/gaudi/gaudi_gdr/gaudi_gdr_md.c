@@ -7,15 +7,17 @@
 #include "config.h"
 #endif
 
+#include "gaudi_gdr_md.h"
+
 #include <ucs/memory/memtype_cache.h>
 #include <uct/gaudi/base/gaudi_base.h>
-#include "gaudi_gdr_md.h"
 #include <ucs/sys/module.h>
-#include <pthread.h>
 
 #include <inttypes.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <hlthunk.h>
+
 
 static ucs_config_field_t uct_gaudi_md_config_table[] =
         {{"", "", NULL, ucs_offsetof(uct_gaudi_md_config_t, super),
@@ -174,7 +176,7 @@ uct_gaudi_md_open(uct_component_h component, const char *md_name,
                                      &md->dmabuf_fd);
 
     if (status != UCS_OK) {
-        ucs_error("failed to get dmabuf information\n");
+        ucs_error("failed to get dmabuf information");
         goto err_close_fd;
     }
 
@@ -205,6 +207,14 @@ ucs_status_t uct_gaudi_query_md_resources(uct_component_h component,
                                           uct_md_resource_desc_t **resources_p,
                                           unsigned *num_resources_p)
 {
+    ucs_status_t status;
+
+    status = uct_gaudi_base_discover_devices();
+    if (status != UCS_OK) {
+        ucs_debug("gaudi device discovery failed, no devices available");
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    }
+
     return uct_md_query_single_md_resource(component, resources_p,
                                            num_resources_p);
 }

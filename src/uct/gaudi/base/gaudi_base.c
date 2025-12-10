@@ -8,17 +8,21 @@
 #endif
 
 #include "gaudi_base.h"
-#include <uct/gaudi/gaudi_gdr/gaudi_gdr_md.h>
+
+#include <ucs/arch/atomic.h>
+#include <ucs/sys/sys.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/module.h>
 #include <ucs/memory/numa.h>
-#include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
-#include <pthread.h>
+#include <uct/gaudi/gaudi_gdr/gaudi_gdr_md.h>
 
 #include <inttypes.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <hlthunk.h>
 #include <synapse_api.h>
+
 
 int uct_gaudi_base_get_fd(int device_id, bool *fd_created)
 {
@@ -39,6 +43,9 @@ int uct_gaudi_base_get_fd(int device_id, bool *fd_created)
         return fd;
     }
 
+    if (fd_created != NULL) {
+        *fd_created = false;
+    }
     return deviceInfo.fd;
 }
 
@@ -56,7 +63,7 @@ void uct_gaudi_base_close_dmabuf_fd(int fd)
     }
 }
 
-ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t* sys_dev)
+ucs_status_t uct_gaudi_base_get_sysdev(int fd, ucs_sys_device_t *sys_dev)
 {
     ucs_status_t status;
     char pci_bus_id[13];
@@ -151,4 +158,138 @@ uct_gaudi_base_query_devices(uct_md_h md,
     return uct_single_device_resource(md, md->component->name,
                                       UCT_DEVICE_TYPE_ACC, sys_dev,
                                       tl_devices_p, num_tl_devices_p);
+}
+
+static void
+uct_gaudi_base_configure_sys_device_from_fd(int fd, int index,
+                                            ucs_sys_device_t *sys_dev_p)
+{
+    ucs_status_t status;
+    struct hlthunk_hw_ip_info hw_ip;
+    const unsigned sys_device_priority = 10;
+    char device_name[16];
+    int rc;
+
+    ucs_assert(fd >= 0);
+
+    status = uct_gaudi_base_get_sysdev(fd, sys_dev_p);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    memset(&hw_ip, 0, sizeof(hw_ip));
+    rc = hlthunk_get_hw_ip_info(fd, &hw_ip);
+    if (rc) {
+        ucs_error("failed to get hw_ip info for fd %d (rc=%d)", fd, rc);
+        goto err;
+    }
+
+    status = ucs_topo_sys_device_set_user_value(*sys_dev_p, hw_ip.module_id);
+    if (status != UCS_OK) {
+        ucs_error("failed to set user value %u for sys_dev %d", hw_ip.module_id,
+                  *sys_dev_p);
+        goto err;
+    }
+
+    ucs_snprintf_safe(device_name, sizeof(device_name), "GAUDI_%d", index);
+    status = ucs_topo_sys_device_set_name(*sys_dev_p, device_name,
+                                          sys_device_priority);
+    if (status != UCS_OK) {
+        ucs_warn("failed to set name for index %d: %s", index,
+                 ucs_status_string(status));
+    }
+
+    status = ucs_topo_sys_device_enable_aux_path(*sys_dev_p);
+    if (status != UCS_OK) {
+        ucs_debug("no aux path for %s: %s", device_name,
+                  ucs_status_string(status));
+    }
+
+    ucs_debug("registered %s (sys_dev %d)", device_name, *sys_dev_p);
+
+    return;
+
+err:
+    *sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
+}
+
+static int uct_gaudi_base_open_minor(int id)
+{
+    char buf[64];
+    int fd;
+    ucs_snprintf_safe(buf, sizeof(buf), HLTHUNK_DEV_NAME_CONTROL, id);
+    fd = open(buf, O_RDWR | O_CLOEXEC, 0);
+    return (fd >= 0) ? fd : -errno;
+}
+
+/* device discovery - enumerate all gaudi devices and register with topology */
+ucs_status_t uct_gaudi_base_discover_devices(void)
+{
+    static pthread_mutex_t discovery_mutex = PTHREAD_MUTEX_INITIALIZER;
+    static uint32_t discovery_done         = 0;
+
+    ucs_status_t status = UCS_OK;
+    ucs_sys_device_t sys_dev;
+
+    int device_count       = 0;
+    int discovered_devices = 0;
+    int i, fd;
+
+    /* check if already discovered - use atomic load for memory ordering */
+    if (ucs_atomic_fadd32(&discovery_done, 0)) {
+        return UCS_OK;
+    }
+
+    pthread_mutex_lock(&discovery_mutex);
+
+    /* double-check after acquiring lock */
+    if (ucs_atomic_fadd32(&discovery_done, 0)) {
+        goto out;
+    }
+
+    ucs_debug("starting gaudi device discovery");
+
+    /* we do not know what minor is in use, so try them all. */
+    for (i = 0; i < HLTHUNK_MAX_MINOR; i++) {
+        /* open the control device instead of the actual hardware device, */
+        /* because the real device node may be busy or in use by another process. */
+        fd = uct_gaudi_base_open_minor(i);
+        if (fd < 0) {
+            continue;
+        }
+
+        uct_gaudi_base_configure_sys_device_from_fd(fd, discovered_devices,
+                                                    &sys_dev);
+        close(fd);
+
+        if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            discovered_devices++;
+        }
+    }
+
+    /* extra measure: compare with reported count */
+    device_count = hlthunk_get_device_count(HLTHUNK_DEVICE_DONT_CARE);
+    if (device_count >= 0 && device_count != discovered_devices) {
+        ucs_warn("gaudi discovery mismatch: discovered=%d, driver=%d",
+                 discovered_devices, device_count);
+    }
+
+    if (discovered_devices > 0) {
+        ucs_debug("discovered %d gaudi devices", discovered_devices);
+        status = UCS_OK;
+
+        ucs_atomic_add32(&discovery_done, 1);
+    } else {
+        ucs_debug("no gaudi devices found");
+        status = UCS_ERR_NO_DEVICE;
+    }
+
+out:
+    pthread_mutex_unlock(&discovery_mutex);
+    return status;
+}
+
+UCS_MODULE_INIT()
+{
+    return UCS_OK;
 }

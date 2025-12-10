@@ -16,14 +16,12 @@ libuct_gaudi_la_LDFLAGS  = $(GAUDI_LDFLAGS) $(GAUDI_LIBS) -version-info $(SOVERS
 
 noinst_HEADERS = \
     base/scal.h \
-    base/gaudi_base.h \
-    base/gaudi_topo.h
+    base/gaudi_base.h
 
 EXTRA_DIST =
 
 libuct_gaudi_la_SOURCES = \
-    base/gaudi_base.c \
-    base/gaudi_topo.c
+    base/gaudi_base.c
 
 noinst_HEADERS += \
     gaudi_gdr/gaudi_gdr_md.h \
