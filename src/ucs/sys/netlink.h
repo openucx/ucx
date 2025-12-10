@@ -45,20 +45,33 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
 
 
 /**
- * Check whether a routing table rule exists for a given network
- * interface name and a destination address.
+ * Check whether a route exists for a given network interface and
+ * destination address.
  *
- * @param [in]  if_index          A global index representing the network
-                                  interface, as assigned by the system
-                                  (e.g., obtained via if_nametoindex()).
- * @param [in]  sa_remote         Pointer to the destination address.
- * @param [in]  allow_default_gw  Allow matching default gateway routes (1) or
- *                                only specific subnet routes (0).
+ * @param [in]  if_index           A global index representing the network
+ *                                 interface, as assigned by the system
+ *                                 (e.g., obtained via if_nametoindex()).
+ * @param [in]  sa_remote          Pointer to the destination address.
+ * @param [out] netmask_len_p      Optional pointer to store the netmask length
+ *                                 of the route found. Pass NULL if this
+ *                                 information is not needed.
  *
- * @return 1 if rule exists, or 0 otherwise.
+ * @return 1 if a route exists, or 0 otherwise.
  */
 int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
-                             int allow_default_gw);
+                             int *netmask_len_p);
+
+/**
+ * Check if this network interface has the best route to the destination
+ * address.
+ *
+ * @param [in]  if_index         Network interface index.
+ * @param [in]  sa_remote        Pointer to the destination address.
+ *
+ * @return 1 if this network interface has the best route to the destination
+ *         address, or 0 otherwise.
+ */
+int ucs_netlink_is_best_route(int if_index, const struct sockaddr *sa_remote);
 
 END_C_DECLS
 
