@@ -164,8 +164,8 @@ protected:
                                     << ucs_status_string(status);
 
             dst_buf.memset(0);
-            UCS_TEST_MESSAGE << "Attempting PUT operation after failure injection on lane("
-                             << lane_idx << '/' << size_t(lane) << ")/" << rma_bw_lanes.size() << "...";
+            UCS_TEST_MESSAGE << "Attempting PUT operation after failure injection on lane "
+                             << size_t(lane) << '/' << rma_bw_lanes.size() << "...";
             status = do_put_and_wait(sender().ep(0, INJECTED_EP_INDEX), src_buf, dst_buf, rkey.get());
             EXPECT_EQ(UCS_OK, status) << "PUT operation returned status: "
                                     << ucs_status_string(status);
