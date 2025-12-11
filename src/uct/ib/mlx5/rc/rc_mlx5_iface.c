@@ -771,6 +771,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
     init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
                                        0 : sizeof(uct_rc_mlx5_hdr_t);
+    init_attr->xport_hdr_len         = ucs_max(sizeof(uct_rc_hdr_t),
+                                               UCT_IB_RETH_LEN);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
                               params, rc_config, init_attr);

@@ -266,6 +266,8 @@ typedef struct uct_ib_iface_init_attr {
     unsigned    rx_hdr_len;              /* Length of transport network header */
     unsigned    cq_len[UCT_IB_DIR_LAST]; /* CQ length */
     size_t      seg_size;                /* Transport segment size */
+    size_t      xport_hdr_len;           /* How many bytes this transport adds on top
+                                          * of IB header (LRH+BTH+iCRC+vCRC) */
     unsigned    fc_req_size;             /* Flow control request size */
     int         qp_type;                 /* IB QP type */
     int         flags;                   /* Various flags (see enum) */
@@ -352,6 +354,7 @@ struct uct_ib_iface {
         unsigned                         tx_max_poll;
         unsigned                         seg_size;
         unsigned                         roce_path_factor;
+        size_t                           xport_hdr_len;
         uint8_t                          max_inl_cqe[UCT_IB_DIR_LAST];
         uint8_t                          port_num;
         uint8_t                          sl;
@@ -555,10 +558,7 @@ int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
 int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                  const uct_iface_is_reachable_params_t *params);
 
-/*
- * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)
- */
-ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
+ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr);
 
 
