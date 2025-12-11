@@ -1229,7 +1229,7 @@ private:
 
     static executor_t make_exec(const char *name, const char *version)
     {
-        interpose_mock &mock = get(name);
+        interpose_mock &mock = get(name, version);
         std::lock_guard<std::mutex> guard(mock.m_mutex);
 
         executor_t exec = { mock.m_mock, mock.m_orig };
