@@ -109,8 +109,8 @@ public:
             return curand(m_rand_state) % (gridDim.x * blockDim.x);
         case UCX_PERF_CHANNEL_MODE_PER_THREAD:
         default:
-            return ucx_perf_cuda_thread_index<level>(threadIdx.x) +
-                   blockIdx.x * ucx_perf_cuda_thread_index<level>(blockDim.x);
+            return ucx_perf_cuda_thread_index<level>(threadIdx.x +
+                                                     blockIdx.x * blockDim.x);
         }
     }
 
@@ -395,8 +395,8 @@ ucp_perf_cuda_put_bw_kernel(ucx_perf_cuda_context &ctx,
     unsigned thread_index      = ucx_perf_cuda_thread_index<level>(threadIdx.x);
     unsigned reqs_count        = ucs_div_round_up(ctx.max_outstanding,
                                                   ctx.device_fc_window);
-    unsigned global_thread_id  = thread_index + blockIdx.x *
-                                 ucx_perf_cuda_thread_index<level>(blockDim.x);
+    unsigned global_thread_id  = ucx_perf_cuda_thread_index<level>(
+        thread_index + blockIdx.x * blockDim.x);
     ucp_device_request_t *reqs = &shared_requests[reqs_count * thread_index];
     curandState rand_state;
 
@@ -424,8 +424,8 @@ ucp_perf_cuda_put_latency_kernel(ucx_perf_cuda_context &ctx,
     ucx_perf_counter_t max_iters = ctx.max_iters;
     ucs_status_t status          = UCS_OK;
     unsigned thread_index        = ucx_perf_cuda_thread_index<level>(threadIdx.x);
-    unsigned global_thread_id    = thread_index + blockIdx.x *
-                                   ucx_perf_cuda_thread_index<level>(blockDim.x);
+    unsigned global_thread_id    = ucx_perf_cuda_thread_index<level>(
+        thread_index + blockIdx.x * blockDim.x);
     ucp_device_request_t *req    = &shared_requests[thread_index];
     curandState rand_state;
 
