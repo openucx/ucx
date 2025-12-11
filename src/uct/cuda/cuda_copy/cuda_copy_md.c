@@ -88,13 +88,18 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 
 static struct {} uct_cuda_dummy_memh;
 
-static int uct_cuda_copy_md_is_dmabuf_supported()
+int uct_cuda_copy_md_is_dmabuf_supported()
 {
-    int dmabuf_supported = 0;
+    static int dmabuf_supported = -1;
     CUdevice cuda_device;
 
+    if (dmabuf_supported != -1) {
+        return dmabuf_supported;
+    }
+
+    dmabuf_supported = 0;
     if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(&cuda_device, 0)) != UCS_OK) {
-        return 0;
+        goto out;
     }
 
     /* Assume dmabuf support is uniform across all devices */
@@ -103,10 +108,11 @@ static int uct_cuda_copy_md_is_dmabuf_supported()
                 cuDeviceGetAttribute(&dmabuf_supported,
                                      CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED,
                                      cuda_device)) != UCS_OK) {
-        return 0;
+        goto out;
     }
 #endif
 
+out:
     ucs_debug("dmabuf is%s supported on cuda device %d",
               dmabuf_supported ? "" : " not", cuda_device);
     return dmabuf_supported;
@@ -910,6 +916,30 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
     return UCT_DMABUF_FD_INVALID;
 }
 
+static uct_cuda_copy_md_dmabuf_t
+uct_cuda_copy_md_get_dmabuf_internal(const void *address, size_t length,
+                                     ucs_sys_device_t sys_dev)
+{
+    uct_cuda_copy_md_dmabuf_t dmabuf;
+    uintptr_t base_address, aligned_start, aligned_end;
+
+    base_address  = (uintptr_t)address;
+    aligned_start = ucs_align_down_pow2(base_address, ucs_get_page_size());
+    aligned_end = ucs_align_up_pow2(base_address + length, ucs_get_page_size());
+    dmabuf.fd   = uct_cuda_copy_md_get_dmabuf_fd(aligned_start,
+                                                 aligned_end - aligned_start,
+                                                 sys_dev);
+    dmabuf.offset = base_address - aligned_start;
+    return dmabuf;
+}
+
+uct_cuda_copy_md_dmabuf_t
+uct_cuda_copy_md_get_dmabuf(const void *address, size_t length)
+{
+    return uct_cuda_copy_md_get_dmabuf_internal(address, length,
+                                                UCS_SYS_DEVICE_ID_UNKNOWN);
+}
+
 ucs_status_t
 uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
                            uct_md_mem_attr_t *mem_attr)
@@ -921,9 +951,9 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
         .alloc_length = length
     };
     uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
-    uintptr_t base_address, aligned_start, aligned_end;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
+    uct_cuda_copy_md_dmabuf_t dmabuf;
 
     if (!(mem_attr->field_mask &
           (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE | UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
@@ -964,21 +994,17 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
         mem_attr->alloc_length = addr_mem_info.alloc_length;
     }
 
-    base_address  = (uintptr_t)addr_mem_info.base_address;
-    aligned_start = ucs_align_down_pow2(base_address, ucs_get_page_size());
-
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
-        aligned_end = ucs_align_up_pow2(base_address +
-                                                addr_mem_info.alloc_length,
-                                        ucs_get_page_size());
-
-        mem_attr->dmabuf_fd = uct_cuda_copy_md_get_dmabuf_fd(
-                aligned_start, aligned_end - aligned_start,
+    if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ||
+        (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET)) {
+        dmabuf = uct_cuda_copy_md_get_dmabuf_internal(
+                addr_mem_info.base_address, addr_mem_info.alloc_length,
                 addr_mem_info.sys_dev);
-    }
-
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
-        mem_attr->dmabuf_offset = (uintptr_t)address - aligned_start;
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+            mem_attr->dmabuf_fd = dmabuf.fd;
+        }
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+            mem_attr->dmabuf_offset = dmabuf.offset;
+        }
     }
 
     return UCS_OK;
