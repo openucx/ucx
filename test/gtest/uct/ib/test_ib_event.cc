@@ -21,6 +21,12 @@ extern "C" {
 
 #include <uct/uct_p2p_test.h>
 
+
+UCS_INTERPOSE_MOCK_DEFINE(
+    int, ibv_get_async_event,
+    (struct ibv_context *ctx, struct ibv_async_event *event), ctx, event);
+
+
 class uct_test_event_base : public uct_p2p_test {
 public:
     uct_test_event_base(): uct_p2p_test(0), m_event() {}
