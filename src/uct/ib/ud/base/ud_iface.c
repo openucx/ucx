@@ -443,12 +443,13 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
         return status;
     }
 
-    init_attr->rx_priv_len = sizeof(uct_ud_recv_skb_t) -
-                             sizeof(uct_ib_iface_recv_desc_t);
-    init_attr->rx_hdr_len  = UCT_UD_RX_HDR_LEN;
-    init_attr->seg_size    = ucs_min(mtu, config->super.seg_size) + UCT_IB_GRH_LEN;
-    init_attr->qp_type     = IBV_QPT_UD;
-    init_attr->dev_name    = params->mode.device.dev_name;
+    init_attr->rx_priv_len   = sizeof(uct_ud_recv_skb_t) -
+                               sizeof(uct_ib_iface_recv_desc_t);
+    init_attr->rx_hdr_len    = UCT_UD_RX_HDR_LEN;
+    init_attr->seg_size      = ucs_min(mtu, config->super.seg_size) + UCT_IB_GRH_LEN;
+    init_attr->xport_hdr_len = UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t);
+    init_attr->qp_type       = IBV_QPT_UD;
+    init_attr->dev_name      = params->mode.device.dev_name;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, md, worker,
                               params, &config->super, init_attr);
@@ -708,9 +709,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
 {
     ucs_status_t status;
 
-    status = uct_ib_iface_query(&iface->super,
-                                UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
-                                iface_attr);
+    status = uct_ib_iface_query(&iface->super, iface_attr);
     if (status != UCS_OK) {
         return status;
     }

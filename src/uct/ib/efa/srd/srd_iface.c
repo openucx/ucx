@@ -476,6 +476,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
                                       sizeof(uct_ib_iface_recv_desc_t);
     init_attr.rx_hdr_len            = sizeof(uct_srd_hdr_t);
     init_attr.seg_size              = ucs_min(mtu, config->super.seg_size);
+    init_attr.xport_hdr_len         = UCT_IB_DETH_LEN + sizeof(uct_srd_hdr_t);
     init_attr.qp_type               = IBV_QPT_DRIVER;
     init_attr.dev_name              = params->mode.device.dev_name;
 
@@ -887,9 +888,7 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     int ret;
 
     /* Common parameters */
-    status = uct_ib_iface_query(&iface->super,
-                                UCT_IB_DETH_LEN + sizeof(uct_srd_hdr_t),
-                                iface_attr);
+    status = uct_ib_iface_query(&iface->super, iface_attr);
     if (status != UCS_OK) {
         return status;
     }
