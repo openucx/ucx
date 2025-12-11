@@ -76,7 +76,9 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
     }
 
     region->refcount++;
+    ucs_spin_lock(&rcache->lru.lock);
     ucs_rcache_region_lru_remove(rcache, region);
+    ucs_spin_unlock(&rcache->lru.lock);
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
     return region;
 }
