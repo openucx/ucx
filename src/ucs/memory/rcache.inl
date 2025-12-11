@@ -19,7 +19,7 @@ ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment)
 }
 
 
-/* LRU spinlock must be held */
+/* LRU must be enabled and LRU spinlock must be held */
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_lru_add(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
@@ -33,7 +33,7 @@ ucs_rcache_region_lru_add(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 }
 
 
-/* LRU spinlock must be held */
+/* LRU must be enabled and LRU spinlock must be held */
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_lru_remove(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
@@ -76,7 +76,11 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
     }
 
     region->refcount++;
-    ucs_rcache_region_lru_remove(rcache, region);
+    if (rcache->lru.enable) {
+        ucs_spin_lock(&rcache->lock);
+        ucs_rcache_region_lru_remove(rcache, region);
+        ucs_spin_unlock(&rcache->lock);
+    }
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
     return region;
 }
@@ -96,7 +100,11 @@ ucs_rcache_lookup(ucs_rcache_t *rcache, void *address, size_t length,
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_put_unsafe(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
-    ucs_rcache_region_lru_add(rcache, region);
+    if (rcache->lru.enable) {
+        ucs_spin_lock(&rcache->lock);
+        ucs_rcache_region_lru_add(rcache, region);
+        ucs_spin_unlock(&rcache->lock);
+    }
 
     ucs_assert(region->refcount > 0);
     if (ucs_unlikely(--region->refcount == 0)) {
