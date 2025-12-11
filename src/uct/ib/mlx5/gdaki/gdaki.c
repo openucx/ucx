@@ -438,6 +438,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
         dev_ep->atomic_lkey  = htonl(iface->atomic_mr->lkey);
         dev_ep->sq_wqe_num   = qp_attr.max_tx;
         dev_ep->sq_fc_mask   = (qp_attr.max_tx >> 1) - 1;
+        dev_ep->num_channels = iface->num_channels;
         dev_ep->sq_wqe_daddr = UCS_PTR_BYTE_OFFSET(ep->ep_gpu,
                                                    qp_attr.umem_offset);
 
