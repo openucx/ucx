@@ -1154,9 +1154,9 @@ public:
     using executor_t = std::pair<functor_t, func_t>;
 
     template<typename Ret, typename Fn, typename... Args>
-    static Ret hook(const char *name, Args &&...args)
+    static Ret hook(const char *name, const char *version, Args &&...args)
     {
-        executor_t exec = make_exec(name);
+        executor_t exec = make_exec(name, version);
         if (exec.first) {
             /* Call the mock functor if set */
             using fn_t = std::function<Ret(Args...)>;
@@ -1214,15 +1214,20 @@ public:
     }
 
 private:
-    explicit interpose_mock(const char *name)
+    explicit interpose_mock(const char *name, const char *version)
     {
-        void *sym = dlsym(RTLD_NEXT, name);
+        void *sym = nullptr;
+        if (version != nullptr) {
+            sym = dlvsym(RTLD_NEXT, name, version);
+        } else {
+            sym = dlsym(RTLD_NEXT, name);
+        }
         ucs_assert_always(sym != nullptr);
-        m_orig    = reinterpret_cast<func_t>(sym);
-        m_calls   = 0;
+        m_orig  = reinterpret_cast<func_t>(sym);
+        m_calls = 0;
     }
 
-    static executor_t make_exec(const char *name)
+    static executor_t make_exec(const char *name, const char *version)
     {
         interpose_mock &mock = get(name);
         std::lock_guard<std::mutex> guard(mock.m_mutex);
@@ -1234,13 +1239,13 @@ private:
         return exec;
     }
 
-    static interpose_mock &get(const char *name)
+    static interpose_mock &get(const char *name, const char *version = nullptr)
     {
         std::lock_guard<std::mutex> guard(m_map_mutex);
         auto it = m_mocks.find(name);
         if (it == m_mocks.end()) {
             it = m_mocks.emplace(name, std::unique_ptr<interpose_mock>(
-                                            new interpose_mock(name))).first;
+                                    new interpose_mock(name, version))).first;
         }
         return *(it->second);
     }
@@ -1254,10 +1259,10 @@ private:
     static std::mutex m_map_mutex;
 };
 
-#define UCS_INTERPOSE_MOCK_DEFINE(ret, name, args, ...) \
+#define UCS_INTERPOSE_MOCK_DEFINE(ret, name, version, args, ...) \
 extern "C" ret name args \
 { \
-    return ucs::interpose_mock::hook<ret, decltype(name)>(#name, __VA_ARGS__); \
+    return ucs::interpose_mock::hook<ret, decltype(name)>(#name, version, __VA_ARGS__); \
 }
 
 // Used to manipulate and restore rlimits

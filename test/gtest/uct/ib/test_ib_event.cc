@@ -23,7 +23,7 @@ extern "C" {
 
 
 UCS_INTERPOSE_MOCK_DEFINE(
-    int, ibv_get_async_event,
+    int, ibv_get_async_event, "IBVERBS_1.1",
     (struct ibv_context *ctx, struct ibv_async_event *event), ctx, event);
 
 
