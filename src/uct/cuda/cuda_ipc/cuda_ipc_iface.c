@@ -325,6 +325,7 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                           cuda_ipc_event->d_bptr,
                                           cuda_ipc_event->mapped_addr,
                                           cuda_ipc_event->cuda_device,
+                                          cuda_ipc_event->pid_ns,
                                           iface->config.enable_cache);
     if (status != UCS_OK) {
         ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
@@ -437,7 +438,8 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
-    cuda_ipc_mem_element.mapped_offset = UCS_PTR_BYTE_DIFF(key->super.d_bptr, mapped_addr);
+    cuda_ipc_mem_element.mapped_offset =
+            UCS_PTR_BYTE_DIFF(key->super.super.d_bptr, mapped_addr);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
