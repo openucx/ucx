@@ -160,6 +160,10 @@ protected:
             ucp_lane_index_t lane = rma_bw_lanes[lane_idx];
             uct_ep_h injected_uct_ep = ucp_ep_get_lane(injected_ucp_ep, lane);
             status = uct_ep_invalidate(injected_uct_ep, 0);
+            if (status == UCS_ERR_UNSUPPORTED) {
+                UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
+            }
+
             EXPECT_EQ(UCS_OK, status) << "uct_ep_invalidate returned status: "
                                     << ucs_status_string(status);
 
@@ -188,7 +192,7 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
  * Test fault tolerance: PUT operation with initiator-side failure injection
  * The sender's endpoint fails, testing recovery when the initiator side fails
  */
-UCS_TEST_P(test_ucp_fault_tolerance, put_with_initiator_failure, "MAX_RMA_RAILS=32")
+UCS_TEST_P(test_ucp_fault_tolerance, put_with_initiator_failure)
 {
     test_put_with_injected_failure(FAILURE_SIDE_INITIATOR);
 }
@@ -197,7 +201,7 @@ UCS_TEST_P(test_ucp_fault_tolerance, put_with_initiator_failure, "MAX_RMA_RAILS=
  * Test fault tolerance: PUT operation with target-side failure injection
  * The receiver's endpoint fails, testing recovery when the target side fails
  */
-UCS_TEST_P(test_ucp_fault_tolerance, put_with_target_failure, "MAX_RMA_RAILS=32")
+UCS_TEST_P(test_ucp_fault_tolerance, put_with_target_failure)
 {
     test_put_with_injected_failure(FAILURE_SIDE_TARGET);
 }
