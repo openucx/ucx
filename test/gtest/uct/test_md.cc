@@ -302,34 +302,33 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
         GTEST_FAIL();
     }
 
-    ucs_for_each_bit(mt, md_attr().reg_mem_types |
-                         md_attr().alloc_mem_types) {
+    ucs_for_each_bit(mt, md_attr().reg_mem_types | md_attr().alloc_mem_types) {
         UCS_TEST_MESSAGE << "rkey_ptr test for memory type "
                          << ucs_memory_type_names[mt];
         mem_type = static_cast<ucs_memory_type_t>(mt);
-        size = sizeof(unsigned) * UCS_MBYTE;
+        size     = sizeof(unsigned) * UCS_MBYTE;
         if (check_alloc_mem_type(mem_type)) {
             // allocate registered memory using md alloc
             uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
             uct_mem_alloc_params_t params;
 
-            rva = nullptr;
-            params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
-                                     UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
-                                     UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
-                                     UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
-                                     UCT_MEM_ALLOC_PARAM_FIELD_NAME;
-            params.flags           = UCT_MD_MEM_ACCESS_ALL;
-            params.name            = "test";
-            params.mem_type        = mem_type;
-            params.mds.mds         = &md_ref;
-            params.mds.count       = 1;
-            params.address         = (void *)rva;
-            status = uct_mem_alloc(size, &method, 1, &params, &mem);
+            rva               = nullptr;
+            params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS |
+                                UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS |
+                                UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                                UCT_MEM_ALLOC_PARAM_FIELD_MDS |
+                                UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+            params.flags      = UCT_MD_MEM_ACCESS_ALL;
+            params.name       = "test";
+            params.mem_type   = mem_type;
+            params.mds.mds    = &md_ref;
+            params.mds.count  = 1;
+            params.address    = (void*)rva;
+            status            = uct_mem_alloc(size, &method, 1, &params, &mem);
             ASSERT_UCS_OK(status);
             EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, mem.length);
             size = mem.length;
-            rva = static_cast<unsigned *>(mem.address);
+            rva  = static_cast<unsigned*>(mem.address);
             memh = mem.memh;
         } else {
             // allocate memory using system allocator and register it

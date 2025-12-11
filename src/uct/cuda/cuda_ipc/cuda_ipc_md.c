@@ -561,7 +561,7 @@ ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
         return status;
     }
 
-    return uct_cuda_ipc_get_remote_address((uct_cuda_ipc_rkey_t *)rkey,
+    return uct_cuda_ipc_get_remote_address((uct_cuda_ipc_rkey_t*)rkey,
                                            raddr, cu_dev, laddr_p, NULL);
 }
 
