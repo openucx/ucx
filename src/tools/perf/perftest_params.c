@@ -83,7 +83,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -Y <mode>      channel selection mode for device tests (single)\n");
     printf("                    single          - use a single fixed channel (channel 0, default)\n");
     printf("                    random[:<seed>] - use random channel per operation with optional random seed\n");
-    printf("                    per-thread      - use global thread ID modulo num_channels\n");
+    printf("                    per-thread      - use global thread ID\n");
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
@@ -783,11 +783,6 @@ ucs_status_t adjust_test_params(perftest_params_t *params,
     }
 
     if (params->super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
-        const char *channel_str = getenv("UCX_RC_GDA_NUM_CHANNELS");
-        if (channel_str) {
-            params->super.device_num_channels = atoi(channel_str);
-        }
-
         /* TODO: Add getter function for thread count */
         params->super.device_thread_count     = params->super.thread_count;
         params->super.thread_count            = 1;

@@ -29,7 +29,6 @@ public:
         : m_size(ctx.max_outstanding),
           m_fc_window(ctx.device_fc_window),
           m_reqs_count(ucs_div_round_up(m_size, m_fc_window)),
-          m_num_channels(ctx.num_channels),
           m_channel_mode(ctx.channel_mode),
           m_pending_count(0),
           m_requests(requests),
@@ -107,13 +106,11 @@ public:
         case UCX_PERF_CHANNEL_MODE_SINGLE:
             return 0;
         case UCX_PERF_CHANNEL_MODE_RANDOM:
-            return curand(m_rand_state) % m_num_channels;
+            return curand(m_rand_state) % (gridDim.x * blockDim.x);
         case UCX_PERF_CHANNEL_MODE_PER_THREAD:
         default:
-            return (ucx_perf_cuda_thread_index<level>(threadIdx.x) +
-                    blockIdx.x *
-                    ucx_perf_cuda_thread_index<level>(blockDim.x)) %
-                   m_num_channels;
+            return ucx_perf_cuda_thread_index<level>(threadIdx.x) +
+                   blockIdx.x * ucx_perf_cuda_thread_index<level>(blockDim.x);
         }
     }
 
@@ -123,7 +120,6 @@ private:
     const size_type               m_size;
     const size_type               m_fc_window;
     const size_type               m_reqs_count;
-    const unsigned                m_num_channels;
     const ucx_perf_channel_mode_t m_channel_mode;
     size_type                     m_pending_count;
     ucp_device_request_t          *m_requests;

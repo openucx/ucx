@@ -82,7 +82,7 @@ typedef enum {
 typedef enum {
     UCX_PERF_CHANNEL_MODE_SINGLE,    /* Use a single fixed channel ID (0) */
     UCX_PERF_CHANNEL_MODE_RANDOM,    /* Use random channel ID per operation */
-    UCX_PERF_CHANNEL_MODE_PER_THREAD,/* Use thread ID modulo num_channels */
+    UCX_PERF_CHANNEL_MODE_PER_THREAD,/* Use thread ID */
     UCX_PERF_CHANNEL_MODE_LAST
 } ucx_perf_channel_mode_t;
 
@@ -296,7 +296,6 @@ typedef struct ucx_perf_params {
     double                  report_interval; /* Interval at which to call the report callback */
     double                  percentile_rank; /* The percentile rank of the percentile reported
                                                 in latency tests */
-    unsigned                device_num_channels; /* Number of channels for each ucp device endpoint */
     ucx_perf_channel_mode_t device_channel_mode; /* Channel selection mode */
     unsigned long long      channel_rand_seed; /* Seed for random generation */
     unsigned                device_thread_count; /* Number of device threads */
