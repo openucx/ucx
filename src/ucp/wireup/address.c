@@ -203,6 +203,9 @@ UCS_ARRAY_DECLARE_TYPE(ucp_address_remote_device_array_t, unsigned,
                                        UCP_ADDRESS_FLAG_NUM_PATHS | \
                                        UCP_ADDRESS_FLAG_LAST))
 
+/* Mask for lane number - allows 7 bits (0-127) */
+#define UCP_ADDRESS_LANE_NUM_MASK (UCS_MASK(8) ^ UCP_ADDRESS_FLAG_LAST)
+
 #define UCP_ADDRESS_FLAG_MD_EMPTY_DEV 0x80u  /* Device without TL addresses */
 
 /* MD legacy bits packed to md_index before UCX 1.19
@@ -1381,7 +1384,8 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                 ep_addr_len = iface_attr->ep_addr_len;
                 ep_lane_ptr = NULL;
 
-                ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
+                UCS_STATIC_BITMAP_FOR_EACH_BIT(lane,
+                                               &ucp_ep_config(ep)->p2p_lanes) {
                     ucs_assert(lane < UCP_MAX_LANES);
                     if (ucp_ep_get_rsc_index(ep, lane) != rsc_index) {
                         continue;
@@ -1413,7 +1417,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                      */
                     remote_lane  = (lanes2remote == NULL) ? lane :
                                    lanes2remote[lane];
-                    ucs_assertv(remote_lane <= UCP_ADDRESS_IFACE_LEN_MASK,
+                    ucs_assertv(remote_lane <= UCP_ADDRESS_LANE_NUM_MASK,
                                 "remote_lane=%d", remote_lane);
                     ep_lane_ptr  = ptr;
                     *ep_lane_ptr = remote_lane;
@@ -1829,7 +1833,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                 ep_addr->len  = ep_addr_len;
                 ptr           = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
 
-                ep_addr->lane = *(uint8_t*)ptr & UCP_ADDRESS_IFACE_LEN_MASK;
+                ep_addr->lane = *(uint8_t*)ptr & UCP_ADDRESS_LANE_NUM_MASK;
                 last_ep_addr  = *(uint8_t*)ptr & UCP_ADDRESS_FLAG_LAST;
 
                 ucp_address_trace(
