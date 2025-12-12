@@ -207,13 +207,15 @@ AS_IF([test "x$with_ib" = "xyes"],
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
                        IBV_EVENT_GID_CHANGE,
+                       IBV_EVENT_PORT_SPEED_CHANGE,
                        IBV_TRANSPORT_USNIC,
                        IBV_TRANSPORT_USNIC_UDP,
                        IBV_TRANSPORT_UNSPECIFIED,
                        ibv_create_qp_ex,
                        ibv_create_cq_ex,
                        ibv_create_srq_ex,
-                       ibv_reg_dmabuf_mr],
+                       ibv_reg_dmabuf_mr,
+                       ibv_query_port_speed],
                       [], [], [[#include <infiniband/verbs.h>]])
 
        # Check ECE operation APIs are supported by rdma-core package
