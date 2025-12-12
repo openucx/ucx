@@ -17,12 +17,14 @@
 typedef unsigned long long ucx_perf_cuda_time_t;
 
 struct ucx_perf_cuda_context {
-    unsigned             max_outstanding;
-    unsigned             device_fc_window;
-    ucx_perf_counter_t   max_iters;
-    ucx_perf_cuda_time_t report_interval_ns;
-    ucx_perf_counter_t   completed_iters;
-    ucs_status_t         status;
+    ucx_perf_channel_mode_t channel_mode;
+    unsigned long long      channel_rand_seed;
+    unsigned                max_outstanding;
+    unsigned                device_fc_window;
+    ucx_perf_counter_t      max_iters;
+    ucx_perf_cuda_time_t    report_interval_ns;
+    ucx_perf_counter_t      completed_iters;
+    ucs_status_t            status;
 };
 
 UCS_F_DEVICE ucx_perf_cuda_time_t ucx_perf_cuda_get_time_ns()
@@ -161,6 +163,8 @@ public:
     {
         init_ctx();
 
+        m_cpu_ctx->channel_mode       = perf.params.device_channel_mode;
+        m_cpu_ctx->channel_rand_seed  = perf.params.channel_rand_seed;
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
         m_cpu_ctx->device_fc_window   = perf.params.device_fc_window;
         m_cpu_ctx->max_iters          = perf.max_iter;
