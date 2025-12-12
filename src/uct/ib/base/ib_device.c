@@ -618,14 +618,6 @@ out:
     return status;
 }
 
-static void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
-{
-    struct ibv_ah *ah;
-
-    kh_foreach_value(&dev->ah_hash, ah, ibv_destroy_ah(ah));
-    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
-}
-
 static void
 uct_ib_device_cleanup_async_events(uct_ib_device_t *dev, uint8_t num_ports)
 {
@@ -644,8 +636,6 @@ uct_ib_device_cleanup_async_events(uct_ib_device_t *dev, uint8_t num_ports)
 
     kh_destroy_inplace(uct_ib_async_event, &dev->async_events_hash);
     ucs_spinlock_destroy(&dev->async_event_lock);
-    uct_ib_device_cleanup_ah_cached(dev);
-    ucs_recursive_spinlock_destroy(&dev->ah_lock);
 }
 
 static ucs_status_t uct_ib_device_init_async_events(uct_ib_device_t *dev)
@@ -653,8 +643,6 @@ static ucs_status_t uct_ib_device_init_async_events(uct_ib_device_t *dev)
     ucs_status_t status = UCS_OK;
     uint8_t UCS_V_UNUSED port_num;
 
-    kh_init_inplace(uct_ib_ah, &dev->ah_hash);
-    ucs_recursive_spinlock_init(&dev->ah_lock, 0);
     kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
     ucs_spinlock_init(&dev->async_event_lock, 0);
 
@@ -717,6 +705,9 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         goto err_release_stats;
     }
 
+    kh_init_inplace(uct_ib_ah, &dev->ah_hash);
+    ucs_recursive_spinlock_init(&dev->ah_lock, 0);
+
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
               dev->num_ports);
@@ -728,11 +719,21 @@ err:
     return status;
 }
 
+static void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
+{
+    struct ibv_ah *ah;
+
+    kh_foreach_value(&dev->ah_hash, ah, ibv_destroy_ah(ah));
+    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
+}
+
 void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
     uct_ib_device_cleanup_async_events(dev, dev->num_ports);
+    uct_ib_device_cleanup_ah_cached(dev);
+    ucs_recursive_spinlock_destroy(&dev->ah_lock);
 
     if (dev->async_events) {
         ucs_async_remove_handler(dev->ibv_context->async_fd, 1);
