@@ -425,11 +425,7 @@ void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
         ucs_free(ucs_rcache_region_pfn_ptr(region));
     }
 
-    if (rcache->lru.enabled) {
-        ucs_spin_lock(&rcache->lru.lock);
-        ucs_rcache_region_lru_remove(rcache, region);
-        ucs_spin_unlock(&rcache->lru.lock);
-    }
+    ucs_rcache_region_lru_get(rcache, region);
 
     --rcache->num_regions;
     region_size         = region->super.end - region->super.start;
