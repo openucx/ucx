@@ -823,8 +823,8 @@ public:
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
 
-            if (err_str.find("on CM lane will not be handled since no error"
-                             " callback is installed") != std::string::npos) {
+            if (err_str.find("will not be handled since no error callback is installed") !=
+                std::string::npos) {
                 UCS_TEST_MESSAGE << "< " << err_str << " >";
                 ++m_err_count;
                 return UCS_LOG_FUNC_RC_STOP;

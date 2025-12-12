@@ -129,6 +129,7 @@ static uct_iface_t ucp_failed_tl_iface = {
         .ep_flush            = (uct_ep_flush_func_t)ucp_ep_failed_op,
         .ep_fence            = (uct_ep_fence_func_t)ucp_ep_failed_op,
         .ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_success,
+        .ep_disconnect       = (uct_ep_disconnect_func_t)ucp_ep_failed_op,
         .ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucp_ep_failed_op,
         .ep_destroy          = ucp_ep_failed_destroy,
         .ep_get_address      = (uct_ep_get_address_func_t)ucp_ep_failed_op
@@ -1496,7 +1497,8 @@ static ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucs_status_t status)
     ucp_request_t *close_req;
 
     /* All lanes must be in failed state */
-    ucs_assert(!ucp_ep_is_alive(ucp_ep, 0));
+    ucs_assert(!ucp_ep_is_alive(ucp_ep, 0) ||
+               (ucp_ep_get_cm_uct_ep(ucp_ep)->iface == &ucp_failed_tl_iface));
 
     /* In case if this is a local unrecoverable failure we need to notify remote side */
     if (ucp_ep_is_cm_local_connected(ucp_ep)) {

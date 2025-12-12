@@ -306,9 +306,13 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_is_alive(ucp_ep_h ep, ucp_lane_map_t new_f
 {
     ucp_lane_map_t failed_lanes = ucp_ep_config_get_failed_lanes(&ucp_ep_config(ep)->key) |
                                   new_failed_lanes;
+    int is_dead = !!(failed_lanes & UCS_MASK(ucp_ep_num_lanes(ep)));
 
-    return (failed_lanes != UCS_MASK(ucp_ep_num_lanes(ep))) ||
-           (ucp_ep_has_cm_lane(ep) && !(failed_lanes & UCS_BIT(ucp_ep_get_cm_lane(ep))));
+    if (!is_dead && ucp_ep_has_cm_lane(ep)) {
+        is_dead = !!(failed_lanes & UCS_BIT(ucp_ep_get_cm_lane(ep)));
+    }
+
+    return !is_dead;
 }
 
 #endif
