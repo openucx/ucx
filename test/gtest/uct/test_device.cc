@@ -77,9 +77,9 @@ protected:
 
     void cleanup()
     {
+        uct_test::cleanup();
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(m_cuda_dev));
-        uct_test::cleanup();
     }
 
     entity *m_sender;
