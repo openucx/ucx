@@ -748,7 +748,7 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
            ucs_signum(a->usecount - b->usecount);
 }
 
-ucs_status_t uct_gdaki_dev_matrix_init(unsigned max_ib_per_cuda,
+ucs_status_t uct_gdaki_dev_matrix_init(unsigned ib_per_cuda,
                                        uct_gdaki_dev_matrix_elem_t **dmat_p,
                                        size_t *dmat_length_p)
 {
@@ -760,7 +760,6 @@ ucs_status_t uct_gdaki_dev_matrix_init(unsigned max_ib_per_cuda,
     char *path_buffer;
     ucs_sys_device_t cuda_sys_dev;
     const char *sysfs_path;
-    unsigned ib_per_cuda;
     uct_gdaki_dev_matrix_elem_t *dmat;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     CUdevice cuda_dev;
@@ -815,10 +814,6 @@ ucs_status_t uct_gdaki_dev_matrix_init(unsigned max_ib_per_cuda,
 
     ucs_assert(cudadev_count < UCT_GDAKI_MAX_CUDA_PER_IB);
 
-    /* Calculate required number of IB devices per CUDA device */
-    ib_per_cuda = ucs_min(ibdev_count / cudadev_count, max_ib_per_cuda);
-    ib_per_cuda = ucs_max(ib_per_cuda, 1);
-
     /* Map each CUDA device to the best suited IB devices */
     for (cudadev_index = 0; cudadev_index < cudadev_count; cudadev_index++) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(
@@ -827,6 +822,7 @@ ucs_status_t uct_gdaki_dev_matrix_init(unsigned max_ib_per_cuda,
             goto out;
         }
 
+        /* Update PCI distance in IB device scores */
         uct_cuda_base_get_sys_dev(cuda_dev, &cuda_sys_dev);
         for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
             ibdesc = &dmat[scores[ibdev_index].index];
@@ -914,13 +910,16 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         goto out;
     }
 
-    ibdesc = dmat;
-    while (ibdesc->sys_dev != md->super.dev.sys_dev) {
-        ucs_assertv_always(++ibdesc - dmat < dmat_length, "dev %s",
-                           uct_ib_device_name(&md->super.dev));
+    for (ibdesc = dmat; ibdesc - dmat < dmat_length; ibdesc++) {
+        if (ibdesc->sys_dev == md->super.dev.sys_dev) {
+            break;
+        }
     }
 
-    if (ucs_popcount(ibdesc->cuda_map) == 0) {
+    ucs_assertv(ibdesc - dmat < dmat_length, "dev %s",
+                uct_ib_device_name(&md->super.dev));
+
+    if (ibdesc->cuda_map == 0) {
         status = UCS_ERR_NO_DEVICE;
         goto out;
     }
