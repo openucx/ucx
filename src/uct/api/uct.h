@@ -502,7 +502,7 @@ enum uct_iface_event_types {
     UCT_EVENT_RECV          = UCS_BIT(1), /**< Tag or active message received */
     UCT_EVENT_RECV_SIG      = UCS_BIT(2), /**< Signaled tag or active message
                                                received */
-    UCT_EVENT_SPEED_CHANGED = UCS_BIT(3)  /**< Speed changed event */
+    UCT_EVENT_SPEED_CHANGE  = UCS_BIT(3)  /**< Speed change event */
 };
 
 
