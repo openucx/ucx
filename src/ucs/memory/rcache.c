@@ -1252,7 +1252,7 @@ size_t ucs_rcache_distribution_get_num_bins()
     return ucs_ilog2(ucs_rcache_stat_max_pow2() / UCS_RCACHE_STAT_MIN_POW2) + 2;
 }
 
-static int ucs_rcache_lru_enable(const ucs_rcache_params_t *params)
+static int ucs_rcache_lru_enabled(const ucs_rcache_params_t *params)
 {
     /* Disable LRU in rcache if both max are "infinity" */
     return (params->max_size != UCS_MEMUNITS_INF) ||
@@ -1321,7 +1321,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     ucs_list_head_init(&self->gc_list);
     self->num_regions = 0;
     self->total_size  = 0;
-    self->lru.enabled = ucs_rcache_lru_enable(params);
+    self->lru.enabled = ucs_rcache_lru_enabled(params);
     if (self->lru.enabled) {
         ucs_list_head_init(&self->lru.list);
         ucs_spinlock_init(&self->lru.lock, 0);
