@@ -38,6 +38,7 @@ test_base::~test_base() {
     while (!m_config_stack.empty()) {
         pop_config();
     }
+    ucs::interpose_mock::clear();
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||
