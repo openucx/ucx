@@ -640,11 +640,14 @@ uct_ib_device_cleanup_async_events(uct_ib_device_t *dev, uint8_t num_ports)
 
 static ucs_status_t uct_ib_device_init_async_events(uct_ib_device_t *dev)
 {
-    ucs_status_t status = UCS_OK;
+    ucs_status_t status;
     uint8_t UCS_V_UNUSED port_num;
 
     kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
-    ucs_spinlock_init(&dev->async_event_lock, 0);
+    status = ucs_spinlock_init(&dev->async_event_lock, 0);
+    if (status != UCS_OK) {
+        return status;
+    }
 
 #if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
     for (port_num = 0; port_num < dev->num_ports; ++port_num) {
