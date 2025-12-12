@@ -568,6 +568,8 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     const ucp_ep_config_key_t *ep_config_key     = params->ep_config_key;
     const ucp_rkey_config_key_t *rkey_config_key = params->rkey_config_key;
     const ucp_proto_select_param_t *select_param = params->select_param;
+    const ucp_lane_map_t failed_lanes_map        =
+            ucp_ep_config_get_failed_lanes(ep_config_key);
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane, num_lanes;
     const uct_md_attr_v2_t *md_attr;
@@ -601,7 +603,8 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
         goto out;
     }
 
-    lane_map = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
+    lane_map = (UCS_MASK(ep_config_key->num_lanes) & ~exclude_map) &
+               (~failed_lanes_map);
     ucs_for_each_bit(lane, lane_map) {
         if (num_lanes >= max_lanes) {
             break;

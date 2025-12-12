@@ -25,6 +25,7 @@ typedef enum {
     UCP_LANE_TYPE_CM,                       /* CM wireup */
     UCP_LANE_TYPE_KEEPALIVE,                /* Checks connectivity */
     UCP_LANE_TYPE_DEVICE,                   /* Lane performs device-side operations */
+    UCP_LANE_TYPE_FAILED,                   /* Lane is in failed state, but can be recovered */
     UCP_LANE_TYPE_LAST
 } ucp_lane_type_t;
 

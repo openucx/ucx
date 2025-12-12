@@ -82,7 +82,7 @@ unsigned ucp_cm_client_try_next_cm_progress(void *arg)
         ucs_error("failed to create a uct sockaddr endpoint on %s cm %p",
                   ucp_context_cm_name(context, cm_idx), worker->cms[cm_idx].cm);
 
-        ucp_ep_set_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
+        ucp_ep_set_lane_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -558,7 +558,7 @@ try_fallback:
     }
 
 err:
-    ucp_ep_set_failed(ep, ucp_ep_get_cm_lane(ep), status);
+    ucp_ep_set_lane_failed(ep, ucp_ep_get_cm_lane(ep), status);
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
@@ -617,7 +617,7 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
 
 try_fallback:
     if (!ucp_cm_client_try_fallback_cms(ep)) {
-        ucp_ep_set_failed_schedule(ep, ucp_ep_get_cm_lane(ep), status);
+        ucp_ep_set_lane_failed_schedule(ep, ucp_ep_get_cm_lane(ep), status);
     }
 out:
     return status;
@@ -731,7 +731,7 @@ out_free_addr:
     ucs_free(addr.address_list);
 out:
     if (status != UCS_OK) {
-        ucp_ep_set_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
+        ucp_ep_set_lane_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     }
 
     ucs_log_indent(-1);
@@ -843,7 +843,7 @@ err_free_sa_data:
 err_free_arg:
     ucs_free(progress_arg);
 err_out:
-    ucp_ep_set_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
+    ucp_ep_set_lane_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
 }
 
 static void ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
@@ -880,7 +880,7 @@ static void ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
     }
 
 set_ep_failed:
-    ucp_ep_set_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
+    ucp_ep_set_lane_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
 }
 
 static unsigned ucp_ep_cm_disconnect_progress(void *arg)
@@ -1054,7 +1054,7 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
 
     status = ucp_ep_client_cm_create_uct_ep(ucp_ep);
     if ((status != UCS_OK) && !ucp_cm_client_try_fallback_cms(ucp_ep)) {
-        ucp_ep_set_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
+        ucp_ep_set_lane_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     }
 
     return UCS_OK;
@@ -1399,7 +1399,7 @@ static void ucp_cm_server_conn_notify_cb(
     } else {
         /* if reject is arrived on server side, then UCT does something wrong */
         ucs_assert(status != UCS_ERR_REJECTED);
-        ucp_ep_set_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
+        ucp_ep_set_lane_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     }
 }
 

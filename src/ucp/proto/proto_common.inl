@@ -98,7 +98,11 @@ ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
-    ucp_request_complete_send(req, status);
+    if (ucs_unlikely(status != UCS_OK) && ucp_ep_is_alive(req->send.ep, 0)) {
+        ucp_proto_request_restart(req);
+    } else {
+        ucp_request_complete_send(req, status);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -217,7 +221,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
     }
 
     /* Set pointer to request's protocol configuration */
-    ucs_assert(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index);
+    ucs_assertv(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index,
+                "ep_cfg_index=%u cfg_index=%u", thresh_elem->proto_config.ep_cfg_index, ep->cfg_index);
     ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
     ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
     return UCS_OK;
