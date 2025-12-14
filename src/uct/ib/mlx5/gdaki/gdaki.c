@@ -751,6 +751,7 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 uct_gdaki_dev_matrix_elem_t *
 uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
 {
+    uct_gdaki_dev_matrix_elem_t *dmat = NULL;
     ucs_status_t status;
     int ibdev_index, cudadev_index, ibdev_count, cudadev_count;
     struct ibv_device **device_list;
@@ -759,7 +760,6 @@ uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
     char *path_buffer;
     ucs_sys_device_t cuda_sys_dev;
     const char *sysfs_path;
-    uct_gdaki_dev_matrix_elem_t *dmat;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     CUdevice cuda_dev;
 
