@@ -184,25 +184,10 @@ ucp_check_rkey_elem(const ucp_device_mem_list_elem_t *element, size_t i,
     return UCS_OK;
 }
 
-static ucs_status_t
-ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
-                    ucs_sys_device_t *local_sys_dev, ucp_md_map_t *local_md_map,
-                    int *first_memh)
+static ucs_status_t ucp_check_memh_elem(const ucp_mem_h memh, size_t i,
+                                        ucs_sys_device_t *local_sys_dev,
+                                        ucp_md_map_t *local_md_map)
 {
-    ucp_mem_h memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
-                                     memh, MEMH, NULL);
-
-    if (memh == NULL) {
-        return UCS_OK;
-    }
-
-    if (*first_memh) {
-        *local_sys_dev = memh->sys_dev;
-        *local_md_map  = memh->md_map;
-        *first_memh = 0;
-        return UCS_OK;
-    }
-
     if (memh->sys_dev != *local_sys_dev) {
         ucs_debug("mismatched local sys_dev: ucp_memh[%zu].sys_dev=%u "
                   "first_sys_dev=%u",
@@ -223,6 +208,7 @@ static ucs_status_t ucp_device_mem_list_params_check(
     int first_memh = 1;
     size_t i, num_elements, element_size;
     const ucp_device_mem_list_elem_t *elements, *element;
+    ucp_mem_h memh;
     ucs_status_t status;
 
     if (params == NULL) {
@@ -245,13 +231,24 @@ static ucs_status_t ucp_device_mem_list_params_check(
 
     for (i = 0; i < num_elements; i++) {
         element = UCS_PTR_BYTE_OFFSET(elements, i * element_size);
-        status = ucp_check_rkey_elem(element, i, rkey_cfg_index);
+        status  = ucp_check_rkey_elem(element, i, rkey_cfg_index);
         if (status != UCS_OK) {
             return status;
         }
 
-        status = ucp_check_memh_elem(element, i, local_sys_dev, local_md_map,
-                                     &first_memh);
+        memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh,
+                               MEMH, NULL);
+        if (memh != NULL) {
+            if (first_memh) {
+                *local_sys_dev = memh->sys_dev;
+                *local_md_map  = memh->md_map;
+                first_memh     = 0;
+            } else {
+                status = ucp_check_memh_elem(memh, i, local_sys_dev,
+                                             local_md_map);
+            }
+        }
+
         if (status != UCS_OK) {
             return status;
         }
