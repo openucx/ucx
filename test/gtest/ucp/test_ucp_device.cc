@@ -20,7 +20,6 @@ public:
 
 private:
     static void get_base_variants(std::vector<ucp_test_variant> &variants);
-    static void get_rx_variants(std::vector<ucp_test_variant> &variants);
 
 protected:
     static constexpr size_t MAX_THREADS = 128;
