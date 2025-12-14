@@ -215,12 +215,10 @@ ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
     return UCS_OK;
 }
 
-static ucs_status_t
-ucp_device_mem_list_params_check(ucp_context_h context,
-                                 const ucp_device_mem_list_params_t *params,
-                                 ucp_worker_cfg_index_t *rkey_cfg_index,
-                                 ucs_sys_device_t *local_sys_dev,
-                                 ucp_md_map_t *local_md_map)
+static ucs_status_t ucp_device_mem_list_params_check(
+        ucp_context_h context, const ucp_device_mem_list_params_t *params,
+        ucs_memory_type_t mem_type, ucp_worker_cfg_index_t *rkey_cfg_index,
+        ucs_sys_device_t *local_sys_dev, ucp_md_map_t *local_md_map)
 {
     int first_memh = 1;
     size_t i, num_elements, element_size;
@@ -260,8 +258,8 @@ ucp_device_mem_list_params_check(ucp_context_h context,
     }
 
     if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        status    = ucp_device_detect_local_sys_dev(context, UCS_MEMORY_TYPE_CUDA,
-                                                    local_sys_dev);
+        status = ucp_device_detect_local_sys_dev(context, mem_type,
+                                                 local_sys_dev);
         if (status != UCS_OK) {
             return status;
         }
@@ -533,6 +531,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
                            const ucp_device_mem_list_params_t *params,
                            ucp_device_mem_list_handle_h *handle_p)
 {
+    ucs_memory_type_t export_mem_type     = UCS_MEMORY_TYPE_CUDA;
     ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
     ucp_lane_index_t lanes[UCP_DEVICE_MEM_LIST_MAX_EPS];
     ucs_status_t status;
@@ -544,8 +543,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
 
     /* Parameter sanity checks and extraction */
     status = ucp_device_mem_list_params_check(ep->worker->context, params,
-                                              &rkey_cfg_index, &local_sys_dev,
-                                              &local_md_map);
+                                              export_mem_type, &rkey_cfg_index,
+                                              &local_sys_dev, &local_md_map);
     if (status != UCS_OK) {
         return status;
     }
@@ -574,7 +573,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
 
     /* Handle creation with lanes and parameters */
     status = ucp_device_mem_list_create_handle(ep, local_sys_dev, params, lanes,
-                                               ep_config, UCS_MEMORY_TYPE_CUDA,
+                                               ep_config, export_mem_type,
                                                &mem);
     if (status != UCS_OK) {
         /*
