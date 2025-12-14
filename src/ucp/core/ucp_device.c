@@ -290,6 +290,7 @@ static void ucp_device_mem_list_lane_lookup(
         }
 
         lane_key = &ep_config->key.lanes[lane];
+        /* Check lane remote sys dev only when remote memory is not host */
         if ((remote_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
             (remote_sys_dev != lane_key->dst_sys_dev)) {
             ucs_trace("lane[%u] wrong destination sys_dev: dst_sys_dev=%u",
@@ -527,8 +528,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
                            const ucp_device_mem_list_params_t *params,
                            ucp_device_mem_list_handle_h *handle_p)
 {
-    ucs_memory_type_t export_mem_type     = UCS_MEMORY_TYPE_CUDA;
-    ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
+    ucp_worker_cfg_index_t rkey_cfg_index   = UCP_WORKER_CFG_INDEX_NULL;
     ucp_lane_index_t lanes[UCP_DEVICE_MEM_LIST_MAX_EPS];
     ucs_status_t status;
     ucp_rkey_config_t *rkey_config;
@@ -649,7 +650,6 @@ ucs_status_t ucp_device_counter_init(ucp_worker_h worker,
     ucp_dt_contig_unpack(worker, counter_ptr, &counter_value,
                          sizeof(counter_value), mem_type,
                          sizeof(counter_value));
-
     return UCS_OK;
 }
 
@@ -664,6 +664,5 @@ uint64_t ucp_device_counter_read(ucp_worker_h worker,
                                            params);
     ucp_dt_contig_pack(worker, &counter_value, counter_ptr,
                        sizeof(counter_value), mem_type, sizeof(counter_value));
-
     return counter_value;
 }
