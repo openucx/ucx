@@ -657,8 +657,8 @@ uint64_t ucp_device_counter_read(ucp_worker_h worker,
                                  const ucp_device_counter_params_t *params,
                                  void *counter_ptr)
 {
+    uint64_t counter_value = 0;
     ucs_memory_type_t mem_type;
-    uint64_t counter_value;
 
     mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
                                            params);
