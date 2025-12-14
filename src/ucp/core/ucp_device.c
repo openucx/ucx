@@ -128,7 +128,8 @@ ucp_check_rkey_elem(const ucp_device_mem_list_elem_t *element, size_t i,
 
 static ucs_status_t
 ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
-                    ucs_sys_device_t *local_sys_dev, ucp_md_map_t *local_md_map)
+                    ucs_sys_device_t *local_sys_dev, ucp_md_map_t *local_md_map,
+                    int *first_memh)
 {
     ucp_mem_h memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
                                      memh, MEMH, NULL);
@@ -137,9 +138,10 @@ ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
         return UCS_OK;
     }
 
-    if (i == 0) {
+    if (*first_memh) {
         *local_sys_dev = memh->sys_dev;
         *local_md_map  = memh->md_map;
+        *first_memh = 0;
         return UCS_OK;
     }
 
@@ -162,6 +164,7 @@ ucp_device_mem_list_params_check(ucp_context_h context,
                                  ucs_sys_device_t *local_sys_dev,
                                  ucp_md_map_t *local_md_map)
 {
+    int first_memh = 1;
     size_t i, num_elements, element_size;
     const ucp_device_mem_list_elem_t *elements, *element;
     ucs_status_t status;
@@ -191,7 +194,8 @@ ucp_device_mem_list_params_check(ucp_context_h context,
             return status;
         }
 
-        status = ucp_check_memh_elem(element, i, local_sys_dev, local_md_map);
+        status = ucp_check_memh_elem(element, i, local_sys_dev, local_md_map,
+                                     &first_memh);
         if (status != UCS_OK) {
             return status;
         }
