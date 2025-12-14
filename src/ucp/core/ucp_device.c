@@ -11,6 +11,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_types.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/dt/dt_contig.h>
 #include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_types.h>
 #include <ucs/type/param.h>
@@ -650,12 +651,9 @@ ucs_status_t ucp_device_counter_init(ucp_worker_h worker,
 
     mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
                                            params);
-    if (UCP_MEM_IS_HOST(mem_type)) {
-        memcpy(counter_ptr, &counter_value, sizeof(counter_value));
-    } else {
-        ucp_mem_type_unpack(worker, counter_ptr, &counter_value,
-                            sizeof(counter_value), mem_type);
-    }
+    ucp_dt_contig_unpack(worker, counter_ptr, &counter_value,
+                         sizeof(counter_value), mem_type,
+                         sizeof(counter_value));
 
     return UCS_OK;
 }
@@ -669,12 +667,8 @@ uint64_t ucp_device_counter_read(ucp_worker_h worker,
 
     mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
                                            params);
-    if (UCP_MEM_IS_HOST(mem_type)) {
-        memcpy(&counter_value, counter_ptr, sizeof(counter_value));
-    } else {
-        ucp_mem_type_pack(worker, &counter_value, counter_ptr,
-                          sizeof(counter_value), mem_type);
-    }
+    ucp_dt_contig_pack(worker, &counter_value, counter_ptr,
+                       sizeof(counter_value), mem_type, sizeof(counter_value));
 
     return counter_value;
 }
