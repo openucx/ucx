@@ -564,7 +564,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
             remote_sys_dev, local_md_map, remote_md_map);
 
     if (local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_error("ep %p local or remote unknown sys_dev", ep);
+        ucs_error("ep %p unknown local sys_dev", ep);
         return UCS_ERR_NO_DEVICE;
     }
 
