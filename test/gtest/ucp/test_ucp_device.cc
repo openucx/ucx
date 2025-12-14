@@ -28,10 +28,6 @@ protected:
     ucs_memory_type_t rx_mem_type() const {
         return static_cast<ucs_memory_type_t>(get_variant_value());
     }
-    
-    ucs_memory_type_t tx_mem_type() const {
-        return static_cast<ucs_memory_type_t>(get_variant_value(1));
-    }
 
     class mem_list {
     public:
@@ -45,6 +41,7 @@ protected:
         };
 
         mem_list(test_ucp_device &test, size_t size, unsigned count,
+                 ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA,
                  mem_list_mode_t mode = MODE_DATA_ONLY);
         ~mem_list();
 
@@ -86,16 +83,9 @@ void test_ucp_device::get_base_variants(std::vector<ucp_test_variant> &variants)
                 UCP_FEATURE_RMA | UCP_FEATURE_AMO64 | UCP_FEATURE_DEVICE);
 }
 
-void test_ucp_device::get_rx_variants(std::vector<ucp_test_variant> &variants)
-{
-    add_variant_memtypes(variants, get_base_variants,
-                         UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                         UCS_BIT(UCS_MEMORY_TYPE_HOST));
-}
-
 void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
 {
-    add_variant_memtypes(variants, get_rx_variants,
+    add_variant_memtypes(variants, get_base_variants,
                          UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                          UCS_BIT(UCS_MEMORY_TYPE_HOST));
 }
@@ -111,8 +101,8 @@ void test_ucp_device::init()
     }
 }
 
-test_ucp_device::mem_list::mem_list(test_ucp_device &test,
-                                    size_t size, unsigned count,
+test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
+                                    unsigned count, ucs_memory_type_t mem_type,
                                     mem_list_mode_t mode)
 {
     bool has_counter  = (mode != MODE_DATA_ONLY);
@@ -121,8 +111,7 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test,
 
     // Prepare src and dst buffers
     for (auto i = 0; i < data_count; ++i) {
-        m_src.emplace_back(
-                new mapped_buffer(size, test.sender(), 0, test.tx_mem_type()));
+        m_src.emplace_back(new mapped_buffer(size, test.sender(), 0, mem_type));
         m_dst.emplace_back(new mapped_buffer(size, test.receiver(), 0,
                                              test.rx_mem_type()));
         m_rkeys.push_back(m_dst.back()->rkey(test.sender()));
@@ -392,7 +381,7 @@ public:
 protected:
     ucs_device_level_t get_device_level() const
     {
-        return static_cast<ucs_device_level_t>(get_variant_value(2));
+        return static_cast<ucs_device_level_t>(get_variant_value(1));
     }
 
     test_ucp_device_kernel_params_t init_params(unsigned num_iters = 1)
@@ -530,7 +519,7 @@ protected:
 
     send_mode_t get_send_mode() const
     {
-        return static_cast<send_mode_t>(get_variant_value(3));
+        return static_cast<send_mode_t>(get_variant_value(2));
     }
 
     virtual unsigned get_num_threads() const override
@@ -649,7 +638,8 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi)
 {
     static constexpr size_t size = 32 * UCS_KBYTE;
     unsigned count               = get_multi_elem_count();
-    mem_list list(*this, size, count + 1, mem_list::MODE_LAST_ELEM_COUNTER);
+    mem_list list(*this, size, count + 1, UCS_MEMORY_TYPE_CUDA,
+                  mem_list::MODE_LAST_ELEM_COUNTER);
 
     const unsigned counter_index = count;
     list.dst_counter_init(counter_index);
@@ -704,7 +694,7 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi_partial)
 {
     static constexpr size_t size = 32 * UCS_KBYTE;
     unsigned total_count         = get_multi_elem_count() * 2;
-    mem_list list(*this, size, total_count + 1,
+    mem_list list(*this, size, total_count + 1, UCS_MEMORY_TYPE_CUDA,
                   mem_list::MODE_LAST_ELEM_COUNTER);
 
     const unsigned counter_index = total_count;
@@ -755,7 +745,8 @@ UCS_TEST_P(test_ucp_device_xfer, put_multi_partial)
 UCS_TEST_P(test_ucp_device_xfer, counter)
 {
     const size_t size = counter_size();
-    mem_list list(*this, size, 1, mem_list::MODE_COUNTER_ONLY);
+    mem_list list(*this, size, 1, UCS_MEMORY_TYPE_CUDA,
+                  mem_list::MODE_COUNTER_ONLY);
 
     static constexpr unsigned mem_list_index = 0;
     list.dst_counter_init(mem_list_index);
