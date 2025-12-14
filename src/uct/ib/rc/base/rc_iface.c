@@ -173,9 +173,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     ucs_status_t status;
 
-    status = uct_ib_iface_query(&iface->super,
-                                ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
-                                iface_attr);
+    status = uct_ib_iface_query(&iface->super, iface_attr);
     if (status != UCS_OK) {
         return status;
     }

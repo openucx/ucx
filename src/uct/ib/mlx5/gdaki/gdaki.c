@@ -348,7 +348,7 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                                                  uct_rc_gdaki_iface_t);
     ucs_status_t status;
 
-    status = uct_ib_iface_query(&iface->super.super.super, 0, iface_attr);
+    status = uct_ib_iface_query(&iface->super.super.super, iface_attr);
     if (status != UCS_OK) {
         return status;
     }

@@ -184,7 +184,8 @@ typedef struct {
     double              recv_overhead;
 
     /**
-     * Bandwidth model. This field is set by the UCT layer.
+     * Represent actual bandwidth of the interface.
+     * This field is set by the UCT layer.
      */
     uct_ppn_bandwidth_t bandwidth;
 

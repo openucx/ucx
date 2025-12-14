@@ -341,7 +341,7 @@ uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     size_t iface_mtu      = uct_ib_mtu_value(iface->super.config.path_mtu);
     ucs_status_t status;
 
-    status = uct_ib_iface_query(&iface->super, UCT_IB_RETH_LEN, iface_attr);
+    status = uct_ib_iface_query(&iface->super, iface_attr);
     if (status != UCS_OK) {
         return status;
     }
@@ -792,6 +792,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
     ucs_status_t status;
     uct_ib_mlx5_dp_ordering_t dp_ordering;
 
+    init_attr.xport_hdr_len         = UCT_IB_RETH_LEN;
     init_attr.qp_type               = IBV_QPT_RC;
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,

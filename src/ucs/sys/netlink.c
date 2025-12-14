@@ -28,9 +28,7 @@
 typedef struct {
     const struct sockaddr *sa_remote;
     int                    if_index;
-    int                    found;
-    int                    allow_default_gw; /* Allow matching default
-                                                gateway routes */
+    int                    netmask_len;
 } ucs_netlink_route_info_t;
 
 
@@ -249,44 +247,29 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
     return UCS_INPROGRESS;
 }
 
-static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
+static int
+ucs_netlink_lookup_in_iface_rules(const struct sockaddr *sa_remote,
+                                  ucs_netlink_rt_rules_t *iface_rules)
 {
-    ucs_netlink_rt_rules_t *iface_rules;
+    int found_netmask_len = -1;
     ucs_netlink_route_entry_t *curr_entry;
-    khiter_t iter;
 
-    iter = kh_get(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
-                  info->if_index);
-    if (iter == kh_end(&ucs_netlink_routing_table_cache)) {
-        info->found = 0;
-        return;
-    }
-
-    iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     ucs_array_for_each(curr_entry, iface_rules) {
-
-        if ((curr_entry->subnet_prefix_len == 0) && !info->allow_default_gw) {
-            ucs_trace("iface_index=%d: skipping default gateway route",
-                      info->if_index);
-            continue;
-        }
-
-        if (ucs_sockaddr_is_same_subnet(
-                                info->sa_remote,
-                                (const struct sockaddr *)&curr_entry->dest,
-                                curr_entry->subnet_prefix_len)) {
-            info->found = 1;
-            return;
+        if ((curr_entry->subnet_prefix_len > found_netmask_len) &&
+            ucs_sockaddr_is_same_subnet(
+                    sa_remote, (const struct sockaddr*)&curr_entry->dest,
+                    curr_entry->subnet_prefix_len)) {
+            found_netmask_len = curr_entry->subnet_prefix_len;
         }
     }
+
+    return found_netmask_len;
 }
 
-int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
-                             int allow_default_gw)
+static void ucs_netlink_init_routing_table_cache(void)
 {
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     struct rtmsg rtm                 = {0};
-    ucs_netlink_route_info_t info;
 
     UCS_INIT_ONCE(&init_once) {
         rtm.rtm_table  = RT_TABLE_UNSPEC; /* fetch all the tables */
@@ -300,13 +283,67 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
                                  sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
                                  NULL);
     }
+}
 
-    info.if_index         = if_index;
-    info.sa_remote        = sa_remote;
-    info.found            = 0;
-    info.allow_default_gw = allow_default_gw;
+static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
+{
+    ucs_netlink_rt_rules_t *iface_rules;
+    khiter_t iter;
+
+    ucs_netlink_init_routing_table_cache();
+
+    iter = kh_get(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
+                  info->if_index);
+    if (iter == kh_end(&ucs_netlink_routing_table_cache)) {
+        return;
+    }
+
+    iface_rules       = &kh_val(&ucs_netlink_routing_table_cache, iter);
+    info->netmask_len = ucs_netlink_lookup_in_iface_rules(info->sa_remote,
+                                                          iface_rules);
+}
+
+static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
+{
+    int max_netmask_len = -1;
+    ucs_netlink_rt_rules_t iface_rules;
+
+    kh_foreach_value(&ucs_netlink_routing_table_cache, iface_rules, {
+        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules(sa_remote,
+                                                                 &iface_rules);
+        if (curr_netmask_len > max_netmask_len) {
+            max_netmask_len = curr_netmask_len;
+        }
+    })
+
+    return max_netmask_len;
+}
+
+int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
+                             int *netmask_len_p)
+{
+    ucs_netlink_route_info_t info = {
+        .if_index    = if_index,
+        .sa_remote   = sa_remote,
+        .netmask_len = -1
+    };
 
     ucs_netlink_lookup_route(&info);
 
-    return info.found;
+    if (netmask_len_p != NULL) {
+        *netmask_len_p = info.netmask_len;
+    }
+
+    return (info.netmask_len > -1);
+}
+
+int ucs_netlink_is_best_route(int if_index, const struct sockaddr *sa_remote)
+{
+    int netmask_len;
+
+    if (!ucs_netlink_route_exists(if_index, sa_remote, &netmask_len)) {
+        return 0;
+    }
+
+    return (ucs_netlink_max_netmask_len(sa_remote) == netmask_len);
 }

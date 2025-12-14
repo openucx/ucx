@@ -139,11 +139,6 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
     dev_addr->flags     = 0;
     dev_addr->sa_family = saddr->sa_family;
 
-    /* Default gateway is not relevant for IPoIB interfaces */
-    if (!ucs_netif_is_ipoib(iface->if_name)) {
-        dev_addr->flags |= UCT_TCP_DEVICE_ADDR_FLAG_ALLOW_DEFAULT_GW;
-    }
-
     if (ucs_sockaddr_is_inaddr_loopback(saddr)) {
         dev_addr->flags |= UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK;
         memset(pack_ptr, 0, sizeof(uct_iface_local_addr_ns_t));
@@ -211,7 +206,6 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     struct sockaddr_storage remote_addr;
     char remote_addr_str[UCS_SOCKADDR_STRING_LEN];
     unsigned ndev_index;
-    int allow_default_gw;
     ucs_status_t status;
 
     if (!uct_iface_is_reachable_params_valid(
@@ -270,12 +264,8 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    allow_default_gw = !!(tcp_dev_addr->flags &
-                          UCT_TCP_DEVICE_ADDR_FLAG_ALLOW_DEFAULT_GW);
-
-    if (!ucs_netlink_route_exists(ndev_index,
-                                  (const struct sockaddr *)&remote_addr,
-                                  allow_default_gw)) {
+    if (!ucs_netlink_is_best_route(ndev_index,
+                                   (const struct sockaddr*)&remote_addr)) {
         uct_iface_fill_info_str_buf(
                     params, "no route to %s",
                     ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
@@ -283,6 +273,11 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
+    /* This interface has the best route */
+    ucs_trace("tcp_iface %p (%s): this interface has the best route to %s",
+              iface, iface->if_name,
+              ucs_sockaddr_str((const struct sockaddr*)&remote_addr,
+                               remote_addr_str, UCS_SOCKADDR_STRING_LEN));
     return 1;
 }
 
