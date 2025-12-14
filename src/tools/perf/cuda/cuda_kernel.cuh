@@ -86,7 +86,7 @@ ucx_perf_cuda_get_sn(const void *address, size_t length)
 UCS_F_DEVICE void ucx_perf_cuda_wait_sn(const uint64_t *sn, uint64_t value)
 {
     if (threadIdx.x == 0) {
-        //TODO - Support host memory
+        /* TODO support host memory */
         while (ucs_device_atomic64_read(sn) < value);
     }
     __syncthreads();
