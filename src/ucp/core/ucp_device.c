@@ -246,11 +246,10 @@ static ucs_status_t ucp_device_mem_list_params_check(
             } else {
                 status = ucp_check_memh_elem(memh, i, local_sys_dev,
                                              local_md_map);
+                if (status != UCS_OK) {
+                    return status;
+                }
             }
-        }
-
-        if (status != UCS_OK) {
-            return status;
         }
     }
 
