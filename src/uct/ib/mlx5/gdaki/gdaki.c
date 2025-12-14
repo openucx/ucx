@@ -748,9 +748,8 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
            ucs_signum(a->usecount - b->usecount);
 }
 
-ucs_status_t uct_gdaki_dev_matrix_init(unsigned ib_per_cuda,
-                                       uct_gdaki_dev_matrix_elem_t **dmat_p,
-                                       size_t *dmat_length_p)
+uct_gdaki_dev_matrix_elem_t *
+uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
 {
     ucs_status_t status;
     int ibdev_index, cudadev_index, ibdev_count, cudadev_count;
@@ -766,7 +765,7 @@ ucs_status_t uct_gdaki_dev_matrix_init(unsigned ib_per_cuda,
 
     status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
     if (status != UCS_OK) {
-        return UCS_ERR_NO_MEMORY;
+        return NULL;
     }
 
     /* Obtain the list of IB devices */
@@ -844,8 +843,7 @@ ucs_status_t uct_gdaki_dev_matrix_init(unsigned ib_per_cuda,
         }
     }
 
-    /* Output processed device matrix */
-    *dmat_p        = dmat;
+    /* Output processed device matrix length */
     *dmat_length_p = ibdev_count;
 
 out:
@@ -853,12 +851,13 @@ out:
 out_dmat:
     if (status != UCS_OK) {
         ucs_free(dmat);
+        dmat = NULL;
     }
 out_dev:
     ibv_free_device_list(device_list);
 out_buff:
     ucs_free(path_buffer);
-    return status;
+    return dmat;
 }
 
 static ucs_status_t
@@ -867,7 +866,6 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
                            unsigned *num_tl_devices_p)
 {
     static ucs_init_once_t dmat_once = UCS_INIT_ONCE_INITIALIZER;
-    static ucs_status_t dmat_status;
     static uct_gdaki_dev_matrix_elem_t *dmat;
     static size_t dmat_length;
     static int uar_supported  = -1;
@@ -901,12 +899,12 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     }
 
     UCS_INIT_ONCE(&dmat_once) {
-        dmat_status = uct_gdaki_dev_matrix_init(
-                md->super.config.gda_max_hca_per_gpu, &dmat, &dmat_length);
+        dmat = uct_gdaki_dev_matrix_init(md->super.config.gda_max_hca_per_gpu,
+                                         &dmat_length);
     }
 
-    if (dmat_status != UCS_OK) {
-        status = dmat_status;
+    if (dmat == NULL) {
+        status = UCS_ERR_NO_DEVICE;
         goto out;
     }
 
