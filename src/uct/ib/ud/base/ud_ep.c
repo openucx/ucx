@@ -728,6 +728,17 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         return;
     }
 
+    /* Ignore ACK for packets we never sent. This can happen if a stale ACK
+     * arrives after the endpoint was reset (e.g., due to reconnection).
+     * A valid ACK must acknowledge a PSN that was actually transmitted:
+     * ack_psn must be in the range (acked_psn, psn). */
+    if (ucs_unlikely(UCT_UD_PSN_COMPARE(ep->tx.psn, <=, ack_psn))) {
+        ucs_trace("ep %p: ignoring invalid ack_psn=%u (tx.psn=%u acked_psn=%u)"
+                  " - possibly stale from previous connection",
+                  ep, ack_psn, ep->tx.psn, ep->tx.acked_psn);
+        return;
+    }
+
     ep->tx.acked_psn = ack_psn;
     ucs_assertv(UCT_UD_PSN_COMPARE(ep->tx.acked_psn, <, ep->tx.psn),
                 "ep %p: flags=0x%x acked_psn=%u must be smaller than"

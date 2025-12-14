@@ -918,6 +918,74 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 }
 #endif
 
+#if UCT_UD_EP_DEBUG_HOOKS
+/* Stale ACK PSN to inject - simulates ACK from before endpoint reset */
+static volatile uct_ud_psn_t stale_ack_psn_to_inject = 0;
+
+static ucs_status_t inject_stale_ack_psn(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+{
+    if (stale_ack_psn_to_inject != 0) {
+        neth->ack_psn = stale_ack_psn_to_inject;
+    }
+    return UCS_OK;
+}
+
+/* Test that stale ACKs (from before endpoint reset) are correctly rejected.
+ * This reproduces the bug where:
+ *   - Endpoint communicates with high PSN (e.g., 135)
+ *   - Endpoint resets (PSN goes back to initial, e.g., 3)
+ *   - Stale ACK arrives with old high PSN (135)
+ *   - Without fix: assertion fails because acked_psn (135) >= current_psn (3)
+ *   - With fix: stale ACK is silently ignored
+ *
+ * This test will CRASH without the fix due to assertion failure.
+ */
+UCS_TEST_SKIP_COND_P(test_ud, stale_ack_after_reset,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    disable_async(m_e1);
+    disable_async(m_e2);
+    connect();
+    set_tx_win(m_e1, 1024);
+    set_tx_win(m_e2, 1024);
+
+    uct_ud_ep_t *ud_ep1 = ep(m_e1);
+
+    /* Send some data to advance PSN */
+    for (int i = 0; i < 5; i++) {
+        EXPECT_UCS_OK(tx(m_e1));
+    }
+    flush();
+
+    /* Now simulate endpoint reset on m_e1:
+     * In real scenario this happens during reconnection.
+     * Reset PSN to low values as if endpoint was just created. */
+    uct_ud_enter(iface(m_e1));
+    ud_ep1->tx.psn       = 3;   /* Next PSN to send */
+    ud_ep1->tx.acked_psn = 0;   /* Last ACKed PSN */
+    ucs_queue_head_init(&ud_ep1->tx.window);  /* Clear TX window */
+    uct_ud_leave(iface(m_e1));
+
+    /* Set up TX hook on m_e2 to inject stale ack_psn in outgoing packets.
+     * This simulates a delayed/stale packet arriving after reset. */
+    stale_ack_psn_to_inject = 135;
+    ep(m_e2)->tx.tx_hook = inject_stale_ack_psn;
+
+    /* m_e2 sends a packet. Due to the hook, it will contain ack_psn=135.
+     * When m_e1 receives this packet:
+     *   - Without fix: assertion "acked_psn < current_psn" fails (135 < 3) -> CRASH
+     *   - With fix: stale ACK is detected and ignored -> no crash */
+    EXPECT_UCS_OK(tx(m_e2));
+    short_progress_loop();
+
+    /* If we reach here, the fix works - stale ACK was rejected */
+    stale_ack_psn_to_inject = 0;
+    ep(m_e2)->tx.tx_hook = uct_ud_ep_null_hook;
+
+    /* Verify endpoint state wasn't corrupted by the stale ACK */
+    EXPECT_EQ(0, ud_ep1->tx.acked_psn);  /* Should NOT be 135 */
+}
+#endif
+
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
 
 
