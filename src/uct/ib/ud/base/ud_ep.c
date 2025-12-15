@@ -733,7 +733,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
      * A valid ACK must acknowledge a PSN that was actually transmitted:
      * ack_psn must be in the range (acked_psn, psn). */
     if (ucs_unlikely(UCT_UD_PSN_COMPARE(ep->tx.psn, <=, ack_psn))) {
-        ucs_trace("ep %p: ignoring invalid ack_psn=%u (tx.psn=%u acked_psn=%u)"
+        ucs_debug("ep %p: ignoring invalid ack_psn=%u (tx.psn=%u acked_psn=%u)"
                   " - possibly stale from previous connection",
                   ep, ack_psn, ep->tx.psn, ep->tx.acked_psn);
         return;
