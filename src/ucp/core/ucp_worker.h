@@ -394,10 +394,10 @@ typedef struct ucp_worker {
     } counters;
 
     struct {
-        /* Worker-level ppln fragment flow control */
+        /* Worker-level mtype fragment flow control */
         size_t                       active_frags;       /* Current active fragments */
-        ucs_queue_head_t             pending_q;          /* Queue of throttled ppln requests */
-    } rndv_ppln_fc;
+        ucs_queue_head_t             pending_q;          /* Queue of throttled mtype requests */
+    } rndv_mtype_fc;
 
     struct {
         /* Usage tracker handle */

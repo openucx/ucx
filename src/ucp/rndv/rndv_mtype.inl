@@ -190,16 +190,16 @@ ucp_proto_rndv_mtype_fc_check(ucp_request_t *req)
     ucp_worker_h worker   = req->send.ep->worker;
     ucp_context_h context = worker->context;
 
-    if (!context->config.ext.rndv_ppln_worker_fc_enable) {
+    if (!context->config.ext.rndv_mtype_worker_fc_enable) {
         return UCS_OK;
     }
 
-    if (worker->rndv_ppln_fc.active_frags >=
-        context->config.ext.rndv_ppln_worker_max_frags) {
+    if (worker->rndv_mtype_fc.active_frags >=
+        context->config.ext.rndv_mtype_worker_max_frags) {
         ucs_trace_req("mtype_fc: throttle limit reached active_frags=%zu max=%zu",
-                      worker->rndv_ppln_fc.active_frags,
-                      context->config.ext.rndv_ppln_worker_max_frags);
-        ucs_queue_push(&worker->rndv_ppln_fc.pending_q,
+                      worker->rndv_mtype_fc.active_frags,
+                      context->config.ext.rndv_mtype_worker_max_frags);
+        ucs_queue_push(&worker->rndv_mtype_fc.pending_q,
                        &req->send.rndv.ppln.queue_elem);
         return UCS_ERR_NO_RESOURCE;
     }
@@ -215,8 +215,8 @@ ucp_proto_rndv_mtype_fc_increment(ucp_request_t *req)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
-    if (worker->context->config.ext.rndv_ppln_worker_fc_enable) {
-        worker->rndv_ppln_fc.active_frags++;
+    if (worker->context->config.ext.rndv_mtype_worker_fc_enable) {
+        worker->rndv_mtype_fc.active_frags++;
     }
 }
 
@@ -229,18 +229,18 @@ ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
     ucp_worker_h worker   = req->send.ep->worker;
     ucp_context_h context = worker->context;
 
-    if (!context->config.ext.rndv_ppln_worker_fc_enable) {
+    if (!context->config.ext.rndv_mtype_worker_fc_enable) {
         return;
     }
 
-    ucs_assert(worker->rndv_ppln_fc.active_frags > 0);
-    worker->rndv_ppln_fc.active_frags--;
+    ucs_assert(worker->rndv_mtype_fc.active_frags > 0);
+    worker->rndv_mtype_fc.active_frags--;
 
-    if (!ucs_queue_is_empty(&worker->rndv_ppln_fc.pending_q)) {
+    if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q)) {
         ucp_request_t *pending_req;
         ucs_queue_elem_t *elem;
 
-        elem        = ucs_queue_pull(&worker->rndv_ppln_fc.pending_q);
+        elem        = ucs_queue_pull(&worker->rndv_mtype_fc.pending_q);
         pending_req = ucs_container_of(elem, ucp_request_t,
                                        send.rndv.ppln.queue_elem);
         ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
