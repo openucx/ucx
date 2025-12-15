@@ -106,7 +106,8 @@ uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md, void *address, size_t length)
     };
 
     if (uct_gdaki_is_dmabuf_supported(md)) {
-        return uct_cuda_copy_md_get_dmabuf(address, length);
+        return uct_cuda_copy_md_get_dmabuf(address, length,
+                                           UCS_SYS_DEVICE_ID_UNKNOWN);
     }
 
     return dmabuf;

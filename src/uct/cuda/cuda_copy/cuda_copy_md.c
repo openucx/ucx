@@ -910,9 +910,9 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
     return UCT_DMABUF_FD_INVALID;
 }
 
-static uct_cuda_copy_md_dmabuf_t
-uct_cuda_copy_md_get_dmabuf_internal(const void *address, size_t length,
-                                     ucs_sys_device_t sys_dev)
+uct_cuda_copy_md_dmabuf_t
+uct_cuda_copy_md_get_dmabuf(const void *address, size_t length,
+                            ucs_sys_device_t sys_dev)
 {
     uct_cuda_copy_md_dmabuf_t dmabuf;
     uintptr_t base_address, aligned_start, aligned_end;
@@ -925,13 +925,6 @@ uct_cuda_copy_md_get_dmabuf_internal(const void *address, size_t length,
                                                  sys_dev);
     dmabuf.offset = base_address - aligned_start;
     return dmabuf;
-}
-
-uct_cuda_copy_md_dmabuf_t
-uct_cuda_copy_md_get_dmabuf(const void *address, size_t length)
-{
-    return uct_cuda_copy_md_get_dmabuf_internal(address, length,
-                                                UCS_SYS_DEVICE_ID_UNKNOWN);
 }
 
 ucs_status_t
@@ -990,7 +983,7 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
 
     if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ||
         (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET)) {
-        dmabuf = uct_cuda_copy_md_get_dmabuf_internal(
+        dmabuf = uct_cuda_copy_md_get_dmabuf(
                 addr_mem_info.base_address, addr_mem_info.alloc_length,
                 addr_mem_info.sys_dev);
         if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
