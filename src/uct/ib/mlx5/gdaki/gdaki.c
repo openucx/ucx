@@ -12,12 +12,16 @@
 
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
+#include <ucs/algorithm/qsort_r.h>
+#include <ucs/type/init_once.h>
 #include <ucs/type/serialize.h>
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 #include <uct/cuda/base/cuda_iface.h>
 
 #include <cuda.h>
+
+#define UCT_GDAKI_MAX_CUDA_PER_IB 64
 
 
 typedef struct {
@@ -722,11 +726,148 @@ out:
     return status;
 }
 
+typedef struct {
+    unsigned               index;
+    ucs_sys_dev_distance_t dist;
+    int                    usecount;
+} uct_gdaki_dev_score_t;
+
+typedef struct {
+    ucs_sys_device_t sys_dev;
+    uint64_t         cuda_map;
+} uct_gdaki_dev_matrix_elem_t;
+
+static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
+{
+    const uct_gdaki_dev_score_t *a = pa;
+    const uct_gdaki_dev_score_t *b = pb;
+
+    /* Prefer lower latency device, and if same latency prefer the less utilized */
+    return (ucs_fp_compare(a->dist.latency, b->dist.latency) *
+            UCT_GDAKI_MAX_CUDA_PER_IB) +
+           ucs_signum(a->usecount - b->usecount);
+}
+
+uct_gdaki_dev_matrix_elem_t *
+uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
+{
+    uct_gdaki_dev_matrix_elem_t *dmat = NULL;
+    ucs_status_t status;
+    int ibdev_index, cudadev_index, ibdev_count, cudadev_count;
+    struct ibv_device **device_list;
+    struct ibv_device *ibdev;
+    uct_gdaki_dev_score_t *scores;
+    char *path_buffer;
+    ucs_sys_device_t cuda_sys_dev;
+    const char *sysfs_path;
+    uct_gdaki_dev_matrix_elem_t *ibdesc;
+    CUdevice cuda_dev;
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    /* Obtain the list of IB devices */
+    device_list = ibv_get_device_list(&ibdev_count);
+    if (device_list == NULL) {
+        status = UCS_ERR_IO_ERROR;
+        goto out_buff;
+    }
+
+    ucs_assert(ibdev_count > 0);
+    /* Allocate memory for device matrix */
+    dmat = ucs_calloc(ibdev_count, sizeof(*dmat), "dev matrix");
+    if (dmat == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_dev;
+    }
+
+    /* Allocate memory for device scores */
+    scores = ucs_calloc(ibdev_count, sizeof(*scores), "dev scores");
+    if (scores == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_dmat;
+    }
+
+    /* Initialize each IB device, retrieve its system device representation */
+    for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
+        ibdesc          = &dmat[ibdev_index];
+        ibdev           = device_list[ibdev_index];
+        sysfs_path      = ucs_topo_resolve_sysfs_path(ibdev->ibdev_path,
+                                                      path_buffer);
+        ibdesc->sys_dev = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
+                                                 sysfs_path, 0);
+        scores[ibdev_index].index = ibdev_index;
+    }
+
+    /* Get the number of CUDA devices */
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cudadev_count));
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (cudadev_count == 0) {
+        goto out;
+    }
+
+    ucs_assert(cudadev_count < UCT_GDAKI_MAX_CUDA_PER_IB);
+
+    /* Map each CUDA device to the best suited IB devices */
+    for (cudadev_index = 0; cudadev_index < cudadev_count; cudadev_index++) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDeviceGet(&cuda_dev, cudadev_index));
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        /* Update PCI distance in IB device scores */
+        uct_cuda_base_get_sys_dev(cuda_dev, &cuda_sys_dev);
+        for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
+            ibdesc = &dmat[scores[ibdev_index].index];
+            status = ucs_topo_get_distance(cuda_sys_dev, ibdesc->sys_dev,
+                                           &scores[ibdev_index].dist);
+            if (status != UCS_OK) {
+                goto out;
+            }
+        }
+
+        /* Sort and select the best suited IB devices for this CUDA device */
+        ucs_qsort_r(scores, ibdev_count, sizeof(*scores),
+                    uct_gdaki_dev_matrix_score, NULL);
+
+        for (ibdev_index = 0; ibdev_index < ib_per_cuda; ibdev_index++) {
+            ibdesc            = &dmat[scores[ibdev_index].index];
+            ibdesc->cuda_map |= UCS_BIT(cudadev_index);
+            scores[ibdev_index].usecount++;
+        }
+    }
+
+    /* Output processed device matrix length */
+    *dmat_length_p = ibdev_count;
+
+out:
+    ucs_free(scores);
+out_dmat:
+    if (status != UCS_OK) {
+        ucs_free(dmat);
+        dmat = NULL;
+    }
+out_dev:
+    ibv_free_device_list(device_list);
+out_buff:
+    ucs_free(path_buffer);
+    return dmat;
+}
+
 static ucs_status_t
 uct_gdaki_query_tl_devices(uct_md_h tl_md,
                            uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p)
 {
+    static ucs_init_once_t dmat_once = UCS_INIT_ONCE_INITIALIZER;
+    static uct_gdaki_dev_matrix_elem_t *dmat;
+    static size_t dmat_length;
     static int uar_supported  = -1;
     static int peermem_loaded = -1;
     uct_ib_mlx5_md_t *md      = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
@@ -735,8 +876,8 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     ucs_status_t status;
     CUdevice device;
     ucs_sys_device_t dev;
-    ucs_sys_dev_distance_t dist;
-    int i, num_gpus;
+    int i;
+    uct_gdaki_dev_matrix_elem_t *ibdesc;
 
     /*
     * Save the result of peermem driver check in a global flag to avoid
@@ -757,17 +898,39 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         goto out;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_gpus));
-    if (status != UCS_OK) {
-        return status;
+    UCS_INIT_ONCE(&dmat_once) {
+        dmat = uct_gdaki_dev_matrix_init(md->super.config.gda_max_hca_per_gpu,
+                                         &dmat_length);
     }
 
-    tl_devices = ucs_malloc(sizeof(*tl_devices) * num_gpus, "gdaki_tl_devices");
+    if (dmat == NULL) {
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
+
+    for (ibdesc = dmat; ibdesc - dmat < dmat_length; ibdesc++) {
+        if (ibdesc->sys_dev == md->super.dev.sys_dev) {
+            break;
+        }
+    }
+
+    ucs_assertv(ibdesc - dmat < dmat_length, "dev %s",
+                uct_ib_device_name(&md->super.dev));
+
+    if (ibdesc->cuda_map == 0) {
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
+
+    tl_devices = ucs_malloc(sizeof(*tl_devices) *
+                                    ucs_popcount(ibdesc->cuda_map),
+                            "gdaki_tl_devices");
     if (tl_devices == NULL) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
-    for (i = 0; i < num_gpus; i++) {
+    ucs_for_each_bit(i, ibdesc->cuda_map) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&device, i));
         if (status != UCS_OK) {
             goto err;
@@ -795,15 +958,6 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         }
 
         uct_cuda_base_get_sys_dev(device, &dev);
-        status = ucs_topo_get_distance(dev, md->super.dev.sys_dev, &dist);
-        if (status != UCS_OK) {
-            goto err;
-        }
-
-        /* TODO this logic should be done in UCP */
-        if (dist.latency > md->super.config.gda_max_sys_latency) {
-            continue;
-        }
 
         snprintf(tl_devices[num_tl_devices].name,
                  sizeof(tl_devices[num_tl_devices].name), "%s%d-%s:%d",
