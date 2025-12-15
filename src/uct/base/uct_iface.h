@@ -285,7 +285,8 @@ typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep, uct_ep_attr_t *ep_attr)
 
 
 /* Invalidate the ep to emulate transport level error */
-typedef ucs_status_t (*uct_ep_invalidate_func_t)(uct_ep_h ep, unsigned flags);
+typedef ucs_status_t (*uct_ep_invalidate_func_t)(
+        uct_ep_h ep, const uct_ep_invalidate_params_t *params);
 
 /* Connect endpoint to remote endpoint */
 typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
@@ -1054,8 +1055,6 @@ void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface);
 
 void uct_iface_vfs_set_dirty(uct_iface_h iface);
-
-ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags);
 
 void uct_tl_register(uct_component_t *component, uct_tl_t *tl);
 
