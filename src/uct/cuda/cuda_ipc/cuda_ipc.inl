@@ -97,7 +97,7 @@ uct_cuda_ipc_get_remote_address(uct_cuda_ipc_rkey_t *rkey, uint64_t raddr,
         return status;
     }
 
-    offset = UCS_PTR_BYTE_DIFF(raddr, rkey->d_bptr);
+    offset = UCS_PTR_BYTE_DIFF(rkey->d_bptr, raddr);
     ucs_assertv(offset <= rkey->b_len,
                 "offset:%ld b_len:%lu", offset, rkey->b_len);
     *laddr_p = UCS_PTR_BYTE_OFFSET(mapped_addr, offset);
