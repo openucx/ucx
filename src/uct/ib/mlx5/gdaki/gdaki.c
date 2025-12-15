@@ -99,10 +99,12 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
 }
 
 static uct_cuda_copy_md_dmabuf_t
-uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md, void *address, size_t length)
+uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md, const void *address,
+                        size_t length)
 {
     uct_cuda_copy_md_dmabuf_t dmabuf = {
-        .fd = UCT_DMABUF_FD_INVALID
+        .fd     = UCT_DMABUF_FD_INVALID,
+        .offset = 0
     };
 
     if (uct_gdaki_is_dmabuf_supported(md)) {
@@ -115,12 +117,12 @@ uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md, void *address, size_t length)
 
 static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
-                      void *address, size_t length)
+                      const void *address, size_t length)
 {
     struct mlx5dv_devx_umem_in umem_in = {};
     uct_cuda_copy_md_dmabuf_t dmabuf;
 
-    umem_in.addr        = address;
+    umem_in.addr        = (void*)address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
     umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
@@ -614,18 +616,23 @@ static uct_iface_ops_t uct_rc_gdaki_iface_tl_ops = {
             ucs_empty_function_return_unsupported,
 };
 
-static struct ibv_mr *
-uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, void *address, size_t length)
+static ucs_status_t
+uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, const void *address, size_t length,
+                    struct ibv_mr **mr_p)
 {
+    uct_md_mem_reg_params_t params;
     uct_cuda_copy_md_dmabuf_t dmabuf;
 
-    dmabuf = uct_rc_gdaki_get_dmabuf(md, address, length);
-    if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
-        return ibv_reg_mr(md->pd, address, length, UCT_IB_MEM_ACCESS_FLAGS);
-    }
+    params.field_mask    = UCT_MD_MEM_REG_FIELD_FLAGS |
+                           UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                           UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+    params.flags         = 0;
+    dmabuf               = uct_rc_gdaki_get_dmabuf(md, address, length);
+    params.dmabuf_fd     = dmabuf.fd;
+    params.dmabuf_offset = dmabuf.offset;
 
-    return ibv_reg_dmabuf_mr(md->pd, dmabuf.offset, length, (uint64_t)address,
-                             dmabuf.fd, UCT_IB_MEM_ACCESS_FLAGS);
+    return uct_ib_reg_mr((uct_ib_md_t*)md, (void*)address, length, &params,
+                         UCT_IB_MEM_ACCESS_FLAGS, NULL, mr_p);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
@@ -698,11 +705,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_ctx;
     }
 
-    self->atomic_mr = uct_rc_gdaki_reg_mr(&md->super, self->atomic_buff,
-                                          sizeof(uint64_t));
-    if (self->atomic_mr == NULL) {
-        ucs_error("failed to register atomic MR: %m");
-        status = UCS_ERR_IO_ERROR;
+    status = uct_rc_gdaki_reg_mr(&md->super, self->atomic_buff,
+                                 sizeof(uint64_t), &self->atomic_mr);
+    if (status != UCS_OK) {
         goto err_atomic;
     }
 
