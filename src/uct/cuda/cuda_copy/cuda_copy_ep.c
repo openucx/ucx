@@ -176,16 +176,18 @@ uct_cuda_primary_ctx_push_first_active(CUdevice *cuda_device_p)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_cuda_primary_ctx_pop_and_release(CUdevice cuda_device,
-                                     CUcontext cuda_context)
+uct_cuda_copy_ctx_pop_and_release(CUdevice cuda_device, CUcontext cuda_context)
 {
-    if ((cuda_device != CU_DEVICE_INVALID) || (cuda_context != NULL)) {
-        UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    if ((cuda_device == CU_DEVICE_INVALID) && (cuda_context == NULL)) {
+        return;
     }
 
-    if (cuda_device != CU_DEVICE_INVALID) {
-        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    if (cuda_device == CU_DEVICE_INVALID) {
+        return;
     }
+
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
 }
 
 static ucs_status_t uct_cuda_copy_ep_push_memory_ctx(CUdeviceptr cuda_deviceptr,
@@ -298,7 +300,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
     return UCS_OK;
 
 err_pop_and_release:
-    uct_cuda_primary_ctx_pop_and_release(cuda_device, cuda_context);
+    uct_cuda_copy_ctx_pop_and_release(cuda_device, cuda_context);
 err:
     return status;
 }
@@ -403,7 +405,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     status = UCS_INPROGRESS;
 
 out_pop_and_release:
-    uct_cuda_primary_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
+    uct_cuda_copy_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
 out:
     return status;
 err_mpool_put:
@@ -481,7 +483,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(*stream));
 
 out_pop_and_release:
-    uct_cuda_primary_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
+    uct_cuda_copy_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
 out:
     return status;
 }
