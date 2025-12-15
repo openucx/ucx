@@ -90,16 +90,11 @@ static struct {} uct_cuda_dummy_memh;
 
 int uct_cuda_copy_md_is_dmabuf_supported()
 {
-    static int dmabuf_supported = -1;
+    int dmabuf_supported = 0;
     CUdevice cuda_device;
 
-    if (dmabuf_supported != -1) {
-        return dmabuf_supported;
-    }
-
-    dmabuf_supported = 0;
     if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(&cuda_device, 0)) != UCS_OK) {
-        goto out;
+        return 0;
     }
 
     /* Assume dmabuf support is uniform across all devices */
@@ -108,11 +103,10 @@ int uct_cuda_copy_md_is_dmabuf_supported()
                 cuDeviceGetAttribute(&dmabuf_supported,
                                      CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED,
                                      cuda_device)) != UCS_OK) {
-        goto out;
+        return 0;
     }
 #endif
 
-out:
     ucs_debug("dmabuf is%s supported on cuda device %d",
               dmabuf_supported ? "" : " not", cuda_device);
     return dmabuf_supported;
