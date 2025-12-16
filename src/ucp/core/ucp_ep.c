@@ -573,8 +573,13 @@ void ucp_ep_release_id(ucp_ep_h ep)
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags)
 {
-    key->err_mode = (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ?
-                    UCP_ERR_HANDLING_MODE_PEER : UCP_ERR_HANDLING_MODE_NONE;
+    if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
+        key->err_mode = UCP_ERR_HANDLING_MODE_PEER;
+    } else if (ep_init_flags & UCP_EP_INIT_ERR_MODE_FAILOVER) {
+        key->err_mode = UCP_ERR_HANDLING_MODE_FAILOVER;
+    } else {
+        key->err_mode = UCP_ERR_HANDLING_MODE_NONE;
+    }
 }
 
 void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
@@ -924,6 +929,7 @@ ucp_sa_data_v1_unpack(const ucp_wireup_sockaddr_data_base_t *sa_data,
 {
     const ucp_wireup_sockaddr_data_v1_t *sa_data_v1 =
             ucs_derived_of(sa_data, ucp_wireup_sockaddr_data_v1_t);
+    unsigned ep_init_flags = 0;
 
     if (sa_data_v1->addr_mode != UCP_WIREUP_SA_DATA_CM_ADDR) {
         ucs_error("sa_data_v1 contains unsupported address mode %u",
@@ -931,8 +937,13 @@ ucp_sa_data_v1_unpack(const ucp_wireup_sockaddr_data_base_t *sa_data,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    *ep_init_flags_p = (sa_data->header == UCP_ERR_HANDLING_MODE_PEER) ?
-                       UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+    if (sa_data->header == UCP_ERR_HANDLING_MODE_PEER) {
+        ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+    } else if (sa_data->header == UCP_ERR_HANDLING_MODE_FAILOVER) {
+        ep_init_flags |= UCP_EP_INIT_ERR_MODE_FAILOVER;
+    }
+
+    *ep_init_flags_p = ep_init_flags;
     *worker_addr_p   = sa_data_v1 + 1;
     return UCS_OK;
 }
@@ -943,7 +954,9 @@ ucp_sa_data_v2_unpack(const ucp_wireup_sockaddr_data_base_t *sa_data,
                       const void** worker_addr_p)
 {
     *ep_init_flags_p = (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_PEER) ?
-                       UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+                       UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 
+                       (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER) ?
+                       UCP_EP_INIT_ERR_MODE_FAILOVER : 0;
     *worker_addr_p   = sa_data + 1;
     return UCS_OK;
 }
@@ -1169,11 +1182,7 @@ err_destroy_ep:
 static void ucp_ep_params_check_err_handling(ucp_ep_h ep,
                                              const ucp_ep_params_t *params)
 {
-    ucp_err_handling_mode_t err_mode =
-            UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
-                            UCP_ERR_HANDLING_MODE_NONE);
-
-    if (err_mode == UCP_ERR_HANDLING_MODE_NONE) {
+    if (ucp_ep_params_err_handling_mode(params) == UCP_ERR_HANDLING_MODE_NONE) {
         return;
     }
 
@@ -1192,13 +1201,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     ucp_ep_h ep    = NULL;
     unsigned flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     ucs_status_t status;
-
-    /* TODO: Implement failover error handling mode */
-    if (UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
-        UCP_ERR_HANDLING_MODE_NONE) == UCP_ERR_HANDLING_MODE_FAILOVER) {
-        ucs_error("failover error handling mode is not implemented");
-        return UCS_ERR_NOT_IMPLEMENTED;
-    }
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -1413,10 +1415,9 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
 
 static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
 {
-    unsigned ep_flush_flags         = (ucp_ep_config(ep)->key.err_mode ==
-                                       UCP_ERR_HANDLING_MODE_NONE) ?
-                                      UCT_FLUSH_FLAG_LOCAL :
-                                      UCT_FLUSH_FLAG_CANCEL;
+    unsigned ep_flush_flags         = ucp_ep_config_err_handling_enabled(ep) ?
+                                      UCT_FLUSH_FLAG_CANCEL :
+                                      UCT_FLUSH_FLAG_LOCAL;
     uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
     ucp_ep_discard_lanes_arg_t *discard_arg;
     ucs_status_t status;
@@ -1475,7 +1476,6 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 {
     UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
     ucp_ep_ext_t *ep_ext = ucp_ep->ext;
-    ucp_err_handling_mode_t err_mode;
     ucs_log_level_t log_level;
     ucp_request_t *close_req;
 
@@ -1516,10 +1516,10 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         } else if (ep_ext->err_cb == NULL) {
             /* Print error if user requested error handling support but did not
                install a valid error handling callback */
-            err_mode  = ucp_ep_config(ucp_ep)->key.err_mode;
-            log_level = (err_mode == UCP_ERR_HANDLING_MODE_NONE) ?
-                                UCS_LOG_LEVEL_DIAG :
-                                UCS_LOG_LEVEL_ERROR;
+            log_level =
+                    (ucp_ep_config_err_mode_eq(ucp_ep,
+                                               UCP_ERR_HANDLING_MODE_NONE)) ?
+                    UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
 
             ucp_ep_get_lane_info_str(ucp_ep, lane, &lane_info_strb);
             ucs_log(log_level,
@@ -1755,7 +1755,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_request_t *close_req;
 
     if ((ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) &&
-        (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
+        !ucp_ep_config_err_handling_enabled(ep)) {
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
@@ -2683,7 +2683,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         config->md_index[lane] = context->tl_rscs[rsc_index].md_index;
         if (ucp_ep_config_connect_p2p(worker, &config->key, rsc_index)) {
             config->p2p_lanes |= UCS_BIT(lane);
-        } else if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+        } else if ((config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) ||
+                   (config->key.err_mode == UCP_ERR_HANDLING_MODE_FAILOVER)) {
             config->uct_rkey_pack_flags |= UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA;
         }
 

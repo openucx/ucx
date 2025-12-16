@@ -582,8 +582,16 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
 static UCS_F_ALWAYS_INLINE unsigned
 ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
 {
-    return (err_mode == UCP_ERR_HANDLING_MODE_PEER) ?
-           UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+    switch (err_mode) {
+    case UCP_ERR_HANDLING_MODE_NONE:
+        return 0;
+    case UCP_ERR_HANDLING_MODE_PEER:
+        return UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+    case UCP_ERR_HANDLING_MODE_FAILOVER:
+        return UCP_EP_INIT_ERR_MODE_FAILOVER;
+    default:
+        ucs_fatal("invalid error handling mode: %d", err_mode);
+    }
 }
 
 static UCS_F_NOINLINE void
@@ -2226,13 +2234,6 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 
     ucs_free(unpacked_address.address_list);
-}
-
-static ucp_err_handling_mode_t
-ucp_ep_params_err_handling_mode(const ucp_ep_params_t *params)
-{
-    return (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) ?
-           params->err_mode : UCP_ERR_HANDLING_MODE_NONE;
 }
 
 static unsigned

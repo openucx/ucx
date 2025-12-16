@@ -397,14 +397,13 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
 
 int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_ep_h ep                      = req->send.ep;
-    ucp_err_handling_mode_t err_mode = ucp_ep_config(ep)->key.err_mode;
-    ucp_worker_h worker              = ep->worker;
-    ucp_context_h context            = worker->context;
+    ucp_ep_h ep           = req->send.ep;
+    ucp_worker_h worker   = ep->worker;
+    ucp_context_h context = worker->context;
     ucp_mem_h *memh_p;
     ucp_md_map_t invalidate_map;
 
-    if ((err_mode != UCP_ERR_HANDLING_MODE_PEER) ||
+    if (ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_NONE) ||
         !(req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
         return 0;
     }
