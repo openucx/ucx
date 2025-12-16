@@ -618,9 +618,8 @@ static uct_iface_ops_t uct_rc_gdaki_iface_tl_ops = {
             ucs_empty_function_return_unsupported,
 };
 
-static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md,
-                                        void *address, size_t length,
-                                        struct ibv_mr **mr_p)
+static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, void *address,
+                                        size_t length, struct ibv_mr **mr_p)
 {
     uct_md_mem_reg_params_t params;
     uct_cuda_copy_md_dmabuf_t dmabuf;
@@ -633,8 +632,8 @@ static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md,
     params.dmabuf_fd     = dmabuf.fd;
     params.dmabuf_offset = dmabuf.offset;
 
-    return uct_ib_reg_mr(md, address, length, &params,
-                         UCT_IB_MEM_ACCESS_FLAGS, NULL, mr_p);
+    return uct_ib_reg_mr(md, address, length, &params, UCT_IB_MEM_ACCESS_FLAGS,
+                         NULL, mr_p);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
