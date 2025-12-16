@@ -467,7 +467,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     return status;
 }
 
-ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
+ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
                            struct ibv_mr **mr_p)

@@ -635,7 +635,7 @@ uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, const void *address, size_t length,
     params.dmabuf_fd     = dmabuf.fd;
     params.dmabuf_offset = dmabuf.offset;
 
-    return uct_ib_reg_mr((uct_ib_md_t*)md, (void*)address, length, &params,
+    return uct_ib_reg_mr(md, (void*)address, length, &params,
                          UCT_IB_MEM_ACCESS_FLAGS, NULL, mr_p);
 }
 
