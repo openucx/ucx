@@ -102,9 +102,9 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
     return dmabuf_supported;
 }
 
-static uct_cuda_copy_md_dmabuf_t
-uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md, const void *address,
-                        size_t length)
+static uct_cuda_copy_md_dmabuf_t uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md,
+                                                         const void *address,
+                                                         size_t length)
 {
     uct_cuda_copy_md_dmabuf_t dmabuf = {
         .fd     = UCT_DMABUF_FD_INVALID,
@@ -620,9 +620,9 @@ static uct_iface_ops_t uct_rc_gdaki_iface_tl_ops = {
             ucs_empty_function_return_unsupported,
 };
 
-static ucs_status_t
-uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, const void *address, size_t length,
-                    struct ibv_mr **mr_p)
+static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md,
+                                        const void *address, size_t length,
+                                        struct ibv_mr **mr_p)
 {
     uct_md_mem_reg_params_t params;
     uct_cuda_copy_md_dmabuf_t dmabuf;

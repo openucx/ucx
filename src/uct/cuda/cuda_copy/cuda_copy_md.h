@@ -104,8 +104,8 @@ int uct_cuda_copy_md_is_dmabuf_supported();
                        be used by any device.
  * @return The dmabuf file descriptor and offset
  */
-uct_cuda_copy_md_dmabuf_t
-uct_cuda_copy_md_get_dmabuf(const void *address, size_t length,
-                            ucs_sys_device_t sys_dev);
+uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
+                                                      size_t length,
+                                                      ucs_sys_device_t sys_dev);
 
 #endif
