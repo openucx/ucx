@@ -919,34 +919,41 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 #endif
 
 #if UCT_UD_EP_DEBUG_HOOKS
-/* Stale ACK PSN to inject - simulates ACK from before endpoint reset */
-static volatile uct_ud_psn_t stale_ack_psn_to_inject = 0;
-
-static ucs_status_t inject_stale_ack_psn(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    if (stale_ack_psn_to_inject != 0) {
-        neth->ack_psn = stale_ack_psn_to_inject;
+class test_ud_stale_ack : public test_ud {
+public:
+    static ucs_status_t inject_stale_ack_psn(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        if (stale_ack_psn_to_inject != 0) {
+            neth->ack_psn = stale_ack_psn_to_inject;
+        }
+        return UCS_OK;
     }
-    return UCS_OK;
-}
 
-/* Test that stale ACKs (from before endpoint reset) are correctly rejected.
- * This reproduces the bug where:
- *   - Endpoint communicates with high PSN (e.g., 135)
- *   - Endpoint resets (PSN goes back to initial, e.g., 3)
- *   - Stale ACK arrives with old high PSN (135)
- *   - Without fix: assertion fails because acked_psn (135) >= current_psn (3)
- *   - With fix: stale ACK is silently ignored
- *
- * This test will CRASH without the fix due to assertion failure.
- */
-UCS_TEST_SKIP_COND_P(test_ud, stale_ack_after_reset,
+    static void set_stale_ack_psn(uct_ud_psn_t psn) {
+        stale_ack_psn_to_inject = psn;
+    }
+
+    static uct_ud_psn_t get_stale_ack_psn() {
+        return stale_ack_psn_to_inject;
+    }
+
+private:
+    /* Stale ACK PSN to inject - simulates ACK from before endpoint reset */
+    static volatile uct_ud_psn_t stale_ack_psn_to_inject;
+};
+
+volatile uct_ud_psn_t test_ud_stale_ack::stale_ack_psn_to_inject = 0;
+
+UCS_TEST_SKIP_COND_P(test_ud_stale_ack, stale_ack_after_reset,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    constexpr uct_ud_psn_t STALE_ACK_PSN = 135;
+    constexpr uct_ud_psn_t WINDOW_SIZE = 1024;
+
     disable_async(m_e1);
     disable_async(m_e2);
     connect();
-    set_tx_win(m_e1, 1024);
-    set_tx_win(m_e2, 1024);
+    set_tx_win(m_e1, WINDOW_SIZE);
+    set_tx_win(m_e2, WINDOW_SIZE);
 
     uct_ud_ep_t *ud_ep1 = ep(m_e1);
 
@@ -956,8 +963,7 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_ack_after_reset,
     }
     flush();
 
-    /* Now simulate endpoint reset on m_e1:
-     * In real scenario this happens during reconnection.
+    /* Simulate endpoint reset on m_e1:
      * Reset PSN to low values as if endpoint was just created. */
     uct_ud_enter(iface(m_e1));
     ud_ep1->tx.psn       = 3;   /* Next PSN to send */
@@ -967,22 +973,18 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_ack_after_reset,
 
     /* Set up TX hook on m_e2 to inject stale ack_psn in outgoing packets.
      * This simulates a delayed/stale packet arriving after reset. */
-    stale_ack_psn_to_inject = 135;
-    ep(m_e2)->tx.tx_hook = inject_stale_ack_psn;
+    set_stale_ack_psn(STALE_ACK_PSN);
+    ep(m_e2)->tx.tx_hook = test_ud_stale_ack::inject_stale_ack_psn;
 
-    /* m_e2 sends a packet. Due to the hook, it will contain ack_psn=135.
-     * When m_e1 receives this packet:
-     *   - Without fix: assertion "acked_psn < current_psn" fails (135 < 3) -> CRASH
-     *   - With fix: stale ACK is detected and ignored -> no crash */
+    /* m_e2 sends a packet. Due to the hook, it will contain ack_psn=135. */
     EXPECT_UCS_OK(tx(m_e2));
     short_progress_loop();
 
-    /* If we reach here, the fix works - stale ACK was rejected */
-    stale_ack_psn_to_inject = 0;
+    set_stale_ack_psn(0);
     ep(m_e2)->tx.tx_hook = uct_ud_ep_null_hook;
 
     /* Verify endpoint state wasn't corrupted by the stale ACK */
-    EXPECT_EQ(0, ud_ep1->tx.acked_psn);  /* Should NOT be 135 */
+    EXPECT_EQ(0, ud_ep1->tx.acked_psn);  /* Should NOT be STALE_ACK_PSN */
 }
 #endif
 
