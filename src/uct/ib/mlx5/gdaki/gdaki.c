@@ -121,12 +121,12 @@ static uct_cuda_copy_md_dmabuf_t uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md,
 
 static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
-                      const void *address, size_t length)
+                      void *address, size_t length)
 {
     struct mlx5dv_devx_umem_in umem_in = {};
     uct_cuda_copy_md_dmabuf_t dmabuf;
 
-    umem_in.addr        = (void*)address;
+    umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
     umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
@@ -619,7 +619,7 @@ static uct_iface_ops_t uct_rc_gdaki_iface_tl_ops = {
 };
 
 static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md,
-                                        const void *address, size_t length,
+                                        void *address, size_t length,
                                         struct ibv_mr **mr_p)
 {
     uct_md_mem_reg_params_t params;
@@ -633,7 +633,7 @@ static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md,
     params.dmabuf_fd     = dmabuf.fd;
     params.dmabuf_offset = dmabuf.offset;
 
-    return uct_ib_reg_mr(md, (void*)address, length, &params,
+    return uct_ib_reg_mr(md, address, length, &params,
                          UCT_IB_MEM_ACCESS_FLAGS, NULL, mr_p);
 }
 
