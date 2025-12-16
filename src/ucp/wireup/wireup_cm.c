@@ -263,8 +263,10 @@ ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
                            "sa_data version: %u", sa_data_version);
         sa_data->header = UCP_OBJECT_VERSION_V2 <<
                           UCP_SA_DATA_HEADER_VERSION_SHIFT;
-        if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+        if (ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_PEER)) {
             sa_data->header |= UCP_SA_DATA_FLAG_ERR_MODE_PEER;
+        } else if (ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+            sa_data->header |= UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER;
         }
 
         return sa_data + 1;

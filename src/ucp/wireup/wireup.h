@@ -202,6 +202,17 @@ void ucp_wireup_remote_connected(ucp_ep_h ep);
 unsigned ucp_ep_init_flags(const ucp_worker_h worker,
                            const ucp_ep_params_t *params);
 
+
+/**
+ * @brief Convert error handling mode to endpoint initialization flags.
+ *
+ * @param [in] err_mode Error handling mode.
+ *
+ * @return Endpoint initialization flags.
+ */
+ unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode);
+
+
 int ucp_wireup_connect_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                            int has_cm_lane);
 
