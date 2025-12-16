@@ -1326,8 +1326,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_reply,
     UCP_WORKER_GET_VALID_EP_BY_ID(&reply_ep, worker, ftr->ep_id, return UCS_OK,
                                   "AM (reply proto)");
 
-    return ucp_am_handler_common(worker, hdr, am_length - sizeof(ftr), reply_ep,
-                                 am_flags, UCP_AM_RECV_ATTR_FIELD_REPLY_EP,
+    return ucp_am_handler_common(worker, hdr, am_length - sizeof(*ftr),
+                                 reply_ep, am_flags,
+                                 UCP_AM_RECV_ATTR_FIELD_REPLY_EP,
                                  "am_handler_reply");
 }
 
