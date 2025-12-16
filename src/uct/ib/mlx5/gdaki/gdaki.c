@@ -145,9 +145,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_rc_gdaki_iface_t);
-    uct_ib_mlx5_md_t *ib_mlx5_md =
-            ucs_derived_of(iface->super.super.super.super.md, uct_ib_mlx5_md_t);
-    const uct_ib_md_t *ib_md           = &ib_mlx5_md->super;
+    const uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                           uct_ib_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
@@ -200,11 +199,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         goto err_ctx;
     }
 
-    self->umem = uct_rc_gdaki_umem_reg(ib_md, ib_md->dev.ibv_context,
-                                       self->ep_gpu, dev_ep_size);
+    self->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, self->ep_gpu,
+                                       dev_ep_size);
     if (self->umem == NULL) {
-        uct_ib_check_memlock_limit_msg(ib_md->dev.ibv_context,
-                                       UCS_LOG_LEVEL_ERROR,
+        uct_ib_check_memlock_limit_msg(md->dev.ibv_context, UCS_LOG_LEVEL_ERROR,
                                        "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
                                        self->ep_gpu, dev_ep_size);
         status = UCS_ERR_NO_MEMORY;
