@@ -2260,8 +2260,17 @@ unsigned ucp_ep_init_flags(const ucp_worker_h worker,
         flags |= UCP_EP_INIT_CREATE_AM_LANE;
     }
 
-    if (ucp_ep_params_err_handling_mode(params) == UCP_ERR_HANDLING_MODE_PEER) {
+    switch (ucp_ep_params_err_handling_mode(params)) {
+    case UCP_ERR_HANDLING_MODE_NONE:
+        break;
+    case UCP_ERR_HANDLING_MODE_PEER:
         flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+        break;
+    case UCP_ERR_HANDLING_MODE_FAILOVER:
+        flags |= UCP_EP_INIT_ERR_MODE_FAILOVER;
+        break;
+    default:
+        ucs_fatal("invalid error handling mode: %d", ucp_ep_params_err_handling_mode(params));
     }
 
     return flags;

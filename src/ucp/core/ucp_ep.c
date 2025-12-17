@@ -1171,7 +1171,8 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 out_resolve_remote_id:
     if ((context->config.ext.resolve_remote_ep_id == UCS_CONFIG_ON) ||
         ((context->config.ext.resolve_remote_ep_id == UCS_CONFIG_AUTO) &&
-         (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
+         (ep_init_flags & (UCP_EP_INIT_ERR_MODE_PEER_FAILURE |
+                           UCP_EP_INIT_ERR_MODE_FAILOVER)) &&
          ucp_worker_keepalive_is_enabled(worker))) {
         /* If resolving remote ID forced by configuration or PEER_FAILURE
          * and keepalive were requested, resolve remote endpoint ID prior to
