@@ -799,7 +799,8 @@ ucp_worker_iface_event_common(ucp_worker_iface_t *wiface)
     ucp_worker_signal_internal(worker);
 }
 
-static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
+static void
+ucp_worker_iface_async_cb_event(void *arg, unsigned flags, uct_ep_h uct_ep)
 {
     ucp_worker_iface_t *wiface = arg;
 
@@ -808,7 +809,7 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
 
     if (flags & UCT_EVENT_SPEED_CHANGE) {
         /* TODO: handle speed changed event */
-        return;
+        ucs_assert_always(0);
     }
 
     ucp_worker_iface_event_common(wiface);

@@ -1659,7 +1659,7 @@ unsigned uct_ib_iface_port_speed_change_progress(void *arg)
 {
     uct_ib_async_event_ctx_t *async_ctx = arg;
 
-    async_ctx->cb(async_ctx->arg, UCT_EVENT_SPEED_CHANGE);
+    async_ctx->cb(async_ctx->arg, UCT_EVENT_SPEED_CHANGE, NULL);
     ucs_callbackq_remove_safe(async_ctx->super.cbq, async_ctx->super.cb_id);
     return 1;
 }

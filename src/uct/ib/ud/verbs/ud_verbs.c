@@ -556,7 +556,7 @@ static void uct_ud_verbs_iface_async_handler(int fd,
 
     ucs_assert(iface->async.event_cb != NULL);
     /* notify user */
-    iface->async.event_cb(iface->async.event_arg, 0);
+    iface->async.event_cb(iface->async.event_arg, 0, NULL);
 }
 
 static ucs_status_t

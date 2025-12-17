@@ -40,7 +40,7 @@ public:
         /* data follows */
     } recv_desc_t;
 
-    static void async_event_handler(void *arg, unsigned flags) {
+    static void async_event_handler(void *arg, unsigned flags, uct_ep_h uct_ep) {
         test_uct_event *self = static_cast<test_uct_event*>(arg);
         self->m_async_event_ctx.signal();
     }
