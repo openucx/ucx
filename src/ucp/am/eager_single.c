@@ -487,8 +487,7 @@ ucp_am_eager_single_zcopy_psn_send_func(ucp_request_t *req,
                                   req->send.msg_proto.am.header.length +
                                           sizeof(*ftr));
 
-    return uct_ep_am_zcopy(ucp_ep_get_fast_lane(req->send.ep,
-                                                spriv->super.lane),
+    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, spriv->super.lane),
                            UCP_AM_ID_AM_SINGLE_PSN, &hdr, sizeof(hdr), iov,
                            iovcnt, 0, &req->send.state.uct_comp);
 }
