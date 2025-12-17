@@ -1455,9 +1455,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                  void *am_arg, void *am_data, size_t am_length,
                  unsigned am_flags)
 {
-    ucp_worker_h worker    = am_arg;
-    ucp_am_hdr_t *hdr      = am_data;
-    size_t user_hdr_length = hdr->header_length;
+    ucp_worker_h worker         = am_arg;
+    ucp_am_hdr_t *hdr           = am_data;
+    size_t user_hdr_length      = hdr->header_length;
     size_t first_payload_length = am_length - sizeof(ucp_am_first_ftr_t);
     ucp_recv_desc_t *mid_rdesc, *first_rdesc;
     ucp_am_mid_hdr_t *mid_hdr;
