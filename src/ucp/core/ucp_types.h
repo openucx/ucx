@@ -201,7 +201,9 @@ typedef enum {
                                           defined AM */
     UCP_AM_ID_AM_SINGLE_REPLY   =  26, /* Single fragment user defined AM
                                           carrying remote ep for reply */
-    UCP_AM_ID_AM_SINGLE_PSN     =  27,
+    UCP_AM_ID_AM_SINGLE_PSN     =  27, /* Single fragment user defined AM
+                                          carrying remote ep and PSN for
+                                          tracking */
     UCP_AM_ID_LAST
 } ucp_am_id_t;
 

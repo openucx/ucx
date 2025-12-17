@@ -484,7 +484,8 @@ ucp_am_eager_single_zcopy_psn_send_func(ucp_request_t *req,
     ftr->ep_id  = ucp_send_request_get_ep_remote_id(req);
 
     ucp_am_eager_zcopy_add_footer(req, 0, spriv->super.md_index, iov, &iovcnt,
-                                  req->send.msg_proto.am.header.length + sizeof(*ftr));
+                                  req->send.msg_proto.am.header.length +
+                                          sizeof(*ftr));
 
     return uct_ep_am_zcopy(ucp_ep_get_fast_lane(req->send.ep,
                                                 spriv->super.lane),
@@ -501,8 +502,7 @@ ucp_am_eager_single_zcopy_psn_proto_progress(uct_pending_req_t *self)
             req, UCT_MD_MEM_ACCESS_LOCAL_READ,
             ucp_am_eager_single_zcopy_psn_send_func,
             ucp_request_invoke_uct_completion_success,
-            ucp_am_eager_zcopy_completion,
-            ucp_am_eager_single_zcopy_init);
+            ucp_am_eager_zcopy_completion, ucp_am_eager_single_zcopy_init);
 }
 
 ucp_proto_t ucp_am_eager_single_zcopy_psn_proto = {

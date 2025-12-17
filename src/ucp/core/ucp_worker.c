@@ -138,6 +138,11 @@ KHASH_IMPL(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*, 1,
            ucp_worker_discard_uct_ep_hash_key, kh_int64_hash_equal);
 
 
+/* Hash map of EP ID to AM message ID */
+__KHASH_IMPL(ucp_worker_ep_psn_hash, kh_inline, uint64_t, uint64_t, 1,
+             kh_int64_hash_func, kh_int64_hash_equal);
+
+
 static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker,
                                              ucp_worker_event_fd_op_t op,
                                              int event_fd)
