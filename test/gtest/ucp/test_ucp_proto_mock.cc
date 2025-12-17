@@ -344,8 +344,8 @@ protected:
     {
         ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
         ucp_proto_select_elem_info(e.worker(), ep_config_index(e),
-                                   rkey_cfg_index, &select_param, &select_elem,
-                                   1, &strb);
+                                   rkey_cfg_index, &select_param,
+                                   &select_elem, 1, 0, &strb);
 
         char *line;
         ucs_string_buffer_for_each_token(line, &strb, "\n") {
