@@ -217,7 +217,14 @@ typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
 KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
+/* Hash map of UCP EPs to last AM message ID */
+KHASH_TYPE(ucp_worker_ep_psn_hash, uint64_t, uint64_t);
+typedef khash_t(ucp_worker_ep_psn_hash) ucp_worker_ep_psn_hash_t;
 
+
+KHASH_IMPL(ucp_worker_ep_psn_hash, uint64_t, uint64_t, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+           
 typedef struct ucp_worker_mpool_key {
     ucs_memory_type_t mem_type;  /* memory type of the buffer pool */
     ucs_sys_device_t  sys_dev;   /* identifier for the device,
@@ -359,6 +366,7 @@ typedef struct ucp_worker {
 
     ucp_worker_rkey_config_hash_t    rkey_config_hash;    /* RKEY config key -> index */
     ucp_worker_discard_uct_ep_hash_t discard_uct_ep_hash; /* Hash of discarded UCT EPs */
+    ucp_worker_ep_psn_hash_t         ep_psn_hash;         /* Hash of UCP EPs to last AM message ID */
     UCS_PTR_MAP_T(ep)                ep_map;              /* UCP ep key to ptr
                                                              mapping */
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to

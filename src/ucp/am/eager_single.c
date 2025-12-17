@@ -464,3 +464,54 @@ ucp_proto_t ucp_am_eager_single_zcopy_reply_proto = {
     .abort    = ucp_proto_am_request_zcopy_abort,
     .reset    = ucp_am_proto_request_zcopy_reset
 };
+
+static ucs_status_t
+ucp_am_eager_single_zcopy_psn_send_func(ucp_request_t *req,
+                                        const ucp_proto_single_priv_t *spriv,
+                                        uct_iov_t *iov)
+{
+    size_t iovcnt = 1;
+    ucp_am_hdr_t hdr;
+    ucp_am_mid_ftr_t *ftr;
+
+    ucp_am_fill_header(&hdr, req);
+    ucs_assert(req->send.msg_proto.am.header.reg_desc != NULL);
+
+    ftr = UCS_PTR_BYTE_OFFSET(req->send.msg_proto.am.header.reg_desc + 1,
+                              req->send.msg_proto.am.header.length);
+
+    ftr->msg_id = ++req->send.ep->worker->am_message_id;
+    ftr->ep_id  = ucp_send_request_get_ep_remote_id(req);
+
+    ucp_am_eager_zcopy_add_footer(req, 0, spriv->super.md_index, iov, &iovcnt,
+                                  req->send.msg_proto.am.header.length + sizeof(*ftr));
+
+    return uct_ep_am_zcopy(ucp_ep_get_fast_lane(req->send.ep,
+                                                spriv->super.lane),
+                           UCP_AM_ID_AM_SINGLE_PSN, &hdr, sizeof(hdr), iov,
+                           iovcnt, 0, &req->send.state.uct_comp);
+}
+
+static ucs_status_t
+ucp_am_eager_single_zcopy_psn_proto_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    return ucp_proto_zcopy_single_progress(
+            req, UCT_MD_MEM_ACCESS_LOCAL_READ,
+            ucp_am_eager_single_zcopy_psn_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_am_eager_zcopy_completion,
+            ucp_am_eager_single_zcopy_init);
+}
+
+ucp_proto_t ucp_am_eager_single_zcopy_psn_proto = {
+    .name     = "am/egr/single/zcopy/psn",
+    .desc     = UCP_PROTO_ZCOPY_DESC " psn",
+    .flags    = 0,
+    .probe    = ucp_am_eager_single_zcopy_probe,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_am_eager_single_zcopy_psn_proto_progress},
+    .abort    = ucp_proto_am_request_zcopy_abort,
+    .reset    = ucp_am_proto_request_zcopy_reset
+};

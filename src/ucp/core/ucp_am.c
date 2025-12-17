@@ -1312,6 +1312,40 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handler_common(
     return UCS_OK;
 }
 
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_psn,
+                 (am_arg, am_data, am_length, am_flags),
+                 void *am_arg, void *am_data, size_t am_length,
+                 unsigned am_flags)
+{
+    ucp_worker_h worker   = am_arg;
+    ucp_am_hdr_t *hdr     = am_data;
+    ucp_am_mid_ftr_t *ftr = UCS_PTR_BYTE_OFFSET(am_data,
+                                                am_length - sizeof(*ftr));
+    khiter_t iter;
+    int ret;
+
+    iter = kh_put(ucp_worker_ep_psn_hash, &worker->ep_psn_hash, ftr->ep_id,
+                  &ret);
+
+    if (iter == kh_end(&worker->ep_psn_hash)) {
+        ucs_error("failed to update EP PSN");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if ((ret == UCS_KH_PUT_KEY_PRESENT) &&
+        (ftr->msg_id <= kh_value(&worker->ep_psn_hash, iter))) {
+        ucs_debug("dropped duplicate AM message");
+        return UCS_OK;
+    }
+
+    kh_value(&worker->ep_psn_hash, iter) = ftr->msg_id;
+    return ucp_am_handler_common(worker, hdr, am_length - sizeof(*ftr),
+                                 NULL, am_flags, 0, "am_handler_psn");
+}
+
+
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_reply,
                  (am_arg, am_data, am_length, am_flags),
                  void *am_arg, void *am_data, size_t am_length,
@@ -1326,7 +1360,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_reply,
     UCP_WORKER_GET_VALID_EP_BY_ID(&reply_ep, worker, ftr->ep_id, return UCS_OK,
                                   "AM (reply proto)");
 
-    return ucp_am_handler_common(worker, hdr, am_length - sizeof(ftr), reply_ep,
+    return ucp_am_handler_common(worker, hdr, am_length - sizeof(*ftr), reply_ep,
                                  am_flags, UCP_AM_RECV_ATTR_FIELD_REPLY_EP,
                                  "am_handler_reply");
 }
@@ -1727,6 +1761,8 @@ UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE,
                          ucp_am_long_middle_handler, NULL, 0);
 UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_REPLY,
                          ucp_am_handler_reply, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_PSN, ucp_am_handler_psn,
+                         NULL, 0);
 
 const ucp_request_send_proto_t ucp_am_proto = {
     .contig_short           = ucp_am_contig_short,
