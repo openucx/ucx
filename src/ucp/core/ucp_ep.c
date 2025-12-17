@@ -1493,7 +1493,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t failed_lanes,
 
 static ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucs_status_t status)
 {
-    ucp_ep_ext_t *ep_ext = ucp_ep->ext;
+    ucp_ep_ext_t *ep_ext;
     ucs_log_level_t log_level;
     ucp_request_t *close_req;
 
