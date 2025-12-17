@@ -460,6 +460,9 @@ typedef struct ucp_context {
         /* Progress wrapper enabled */
         int                       progress_wrapper_enabled;
 
+        /* Indicate whether tracing for used protocol selections is enabled */
+        int                       trace_used_proto_selections;
+
         struct {
            unsigned               count;
            size_t                 *sizes;
