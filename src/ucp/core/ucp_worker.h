@@ -124,9 +124,11 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2), /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
+    UCP_WORKER_IFACE_FLAG_PENDING_UPDATE    = UCS_BIT(3), /**< UCP iface is pending to
+                                                               be updated */
 };
 
 
@@ -288,6 +290,14 @@ struct ucp_worker_cm {
 };
 
 
+/**
+ * Dynamic flow service
+ */
+typedef struct {
+    uct_worker_cb_id_t     cb_id;
+} ucp_proto_dflow_service_t;
+
+
 UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
@@ -404,6 +414,8 @@ typedef struct ucp_worker {
         /* Last round timestamp */
         ucs_time_t                   last_round;
     } usage_tracker;
+
+    ucp_proto_dflow_service_t        dflow_service;
 } ucp_worker_t;
 
 

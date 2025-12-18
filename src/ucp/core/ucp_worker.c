@@ -787,6 +787,55 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface)
     UCS_ASYNC_UNBLOCK(&wiface->worker->async);
 }
 
+static void
+ucp_proto_dflow_service_init(ucp_worker_h worker,
+                             ucp_proto_dflow_service_t *service)
+{
+    service->cb_id = UCS_CALLBACKQ_ID_NULL;
+}
+
+static void
+ucp_proto_dflow_service_cleanup(ucp_worker_h worker,
+                                ucp_proto_dflow_service_t *service)
+{
+    if (service->cb_id != UCS_CALLBACKQ_ID_NULL) {
+        uct_worker_progress_unregister_safe(worker->uct, &service->cb_id);
+    }
+}
+
+static unsigned
+ucp_worker_iface_handle_port_speed_progress(void *arg)
+{
+    ucp_worker_h worker = arg;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    uct_worker_progress_unregister_safe(worker->uct, &worker->dflow_service.cb_id);
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
+static void
+ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
+{
+    ucp_worker_h worker = wiface->worker;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    /* There could be several ifaces updates from the same device. In order to
+     * handle all of them at the same time, mark iface as pending to be updated
+     * and defer the actual update
+     */
+    wiface->flags |= UCP_WORKER_IFACE_FLAG_PENDING_UPDATE;
+    if (worker->dflow_service.cb_id == UCS_CALLBACKQ_ID_NULL) {
+        uct_worker_progress_register_safe(
+            worker->uct, ucp_worker_iface_handle_port_speed_progress, worker, 0,
+            &worker->dflow_service.cb_id);
+    }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_iface_event_common(ucp_worker_iface_t *wiface)
 {
@@ -802,6 +851,11 @@ ucp_worker_iface_event_common(ucp_worker_iface_t *wiface)
 static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
 {
     ucp_worker_iface_t *wiface = arg;
+
+    if (flags != 0) {
+        ucp_worker_iface_handle_port_speed_event(wiface);
+        return;
+    }
 
     ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
     ucs_trace_func("async_cb for iface=%p", wiface->iface);
@@ -2684,6 +2738,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
+    ucp_proto_dflow_service_init(worker, &worker->dflow_service);
+
     status = ucp_worker_usage_tracker_create(worker);
     if (status != UCS_OK) {
         goto err_am_cleanup;
@@ -2924,6 +2980,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
+    ucp_proto_dflow_service_cleanup(worker, &worker->dflow_service);
     ucp_worker_usage_tracker_destroy(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
