@@ -334,7 +334,7 @@ static void uct_ud_ep_handle_timeout(uct_ud_ep_t *ep)
                               uct_ud_ep_deferred_timeout_handler, ep);
     if (iface->async.event_cb != NULL) {
         /* notify user */
-        iface->async.event_cb(iface->async.event_arg, 0, NULL);
+        iface->async.event_cb(iface->async.event_arg, 0);
     }
 }
 

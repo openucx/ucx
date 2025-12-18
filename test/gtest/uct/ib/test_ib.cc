@@ -906,7 +906,7 @@ public:
         m_e2->connect(0, *m_e1, 0);
     }
 
-    static void async_event_handler(void *arg, unsigned flags, uct_ep_h uct_ep) {
+    static void async_event_handler(void *arg, unsigned flags) {
         test_uct_event_ib *self = static_cast<test_uct_event_ib*>(arg);
         self->m_async_event_ctx.signal();
     }

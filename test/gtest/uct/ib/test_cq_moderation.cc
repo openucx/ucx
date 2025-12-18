@@ -61,12 +61,12 @@ protected:
         m_sender->destroy_ep(0);
     }
 
-    static void send_async_event_handler(void *arg, unsigned flags, uct_ep_h uct_ep) {
+    static void send_async_event_handler(void *arg, unsigned flags) {
         test_uct_cq_moderation *self = static_cast<test_uct_cq_moderation*>(arg);
         self->m_send_async_event_ctx.signal();
     }
 
-    static void recv_async_event_handler(void *arg, unsigned flags, uct_ep_h uct_ep) {
+    static void recv_async_event_handler(void *arg, unsigned flags) {
         test_uct_cq_moderation *self = static_cast<test_uct_cq_moderation*>(arg);
         self->m_recv_async_event_ctx.signal();
     }

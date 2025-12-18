@@ -715,7 +715,7 @@ uct_ud_mlx5_iface_async_handler(int fd, ucs_event_set_types_t events, void *arg)
     uct_ib_mlx5dv_arm_cq(&iface->cq[UCT_IB_DIR_RX], 1);
 
     ucs_assert(iface->super.async.event_cb != NULL);
-    iface->super.async.event_cb(iface->super.async.event_arg, 0, NULL);
+    iface->super.async.event_cb(iface->super.async.event_arg, 0);
 }
 
 ucs_status_t uct_ud_mlx5_iface_event_arm(uct_iface_h tl_iface, unsigned events)

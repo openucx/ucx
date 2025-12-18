@@ -800,7 +800,7 @@ ucp_worker_iface_event_common(ucp_worker_iface_t *wiface)
 }
 
 static void
-ucp_worker_iface_async_cb_event(void *arg, unsigned flags, uct_ep_h uct_ep)
+ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
 {
     ucp_worker_iface_t *wiface = arg;
 

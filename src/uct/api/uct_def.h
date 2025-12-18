@@ -895,9 +895,8 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
  * @param [in]  arg      User argument to be passed to the callback.
  * @param [in]  flags    Flags to be passed to the callback (reserved for
  *                       future use).
- * @param [in]  uct_ep   UCT endpoint that triggered the event (optional).
  */
-typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags, uct_ep_h uct_ep);
+typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
 
 
 #endif
