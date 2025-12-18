@@ -182,35 +182,6 @@ ucp_worker_iface_bandwidth(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 }
 
 /**
- * Calculate port speed based on the actual bandwidth and the maximum bandwidth.
- * The resulting value is a quantized value of the ratio between the actual and
- * maximum bandwidth: {0, 1, 2, 3} -> {0.0-0.24, 0.25-0.49, 0.5-0.74, 0.75-1.0}
- */
-static UCS_F_ALWAYS_INLINE uint8_t
-ucp_worker_iface_port_speed(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
-{
-    ucp_worker_iface_t *wiface   = ucp_worker_iface(worker, rsc_index);
-    uct_iface_attr_t *iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-    uct_perf_attr_t perf_attr;
-    ucs_status_t status;
-    double ratio;
-
-    if ((wiface == NULL) || (iface_attr == NULL)) {
-        return 0;
-    }
-
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
-    status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    ratio = perf_attr.bandwidth.shared / iface_attr->bandwidth.shared;
-    ratio = ucs_min(ucs_max(ratio, 0.0), 0.99);
-    return (uint8_t)(ratio * 4.0);
-}
-
-/**
  * @return whether the worker is using unified mode
  */
 static UCS_F_ALWAYS_INLINE int

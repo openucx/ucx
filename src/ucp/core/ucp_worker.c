@@ -803,20 +803,62 @@ ucp_proto_dflow_service_cleanup(ucp_worker_h worker,
     }
 }
 
-static unsigned
-ucp_worker_iface_handle_port_speed_progress(void *arg)
+/*
+ * Calculate port speed based on the actual bandwidth and the maximum bandwidth.
+ * The resulting value is a quantized value of the ratio between the actual and
+ * maximum bandwidth: {0, 1, 2, 3} -> {0.0-0.24, 0.25-0.49, 0.5-0.74, 0.75-1.0}
+ */
+static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
 {
-    ucp_worker_h worker = arg;
+    uct_perf_attr_t perf_attr;
+    ucs_status_t status;
+    double ratio;
+
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
+    status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    ratio = perf_attr.bandwidth.shared / wiface->attr.bandwidth.shared;
+    ratio = ucs_min(ucs_max(ratio, 0.0), 0.99);
+    return (uint8_t)(ratio * 4.0);
+}
+
+static unsigned ucp_worker_iface_handle_port_speed_progress(void *arg)
+{
+    ucp_worker_h worker     = arg;
+    unsigned progress_count = 0;
+    ucp_worker_iface_t *wiface;
+    ucp_rsc_index_t iface_id;
+    uint8_t port_speed;
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->dflow_service.cb_id);
 
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface = worker->ifaces[iface_id];
+        if (wiface->flags & UCP_WORKER_IFACE_FLAG_PENDING_UPDATE) {
+            wiface->flags &= ~UCP_WORKER_IFACE_FLAG_PENDING_UPDATE;
+            port_speed     = ucp_worker_iface_port_speed(wiface);
+            if (port_speed != wiface->port_speed) {
+                ucs_debug(UCP_WIFACE_FMT " port speed changed from %u to %u",
+                          UCP_WIFACE_ARG(wiface), wiface->port_speed, port_speed);
+                wiface->port_speed = port_speed;
+                ++progress_count;
+            }
+        }
+    }
+
+    if (progress_count > 0) {
+        ++worker->epoch_counter;
+    }
+
     UCS_ASYNC_UNBLOCK(&worker->async);
-    return 1;
+    return progress_count;
 }
 
-static void
-ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
+static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
 {
     ucp_worker_h worker = wiface->worker;
 
@@ -1486,6 +1528,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     ucp_worker_iface_get_memory_distance(wiface, &distance);
     ucp_worker_iface_add_distance(&wiface->attr, &distance);
+
+    wiface->port_speed = ucp_worker_iface_port_speed(wiface);
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
               tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
@@ -2739,6 +2783,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucp_worker_create_vfs(context, worker);
 
     ucp_proto_dflow_service_init(worker, &worker->dflow_service);
+    worker->epoch_counter = 0;
 
     status = ucp_worker_usage_tracker_create(worker);
     if (status != UCS_OK) {

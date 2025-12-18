@@ -731,6 +731,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         ucp_wireup_select_context_t *select_ctx, int show_error)
 {
     ucp_worker_h worker = select_params->ep->worker;
+    ucp_worker_iface_t *wiface;
     ucp_wireup_lane_desc_t *lane_desc;
     ucp_lane_type_t lane_type_iter;
     ucp_lane_index_t lane;
@@ -796,8 +797,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
     lane_desc->dst_md_index = dst_md_index;
     lane_desc->dst_sys_dev  = dst_sys_dev;
     lane_desc->lane_types   = UCS_BIT(lane_type);
-    lane_desc->port_speed   = ucp_worker_iface_port_speed(worker,
-                                                          lane_desc->rsc_index);
+    wiface                  = ucp_worker_iface(worker, select_info->rsc_index);
+    lane_desc->port_speed   = (wiface != NULL) ? wiface->port_speed : 0;
     lane_desc->seg_size     = seg_size;
     for (lane_type_iter = UCP_LANE_TYPE_FIRST;
          lane_type_iter < UCP_LANE_TYPE_LAST;

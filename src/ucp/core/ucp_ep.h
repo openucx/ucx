@@ -490,6 +490,9 @@ struct ucp_ep_config {
 
     /* Number of endpoints using this configuration */
     unsigned                      ep_count;
+
+    /* Epoch (generation) counter. @see ucp_worker::epoch_counter */
+    uint64_t                      epoch_counter;
 };
 
 

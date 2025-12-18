@@ -276,6 +276,7 @@ struct ucp_worker_iface {
     unsigned                      post_count;    /* Counts uncompleted requests which are
                                                     offloaded to the transport */
     uint8_t                       flags;         /* Interface flags */
+    uint8_t                       port_speed;    /* Quantized port speed */
 };
 
 
@@ -416,6 +417,12 @@ typedef struct ucp_worker {
     } usage_tracker;
 
     ucp_proto_dflow_service_t        dflow_service;
+
+    /* Configuration epoch (generation counter).
+     * Incremented after major connectivity changes (e.g. lane failure, port
+     * speed change). A matching epoch is stored in @ref ucp_ep_config.
+     * If epochs differ, the cached config is stale and must be updated. */
+    uint64_t                         epoch_counter;
 } ucp_worker_t;
 
 
