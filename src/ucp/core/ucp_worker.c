@@ -799,8 +799,7 @@ ucp_worker_iface_event_common(ucp_worker_iface_t *wiface)
     ucp_worker_signal_internal(worker);
 }
 
-static void
-ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
+static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
 {
     ucp_worker_iface_t *wiface = arg;
 
