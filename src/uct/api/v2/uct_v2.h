@@ -1140,6 +1140,7 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
  */
 ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief Invalidate the endpoint.
