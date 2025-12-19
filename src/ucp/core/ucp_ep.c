@@ -2629,7 +2629,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->am.zcopy_auto_thresh        = 0;
     config->p2p_lanes                   = 0;
     config->uct_rkey_pack_flags         = 0;
-    config->epoch_counter               = worker->epoch_counter;
     if (context->config.ext.bcopy_thresh == UCS_MEMUNITS_AUTO) {
         config->bcopy_thresh = 0;
     } else {
@@ -3017,7 +3016,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
     }
 
-    status = ucp_proto_select_init(&config->proto_select);
+    status = ucp_proto_select_init(&config->proto_select, worker->epoch_counter);
     if (status != UCS_OK) {
         goto err_free_dst_mds;
     }
@@ -3964,4 +3963,56 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
     ep->cfg_index = cfg_index;
     ucp_ep_config_activate_worker_ifaces(ep->worker, cfg_index);
     ucp_ep_config_proto_init(ep->worker, cfg_index);
+}
+
+static ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
+{
+    ucp_worker_h worker                = ep->worker;
+    ucp_rkey_config_t *rkey_cfg        = ucp_rkey_config(worker, rkey);
+    ucp_rkey_config_key_t rkey_cfg_key = rkey_cfg->key;
+    ucs_status_t status;
+
+    rkey_cfg_key.ep_cfg_index = ep->cfg_index;
+    status = ucp_worker_rkey_config_get(worker, &rkey_cfg_key, NULL, &rkey->cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Now rkey config is up to date with worker epoch */
+    rkey_cfg                             = ucp_rkey_config(worker, rkey);
+    rkey_cfg->proto_select.epoch_counter = worker->epoch_counter;
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_update_config(ucp_ep_h ep, ucp_rkey_h rkey)
+{
+    ucp_worker_h worker                  = ep->worker;
+    ucp_ep_config_key_t cfg_key          = ucp_ep_config(ep)->key;
+    ucp_worker_cfg_index_t old_cfg_index = ep->cfg_index;
+    ucp_lane_index_t lane;
+    ucp_worker_iface_t *wiface;
+    ucs_status_t status;
+
+    /* TODO: Can we also handle failed lanes here?*/
+    for (lane = 0; lane < cfg_key.num_lanes; lane++) {
+        wiface = ucp_worker_iface(worker, cfg_key.lanes[lane].rsc_index);
+        cfg_key.lanes[lane].port_speed = wiface->port_speed;
+    }
+
+    ucp_ep_config_deactivate_worker_ifaces(worker, ep->cfg_index);
+    status = ucp_worker_get_ep_config(worker, &cfg_key, ep->flags, &ep->cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_ep_config_activate_worker_ifaces(worker, ep->cfg_index);
+    /* Now EP config is up to date with worker epoch */
+    ucp_ep_config(ep)->proto_select.epoch_counter = worker->epoch_counter;
+
+    /* TODO: Is it safe to update rkey->cfg_index? */
+    if ((old_cfg_index != ep->cfg_index) && (rkey != NULL)) {
+        return ucp_ep_update_rkey_config(ep, rkey);
+    } else {
+        return UCS_OK;
+    }
 }

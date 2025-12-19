@@ -490,9 +490,6 @@ struct ucp_ep_config {
 
     /* Number of endpoints using this configuration */
     unsigned                      ep_count;
-
-    /* Epoch (generation) counter. @see ucp_worker::epoch_counter */
-    uint64_t                      epoch_counter;
 };
 
 
@@ -957,5 +954,10 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
+
+/**
+ * TODO
+ */
+ucs_status_t ucp_ep_update_config(ucp_ep_h ep, ucp_rkey_h rkey);
 
 #endif

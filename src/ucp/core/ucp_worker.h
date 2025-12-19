@@ -420,7 +420,7 @@ typedef struct ucp_worker {
 
     /* Configuration epoch (generation counter).
      * Incremented after major connectivity changes (e.g. lane failure, port
-     * speed change). A matching epoch is stored in @ref ucp_ep_config.
+     * speed change). A matching epoch is stored in @ref ucp_proto_select_t.
      * If epochs differ, the cached config is stale and must be updated. */
     uint64_t                         epoch_counter;
 } ucp_worker_t;

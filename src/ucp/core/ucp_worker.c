@@ -2328,7 +2328,8 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     kh_value(&worker->rkey_config_hash, khiter) = rkey_cfg_index;
 
     /* Initialize protocol selection */
-    status = ucp_proto_select_init(&rkey_config->proto_select);
+    status = ucp_proto_select_init(&rkey_config->proto_select,
+                                   worker->epoch_counter);
     if (status != UCS_OK) {
         goto err_kh_del;
     }
