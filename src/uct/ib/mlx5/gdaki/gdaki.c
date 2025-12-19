@@ -1396,6 +1396,7 @@ uct_gdaki_check_cuda_ctx_dependent_features(uct_ib_mlx5_md_t *ib_mlx5_md)
     }
 
     if (uct_gdaki_is_uar_supported(ib_mlx5_md)) {
+        ucs_debug("%s: UAR not supported", uct_ib_device_name(&ib_md->dev));
         ret = 1;
     } else {
         ret = 0;
@@ -1428,6 +1429,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     }
 
     if (dmat == NULL) {
+        ucs_debug("%s: no gpu found", uct_ib_device_name(&ib_md->dev));
         status = UCS_ERR_NO_DEVICE;
         goto out;
     }
@@ -1447,6 +1449,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
                 uct_ib_device_name(&ib_md->dev));
 
     if (ibdesc->cuda_map == 0) {
+        ucs_debug("%s: no assigned gpu found", uct_ib_device_name(&ib_md->dev));
         status = UCS_ERR_NO_DEVICE;
         goto out;
     }
