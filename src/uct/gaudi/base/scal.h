@@ -9,17 +9,17 @@
 #include <stdint.h>
 
 #define UCT_GAUID_SCAL_SUCCESS 0
-#define DECLARE_HANDLE(name) \
+#define UCT_GAUDI_DECLARE_HANDLE(name) \
     struct uct_gaudi_##name##__ { \
         int unused; \
     }; \
     typedef struct uct_gaudi_##name##__ *name
 
-DECLARE_HANDLE(scal_handle_t);
-DECLARE_HANDLE(scal_pool_handle_t);
-DECLARE_HANDLE(scal_arc_fw_config_handle_t);
+UCT_GAUDI_DECLARE_HANDLE(scal_handle_t);
+UCT_GAUDI_DECLARE_HANDLE(scal_pool_handle_t);
+UCT_GAUDI_DECLARE_HANDLE(scal_arc_fw_config_handle_t);
 
-typedef struct _scal_memory_pool_infoV2 {
+typedef struct _uct_gaudi_scal_memory_pool_infoV2 {
     scal_handle_t scal;
     const char    *name;
     unsigned      idx;
@@ -39,4 +39,5 @@ int scal_get_pool_handle_by_name(const scal_handle_t scal,
                                  scal_pool_handle_t *pool);
 int scal_pool_get_infoV2(const scal_pool_handle_t pool,
                          scal_memory_pool_infoV2 *info);
+
 #endif

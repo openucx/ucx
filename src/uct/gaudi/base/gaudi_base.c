@@ -100,7 +100,8 @@ ucs_status_t uct_gaudi_base_get_info(int fd,
     rc = scal_get_handle_from_fd(fd, &scal_handle);
     if (rc != UCT_GAUID_SCAL_SUCCESS) {
         /*
-         * If rc value equal UCT_GAUID_SCAL_SUCCESS, it mean that it use synDeviceAcquireByModuleId to open Gaudi device.
+         * If rc value equal UCT_GAUID_SCAL_SUCCESS, it mean that 
+           it use synDeviceAcquireByModuleId to open Gaudi device.
          * Otherwise, the device is opened via hlthunk_open_by_module_id function.
          */
         rc = scal_init(fd, "", &scal_handle, NULL);

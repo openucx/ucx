@@ -33,4 +33,5 @@ uct_gaudi_base_query_devices(uct_md_h md,
                              unsigned *num_tl_devices_p);
 
 ucs_status_t uct_gaudi_base_discover_devices(void);
+
 #endif
