@@ -18,6 +18,7 @@
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/cuda_copy/cuda_copy_md.h>
 
 #include <cuda.h>
 
@@ -88,12 +89,64 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
     *dev_ep_size_p       = qp_attr->umem_offset + qp_attr->len * num_channels;
 }
 
+static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
+{
+    static int dmabuf_supported = -1;
+
+    if (dmabuf_supported != -1) {
+        return dmabuf_supported;
+    }
+
+    dmabuf_supported = !!(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
+                       uct_cuda_copy_md_is_dmabuf_supported();
+    return dmabuf_supported;
+}
+
+static uct_cuda_copy_md_dmabuf_t uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md,
+                                                         const void *address,
+                                                         size_t length)
+{
+    uct_cuda_copy_md_dmabuf_t dmabuf = {
+        .fd     = UCT_DMABUF_FD_INVALID,
+        .offset = 0
+    };
+
+    if (uct_gdaki_is_dmabuf_supported(md)) {
+        return uct_cuda_copy_md_get_dmabuf(address, length,
+                                           UCS_SYS_DEVICE_ID_UNKNOWN);
+    }
+
+    return dmabuf;
+}
+
+static struct mlx5dv_devx_umem *
+uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
+                      void *address, size_t length)
+{
+    struct mlx5dv_devx_umem_in umem_in = {};
+    uct_cuda_copy_md_dmabuf_t dmabuf;
+
+    umem_in.addr        = address;
+    umem_in.size        = length;
+    umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
+    umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
+    dmabuf              = uct_rc_gdaki_get_dmabuf(md, address, length);
+    if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
+        umem_in.comp_mask = 0;
+    } else {
+        umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
+        umem_in.dmabuf_fd = dmabuf.fd;
+    }
+
+    return mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_rc_gdaki_iface_t);
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-                                          uct_ib_mlx5_md_t);
+    const uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                           uct_ib_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
@@ -146,12 +199,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
         goto err_ctx;
     }
 
-    /* TODO add dmabuf_fd support */
-    self->umem = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, self->ep_gpu,
-                                      dev_ep_size, IBV_ACCESS_LOCAL_WRITE);
+    self->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, self->ep_gpu,
+                                       dev_ep_size);
     if (self->umem == NULL) {
-        uct_ib_check_memlock_limit_msg(md->super.dev.ibv_context,
-                                       UCS_LOG_LEVEL_ERROR,
+        uct_ib_check_memlock_limit_msg(md->dev.ibv_context, UCS_LOG_LEVEL_ERROR,
                                        "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
                                        self->ep_gpu, dev_ep_size);
         status = UCS_ERR_NO_MEMORY;
@@ -567,6 +618,23 @@ static uct_iface_ops_t uct_rc_gdaki_iface_tl_ops = {
             ucs_empty_function_return_unsupported,
 };
 
+static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, void *address,
+                                        size_t length, struct ibv_mr **mr_p)
+{
+    uct_md_mem_reg_params_t params;
+    uct_cuda_copy_md_dmabuf_t dmabuf;
+
+    params.field_mask    = UCT_MD_MEM_REG_FIELD_FLAGS |
+                           UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                           UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+    params.flags         = 0;
+    dmabuf               = uct_rc_gdaki_get_dmabuf(md, address, length);
+    params.dmabuf_fd     = dmabuf.fd;
+    params.dmabuf_offset = dmabuf.offset;
+
+    return uct_ib_reg_mr(md, address, length, &params, UCT_IB_MEM_ACCESS_FLAGS,
+                         NULL, mr_p);
+}
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
                            uct_worker_h worker,
@@ -638,14 +706,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_ctx;
     }
 
-    self->atomic_mr = ibv_reg_mr(md->super.pd, self->atomic_buff,
-                                 sizeof(uint64_t),
-                                 IBV_ACCESS_LOCAL_WRITE |
-                                 IBV_ACCESS_REMOTE_WRITE |
-                                 IBV_ACCESS_REMOTE_READ |
-                                 IBV_ACCESS_REMOTE_ATOMIC);
-    if (self->atomic_mr == NULL) {
-        status = UCS_ERR_IO_ERROR;
+    status = uct_rc_gdaki_reg_mr(&md->super, self->atomic_buff,
+                                 sizeof(uint64_t), &self->atomic_mr);
+    if (status != UCS_OK) {
         goto err_atomic;
     }
 
@@ -724,6 +787,49 @@ out_free_uar:
     mlx5dv_devx_free_uar(uar);
 out:
     return status;
+}
+
+static int uct_gdaki_is_peermem_loaded(const uct_ib_md_t *md)
+{
+    /**
+     * Save the result of peermem driver check in a global flag to avoid
+     * printing diag message for each MD.
+     */
+    static int peermem_loaded = -1;
+
+    if (peermem_loaded != -1) {
+        return peermem_loaded;
+    }
+
+    peermem_loaded = !!(md->reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA));
+    if (peermem_loaded == 0) {
+        ucs_diag("GDAKI not supported, please load Nvidia peermem driver by "
+                 "running \"modprobe nvidia_peermem\"");
+    }
+
+    return peermem_loaded;
+}
+
+static int uct_gdaki_is_uar_supported(uct_ib_mlx5_md_t *md, CUdevice cu_device)
+{
+    /**
+      * Save the result of UAR support in a global flag to avoid the overhead of
+      * checking UAR support for each GPU and MD. Assume the UAR support is the
+      * same for all GPUs and MDs in the system.
+      */
+    static int uar_supported = -1;
+
+    if (uar_supported != -1) {
+        return uar_supported;
+    }
+
+    uar_supported = (uct_gdaki_md_check_uar(md, cu_device) == UCS_OK);
+    if (uar_supported == 0) {
+        ucs_diag("GDAKI not supported, please add NVreg_RegistryDwords="
+                 "\"PeerMappingOverride=1;\" option for nvidia kernel driver");
+    }
+
+    return uar_supported;
 }
 
 typedef struct {
@@ -865,13 +971,12 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
                            uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p)
 {
+    uct_ib_mlx5_md_t *ib_mlx5_md     = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    uct_ib_md_t *ib_md               = &ib_mlx5_md->super;
     static ucs_init_once_t dmat_once = UCS_INIT_ONCE_INITIALIZER;
     static uct_gdaki_dev_matrix_elem_t *dmat;
     static size_t dmat_length;
-    static int uar_supported  = -1;
-    static int peermem_loaded = -1;
-    uct_ib_mlx5_md_t *md      = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    unsigned num_tl_devices   = 0;
+    unsigned num_tl_devices;
     uct_tl_device_resource_t *tl_devices;
     ucs_status_t status;
     CUdevice device;
@@ -879,27 +984,8 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     int i;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
 
-    /*
-    * Save the result of peermem driver check in a global flag to avoid
-    * printing diag message for each MD.
-    */
-    if (peermem_loaded == -1) {
-        peermem_loaded = !!(md->super.reg_mem_types &
-                            UCS_BIT(UCS_MEMORY_TYPE_CUDA));
-        if (peermem_loaded == 0) {
-            ucs_diag("GDAKI not supported, please load "
-                        "Nvidia peermem driver by running "
-                        "\"modprobe nvidia_peermem\"");
-        }
-    }
-
-    if (peermem_loaded == 0) {
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
-    }
-
     UCS_INIT_ONCE(&dmat_once) {
-        dmat = uct_gdaki_dev_matrix_init(md->super.config.gda_max_hca_per_gpu,
+        dmat = uct_gdaki_dev_matrix_init(ib_md->config.gda_max_hca_per_gpu,
                                          &dmat_length);
     }
 
@@ -908,14 +994,20 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         goto out;
     }
 
+    if (!uct_gdaki_is_dmabuf_supported(ib_md) &&
+        !uct_gdaki_is_peermem_loaded(ib_md)) {
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
+
     for (ibdesc = dmat; ibdesc - dmat < dmat_length; ibdesc++) {
-        if (ibdesc->sys_dev == md->super.dev.sys_dev) {
+        if (ibdesc->sys_dev == ib_md->dev.sys_dev) {
             break;
         }
     }
 
     ucs_assertv(ibdesc - dmat < dmat_length, "dev %s",
-                uct_ib_device_name(&md->super.dev));
+                uct_ib_device_name(&ib_md->dev));
 
     if (ibdesc->cuda_map == 0) {
         status = UCS_ERR_NO_DEVICE;
@@ -930,29 +1022,15 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         goto out;
     }
 
+    num_tl_devices = 0;
     ucs_for_each_bit(i, ibdesc->cuda_map) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&device, i));
         if (status != UCS_OK) {
             goto err;
         }
 
-        /*
-         * Save the result of UAR support in a global flag since to avoid the
-         * overhead of checking UAR support for each GPU and MD. Assume the
-         * support is the same for all GPUs and MDs in the system.
-         */
-        if (uar_supported == -1) {
-            status = uct_gdaki_md_check_uar(md, device);
-            if (status == UCS_OK) {
-                uar_supported = 1;
-            } else {
-                ucs_diag("GDAKI not supported, please add "
-                         "NVreg_RegistryDwords=\"PeerMappingOverride=1;\" "
-                         "option for nvidia kernel driver");
-                uar_supported = 0;
-            }
-        }
-        if (uar_supported == 0) {
+        if (!uct_gdaki_is_dmabuf_supported(ib_md) &&
+            !uct_gdaki_is_uar_supported(ib_mlx5_md, device)) {
             status = UCS_ERR_NO_DEVICE;
             goto err;
         }
@@ -961,8 +1039,8 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
 
         snprintf(tl_devices[num_tl_devices].name,
                  sizeof(tl_devices[num_tl_devices].name), "%s%d-%s:%d",
-                 UCT_DEVICE_CUDA_NAME, device,
-                 uct_ib_device_name(&md->super.dev), md->super.dev.first_port);
+                 UCT_DEVICE_CUDA_NAME, device, uct_ib_device_name(&ib_md->dev),
+                 ib_md->dev.first_port);
         tl_devices[num_tl_devices].type       = UCT_DEVICE_TYPE_NET;
         tl_devices[num_tl_devices].sys_device = dev;
         num_tl_devices++;
