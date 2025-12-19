@@ -53,7 +53,6 @@ protected:
     CUdevice m_cuda_dev;
     static const uint64_t SEED1     = 0xABClu;
     static const uint64_t SEED2     = 0xDEFlu;
-    static const unsigned WARP_SIZE = 32;
 };
 
 UCS_TEST_P(test_cuda_ipc_rma, has_device_ep_capability)
