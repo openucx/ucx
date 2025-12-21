@@ -31,9 +31,11 @@ done
 rm -rf autom4te.cache
 mkdir -p config/m4 config/aux
 
+git submodule update --init src/uct/ib/mlx5/gdaki/gpunetio
+
 if [ "X$with_ucg" = "Xyes" ]
 then
-	git submodule update --init --recursive --remote
+	git submodule update --init --recursive --remote src/ucg
 fi
 
 autoreconf -v --install || exit 1
