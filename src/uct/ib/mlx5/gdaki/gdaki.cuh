@@ -41,33 +41,6 @@ UCS_F_DEVICE void *uct_rc_mlx5_gda_get_wqe_ptr(uct_rc_gdaki_dev_ep_t *ep,
     return (void*)(wqe_addr + (full_idx << DOCA_GPUNETIO_IB_MLX5_WQE_SQ_SHIFT));
 }
 
-UCS_F_DEVICE void uct_rc_mlx5_gda_ring_db(uct_rc_gdaki_dev_ep_t *ep,
-                                          unsigned cid, uint64_t prod_index)
-{
-    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
-    struct doca_gpu_dev_verbs_wqe_ctrl_seg ctrl_seg = {0};
-    __be64 *db_ptr = (__be64*)__ldg((uintptr_t*)&qp->sq_db);
-
-    ctrl_seg.qpn_ds = doca_gpu_dev_verbs_bswap32(__ldg(&qp->sq_num) << 8);
-    ctrl_seg.opmod_idx_opcode = doca_gpu_dev_verbs_bswap32(
-            (prod_index << DOCA_GPUNETIO_VERBS_WQE_IDX_SHIFT));
-
-    doca_gpu_dev_verbs_fence_release<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU>();
-    doca_gpu_dev_verbs_store_relaxed_mmio((uint64_t*)db_ptr,
-                                          *(uint64_t*)&ctrl_seg);
-}
-
-UCS_F_DEVICE void uct_rc_mlx5_gda_update_dbr(uct_rc_gdaki_dev_ep_t *ep,
-                                             unsigned cid, uint32_t prod_index)
-{
-    __be32 dbrec_val  = doca_gpu_dev_verbs_prepare_dbr(prod_index);
-    __be32 *dbrec_ptr = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
-
-    cuda::atomic_ref<__be32, cuda::thread_scope_system> dbrec_ptr_aref(
-            *dbrec_ptr);
-    dbrec_ptr_aref.store(dbrec_val, cuda::std::memory_order_relaxed);
-}
-
 template<ucs_device_level_t level>
 UCS_F_DEVICE void
 uct_rc_mlx5_gda_exec_init(unsigned &lane_id, unsigned &num_lanes)
@@ -254,28 +227,11 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
     doca_gpu_dev_verbs_store_wqe_seg(dseg_ptr, (uint64_t*)&(dseg));
 }
 
-UCS_F_DEVICE void uct_rc_mlx5_gda_lock(int *lock) {
-    while (atomicCAS(lock, 0, 1) != 0)
-        ;
-#ifdef DOCA_GPUNETIO_VERBS_HAS_FENCE_ACQUIRE_RELEASE_PTX
-    asm volatile("fence.acquire.gpu;");
-#else
-    uint32_t dummy;
-    uint32_t UCS_V_UNUSED val;
-    asm volatile("ld.acquire.gpu.b32 %0, [%1];" : "=r"(val) : "l"(&dummy));
-#endif
-}
-
-UCS_F_DEVICE void uct_rc_mlx5_gda_unlock(int *lock) {
-    cuda::atomic_ref<int, cuda::thread_scope_device> lock_aref(*lock);
-    lock_aref.store(0, cuda::std::memory_order_release);
-}
-
 UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
                                      uint64_t wqe_base, unsigned count,
                                      uint64_t flags)
 {
-    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
+    auto qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
             qp->sq_ready_index);
     const uint64_t wqe_next = wqe_base + count;
@@ -284,17 +240,17 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
 
     __threadfence();
     if (skip_db) {
-        const uint64_t wqe_base_orig = wqe_base;
-        while (!ref.compare_exchange_strong(wqe_base, wqe_next,
-                                            cuda::std::memory_order_relaxed)) {
-            wqe_base = wqe_base_orig;
-        }
+        doca_gpu_dev_common_mark_wqes_ready(qp->sq_ready_index, wqe_base, wqe_next - 1);
     } else {
+        uint32_t qpn_ds = __ldg(&qp->qpn_ds);
+        auto *db_ptr = (uint64_t*)__ldg((uintptr_t*)&qp->sq_db);
+        auto dbrec_ptr = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
+
         while (READ_ONCE(qp->sq_ready_index) != wqe_base) {
         }
-        uct_rc_mlx5_gda_ring_db(ep, cid, wqe_next);
-        uct_rc_mlx5_gda_update_dbr(ep, cid, wqe_next);
-        uct_rc_mlx5_gda_ring_db(ep, cid, wqe_next);
+        doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
+        doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
+        doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
         ref.store(wqe_next, cuda::std::memory_order_release);
     }
 }
