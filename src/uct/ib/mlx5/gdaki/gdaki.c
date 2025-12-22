@@ -1029,8 +1029,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             goto err;
         }
 
-        if (!uct_gdaki_is_dmabuf_supported(ib_md) &&
-            !uct_gdaki_is_uar_supported(ib_mlx5_md, device)) {
+        if (!uct_gdaki_is_uar_supported(ib_mlx5_md, device)) {
             status = UCS_ERR_NO_DEVICE;
             goto err;
         }
