@@ -41,7 +41,7 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
     {"NUM_CHANNELS", "1",
-     "Number of channels.",
+     "Number of channels. \nRounded up to the next power-of-2 value.",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, num_channels),
      UCS_CONFIG_TYPE_UINT},
 
@@ -718,7 +718,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_lock;
     }
 
-    self->num_channels = config->num_channels;
+    self->num_channels = ucs_roundup_pow2(config->num_channels);
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 
