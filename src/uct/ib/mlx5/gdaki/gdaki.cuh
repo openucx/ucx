@@ -373,8 +373,10 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
             tl_mem_elem);
     auto cid      = channel_id & ep->channel_mask;
 
-    return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, ep->atomic_va,
-                                            ep->atomic_lkey, remote_address,
+    return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem,
+                                            (&ep->qps[cid].atomic_buf),
+                                            __ldg(&ep->atomic_lkey),
+                                            remote_address,
                                             mem_elem->rkey, sizeof(uint64_t),
                                             cid, flags, comp,
                                             MLX5_OPCODE_ATOMIC_FA, true, value);
@@ -427,8 +429,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
     for (uint32_t i = lane_id; i < count; i += num_lanes) {
         if (i == counter_index) {
             atomic         = true;
-            address        = ep->atomic_va;
-            lkey           = ep->atomic_lkey;
+            address        = &ep->qps[cid].atomic_buf;
+            lkey           = __ldg(&ep->atomic_lkey);
             remote_address = counter_remote_address;
             length         = 8;
             opcode         = MLX5_OPCODE_ATOMIC_FA;
@@ -522,8 +524,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         if (i == mem_list_count) {
             idx            = counter_index;
             atomic         = true;
-            address        = ep->atomic_va;
-            lkey           = ep->atomic_lkey;
+            address        = &ep->qps[cid].atomic_buf;
+            lkey           = __ldg(&ep->atomic_lkey);
             remote_address = counter_remote_address;
             length         = 8;
             opcode         = MLX5_OPCODE_ATOMIC_FA;
