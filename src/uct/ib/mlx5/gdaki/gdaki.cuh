@@ -352,7 +352,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_elem);
-    auto cid      = channel_id & (ep->num_channels - 1);
+    auto cid      = channel_id & ep->channel_mask;
 
     return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, address,
                                             mem_elem->lkey, remote_address,
@@ -370,7 +370,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_elem);
-    auto cid      = channel_id & (ep->num_channels - 1);
+    auto cid      = channel_id & ep->channel_mask;
 
     return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, ep->atomic_va,
                                             ep->atomic_lkey, remote_address,
@@ -390,7 +390,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
-    auto cid      = channel_id & (ep->num_channels - 1);
+    auto cid      = channel_id & ep->channel_mask;
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
     int count                     = mem_list_count;
     int counter_index             = count - 1;
@@ -484,7 +484,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
-    auto cid      = channel_id & (ep->num_channels - 1);
+    auto cid      = channel_id & ep->channel_mask;
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
     unsigned count                = mem_list_count;
     bool atomic                   = false;

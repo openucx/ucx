@@ -41,7 +41,8 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
     {"NUM_CHANNELS", "1",
-     "Number of channels. \nRounded up to the next power-of-2 value.",
+     "Number of channels. \nRounded up to the next power-of-2 value.\n"
+     "Maximum value is 256.",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, num_channels),
      UCS_CONFIG_TYPE_UINT},
 
@@ -493,7 +494,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
         dev_ep->atomic_lkey  = htonl(iface->atomic_mr->lkey);
         dev_ep->sq_wqe_num   = qp_attr.max_tx;
         dev_ep->sq_fc_mask   = (qp_attr.max_tx >> 1) - 1;
-        dev_ep->num_channels = iface->num_channels;
+        dev_ep->channel_mask = iface->num_channels - 1;
         dev_ep->sq_wqe_daddr = UCS_PTR_BYTE_OFFSET(ep->ep_gpu,
                                                    qp_attr.umem_offset);
 
@@ -652,6 +653,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     ucs_status_t status;
     int cuda_id;
 
+    if (config->num_channels > 256) {
+         ucs_error("num_channels exceeds maximum value of 256");
+         return UCS_ERR_INVALID_PARAM;
+    }
+    self->num_channels = ucs_roundup_pow2(config->num_channels);
+
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap_devx.rc,
                                               md->ddp_support_dv.rc,
@@ -718,7 +725,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_lock;
     }
 
-    self->num_channels = ucs_roundup_pow2(config->num_channels);
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 

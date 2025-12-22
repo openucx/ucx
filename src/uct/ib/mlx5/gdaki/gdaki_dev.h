@@ -32,9 +32,9 @@ typedef struct {
     uint8_t                      *sq_wqe_daddr;
     uint16_t                     sq_wqe_num;
     uint16_t                     sq_fc_mask;
-    uint32_t                     num_channels;
+    uint8_t                      channel_mask;
 
-    uint8_t                      pad[20];
+    uint8_t                      pad[23];
 
     uct_rc_gdaki_dev_qp_t        qps[0];
 } uct_rc_gdaki_dev_ep_t;
