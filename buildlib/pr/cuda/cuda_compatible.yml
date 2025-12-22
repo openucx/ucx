@@ -8,6 +8,7 @@ jobs:
     container: centos7_cuda11
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5

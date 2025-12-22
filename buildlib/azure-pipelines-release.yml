@@ -88,6 +88,7 @@ stages:
           - ucx_docker
         steps:
           - checkout: self
+            submodules: true
             fetchDepth: 100
             clean: true
             retryCountOnTaskFailure: 5

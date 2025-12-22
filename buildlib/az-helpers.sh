@@ -291,7 +291,7 @@ git_clone_with_retry() {
 
     for attempt in $(seq 1 $max_attempts); do
         echo "Attempt $attempt of $max_attempts: Cloning UCX (branch: $branch)"
-        if git clone --depth "$depth" -b "$branch" "$BUILD_REPOSITORY_URI" "$target_dir"; then
+        if git clone --recurse-submodules --shallow-submodules --depth "$depth" -b "$branch" "$BUILD_REPOSITORY_URI" "$target_dir"; then
             echo "Clone successful"
             return 0
         fi
