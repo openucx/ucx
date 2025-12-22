@@ -3643,6 +3643,88 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Declare an operation ordered with respect to a stream.
+ *
+ * Declares the beginning of an operation that is to be ordered with respect to
+ * the specified @a stream. This call returns an @a op_handle, which is used to
+ * track the operation state. Anything added to the stream after this call will
+ * remain blocked until @ref uct_iface_stream_op_finish is called.
+ *
+ * The user may call @ref uct_iface_stream_op_is_ready to verify that all
+ * previously issued operations on the @a stream have completed before
+ * starting the operation’s own processing. This check is optional and
+ * depends on the user's ordering requirements.
+ *
+ * After completing the operation’s processing, the user must eventually
+ * call @ref uct_iface_stream_op_finish.
+ *
+ * @param [in]  iface     Interface used for state management.
+ * @param [in]  stream    Stream to order against.
+ * @param [out] op_handle Operation handle used for subsequent tracking.
+ *
+ * @return Error code.
+ */
+UCT_INLINE_API ucs_status_t
+uct_iface_stream_op_begin(const uct_iface_h iface, uct_iface_stream_h stream,
+                          uct_iface_stream_op_handle_h *op_handle)
+{
+    return iface->ops.iface_stream_op_begin(iface, stream, op_handle);
+}
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Check if all predecessors of a stream operation have completed.
+ *
+ * Checks whether all work on the stream that was issued prior to the
+ * creation of the operation represented by @a op_handle has completed.
+ * This can be used by the user to guarantee strict ordering of operations
+ * from the stream perspective. Calling this function is optional; the user
+ * may start processing without calling it, depending on its ordering
+ * requirements.
+ *
+ * If all prior operations have completed, the function returns @ref UCS_OK.
+ * Otherwise, it returns @ref UCS_INPROGRESS, indicating that there are still
+ * remaining operations being processed on the stream.
+ *
+ * @param [in]  iface     Interface used for state management.
+ * @param [in]  op_handle Operation handle previously returned by
+ *                        @ref uct_iface_stream_op_begin.
+ *
+ * @return @ref UCS_OK if the operation is ready, @ref UCS_INPROGRESS if it
+ *         is still blocked, or another error code on failure.
+ */
+UCT_INLINE_API ucs_status_t uct_iface_stream_op_is_ready(
+        const uct_iface_h iface, uct_iface_stream_op_handle_h op_handle)
+{
+    return iface->ops.iface_stream_op_is_ready(iface, op_handle);
+}
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Mark a previously declared stream operation as finished.
+ *
+ * Declares that the operation associated with @a op_handle has completed
+ * its processing. This will release the wait on the stream associated with
+ * @a op_handle, unblock any subsequent operations that were waiting on
+ * this stream, and release the resources associated with @a op_handle.
+ *
+ * @param [in]  iface     Interface used for state management.
+ * @param [in]  op_handle Operation handle previously returned by
+ *                        @ref uct_iface_stream_op_begin.
+ *
+ * @return Error code.
+ */
+UCT_INLINE_API ucs_status_t uct_iface_stream_op_finish(
+        const uct_iface_h iface, uct_iface_stream_op_handle_h op_handle)
+{
+    return iface->ops.iface_stream_op_finish(iface, op_handle);
+}
+
+
+/**
  * @ingroup UCT_CLIENT_SERVER
  * @brief Open a connection manager.
  *
