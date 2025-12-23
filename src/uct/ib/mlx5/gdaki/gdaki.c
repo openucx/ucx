@@ -653,10 +653,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     ucs_status_t status;
     int cuda_id;
 
-    if (config->num_channels > 256) {
+    if (config->num_channels > UINT8_MAX + 1) {
          ucs_error("num_channels exceeds maximum value of 256");
          return UCS_ERR_INVALID_PARAM;
     }
+
     self->num_channels = ucs_roundup_pow2(config->num_channels);
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
