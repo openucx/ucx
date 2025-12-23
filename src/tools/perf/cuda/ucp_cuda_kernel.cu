@@ -479,7 +479,7 @@ public:
     ucp_perf_cuda_test_runner(ucx_perf_context_t &perf) :
         ucx_perf_cuda_test_runner(perf)
     {
-        size_t length = ucx_perf_get_message_size(&m_perf.params);
+        size_t length = ucx_perf_get_message_size(&m_perf.params) + ONESIDED_SIGNAL_SIZE;
 
         m_perf.send_allocator->memset(m_perf.send_buffer, 0, length);
         m_perf.recv_allocator->memset(m_perf.recv_buffer, 0, length);
