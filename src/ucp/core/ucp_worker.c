@@ -2519,9 +2519,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->counters.ep_closures          = 0;
     worker->counters.ep_failures          = 0;
 
-    /* Initialize RNDV pipeline flow control */
-    worker->rndv_mtype_fc.active_frags     = 0;
-    ucs_queue_head_init(&worker->rndv_mtype_fc.pending_q);
+    /* Initialize RNDV mtype flow control with separate priority queues */
+    worker->rndv_mtype_fc.active_frags = 0;
+    ucs_queue_head_init(&worker->rndv_mtype_fc.put_pending_q);
+    ucs_queue_head_init(&worker->rndv_mtype_fc.get_pending_q);
+    ucs_queue_head_init(&worker->rndv_mtype_fc.rtr_pending_q);
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &

@@ -396,7 +396,10 @@ typedef struct ucp_worker {
     struct {
         /* Worker-level mtype fragment flow control */
         size_t                       active_frags;       /* Current active fragments */
-        ucs_queue_head_t             pending_q;          /* Queue of throttled mtype requests */
+        /* Separate pending queues by priority (PUT > GET > RTR) */
+        ucs_queue_head_t             put_pending_q;      /* Throttled PUT (RNDV_SEND) requests */
+        ucs_queue_head_t             get_pending_q;      /* Throttled GET requests */
+        ucs_queue_head_t             rtr_pending_q;      /* Throttled RTR requests */
     } rndv_mtype_fc;
 
     struct {
