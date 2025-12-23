@@ -1656,6 +1656,15 @@ static ucs_status_t uct_ib_iface_destroy_comp_channel(uct_ib_iface_t *iface)
     return 0;
 }
 
+unsigned uct_ib_iface_port_speed_change_progress(void *arg)
+{
+    uct_ib_async_event_ctx_t *async_ctx = arg;
+
+    async_ctx->cb(async_ctx->arg, UCT_EVENT_SPEED_CHANGE);
+    ucs_callbackq_remove_safe(async_ctx->super.cbq, async_ctx->super.cb_id);
+    return 1;
+}
+
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                     uct_ib_iface_ops_t *ops, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
@@ -1817,6 +1826,21 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
 
     self->addr_size  = uct_ib_iface_address_size(self);
 
+#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+    uct_iface_set_async_event_params(params, &self->async_ctx.cb,
+                                     &self->async_ctx.arg);
+    if (self->async_ctx.cb != NULL) {
+        self->async_ctx.super.cbq = &self->super.worker->super.progress_q;
+        self->async_ctx.super.cb  = uct_ib_iface_port_speed_change_progress;
+        status = uct_ib_device_async_event_wait(dev, IBV_EVENT_PORT_SPEED_CHANGE,
+                                                self->config.port_num,
+                                                &self->async_ctx.super);
+        if (status != UCS_OK) {
+            goto err_destroy_send_cq;
+        }
+    }
+#endif
+
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,
               self->config.rx_hdr_offset, self->config.seg_size);
@@ -1848,6 +1872,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
     if (ret != 0) {
         ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
+
+#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+    if (self->async_ctx.cb != NULL) {
+        uct_ib_device_async_event_cancel(uct_ib_iface_device(self),
+                                         IBV_EVENT_PORT_SPEED_CHANGE,
+                                         self->config.port_num,
+                                         &self->async_ctx.super);
+    }
+#endif
 
     ucs_free(self->path_bits);
 }
@@ -2008,6 +2041,10 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
     wire_speed            = (width * signal_rate * encoding * num_path) / 8.0;
     iface_attr->bandwidth = uct_ib_iface_get_bandwidth(iface, wire_speed);
     iface_attr->priority  = uct_ib_device_spec(dev)->priority;
+
+#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+    iface_attr->cap.event_flags    |= UCT_IFACE_FLAG_EVENT_ASYNC_CB;
+#endif
 
     return UCS_OK;
 }
