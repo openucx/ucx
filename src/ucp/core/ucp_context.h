@@ -180,6 +180,8 @@ typedef struct ucp_context_config {
     size_t                                 rndv_align_thresh;
     /** Print protocols information */
     char                                   *proto_info;
+    /** Maximum number of times a protocol usage would be counted */
+    unsigned                               proto_usage_count_max;
     /** MD to compare for transport selection scores */
     char                                   *select_distance_md;
     /** Directory to write protocol selection information */

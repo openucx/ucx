@@ -95,8 +95,6 @@ struct ucp_proto_select_param {
     } UCS_S_PACKED op;
 } UCS_S_PACKED;
 
-#define UCP_PROTO_SELECTIONS_COUNT_MAX  UINT8_MAX
-
 /**
  * Protocol and its private configuration
  */

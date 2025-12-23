@@ -497,6 +497,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "                For example: '*tag*gpu*', '*put*fast*host*'",
    ucs_offsetof(ucp_context_config_t, proto_info), UCS_CONFIG_TYPE_STRING},
 
+  {"PROTO_USAGE_COUNT_MAX", "255",
+   "The maximal amount of times the protocol usage would be counted.\n"
+   "After reaching this value, counting is stopped to reduce overhead.\n"
+   " 'inf' : Count up to UINT_MAX",
+   ucs_offsetof(ucp_context_config_t, proto_usage_count_max), UCS_CONFIG_TYPE_UINT},
+
   {"RNDV_ALIGN_THRESH", "64kB",
    "If the rendezvous payload size is larger than this value, it could be split\n"
    "in order to optimize memory alignment",

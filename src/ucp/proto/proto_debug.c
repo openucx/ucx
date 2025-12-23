@@ -196,22 +196,28 @@ ucp_proto_select_elem_has_selections(const ucp_proto_select_elem_t *select_elem)
     return 0;
 }
 
-static void
-ucp_proto_selections_dump(const ucp_proto_query_attr_t *proto_attr,
-                          char *counter_str, size_t size, int show_used)
+static void ucp_proto_selections_dump(ucp_worker_h worker,
+                                      const ucp_proto_query_attr_t *proto_attr,
+                                      char *counter_str, size_t size,
+                                      int show_used)
 {
-    unsigned max_selections;
+    unsigned proto_usage_count_max =
+            worker->context->config.ext.proto_usage_count_max;
+    // unsigned max_selections;
 
     if (!show_used) {
         *counter_str = '\0';
         return;
     }
 
-    max_selections = (strstr(proto_attr->desc, "short") != NULL) ?
-                            1 : UCP_PROTO_SELECTIONS_COUNT_MAX;
+    // TODO: Ask Ilia about this
+    // max_selections = (strstr(proto_attr->desc, "short") != NULL) ?
+    //                          1 :
+    //                          proto_usage_count_max;
 
     ucs_snprintf_safe(counter_str, size, "%u%s  ", proto_attr->selections,
-                      (proto_attr->selections >= max_selections ? "+" : ""));
+                      ((proto_attr->selections >= proto_usage_count_max) ? "+" :
+                                                                           ""));
 }
 
 void
@@ -273,7 +279,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
         ucs_memunits_range_str(range_start, range_end, row_elem->range_str,
                                sizeof(row_elem->range_str));
 
-        ucp_proto_selections_dump(&proto_attr, row_elem->counter_str,
+        ucp_proto_selections_dump(worker, &proto_attr, row_elem->counter_str,
                                   sizeof(row_elem->counter_str), show_used);
 
         col_width[0] = ucs_max(col_width[0], strlen(row_elem->counter_str) +
