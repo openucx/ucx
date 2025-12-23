@@ -11,6 +11,7 @@
 #include "log.h"
 
 #include <ucs/arch/atomic.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/compiler.h>
@@ -246,6 +247,63 @@ void ucs_log_print_compact(const char *str)
         fprintf(stdout, UCS_LOG_COMPACT_FMT " %s\n", UCS_LOG_COMPACT_ARG(&tv),
                 str);
     }
+}
+
+void ucs_log_print_compact_multiline(const char *str)
+{
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    struct timeval tv;
+    const char *line_start;
+    const char *line_end;
+    size_t prefix_len;
+
+    gettimeofday(&tv, NULL);
+
+    /* Build prefix and measure its length for subsequent line padding */
+    if (RUNNING_ON_VALGRIND) {
+        ucs_string_buffer_appendf(&strb, UCS_LOG_TIME_FMT,
+                                  UCS_LOG_TIME_ARG(&tv));
+    } else {
+        ucs_string_buffer_appendf(&strb, UCS_LOG_COMPACT_FMT,
+                                  UCS_LOG_COMPACT_ARG(&tv));
+    }
+    prefix_len = ucs_string_buffer_length(&strb);
+
+    /* Build the entire output in a string buffer */
+    line_start = str;
+    while (*line_start != '\0') {
+        /* Add newline and space padding for lines other than the first */
+        if (line_start != str) {
+            ucs_string_buffer_appendf(&strb, "\n%*s", (int)prefix_len, "");
+        }
+
+        line_end = strchr(line_start, '\n');
+        if (line_end == NULL) {
+            /* Last line without trailing newline */
+            ucs_string_buffer_appendf(&strb, " %s", line_start);
+            break;
+        }
+
+        /* Append line up to (but not including) the newline */
+        ucs_string_buffer_appendf(&strb, " %.*s", (int)(line_end - line_start),
+                                  line_start);
+        line_start = line_end + 1;
+    }
+
+    ucs_string_buffer_appendf(&strb, "\n");
+
+    if (RUNNING_ON_VALGRIND) {
+        VALGRIND_PRINTF("%s", ucs_string_buffer_cstr(&strb));
+    } else if (ucs_log_initialized) {
+        if (ucs_log_file_close) { /* non-stdout/stderr */
+            ucs_log_handle_file_max_size(ucs_string_buffer_length(&strb));
+        }
+        fputs(ucs_string_buffer_cstr(&strb), ucs_log_file);
+    } else {
+        fputs(ucs_string_buffer_cstr(&strb), stdout);
+    }
+
+    ucs_string_buffer_cleanup(&strb);
 }
 
 static void ucs_log_print(const char *short_file, int line,
