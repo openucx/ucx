@@ -26,6 +26,9 @@
 source $(dirname $0)/../buildlib/az-helpers.sh
 source $(dirname $0)/../buildlib/tools/common.sh
 
+set -o pipefail
+trap 'azure_log_error "Error at line ${BASH_LINENO[0]}"; exit -1' ERR
+
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
 
@@ -193,6 +196,7 @@ run_client_server_app() {
 	if [ $error_emulation -eq 1 ]
 	then
 		set +Ee
+		trap '' ERR
 	fi
 
 	taskset -c $affinity_client ${test_exe} ${test_args} ${server_addr_arg} ${server_port_arg} &
@@ -203,6 +207,7 @@ run_client_server_app() {
 	if [ $error_emulation -eq 1 ]
 	then
 		set -eE
+		trap 'azure_log_error "Error at line ${BASH_LINENO[0]}"; exit -1' ERR
 	fi
 
 	if [ $kill_server -eq 1 ]
@@ -874,8 +879,22 @@ test_memtrack() {
 	UCX_MEMTRACK_DEST=stdout GTEST_FILTER=test_memtrack.sanity make -C ./test/gtest test
 
 	echo "==== Running memtrack limit test ===="
-	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
-	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=412MB ./test/apps/test_memtrack_limit |& grep -C 100 'reached'
+    UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
+
+    echo "==== Testing failure scenario ===="
+    set +e
+    trap '' ERR
+    UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=412MB ./test/apps/test_memtrack_limit |& grep -C 100 'reached'
+    status=$?
+    trap 'azure_log_error "Error at line ${BASH_LINENO[0]}"; exit -1' ERR
+    set -e
+
+    if [ $status -ne 0 ]; then
+        echo "ERROR: Failure test did not behave as expected"
+        exit 1
+    else
+        echo "Failure test behaved as expected"
+    fi
 }
 
 test_unused_env_var() {
@@ -951,33 +970,43 @@ run_gtest_watchdog_test() {
 
 	start_time=`date +%s`
 
-	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
-		WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
-		GTEST_FILTER=test_watchdog.watchdog_timeout \
-		make -C ./test/gtest test 2>&1 | tee watchdog_timeout_test &
+	# Run the test in the background
+	(
+		env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
+			WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
+			GTEST_FILTER=test_watchdog.watchdog_timeout \
+			make -C ./test/gtest test 2>&1 | tee watchdog_timeout_test &
+	) &
 	pid=$!
 	wait $pid
+	exit_code=$?
 
 	end_time=`date +%s`
 
-	res="$(grep -x "$expected_err_str" watchdog_timeout_test)" || true
-
-	rm -f watchdog_timeout_test
-
-	if [ "$res" != "$expected_err_str" ]
+	if [ $exit_code -eq 0 ]
 	then
-		echo "didn't find [$expected_err_str] string in the test output"
+		echo "Watchdog timeout test didn't fail as expected"
+		rm -f watchdog_timeout_test
 		exit 1
 	fi
 
-	runtime=$(($end_time-$start_time))
+	if ! grep -Fxq "$expected_err_str" watchdog_timeout_test; then
+		echo "ERROR: Didn't find the expected error string [$expected_err_str] in the test output"
+		rm -f watchdog_timeout_test
+		exit 1
+	fi
 
+	rm -f watchdog_timeout_test
+
+	runtime=$(($end_time-$start_time))
 	if [ $runtime -gt $expected_runtime ]
 	then
 		echo "Watchdog timeout test takes $runtime seconds that" \
 			"is greater than expected $expected_runtime seconds"
 		exit 1
 	fi
+
+	echo "Watchdog timeout test passed (runtime: $runtime seconds)"
 }
 
 run_malloc_hook_gtest() {
