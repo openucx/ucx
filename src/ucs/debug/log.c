@@ -255,42 +255,32 @@ void ucs_log_print_compact_multiline(const char *str)
     struct timeval tv;
     const char *line_start;
     const char *line_end;
-    size_t prefix_len;
 
     gettimeofday(&tv, NULL);
-
-    /* Build prefix and measure its length for subsequent line padding */
-    if (RUNNING_ON_VALGRIND) {
-        ucs_string_buffer_appendf(&strb, UCS_LOG_TIME_FMT,
-                                  UCS_LOG_TIME_ARG(&tv));
-    } else {
-        ucs_string_buffer_appendf(&strb, UCS_LOG_COMPACT_FMT,
-                                  UCS_LOG_COMPACT_ARG(&tv));
-    }
-    prefix_len = ucs_string_buffer_length(&strb);
 
     /* Build the entire output in a string buffer */
     line_start = str;
     while (*line_start != '\0') {
-        /* Add newline and space padding for lines other than the first */
-        if (line_start != str) {
-            ucs_string_buffer_appendf(&strb, "\n%*s", (int)prefix_len, "");
+        if (RUNNING_ON_VALGRIND) {
+            ucs_string_buffer_appendf(&strb, UCS_LOG_TIME_FMT,
+                                      UCS_LOG_TIME_ARG(&tv));
+        } else {
+            ucs_string_buffer_appendf(&strb, UCS_LOG_COMPACT_FMT,
+                                      UCS_LOG_COMPACT_ARG(&tv));
         }
 
         line_end = strchr(line_start, '\n');
         if (line_end == NULL) {
-            /* Last line without trailing newline */
-            ucs_string_buffer_appendf(&strb, " %s", line_start);
+            /* Last line */
+            ucs_string_buffer_appendf(&strb, " %s\n", line_start);
             break;
         }
 
-        /* Append line up to (but not including) the newline */
-        ucs_string_buffer_appendf(&strb, " %.*s", (int)(line_end - line_start),
-                                  line_start);
+        /* Append current line (including the newline character) */
+        ucs_string_buffer_appendf(&strb, " %.*s",
+                                  (int)(line_end - line_start + 1), line_start);
         line_start = line_end + 1;
     }
-
-    ucs_string_buffer_appendf(&strb, "\n");
 
     if (RUNNING_ON_VALGRIND) {
         VALGRIND_PRINTF("%s", ucs_string_buffer_cstr(&strb));
