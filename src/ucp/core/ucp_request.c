@@ -737,12 +737,20 @@ ucs_status_t ucp_request_progress_counter(uct_pending_req_t *self)
     const ucp_proto_t *proto = conf->proto;
     ucs_status_t status;
 
+    // TODO: `ucp_trace_req` will never be printed because a different wrapper
+    // is used when TRACE_REQ is enabled.
+    // context->config.progress_wrapper_enabled =
+    //   ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
+    //   ucp_context_usage_tracker_enabled(context);
+
     status = proto->progress[UCP_PROTO_STAGE_START](self);
-    if (status != UCS_OK) {
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        ucp_trace_req(req, "progress protocol %s returned: %s lane %d",
+                      proto->name, ucs_status_string(status), req->send.lane);
         return status;
     }
 
-    if (++conf->selections == UCP_PROTO_SELECTIONS_COUNT_MAX) {
+    if (ucs_unlikely(++conf->selections == UCP_PROTO_SELECTIONS_COUNT_MAX)) {
         ucp_trace_req(req, "protocol %s was selected %u times, stop tracing",
                       proto->name, conf->selections);
         memcpy(conf->progress_wrapper, proto->progress,
@@ -773,7 +781,7 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
 
     ucs_log_indent(1);
     status = progress_cb(self);
-    if (UCS_STATUS_IS_ERR(status)) {
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucp_trace_req(req, "progress protocol %s returned: %s lane %d",
                       proto->name, ucs_status_string(status), req->send.lane);
     } else {
