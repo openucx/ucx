@@ -97,7 +97,8 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
         return dmabuf_supported;
     }
 
-    dmabuf_supported = !!(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
+    dmabuf_supported = md->config.gda_dmabuf_enable &&
+                       !!(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
                        uct_cuda_copy_md_is_dmabuf_supported();
     return dmabuf_supported;
 }
