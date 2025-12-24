@@ -759,8 +759,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
 
             /* If adding same lane type and usage, expect same score */
             ucs_assertv_always(
-                    ucp_score_cmp(lane_desc->score[lane_type],
-                                  select_info->score) == 0,
+                    ucs_fp_compare(lane_desc->score[lane_type],
+                                   select_info->score) == 0,
                     "usage=%s lane_desc->score=%.2f select->score=%.2f",
                     ucp_lane_type_info[lane_type].short_name,
                     lane_desc->score[lane_type], select_info->score);
@@ -844,8 +844,8 @@ static int ucp_wireup_compare_score(const void *elem1, const void *elem2,
     score1 = (*lane1 == UCP_NULL_LANE) ? 0.0 : lanes[*lane1].score[lane_type];
     score2 = (*lane2 == UCP_NULL_LANE) ? 0.0 : lanes[*lane2].score[lane_type];
 
-    /* reverse the value of ucp_score_cmp to sort scores in descending order */
-    return -ucp_score_cmp(score1, score2);
+    /* reverse the value of ucs_fp_compare to sort scores in descending order */
+    return -ucs_fp_compare(score1, score2);
 }
 
 static int ucp_wireup_compare_lane_am_bw_score(const void *elem1, const void *elem2,
@@ -989,7 +989,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
         if ((status != UCS_OK) ||
             /* - the selected transport is worse than
              *   the transport selected above */
-            (ucp_score_cmp(select_info.score, reg_score) <= 0)) {
+            (ucs_fp_compare(select_info.score, reg_score) <= 0)) {
             break;
         }
 
@@ -1573,7 +1573,7 @@ ucp_proto_select_info_score_compare(const void *e1, const void *e2,
     const ucp_wireup_select_info_t *info2 = e2;
     int score_cmp, key_cmp1, key_cmp2;
 
-    score_cmp = ucp_score_cmp(info1->score, info2->score);
+    score_cmp = ucs_fp_compare(info1->score, info2->score);
     if (score_cmp != 0) {
         return -score_cmp;
     }
@@ -2270,8 +2270,7 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
                                          UINT64_MAX, UINT64_MAX, 0,
                                          &select_info);
     if ((status == UCS_OK) &&
-        (ucp_score_cmp(select_info.score,
-                       am_info->score) >= 0)) {
+        (ucs_fp_compare(select_info.score, am_info->score) >= 0)) {
         return ucp_wireup_add_lane(select_params, &select_info,
                                    UCP_LANE_TYPE_TAG, /* show error */ 1,
                                    select_ctx);
@@ -2501,8 +2500,7 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
                                          mem_type_tl_bitmap, UCP_NULL_LANE,
                                          select_ctx, 0);
     if (!found_lane) {
-        ucs_error("could not find device lanes");
-        return UCS_ERR_UNREACHABLE;
+        ucs_debug("ep %p: could not find device lanes", select_params->ep);
     }
 
     return UCS_OK;

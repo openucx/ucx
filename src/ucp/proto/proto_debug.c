@@ -161,10 +161,17 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
     const char *proto_info_config = context->config.ext.proto_info;
     int bool_value;
 
+    /* Handle "auto" - enable when log level is DEBUG or higher */
+    if (!strcasecmp(proto_info_config, "auto")) {
+        return ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG);
+    }
+
+    /* Handle boolean */
     if (ucs_config_sscanf_bool(proto_info_config, &bool_value, NULL)) {
         return bool_value;
     }
 
+    /* Handle glob pattern */
     return fnmatch(proto_info_config, select_param_str, FNM_CASEFOLD) == 0;
 }
 

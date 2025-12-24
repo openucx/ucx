@@ -15,6 +15,7 @@
 #include <ucs/sys/checker.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>

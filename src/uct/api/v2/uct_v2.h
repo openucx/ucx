@@ -184,7 +184,8 @@ typedef struct {
     double              recv_overhead;
 
     /**
-     * Bandwidth model. This field is set by the UCT layer.
+     * Represent actual bandwidth of the interface.
+     * This field is set by the UCT layer.
      */
     uct_ppn_bandwidth_t bandwidth;
 
@@ -713,6 +714,20 @@ typedef struct uct_ep_connect_to_ep_params {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for invalidating a UCT endpoint by @ref uct_ep_invalidate.
+ */
+ typedef struct {
+    /**
+     * Mask of valid fields in this structure. Must currently be equal to zero.
+     * Fields not specified in this mask will be ignored. Provides ABI
+     * compatibility with respect to adding new fields.
+     */
+    uint64_t                      field_mask;
+} uct_ep_invalidate_params_t;
+
+
+/**
  * @ingroup UCT_MD
  * @brief Parameters for comparing remote keys using @ref uct_rkey_compare.
  */
@@ -1124,6 +1139,24 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
  * @return Error code.
  */
 ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Invalidate the endpoint.
+ *
+ * This routine invalidates the endpoint and moves it to the error state.
+ * All the incomplete and subsequent operations on the endpoint will be
+ * completed with error.
+ *
+ * @param [in]  ep         Endpoint to invalidate.
+ * @param [in]  params     Operation parameters, see @ref
+ *                         uct_ep_invalidate_params_t.
+ *
+ * @return Error code.
+*/
+ucs_status_t uct_ep_invalidate(uct_ep_h ep,
+                               const uct_ep_invalidate_params_t *params);
 
 
 /**

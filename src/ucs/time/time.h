@@ -163,7 +163,7 @@ static inline double ucs_time_units_to_sec(ucs_time_t t, double auto_val)
     if (t == UCS_TIME_AUTO) {
         return auto_val;
     } else if (t == UCS_TIME_INFINITY) {
-        return INFINITY;
+        return UCS_INFINITY;
     }
 
     return ucs_time_to_sec(t);

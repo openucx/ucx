@@ -13,6 +13,7 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/netlink.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
 #include <ucs/config/types.h>
 #include <sys/socket.h>
 #include <sys/poll.h>
@@ -263,8 +264,8 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (!ucs_netlink_route_exists(ndev_index,
-                                  (const struct sockaddr *)&remote_addr)) {
+    if (!ucs_netlink_is_best_route(ndev_index,
+                                   (const struct sockaddr*)&remote_addr)) {
         uct_iface_fill_info_str_buf(
                     params, "no route to %s",
                     ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
@@ -272,6 +273,11 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
+    /* This interface has the best route */
+    ucs_trace("tcp_iface %p (%s): this interface has the best route to %s",
+              iface, iface->if_name,
+              ucs_sockaddr_str((const struct sockaddr*)&remote_addr,
+                               remote_addr_str, UCS_SOCKADDR_STRING_LEN));
     return 1;
 }
 

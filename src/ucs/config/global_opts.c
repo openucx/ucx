@@ -129,7 +129,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #if ENABLE_DEBUG_DATA
   "bt,freeze",
 #else
-  "bt",
+  "none",
 #endif
   "Error signal handling mode. Either 'none' to disable signal interception,\n"
   "or a combination of:\n"
@@ -347,11 +347,11 @@ UCS_CONFIG_DECLARE_TABLE(ucs_global_opts_read_only_table,
                          "UCS global (runtime read-only)", NULL,
                          ucs_global_opts_t)
 
-
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
 {
-    ucs_status_t status = ucs_global_opts_set_value_modifiable(name, value);
-
+    ucs_status_t status = ucs_config_parser_set_value(&ucs_global_opts,
+                                                      ucs_global_opts_table,
+                                                      NULL, name, value);
     if (status != UCS_ERR_NO_ELEM) {
         return status;
     }
@@ -361,11 +361,10 @@ ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
                                        name, value);
 }
 
-ucs_status_t ucs_global_opts_set_value_modifiable(const char *name,
-                                                  const char *value)
+int ucs_global_opts_is_read_only(const char *name)
 {
-    return ucs_config_parser_set_value(&ucs_global_opts, ucs_global_opts_table,
-                                       NULL, name, value);
+    return ucs_config_parser_has_field(ucs_global_opts_read_only_table, NULL,
+                                       name);
 }
 
 ucs_status_t ucs_global_opts_get_value(const char *name, char *value,

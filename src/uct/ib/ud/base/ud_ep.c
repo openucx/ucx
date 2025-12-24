@@ -1823,7 +1823,8 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
     uct_ud_leave(iface);
 }
 
-ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
+ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep,
+                                  const uct_ep_invalidate_params_t *params)
 {
     uct_ud_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
