@@ -700,11 +700,13 @@ ssize_t ucs_get_huge_page_size()
 
 static ssize_t ucs_get_huge_pages_count()
 {
-    ssize_t huge_page_count;
+    static ssize_t huge_page_count = -1;
 
-    huge_page_count = ucs_get_meminfo_entry("HugePages_Total", 0);
     if (huge_page_count == -1) {
-        ucs_debug("could not read HugePages_Total from /proc/meminfo");
+        huge_page_count = ucs_get_meminfo_entry("HugePages_Total", 0);
+        if (huge_page_count == -1) {
+            ucs_debug("could not read HugePages_Total from /proc/meminfo");
+        }
     }
 
     return huge_page_count;
