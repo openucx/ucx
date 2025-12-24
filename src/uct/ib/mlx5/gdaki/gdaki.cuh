@@ -282,7 +282,7 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
             wqe_base = wqe_base_orig;
         }
     } else {
-        while (READ_ONCE(ep->sq_ready_index) != wqe_base) {
+        while (READ_ONCE(qp->sq_ready_index) != wqe_base) {
         }
         uct_rc_mlx5_gda_ring_db(ep, cid, wqe_next);
         uct_rc_mlx5_gda_update_dbr(ep, cid, wqe_next);
