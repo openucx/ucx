@@ -13,6 +13,7 @@
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_init.h>
+#include <ucs/datastruct/callbackq.h>
 
 
 enum {
@@ -252,7 +253,7 @@ void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
 
 static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req  = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     ucp_worker_h worker = req->send.ep->worker;
     const ucp_proto_rndv_ppln_priv_t *rpriv;
     ucp_datatype_iter_t next_iter;

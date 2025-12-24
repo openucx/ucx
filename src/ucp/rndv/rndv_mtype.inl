@@ -10,6 +10,7 @@
 #include "rndv.h"
 
 #include <ucp/core/ucp_worker.h>
+#include <ucp/proto/proto_select.inl>
 
 
 static ucp_ep_h ucp_proto_rndv_mtype_ep(ucp_worker_t *worker,
@@ -167,6 +168,131 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
     }
 
     return status;
+}
+
+/* Reschedule callback for throttled mtype requests */
+static unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
+{
+    ucp_request_t *req = arg;
+    ucp_request_send(req);
+    return 1;
+}
+
+/**
+ * Check if this is an RTR protocol (vs GET protocol).
+ * Both are UCP_OP_ID_RNDV_RECV, but RTR holds memory longer (waiting for PUT).
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_mtype_is_rtr(ucp_request_t *req)
+{
+    const char *proto_name = req->send.proto_config->proto->name;
+    return (strstr(proto_name, "rtr") != NULL);
+}
+
+/**
+ * Check if request should be throttled due to flow control limit.
+ * If throttled, the request is queued to the appropriate priority queue.
+ *
+ * Priority and quota allocation:
+ * - PUT (RNDV_SEND): Full quota, highest dequeue priority (releases both sides' memory)
+ * - GET (RNDV_RECV): 75% quota, medium priority (releases receiver memory)
+ * - RTR (RNDV_RECV): 50% quota, lowest priority (holds memory until remote PUT)
+ *
+ * @return UCS_OK if not throttled (caller should continue),
+ *         UCS_ERR_NO_RESOURCE if throttled and queued (caller should return UCS_OK).
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_mtype_fc_check(ucp_request_t *req)
+{
+    ucp_worker_h worker       = req->send.ep->worker;
+    ucp_context_h context     = worker->context;
+    size_t max_frags          = context->config.ext.rndv_mtype_worker_max_frags;
+    ucp_operation_id_t op_id;
+    ucs_queue_head_t *pending_q;
+    size_t effective_max;
+
+    if (!context->config.ext.rndv_mtype_worker_fc_enable) {
+        return UCS_OK;
+    }
+
+    op_id = ucp_proto_select_op_id(&req->send.proto_config->select_param);
+
+    if (op_id == UCP_OP_ID_RNDV_SEND) {
+        /* PUT - can use full quota (highest priority, releases both sides) */
+        effective_max = max_frags;
+        pending_q     = &worker->rndv_mtype_fc.put_pending_q;
+    } else if (ucp_proto_rndv_mtype_is_rtr(req)) {
+        /* RTR - reserve 50% for PUT/GET (holds memory waiting for remote PUT) */
+        effective_max = max_frags / 2;
+        pending_q     = &worker->rndv_mtype_fc.rtr_pending_q;
+    } else {
+        /* GET - reserve 25% for PUT (releases receiver memory on completion) */
+        effective_max = (max_frags * 3) / 4;
+        pending_q     = &worker->rndv_mtype_fc.get_pending_q;
+    }
+
+    if (worker->rndv_mtype_fc.active_frags >= effective_max) {
+        ucs_trace_req("mtype_fc: throttle op=%d active=%zu max=%zu effective=%zu",
+                      op_id, worker->rndv_mtype_fc.active_frags,
+                      max_frags, effective_max);
+        ucs_queue_push(pending_q, &req->send.rndv.ppln.queue_elem);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    return UCS_OK;
+}
+
+/**
+ * Increment active_frags counter after successful mtype allocation.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_fc_increment(ucp_request_t *req)
+{
+    ucp_worker_h worker = req->send.ep->worker;
+
+    if (worker->context->config.ext.rndv_mtype_worker_fc_enable) {
+        worker->rndv_mtype_fc.active_frags++;
+    }
+}
+
+/**
+ * Decrement active_frags counter and reschedule pending request.
+ * Dequeue priority: PUT > GET > RTR (by memory release impact)
+ * - PUT completion releases memory on both sender and receiver
+ * - GET completion releases memory on receiver
+ * - RTR completion doesn't release memory (waiting for PUT)
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
+{
+    ucp_worker_h worker   = req->send.ep->worker;
+    ucp_context_h context = worker->context;
+    ucs_queue_elem_t *elem = NULL;
+    ucp_request_t *pending_req;
+
+    if (!context->config.ext.rndv_mtype_worker_fc_enable) {
+        return;
+    }
+
+    ucs_assert(worker->rndv_mtype_fc.active_frags > 0);
+    worker->rndv_mtype_fc.active_frags--;
+
+    /* Dequeue with priority: PUT > GET > RTR */
+    if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.put_pending_q)) {
+        elem = ucs_queue_pull(&worker->rndv_mtype_fc.put_pending_q);
+    } else if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.get_pending_q)) {
+        elem = ucs_queue_pull(&worker->rndv_mtype_fc.get_pending_q);
+    } else if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.rtr_pending_q)) {
+        elem = ucs_queue_pull(&worker->rndv_mtype_fc.rtr_pending_q);
+    }
+
+    if (elem != NULL) {
+        pending_req = ucs_container_of(elem, ucp_request_t,
+                                       send.rndv.ppln.queue_elem);
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
+                                  ucp_proto_rndv_mtype_fc_reschedule_cb,
+                                  pending_req);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

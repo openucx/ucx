@@ -517,13 +517,17 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_mtype_send_func(
 static ucs_status_t
 ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req                     = ucs_container_of(uct_req,
-                                                              ucp_request_t,
-                                                              send.uct);
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
     ucs_status_t status;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
+
+    /* Check throttling. If no resource at the moment, queue the request
+     * in the throttle pending queue and return UCS_OK. */
+    if (ucp_proto_rndv_mtype_fc_check(req) == UCS_ERR_NO_RESOURCE) {
+        return UCS_OK;
+    }
 
     status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type,
                                                rpriv->bulk.frag_sys_dev);
@@ -532,6 +536,7 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
         return UCS_OK;
     }
 
+    ucp_proto_rndv_mtype_fc_increment(req);
     ucp_proto_rndv_put_common_request_init(req);
     req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     ucp_proto_rndv_mdesc_mtype_copy(req, uct_ep_get_zcopy,
@@ -563,6 +568,7 @@ static void ucp_proto_rndv_put_mtype_completion(uct_completion_t *uct_comp)
 
     ucp_trace_req(req, "rndv_put_mtype_completion");
     ucs_mpool_put(req->send.rndv.mdesc);
+    ucp_proto_rndv_mtype_fc_decrement(req);
     ucp_proto_rndv_put_common_complete(req);
 }
 
@@ -573,6 +579,7 @@ static void ucp_proto_rndv_put_mtype_frag_completion(uct_completion_t *uct_comp)
 
     ucp_trace_req(req, "rndv_put_mtype_frag_completion");
     ucs_mpool_put(req->send.rndv.mdesc);
+    ucp_proto_rndv_mtype_fc_decrement(req);
     ucp_proto_rndv_ppln_send_frag_complete(req, 1);
 }
 
