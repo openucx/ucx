@@ -2808,9 +2808,15 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_tl_bitmap_t scalable_tl_bitmap = worker->scalable_tl_bitmap;
     /* TODO: remove initialization after all ucp_wireup_add_X_lanes functions
        will support specifying a reason */
-    ucp_wireup_select_context_t select_ctx;
+    ucp_wireup_select_context_t *select_ctx;
     ucp_wireup_select_params_t select_params;
     ucs_status_t status;
+
+    select_ctx = ucs_malloc(sizeof(*select_ctx), "select_ctx");
+    if (select_ctx == NULL) {
+        ucs_error("failed to allocate select_ctx");
+        return UCS_ERR_NO_MEMORY;
+    }
 
     UCS_STATIC_BITMAP_AND_INPLACE(&scalable_tl_bitmap, tl_bitmap);
 
@@ -2818,7 +2824,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                       remote_address, scalable_tl_bitmap, 0);
         status = ucp_wireup_search_lanes(&select_params, key->err_mode,
-                                         &select_ctx);
+                                         select_ctx);
         if (status == UCS_OK) {
             goto out;
         }
@@ -2831,16 +2837,16 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                   remote_address, tl_bitmap, show_error);
     status = ucp_wireup_search_lanes(&select_params, key->err_mode,
-                                     &select_ctx);
+                                     select_ctx);
     if (status != UCS_OK) {
-        return status;
+        goto out_err;
     }
 
 out:
-    status = ucp_wireup_construct_lanes(&select_params, &select_ctx,
+    status = ucp_wireup_construct_lanes(&select_params, select_ctx,
                                         addr_indices, key);
     if (status != UCS_OK) {
-        return status;
+        goto out_err;
     }
 
     /* Only two lanes must be created during CM phase (CM lane and TL lane) of
@@ -2850,7 +2856,9 @@ out:
                                    UCP_EP_INIT_CM_PHASE) ||
                (key->num_lanes == 2));
 
-    return UCS_OK;
+out_err:
+    ucs_free(select_ctx);
+    return status;
 }
 
 ucs_status_t
@@ -2859,29 +2867,41 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                 const ucp_unpacked_address_t *remote_address,
                                 ucp_wireup_select_info_t *select_info)
 {
-    ucp_wireup_select_context_t select_ctx = {};
-    ucp_wireup_criteria_t criteria         = {};
+    ucp_wireup_criteria_t criteria = {};
     ucp_wireup_select_params_t select_params;
+    ucp_wireup_select_context_t *select_ctx;
     ucs_status_t status;
 
+    select_ctx = ucs_malloc(sizeof(*select_ctx), "select_ctx");
+    if (select_ctx == NULL) {
+        ucs_error("failed to allocate select_ctx");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucp_wireup_select_context_init(select_ctx);
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                   remote_address, tl_bitmap, 1);
 
     /* Select auxiliary transport that supports async active message callback */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
-    status = ucp_wireup_select_transport(&select_ctx, &select_params, &criteria,
+    status = ucp_wireup_select_transport(select_ctx, &select_params, &criteria,
                                          ucp_tl_bitmap_max, UINT64_MAX,
                                          UINT64_MAX, UINT64_MAX, 0,
                                          select_info);
     if (status == UCS_OK) {
-        return UCS_OK;
+        goto out;
     }
 
     /* Fallback to an auxiliary transport without async active message callback
      * requirement */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0);
-    return ucp_wireup_select_transport(&select_ctx, &select_params, &criteria,
-                                       ucp_tl_bitmap_max, UINT64_MAX,
-                                       UINT64_MAX, UINT64_MAX, 1, select_info);
+    status = ucp_wireup_select_transport(select_ctx, &select_params, &criteria,
+                                         ucp_tl_bitmap_max, UINT64_MAX,
+                                         UINT64_MAX, UINT64_MAX, 1,
+                                         select_info);
+
+out:
+    ucs_free(select_ctx);
+    return status;
 }

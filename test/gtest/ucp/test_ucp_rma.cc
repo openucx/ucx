@@ -564,7 +564,8 @@ public:
         }
 
         ASSERT_FALSE(UCS_PTR_IS_ERR(sptr));
-        ASSERT_NE(sender().ep()->ext->unflushed_lanes, 0);
+        ASSERT_FALSE(
+                UCS_STATIC_BITMAP_IS_ZERO(sender().ep()->ext->unflushed_lanes));
         request_release(sptr);
     }
 
@@ -616,7 +617,7 @@ public:
          * fences, requiring reset of unflushed_lanes after flush between
          * iterations.
          */
-        sender().ep()->ext->unflushed_lanes = 0;
+        UCS_STATIC_BITMAP_RESET_ALL(&sender().ep()->ext->unflushed_lanes);
     }
 
     void do_rma_op_with_fence_before(op_type_t op, void *sbuf, size_t size,

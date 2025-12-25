@@ -511,8 +511,8 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
     num_lanes = ucp_proto_common_find_lanes(params,
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
                                             UCP_LANE_TYPE_AM,
-                                            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, NULL,
-                                            &lane);
+                                            UCT_IFACE_FLAG_AM_BCOPY, 1,
+                                            ucp_lane_map_zero, NULL, &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s",
                   ucp_proto_id_field(params->proto_id, name));
@@ -543,7 +543,7 @@ void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = ucp_lane_map_zero,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
@@ -568,7 +568,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
     attr->is_estimation  = 1;
     attr->max_msg_length = remote_attr.max_msg_length;
-    attr->lane_map       = UCS_BIT(rpriv->lane);
+    attr->lane_map       = UCP_LANE_MAP_BIT(rpriv->lane);
 
     ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "rendezvous %s",
                       remote_attr.desc);
