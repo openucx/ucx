@@ -914,8 +914,8 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
         huge_page_size = ucs_get_huge_page_size();
         if ((huge_page_size <= 0) || (ucs_get_huge_pages_count() <= 0) ||
             !ucs_sys_get_mlock_cap()) {
-            ucs_debug("huge pages are not supported on the system");
-            return UCS_ERR_NO_MEMORY; /* Huge pages not supported */
+            ucs_debug("SHM_HUGETLB are not supported on the system");
+            return UCS_ERR_NO_MEMORY; /* SHM_HUGETLB not supported */
         }
 
         alloc_size = ucs_align_up(*size, huge_page_size);
