@@ -27,6 +27,7 @@ stages:
           - ucx_docker -equals yes
         steps:
           - checkout: self
+            submodules: true
             clean: true
             retryCountOnTaskFailure: 5
           - bash: |
