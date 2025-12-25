@@ -270,24 +270,25 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
     uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
             qp->sq_ready_index);
-    uint64_t wqe_base_orig = wqe_base;
+    const uint64_t wqe_next = wqe_base + count;
+    const bool skip_db      = !(flags & UCT_DEVICE_FLAG_NODELAY) &&
+                              !((wqe_base ^ wqe_next) & 128);
 
     __threadfence();
-    while (!ref.compare_exchange_strong(wqe_base, wqe_base + count,
-                                        cuda::std::memory_order_relaxed)) {
-        wqe_base = wqe_base_orig;
+    if (skip_db) {
+        const uint64_t wqe_base_orig = wqe_base;
+        while (!ref.compare_exchange_strong(wqe_base, wqe_next,
+                                            cuda::std::memory_order_relaxed)) {
+            wqe_base = wqe_base_orig;
+        }
+    } else {
+        while (READ_ONCE(qp->sq_ready_index) != wqe_base) {
+        }
+        uct_rc_mlx5_gda_ring_db(ep, cid, wqe_next);
+        uct_rc_mlx5_gda_update_dbr(ep, cid, wqe_next);
+        uct_rc_mlx5_gda_ring_db(ep, cid, wqe_next);
+        ref.store(wqe_next, cuda::std::memory_order_release);
     }
-
-    if (!(flags & UCT_DEVICE_FLAG_NODELAY) &&
-        !((wqe_base ^ (wqe_base + count)) & 128)) {
-        return;
-    }
-
-    uct_rc_mlx5_gda_lock(&qp->sq_lock);
-    uct_rc_mlx5_gda_ring_db(ep, cid, qp->sq_ready_index);
-    uct_rc_mlx5_gda_update_dbr(ep, cid, qp->sq_ready_index);
-    uct_rc_mlx5_gda_ring_db(ep, cid, qp->sq_ready_index);
-    uct_rc_mlx5_gda_unlock(&qp->sq_lock);
 }
 
 UCS_F_DEVICE bool
