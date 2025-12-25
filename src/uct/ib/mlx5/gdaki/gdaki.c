@@ -90,6 +90,22 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
     *dev_ep_size_p       = qp_attr->umem_offset + qp_attr->len * num_channels;
 }
 
+static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
+{
+    int res = 0;
+#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
+    struct mlx5dv_devx_umem_in umem_in = {};
+    struct mlx5dv_devx_umem *umem;
+
+    umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
+    umem              = mlx5dv_devx_umem_reg_ex(md->dev.ibv_context, &umem_in);
+    res               = errno != EPROTONOSUPPORT;
+    ucs_assert_always(umem == NULL);
+#endif
+
+    return res;
+}
+
 static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
 {
     static int dmabuf_supported = -1;
@@ -100,6 +116,7 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
 
     dmabuf_supported = md->config.gda_dmabuf_enable &&
                        !!(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
+                       uct_gdaki_check_umem_dmabuf(md) &&
                        uct_cuda_copy_md_is_dmabuf_supported();
     return dmabuf_supported;
 }
@@ -126,19 +143,19 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
                       void *address, size_t length)
 {
     struct mlx5dv_devx_umem_in umem_in = {};
-    uct_cuda_copy_md_dmabuf_t dmabuf;
+    uct_cuda_copy_md_dmabuf_t dmabuf UCS_V_UNUSED;
 
     umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
     umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
+#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     dmabuf              = uct_rc_gdaki_get_dmabuf(md, address, length);
-    if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
-        umem_in.comp_mask = 0;
-    } else {
+    if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
         umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
         umem_in.dmabuf_fd = dmabuf.fd;
     }
+#endif
 
     return mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
 }
