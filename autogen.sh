@@ -33,7 +33,10 @@ mkdir -p config/m4 config/aux
 
 if [ "X$with_ucg" = "Xyes" ]
 then
-	git submodule update --init --recursive --remote
+	git submodule update --init --recursive --remote src/ucg
+elif [ -f src/ucg/configure.m4 ]
+then
+	git submodule deinit -f src/ucg
 fi
 
 autoreconf -v --install || exit 1
