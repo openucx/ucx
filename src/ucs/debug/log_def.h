@@ -150,6 +150,16 @@ void ucs_log_print_compact(const char *str);
 
 
 /**
+ * Print a multiline compact log (without file/line prefixes) to the log stream. 
+ * The entire output is written in a single operation to avoid interleaving with 
+ * other prints.
+ *
+ * @param [in] str   Multiline string to print (may contain '\n' characters).
+ */
+void ucs_log_print_compact_multiline(const char *str);
+
+
+/**
  * Default log handler, which prints the message to the output configured in
  * UCS global options. See @ref ucs_log_func_t.
  */
