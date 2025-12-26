@@ -154,7 +154,6 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
     if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
         umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
         umem_in.dmabuf_fd = dmabuf.fd;
-        umem_in.addr      = (void*)dmabuf.offset;
     }
 #endif
 
