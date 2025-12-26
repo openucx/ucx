@@ -19,7 +19,7 @@ ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment)
 }
 
 
-/* LRU spinlock must be held */
+/* LRU must be enabled and LRU spinlock must be held */
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_lru_add(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
@@ -33,7 +33,7 @@ ucs_rcache_region_lru_add(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 }
 
 
-/* LRU spinlock must be held */
+/* LRU must be enabled and LRU spinlock must be held */
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_lru_remove(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
@@ -46,6 +46,32 @@ ucs_rcache_region_lru_remove(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
     region->lru_flags &= ~UCS_RCACHE_LRU_FLAG_IN_LRU;
 }
 
+
+static UCS_F_ALWAYS_INLINE void
+ucs_rcache_region_lru_get(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
+{
+    if (!rcache->lru.enabled) {
+        return;
+    }
+
+    /* A used region cannot be evicted */
+    ucs_spin_lock(&rcache->lru.lock);
+    ucs_rcache_region_lru_remove(rcache, region);
+    ucs_spin_unlock(&rcache->lru.lock);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucs_rcache_region_lru_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
+{
+    if (!rcache->lru.enabled) {
+        return;
+    }
+
+    /* When we finish using a region, it's a candidate for LRU eviction */
+    ucs_spin_lock(&rcache->lru.lock);
+    ucs_rcache_region_lru_add(rcache, region);
+    ucs_spin_unlock(&rcache->lru.lock);
+}
 
 static UCS_F_ALWAYS_INLINE ucs_rcache_region_t *
 ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
@@ -76,7 +102,7 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
     }
 
     region->refcount++;
-    ucs_rcache_region_lru_remove(rcache, region);
+    ucs_rcache_region_lru_get(rcache, region);
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
     return region;
 }
@@ -96,7 +122,7 @@ ucs_rcache_lookup(ucs_rcache_t *rcache, void *address, size_t length,
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_put_unsafe(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
-    ucs_rcache_region_lru_add(rcache, region);
+    ucs_rcache_region_lru_put(rcache, region);
 
     ucs_assert(region->refcount > 0);
     if (ucs_unlikely(--region->refcount == 0)) {
