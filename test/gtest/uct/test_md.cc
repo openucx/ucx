@@ -236,6 +236,16 @@ bool test_md::check_caps(uint64_t flags) const
     return ((md() == nullptr) || ucs_test_all_flags(m_md_attr.flags, flags));
 }
 
+bool test_md::check_component_caps(uint64_t flags) const
+{
+    uct_component_attr attr;
+
+    attr.field_mask = UCT_COMPONENT_ATTR_FIELD_FLAGS;
+    EXPECT_UCS_OK(uct_component_query(GetParam().component, &attr));
+
+    return ucs_test_all_flags(attr.flags, flags);
+}
+
 bool test_md::check_reg_mem_type(ucs_memory_type_t mem_type)
 {
     return ((md() == nullptr) || (check_caps(UCT_MD_FLAG_REG) &&
@@ -282,7 +292,8 @@ void test_md::dereg_cb(uct_completion_t *comp)
     md_comp->self->m_comp_count++;
 }
 
-UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
+UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
+                     !check_component_caps(UCT_COMPONENT_FLAG_RKEY_PTR)) {
     uct_md_h md_ref                       = md();
     uct_md_mkey_pack_params_t pack_params = {};
     void *ptr                             = nullptr;
