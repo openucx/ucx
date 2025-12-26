@@ -920,6 +920,96 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
 
+#if UCT_UD_EP_DEBUG_HOOKS
+class test_ud_stale_ack : public test_ud {
+public:
+    static ucs_status_t inject_stale_ack_psn(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        if (m_stale_ack_psn_to_inject != 0) {
+            neth->ack_psn = m_stale_ack_psn_to_inject;
+        }
+        return UCS_OK;
+    }
+
+    static ucs_status_t capture_rx_ack_psn(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        m_received_ack_psn = neth->ack_psn;
+        return UCS_OK;
+    }
+
+    static void set_stale_ack_psn(uct_ud_psn_t psn) {
+        m_stale_ack_psn_to_inject = psn;
+    }
+
+    static uct_ud_psn_t get_stale_ack_psn() {
+        return m_stale_ack_psn_to_inject;
+    }
+
+    static uct_ud_psn_t get_received_ack_psn() {
+        return m_received_ack_psn;
+    }
+
+private:
+    /* Stale ACK PSN to inject - simulates ACK from before endpoint reset */
+    static volatile uct_ud_psn_t m_stale_ack_psn_to_inject;
+    /* Captured ACK PSN from received packet */
+    static volatile uct_ud_psn_t m_received_ack_psn;
+};
+
+volatile uct_ud_psn_t test_ud_stale_ack::m_stale_ack_psn_to_inject = 0;
+volatile uct_ud_psn_t test_ud_stale_ack::m_received_ack_psn        = 0;
+
+UCS_TEST_SKIP_COND_P(test_ud_stale_ack, stale_ack_after_reset,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    constexpr uct_ud_psn_t STALE_ACK_PSN = 135;
+    constexpr uct_ud_psn_t WINDOW_SIZE = 1024;
+
+    disable_async(m_e1);
+    disable_async(m_e2);
+    connect();
+    set_tx_win(m_e1, WINDOW_SIZE);
+    set_tx_win(m_e2, WINDOW_SIZE);
+
+    uct_ud_ep_t *ud_ep1 = ep(m_e1);
+
+    /* Send some data to advance PSN */
+    for (int i = 0; i < 5; i++) {
+        EXPECT_UCS_OK(tx(m_e1));
+    }
+    flush();
+
+    /* Simulate endpoint reset on m_e1:
+     * Reset PSN to low values as if endpoint was just created. */
+    uct_ud_enter(iface(m_e1));
+    ud_ep1->tx.psn       = 3;   /* Next PSN to send */
+    ud_ep1->tx.acked_psn = 0;   /* Last ACKed PSN */
+    ucs_queue_head_init(&ud_ep1->tx.window);  /* Clear TX window */
+    uct_ud_leave(iface(m_e1));
+
+    /* Set up TX hook on m_e2 to inject stale ack_psn in outgoing packets.
+     * This simulates a delayed/stale packet arriving after reset. */
+    set_stale_ack_psn(STALE_ACK_PSN);
+    ep(m_e2)->tx.tx_hook = test_ud_stale_ack::inject_stale_ack_psn;
+    ep(m_e1)->rx.rx_hook = test_ud_stale_ack::capture_rx_ack_psn;
+
+    /* m_e2 sends a packet. Due to the hook, it will contain ack_psn=135. */
+    EXPECT_UCS_OK(tx(m_e2));
+    short_progress_loop();
+
+    /* Verify the hook actually injected the stale ack_psn */
+    EXPECT_EQ(STALE_ACK_PSN, get_received_ack_psn())
+        << "Invalid value after the hook";
+
+    set_stale_ack_psn(0);
+    ep(m_e2)->tx.tx_hook = uct_ud_ep_null_hook;
+    ep(m_e1)->rx.rx_hook = uct_ud_ep_null_hook;
+
+    /* Verify endpoint state wasn't corrupted by the stale ACK */
+    EXPECT_EQ(0, ud_ep1->tx.acked_psn);  /* Should NOT be STALE_ACK_PSN */
+}
+
+UCT_INSTANTIATE_UD_TEST_CASE(test_ud_stale_ack)
+#endif
 
 class test_ud_peer_failure : public ud_base_test {
 public:
