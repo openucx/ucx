@@ -13,6 +13,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sock.h>
@@ -205,7 +206,7 @@ const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb)
 {
     char *c_str;
 
-    if (ucs_array_is_empty(strb)) {
+    if (ucs_unlikely(ucs_array_is_empty(strb))) {
         return "";
     }
 
