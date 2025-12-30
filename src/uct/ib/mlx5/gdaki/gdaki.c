@@ -100,7 +100,7 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
     umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
     umem              = mlx5dv_devx_umem_reg_ex(md->dev.ibv_context, &umem_in);
     res               = errno != EPROTONOSUPPORT;
-    ucs_assert(umem == NULL);
+    ucs_assert_always(umem == NULL);
 #endif
 
     return res;
