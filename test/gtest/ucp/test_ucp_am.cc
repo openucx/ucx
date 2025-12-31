@@ -2187,4 +2187,146 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_managed_buff,
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
 
+
+class test_ucp_am_nbx_rndv_mtype_fc : public test_ucp_am_nbx_rndv_ppln {
+protected:
+    void check_stats_ge(entity &e, uint64_t cntr, uint64_t min_value)
+    {
+        auto stats_node = e.worker()->stats;
+        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
+
+        EXPECT_GE(value, min_value) << "counter "
+                                    << stats_node->cls->counter_names[cntr]
+                                    << " expected >= " << min_value
+                                    << " but got " << value;
+    }
+
+    void check_active_frags_zero(entity &e)
+    {
+        EXPECT_EQ(0u, e.worker()->rndv_mtype_fc.active_frags)
+            << "active_frags should be 0 after completion";
+    }
+
+    void check_pending_queues_empty(entity &e)
+    {
+        ucp_worker_h worker = e.worker();
+        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.put_pending_q))
+            << "put_pending_q should be empty";
+        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.get_pending_q))
+            << "get_pending_q should be empty";
+        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.rtr_pending_q))
+            << "rtr_pending_q should be empty";
+    }
+
+    void send_message(size_t num_frags)
+    {
+        set_mem_type(UCS_MEMORY_TYPE_CUDA_MANAGED);
+        test_am_send_recv(get_rndv_frag_size(UCS_MEMORY_TYPE_CUDA) * num_frags);
+    }
+
+    void verify_clean_fc_state()
+    {
+        check_active_frags_zero(sender());
+        check_active_frags_zero(receiver());
+        check_pending_queues_empty(sender());
+        check_pending_queues_empty(receiver());
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_under_cap,
+           "RNDV_MTYPE_WORKER_FC_ENABLE=y",
+           "RNDV_MTYPE_WORKER_MAX_FRAGS=128",
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    if (!sender().is_rndv_put_ppln_supported()) {
+        UCS_TEST_SKIP_R("RNDV is not supported");
+    }
+
+    send_message(8);
+
+    check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
+    check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, 1);
+
+    /* Throttling should NOT have occurred */
+    auto sender_throttled   = UCS_STATS_GET_COUNTER(sender().worker()->stats,
+                                UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+    auto receiver_throttled = UCS_STATS_GET_COUNTER(receiver().worker()->stats,
+                                UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+    EXPECT_EQ(0u, sender_throttled) << "sender should not be throttled";
+    EXPECT_EQ(0u, receiver_throttled) << "receiver should not be throttled";
+
+    /* FC should have been active (incremented) even though no throttling */
+    auto sender_incremented   = UCS_STATS_GET_COUNTER(
+                                    sender().worker()->stats,
+                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED);
+    auto receiver_incremented = UCS_STATS_GET_COUNTER(
+                                    receiver().worker()->stats,
+                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED);
+    EXPECT_GT(sender_incremented + receiver_incremented, 0u)
+        << "FC should be active and tracking fragments";
+
+    verify_clean_fc_state();
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
+           "RNDV_MTYPE_WORKER_FC_ENABLE=y",
+           "RNDV_MTYPE_WORKER_MAX_FRAGS=5",
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    if (!sender().is_rndv_put_ppln_supported()) {
+        UCS_TEST_SKIP_R("RNDV is not supported");
+    }
+
+    send_message(20);
+
+    /* Verify mtype protocols were used */
+    check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
+    check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, 1);
+
+    /* Throttling SHOULD have occurred (at least once on sender or receiver) */
+    auto sender_throttled   = UCS_STATS_GET_COUNTER(sender().worker()->stats,
+                                UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+    auto receiver_throttled = UCS_STATS_GET_COUNTER(receiver().worker()->stats,
+                                UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+    EXPECT_GT(sender_throttled + receiver_throttled, 0u)
+        << "throttling should have occurred with MAX_FRAGS=5";
+
+    verify_clean_fc_state();
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_disabled,
+           "RNDV_MTYPE_WORKER_FC_ENABLE=n",
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    if (!sender().is_rndv_put_ppln_supported()) {
+        UCS_TEST_SKIP_R("RNDV is not supported");
+    }
+
+    send_message(8);
+
+    check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
+    check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, 1);
+
+    /* No throttling should have occurred (FC is disabled) */
+    auto sender_throttled   = UCS_STATS_GET_COUNTER(sender().worker()->stats,
+                                UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+    auto receiver_throttled = UCS_STATS_GET_COUNTER(receiver().worker()->stats,
+                                UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+    EXPECT_EQ(0u, sender_throttled) << "FC disabled - no throttling expected";
+    EXPECT_EQ(0u, receiver_throttled) << "FC disabled - no throttling expected";
+
+    /* With FC disabled, increment should NOT be called */
+    auto sender_incremented   = UCS_STATS_GET_COUNTER(sender().worker()->stats,
+                                  UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED);
+    auto receiver_incremented = UCS_STATS_GET_COUNTER(receiver().worker()->stats,
+                                  UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED);
+    EXPECT_EQ(0u, sender_incremented) << "FC disabled - no increment expected";
+    EXPECT_EQ(0u, receiver_incremented) << "FC disabled - no increment expected";
+
+    verify_clean_fc_state();
+}
+
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_mtype_fc);
+
 #endif
