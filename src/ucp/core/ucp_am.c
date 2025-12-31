@@ -1319,14 +1319,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_reply,
 {
     ucp_am_hdr_t *hdr       = (ucp_am_hdr_t*)am_data;
     ucp_worker_h worker     = (ucp_worker_h)am_arg;
-    ucp_am_reply_ftr_t *ftr = UCS_PTR_BYTE_OFFSET(am_data,
-                                                  am_length - sizeof(*ftr));
+    size_t payload_length;
+    ucp_am_reply_ftr_t *ftr;
     ucp_ep_h reply_ep;
+
+    payload_length = am_length - sizeof(*ftr);
+    ftr            = UCS_PTR_BYTE_OFFSET(am_data, payload_length);
 
     UCP_WORKER_GET_VALID_EP_BY_ID(&reply_ep, worker, ftr->ep_id, return UCS_OK,
                                   "AM (reply proto)");
 
-    return ucp_am_handler_common(worker, hdr, am_length - sizeof(ftr), reply_ep,
+    return ucp_am_handler_common(worker, hdr, payload_length, reply_ep,
                                  am_flags, UCP_AM_RECV_ATTR_FIELD_REPLY_EP,
                                  "am_handler_reply");
 }
@@ -1458,6 +1461,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     ucp_worker_h worker    = am_arg;
     ucp_am_hdr_t *hdr      = am_data;
     size_t user_hdr_length = hdr->header_length;
+    size_t first_payload_length;
     ucp_recv_desc_t *mid_rdesc, *first_rdesc;
     ucp_am_mid_hdr_t *mid_hdr;
     ucp_am_mid_ftr_t *mid_ftr;
@@ -1469,7 +1473,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     uint64_t recv_flags;
     void *user_hdr;
 
-    first_ftr = UCS_PTR_BYTE_OFFSET(am_data, am_length - sizeof(*first_ftr));
+    first_payload_length = am_length - sizeof(*first_ftr);
+    first_ftr = UCS_PTR_BYTE_OFFSET(am_data, first_payload_length);
 
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, first_ftr->super.ep_id,
                                   return UCS_OK, "AM first fragment");
@@ -1482,8 +1487,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
         /* Can be a single fragment if send was issued on stub ep */
         recv_flags = ucp_am_hdr_reply_ep(worker, hdr->flags, ep, &ep);
 
-        return ucp_am_handler_common(worker, hdr,
-                                     am_length - sizeof(*first_ftr), ep,
+        return ucp_am_handler_common(worker, hdr, first_payload_length, ep,
                                      am_flags, recv_flags,
                                      "am_long_first_handler");
     }

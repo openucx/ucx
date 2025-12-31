@@ -1193,6 +1193,13 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     unsigned flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     ucs_status_t status;
 
+    /* TODO: Implement failover error handling mode */
+    if (UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
+        UCP_ERR_HANDLING_MODE_NONE) == UCP_ERR_HANDLING_MODE_FAILOVER) {
+        ucs_error("failover error handling mode is not implemented");
+        return UCS_ERR_NOT_IMPLEMENTED;
+    }
+
     UCS_ASYNC_BLOCK(&worker->async);
 
     if (flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER) {
@@ -2421,7 +2428,7 @@ static void ucp_ep_config_rndv_zcopy_set(
         ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
         scale = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
                 max_bw[mem_type_index];
-        if ((scale - min_scale) < -ucp_calc_epsilon(scale, min_scale)) {
+        if ((scale - min_scale) < -ucs_fp_compare_thresh(scale, min_scale)) {
             continue;
         }
 

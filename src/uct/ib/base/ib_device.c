@@ -22,6 +22,7 @@
 #include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
+#include <netinet/in.h>
 #include <libgen.h>
 #include <pthread.h>
 #include <sched.h>
@@ -258,6 +259,7 @@ uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
 {
     khiter_t iter = kh_get(uct_ib_async_event, &dev->async_events_hash, *event);
     uct_ib_async_event_val_t *entry;
+    uct_ib_async_event_wait_t *wait_ctx;
 
     if (iter == kh_end(&dev->async_events_hash)) {
         return;
@@ -265,8 +267,8 @@ uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
 
     entry        = &kh_value(&dev->async_events_hash, iter);
     entry->fired = 1;
-    if (entry->wait_ctx != NULL) {
-        uct_ib_device_async_event_schedule_callback(dev, entry->wait_ctx);
+    ucs_hlist_for_each(wait_ctx, &entry->list, link) {
+        uct_ib_device_async_event_schedule_callback(dev, wait_ctx);
     }
 }
 
@@ -314,19 +316,13 @@ uct_ib_device_async_event_register(uct_ib_device_t *dev,
 
     ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
     entry           = &kh_value(&dev->async_events_hash, iter);
-    entry->wait_ctx = NULL;
+    ucs_hlist_head_init(&entry->list);
     entry->fired    = 0;
     status          = UCS_OK;
 
 out:
     ucs_spin_unlock(&dev->async_event_lock);
     return status;
-}
-
-static int uct_ib_device_async_event_inprogress(uct_ib_async_event_val_t *entry)
-{
-    return (entry->wait_ctx != NULL) &&
-           (entry->wait_ctx->cb_id != UCS_CALLBACKQ_ID_NULL);
 }
 
 ucs_status_t
@@ -346,28 +342,22 @@ uct_ib_device_async_event_wait(uct_ib_device_t *dev,
     ucs_spin_lock(&dev->async_event_lock);
     iter  = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
     ucs_assert(iter != kh_end(&dev->async_events_hash));
-    entry = &kh_value(&dev->async_events_hash, iter);
-
-    if (uct_ib_device_async_event_inprogress(entry)) {
-        status = UCS_ERR_BUSY;
-        goto out_unlock;
-    }
-
+    entry           = &kh_value(&dev->async_events_hash, iter);
     status          = UCS_OK;
     wait_ctx->cb_id = UCS_CALLBACKQ_ID_NULL;
-    entry->wait_ctx = wait_ctx;
+    ucs_hlist_add_tail(&entry->list, &wait_ctx->link);
     if (entry->fired) {
         uct_ib_device_async_event_schedule_callback(dev, wait_ctx);
     }
 
-out_unlock:
     ucs_spin_unlock(&dev->async_event_lock);
     return status;
 }
 
-void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
-                                          enum ibv_event_type event_type,
-                                          uint32_t resource_id)
+void uct_ib_device_async_event_cancel(uct_ib_device_t *dev,
+                                      enum ibv_event_type event_type,
+                                      uint32_t resource_id,
+                                      uct_ib_async_event_wait_t *wait_ctx)
 {
     uct_ib_async_event_val_t *entry;
     uct_ib_async_event_t event;
@@ -380,9 +370,36 @@ void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
     iter = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
     ucs_assert(iter != kh_end(&dev->async_events_hash));
     entry = &kh_value(&dev->async_events_hash, iter);
-    if (uct_ib_device_async_event_inprogress(entry)) {
-        /* cancel scheduled callback */
-        ucs_callbackq_remove_safe(entry->wait_ctx->cbq, entry->wait_ctx->cb_id);
+
+    /* cancel scheduled callback */
+    if (wait_ctx->cb_id != UCS_CALLBACKQ_ID_NULL) {
+        ucs_callbackq_remove_safe(wait_ctx->cbq, wait_ctx->cb_id);
+    }
+    ucs_hlist_del(&entry->list, &wait_ctx->link);
+    ucs_spin_unlock(&dev->async_event_lock);
+}
+
+void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
+                                          enum ibv_event_type event_type,
+                                          uint32_t resource_id)
+{
+    uct_ib_async_event_val_t *entry;
+    uct_ib_async_event_wait_t *wait_ctx;
+    uct_ib_async_event_t event;
+    khiter_t iter;
+
+    event.event_type  = event_type;
+    event.resource_id = resource_id;
+
+    ucs_spin_lock(&dev->async_event_lock);
+    iter = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
+    ucs_assert(iter != kh_end(&dev->async_events_hash));
+    entry = &kh_value(&dev->async_events_hash, iter);
+    ucs_hlist_for_each(wait_ctx, &entry->list, link) {
+        /* cancel scheduled callbacks */
+        if (wait_ctx->cb_id != UCS_CALLBACKQ_ID_NULL) {
+            ucs_callbackq_remove_safe(wait_ctx->cbq, wait_ctx->cb_id);
+        }
     }
     kh_del(uct_ib_async_event, &dev->async_events_hash, iter);
     ucs_spin_unlock(&dev->async_event_lock);
@@ -601,6 +618,52 @@ out:
     return status;
 }
 
+static void
+uct_ib_device_cleanup_async_events(uct_ib_device_t *dev, uint8_t num_ports)
+{
+#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+    uint8_t port_num;
+
+    for (port_num = 0; port_num < num_ports; ++port_num) {
+        uct_ib_device_async_event_unregister(dev, IBV_EVENT_PORT_SPEED_CHANGE,
+                                             port_num + dev->first_port);
+    }
+#endif
+
+    if (kh_size(&dev->async_events_hash) != 0) {
+        ucs_warn("async_events_hash not empty");
+    }
+
+    kh_destroy_inplace(uct_ib_async_event, &dev->async_events_hash);
+    ucs_spinlock_destroy(&dev->async_event_lock);
+}
+
+static ucs_status_t uct_ib_device_init_async_events(uct_ib_device_t *dev)
+{
+    ucs_status_t status;
+    uint8_t UCS_V_UNUSED port_num;
+
+    kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
+    status = ucs_spinlock_init(&dev->async_event_lock, 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+    for (port_num = 0; port_num < dev->num_ports; ++port_num) {
+        status = uct_ib_device_async_event_register(dev,
+                                                    IBV_EVENT_PORT_SPEED_CHANGE,
+                                                    dev->first_port + port_num);
+        if (status != UCS_OK) {
+            uct_ib_device_cleanup_async_events(dev, port_num);
+            break;
+        }
+    }
+#endif
+
+    return status;
+}
+
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
@@ -640,10 +703,13 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         }
     }
 
+    status = uct_ib_device_init_async_events(dev);
+    if (status != UCS_OK) {
+        goto err_release_stats;
+    }
+
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
     ucs_recursive_spinlock_init(&dev->ah_lock, 0);
-    kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
-    ucs_spinlock_init(&dev->async_event_lock, 0);
 
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
@@ -668,12 +734,7 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
-    if (kh_size(&dev->async_events_hash) != 0) {
-        ucs_warn("async_events_hash not empty");
-    }
-
-    kh_destroy_inplace(uct_ib_async_event, &dev->async_events_hash);
-    ucs_spinlock_destroy(&dev->async_event_lock);
+    uct_ib_device_cleanup_async_events(dev, dev->num_ports);
     uct_ib_device_cleanup_ah_cached(dev);
     ucs_recursive_spinlock_destroy(&dev->ah_lock);
 
@@ -847,6 +908,11 @@ const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size)
 {
     inet_ntop(AF_INET6, gid, str, max_size);
     return str;
+}
+
+static int uct_ib_gid_is_ipv6_ll(const union ibv_gid *gid)
+{
+    return IN6_IS_ADDR_LINKLOCAL((struct in6_addr *)gid);
 }
 
 static int uct_ib_device_is_addr_ipv4_mcast(const struct in6_addr *raw,
@@ -1074,11 +1140,16 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
                          uct_ib_device_gid_info_t *gid_info)
 {
     static const size_t max_str_len                     = 200;
-    static const uct_ib_roce_version_info_t roce_prio[] = {
-        {UCT_IB_DEVICE_ROCE_V2, AF_INET},
-        {UCT_IB_DEVICE_ROCE_V2, AF_INET6},
-        {UCT_IB_DEVICE_ROCE_V1, AF_INET},
-        {UCT_IB_DEVICE_ROCE_V1, AF_INET6}
+    struct {
+        uct_ib_roce_version_info_t info;
+        int                        allow_ll; /* link-local allowed when true */
+    } roce_prio[] = {
+        {{UCT_IB_DEVICE_ROCE_V2, AF_INET},  1},
+        {{UCT_IB_DEVICE_ROCE_V2, AF_INET6}, 0},
+        {{UCT_IB_DEVICE_ROCE_V2, AF_INET6}, 1},
+        {{UCT_IB_DEVICE_ROCE_V1, AF_INET},  1},
+        {{UCT_IB_DEVICE_ROCE_V1, AF_INET6}, 0},
+        {{UCT_IB_DEVICE_ROCE_V1, AF_INET6}, 1}
     };
     int gid_tbl_len         = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
     ucs_status_t status     = UCS_OK;
@@ -1108,8 +1179,9 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
                 goto out;
             }
 
-            if ((roce_prio[prio_idx].ver         == gid_info_tmp.roce_info.ver) &&
-                (roce_prio[prio_idx].addr_family == gid_info_tmp.roce_info.addr_family) &&
+            if ((roce_prio[prio_idx].info.ver         == gid_info_tmp.roce_info.ver) &&
+                (roce_prio[prio_idx].info.addr_family == gid_info_tmp.roce_info.addr_family) &&
+                (roce_prio[prio_idx].allow_ll || !uct_ib_gid_is_ipv6_ll(&gid_info_tmp.gid)) &&
                 uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info_tmp.gid, i) &&
                 uct_ib_device_match_roce_subnet(&gid_info_tmp, &subnets,
                                                 subnet_strs->mode)) {

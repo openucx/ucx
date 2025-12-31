@@ -178,21 +178,6 @@ ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p)
     return UCS_OK;
 }
 
-int ucs_netif_is_ipoib(const char *if_name)
-{
-    struct ifreq ifr;
-    ucs_status_t status;
-
-    status = ucs_netif_ioctl(if_name, SIOCGIFHWADDR, &ifr);
-    if (status != UCS_OK) {
-        /* If we can't determine the hardware type, assume it's not IPoIB */
-        ucs_debug("failed to get hardware address for %s", if_name);
-        return 0;
-    }
-
-    return ifr.ifr_hwaddr.sa_family == ARPHRD_INFINIBAND;
-}
-
 static uint64_t ucs_get_mac_address()
 {
     static uint64_t mac_address = 0;
@@ -658,7 +643,7 @@ void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
     }
 }
 
-static ssize_t ucs_get_meminfo_entry(const char* pattern)
+static ssize_t ucs_get_meminfo_entry(const char* pattern, int is_kb)
 {
     char buf[256];
     char final_pattern[80];
@@ -668,11 +653,11 @@ static ssize_t ucs_get_meminfo_entry(const char* pattern)
 
     f = fopen("/proc/meminfo", "r");
     if (f != NULL) {
-        snprintf(final_pattern, sizeof(final_pattern), "%s: %s", pattern,
-                 "%d kB");
+        snprintf(final_pattern, sizeof(final_pattern), "%s: %s%s", pattern,
+                 "%d", is_kb ? " kB" : "");
         while (fgets(buf, sizeof(buf), f)) {
             if (sscanf(buf, final_pattern, &val) == 1) {
-                val_b = val * 1024ull;
+                val_b = val * (is_kb ? 1024ull : 1);
                 break;
             }
         }
@@ -686,7 +671,7 @@ size_t ucs_get_memfree_size()
 {
     ssize_t mem_free;
 
-    mem_free = ucs_get_meminfo_entry("MemFree");
+    mem_free = ucs_get_meminfo_entry("MemFree", 1);
     if (mem_free == -1) {
         mem_free = UCS_DEFAULT_MEM_FREE;
         ucs_info("cannot determine free mem size, using default: %zu",
@@ -702,7 +687,7 @@ ssize_t ucs_get_huge_page_size()
 
     /* Cache the huge page size value */
     if (huge_page_size == 0) {
-        huge_page_size = ucs_get_meminfo_entry("Hugepagesize");
+        huge_page_size = ucs_get_meminfo_entry("Hugepagesize", 1);
         if (huge_page_size == -1) {
             ucs_debug("huge pages are not supported on the system");
         } else {
@@ -711,6 +696,20 @@ ssize_t ucs_get_huge_page_size()
     }
 
     return huge_page_size;
+}
+
+static ssize_t ucs_get_huge_pages_count()
+{
+    static ssize_t huge_page_count = -1;
+
+    if (huge_page_count == -1) {
+        huge_page_count = ucs_get_meminfo_entry("HugePages_Total", 0);
+        if (huge_page_count == -1) {
+            ucs_debug("could not read HugePages_Total from /proc/meminfo");
+        }
+    }
+
+    return huge_page_count;
 }
 
 size_t ucs_get_phys_mem_size()
@@ -913,9 +912,10 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
 #ifdef SHM_HUGETLB
     if (flags & SHM_HUGETLB) {
         huge_page_size = ucs_get_huge_page_size();
-        if (huge_page_size <= 0) {
-            ucs_debug("huge pages are not supported on the system");
-            return UCS_ERR_NO_MEMORY; /* Huge pages not supported */
+        if ((huge_page_size <= 0) || (ucs_get_huge_pages_count() <= 0) ||
+            !ucs_sys_get_mlock_cap()) {
+            ucs_debug("SHM_HUGETLB are not supported on the system");
+            return UCS_ERR_NO_MEMORY; /* SHM_HUGETLB not supported */
         }
 
         alloc_size = ucs_align_up(*size, huge_page_size);

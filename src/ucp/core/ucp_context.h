@@ -627,36 +627,12 @@ double ucp_tl_iface_latency_with_priority(ucp_context_h context,
                                           int is_prioritized_ep);
 
 /**
- * Calculate a small value to overcome float imprecision
- * between two float values
- */
-static UCS_F_ALWAYS_INLINE
-double ucp_calc_epsilon(double val1, double val2)
-{
-    return (val1 + val2) * (1e-6);
-}
-
-/**
- * Compare two scores and return:
- * - `-1` if score1 < score2
- * -  `0` if score1 == score2
- * -  `1` if score1 > score2
- */
-static UCS_F_ALWAYS_INLINE
-int ucp_score_cmp(double score1, double score2)
-{
-    double diff = score1 - score2;
-    return ((fabs(diff) < ucp_calc_epsilon(score1, score2)) ?
-            0 : ucs_signum(diff));
-}
-
-/**
  * Compare two scores taking into account priorities if scores are equal
  */
 static UCS_F_ALWAYS_INLINE
 int ucp_score_prio_cmp(double score1, int prio1, double score2, int prio2)
 {
-    int score_res = ucp_score_cmp(score1, score2);
+    int score_res = ucs_fp_compare(score1, score2);
 
     return score_res ? score_res : ucs_signum(prio1 - prio2);
 }

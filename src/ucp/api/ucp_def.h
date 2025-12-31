@@ -119,23 +119,28 @@ typedef struct ucp_address               ucp_address_t;
  * Specifies error handling mode for the UCP endpoint.
  */
 typedef enum {
-    UCP_ERR_HANDLING_MODE_NONE,             /**< No guarantees about error
-                                             *   reporting, imposes minimal
-                                             *   overhead from a performance
-                                             *   perspective. @note In this
-                                             *   mode, any error reporting will
-                                             *   not generate calls to @ref
-                                             *   ucp_ep_params_t::err_handler.
-                                             */
-    UCP_ERR_HANDLING_MODE_PEER              /**< Guarantees that send requests
-                                             *   are always completed
-                                             *   (successfully or error) even in
-                                             *   case of remote failure, disables
-                                             *   protocols and APIs which may
-                                             *   cause a hang or undefined
-                                             *   behavior in case of peer failure,
-                                             *   may affect performance and
-                                             *   memory footprint */
+    /**
+     * No guarantees about error reporting, imposes minimal overhead from
+     * a performance perspective. @note In this mode, any error reporting will
+     * not generate calls to @ref ucp_ep_params_t::err_handler.
+     */
+    UCP_ERR_HANDLING_MODE_NONE,
+
+    /**
+     * Guarantees that send requests are always completed (successfully or
+     * error) even in case of remote failure, disables protocols and APIs which
+     * may cause a hang or undefined behavior in case of peer failure, may
+     * affect performance and memory footprint
+     */
+    UCP_ERR_HANDLING_MODE_PEER,
+
+    /**
+     * In case of error on transport layer, protocol layer tries to handle the
+     * error by best effort and continue operation by using the next available
+     * communication channel. If the error cannot be handled,
+     * see @ref UCP_ERR_HANDLING_MODE_PEER.
+     */
+    UCP_ERR_HANDLING_MODE_FAILOVER
 } ucp_err_handling_mode_t;
 
 

@@ -120,10 +120,14 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
-    {"GDA_MAX_SYS_LATENCY", "300ns",
-     "Skip GPU device if the distance latency to the IB device is greater than this value.",
-     ucs_offsetof(uct_ib_md_config_t, ext.gda_max_sys_latency),
-     UCS_CONFIG_TYPE_TIME},
+    {"GDA_MAX_HCA_PER_GPU", "1",
+     "Max number of HCA devices to use for GDA per one GPU device.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_max_hca_per_gpu),
+     UCS_CONFIG_TYPE_UINT},
+
+    {"GDA_DMABUF_ENABLE", "n",
+     "Enable DMA-BUF in GDA.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_BOOL},
 
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
@@ -467,7 +471,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     return status;
 }
 
-ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
+ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
                            struct ibv_mr **mr_p)
@@ -1340,6 +1344,11 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
+
+        /* Check for HabanaLabs Gaudi DMABuf support */
+        uct_ib_check_gpudirect_driver(md, "/dev/accel/accel0",
+                                      UCS_MEMORY_TYPE_GAUDI);
+        uct_ib_check_gpudirect_driver(md, "/dev/hl0", UCS_MEMORY_TYPE_GAUDI);
 
         /* Check for dma-buf support */
         uct_ib_md_check_dmabuf(md);
