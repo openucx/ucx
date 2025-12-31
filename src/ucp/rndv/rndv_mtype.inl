@@ -10,7 +10,6 @@
 #include "rndv.h"
 
 #include <ucp/core/ucp_worker.h>
-#include <ucp/proto/proto_select.inl>
 
 
 static ucp_ep_h ucp_proto_rndv_mtype_ep(ucp_worker_t *worker,
