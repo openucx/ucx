@@ -201,6 +201,8 @@ ucp_proto_rndv_mtype_fc_check(ucp_request_t *req, size_t max_frags,
     if (worker->rndv_mtype_fc.active_frags >= max_frags) {
         ucs_trace_req("mtype_fc: fragments throttle limit reached (%zu/%zu)",
                       worker->rndv_mtype_fc.active_frags, max_frags);
+        UCS_STATS_UPDATE_COUNTER(worker->stats,
+                                 UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
         ucs_queue_push(pending_q, &req->send.rndv.ppln.queue_elem);
         return UCS_ERR_NO_RESOURCE;
     }
@@ -218,6 +220,8 @@ ucp_proto_rndv_mtype_fc_increment(ucp_request_t *req)
 
     if (worker->context->config.ext.rndv_mtype_worker_fc_enable) {
         worker->rndv_mtype_fc.active_frags++;
+        UCS_STATS_UPDATE_COUNTER(worker->stats,
+                                 UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED, 1);
     }
 }
 
