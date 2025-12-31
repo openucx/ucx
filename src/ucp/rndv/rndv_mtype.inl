@@ -179,28 +179,14 @@ static unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
 }
 
 /**
- * Check if this is an RTR protocol (vs GET protocol).
- */
-static UCS_F_ALWAYS_INLINE int
-ucp_proto_rndv_mtype_is_rtr(ucp_request_t *req)
-{
-    const char *proto_name = req->send.proto_config->proto->name;
-    return (strstr(proto_name, "rtr") != NULL);
-}
-
-/**
  * Check if request should be throttled due to flow control limit.
  * If throttled, the request is queued to the appropriate priority queue.
  *
- * Priority and quota allocation (based on memory release and system impact):
- * - PUT: Full quota, remote already sent RTR and is waiting. Completing PUT
- *        unblocks remote.
- * - GET: 75% quota, self-contained operation, no remote allocation triggered.
- * - RTR: 50% quota, scheduling RTR causes additional allocation on remote
- *        (RNDV PUT).
+ * @param req       The request to check.
+ * @param max_frags The maximum number of fragments allowed.
+ * @param pending_q The queue to add the request to if it is throttled.
  *
- * @return UCS_OK if not throttled (caller should continue),
- *         UCS_ERR_NO_RESOURCE if throttled and queued.
+ * @return UCS_OK if not throttled, UCS_ERR_NO_RESOURCE if throttled and queued.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_fc_check(ucp_request_t *req, size_t max_frags,
@@ -242,9 +228,9 @@ ucp_proto_rndv_mtype_fc_increment(ucp_request_t *req)
  *
  * Priority rationale:
  * PUT - Remote is blocked waiting for our data. Scheduling PUT unblocks remote
- *       immediately.
+ *       as well.
  * GET - Self-contained fetch operation. Completes without causing remote
- *       allocations.
+ *       allocations, but scheduling it doesn't unblock another buffer.
  * RTR - Scheduling RTR triggers a remote PUT allocation, increasing total
  *       memory pressure.
  */
