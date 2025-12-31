@@ -519,7 +519,7 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req    = ucs_container_of(uct_req, ucp_request_t, send.uct);
     ucp_context_h context = req->send.ep->worker->context;
-    const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
+    const ucp_proto_rndv_put_priv_t *rpriv;
     ucs_status_t status;
     size_t max_frags;
     ucs_queue_head_t *pending_q;
@@ -535,6 +535,7 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
         return UCS_OK;
     }
 
+    rpriv = req->send.proto_config->priv;
     status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type,
                                                rpriv->bulk.frag_sys_dev);
     if (status != UCS_OK) {
