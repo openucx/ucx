@@ -363,12 +363,12 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
          * request in RTR pending queue and return UCS_OK. */
         max_frags = context->config.ext.rndv_mtype_worker_max_frags / 2;
         pending_q = &req->send.ep->worker->rndv_mtype_fc.rtr_pending_q;
-        if (ucp_proto_rndv_mtype_fc_check(
-                        req, max_frags, pending_q) == UCS_ERR_NO_RESOURCE) {
+        if (ucp_proto_rndv_mtype_fc_check(req, max_frags, pending_q) ==
+            UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }
 
-        rpriv = req->send.proto_config->priv;
+        rpriv  = req->send.proto_config->priv;
         status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
                                                    rpriv->frag_sys_dev);
         if (status != UCS_OK) {
