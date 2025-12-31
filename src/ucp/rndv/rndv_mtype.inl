@@ -192,13 +192,15 @@ ucp_proto_rndv_mtype_is_rtr(ucp_request_t *req)
  * Check if request should be throttled due to flow control limit.
  * If throttled, the request is queued to the appropriate priority queue.
  *
- * Priority and quota allocation:
- * - PUT (RNDV_SEND): Full quota, highest dequeue priority (releases both sides' memory)
- * - GET (RNDV_RECV): 75% quota, medium priority (releases receiver memory)
- * - RTR (RNDV_RECV): 50% quota, lowest priority (holds memory until remote PUT)
+ * Priority and quota allocation (based on memory release and system impact):
+ * - PUT: Full quota, remote already sent RTR and is waiting. Completing PUT
+ *        unblocks remote.
+ * - GET: 75% quota, self-contained operation, no remote allocation triggered.
+ * - RTR: 50% quota, scheduling RTR causes additional allocation on remote
+ *        (RNDV PUT).
  *
  * @return UCS_OK if not throttled (caller should continue),
- *         UCS_ERR_NO_RESOURCE if throttled and queued (caller should return UCS_OK).
+ *         UCS_ERR_NO_RESOURCE if throttled and queued.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_fc_check(ucp_request_t *req, size_t max_frags,
@@ -236,10 +238,15 @@ ucp_proto_rndv_mtype_fc_increment(ucp_request_t *req)
 
 /**
  * Decrement active_frags counter and reschedule pending request.
- * Dequeue priority: PUT > GET > RTR (by memory release impact)
- * - PUT completion releases memory on both sender and receiver
- * - GET completion releases memory on receiver
- * - RTR completion doesn't release memory (waiting for PUT)
+ * Dequeue priority: PUT > GET > RTR
+ *
+ * Priority rationale:
+ * PUT - Remote is blocked waiting for our data. Scheduling PUT unblocks remote
+ *       immediately.
+ * GET - Self-contained fetch operation. Completes without causing remote
+ *       allocations.
+ * RTR - Scheduling RTR triggers a remote PUT allocation, increasing total
+ *       memory pressure.
  */
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
