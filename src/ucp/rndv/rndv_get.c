@@ -301,8 +301,8 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
          * in GET pending queue and return UCS_OK. */
         max_frags = context->config.ext.rndv_mtype_worker_max_frags * 3 / 4;
         pending_q = &req->send.ep->worker->rndv_mtype_fc.get_pending_q;
-        if (ucp_proto_rndv_mtype_fc_check(
-                            req, max_frags, pending_q) == UCS_ERR_NO_RESOURCE) {
+        if (ucp_proto_rndv_mtype_fc_check(req, max_frags, pending_q) ==
+            UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }
 
