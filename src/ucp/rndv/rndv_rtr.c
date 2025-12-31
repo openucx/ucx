@@ -286,6 +286,9 @@ ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
     if (!abort || (req->send.rndv.mdesc != NULL)) {
         ucs_mpool_put_inline(req->send.rndv.mdesc);
     }
+
+    ucp_proto_rndv_mtype_fc_decrement(req);
+
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
         ucp_proto_rndv_ppln_recv_frag_complete(req, 0, abort);
     } else {
@@ -316,6 +319,7 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         ucs_mpool_put_inline(req->send.rndv.mdesc);
         req->send.rndv.mdesc = NULL;
+        ucp_proto_rndv_mtype_fc_decrement(req);
     }
 
     return ucp_proto_request_zcopy_id_reset(req);
@@ -347,11 +351,24 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
 
 static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    const ucp_proto_rndv_rtr_mtype_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_context_h context = req->send.ep->worker->context;
+    const ucp_proto_rndv_rtr_mtype_priv_t *rpriv;
+    size_t max_frags;
+    ucs_queue_head_t *pending_q;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        /* Check throttling limit. If no resource at the moment, queue the
+         * request in RTR pending queue and return UCS_OK. */
+        max_frags = context->config.ext.rndv_mtype_worker_max_frags * 3 / 5;
+        pending_q = &req->send.ep->worker->rndv_mtype_fc.rtr_pending_q;
+        if (ucp_proto_rndv_mtype_fc_check(req, max_frags, pending_q) ==
+            UCS_ERR_NO_RESOURCE) {
+            return UCS_OK;
+        }
+
+        rpriv  = req->send.proto_config->priv;
         status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
                                                    rpriv->frag_sys_dev);
         if (status != UCS_OK) {
@@ -359,6 +376,7 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
             return UCS_OK;
         }
 
+        ucp_proto_rndv_mtype_fc_increment(req);
         ucp_proto_rtr_common_request_init(req);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
