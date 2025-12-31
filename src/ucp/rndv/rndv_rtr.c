@@ -353,12 +353,17 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_rndv_rtr_mtype_priv_t *rpriv = req->send.proto_config->priv;
+    size_t max_frags;
+    ucs_queue_head_t *pending_q;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        /* Check throttling. If no resource at the moment, queue the request
-         * in the throttle pending queue and return UCS_OK. */
-        if (ucp_proto_rndv_mtype_fc_check(req) == UCS_ERR_NO_RESOURCE) {
+        /* Check throttling limit. If no resource at the moment, queue the
+         * request in RTR pending queue and return UCS_OK. */
+        max_frags = context->config.ext.rndv_mtype_worker_max_frags / 2;
+        pending_q = &req->send.ep->worker->rndv_mtype_fc.rtr_pending_q;
+        if (ucp_proto_rndv_mtype_fc_check(
+                        req, max_frags, pending_q) == UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }
 
