@@ -84,7 +84,7 @@ static void ucm_bistro_wait_for_syscall_completion(int syscall_num)
 
     while (ucs_sys_is_syscall_in_progress(syscall_num)) {
         if (ucm_get_time() >= deadline) {
-            ucm_diag("wait_for_syscall_completion: timeout exeeded");
+            ucm_diag("wait_for_syscall_completion: timeout exceeded");
             break;
         }
 
