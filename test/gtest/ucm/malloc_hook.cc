@@ -212,7 +212,7 @@ protected:
             if (func_ptr == NULL) {
                 UCS_TEST_ABORT("could not find " << symbol);
             }
-            status = ucm_bistro_patch(func_ptr, hook, symbol, NULL, &m_rp);
+            status = ucm_bistro_patch(func_ptr, hook, symbol, NULL, &m_rp, -1);
             ASSERT_UCS_OK(status);
             EXPECT_NE((intptr_t)m_rp, 0);
         }

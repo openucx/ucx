@@ -30,8 +30,8 @@
 
 ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len);
 
-ucs_status_t
-ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len);
+ucs_status_t ucm_bistro_apply_patch_atomic(void *dst, const void *patch,
+                                           size_t len, int syscall_num);
 
 void ucm_bistro_modify_code(void *dst, const ucm_bistro_lock_t *bytes);
 

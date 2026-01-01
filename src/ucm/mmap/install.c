@@ -70,6 +70,7 @@ typedef struct ucm_mmap_func {
     ucm_reloc_patch_t    patch;
     ucm_event_type_t     event_type;
     ucm_event_type_t     deps;
+    int                  syscall_num;
 } ucm_mmap_func_t;
 
 typedef struct ucm_mmap_test_events_data {
@@ -79,16 +80,24 @@ typedef struct ucm_mmap_test_events_data {
 } ucm_mmap_test_events_data_t;
 
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
-    { UCM_MMAP_RELOC_ENTRY(mmap),    UCM_EVENT_MMAP,    UCM_EVENT_NONE},
-    { UCM_MMAP_RELOC_ENTRY(munmap),  UCM_EVENT_MUNMAP,  UCM_EVENT_NONE},
+    { UCM_MMAP_RELOC_ENTRY(mmap),    UCM_EVENT_MMAP,    UCM_EVENT_NONE,
+      SYS_mmap},
+    { UCM_MMAP_RELOC_ENTRY(munmap),  UCM_EVENT_MUNMAP,  UCM_EVENT_NONE,
+      SYS_munmap},
 #if HAVE_MREMAP
-    { UCM_MMAP_RELOC_ENTRY(mremap),  UCM_EVENT_MREMAP,  UCM_EVENT_NONE},
+    { UCM_MMAP_RELOC_ENTRY(mremap),  UCM_EVENT_MREMAP,  UCM_EVENT_NONE,
+      SYS_mmap},
 #endif
-    { UCM_MMAP_RELOC_ENTRY(shmat),   UCM_EVENT_SHMAT,   UCM_EVENT_NONE},
-    { UCM_MMAP_RELOC_ENTRY(shmdt),   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT},
-    { UCM_MMAP_RELOC_ENTRY(sbrk),    UCM_EVENT_SBRK,    UCM_EVENT_NONE},
-    { UCM_MMAP_RELOC_ENTRY(brk),     UCM_EVENT_BRK,     UCM_EVENT_NONE},
-    { UCM_MMAP_RELOC_ENTRY(madvise), UCM_EVENT_MADVISE, UCM_EVENT_NONE},
+    { UCM_MMAP_RELOC_ENTRY(shmat),   UCM_EVENT_SHMAT,   UCM_EVENT_NONE,
+      SYS_shmat},
+    { UCM_MMAP_RELOC_ENTRY(shmdt),   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT,
+      SYS_shmdt},
+    { UCM_MMAP_RELOC_ENTRY(sbrk),    UCM_EVENT_SBRK,    UCM_EVENT_NONE,
+      SYS_brk},
+    { UCM_MMAP_RELOC_ENTRY(brk),     UCM_EVENT_BRK,     UCM_EVENT_NONE,
+      SYS_brk},
+    { UCM_MMAP_RELOC_ENTRY(madvise), UCM_EVENT_MADVISE, UCM_EVENT_NONE,
+      SYS_madvise},
     { {NULL, NULL, NULL}, UCM_EVENT_NONE}
 };
 
@@ -395,7 +404,8 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
                 status = UCS_ERR_NO_ELEM;
             } else {
                 status = ucm_bistro_patch(func_ptr, entry->patch.value,
-                                          entry->patch.symbol, NULL, NULL);
+                                          entry->patch.symbol, NULL, NULL,
+                                          entry->syscall_num);
             }
         }
         if (status != UCS_OK) {

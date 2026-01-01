@@ -328,7 +328,7 @@ void ucm_bistro_patch_lock(void *dst)
 
 ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
                               void **orig_func_p,
-                              ucm_bistro_restore_point_t **rp)
+                              ucm_bistro_restore_point_t **rp, int syscall_num)
 {
     ucm_bistro_jmp_rax_patch_t jmp_rax   = {
         .mov_rax = {0x48, 0xb8},
@@ -370,7 +370,8 @@ ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
         return status;
     }
 
-    return ucm_bistro_apply_patch_atomic(func_ptr, patch, patch_len);
+    return ucm_bistro_apply_patch_atomic(func_ptr, patch, patch_len,
+                                         syscall_num);
 }
 
 #endif
