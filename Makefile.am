@@ -85,6 +85,7 @@ EXTRA_DIST += debian/copyright
 EXTRA_DIST += debian/control
 EXTRA_DIST += debian/ucx.install
 EXTRA_DIST += debian/ucx-cuda.install
+EXTRA_DIST += debian/ucx-ib-mlx5-gda.install
 EXTRA_DIST += debian/rules
 EXTRA_DIST += debian/source/format
 EXTRA_DIST += ucx.pc.in
