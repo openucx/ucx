@@ -286,8 +286,7 @@ ucp_proto_rndv_get_mtype_fetch_completion(uct_completion_t *uct_comp)
 static ucs_status_t
 ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req    = ucs_container_of(uct_req, ucp_request_t, send.uct);
-    ucp_context_h context = req->send.ep->worker->context;
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_bulk_priv_t *rpriv;
     ucs_status_t status;
     size_t max_frags;
@@ -297,9 +296,11 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
     rpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        /* GET priority: 80% of total fragments */
+        max_frags = rpriv->fc_max_frags / 5 * 4;
+
         /* Check throttling limit. If no resource at the moment, queue the
          * request in GET pending queue and return UCS_OK. */
-        max_frags = context->config.ext.rndv_mtype_worker_max_frags / 5 * 4;
         pending_q = &req->send.ep->worker->rndv_mtype_fc.get_pending_q;
         if (ucp_proto_rndv_mtype_fc_check(req, max_frags, pending_q) ==
             UCS_ERR_NO_RESOURCE) {

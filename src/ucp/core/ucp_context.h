@@ -100,8 +100,8 @@ typedef struct ucp_context_config {
     int                                    rndv_errh_ppln_enable;
     /** Enable flow control for rndv mtype fragments at worker level */
     int                                    rndv_mtype_worker_fc_enable;
-    /** Maximum number of concurrent rndv mtype fragments per worker */
-    size_t                                 rndv_mtype_worker_max_frags;
+    /** Maximum memory for concurrent rndv mtype fragments per worker (bytes) */
+    size_t                                 rndv_mtype_worker_max_mem;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
