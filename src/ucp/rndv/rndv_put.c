@@ -517,8 +517,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_mtype_send_func(
 static ucs_status_t
 ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req    = ucs_container_of(uct_req, ucp_request_t, send.uct);
-    ucp_context_h context = req->send.ep->worker->context;
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_put_priv_t *rpriv;
     ucs_status_t status;
     size_t max_frags;
@@ -526,16 +525,16 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
 
+    rpriv = req->send.proto_config->priv;
+
     /* Check throttling limit. If no resource at the moment, queue the request
      * in PUT pending queue and return UCS_OK. */
-    max_frags = context->config.ext.rndv_mtype_worker_max_frags;
+    max_frags = rpriv->bulk.fc_max_frags;
     pending_q = &req->send.ep->worker->rndv_mtype_fc.put_pending_q;
     if (ucp_proto_rndv_mtype_fc_check(req, max_frags, pending_q) ==
         UCS_ERR_NO_RESOURCE) {
         return UCS_OK;
     }
-
-    rpriv  = req->send.proto_config->priv;
     status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type,
                                                rpriv->bulk.frag_sys_dev);
     if (status != UCS_OK) {

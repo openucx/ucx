@@ -36,6 +36,8 @@ typedef struct {
     ucp_proto_rndv_rtr_priv_t super;
     ucs_memory_type_t         frag_mem_type;
     ucs_sys_device_t          frag_sys_dev;
+    /* max fragments for flow control */
+    size_t                    fc_max_frags;
 } ucp_proto_rndv_rtr_mtype_priv_t;
 
 static UCS_F_ALWAYS_INLINE void
@@ -351,24 +353,25 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
 
 static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_context_h context = req->send.ep->worker->context;
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_rndv_rtr_mtype_priv_t *rpriv;
     size_t max_frags;
     ucs_queue_head_t *pending_q;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        rpriv = req->send.proto_config->priv;
+
+        /* RTR priority: 60% of total fragments */
+        max_frags = rpriv->fc_max_frags / 5 * 3;
+
         /* Check throttling limit. If no resource at the moment, queue the
          * request in RTR pending queue and return UCS_OK. */
-        max_frags = context->config.ext.rndv_mtype_worker_max_frags / 5 * 3;
         pending_q = &req->send.ep->worker->rndv_mtype_fc.rtr_pending_q;
         if (ucp_proto_rndv_mtype_fc_check(req, max_frags, pending_q) ==
             UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }
-
-        rpriv  = req->send.proto_config->priv;
         status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
                                                    rpriv->frag_sys_dev);
         if (status != UCS_OK) {
@@ -466,6 +469,8 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         rpriv.super.data_received = ucp_proto_rndv_rtr_mtype_data_received;
         rpriv.frag_mem_type       = frag_mem_type;
         rpriv.frag_sys_dev        = params.super.reg_mem_info.sys_dev;
+        rpriv.fc_max_frags        = ucp_proto_rndv_mtype_fc_max_frags(
+                                                      context, frag_mem_type);
 
         ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
 out_unpack_perf_destroy:

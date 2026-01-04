@@ -178,6 +178,25 @@ static unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
 }
 
 /**
+ * Compute maximum number of fragments allowed based on configured max memory
+ * and fragment size for the given memory type.
+ *
+ * @param context       The UCP context.
+ * @param frag_mem_type Memory type used for fragments.
+ *
+ * @return Maximum number of fragments that fit within the configured memory limit.
+ */
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_mtype_fc_max_frags(ucp_context_h context,
+                                  ucs_memory_type_t frag_mem_type)
+{
+    size_t max_mem   = context->config.ext.rndv_mtype_worker_max_mem;
+    size_t frag_size = context->config.ext.rndv_frag_size[frag_mem_type];
+
+    return (frag_size > 0) ? (max_mem / frag_size) : SIZE_MAX;
+}
+
+/**
  * Check if request should be throttled due to flow control limit.
  * If throttled, the request is queued to the appropriate priority queue.
  *
