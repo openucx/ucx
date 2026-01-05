@@ -1189,11 +1189,9 @@ public:
     static auto call_orig(const char *name, Args &&...args) ->
         decltype((*((Fn*)0))(std::forward<Args>(args)...))
     {
-        Fn *fn;
-        {
-            std::lock_guard<std::mutex> guard(m_mutex);
-            fn = reinterpret_cast<Fn *>(get(name).m_orig);
-        }
+        std::unique_lock<std::mutex> lock(m_mutex);
+        Fn *fn = reinterpret_cast<Fn *>(get(name).m_orig);
+        lock.unlock();
         return (*fn)(std::forward<Args>(args)...);
     }
 
@@ -1207,14 +1205,8 @@ public:
     {
         std::lock_guard<std::mutex> guard(m_mutex);
         interpose_mock &mock = get(name);
-        mock.reset();
-    }
-
-    void reset()
-    {
-        std::lock_guard<std::mutex> guard(m_mutex);
-        m_mock.reset();
-        m_calls = 0;
+        mock.m_mock.reset();
+        mock.m_calls = 0;
     }
 
 private:
