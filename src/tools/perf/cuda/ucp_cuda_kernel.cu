@@ -129,14 +129,16 @@ private:
 };
 
 struct ucp_perf_cuda_params {
-    ucp_device_mem_list_handle_h mem_list;
-    size_t                       length;
-    unsigned                     *indices;
-    size_t                       *local_offsets;
-    size_t                       *remote_offsets;
-    size_t                       *lengths;
-    uint64_t                     *counter_send;
-    uint64_t                     *counter_recv;
+    ucp_device_mem_list_handle_h        mem_list;
+    ucp_device_local_mem_list_handle_h  local_mem_list;
+    ucp_device_remote_mem_list_handle_h remote_mem_list;
+    size_t                              length;
+    unsigned                            *indices;
+    size_t                              *local_offsets;
+    size_t                              *remote_offsets;
+    size_t                              *lengths;
+    uint64_t                            *counter_send;
+    uint64_t                            *counter_recv;
 };
 
 class ucp_perf_cuda_params_handler {
@@ -151,6 +153,8 @@ public:
     ~ucp_perf_cuda_params_handler()
     {
         ucp_device_mem_list_release(m_params.mem_list);
+        ucp_device_mem_list_release(m_params.local_mem_list);
+        ucp_device_mem_list_release(m_params.remote_mem_list);
         CUDA_CALL_WARN(cudaFree, m_params.indices);
         CUDA_CALL_WARN(cudaFree, m_params.local_offsets);
         CUDA_CALL_WARN(cudaFree, m_params.remote_offsets);
@@ -162,7 +166,8 @@ public:
 private:
     static bool has_counter(const ucx_perf_context_t &perf)
     {
-        return (perf.params.command != UCX_PERF_CMD_PUT_SINGLE);
+        return ((perf.params.command != UCX_PERF_CMD_PUT_SINGLE) &&
+                (perf.params.command != UCX_PERF_CMD_PUT_SINGLE_V2));
     }
 
     void init_mem_list(const ucx_perf_context_t &perf)
@@ -171,6 +176,8 @@ private:
         size_t count      = data_count + (has_counter(perf) ? 1 : 0);
         size_t offset     = 0;
         ucp_device_mem_list_elem_t elems[count];
+        ucp_device_local_mem_list_elem_t local_elems[count];
+        ucp_device_remote_mem_list_elem_t remote_elems[count];
 
         for (size_t i = 0; i < data_count; ++i) {
             elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
@@ -183,7 +190,27 @@ private:
             elems[i].local_addr  = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
             elems[i].remote_addr = perf.ucp.remote_addr + offset;
             elems[i].length      = perf.params.msg_size_list[i];
-            offset              += elems[i].length;
+
+            /* local elements - API v2 */
+            local_elems[i].field_mask   =
+                              UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_MEMH |
+                              UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
+                              UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_LENGTH;
+            local_elems[i].memh         = perf.ucp.send_memh;
+            local_elems[i].local_addr   = UCS_PTR_BYTE_OFFSET(perf.send_buffer,
+                                                              offset);
+            local_elems[i].length       = perf.params.msg_size_list[i];
+
+            /* remote elements - API v2 */
+            remote_elems[i].field_mask  =
+                              UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_EP |
+                              UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_RKEY |
+                              UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR;
+            remote_elems[i].ep          = perf.ucp.ep;
+            remote_elems[i].rkey        = perf.ucp.rkey;
+            remote_elems[i].remote_addr = perf.ucp.remote_addr + offset;
+
+            offset += perf.params.msg_size_list[i];
         }
 
         if (has_counter(perf)) {
@@ -218,6 +245,48 @@ private:
 
         if (status != UCS_OK) {
             throw std::runtime_error("Failed to create memory list");
+        }
+
+        ucp_device_mem_list_params_t local_params;
+        local_params.field_mask     =
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_LOCAL_ELEMENTS |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER;
+        local_params.element_size   = sizeof(ucp_device_local_mem_list_elem_t);
+        local_params.num_elements   = count;
+        local_params.local_elements = local_elems;
+        local_params.worker         = perf.ucp.worker;
+
+        status = ucp_device_local_mem_list_create(&local_params,
+                                                  &m_params.local_mem_list);
+        if (status != UCS_OK) {
+            throw std::runtime_error("Failed to create local memory list");
+        }
+
+        ucp_device_mem_list_params_t remote_params;
+        remote_params.field_mask      =
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_REMOTE_ELEMENTS |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
+        remote_params.element_size    = sizeof(ucp_device_remote_mem_list_elem_t);
+        remote_params.num_elements    = count;
+        remote_params.remote_elements = remote_elems;
+
+        deadline = ucs_get_time() + ucs_time_from_sec(60.0);
+        do {
+            if (ucs_get_time() > deadline) {
+                ucs_warn("timeout creating remote device memory list");
+                deadline = ULONG_MAX;
+            }
+
+            ucp_worker_progress(perf.ucp.worker);
+            status = ucp_device_remote_mem_list_create(&remote_params,
+                                                       &m_params.remote_mem_list);
+        } while (status == UCS_ERR_NOT_CONNECTED);
+
+        if (status != UCS_OK) {
+            throw std::runtime_error("Failed to create remote memory list");
         }
     }
 
@@ -281,6 +350,14 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
         *params.counter_send = idx + 1;
         return ucp_device_put_single<level>(params.mem_list, params.indices[0],
                                             0, 0,
+                                            params.length + ONESIDED_SIGNAL_SIZE,
+                                            channel_id, flags, req);
+    case UCX_PERF_CMD_PUT_SINGLE_V2:
+        *params.counter_send = idx + 1;
+        return ucp_device_put_single<level>(params.local_mem_list,
+                                            params.indices[0], 0,
+                                            params.remote_mem_list,
+                                            params.indices[0], 0,
                                             params.length + ONESIDED_SIGNAL_SIZE,
                                             channel_id, flags, req);
     case UCX_PERF_CMD_PUT_MULTI:
