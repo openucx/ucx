@@ -2235,7 +2235,7 @@ protected:
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_under_cap,
            "RNDV_MTYPE_WORKER_FC_ENABLE=y",
-           "RNDV_MTYPE_WORKER_MAX_FRAGS=128",
+           "RNDV_MTYPE_WORKER_MAX_MEM=1g",
            "RNDV_FRAG_MEM_TYPE=cuda")
 {
     if (!sender().is_rndv_put_ppln_supported()) {
@@ -2270,14 +2270,14 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_under_cap,
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
            "RNDV_MTYPE_WORKER_FC_ENABLE=y",
-           "RNDV_MTYPE_WORKER_MAX_FRAGS=5",
+           "RNDV_MTYPE_WORKER_MAX_MEM=600mb",
            "RNDV_FRAG_MEM_TYPE=cuda")
 {
     if (!sender().is_rndv_put_ppln_supported()) {
         UCS_TEST_SKIP_R("RNDV is not supported");
     }
 
-    send_message(20);
+    send_message(200);
 
     /* Verify mtype protocols were used */
     check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
@@ -2289,7 +2289,7 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
     auto receiver_throttled = UCS_STATS_GET_COUNTER(receiver().worker()->stats,
                                 UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
     EXPECT_GT(sender_throttled + receiver_throttled, 0u)
-        << "throttling should have occurred with MAX_FRAGS=5";
+        << "throttling should have occurred with MAX_MEM=600mb";
 
     verify_clean_fc_state();
 }
