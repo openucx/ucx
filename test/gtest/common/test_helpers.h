@@ -1174,8 +1174,8 @@ public:
     setup(const char *name, std::function<Ret(Args...)> mock_fn,
           unsigned calls = 1)
     {
+        std::lock_guard<std::mutex> guard(m_mutex);
         interpose_mock &mock = get(name);
-        std::lock_guard<std::mutex> guard(mock.m_mutex);
 
         using fn_t   = std::function<Ret(Args...)>;
         mock.m_calls = calls;
@@ -1189,19 +1189,23 @@ public:
     static auto call_orig(const char *name, Args &&...args) ->
         decltype((*((Fn*)0))(std::forward<Args>(args)...))
     {
-        interpose_mock &mock = get(name);
-        Fn *fn = reinterpret_cast<Fn *>(mock.m_orig);
+        Fn *fn;
+        {
+            std::lock_guard<std::mutex> guard(m_mutex);
+            fn = reinterpret_cast<Fn *>(get(name).m_orig);
+        }
         return (*fn)(std::forward<Args>(args)...);
     }
 
     static void clear()
     {
-        std::lock_guard<std::mutex> guard(m_map_mutex);
+        std::lock_guard<std::mutex> guard(m_mutex);
         m_mocks.clear();
     }
 
     static void reset(const char *name)
     {
+        std::lock_guard<std::mutex> guard(m_mutex);
         interpose_mock &mock = get(name);
         mock.reset();
     }
@@ -1229,11 +1233,11 @@ private:
 
     static executor_t make_exec(const char *name, const char *version)
     {
+        std::lock_guard<std::mutex> guard(m_mutex);
         interpose_mock &mock = get(name, version);
-        std::lock_guard<std::mutex> guard(mock.m_mutex);
 
         executor_t exec = { mock.m_mock, mock.m_orig };
-        if (mock.m_calls > 0 && (--mock.m_calls == 0)) {
+        if (mock.m_mock && (--mock.m_calls == 0)) {
             mock.m_mock.reset();
         }
         return exec;
@@ -1241,7 +1245,6 @@ private:
 
     static interpose_mock &get(const char *name, const char *version = nullptr)
     {
-        std::lock_guard<std::mutex> guard(m_map_mutex);
         auto it = m_mocks.find(name);
         if (it == m_mocks.end()) {
             it = m_mocks.emplace(name, std::unique_ptr<interpose_mock>(
@@ -1253,10 +1256,9 @@ private:
     func_t     m_orig;
     functor_t  m_mock;
     unsigned   m_calls;
-    std::mutex m_mutex;
 
     static std::map<std::string, std::unique_ptr<interpose_mock>> m_mocks;
-    static std::mutex m_map_mutex;
+    static std::mutex m_mutex;
 };
 
 #define UCS_INTERPOSE_MOCK_DEFINE(ret, name, version, args, ...) \

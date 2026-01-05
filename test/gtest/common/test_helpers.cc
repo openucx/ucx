@@ -33,7 +33,7 @@ static test_watchdog_t watchdog;
 std::set< const ::testing::TestInfo*> skipped_tests;
 
 std::map<std::string, std::unique_ptr<interpose_mock>> interpose_mock::m_mocks;
-std::mutex interpose_mock::m_map_mutex;
+std::mutex interpose_mock::m_mutex;
 
 void *watchdog_func(void *arg)
 {
