@@ -839,13 +839,9 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
     } else if (uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) != ep->dest_ep_id) {
-        /* ep_id mismatch: either simultaneous CREQ or stale EP reuse */
         if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
             /* simultaneous CREQ */
-            uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
-            ep->rx.ooo_pkts.head_sn = neth->psn;
-            uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
-        ucs_debug("simultaneous CREQ ep=%p"
+            ucs_debug("simultaneous CREQ ep=%p"
                       "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
                       ep, iface, ep->conn_sn, ep->ep_id,
                       ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
@@ -855,20 +851,18 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
                  */
                 uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
             }
-            uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
         } else {
             /* stale EP reuse */
             ucs_debug("iface=%p: detected stale EP reuse (ep=%p conn_sn=%d "
-                    "old_dest_ep_id=%d new_ep_id=%d), updating dest_ep_id",
+                "old_dest_ep_id=%d new_ep_id=%d), updating dest_ep_id",
                     iface, ep, ep->conn_sn, ep->dest_ep_id,
                     uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
-            
-            /* Update dest_ep_id */
-            uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
-            ep->rx.ooo_pkts.head_sn = neth->psn;
-            uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
-            uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
         }
+        /* Update dest_ep_id */
+        uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
+        ep->rx.ooo_pkts.head_sn = neth->psn;
+        uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
     }
 
     ++ep->rx_creq_count;
