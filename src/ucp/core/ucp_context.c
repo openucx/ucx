@@ -23,6 +23,7 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/type/init_once.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
@@ -486,10 +487,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, worker_addr_version),
    UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
 
-  {"PROTO_INFO", "n",
+  {"PROTO_INFO", "auto",
    "Enable printing protocols information. The value is interpreted as follows:\n"
    " 'y'          : Print information for all protocols\n"
    " 'n'          : Do not print any protocol information\n"
+   " 'auto'       : Print information when UCX_LOG_LEVEL is 'debug' or higher\n"
    " glob_pattern : Print information for operations matching the glob pattern.\n"
    "                For example: '*tag*gpu*', '*put*fast*host*'",
    ucs_offsetof(ucp_context_config_t, proto_info), UCS_CONFIG_TYPE_STRING},
@@ -748,6 +750,24 @@ const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX}};
 const ucp_tl_bitmap_t ucp_tl_bitmap_min = {{0}};
 
 
+static void ucp_load_uct_components(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    uct_component_h *components;
+    unsigned num_components;
+    ucs_status_t status;
+
+    UCS_INIT_ONCE(&init_once) {
+        status = uct_query_components(&components, &num_components);
+        if (status == UCS_OK) {
+            uct_release_component_list(components);
+        } else {
+            ucs_warn("failed to query UCT components: %s",
+                     ucs_status_string(status));
+        }
+    }
+}
+
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
 {
@@ -790,6 +810,9 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
     }
 
     ucs_list_head_init(&config->cached_key_list);
+    /* Load UCT components to populate ucs_config_global_list with UCT
+     * configuration options */
+    ucp_load_uct_components();
 
     *config_p = config;
     return UCS_OK;
@@ -873,9 +896,19 @@ ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
         return status;
     }
 
-    status = ucs_global_opts_set_value_modifiable(name, value);
+    if (ucs_global_opts_is_read_only(name)) {
+        ucs_debug("'%s' global configuration is read-only", name);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucs_global_opts_set_value(name, value);
     if (status != UCS_ERR_NO_ELEM) {
         return status;
+    }
+
+    if (!ucs_config_global_list_has_field(name)) {
+        ucs_debug("'%s' configuration is invalid", name);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return ucp_config_cached_key_add(&config->cached_key_list, name, value);
@@ -1747,11 +1780,28 @@ ucp_update_memtype_md_map(uint64_t mem_types_map, ucs_memory_type_t mem_type,
     }
 }
 
+/* Returns the MDs that are part of the fallback mechanism */
+static ucp_md_map_t ucp_fill_fallback_reg_nonblock_mds(ucp_context_h context)
+{
+    ucp_md_map_t md_map = 0;
+    ucp_rsc_index_t tl_idx;
+
+    for (tl_idx = 0; tl_idx < context->num_tls; tl_idx++) {
+        if (context->tl_rscs[tl_idx].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+            /* Find all memory domains with at least one network device. */
+            md_map |= UCS_BIT(context->tl_rscs[tl_idx].md_index);
+        }
+    }
+
+    return (md_map == 0) ? ~md_map : md_map;
+}
+
 static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_md_map_t reg_block_md_map;
     ucp_md_map_t reg_nonblock_md_map;
+    ucp_md_map_t fallback_reg_nonblock_md_map;
     ucs_memory_type_t mem_type;
     ucp_md_index_t md_index;
     const uct_md_attr_v2_t *md_attr;
@@ -1766,6 +1816,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
             context->dmabuf_reg_md_map |= UCS_BIT(md_index);
         }
     }
+
+    fallback_reg_nonblock_md_map = ucp_fill_fallback_reg_nonblock_mds(context);
 
     ucs_memory_type_for_each(mem_type) {
         reg_block_md_map    = 0;
@@ -1806,7 +1858,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
          * buffers for rndv pipeline protocols). */
         context->reg_block_md_map[mem_type] = reg_block_md_map;
 
-        if ((reg_nonblock_md_map == 0) && context->config.ext.reg_nb_fallback) {
+        if (context->config.ext.reg_nb_fallback &&
+            ((reg_nonblock_md_map & fallback_reg_nonblock_md_map) == 0)) {
             /* Fallback to blocking registration if no MD supports non-blocking
              * registration */
             reg_nonblock_md_map = reg_block_md_map;

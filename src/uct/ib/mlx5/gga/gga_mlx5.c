@@ -341,7 +341,7 @@ uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     size_t iface_mtu      = uct_ib_mtu_value(iface->super.config.path_mtu);
     ucs_status_t status;
 
-    status = uct_ib_iface_query(&iface->super, UCT_IB_RETH_LEN, iface_attr);
+    status = uct_ib_iface_query(&iface->super, iface_attr);
     if (status != UCS_OK) {
         return status;
     }
@@ -792,6 +792,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
     ucs_status_t status;
     uct_ib_mlx5_dp_ordering_t dp_ordering;
 
+    init_attr.xport_hdr_len         = UCT_IB_RETH_LEN;
     init_attr.qp_type               = IBV_QPT_RC;
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
@@ -852,9 +853,11 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
         return UCS_ERR_NO_DEVICE;
     }
 
-    ucs_assertv(mlx5_md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY,
-                "md %p: cap_flags=0x%" PRIx64 " do not have EXPORTED_MKEY flag",
-                mlx5_md, mlx5_md->super.cap_flags);
+    if (!(mlx5_md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY)) {
+        ucs_debug("md %p: cap_flags=0x%" PRIx64 " does not have EXPORTED_MKEY "
+                  "flag", mlx5_md, mlx5_md->super.cap_flags);
+        return UCS_ERR_NO_DEVICE;
+    }
 
     ucs_assertv(ucs_test_all_flags(mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS),
                 "md %p: flags=0x%x do not have mandatory capabilities 0x%x",

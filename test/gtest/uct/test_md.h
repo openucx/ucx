@@ -41,6 +41,7 @@ protected:
                                modify_config_mode_t mode);
     bool check_caps(uint64_t flags) const;
     bool check_reg_mem_type(ucs_memory_type_t mem_type);
+    bool check_alloc_mem_type(ucs_memory_type_t mem_type);
     void alloc_memory(void **address, size_t size, char *fill,
                       ucs_memory_type_t mem_type);
     void check_memory(void *address, void *expect, size_t size,

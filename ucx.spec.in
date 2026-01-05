@@ -91,7 +91,7 @@ The acronym UCX stands for "Unified Communication X".
 
 This package was built from '@SCM_BRANCH@' branch, commit @SCM_VERSION@.
 
-%if "%{_vendor}" == "suse"
+%if "%{_vendor}" == "suse" && 0%{?suse_version} < 1600
 %debug_package
 %endif
 
@@ -166,6 +166,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 
 %files devel
 %{_includedir}/uc*
+%{_includedir}/stubs
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
@@ -451,6 +452,8 @@ with the host CPU.
 %endif
 
 %changelog
+* Mon Oct 20 2025 Leonid Genkin <lgenkin@nvidia.com> 1.21.0-1
+- Bump version to 1.21.0
 * Fri Apr 11 2025 Yossi Itigin <yosefe@nvidia.com> 1.20.0-1
 - Bump version to 1.20.0
 * Sat Oct 12 2024 Yossi Itigin <yosefe@nvidia.com> 1.19.0-1

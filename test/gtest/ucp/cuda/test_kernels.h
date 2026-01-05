@@ -20,6 +20,7 @@ typedef enum {
 } test_ucp_device_operation_t;
 
 typedef struct {
+    unsigned                     num_channels;
     unsigned                     num_threads;
     unsigned                     num_blocks;
     test_ucp_device_operation_t  operation;
@@ -64,7 +65,13 @@ typedef struct {
     };
 } test_ucp_device_kernel_params_t;
 
-ucs_status_t
+struct test_ucp_device_kernel_result_t {
+    ucs_status_t status;
+    uint64_t     producer_index;
+    uint64_t     ready_index;
+};
+
+test_ucp_device_kernel_result_t
 launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params);
 
 #endif

@@ -26,7 +26,6 @@ typedef struct ucp_device_request {
     uct_device_completion_t comp;
     ucs_status_t            status;
     uct_device_ep_h         device_ep;
-    unsigned                channel_id;
 } ucp_device_request_t;
 
 
@@ -162,7 +161,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_single, device_ep,
                                     req, uct_elem, address, remote_address,
-                                    length, flags, comp);
+                                    length, channel_id, flags, comp);
 }
 
 
@@ -219,7 +218,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
                                     req, uct_elem, inc_value, remote_address,
-                                    flags, comp);
+                                    channel_id, flags, comp);
 }
 
 
@@ -232,9 +231,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * This operation can be polled on the receiver to detect completion of all the
  * operations of the batch, started during the same routine call.
  *
- * The last entry in the descriptor list contains
- * the remote memory registration descriptors to be used for the increment
- * operation.
+ * All the elements except the last one are data elements that must contain all
+ * @ref ucp_device_mem_list_elem_fields and @ref ucp_device_mem_list_elem_t.
+ *
+ * The last entry in the descriptor list contains the remote memory
+ * registration descriptors to be used for the increment operation.
  *
  * The routine returns a request that can be progressed and checked for
  * completion with @ref ucp_device_progress_req.
@@ -284,7 +285,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
                                     mem_list_h->mem_list_length, addresses,
                                     remote_addresses, lengths,
                                     counter_inc_value, counter_remote_address,
-                                    flags, comp);
+                                    channel_id, flags, comp);
 }
 
 
@@ -371,7 +372,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
                                     remote_addresses, local_offsets,
                                     remote_offsets, lengths, counter_index,
                                     counter_inc_value, counter_remote_address,
-                                    flags, comp);
+                                    channel_id, flags, comp);
 }
 
 

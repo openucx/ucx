@@ -100,7 +100,8 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
                                 UCT_MD_FLAG_INVALIDATE |
                                 UCT_MD_FLAG_INVALIDATE_RMA |
                                 UCT_MD_FLAG_INVALIDATE_AMO |
-                                UCT_MD_FLAG_MEMTYPE_COPY;
+                                UCT_MD_FLAG_MEMTYPE_COPY |
+                                UCT_MD_FLAG_RKEY_PTR;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
@@ -549,13 +550,28 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     return UCS_OK;
 }
 
+ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
+                                   void *handle, uint64_t raddr, void **laddr_p)
+{
+    CUdevice cu_dev;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cu_dev));
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    return uct_cuda_ipc_get_remote_address((uct_cuda_ipc_rkey_t*)rkey,
+                                           raddr, cu_dev, laddr_p, NULL);
+}
+
 uct_cuda_ipc_component_t uct_cuda_ipc_component = {
     .super = {
         .query_md_resources = uct_cuda_base_query_md_resources,
         .md_open            = uct_cuda_ipc_md_open,
         .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
         .rkey_unpack        = uct_cuda_ipc_rkey_unpack,
-        .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
+        .rkey_ptr           = uct_cuda_ipc_rkey_ptr,
         .rkey_release       = uct_cuda_ipc_rkey_release,
         .rkey_compare       = uct_base_rkey_compare,
         .name               = "cuda_ipc",

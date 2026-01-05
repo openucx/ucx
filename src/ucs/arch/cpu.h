@@ -4,6 +4,7 @@
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+* Copyright (C) Fujitsu Limited. 2025. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -44,6 +45,8 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI,
     UCS_CPU_MODEL_RV64G,
     UCS_CPU_MODEL_NVIDIA_GRACE,
+    UCS_CPU_MODEL_FUJITSU_A64FX,
+    UCS_CPU_MODEL_FUJITSU_MONAKA,
     UCS_CPU_MODEL_LAST
 } ucs_cpu_model_t;
 

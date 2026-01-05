@@ -24,6 +24,11 @@
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
+#define UCP_WIREUP_UCT_INFO_SIZE           256
+
+/* 6 for the string format constant length */
+#define UCP_WIREUP_TLS_INFO_SIZE       (UCP_WIREUP_UCT_INFO_SIZE + \
+                                        UCT_TL_NAME_MAX + UCT_DEVICE_NAME_MAX + 6)
 
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
@@ -410,8 +415,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_rsc_index_t rsc_index;
     ucp_rsc_index_t dev_index;
     ucp_lane_index_t lane;
-    char tls_info[256];
-    char uct_info[256];
+    char tls_info[UCP_WIREUP_TLS_INFO_SIZE];
+    char uct_info[UCP_WIREUP_UCT_INFO_SIZE];
     char *p, *endp;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_v2_t *md_attr;
@@ -754,8 +759,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
 
             /* If adding same lane type and usage, expect same score */
             ucs_assertv_always(
-                    ucp_score_cmp(lane_desc->score[lane_type],
-                                  select_info->score) == 0,
+                    ucs_fp_compare(lane_desc->score[lane_type],
+                                   select_info->score) == 0,
                     "usage=%s lane_desc->score=%.2f select->score=%.2f",
                     ucp_lane_type_info[lane_type].short_name,
                     lane_desc->score[lane_type], select_info->score);
@@ -839,8 +844,8 @@ static int ucp_wireup_compare_score(const void *elem1, const void *elem2,
     score1 = (*lane1 == UCP_NULL_LANE) ? 0.0 : lanes[*lane1].score[lane_type];
     score2 = (*lane2 == UCP_NULL_LANE) ? 0.0 : lanes[*lane2].score[lane_type];
 
-    /* reverse the value of ucp_score_cmp to sort scores in descending order */
-    return -ucp_score_cmp(score1, score2);
+    /* reverse the value of ucs_fp_compare to sort scores in descending order */
+    return -ucs_fp_compare(score1, score2);
 }
 
 static int ucp_wireup_compare_lane_am_bw_score(const void *elem1, const void *elem2,
@@ -984,7 +989,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
         if ((status != UCS_OK) ||
             /* - the selected transport is worse than
              *   the transport selected above */
-            (ucp_score_cmp(select_info.score, reg_score) <= 0)) {
+            (ucs_fp_compare(select_info.score, reg_score) <= 0)) {
             break;
         }
 
@@ -1568,7 +1573,7 @@ ucp_proto_select_info_score_compare(const void *e1, const void *e2,
     const ucp_wireup_select_info_t *info2 = e2;
     int score_cmp, key_cmp1, key_cmp2;
 
-    score_cmp = ucp_score_cmp(info1->score, info2->score);
+    score_cmp = ucs_fp_compare(info1->score, info2->score);
     if (score_cmp != 0) {
         return -score_cmp;
     }
@@ -2265,8 +2270,7 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
                                          UINT64_MAX, UINT64_MAX, 0,
                                          &select_info);
     if ((status == UCS_OK) &&
-        (ucp_score_cmp(select_info.score,
-                       am_info->score) >= 0)) {
+        (ucs_fp_compare(select_info.score, am_info->score) >= 0)) {
         return ucp_wireup_add_lane(select_params, &select_info,
                                    UCP_LANE_TYPE_TAG, /* show error */ 1,
                                    select_ctx);
@@ -2435,6 +2439,18 @@ ucp_wireup_select_context_init(ucp_wireup_select_context_t *select_ctx)
     UCS_STATIC_BITMAP_RESET_ALL(&select_ctx->tl_bitmap);
 }
 
+static double ucp_wireup_device_score_func(const ucp_worker_iface_t *wiface,
+                                           const uct_md_attr_v2_t *md_attr,
+                                           const ucp_unpacked_address_t *unpacked_addr,
+                                           const ucp_address_entry_t *remote_addr,
+                                           int is_prioritized_ep, void *arg)
+{
+    ucp_wireup_dev_usage_count *dev_count = arg;
+
+    return ucp_wireup_iface_avail_bandwidth(wiface, unpacked_addr, remote_addr,
+                                            dev_count) / UCS_MBYTE;
+}
+
 /* Also ignore error mode when set to peer failure */
 static ucs_status_t
 ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
@@ -2462,7 +2478,7 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_init_select_flags(&peer_rma_flags, 0, 0);
     ucp_wireup_criteria_init(&bw_info.criteria);
 
-    bw_info.criteria.calc_score = ucp_wireup_rma_bw_score_func;
+    bw_info.criteria.calc_score = ucp_wireup_device_score_func;
     ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_DEVICE_EP, 0);
 
@@ -2484,8 +2500,7 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
                                          mem_type_tl_bitmap, UCP_NULL_LANE,
                                          select_ctx, 0);
     if (!found_lane) {
-        ucs_error("could not find device lanes");
-        return UCS_ERR_UNREACHABLE;
+        ucs_debug("ep %p: could not find device lanes", select_params->ep);
     }
 
     return UCS_OK;

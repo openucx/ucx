@@ -31,3 +31,9 @@ endef
 
 CUDA_DEP_FILES := $(shell find $(DEPDIR)/cuda/ -type f -name *.d 2>/dev/null)
 -include $(CUDA_DEP_FILES)
+
+clean-local:
+	-rm -rf $(DEPDIR)/cuda
+
+distclean-local:
+	-rm -rf $(DEPDIR)/cuda

@@ -17,11 +17,14 @@
 typedef unsigned long long ucx_perf_cuda_time_t;
 
 struct ucx_perf_cuda_context {
-    unsigned             max_outstanding;
-    ucx_perf_counter_t   max_iters;
-    ucx_perf_cuda_time_t report_interval_ns;
-    ucx_perf_counter_t   completed_iters;
-    ucs_status_t         status;
+    ucx_perf_channel_mode_t channel_mode;
+    unsigned long long      channel_rand_seed;
+    unsigned                max_outstanding;
+    unsigned                device_fc_window;
+    ucx_perf_counter_t      max_iters;
+    ucx_perf_cuda_time_t    report_interval_ns;
+    ucx_perf_counter_t      completed_iters;
+    ucs_status_t            status;
 };
 
 UCS_F_DEVICE ucx_perf_cuda_time_t ucx_perf_cuda_get_time_ns()
@@ -32,22 +35,49 @@ UCS_F_DEVICE ucx_perf_cuda_time_t ucx_perf_cuda_get_time_ns()
     return globaltimer;
 }
 
-UCS_F_DEVICE void
-ucx_perf_cuda_update_report(ucx_perf_cuda_context &ctx,
-                            ucx_perf_counter_t completed,
-                            ucx_perf_counter_t max_iters,
-                            ucx_perf_cuda_time_t &last_report_time)
-{
-    if (threadIdx.x == 0) {
-        ucx_perf_cuda_time_t current_time = ucx_perf_cuda_get_time_ns();
-        if (((current_time - last_report_time) >= ctx.report_interval_ns) ||
-            (completed >= max_iters)) {
-            ctx.completed_iters = completed;
-            last_report_time    = current_time;
-            __threadfence();
+class ucx_perf_cuda_reporter {
+public:
+    /* Number of updates per report interval */
+    static const unsigned UPDATES_PER_INTERVAL = 5;
+
+    __device__
+    ucx_perf_cuda_reporter(ucx_perf_cuda_context &ctx) :
+        m_ctx(ctx),
+        m_max_iters(ctx.max_iters),
+        m_next_report_iter(1),
+        m_last_completed(0),
+        m_last_report_time(ucx_perf_cuda_get_time_ns()),
+        m_report_interval_ns(ctx.report_interval_ns / UPDATES_PER_INTERVAL)
+    {
+    }
+
+    __device__ inline void
+    update_report(ucx_perf_counter_t completed)
+    {
+        if ((blockIdx.x == 0) && (threadIdx.x == 0) && ucs_unlikely(completed >= m_next_report_iter)) {
+            assert(completed - m_last_completed > 0);
+            ucx_perf_cuda_time_t cur_time  = ucx_perf_cuda_get_time_ns();
+            ucx_perf_cuda_time_t iter_time = (cur_time - m_last_report_time) /
+                                             (completed - m_last_completed);
+            assert(iter_time > 0);
+            m_last_completed               = completed;
+            m_last_report_time             = cur_time;
+            m_ctx.completed_iters          = completed * gridDim.x;
+            __threadfence_system();
+
+            m_next_report_iter = ucs_min(completed + (m_report_interval_ns / iter_time),
+                                         m_max_iters);
         }
     }
-}
+
+private:
+    ucx_perf_cuda_context &m_ctx;
+    ucx_perf_counter_t    m_max_iters;
+    ucx_perf_counter_t    m_next_report_iter;
+    ucx_perf_counter_t    m_last_completed;
+    ucx_perf_cuda_time_t  m_last_report_time;
+    ucx_perf_cuda_time_t  m_report_interval_ns;
+};
 
 static UCS_F_ALWAYS_INLINE uint64_t *
 ucx_perf_cuda_get_sn(const void *address, size_t length)
@@ -58,87 +88,75 @@ ucx_perf_cuda_get_sn(const void *address, size_t length)
 UCS_F_DEVICE void ucx_perf_cuda_wait_sn(const uint64_t *sn, uint64_t value)
 {
     if (threadIdx.x == 0) {
+        /* TODO support host memory */
         while (ucs_device_atomic64_read(sn) < value);
     }
     __syncthreads();
 }
 
-/* Simple bitset */
-#define UCX_BIT_MASK(bit)       (1 << ((bit) & (CHAR_BIT - 1)))
-#define UCX_BIT_SET(set, bit)   (set[(bit)/CHAR_BIT] |= UCX_BIT_MASK(bit))
-#define UCX_BIT_RESET(set, bit) (set[(bit)/CHAR_BIT] &= ~UCX_BIT_MASK(bit))
-#define UCX_BIT_GET(set, bit)   (set[(bit)/CHAR_BIT] &  UCX_BIT_MASK(bit))
-#define UCX_BITSET_SIZE(bits)   ((bits + CHAR_BIT - 1) / CHAR_BIT)
-
-UCS_F_DEVICE size_t ucx_bitset_popcount(const uint8_t *set, size_t bits) {
-    size_t count = 0;
-    for (size_t i = 0; i < bits; i++) {
-        if (UCX_BIT_GET(set, i)) {
-            count++;
-        }
-    }
-    return count;
-}
-
-UCS_F_DEVICE size_t
-ucx_bitset_ffns(const uint8_t *set, size_t bits, size_t from)
+template<ucs_device_level_t level>
+__host__ UCS_F_DEVICE unsigned ucx_perf_cuda_thread_index(size_t tid)
 {
-    for (size_t i = from; i < bits; i++) {
-        if (!UCX_BIT_GET(set, i)) {
-            return i;
-        }
+    switch (level) {
+    case UCS_DEVICE_LEVEL_THREAD: return tid;
+    case UCS_DEVICE_LEVEL_WARP:   return tid / UCS_DEVICE_NUM_THREADS_IN_WARP;
+    default:                      return 0;
     }
-    return bits;
 }
 
-#define UCX_KERNEL_CMD(level, cmd, blocks, threads, shared_size, func, ...) \
-    do { \
-        switch (cmd) { \
-        case UCX_PERF_CMD_PUT_SINGLE: \
-            func<level, UCX_PERF_CMD_PUT_SINGLE><<<blocks, threads, shared_size>>>(__VA_ARGS__); \
-            break; \
-        case UCX_PERF_CMD_PUT_MULTI: \
-            func<level, UCX_PERF_CMD_PUT_MULTI><<<blocks, threads, shared_size>>>(__VA_ARGS__); \
-            break; \
-        case UCX_PERF_CMD_PUT_PARTIAL: \
-            func<level, UCX_PERF_CMD_PUT_PARTIAL><<<blocks, threads, shared_size>>>(__VA_ARGS__); \
-            break; \
-        default: \
-            ucs_error("Unsupported cmd: %d", cmd); \
-            break; \
-        } \
-    } while (0)
+#define UCX_PERF_THREAD_INDEX_SET(_level, _tid, _outval) \
+    (_outval) = ucx_perf_cuda_thread_index<_level>(_tid)
 
-#define UCX_KERNEL_DISPATCH(perf, func, ...) \
-    do { \
-        ucs_device_level_t _level = perf.params.device_level; \
-        ucx_perf_cmd_t _cmd       = perf.params.command; \
-        unsigned _blocks          = perf.params.device_block_count; \
-        unsigned _threads         = perf.params.device_thread_count; \
-        size_t _shared_size       = _threads * perf.params.max_outstanding * \
-                                    sizeof(ucp_device_request_t); \
-        switch (_level) { \
+#define UCX_PERF_SWITCH_CMD(_cmd, _func, ...) \
+    switch (_cmd) { \
+    case UCX_PERF_CMD_PUT_SINGLE: \
+        _func(UCX_PERF_CMD_PUT_SINGLE, __VA_ARGS__); \
+        break; \
+    case UCX_PERF_CMD_PUT_MULTI: \
+        _func(UCX_PERF_CMD_PUT_MULTI, __VA_ARGS__); \
+        break; \
+    case UCX_PERF_CMD_PUT_PARTIAL: \
+        _func(UCX_PERF_CMD_PUT_PARTIAL, __VA_ARGS__); \
+        break; \
+    default: \
+        ucs_error("Unsupported cmd: %d", _cmd); \
+        break; \
+    }
+
+#define UCX_PERF_SWITCH_LEVEL(_level, _func, ...) \
+    switch (_level) { \
         case UCS_DEVICE_LEVEL_THREAD: \
-            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_THREAD, _cmd, _blocks, _threads,\
-                           _shared_size, func, __VA_ARGS__); \
+            _func(UCS_DEVICE_LEVEL_THREAD, __VA_ARGS__); \
             break; \
         case UCS_DEVICE_LEVEL_WARP: \
-            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_WARP, _cmd, _blocks, _threads,\
-                           _shared_size, func, __VA_ARGS__); \
+            _func(UCS_DEVICE_LEVEL_WARP, __VA_ARGS__); \
             break; \
         case UCS_DEVICE_LEVEL_BLOCK: \
-            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_BLOCK, _cmd, _blocks, _threads,\
-                           _shared_size, func, __VA_ARGS__); \
-            break; \
         case UCS_DEVICE_LEVEL_GRID: \
-            UCX_KERNEL_CMD(UCS_DEVICE_LEVEL_GRID, _cmd, _blocks, _threads,\
-                           _shared_size, func, __VA_ARGS__); \
-            break; \
         default: \
             ucs_error("Unsupported level: %d", _level); \
             break; \
-        } \
+    }
+
+#define UCX_PERF_KERNEL_DISPATCH_CMD_LEVEL(_cmd, _level, _perf, _kernel, ...) \
+    do { \
+        unsigned _blocks     = _perf.params.device_block_count; \
+        unsigned _threads    = _perf.params.device_thread_count; \
+        unsigned _reqs_count = ucs_div_round_up(_perf.params.max_outstanding, \
+                                                _perf.params.device_fc_window); \
+        size_t _shared_size  = _reqs_count * sizeof(ucp_device_request_t) * \
+                               ucx_perf_cuda_thread_index<_level>(_threads); \
+        _kernel<_level, _cmd><<<_blocks, _threads, _shared_size>>>(__VA_ARGS__); \
     } while (0)
+
+#define UCX_PERF_KERNEL_DISPATCH_CMD(_level, _perf, _kernel, ...) \
+    UCX_PERF_SWITCH_CMD(_perf.params.command, UCX_PERF_KERNEL_DISPATCH_CMD_LEVEL, \
+                        _level, _perf, _kernel, __VA_ARGS__);
+
+#define UCX_PERF_KERNEL_DISPATCH(_perf, _kernel, ...) \
+    UCX_PERF_SWITCH_LEVEL(_perf.params.device_level, UCX_PERF_KERNEL_DISPATCH_CMD, \
+                          _perf, _kernel, __VA_ARGS__);
+
 
 class ucx_perf_cuda_test_runner {
 public:
@@ -146,12 +164,15 @@ public:
     {
         init_ctx();
 
+        m_cpu_ctx->channel_mode       = perf.params.device_channel_mode;
+        m_cpu_ctx->channel_rand_seed  = perf.params.channel_rand_seed;
         m_cpu_ctx->max_outstanding    = perf.params.max_outstanding;
+        m_cpu_ctx->device_fc_window   = perf.params.device_fc_window;
         m_cpu_ctx->max_iters          = perf.max_iter;
         m_cpu_ctx->completed_iters    = 0;
         m_cpu_ctx->report_interval_ns = (perf.report_interval == ULONG_MAX) ?
                                         ULONG_MAX :
-                                        ucs_time_to_nsec(perf.report_interval) / 100;
+                                        ucs_time_to_nsec(perf.report_interval);
         m_cpu_ctx->status             = UCS_ERR_NOT_IMPLEMENTED;
     }
 
@@ -166,12 +187,18 @@ public:
         ucx_perf_counter_t last_completed = 0;
         ucx_perf_counter_t completed      = m_cpu_ctx->completed_iters;
         unsigned thread_count             = m_perf.params.device_thread_count;
+        unsigned block_count              = m_perf.params.device_block_count;
+        ucs_device_level_t level          = m_perf.params.device_level;
+        unsigned msgs_per_iter;
+        UCX_PERF_SWITCH_LEVEL(level, UCX_PERF_THREAD_INDEX_SET, thread_count,
+                              msgs_per_iter);
+
         while (true) {
             ucx_perf_counter_t delta = completed - last_completed;
             if (delta > 0) {
                 // TODO: calculate latency percentile on kernel
-                ucx_perf_update(&m_perf, delta, delta * thread_count, msg_length);
-            } else if (completed >= m_perf.max_iter) {
+                ucx_perf_update(&m_perf, delta, delta * msgs_per_iter, msg_length);
+            } else if (completed >= (m_perf.max_iter * block_count)) {
                 break;
             }
             last_completed = completed;

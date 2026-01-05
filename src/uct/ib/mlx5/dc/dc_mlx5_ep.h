@@ -208,7 +208,9 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
 
 ucs_status_t uct_dc_mlx5_ep_qp_to_err(uct_dc_mlx5_ep_t *ep);
 
-ucs_status_t uct_dc_mlx5_ep_invalidate(uct_ep_h tl_ep, unsigned flags);
+ucs_status_t
+uct_dc_mlx5_ep_invalidate(uct_ep_h tl_ep,
+                          const uct_ep_invalidate_params_t *params);
 
 ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
                                                uct_rc_iface_send_op_t *send_op);
