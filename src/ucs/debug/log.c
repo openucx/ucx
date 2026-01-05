@@ -396,13 +396,15 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     }
 
     if (strcmp(format, "%s") == 0) {
-        /* Format is just "%s", use the string directly */
+        /* Format is just "%s" so we use the string directly, this allows 
+           messages to be bigger than the maximal stack allocation size without 
+           the need for another heap allocation */
         message = va_arg(ap, const char*);
     } else {
         /* Allocate a buffer on the stack and format the message into it */
         size_t buffer_size = ucs_log_get_buffer_size();
-        char *buf        = ucs_alloca(buffer_size + 1);
-        buf[buffer_size] = '\0';
+        char *buf          = ucs_alloca(buffer_size + 1);
+        buf[buffer_size]   = '\0';
         vsnprintf(buf, buffer_size, format, ap);
         message = buf;
     }
