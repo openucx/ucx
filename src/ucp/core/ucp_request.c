@@ -739,22 +739,21 @@ ucs_status_t ucp_request_progress_counter(uct_pending_req_t *self)
             req->send.ep->worker->context->config.ext.proto_usage_count_max;
     ucs_status_t status;
 
-    // TODO: `ucp_trace_req` will never be printed because a different wrapper
-    // is used when TRACE_REQ is enabled.
-    // context->config.progress_wrapper_enabled =
-    //   ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
-    //   ucp_context_usage_tracker_enabled(context);
+    /* NOTE: This function is only called when `progress_wrapper_enabled` is 
+       `false`, which means that it won't be called when the log level is 
+       TRACE_REQ or higher.
+       Because of this, `ucs_trace` is used here instead of `ucp_trace_req` */
 
     status = proto->progress[UCP_PROTO_STAGE_START](self);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        ucp_trace_req(req, "progress protocol %s returned: %s lane %d",
-                      proto->name, ucs_status_string(status), req->send.lane);
+        ucs_trace("progress protocol %s returned: %s lane %d", proto->name,
+                  ucs_status_string(status), req->send.lane);
         return status;
     }
 
     if (ucs_unlikely(++proto_config->selections == proto_usage_count_max)) {
-        ucp_trace_req(req, "protocol %s was selected %u times, stop tracing",
-                      proto->name, proto_config->selections);
+        ucs_trace("protocol %s was selected %u times, stop tracing",
+                  proto->name, proto_config->selections);
         memcpy(proto_config->progress_wrapper, proto->progress,
                sizeof(proto_config->progress_wrapper));
     }
@@ -821,7 +820,7 @@ void ucp_request_init_progress_wrapper(ucp_worker_h worker,
            sizeof(proto_config->progress_wrapper));
 
     if (worker->context->config.trace_used_proto_selections) {
-        /* TODO: should we disable progress wrapper for internal protocols? */
+        /* Set counting wrapper for the first stage */
         proto_config->progress_wrapper[UCP_PROTO_STAGE_START] =
                                                 ucp_request_progress_counter;
     }
