@@ -854,9 +854,9 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         } else {
             /* stale EP reuse */
             ucs_debug("iface=%p: detected stale EP reuse (ep=%p conn_sn=%d "
-                "old_dest_ep_id=%d new_ep_id=%d), updating dest_ep_id",
-                    iface, ep, ep->conn_sn, ep->dest_ep_id,
-                    uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
+                      "old_dest_ep_id=%d new_ep_id=%d), updating dest_ep_id",
+                      iface, ep, ep->conn_sn, ep->dest_ep_id,
+                      uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
         }
         /* Update dest_ep_id */
         uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
