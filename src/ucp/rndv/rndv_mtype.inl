@@ -197,7 +197,6 @@ ucp_proto_rndv_mtype_fc_max_frags(ucp_context_h context,
     size_t frags_in_chunk = context->config.ext.rndv_num_frags[frag_mem_type];
     size_t max_frags;
 
-    /* frag_size must be > 0 for mtype protocols - validated during proto init */
     ucs_assert(frag_size > 0);
 
     /* Compute max fragments and round down to allocation chunk granularity */
