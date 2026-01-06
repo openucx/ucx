@@ -169,6 +169,7 @@ AS_IF([test "x$with_ib" = "xyes"],
                            MLX5DV_CQ_INIT_ATTR_MASK_COMPRESSED_CQE,
                            MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
                            MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE,
+                           MLX5DV_UMEM_MASK_DMABUF,
                            MLX5DV_UAR_ALLOC_TYPE_BF,
                            MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
@@ -255,6 +256,9 @@ AS_IF([test "x$with_ib" = "xyes"],
 
        AC_CHECK_MEMBERS([struct mlx5_cqe64.ib_stride_index],
                         [], [], [[#include <infiniband/$mlx5_include>]])
+
+       AC_CHECK_DECLS([mlx5dv_devx_umem_reg_ex],
+                      [have_mlx5dv_devx_umem=yes], [], [[#include <infiniband/$mlx5_include>]])
 
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
