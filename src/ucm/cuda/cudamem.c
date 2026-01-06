@@ -353,7 +353,7 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, const char *name,
         if (mode == UCM_MMAP_HOOK_BISTRO) {
             status = ucm_bistro_patch(func_ptr, func->patch.value,
                                       func->patch.symbol, func->orig_func_ptr,
-                                      NULL);
+                                      NULL, -1);
         } else if (mode == UCM_MMAP_HOOK_RELOC) {
             status = ucm_reloc_modify(&func->patch);
         } else {
