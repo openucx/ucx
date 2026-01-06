@@ -28,8 +28,9 @@
  *                     @ref UCS_ERR_UNSUPPORTED.
  * @param rp           Restore point used to restore original function.
  *                     Optional, may be NULL.
- * @param syscall_num  Number of syscall which requires waiting on, before lock
- *                     is patched.
+ * @param syscall_num  Number of syscall which requires waiting on, after lock
+ *                     and before patching. If -1 is passed, no wait would be
+ *                     performed.
  *
  * @return Error code as defined by @ref ucs_status_t
  */

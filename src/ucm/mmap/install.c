@@ -98,7 +98,7 @@ static ucm_mmap_func_t ucm_mmap_funcs[] = {
       SYS_brk},
     { UCM_MMAP_RELOC_ENTRY(madvise), UCM_EVENT_MADVISE, UCM_EVENT_NONE,
       SYS_madvise},
-    { {NULL, NULL, NULL}, UCM_EVENT_NONE}
+    { {NULL, NULL, NULL}, UCM_EVENT_NONE, UCM_EVENT_NONE, -1}
 };
 
 static pthread_mutex_t ucm_mmap_install_mutex = PTHREAD_MUTEX_INITIALIZER;

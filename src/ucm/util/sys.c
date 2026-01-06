@@ -400,6 +400,10 @@ int ucm_is_syscall_in_progress(int syscall_num)
     FILE *fp;
     char *res;
 
+    if (syscall_num == -1) {
+        return 0;
+    }
+
     dir = opendir(task_dir);
     if (dir == NULL) {
         ucm_error("failed to open /proc/self/task");
@@ -428,7 +432,7 @@ int ucm_is_syscall_in_progress(int syscall_num)
             goto out;
         }
 
-        if ((sscanf(line, "%d", &curr_syscall) == 1) && (curr_syscall != -1) &&
+        if ((sscanf(line, "%d", &curr_syscall) == 1) &&
             (curr_syscall == syscall_num)) {
             found = 1;
             goto out;

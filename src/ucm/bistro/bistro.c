@@ -79,8 +79,9 @@ static void ucm_bistro_wait_sec(double sec)
 
 static void ucm_bistro_wait_for_syscall_completion(int syscall_num)
 {
-    static double timeout_sec = 5;
-    double deadline           = ucm_get_time() + timeout_sec;
+    static double timeout_sec    = 5;
+    static double grace_duration = 5e-3;
+    double deadline              = ucm_get_time() + timeout_sec;
 
     while (ucm_is_syscall_in_progress(syscall_num)) {
         if (ucm_get_time() >= deadline) {
@@ -90,13 +91,14 @@ static void ucm_bistro_wait_for_syscall_completion(int syscall_num)
 
         ucm_bistro_wait_sec(0.5);
     }
+
+    ucm_bistro_wait_sec(grace_duration);
 }
 
 ucs_status_t ucm_bistro_apply_patch_atomic(void *dst, const void *patch,
                                            size_t len, int syscall_num)
 {
-    size_t skip           = sizeof(ucm_bistro_lock_t);
-    double grace_duration = 5e-3;
+    size_t skip = sizeof(ucm_bistro_lock_t);
     ucs_status_t status;
 
     status = ucm_bistro_protect(dst, len, UCM_PROT_READ_WRITE_EXEC);
@@ -107,9 +109,7 @@ ucs_status_t ucm_bistro_apply_patch_atomic(void *dst, const void *patch,
     /* Lock the codepatch and wait for existing flows to complete */
     ucm_bistro_patch_lock(dst);
     ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
-
     ucm_bistro_wait_for_syscall_completion(syscall_num);
-    ucm_bistro_wait_sec(grace_duration);
 
     /* Copy the payload behind the lock */
     memcpy(UCS_PTR_BYTE_OFFSET(dst, skip), UCS_PTR_BYTE_OFFSET(patch, skip),
