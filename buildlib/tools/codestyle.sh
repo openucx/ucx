@@ -34,6 +34,5 @@ codestyle_check_spell() {
     python3 -m venv /tmp/codespell_env
     source /tmp/codespell_env/bin/activate
     pip3 install codespell
-
     codespell $(codespell_skip_args) "$@"
 }
