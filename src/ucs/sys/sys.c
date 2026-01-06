@@ -1521,48 +1521,6 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx)
     return ucs_sys_readdir(task_dir, &ucs_sys_enum_threads_cb, &param);
 }
 
-static ucs_status_t ucs_sys_is_syscall_in_progress_cb(pid_t tid, void *ctx)
-{
-    ucs_sys_is_syscall_in_progress_ctx_t *sys_ctx = ctx;
-    char syscall_file[PATH_MAX], line[256];
-    long syscall_num;
-    FILE *fp;
-
-    snprintf(syscall_file, sizeof(syscall_file), "/proc/self/task/%d/syscall",
-             tid);
-
-    fp = fopen(syscall_file, "r");
-    if (fp == NULL) {
-        return UCS_ERR_NO_ELEM;
-    }
-
-    if ((fgets(line, sizeof(line), fp) != NULL) &&
-        sscanf(line, "%ld", &syscall_num) == 1) {
-        sys_ctx->in_progress = (syscall_num != -1) &&
-                               (syscall_num == sys_ctx->syscall_num);
-    }
-
-    fclose(fp);
-    return UCS_OK;
-}
-
-int ucs_sys_is_syscall_in_progress(int syscall_num)
-{
-    ucs_sys_is_syscall_in_progress_ctx_t ctx = {
-        .syscall_num = syscall_num,
-        .in_progress = 0
-    };
-    ucs_status_t status;
-
-    status = ucs_sys_enum_threads(ucs_sys_is_syscall_in_progress_cb, &ctx);
-    if (status != UCS_OK) {
-        ucs_error("failed to query threads syscalls for %d", syscall_num);
-        return 0;
-    }
-
-    return ctx.in_progress;
-}
-
 ucs_status_t ucs_sys_check_fd_limit_per_process()
 {
     int fd;

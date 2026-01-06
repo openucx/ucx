@@ -640,16 +640,6 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *arg);
 
 
 /**
- * Check if any thread in the process is currently executing a specific syscall.
- *
- * @param [in]  syscall_num  syscall number
- *
- * @return 1 if the syscall is found or 0 otherwise.
- */
-int ucs_sys_is_syscall_in_progress(int syscall_num);
-
-
-/**
  * Check the per-process limit on the number of open file descriptors.
  *
  * @return UCS_OK if the limit has not been reached. UCS_ERR_EXCEEDS_LIMIT,

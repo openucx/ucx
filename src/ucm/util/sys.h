@@ -112,6 +112,16 @@ pid_t ucm_get_tid();
 
 
 /**
+ * Check if a specific syscall is in progress in any thread
+ *
+ * @param syscall_num   Syscall number to check
+ *
+ * @return 1 if the syscall is in progress, 0 otherwise
+ */
+int ucm_is_syscall_in_progress(int syscall_num);
+
+
+/**
  * Get memory hooks mode to use, based on the configured mode and runtime.
  *
  * @param config_mode   Configured memory hook mode.

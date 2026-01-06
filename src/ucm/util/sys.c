@@ -30,6 +30,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <dlfcn.h>
+#include <dirent.h>
 
 
 #define UCM_PROC_SELF_MAPS "/proc/self/maps"
@@ -386,6 +387,57 @@ void *ucm_brk_syscall(void *addr)
 pid_t ucm_get_tid()
 {
     return syscall(SYS_gettid);
+}
+
+int ucm_is_syscall_in_progress(int syscall_num)
+{
+    static const char *task_dir = "/proc/self/task";
+    int found                   = 0;
+    char syscall_file[PATH_MAX], line[256];
+    int curr_syscall;
+    struct dirent *entry;
+    DIR *dir;
+    FILE *fp;
+    char *res;
+
+    dir = opendir(task_dir);
+    if (dir == NULL) {
+        ucm_error("failed to open /proc/self/task");
+        return 0;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.') {
+            continue;
+        }
+
+        snprintf(syscall_file, sizeof(syscall_file), "%s/%s/syscall", task_dir,
+                 entry->d_name);
+
+        fp = fopen(syscall_file, "r");
+        if (fp == NULL) {
+            ucm_error("failed to open %s", syscall_file);
+            goto out;
+        }
+
+        res = fgets(line, sizeof(line), fp);
+        fclose(fp);
+
+        if (res == NULL) {
+            ucm_error("failed to read %s", syscall_file);
+            goto out;
+        }
+
+        if ((sscanf(line, "%d", &curr_syscall) == 1) && (curr_syscall != -1) &&
+            (curr_syscall == syscall_num)) {
+            found = 1;
+            goto out;
+        }
+    }
+
+out:
+    closedir(dir);
+    return found;
 }
 
 void UCS_F_CTOR ucm_init()
