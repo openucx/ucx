@@ -77,12 +77,6 @@ typedef struct {
 } ucs_sys_enum_threads_t;
 
 
-typedef struct {
-    int syscall_num;
-    int in_progress;
-} ucs_sys_is_syscall_in_progress_ctx_t;
-
-
 static const char *ucs_pagemap_file = "/proc/self/pagemap";
 
 
