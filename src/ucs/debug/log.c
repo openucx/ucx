@@ -282,6 +282,25 @@ ucs_log_print_single_line(const char *short_file, int line,
     }
 }
 
+static size_t
+ucs_log_calc_expected_length(ucs_string_buffer_t *prefix, const char *message)
+{
+    size_t prefix_length = ucs_string_buffer_length(prefix);
+    size_t line_count    = 1;
+    const char *ptr      = message;
+
+    while (*ptr != '\0') {
+        if (*ptr == '\n') {
+            line_count++;
+        }
+        ptr++;
+    }
+
+    return line_count * prefix_length /* total prefixes length */
+           + (ptr - message) /* total message length (including newlines) */
+           + 1; /* final newline */
+}
+
 static void
 ucs_log_print_multi_line(const char *short_file, int line,
                          ucs_log_level_t level,
@@ -290,11 +309,12 @@ ucs_log_print_multi_line(const char *short_file, int line,
                          const char *first_line_end)
 {
     UCS_STRING_BUFFER_ONSTACK(prefix, 128);
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     const char *line_start   = message;
     const char *line_end     = first_line_end;
     const char *prefix_cstr;
-    const char *strb_cstr;
+    char *strb_buffer;
+    ucs_string_buffer_t strb;
+    size_t strb_buffer_capacity;
 
     /* Format the log prefix once */
     if (RUNNING_ON_VALGRIND || !ucs_log_initialized) {
@@ -306,7 +326,20 @@ ucs_log_print_multi_line(const char *short_file, int line,
                                   UCS_LOG_ARG(short_file, line, level,
                                               comp_conf, tv));
     }
+    ucs_assert(ucs_array_available_length(&prefix) > 1);
     prefix_cstr = ucs_string_buffer_cstr(&prefix);
+
+    /* Allocate a buffer with the expected length of the log message,
+     * it may be allocated on the heap depending on the maximal allocation
+       size on the stack */
+    strb_buffer_capacity =
+            ucs_log_calc_expected_length(&prefix, message) /* string length */
+            + 1 /* null terminator */
+            + 1; /* extra space to validate that the buffer is not truncated */
+
+    strb_buffer = ucs_alloc_on_stack(strb_buffer_capacity,
+                                     "multi_line_strb_buffer");
+    ucs_string_buffer_init_fixed(&strb, strb_buffer, strb_buffer_capacity);
 
     /* Append line by line */
     ucs_assert(line_end != NULL);
@@ -318,21 +351,21 @@ ucs_log_print_multi_line(const char *short_file, int line,
 
     /* Append last line */
     ucs_string_buffer_appendf(&strb, "%s%s\n", prefix_cstr, line_start);
-    strb_cstr = ucs_string_buffer_cstr(&strb);
+    ucs_assert(ucs_array_available_length(&strb) == 2);
 
-    /* Print entire buffer in a single operation to avoid interleaving */
+    /* Print the entire buffer in a single operation to avoid interleaving */
     if (RUNNING_ON_VALGRIND) {
-        VALGRIND_PRINTF("%s", strb_cstr);
+        VALGRIND_PRINTF("%s", strb_buffer);
     } else if (ucs_log_initialized) {
-        if (ucs_log_file_close) { /* non-stdout/stderr */
+        if (ucs_unlikely(ucs_log_file_close)) { /* non-stdout/stderr */
             ucs_log_handle_file_max_size(ucs_string_buffer_length(&strb));
         }
-        fputs(strb_cstr, ucs_log_file);
+        fputs(strb_buffer, ucs_log_file);
     } else {
-        fputs(strb_cstr, stdout);
+        fputs(strb_buffer, stdout);
     }
 
-    ucs_string_buffer_cleanup(&strb);
+    ucs_free_on_stack(strb_buffer, strb_buffer_capacity);
 }
 
 static void ucs_log_print(const char *file, int line, ucs_log_level_t level,
