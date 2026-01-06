@@ -286,6 +286,7 @@ typedef int          (*uct_iface_is_reachable_func_t)(const uct_iface_h iface,
                                                       const uct_device_addr_t *dev_addr,
                                                       const uct_iface_addr_t *iface_addr);
 
+
 /**
  * Transport interface operations.
  * Every operation exposed in the API must appear in the table below, to allow

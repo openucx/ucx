@@ -1301,6 +1301,20 @@ struct uct_iface_params {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief User stream descriptor.
+ */
+struct uct_iface_stream;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief User stream interface handle.
+ */
+struct uct_iface_stream_op_handle;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Parameters for creating a UCT endpoint by @ref uct_ep_create
  */
 struct uct_ep_params {
@@ -3640,6 +3654,7 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
 {
     return iface->ops.iface_progress(iface);
 }
+
 
 /**
  * @ingroup UCT_CLIENT_SERVER

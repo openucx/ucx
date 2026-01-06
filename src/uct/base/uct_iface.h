@@ -318,11 +318,10 @@ typedef ucs_status_t (*uct_iface_mem_element_pack_func_t)(
         uct_device_mem_element_t *mem_element);
 
 
-/* Bock a stream operations and wait for previous operations to completed */
+/* Block a stream operations and wait for previous operations to complete */
 typedef ucs_status_t (*uct_iface_stream_op_block_func_t)(
         const uct_iface_h iface, uct_iface_stream_h stream,
-        void (*ready_cb)(void *),
-        void *arg,
+        void (*ready_cb)(void*), void *arg,
         uct_iface_stream_op_handle_h *op_handle);
 
 

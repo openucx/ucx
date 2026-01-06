@@ -267,7 +267,8 @@ gtest_SOURCES += \
 	ucm/cuda_hooks.cc \
 	uct/cuda/test_switch_cuda_device.cc \
 	uct/cuda/test_cuda_ipc_md.cc \
-	uct/cuda/test_cuda_nvml.cc
+	uct/cuda/test_cuda_nvml.cc \
+	uct/cuda/test_cuda_stream.cc
 
 if HAVE_NVCC
 if HAVE_GPUNETIO # temporarily all device code depends on doca

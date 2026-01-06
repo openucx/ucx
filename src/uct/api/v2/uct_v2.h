@@ -1336,8 +1336,7 @@ ucs_status_t uct_iface_mem_element_pack(uct_iface_h iface, uct_mem_h memh,
  */
 ucs_status_t
 uct_iface_stream_op_block(const uct_iface_h iface, uct_iface_stream_h stream,
-                          void (*ready_cb)(void *arg),
-                          void *ready_arg,
+                          void (*ready_cb)(void *arg), void *ready_arg,
                           uct_iface_stream_op_handle_h *op_handle);
 
 
@@ -1356,8 +1355,9 @@ uct_iface_stream_op_block(const uct_iface_h iface, uct_iface_stream_h stream,
  *
  * @return Error code.
  */
-ucs_status_t uct_iface_stream_op_unblock(
-        const uct_iface_h iface, uct_iface_stream_op_handle_h op_handle);
+ucs_status_t
+uct_iface_stream_op_unblock(const uct_iface_h iface,
+                            uct_iface_stream_op_handle_h op_handle);
 
 
 END_C_DECLS
