@@ -92,18 +92,59 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
 
 static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 {
-    int res = 0;
+    ucs_status_t status = UCS_ERR_UNSUPPORTED;
 #if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     struct mlx5dv_devx_umem_in umem_in = {};
     struct mlx5dv_devx_umem *umem;
+    uct_cuda_copy_md_dmabuf_t dmabuf;
+    CUdeviceptr buff;
+    CUcontext cuda_ctx;
 
-    umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
-    umem              = mlx5dv_devx_umem_reg_ex(md->dev.ibv_context, &umem_in);
-    res               = errno != EPROTONOSUPPORT;
-    ucs_assert_always(umem == NULL);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&cuda_ctx, 0));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+    if (status != UCS_OK) {
+        goto out_ctx_release;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc(&buff, 1));
+    if (status != UCS_OK) {
+        goto out_ctx_pop;
+    }
+
+    dmabuf = uct_cuda_copy_md_get_dmabuf((void*)buff, 1,
+                                         UCS_SYS_DEVICE_ID_UNKNOWN);
+
+    umem_in.addr        = (void*)buff;
+    umem_in.size        = 1;
+    umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
+    umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
+    umem_in.comp_mask   = MLX5DV_UMEM_MASK_DMABUF;
+    umem_in.dmabuf_fd   = dmabuf.fd;
+
+    umem = mlx5dv_devx_umem_reg_ex(md->dev.ibv_context, &umem_in);
+
+    if (umem == NULL) {
+        if (md->config.gda_dmabuf_enable == UCS_YES) {
+            ucs_error("DEVX UMEM doesn't support DMA-BUF");
+        }
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free;
+    }
+
+    mlx5dv_devx_umem_dereg(umem);
+out_free:
+    cuMemFree(buff);
+out_ctx_pop:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+out_ctx_release:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(0));
 #endif
 
-    return res;
+    return status;
 }
 
 static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
@@ -114,9 +155,9 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
         return dmabuf_supported;
     }
 
-    dmabuf_supported = md->config.gda_dmabuf_enable &&
+    dmabuf_supported = (md->config.gda_dmabuf_enable != UCS_NO) &&
                        !!(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
-                       uct_gdaki_check_umem_dmabuf(md) &&
+                       (uct_gdaki_check_umem_dmabuf(md) == UCS_OK) &&
                        uct_cuda_copy_md_is_dmabuf_supported();
     return dmabuf_supported;
 }
@@ -1021,7 +1062,8 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     }
 
     if (!uct_gdaki_is_dmabuf_supported(ib_md) &&
-        !uct_gdaki_is_peermem_loaded(ib_md)) {
+        ((ib_md->config.gda_dmabuf_enable == UCS_YES) ||
+         !uct_gdaki_is_peermem_loaded(ib_md))) {
         status = UCS_ERR_NO_DEVICE;
         goto out;
     }
