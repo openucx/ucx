@@ -287,7 +287,7 @@ static double ucs_arch_x86_tsc_freq_from_cpu_model()
 
 static double ucs_arch_x86_tsc_freq_measure()
 {
-    static const double relative_accuracy = 1e-6; /* 1KHz for every 1GHz */
+    static const double relative_accuracy = 3e-6; /* 3KHz for every 1GHz */
     static const double max_time          = 1e-3; /* 1ms */
     static const unsigned init_iterations = 10;
     static const unsigned max_count       = 10;
@@ -321,8 +321,8 @@ static double ucs_arch_x86_tsc_freq_measure()
     /* Calculate the frequency and stop when the relative error is below
        the required accuracy threshold */
     relative_error = 0.0;
-    curr_freq = 0.0;
-    count     = 0;
+    curr_freq      = 0.0;
+    count          = 0;
     do {
         prev_freq = curr_freq;
 
