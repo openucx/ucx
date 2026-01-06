@@ -201,8 +201,9 @@ typedef struct ucp_ep_config_key_lane {
     ucp_md_index_t       dst_md_index; /* Destination memory domain index */
     ucs_sys_device_t     dst_sys_dev; /* Destination system device */
     uint8_t              path_index; /* Device path index */
-    ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
-                                        was selected for */
+    ucp_lane_type_mask_t lane_types: 28; /* Which types of operations this lane
+                                            was selected for */
+    uint32_t             port_speed: 4; /* Quantified port speed */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
 } ucp_ep_config_key_lane_t;
@@ -953,5 +954,16 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
+
+/**
+ * @brief Update EP configuration and rkey configuration according to the latest
+ * interfaces state.
+ *
+ * @param [in] ep      Endpoint object.
+ * @param [in] rkey    Rkey object.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_update_config(ucp_ep_h ep, ucp_rkey_h rkey);
 
 #endif

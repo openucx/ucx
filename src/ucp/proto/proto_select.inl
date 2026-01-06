@@ -176,4 +176,11 @@ ucp_proto_select_is_short(ucp_ep_h ep,
             ucs_memtype_cache_is_empty());
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_select_is_stale(const ucp_proto_select_t *proto_select,
+                          ucp_worker_h worker)
+{
+    return proto_select->epoch_counter != worker->epoch_counter;
+}
+
 #endif
