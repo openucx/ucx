@@ -420,26 +420,25 @@ int ucm_is_syscall_in_progress(int syscall_num)
 
         fp = fopen(syscall_file, "r");
         if (fp == NULL) {
-            ucm_error("failed to open %s", syscall_file);
-            goto out;
+            ucm_error("failed to open %s: %m", syscall_file);
+            break;
         }
 
         res = fgets(line, sizeof(line), fp);
         fclose(fp);
 
         if (res == NULL) {
-            ucm_error("failed to read %s", syscall_file);
-            goto out;
+            ucm_error("failed to read %s: %m", syscall_file);
+            break;
         }
 
         if ((sscanf(line, "%d", &curr_syscall) == 1) &&
             (curr_syscall == syscall_num)) {
             found = 1;
-            goto out;
+            break;
         }
     }
 
-out:
     closedir(dir);
     return found;
 }
