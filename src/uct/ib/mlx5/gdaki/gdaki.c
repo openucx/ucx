@@ -131,7 +131,7 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
     umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
-    umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
+    umem_in.pgsz_bitmap = UCT_IB_MLX5_PAGE_SIZE;
     dmabuf              = uct_rc_gdaki_get_dmabuf(md, address, length);
     if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
         umem_in.comp_mask = 0;

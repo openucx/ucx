@@ -77,6 +77,7 @@
 #define UCT_IB_MLX5_MP_RQ_FIRST_MSG_FLAG UCS_BIT(29) /* MP first packet indication */
 #define UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG  UCS_BIT(30) /* MP last packet indication */
 #define UCT_IB_MLX5_MP_RQ_FILLER_FLAG    UCS_BIT(31) /* Filler CQE indicator */
+#define UCT_IB_MLX5_PAGE_SIZE            UCS_BIT(12) /* Device page size */
 
 #if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_BF
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC MLX5DV_UAR_ALLOC_TYPE_BF
