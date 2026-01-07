@@ -95,6 +95,7 @@ struct ucp_proto_select_param {
     } UCS_S_PACKED op;
 } UCS_S_PACKED;
 
+
 /**
  * Protocol and its private configuration
  */

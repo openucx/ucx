@@ -172,7 +172,7 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
     if (!strcasecmp(proto_info_config, "auto")) {
         return ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG);
     }
-    
+
     /* Handle boolean */
     if (ucs_config_sscanf_bool(proto_info_config, &bool_value, NULL)) {
         return bool_value;
