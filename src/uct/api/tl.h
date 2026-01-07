@@ -287,14 +287,13 @@ typedef int          (*uct_iface_is_reachable_func_t)(const uct_iface_h iface,
                                                       const uct_iface_addr_t *iface_addr);
 
 /* interface - stream operation ordering, for supporting transports */
-typedef ucs_status_t (*uct_iface_stream_op_begin_func_t)(
+typedef ucs_status_t (*uct_iface_stream_op_block_func_t)(
         const uct_iface_h iface, uct_iface_stream_h stream,
+        void (*ready_cb)(void *),
+        void *arg,
         uct_iface_stream_op_handle_h *op_handle);
 
-typedef ucs_status_t (*uct_iface_stream_op_is_ready_func_t)(
-        const uct_iface_h iface, uct_iface_stream_op_handle_h op_handle);
-
-typedef ucs_status_t (*uct_iface_stream_op_finish_func_t)(
+typedef ucs_status_t (*uct_iface_stream_op_unblock_func_t)(
         const uct_iface_h iface, uct_iface_stream_op_handle_h op_handle);
 
 /**
@@ -383,9 +382,8 @@ typedef struct uct_iface_ops {
     uct_iface_is_reachable_func_t       iface_is_reachable;
 
     /* interface - virtually insert operations on the stream */
-    uct_iface_stream_op_begin_func_t    iface_stream_op_begin;
-    uct_iface_stream_op_is_ready_func_t iface_stream_op_is_ready;
-    uct_iface_stream_op_finish_func_t   iface_stream_op_finish;
+    uct_iface_stream_op_block_func_t    iface_stream_op_block;
+    uct_iface_stream_op_unblock_func_t  iface_stream_op_unblock;
 
 } uct_iface_ops_t;
 

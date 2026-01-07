@@ -3649,62 +3649,38 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
  * Declares the beginning of an operation that is to be ordered with respect to
  * the specified @a stream. This call returns an @a op_handle, which is used to
  * track the operation state. Anything added to the stream after this call will
- * remain blocked until @ref uct_iface_stream_op_finish is called.
+ * remain blocked until @ref uct_iface_stream_op_unblock is called.
  *
- * The user may call @ref uct_iface_stream_op_is_ready to verify that all
- * previously issued operations on the @a stream have completed before
- * starting the operation’s own processing. This check is optional and
- * depends on the user's ordering requirements.
+ * When all preexisting operations in @a stream have completed, the transport
+ * will call the callback @a ready_cb with @a ready_arg as a parameter. The
+ * user can then start any needed operation.
  *
  * After completing the operation’s processing, the user must eventually
- * call @ref uct_iface_stream_op_finish.
+ * always call @ref uct_iface_stream_op_unblock.
  *
  * @param [in]  iface     Interface used for state management.
  * @param [in]  stream    Stream to order against.
+ * @param [in]  ready_cb  Callback called when preexisting @stream operations
+ *                        have completed.
+ * @param [in]  ready_arg Parameter passed to the callback.
  * @param [out] op_handle Operation handle used for subsequent tracking.
  *
  * @return Error code.
  */
 UCT_INLINE_API ucs_status_t
-uct_iface_stream_op_begin(const uct_iface_h iface, uct_iface_stream_h stream,
+uct_iface_stream_op_block(const uct_iface_h iface, uct_iface_stream_h stream,
+                          void (*ready_cb)(void *arg),
+                          void *ready_arg,
                           uct_iface_stream_op_handle_h *op_handle)
 {
-    return iface->ops.iface_stream_op_begin(iface, stream, op_handle);
+    return iface->ops.iface_stream_op_block(iface, stream,
+                                            ready_cb, ready_arg, op_handle);
 }
 
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Check if all predecessors of a stream operation have completed.
- *
- * Checks whether all work on the stream that was issued prior to the
- * creation of the operation represented by @a op_handle has completed.
- * This can be used by the user to guarantee strict ordering of operations
- * from the stream perspective. Calling this function is optional; the user
- * may start processing without calling it, depending on its ordering
- * requirements.
- *
- * If all prior operations have completed, the function returns @ref UCS_OK.
- * Otherwise, it returns @ref UCS_INPROGRESS, indicating that there are still
- * remaining operations being processed on the stream.
- *
- * @param [in]  iface     Interface used for state management.
- * @param [in]  op_handle Operation handle previously returned by
- *                        @ref uct_iface_stream_op_begin.
- *
- * @return @ref UCS_OK if the operation is ready, @ref UCS_INPROGRESS if it
- *         is still blocked, or another error code on failure.
- */
-UCT_INLINE_API ucs_status_t uct_iface_stream_op_is_ready(
-        const uct_iface_h iface, uct_iface_stream_op_handle_h op_handle)
-{
-    return iface->ops.iface_stream_op_is_ready(iface, op_handle);
-}
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Mark a previously declared stream operation as finished.
+ * @brief Unblock a stream when operation has completed.
  *
  * Declares that the operation associated with @a op_handle has completed
  * its processing. This will release the wait on the stream associated with
@@ -3717,10 +3693,10 @@ UCT_INLINE_API ucs_status_t uct_iface_stream_op_is_ready(
  *
  * @return Error code.
  */
-UCT_INLINE_API ucs_status_t uct_iface_stream_op_finish(
+UCT_INLINE_API ucs_status_t uct_iface_stream_op_unblock(
         const uct_iface_h iface, uct_iface_stream_op_handle_h op_handle)
 {
-    return iface->ops.iface_stream_op_finish(iface, op_handle);
+    return iface->ops.iface_stream_op_unblock(iface, op_handle);
 }
 
 
