@@ -135,27 +135,27 @@ enum {
  */
 enum {
     /* Total number of received eager messages */
-    UCP_WORKER_STAT_TAG_RX_EAGER_MSG,
-    UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG,
+    UCP_WORKER_STAT_TAG_RX_EAGER_MSG            = 0,
+    UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG       = 1,
 
     /* Total number of  received eager chunks (every message
      * can be split into a bunch of chunks). It is possible that
      * some chunks  of the message arrived unexpectedly and then
      * receive had been posted and the rest arrived expectedly */
-    UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP,
-    UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP,
+    UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP      = 2,
+    UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP    = 3,
 
-    UCP_WORKER_STAT_RNDV_RX_EXP,
-    UCP_WORKER_STAT_RNDV_RX_UNEXP,
+    UCP_WORKER_STAT_RNDV_RX_EXP                 = 4,
+    UCP_WORKER_STAT_RNDV_RX_UNEXP               = 5,
 
-    UCP_WORKER_STAT_RNDV_PUT_ZCOPY,
-    UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
-    UCP_WORKER_STAT_RNDV_GET_ZCOPY,
-    UCP_WORKER_STAT_RNDV_RTR,
-    UCP_WORKER_STAT_RNDV_RTR_MTYPE,
-    UCP_WORKER_STAT_RNDV_RKEY_PTR,
-    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED,
-    UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED,
+    UCP_WORKER_STAT_RNDV_PUT_ZCOPY              = 6,
+    UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY        = 7,
+    UCP_WORKER_STAT_RNDV_GET_ZCOPY              = 8,
+    UCP_WORKER_STAT_RNDV_RTR                    = 9,
+    UCP_WORKER_STAT_RNDV_RTR_MTYPE              = 10,
+    UCP_WORKER_STAT_RNDV_RKEY_PTR               = 11,
+    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED     = 12,
+    UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED   = 13,
 
     UCP_WORKER_STAT_LAST
 };
