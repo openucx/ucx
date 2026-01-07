@@ -1662,6 +1662,7 @@ unsigned uct_ib_iface_port_speed_change_progress(void *arg)
 
     async_ctx->cb(async_ctx->arg, UCT_EVENT_SPEED_CHANGE);
     ucs_callbackq_remove_safe(async_ctx->super.cbq, async_ctx->super.cb_id);
+    async_ctx->super.cb_id = UCS_CALLBACKQ_ID_NULL;
     return 1;
 }
 
@@ -1916,10 +1917,10 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 static uct_ppn_bandwidth_t
 uct_ib_iface_get_bandwidth(uct_ib_iface_t *iface, double wire_speed)
 {
-    uct_ib_md_t *md      = uct_ib_iface_md(iface);
-    uint8_t active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
-    size_t mtu           = ucs_min(uct_ib_mtu_value((enum ibv_mtu)active_mtu),
-                                   iface->config.seg_size);
+    uct_ib_md_t *md    = uct_ib_iface_md(iface);
+    uint8_t active_mtu = uct_ib_iface_port_attr(iface)->active_mtu;
+    size_t mtu         = ucs_min(uct_ib_mtu_value((enum ibv_mtu)active_mtu),
+                                 iface->config.seg_size);
     size_t extra_pkt_len;
     uct_ppn_bandwidth_t bandwidth;
 

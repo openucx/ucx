@@ -182,7 +182,7 @@ KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*);
 typedef struct uct_ib_async_event {
     enum ibv_event_type event_type;             /* Event type */
     union {
-        uint8_t         port_num;               /* Port number */
+        uint32_t        port_num;               /* Port number */
         uint32_t        qp_num;                 /* QP number */
         uint32_t        dct_num;                /* DCT number */
         void            *cookie;                /* Pointer to resource */
