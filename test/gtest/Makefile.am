@@ -275,7 +275,8 @@ NVCC_EXTRA_FLAGS = \
 	$(CUDA_CPPFLAGS) \
 	$(GPUNETIO_CFLAGS) \
 	-I$(top_srcdir)/test \
-	-I$(top_srcdir)/test/gtest
+	-I$(top_srcdir)/test/gtest \
+	-I$(top_srcdir)/src/uct/ib/mlx5/gdaki/gpunetio/include
 include $(top_srcdir)/config/cuda.am
 
 gtest_SOURCES += \
