@@ -200,7 +200,7 @@
  * @param _type Type of the non-const pointer.
  * @param _ptr  Pointer to cast.
  *
- * @return Casted non-const pointer.
+ * @return Cast non-const pointer.
  */
 #define ucs_const_cast(_type, _ptr) (_type)(uintptr_t)(const void*)(_ptr)
 

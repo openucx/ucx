@@ -731,11 +731,12 @@ void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg)
 
 ucs_status_t ucp_request_progress_counter(uct_pending_req_t *self)
 {
-    ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req                = ucs_container_of(self, ucp_request_t, 
+                                                         send.uct);
     ucp_proto_config_t *proto_config  = ucs_const_cast(ucp_proto_config_t*,
                                                        req->send.proto_config);
     const ucp_proto_t *proto          = proto_config->proto;
-    unsigned proto_usage_count_max =
+    unsigned proto_usage_count_max    =
             req->send.ep->worker->context->config.ext.proto_usage_count_max;
     ucs_status_t status;
 
@@ -800,9 +801,8 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
     return status;
 }
 
-void ucp_request_init_progress_wrapper(ucp_worker_h worker,
-                                       ucp_proto_config_t *proto_config,
-                                       int internal)
+void ucp_request_progress_wrapper_init(ucp_worker_h worker,
+                                       ucp_proto_config_t *proto_config)
 {
     uint8_t stage;
 
@@ -820,7 +820,6 @@ void ucp_request_init_progress_wrapper(ucp_worker_h worker,
            sizeof(proto_config->progress_wrapper));
 
     if (worker->context->config.trace_used_proto_selections) {
-        /* Set counting wrapper for the first stage */
         proto_config->progress_wrapper[UCP_PROTO_STAGE_START] =
                                                 ucp_request_progress_counter;
     }
