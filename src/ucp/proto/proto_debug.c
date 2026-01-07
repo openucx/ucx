@@ -201,17 +201,12 @@ static void ucp_proto_selections_dump(ucp_worker_h worker,
                                       char *counter_str, size_t size,
                                       int show_used)
 {
-    unsigned proto_usage_count_max =
-            worker->context->config.ext.proto_usage_count_max;
-
     if (!show_used) {
         *counter_str = '\0';
         return;
     }
 
-    ucs_snprintf_safe(counter_str, size, "%u%s  ", proto_attr->selections,
-                      ((proto_attr->selections >= proto_usage_count_max) ? "+" :
-                                                                           ""));
+    ucs_snprintf_safe(counter_str, size, "%u  ", proto_attr->selections);
 }
 
 void
