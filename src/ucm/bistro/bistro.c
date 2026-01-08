@@ -90,7 +90,7 @@ static void ucm_bistro_wait_for_syscall_completion(int syscall_num)
             break;
         }
 
-        ucm_bistro_wait_sec(0.5);
+        ucm_bistro_wait_sec(grace_duration);
     }
 
     ucm_bistro_wait_sec(grace_duration);

@@ -391,55 +391,71 @@ pid_t ucm_get_tid()
 
 int ucm_is_syscall_in_progress(int syscall_num)
 {
-    static const char *task_dir = "/proc/self/task";
-    int found                   = 0;
-    char syscall_file[PATH_MAX], line[256];
+    struct linux_dirent {
+        long           d_ino;
+        off_t          d_off;
+        unsigned short d_reclen;
+        char           d_name[];
+    };
+
+    static const char *task_dir   = "/proc/self/task";
+    static const size_t buff_size = 1024;
+    int found                     = 0;
+    char syscall_file[PATH_MAX], line[buff_size], dir_buf[buff_size];
     int curr_syscall;
-    struct dirent *entry;
-    DIR *dir;
-    FILE *fp;
-    char *res;
+    struct linux_dirent *entry;
+    int fd, dir_fd, nread, bpos;
+    ssize_t read_bytes;
 
     if (syscall_num == -1) {
         return 0;
     }
 
-    dir = opendir(task_dir);
-    if (dir == NULL) {
-        ucm_error("failed to open /proc/self/task");
+    dir_fd = open(task_dir, O_RDONLY | O_DIRECTORY);
+    if (dir_fd < 0) {
+        ucm_error("failed to open %s: %m", task_dir);
         return 0;
     }
 
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_name[0] == '.') {
-            continue;
-        }
+    while ((nread = syscall(SYS_getdents, dir_fd, dir_buf, sizeof(dir_buf))) >
+           0) {
+        for (bpos = 0; bpos < nread;) {
+            entry = (struct linux_dirent*)(dir_buf + bpos);
 
-        snprintf(syscall_file, sizeof(syscall_file), "%s/%s/syscall", task_dir,
-                 entry->d_name);
+            if (entry->d_name[0] == '.') {
+                bpos += entry->d_reclen;
+                continue;
+            }
 
-        fp = fopen(syscall_file, "r");
-        if (fp == NULL) {
-            ucm_error("failed to open %s: %m", syscall_file);
-            break;
-        }
+            snprintf(syscall_file, sizeof(syscall_file), "%s/%s/syscall",
+                     task_dir, entry->d_name);
 
-        res = fgets(line, sizeof(line), fp);
-        fclose(fp);
+            fd = open(syscall_file, O_RDONLY);
+            if (fd < 0) {
+                ucm_error("failed to open %s: %m", syscall_file);
+                break;
+            }
 
-        if (res == NULL) {
-            ucm_error("failed to read %s: %m", syscall_file);
-            break;
-        }
+            read_bytes = read(fd, line, sizeof(line) - 1);
+            close(fd);
 
-        if ((sscanf(line, "%d", &curr_syscall) == 1) &&
-            (curr_syscall == syscall_num)) {
-            found = 1;
-            break;
+            if (read_bytes < 0) {
+                ucm_error("failed to read %s: %m", syscall_file);
+                break;
+            }
+
+            line[read_bytes] = '\0';
+            if ((sscanf(line, "%d", &curr_syscall) == 1) &&
+                (curr_syscall == syscall_num)) {
+                found = 1;
+                break;
+            }
+
+            bpos += entry->d_reclen;
         }
     }
 
-    closedir(dir);
+    close(dir_fd);
     return found;
 }
 

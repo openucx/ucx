@@ -112,11 +112,11 @@ pid_t ucm_get_tid();
 
 
 /**
- * Check if a specific syscall is in progress in any thread
+ * Check if a specific syscall is in progress in any thread.
  *
- * @param syscall_num   Syscall number to check
+ * @param syscall_num   Syscall number to check.
  *
- * @return 1 if the syscall is in progress, 0 otherwise
+ * @return 1 if the syscall is in progress, 0 otherwise.
  */
 int ucm_is_syscall_in_progress(int syscall_num);
 
