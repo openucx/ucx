@@ -180,9 +180,21 @@ _UCT_MD_INSTANTIATE_TEST_CASE(test_switch_cuda_device, cuda_cpy);
 
 class test_p2p_create_destroy_ctx : public uct_p2p_rma_test {
 public:
+    void cleanup() override;
     void test_xfer(send_func_t send, size_t length, unsigned flags,
                    ucs_memory_type_t mem_type) override;
+
+private:
+    CUcontext m_cuda_context = nullptr;
 };
+
+void test_p2p_create_destroy_ctx::cleanup()
+{
+    uct_p2p_rma_test::cleanup();
+    if (m_cuda_context != nullptr) {
+        EXPECT_EQ(cuCtxDestroy(m_cuda_context), CUDA_SUCCESS);
+    }
+}
 
 void test_p2p_create_destroy_ctx::test_xfer(send_func_t send, size_t length,
                                             unsigned flags,
@@ -198,15 +210,29 @@ void test_p2p_create_destroy_ctx::test_xfer(send_func_t send, size_t length,
     CUdevice device;
     ASSERT_EQ(cuDeviceGet(&device, 0), CUDA_SUCCESS);
 
-    CUcontext ctx;
-#if CUDA_VERSION >= 12050
+    auto clear_ctx = getenv("GTEST_CLEAR_CUDA_CTX_");
+    if ((clear_ctx != nullptr) && (strcmp(clear_ctx, "y") == 0)) {
+        ASSERT_EQ(cuDevicePrimaryCtxReset(device), CUDA_SUCCESS);
+
+        for (;;) {
+            CUcontext cuda_context;
+            ASSERT_EQ(cuCtxGetCurrent(&cuda_context), CUDA_SUCCESS);
+            if (cuda_context == nullptr) {
+                break;
+            }
+
+            ASSERT_EQ(cuCtxPopCurrent(nullptr), CUDA_SUCCESS);
+        }
+    }
+
+#if CUDA_VERSION >= 13000
     CUctxCreateParams ctx_create_params = {};
-    ASSERT_EQ(cuCtxCreate_v4(&ctx, &ctx_create_params, 0, device), CUDA_SUCCESS);
+    ASSERT_EQ(cuCtxCreate(&m_cuda_context, &ctx_create_params, 0, device),
+              CUDA_SUCCESS);
 #else
-    ASSERT_EQ(cuCtxCreate(&ctx, 0, device), CUDA_SUCCESS);
+    ASSERT_EQ(cuCtxCreate(&m_cuda_context, 0, device), CUDA_SUCCESS);
 #endif
     uct_p2p_rma_test::test_xfer(send, length, flags, mem_type);
-    EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
 }
 
 UCS_TEST_P(test_p2p_create_destroy_ctx, put_short)
