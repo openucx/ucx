@@ -391,10 +391,11 @@ pid_t ucm_get_tid()
 
 int ucm_is_syscall_in_progress(int syscall_num)
 {
-    struct linux_dirent {
-        long           d_ino;
-        off_t          d_off;
+    struct linux_dirent64 {
+        ino64_t        d_ino;
+        off64_t        d_off;
         unsigned short d_reclen;
+        unsigned char  d_type;
         char           d_name[];
     };
 
@@ -403,7 +404,7 @@ int ucm_is_syscall_in_progress(int syscall_num)
     int found                     = 0;
     char syscall_file[PATH_MAX], line[buff_size], dir_buf[buff_size];
     int curr_syscall;
-    struct linux_dirent *entry;
+    struct linux_dirent64 *entry;
     int fd, dir_fd, nread, bpos;
     ssize_t read_bytes;
 
@@ -417,12 +418,12 @@ int ucm_is_syscall_in_progress(int syscall_num)
         return 0;
     }
 
-    while ((nread = syscall(SYS_getdents, dir_fd, dir_buf, sizeof(dir_buf))) >
+    while ((nread = syscall(SYS_getdents64, dir_fd, dir_buf, sizeof(dir_buf))) >
            0) {
         for (bpos = 0; bpos < nread;) {
-            entry = (struct linux_dirent*)(dir_buf + bpos);
+            entry = (struct linux_dirent64*)(dir_buf + bpos);
 
-            if (entry->d_name[0] == '.') {
+            if ((entry->d_name[0] == '.') || (entry->d_type != DT_DIR)) {
                 bpos += entry->d_reclen;
                 continue;
             }
