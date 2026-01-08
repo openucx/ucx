@@ -75,6 +75,9 @@ typedef struct {
     ucs_memory_type_t         frag_mem_type;
     ucs_sys_device_t          frag_sys_dev;
 
+    /* max fragments for flow control */
+    size_t                    fc_max_frags;
+
     /* Multi-lane common part. Must be the last field, see
        @ref ucp_proto_multi_priv_t */
     ucp_proto_multi_priv_t    mpriv;
