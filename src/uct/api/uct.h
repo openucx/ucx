@@ -3641,65 +3641,6 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
     return iface->ops.iface_progress(iface);
 }
 
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Declare an operation ordered with respect to a stream.
- *
- * Declares the beginning of an operation that is to be ordered with respect to
- * the specified @a stream. This call returns an @a op_handle, which is used to
- * track the operation state. Anything added to the stream after this call will
- * remain blocked until @ref uct_iface_stream_op_unblock is called.
- *
- * When all preexisting operations in @a stream have completed, the transport
- * will call the callback @a ready_cb with @a ready_arg as a parameter. The
- * user can then start any needed operation.
- *
- * After completing the operation’s processing, the user must eventually
- * always call @ref uct_iface_stream_op_unblock.
- *
- * @param [in]  iface     Interface used for state management.
- * @param [in]  stream    Stream to order against.
- * @param [in]  ready_cb  Callback called when preexisting @stream operations
- *                        have completed.
- * @param [in]  ready_arg Parameter passed to the callback.
- * @param [out] op_handle Operation handle used for subsequent tracking.
- *
- * @return Error code.
- */
-UCT_INLINE_API ucs_status_t
-uct_iface_stream_op_block(const uct_iface_h iface, uct_iface_stream_h stream,
-                          void (*ready_cb)(void *arg),
-                          void *ready_arg,
-                          uct_iface_stream_op_handle_h *op_handle)
-{
-    return iface->ops.iface_stream_op_block(iface, stream,
-                                            ready_cb, ready_arg, op_handle);
-}
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Unblock a stream when operation has completed.
- *
- * Declares that the operation associated with @a op_handle has completed
- * its processing. This will release the wait on the stream associated with
- * @a op_handle, unblock any subsequent operations that were waiting on
- * this stream, and release the resources associated with @a op_handle.
- *
- * @param [in]  iface     Interface used for state management.
- * @param [in]  op_handle Operation handle previously returned by
- *                        @ref uct_iface_stream_op_begin.
- *
- * @return Error code.
- */
-UCT_INLINE_API ucs_status_t uct_iface_stream_op_unblock(
-        const uct_iface_h iface, uct_iface_stream_op_handle_h op_handle)
-{
-    return iface->ops.iface_stream_op_unblock(iface, op_handle);
-}
-
-
 /**
  * @ingroup UCT_CLIENT_SERVER
  * @brief Open a connection manager.

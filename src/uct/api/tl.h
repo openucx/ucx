@@ -286,16 +286,6 @@ typedef int          (*uct_iface_is_reachable_func_t)(const uct_iface_h iface,
                                                       const uct_device_addr_t *dev_addr,
                                                       const uct_iface_addr_t *iface_addr);
 
-/* interface - stream operation ordering, for supporting transports */
-typedef ucs_status_t (*uct_iface_stream_op_block_func_t)(
-        const uct_iface_h iface, uct_iface_stream_h stream,
-        void (*ready_cb)(void *),
-        void *arg,
-        uct_iface_stream_op_handle_h *op_handle);
-
-typedef ucs_status_t (*uct_iface_stream_op_unblock_func_t)(
-        const uct_iface_h iface, uct_iface_stream_op_handle_h op_handle);
-
 /**
  * Transport interface operations.
  * Every operation exposed in the API must appear in the table below, to allow
@@ -380,10 +370,6 @@ typedef struct uct_iface_ops {
     uct_iface_get_device_address_func_t iface_get_device_address;
     uct_iface_get_address_func_t        iface_get_address;
     uct_iface_is_reachable_func_t       iface_is_reachable;
-
-    /* interface - virtually insert operations on the stream */
-    uct_iface_stream_op_block_func_t    iface_stream_op_block;
-    uct_iface_stream_op_unblock_func_t  iface_stream_op_unblock;
 
 } uct_iface_ops_t;
 
