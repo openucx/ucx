@@ -98,7 +98,11 @@ ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
-    ucp_request_complete_send(req, status);
+    if (ucs_unlikely(status != UCS_OK) && ucp_ep_is_alive(req->send.ep, 0)) {
+        ucp_proto_request_restart(req);
+    } else {
+        ucp_request_complete_send(req, status);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -217,7 +221,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
     }
 
     /* Set pointer to request's protocol configuration */
-    ucs_assert(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index);
+    ucs_assertv(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index,
+                "ep_cfg_index=%u cfg_index=%u", thresh_elem->proto_config.ep_cfg_index, ep->cfg_index);
     ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
     ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
     return UCS_OK;
@@ -363,8 +368,7 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     /* Since global VA registration doesn't support invalidation yet, and error
      * handling is enabled on this EP, we replace GVA registrations with
      * regular ones */
-    if (ucp_ep_config_err_mode_eq(req->send.ep,
-                                  UCP_ERR_HANDLING_MODE_PEER) &&
+    if (ucp_ep_config_err_handling_enabled(req->send.ep) &&
         ucs_unlikely(memh->flags & UCP_MEMH_FLAG_HAS_AUTO_GVA)) {
         ucp_memh_disable_gva(memh, md_map);
     }
