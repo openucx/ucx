@@ -1206,8 +1206,9 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
     gid_info->roce_info.addr_family = AF_INET;
 
 out_print:
-    ucs_debug("%s:%d using gid_index %d", uct_ib_device_name(dev), port_num,
-              gid_info->gid_index);
+    ucs_debug("%s:%d using gid_index=%d ver=%d addr_family=%d",
+              uct_ib_device_name(dev), port_num, gid_info->gid_index,
+              gid_info->roce_info.ver, gid_info->roce_info.addr_family);
 out:
     return status;
 }
