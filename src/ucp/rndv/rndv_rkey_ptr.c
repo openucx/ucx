@@ -101,6 +101,13 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
+    /* Do not select rkey_ptr protocol when the receive buffer is not
+     * CPU-accessible (e.g. CUDA/ROCM). rkey_ptr yields a host pointer and
+     * the CPU copy path requires host-accessible memory. */
+     if (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(init_params->select_param->mem_type)) {
+        return;
+    }
+
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
         !ucp_proto_common_init_check_err_handling(&params.super) ||
         (ucp_proto_select_op_flags(params.super.super.select_param) &
@@ -281,6 +288,12 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_perf_t *perf;
     ucp_lane_index_t lane;
     ucs_status_t status;
+
+    /* For non-CPU receive memory types, avoid selecting the rkey_ptr mtype
+     * pipeline. It relies on obtaining a host pointer and CPU-side copy. */
+     if (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(init_params->select_param->mem_type)) {
+        return;
+    }
 
     if (!context->config.ext.rndv_shm_ppln_enable ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND, 1) ||
