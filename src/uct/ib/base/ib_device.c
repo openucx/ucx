@@ -32,6 +32,7 @@
 #endif
 
 #define UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID 0
+#define UCT_IB_GLOBAL_TCLASS_PREFIX              "Global tclass="
 
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
@@ -1749,3 +1750,31 @@ int uct_ib_device_is_smi(struct ibv_device *ibv_device)
     return 0;
 }
 #endif
+
+int uct_ib_device_get_global_tclass(uct_ib_device_t *dev, uint8_t port_num,
+                                    uint8_t *tclass)
+{
+    char buf[64];
+    ssize_t nread;
+    int val;
+
+    nread = ucs_read_file(buf, sizeof(buf) - 1, 1,
+                          UCT_IB_DEVICE_SYSFS_TC_FMT,
+                          uct_ib_device_name(dev), port_num);
+    if (nread < 0) {
+        return 0;
+    }
+    buf[nread] = '\0';
+
+    if (strncmp(buf, UCT_IB_GLOBAL_TCLASS_PREFIX,
+                sizeof(UCT_IB_GLOBAL_TCLASS_PREFIX) - 1) != 0) {
+        return 0;
+    }
+
+    if (sscanf(buf + sizeof(UCT_IB_GLOBAL_TCLASS_PREFIX) - 1, "%d", &val) != 1) {
+        return 0;
+    }
+
+    *tclass = (uint8_t)val;
+    return 1;
+}

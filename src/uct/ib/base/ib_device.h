@@ -68,6 +68,7 @@
 #define UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX  UCT_IB_DEVICE_SYSFS_PFX "/ports/%d/gid_attrs"
 #define UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/types/%d"
 #define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
+#define UCT_IB_DEVICE_SYSFS_TC_FMT        UCT_IB_DEVICE_SYSFS_PFX "/tc/%d/traffic_class"
 #define UCT_IB_DEVICE_ECE_DEFAULT         0x0         /* default ECE */
 #define UCT_IB_DEVICE_ECE_MAX             0xffffffffU /* max ECE */
 #define UCT_IB_DEVICE_DEFAULT_GID_INDEX 0   /* The gid index used by default for an IB/RoCE port */
@@ -516,5 +517,17 @@ static inline void uct_ib_destroy_cq(struct ibv_cq *cq, const char *desc)
 void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event);
 
 int uct_ib_device_is_smi(struct ibv_device *ibv_device);
+
+/**
+ * Try to read global traffic class from kernel sysfs.
+ *
+ * @param [in]  dev       IB device.
+ * @param [in]  port_num  Port number.
+ * @param [out] tclass    Filled with the global traffic class value if found.
+ *
+ * @return 1 if global tclass is set, 0 otherwise.
+ */
+int uct_ib_device_get_global_tclass(uct_ib_device_t *dev, uint8_t port_num,
+                                    uint8_t *tclass);
 
 #endif

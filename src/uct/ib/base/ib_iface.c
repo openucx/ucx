@@ -175,7 +175,8 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"TRAFFIC_CLASS", "auto",
    "IB Traffic Class / RoCEv2 Differentiated Services Code Point (DSCP).\n"
-   "\"auto\" option selects 106 on RoCEv2 and 0 otherwise.",
+   "\"auto\" option first selects the global traffic class setting, and if\n"
+   "not set, then selects 106 on RoCEv2 and 0 otherwise.",
    ucs_offsetof(uct_ib_iface_config_t, traffic_class), UCS_CONFIG_TYPE_ULUNITS},
 
   {"HOP_LIMIT", "255",
@@ -1752,8 +1753,15 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     }
 
     if (config->traffic_class == UCS_ULUNITS_AUTO) {
-        self->config.traffic_class = uct_ib_iface_is_roce_v2(self) ?
-                                     UCT_IB_DEFAULT_ROCEV2_DSCP : 0;
+        uint8_t global_tclass;
+
+        if (uct_ib_device_get_global_tclass(dev, self->config.port_num,
+                                            &global_tclass)) {
+            self->config.traffic_class = global_tclass;
+        } else {
+            self->config.traffic_class = uct_ib_iface_is_roce_v2(self) ?
+                                         UCT_IB_DEFAULT_ROCEV2_DSCP : 0;
+        }
     } else {
         self->config.traffic_class = config->traffic_class;
     }
