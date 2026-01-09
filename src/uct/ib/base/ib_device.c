@@ -446,6 +446,9 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
 #if HAVE_DECL_IBV_EVENT_GID_CHANGE
     case IBV_EVENT_GID_CHANGE:
 #endif
+#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+    case IBV_EVENT_PORT_SPEED_CHANGE:
+#endif
     case IBV_EVENT_LID_CHANGE:
     case IBV_EVENT_PKEY_CHANGE:
     case IBV_EVENT_SM_CHANGE:
@@ -525,6 +528,14 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
                  ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_WARN;
         break;
+#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+    case IBV_EVENT_PORT_SPEED_CHANGE:
+        snprintf(event_info, sizeof(event_info), "%s on port %d",
+                 ibv_event_type_str(event->event_type), event->port_num);
+        uct_ib_device_async_event_dispatch(dev, event);
+        level = UCS_LOG_LEVEL_DIAG;
+        break;
+#endif
     default:
         snprintf(event_info, sizeof(event_info), "%s (%d)",
                  ibv_event_type_str(event->event_type), event->event_type);
