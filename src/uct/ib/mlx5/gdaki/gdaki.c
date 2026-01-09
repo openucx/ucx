@@ -24,6 +24,12 @@
 
 #define UCT_GDAKI_MAX_CUDA_PER_IB 64
 
+#define UCT_GDAKI_CQ_PAGE_OFFSET_QUANTA_DENOMINATOR 64
+#define UCT_GDAKI_DEV_EP_SIZE                       64
+#define UCT_GDAKI_DEV_QP_SIZE                       128
+#define UCT_GDAKI_DEV_PAGE_SIZE \
+    (ucs_min(UCT_GDAKI_DEV_EP_SIZE, UCT_GDAKI_DEV_QP_SIZE) * \
+     UCT_GDAKI_CQ_PAGE_OFFSET_QUANTA_DENOMINATOR)
 
 typedef struct {
     uct_rc_iface_common_config_t      super;
@@ -81,8 +87,8 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
                                             size_t *cq_umem_offset_p,
                                             size_t *dev_ep_size_p)
 {
-    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_ep_t) == 64);
-    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_qp_t) == 128);
+    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_ep_t) == UCT_GDAKI_DEV_EP_SIZE);
+    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_qp_t) == UCT_GDAKI_DEV_QP_SIZE);
 
     *cq_umem_offset_p    = sizeof(uct_rc_gdaki_dev_ep_t);
     qp_attr->umem_offset = *cq_umem_offset_p +
@@ -131,7 +137,7 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
     umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
-    umem_in.pgsz_bitmap = UCT_IB_MLX5_PAGE_SIZE;
+    umem_in.pgsz_bitmap = UCT_GDAKI_DEV_PAGE_SIZE;
     dmabuf              = uct_rc_gdaki_get_dmabuf(md, address, length);
     if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
         umem_in.comp_mask = 0;
