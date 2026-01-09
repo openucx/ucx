@@ -492,6 +492,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " 'y'          : Print information for all protocols\n"
    " 'n'          : Do not print any protocol information\n"
    " 'auto'       : Print information when UCX_LOG_LEVEL is 'debug' or higher\n"
+   " 'used'       : Print information for used protocols\n"
    " glob_pattern : Print information for operations matching the glob pattern.\n"
    "                For example: '*tag*gpu*', '*put*fast*host*'",
    ucs_offsetof(ucp_context_config_t, proto_info), UCS_CONFIG_TYPE_STRING},
@@ -2398,6 +2399,10 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.progress_wrapper_enabled =
             ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
             ucp_context_usage_tracker_enabled(context);
+
+    context->config.trace_used_proto_selections =
+            !strcasecmp(context->config.ext.proto_info, "used");
+
     return UCS_OK;
 
 err_free_key_list:
